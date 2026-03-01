@@ -15,9 +15,12 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@quietr/auth": "workspace:*",
     "@quietr/database": "workspace:*",
     "@trpc/client": "catalog:",
-    "@trpc/server": "catalog:"
+    "@trpc/server": "catalog:",
+    "drizzle-orm": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@quietr/config": "workspace:*",

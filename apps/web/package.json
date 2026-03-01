@@ -21,6 +21,7 @@
     "@quietr/ui": "workspace:*",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",
+    "@tabler/icons-solidjs": "catalog:",
     "@tailwindcss/vite": "^4.2.1",
     "@tanstack/query-persist-client-core": "catalog:",
     "@tanstack/solid-query": "catalog:",

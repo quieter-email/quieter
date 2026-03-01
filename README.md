@@ -8,7 +8,7 @@
 - Monorepo orchestration: Turborepo
 - App framework: SolidStart + Vite
 - API layer: tRPC v11
-- Database layer: Drizzle ORM beta + SQLite (`bun:sqlite`)
+- Database layer: Drizzle ORM beta + Postgres (Neon HTTP)
 - Styling: Tailwind CSS v4
 - Linting and formatting: Oxlint + Oxfmt
 - Type checking: TypeScript native preview (`tsgo`)
@@ -22,12 +22,11 @@
   - `src/routes/index.tsx`: minimal landing page
   - `src/routes/api/trpc/[...path].ts`: tRPC HTTP endpoint
 - `packages/database`: Drizzle schema, client, and migrations
-  - `src/schema.ts`: schema placeholder (no tables yet)
-  - `src/client.ts`: SQLite + Drizzle client
-  - `src/migrate.ts`: migration runner
+  - `src/schema.ts`: auth + app schema definitions
+  - `src/client.ts`: Neon + Drizzle client
   - `drizzle.config.ts`: Drizzle Kit config
 - `packages/trpc`: shared tRPC router, context, server handler, and client
-  - `src/router.ts`: empty router scaffold (no procedures yet)
+  - `src/router.ts`: app router with Gmail cache procedures (`gmail.getCachedMessages`, `gmail.upsertCachedMessages`)
   - `src/server.ts`: `fetchRequestHandler` wrapper
   - `src/client.ts`: typed `createTrpcClient`
 - `packages/ui`: shared Tailwind theme and UI components
@@ -45,7 +44,15 @@
 1. `apps/web` uses `@quietr/trpc` client in `src/lib/trpc.ts`.
 2. Browser requests hit `apps/web/src/routes/api/trpc/[...path].ts`.
 3. `@quietr/trpc/server` handles requests through the shared router.
-4. `@quietr/database` persists data in SQLite (`packages/database/dev.db` by default).
+4. `@quietr/database` persists data in Postgres via `DATABASE_URL`.
+
+## Inbox sync strategy
+
+- Inbox list data is cached with TanStack Query and persisted in `localStorage` for instant reload UX.
+- Freshness uses periodic polling plus manual refresh (no Gmail Pub/Sub in the current phase).
+- Polling is list-first: compare message IDs from `messages.list`, then fetch metadata only for unseen IDs.
+- Message IDs and metadata are also persisted server-side in Postgres through tRPC, so repeated metadata calls are reduced across browser sessions.
+- Thread bodies are fetched on click for fast navigation with minimal background API usage.
 
 ## SolidStart routing notes
 

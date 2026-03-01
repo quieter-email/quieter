@@ -28,7 +28,7 @@ export const MessageRow = (props: MessageRowProps) => {
       <button
         type="button"
         class={cn(
-          "group flex w-full items-center gap-3 overflow-hidden border border-border bg-background/20 px-4 py-3 text-left transition-colors duration-150 hover:border-foreground/25 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none",
+          "group flex h-16 w-full items-center gap-3 overflow-hidden border border-border bg-background/20 px-3 text-left transition-colors duration-150 hover:border-foreground/25 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none sm:px-3.5",
         )}
         onClick={() => {
           props.onActivateMessage(msg().id);
@@ -42,8 +42,8 @@ export const MessageRow = (props: MessageRowProps) => {
         // }}
       >
         <SenderAvatar avatarUrl={msg().senderAvatarUrl} fallbackLabel={senderInitial()} />
-        <div class="min-w-0 flex-1">
-          <div class="flex min-w-0 items-start justify-between gap-2">
+        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div class="flex min-w-0 items-baseline justify-between gap-2">
             <p class="min-w-0 flex-1 truncate text-sm text-foreground">
               <span class="font-medium">{senderLabel()}</span>
               <Show when={senderEmail()}>
@@ -58,3 +58,4 @@ export const MessageRow = (props: MessageRowProps) => {
     </li>
   );
 };
+

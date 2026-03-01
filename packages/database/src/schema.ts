@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { bigint, boolean, integer, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
 import { defineRelations } from "drizzle-orm/relations";
 
 export const user = pgTable("user", {
@@ -150,6 +150,38 @@ export const teamMember = pgTable(
   (table) => [unique().on(table.teamId, table.userId)],
 );
 
+export const gmailMailboxState = pgTable("gmailMailboxState", {
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id)
+    .primaryKey(),
+  lastSyncAt: timestamp("lastSyncAt"),
+  lastError: text("lastError"),
+  createdAt: timestamp("createdAt").notNull(),
+  updatedAt: timestamp("updatedAt").notNull(),
+});
+
+export const gmailMessageCache = pgTable(
+  "gmailMessageCache",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id),
+    messageId: text("messageId").notNull(),
+    threadId: text("threadId").notNull(),
+    snippet: text("snippet"),
+    subject: text("subject"),
+    from: text("from"),
+    date: text("date"),
+    internalDateMs: bigint("internalDateMs", { mode: "number" }),
+    senderAvatarUrl: text("senderAvatarUrl"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [unique().on(table.userId, table.messageId)],
+);
+
 export const organizationRole = pgTable(
   "organizationRole",
   {
@@ -177,6 +209,8 @@ export const tables = {
   member,
   invitation,
   teamMember,
+  gmailMailboxState,
+  gmailMessageCache,
   organizationRole,
 };
 
@@ -193,6 +227,15 @@ export const authRelations = defineRelations(tables, (r) => ({
     memberships: r.many.member({ from: r.user.id, to: r.member.userId }),
     invitationsSent: r.many.invitation({ from: r.user.id, to: r.invitation.inviterId }),
     teamMemberships: r.many.teamMember({ from: r.user.id, to: r.teamMember.userId }),
+    gmailMailboxState: r.one.gmailMailboxState({
+      from: r.user.id,
+      to: r.gmailMailboxState.userId,
+      optional: true,
+    }),
+    gmailMessageCache: r.many.gmailMessageCache({
+      from: r.user.id,
+      to: r.gmailMessageCache.userId,
+    }),
   },
   account: {
     user: r.one.user({
@@ -292,6 +335,20 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
     user: r.one.user({
       from: r.teamMember.userId,
+      to: r.user.id,
+      optional: false,
+    }),
+  },
+  gmailMailboxState: {
+    user: r.one.user({
+      from: r.gmailMailboxState.userId,
+      to: r.user.id,
+      optional: false,
+    }),
+  },
+  gmailMessageCache: {
+    user: r.one.user({
+      from: r.gmailMessageCache.userId,
       to: r.user.id,
       optional: false,
     }),

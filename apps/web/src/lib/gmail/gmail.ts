@@ -10,7 +10,9 @@ type GmailMessage = z.infer<typeof getMessageSchema>;
 const MESSAGE_DETAILS_CONCURRENCY = 8;
 const RATE_LIMIT_MAX_RETRIES = 2;
 const RATE_LIMIT_BASE_DELAY_MS = 350;
-export const GMAIL_QUERY_STALE_TIME_MS = 1000 * 60 * 10;
+export const GMAIL_QUERY_STALE_TIME_MS = 1000 * 60 * 2;
+export const GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS = 1000 * 30;
+export const GMAIL_QUERY_BACKGROUND_SYNC_INTERVAL_MS = 1000 * 60 * 5;
 
 const findHeaders = (
   obj: MessagePart | undefined,
@@ -49,6 +51,16 @@ export type ListMessagesPageResult = {
   nextPageToken?: string;
   resultSizeEstimate?: number;
 };
+
+type LoadCachedMessagesFn = (
+  messageIds: string[],
+  signal?: AbortSignal,
+) => Promise<MessageListItem[]>;
+
+type PersistFetchedMessagesFn = (
+  messages: MessageListItem[],
+  signal?: AbortSignal,
+) => Promise<void>;
 
 const resolveGoogleAccessToken = async (accessToken?: string | null): Promise<string> => {
   if (accessToken) return accessToken;
@@ -222,6 +234,9 @@ export const listMessagesWithDetails = async (opts?: {
   pageToken?: string;
   maxResults?: number;
   accessToken?: string | null;
+  cachedMessagesById?: ReadonlyMap<string, MessageListItem>;
+  loadCachedMessages?: LoadCachedMessagesFn;
+  persistFetchedMessages?: PersistFetchedMessagesFn;
   signal?: AbortSignal;
 }): Promise<ListMessagesPageResult> => {
   const accessToken = await resolveGoogleAccessToken(opts?.accessToken);
@@ -233,21 +248,78 @@ export const listMessagesWithDetails = async (opts?: {
     signal: opts?.signal,
   });
 
-  const details = await getMessageDetailsWithConcurrency(list.messages, {
-    accessToken,
-    signal: opts?.signal,
-  });
+  const missingMessageRefs = list.messages.filter(
+    (message) => !opts?.cachedMessagesById?.has(message.id),
+  );
+
+  const persistedMessagesById = new Map<string, MessageListItem>();
+
+  if (missingMessageRefs.length > 0 && opts?.loadCachedMessages) {
+    const persistedMessages = await opts.loadCachedMessages(
+      missingMessageRefs.map((message) => message.id),
+      opts.signal,
+    );
+
+    for (const message of persistedMessages) {
+      persistedMessagesById.set(message.id, message);
+    }
+  }
+
+  const messagesStillMissing = missingMessageRefs.filter(
+    (message) => !persistedMessagesById.has(message.id),
+  );
+
+  const details =
+    messagesStillMissing.length > 0
+      ? await getMessageDetailsWithConcurrency(messagesStillMissing, {
+          accessToken,
+          signal: opts?.signal,
+        })
+      : [];
 
   if (opts?.signal?.aborted) {
     throw new DOMException("The operation was aborted", "AbortError");
   }
 
-  if (!details.length && list.messages.length > 0) {
+  const fetchedMessagesById = new Map(
+    details.map((message) => {
+      const item = toMessageListItem(message, false);
+      return [item.id, item] as const;
+    }),
+  );
+
+  const messages = list.messages
+    .map((message) => {
+      return (
+        opts?.cachedMessagesById?.get(message.id) ??
+        persistedMessagesById.get(message.id) ??
+        fetchedMessagesById.get(message.id)
+      );
+    })
+    .filter((message): message is MessageListItem => Boolean(message));
+
+  if (!messages.length && list.messages.length > 0) {
     throw new Error("Failed to get message");
   }
 
-  const messages = details.map((message) => toMessageListItem(message, false));
   const messagesWithAvatars = await withSenderAvatars(messages);
+
+  if (opts?.persistFetchedMessages && fetchedMessagesById.size > 0) {
+    const fetchedMessageIds = new Set(fetchedMessagesById.keys());
+    const fetchedMessagesWithAvatars = messagesWithAvatars.filter((message) =>
+      fetchedMessageIds.has(message.id),
+    );
+
+    if (fetchedMessagesWithAvatars.length > 0) {
+      try {
+        await opts.persistFetchedMessages(fetchedMessagesWithAvatars, opts.signal);
+      } catch (error) {
+        if (opts.signal?.aborted) {
+          throw error;
+        }
+      }
+    }
+  }
 
   return {
     messages: messagesWithAvatars,

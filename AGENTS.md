@@ -9,7 +9,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - Frontend app: [SolidStart](https://docs.solidjs.com/solid-start) + [Vite](https://vite.dev/)
 - Routing: `@solidjs/router` file-based routing via `@solidjs/start/router`
 - API layer: [tRPC v11](https://trpc.io/)
-- Database: [Drizzle ORM beta](https://orm.drizzle.team/) + SQLite via `bun:sqlite`
+- Database: [Drizzle ORM beta](https://orm.drizzle.team/) + Postgres (Neon HTTP)
 - Styling: [Tailwind CSS 4](https://tailwindcss.com/)
 - Linting and formatting: [Oxlint](https://oxc.rs/docs/guide/usage/linter) + [Oxfmt](https://oxc.rs/docs/guide/usage/formatter)
 - Type checking: TypeScript native preview (`tsgo` from `@typescript/native-preview`)
@@ -24,14 +24,13 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
   - `src/routes/api/trpc/[...path].ts`: HTTP endpoint for tRPC requests (`/api/trpc`).
   - `src/lib/trpc.ts`: Shared tRPC client instance for the app.
 - `packages/database/`: Shared database package.
-  - `src/schema.ts`: Drizzle schema placeholder (no tables yet).
-  - `src/client.ts`: SQLite and Drizzle client setup.
-  - `src/migrate.ts`: Migration runner.
+  - `src/schema.ts`: Drizzle schema definitions.
+  - `src/client.ts`: Neon and Drizzle client setup.
   - `drizzle.config.ts`: Drizzle Kit configuration.
   - `drizzle/`: Generated migration artifacts.
 - `packages/trpc/`: Shared API contract + server/client helpers.
   - `src/context.ts`: tRPC context creation.
-  - `src/router.ts`: App router scaffold (no procedures yet).
+  - `src/router.ts`: App router with Gmail cache procedures.
   - `src/server.ts`: `fetchRequestHandler` integration.
   - `src/client.ts`: Typed client factory.
   - `src/types.ts`: `RouterInputs` and `RouterOutputs` utility types.
@@ -58,8 +57,10 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 
 - App calls `@quietr/trpc` client from `apps/web/src/lib/trpc.ts`.
 - Requests are handled in `apps/web/src/routes/api/trpc/[...path].ts` using `@quietr/trpc/server`.
-- Router procedures are not defined yet; `packages/trpc/src/router.ts` is currently an empty scaffold.
-- SQLite persistence is managed in `packages/database/src/client.ts`.
+- Router procedures currently include Gmail metadata cache helpers.
+- Postgres persistence is managed in `packages/database/src/client.ts`.
+- Inbox synchronization currently uses periodic polling + manual refresh (no Gmail Pub/Sub in this phase).
+- Inbox metadata caching is shared: browser-local TanStack persistence plus server-side Postgres cache accessed via tRPC.
 
 ### Routing + SSR behavior
 
@@ -72,7 +73,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - Schema changes go in `packages/database/src/schema.ts`.
 - Generate migrations with `bun run db:generate` (root) or package-local `db:generate`.
 - Apply migrations with `bun run db:migrate` (root) or package-local `db:migrate`.
-- Default local DB path is `packages/database/dev.db` unless `DATABASE_URL` is set.
+- Database connections use `DATABASE_URL` (required).
 
 ### Shared tooling and config
 

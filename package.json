@@ -11,6 +11,7 @@
       "@types/node": "^25.3.3",
       "@solidjs/router": "^0.15.4",
       "@solidjs/start": "^2.0.0-alpha.2",
+      "@tabler/icons-solidjs": "^3.38.0",
       "@tanstack/query-persist-client-core": "^5.92.0",
       "@tanstack/solid-query": "^5.90.23",
       "@tanstack/solid-virtual": "^3.13.19",
