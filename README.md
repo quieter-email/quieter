@@ -1,135 +1,110 @@
-# Turborepo starter
+# quietr
 
-This Turborepo starter is maintained by the Turborepo core team.
+`quietr` is a Bun + Turbo monorepo with a SolidStart app and shared packages for database, tRPC, and UI.
 
-## Using this example
+## Tech stack
 
-Run the following command:
+- Runtime and package manager: Bun
+- Monorepo orchestration: Turborepo
+- App framework: SolidStart + Vite
+- API layer: tRPC v11
+- Database layer: Drizzle ORM beta + SQLite (`bun:sqlite`)
+- Styling: Tailwind CSS v4
+- Linting and formatting: Oxlint + Oxfmt
+- Type checking: TypeScript native preview (`tsgo`)
 
-```sh
-npx create-turbo@latest
+## Workspace layout
+
+- `apps/web`: SolidStart app
+  - `src/app.tsx`: router setup, root layout, and global error boundary
+  - `src/entry-client.tsx`: client mount entrypoint
+  - `src/entry-server.tsx`: server document and render entrypoint
+  - `src/routes/index.tsx`: minimal landing page
+  - `src/routes/api/trpc/[...path].ts`: tRPC HTTP endpoint
+- `packages/database`: Drizzle schema, client, and migrations
+  - `src/schema.ts`: schema placeholder (no tables yet)
+  - `src/client.ts`: SQLite + Drizzle client
+  - `src/migrate.ts`: migration runner
+  - `drizzle.config.ts`: Drizzle Kit config
+- `packages/trpc`: shared tRPC router, context, server handler, and client
+  - `src/router.ts`: empty router scaffold (no procedures yet)
+  - `src/server.ts`: `fetchRequestHandler` wrapper
+  - `src/client.ts`: typed `createTrpcClient`
+- `packages/ui`: shared Tailwind theme and UI components
+  - `src/styles.css`: Tailwind v4 theme tokens and global base styles
+  - `src/components/button.tsx`: Kobalte-based button primitive with variants
+  - `src/components/text-field.tsx`: Kobalte-based text field primitives
+  - `src/components/card.tsx`: shared card/layout primitives
+- `packages/config`: shared TypeScript config package
+  - `tsconfig/base.json`: shared TS config (+ JSON schema)
+- `oxlint.json`: root shared Oxlint config (+ JSON schema)
+- `oxfmt.json`: root shared Oxfmt config (+ JSON schema)
+
+## Architecture flow
+
+1. `apps/web` uses `@quietr/trpc` client in `src/lib/trpc.ts`.
+2. Browser requests hit `apps/web/src/routes/api/trpc/[...path].ts`.
+3. `@quietr/trpc/server` handles requests through the shared router.
+4. `@quietr/database` persists data in SQLite (`packages/database/dev.db` by default).
+
+## SolidStart routing notes
+
+- `apps/web/src/app.tsx` wires `Router` + `FileRoutes` and owns the global error boundary and shell-level Suspense.
+- Route guards are implemented with `route.preload` exports in route files.
+- Catch-all API handlers use SolidStart file routes (for example, `src/routes/api/trpc/[...path].ts`).
+
+## Getting started
+
+```bash
+bun install
+bun run db:generate
+bun run db:migrate
+bun run dev
 ```
 
-## What's inside?
+Open `http://localhost:3000`.
 
-This Turborepo includes the following packages/apps:
+## Root commands
 
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
+```bash
+bun run dev
+bun run lint
+bun run lint:fix
+bun run fmt
+bun run fmt:check
+bun run typecheck
+bun run build
+bun run db:generate
+bun run db:migrate
+bun run db:push
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+## Package-local commands
 
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build --filter=docs
+Each package defines its own:
 
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-```
+- `lint` (Oxlint)
+- `lint:fix` (Oxlint autofix)
+- `fmt` and `fmt:check` (Oxfmt)
+- `typecheck` (`tsgo --noEmit`)
 
-### Develop
+`@quietr/database` also defines:
 
-To develop all apps and packages, run the following command:
+- `db:generate`
+- `db:migrate`
+- `db:push`
 
-```
-cd my-turborepo
+## Environment notes
 
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev
+- `VITE_LOGO_DEV_PUBLISHABLE_KEY`: Logo.dev publishable key (starts with `pk_`). Required for company logo avatars. Get one at [logo.dev/signup](https://www.logo.dev/signup). Add to root `.env.local` or `.env`.
+- Turborepo is configured in `strict` env mode.
+- Variables used by tasks are declared in `turbo.json` task `env` keys.
+- `.env*` files are included in Turborepo hashing via `globalDependencies`.
+- Turborepo does not load `.env` files into task runtimes by itself.
+- `@quietr/database` scripts load root `.env.local` explicitly via `bun --env-file=../../.env.local ...`.
+- `@quietr/web` keeps `envDir: "../../"` and also hydrates non-prefixed env vars into `process.env` via `loadEnv(mode, "../../", "")` in `vite.config.ts` for server runtime code.
 
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
-```
+## Dependency management
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev --filter=web
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo login
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo link
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+- Root `package.json` uses Bun workspaces and `workspaces.catalog` for version pinning.
+- Workspace packages consume shared versions via `catalog:` references.

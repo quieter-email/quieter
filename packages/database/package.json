@@ -1,0 +1,33 @@
+{
+  "name": "@quietr/database",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "db:generate": "bun --env-file=../../.env.local drizzle-kit generate",
+    "db:migrate": "bun --env-file=../../.env.local drizzle-kit migrate",
+    "db:push": "bun --env-file=../../.env.local drizzle-kit push",
+    "fmt": "oxfmt --config ../../oxfmt.json .",
+    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
+    "lint": "oxlint --config ../../oxlint.json .",
+    "lint:fix": "oxlint --fix --config ../../oxlint.json .",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
+    "drizzle-orm": "catalog:"
+  },
+  "devDependencies": {
+    "@quietr/config": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "drizzle-kit": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:"
+  }
+}

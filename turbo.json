@@ -1,21 +1,60 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
+  "envMode": "strict",
+  "globalDependencies": [".env*"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**"]
+      "env": ["BETTER_AUTH_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "DATABASE_URL", "VITE_LOGO_DEV_PUBLISHABLE_KEY"],
+      "inputs": ["$TURBO_DEFAULT$"],
+      "outputs": ["dist/**", ".output/**", "!.output/cache/**"]
     },
     "lint": {
-      "dependsOn": ["^lint"]
+      "dependsOn": ["^lint"],
+      "outputs": [],
+      "cache": false
     },
-    "check-types": {
-      "dependsOn": ["^check-types"]
+    "lint:fix": {
+      "dependsOn": ["^lint:fix"],
+      "outputs": [],
+      "cache": false
+    },
+    "fmt": {
+      "dependsOn": ["^fmt"],
+      "outputs": [],
+      "cache": false
+    },
+    "fmt:check": {
+      "dependsOn": ["^fmt:check"],
+      "outputs": [],
+      "cache": false
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck"],
+      "outputs": [],
+      "cache": false
+    },
+    "db:generate": {
+      "env": ["DATABASE_URL"],
+      "cache": false,
+      "outputs": ["drizzle/**"]
+    },
+    "db:migrate": {
+      "env": ["DATABASE_URL"],
+      "cache": false,
+      "outputs": []
+    },
+    "db:push": {
+      "env": ["DATABASE_URL"],
+      "cache": false,
+      "outputs": []
     },
     "dev": {
+      "env": ["BETTER_AUTH_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "DATABASE_URL", "VITE_LOGO_DEV_PUBLISHABLE_KEY"],
       "cache": false,
       "persistent": true
     }
   }
 }
+

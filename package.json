@@ -1,24 +1,65 @@
 {
   "name": "quietr",
   "private": true,
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*"
+    ],
+    "catalog": {
+      "@types/bun": "^1.3.9",
+      "@types/node": "^25.3.3",
+      "@solidjs/router": "^0.15.4",
+      "@solidjs/start": "^2.0.0-alpha.2",
+      "@tanstack/query-persist-client-core": "^5.92.0",
+      "@tanstack/solid-query": "^5.90.23",
+      "@tanstack/solid-virtual": "^3.13.19",
+      "better-auth": "1.5.0",
+      "@tailwindcss/vite": "^4.2.1",
+      "@trpc/client": "^11.11.0",
+      "@trpc/server": "^11.11.0",
+      "@better-auth/core": "1.5.0",
+      "@better-auth/passkey": "1.5.0",
+      "@typescript/native-preview": "^7.0.0-dev.20260301.1",
+      "drizzle-kit": "beta",
+      "drizzle-orm": "beta",
+      "oxfmt": "^0.35.0",
+      "oxlint": "^1.50.0",
+      "solid-js": "^1.9.11",
+      "tailwindcss": "^4.2.1",
+      "typescript": "^5.9.3",
+      "vite": "^7.3.1",
+      "vite-plugin-solid": "^2.11.10",
+      "vite-tsconfig-paths": "^6.1.1",
+      "zod": "^4.3.6"
+    }
+  },
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev",
+    "db:generate": "turbo run db:generate --filter=@quietr/database",
+    "db:migrate": "turbo run db:migrate --filter=@quietr/database",
+    "db:push": "turbo run db:push --filter=@quietr/database",
+    "dev": "turbo run dev --parallel",
+    "fmt": "turbo run fmt",
+    "fmt:check": "turbo run fmt:check",
     "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types"
+    "lint:fix": "turbo run lint:fix",
+    "typecheck": "turbo run typecheck"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.2"
   },
   "devDependencies": {
-    "prettier": "^3.7.4",
-    "turbo": "^2.8.10",
-    "typescript": "5.9.2"
+    "turbo": "^2.8.12"
+  },
+  "overrides": {
+    "@better-auth/core": "1.5.0",
+    "@better-auth/utils": "0.3.1",
+    "better-call": "1.3.2"
   },
   "engines": {
-    "node": ">=18"
+    "bun": ">=1.3.9"
   },
-  "packageManager": "bun@1.3.9",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ]
+  "packageManager": "bun@1.3.10"
 }
+

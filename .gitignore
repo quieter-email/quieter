@@ -22,10 +22,12 @@ coverage
 .vercel
 
 # Build Outputs
-.next/
 out/
 build
 dist
+.output/
+.tanstack/
+.vinxi/
 
 
 # Debug
@@ -36,3 +38,12 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+
+# Local database files
+packages/database/dev.db
+packages/database/dev.db-shm
+packages/database/dev.db-wal
+
+# Local scratch scaffolds
+scratch-start/
+scratch-solid/

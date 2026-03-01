@@ -1,28 +1,50 @@
 {
-  "name": "web",
-  "version": "0.1.0",
-  "type": "module",
+  "name": "@quietr/web",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "next dev --port 3000",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint --max-warnings 0",
-    "check-types": "next typegen && tsc --noEmit"
+    "build": "vite build",
+    "dev": "vite dev --port 3000",
+    "fmt": "oxfmt --config ../../oxfmt.json .",
+    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
+    "lint": "oxlint --config ../../oxlint.json .",
+    "lint:fix": "oxlint --fix --config ../../oxlint.json .",
+    "preview": "vite preview",
+    "start": "vite start",
+    "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@repo/ui": "*",
-    "next": "16.1.5",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "@corvu/resizable": "^0.2.5",
+    "@quietr/auth": "workspace:*",
+    "@quietr/database": "workspace:*",
+    "@quietr/trpc": "workspace:*",
+    "@quietr/ui": "workspace:*",
+    "@solidjs/router": "catalog:",
+    "@solidjs/start": "catalog:",
+    "@tailwindcss/vite": "^4.2.1",
+    "@tanstack/query-persist-client-core": "catalog:",
+    "@tanstack/solid-query": "catalog:",
+    "@tanstack/solid-virtual": "catalog:",
+    "better-auth": "catalog:",
+    "drizzle-orm": "catalog:",
+    "isomorphic-dompurify": "^3.0.0",
+    "motion-solid": "^0.4.0",
+    "solid-js": "1.9",
+    "srvx": "^0.11.8",
+    "tailwindcss": "catalog:",
+    "vite-tsconfig-paths": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@repo/eslint-config": "*",
-    "@repo/typescript-config": "*",
-    "@types/node": "^22.15.3",
-    "@types/react": "19.2.2",
-    "@types/react-dom": "19.2.2",
-    "eslint": "^9.39.1",
-    "typescript": "5.9.2"
+    "@quietr/config": "workspace:*",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:",
+    "vite": "npm:rolldown-vite@latest"
+  },
+  "overrides": {
+    "vite": "npm:rolldown-vite@latest"
   }
 }

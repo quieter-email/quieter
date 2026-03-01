@@ -1,0 +1,21 @@
+{
+  "name": "@quietr/config",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./tsconfig/base.json": "./tsconfig/base.json"
+  },
+  "scripts": {
+    "fmt": "oxfmt --config ../../oxfmt.json .",
+    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
+    "lint": "oxlint --config ../../oxlint.json .",
+    "lint:fix": "oxlint --fix --config ../../oxlint.json .",
+    "typecheck": "tsgo --project ./tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@quietr/trpc",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/client.ts",
+    "./server": "./src/server.ts",
+    "./router": "./src/router.ts"
+  },
+  "scripts": {
+    "fmt": "oxfmt --config ../../oxfmt.json .",
+    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
+    "lint": "oxlint --config ../../oxlint.json .",
+    "lint:fix": "oxlint --fix --config ../../oxlint.json .",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@quietr/database": "workspace:*",
+    "@trpc/client": "catalog:",
+    "@trpc/server": "catalog:"
+  },
+  "devDependencies": {
+    "@quietr/config": "workspace:*",
+    "@typescript/native-preview": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "skills": {
+    "better-auth-best-practices": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "computedHash": "ae9bd37665a525bdb056ff6f27afc0f9c7c75809e3e23ed85c0d398dd10f6a96"
+    },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "516bd2154eb843a8240e43d5b285229129853114ad7075a5e141e1c08e408c84"
+    },
+    "solidjs": {
+      "source": "fjrevoredo/mini-diarium",
+      "sourceType": "github",
+      "computedHash": "c8d4b1f3573b6422266da881c4c1a6b46d7ffb6b8d24de4541592a1788e3de01"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "d8e7d3afe37dcc8a97b99ffb5afdb4d0919ae0092ea8b68f44eb201f035e33ac"
+    }
+  }
+}
