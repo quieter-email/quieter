@@ -11,8 +11,8 @@ const MESSAGE_DETAILS_CONCURRENCY = 8;
 const RATE_LIMIT_MAX_RETRIES = 2;
 const RATE_LIMIT_BASE_DELAY_MS = 350;
 export const GMAIL_QUERY_STALE_TIME_MS = 1000 * 60 * 2;
-export const GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS = 1000 * 30;
-export const GMAIL_QUERY_BACKGROUND_SYNC_INTERVAL_MS = 1000 * 60 * 5;
+export const GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS = 1000 * 10;
+export const GMAIL_QUERY_BACKGROUND_SYNC_INTERVAL_MS = 1000 * 60;
 
 const findHeaders = (
   obj: MessagePart | undefined,
@@ -169,6 +169,8 @@ const extractEmailFromFrom = (from?: string): string | undefined => {
   return match?.[1]?.trim() ?? (from.includes("@") ? from.trim() : undefined);
 };
 
+const senderAvatarCache = new Map<string, string | undefined>();
+
 const getMessageTimestamp = (message: MessageListItem): number => {
   const source = message.internalDate ?? message.date;
   if (!source) return 0;
@@ -207,25 +209,35 @@ const withSenderAvatars = async (messages: MessageListItem[]): Promise<MessageLi
   const senderEmails = Array.from(
     new Set(
       messages
+        .filter((message) => !message.senderAvatarUrl)
         .map((message) => extractEmailFromFrom(message.from))
         .filter((email): email is string => Boolean(email)),
     ),
   );
 
-  const avatarByEmail = new Map<string, string | undefined>();
   await Promise.all(
     senderEmails.map(async (email) => {
+      if (senderAvatarCache.has(email)) return;
       const avatarUrl = await getSenderAvatarUrl(email, { size: 64 });
-      avatarByEmail.set(email, avatarUrl);
+      senderAvatarCache.set(email, avatarUrl);
     }),
   );
 
   return messages.map((message) => {
+    if (message.senderAvatarUrl) {
+      const email = extractEmailFromFrom(message.from);
+      if (email) senderAvatarCache.set(email, message.senderAvatarUrl);
+      return message;
+    }
+
     const email = extractEmailFromFrom(message.from);
+    if (!email) return message;
+
+    const avatarUrl = senderAvatarCache.get(email);
 
     return {
       ...message,
-      senderAvatarUrl: email ? avatarByEmail.get(email) : undefined,
+      senderAvatarUrl: avatarUrl,
     };
   });
 };
@@ -311,13 +323,7 @@ export const listMessagesWithDetails = async (opts?: {
     );
 
     if (fetchedMessagesWithAvatars.length > 0) {
-      try {
-        await opts.persistFetchedMessages(fetchedMessagesWithAvatars, opts.signal);
-      } catch (error) {
-        if (opts.signal?.aborted) {
-          throw error;
-        }
-      }
+      void opts.persistFetchedMessages(fetchedMessagesWithAvatars).catch(() => undefined);
     }
   }
 

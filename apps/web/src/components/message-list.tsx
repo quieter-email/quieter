@@ -1,38 +1,10 @@
-import type { JSX } from "solid-js";
 import { Button } from "@quietr/ui";
 import { IconRefresh } from "@tabler/icons-solidjs";
 import { createVirtualizer } from "@tanstack/solid-virtual";
-import { motion } from "motion-solid";
-import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo } from "solid-js";
 import type { ListMessagesPageResult } from "~/lib/gmail/gmail";
 import { MessageRow } from "./message-row";
-
-const SpinWhileActive = (props: { active: boolean; children: JSX.Element }) => {
-  const [rotation, setRotation] = createSignal(0);
-
-  createEffect(() => {
-    if (props.active) {
-      setRotation((prev) => prev + 360);
-    }
-  });
-
-  const onSpinComplete = () => {
-    if (props.active) {
-      setRotation((prev) => prev + 360);
-    }
-  };
-
-  return (
-    <motion.span
-      class="inline-flex"
-      animate={{ rotate: rotation() }}
-      transition={{ duration: 1, ease: "easeInOut" }}
-      onAnimationComplete={onSpinComplete}
-    >
-      {props.children}
-    </motion.span>
-  );
-};
+import { SpinWhileActive } from "./spin-while-active";
 
 type MessageListProps = {
   onActivateMessage: (messageId: string) => void;
@@ -89,7 +61,7 @@ export const MessageList = (props: MessageListProps) => {
   });
 
   const refreshList = () => {
-    scrollRef?.scrollTo({ top: 0, behavior: "auto" });
+    scrollRef?.scrollTo({ top: 0, behavior: "smooth" });
     void props.onRefresh();
   };
 
@@ -179,4 +151,3 @@ export const MessageList = (props: MessageListProps) => {
     </div>
   );
 };
-

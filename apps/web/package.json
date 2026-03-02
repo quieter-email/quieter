@@ -29,7 +29,7 @@
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:",
     "isomorphic-dompurify": "^3.0.0",
-    "motion-solid": "^0.4.0",
+    "motion-solid": "0.4.1",
     "solid-js": "1.9",
     "srvx": "^0.11.8",
     "tailwindcss": "catalog:",

@@ -29,7 +29,7 @@
         "better-auth": "catalog:",
         "drizzle-orm": "catalog:",
         "isomorphic-dompurify": "^3.0.0",
-        "motion-solid": "^0.4.0",
+        "motion-solid": "0.4.1",
         "solid-js": "1.9",
         "srvx": "^0.11.8",
         "tailwindcss": "catalog:",
@@ -1087,7 +1087,7 @@
 
     "motion-dom": ["motion-dom@12.34.3", "", { "dependencies": { "motion-utils": "^12.29.2" } }, "sha512-sYgFe+pR9aIM7o4fhs2aXtOI+oqlUd33N9Yoxcgo1Fv7M20sRkHtCmzE/VRNIcq7uNJ+qio+Xubt1FXH3pQ+eQ=="],
 
-    "motion-solid": ["motion-solid@0.4.0", "", { "dependencies": { "@solid-primitives/refs": "^1.1.2", "@solid-primitives/transition-group": "^1.1.2", "motion-dom": "^12.34.2", "motion-utils": "^12.29.2" }, "peerDependencies": { "solid-js": ">=1.0.0" } }, "sha512-XEEfkrRRhU6Yp+UdVyw2LFsoOdGwdYg01pKzUqYx1qkAtp779UVAgkZl+6oWvkdqr55kxToIsv8Si8bo/6qhgQ=="],
+    "motion-solid": ["motion-solid@0.4.1", "", { "dependencies": { "@solid-primitives/refs": "^1.1.2", "@solid-primitives/transition-group": "^1.1.2", "motion-dom": "^12.34.2", "motion-utils": "^12.29.2" }, "peerDependencies": { "solid-js": ">=1.0.0" } }, "sha512-JU+rBb9umqkxixVYG4JPje5OxxoV0AaKLXePT3QojrO0PF1bHQbZ9FSYJdbiNxKfV1+G6SUCnqCrEXE0CkA2QQ=="],
 
     "motion-utils": ["motion-utils@12.29.2", "", {}, "sha512-G3kc34H2cX2gI63RqU+cZq+zWRRPSsNIOjpdl9TN4AQwC4sgwYPl/Q/Obf/d53nOm569T0fYK+tcoSV50BWx8A=="],
 

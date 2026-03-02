@@ -7,8 +7,6 @@ import { MessageDetail } from "~/components/message-detail";
 import { MessageList } from "~/components/message-list";
 import { getGoogleRelinkUrl, getGoogleScopeStatus, getSession } from "~/lib/auth";
 import {
-  GMAIL_QUERY_BACKGROUND_SYNC_INTERVAL_MS,
-  GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
   GMAIL_QUERY_STALE_TIME_MS,
   listMessagesWithDetails,
   type ListMessagesPageResult,
@@ -18,8 +16,6 @@ import { trpc } from "~/lib/trpc";
 
 const MESSAGES_QUERY_KEY = ["messages"] as const;
 const LIVE_SYNC_QUERY_KEY = [...MESSAGES_QUERY_KEY, "live-sync"] as const;
-const DEEP_RECONCILE_EVERY_SYNC = 10;
-const DEEP_RECONCILE_MAX_REFRESHED_PAGES = 2;
 
 type MessagesQueryData = {
   pages: ListMessagesPageResult[];
@@ -32,20 +28,13 @@ const parsePageToken = (value: unknown): string | undefined => {
   return normalized.length > 0 ? normalized : undefined;
 };
 
-const throwIfAborted = (signal?: AbortSignal) => {
-  if (!signal?.aborted) return;
-  throw new DOMException("The operation was aborted", "AbortError");
-};
-
 const loadPersistedMessages = async (
   messageIds: string[],
   signal?: AbortSignal,
 ): Promise<MessageListItem[]> => {
   if (messageIds.length === 0) return [];
 
-  throwIfAborted(signal);
-  const messages = await trpc.gmail.getCachedMessages.query({ messageIds });
-  throwIfAborted(signal);
+  const messages = await trpc.gmail.getCachedMessages.query({ messageIds }, { signal });
 
   return messages;
 };
@@ -53,9 +42,7 @@ const loadPersistedMessages = async (
 const persistFetchedMessages = async (messages: MessageListItem[], signal?: AbortSignal) => {
   if (messages.length === 0) return;
 
-  throwIfAborted(signal);
-  await trpc.gmail.upsertCachedMessages.mutate({ messages });
-  throwIfAborted(signal);
+  await trpc.gmail.upsertCachedMessages.mutate({ messages }, { signal });
 };
 
 const fetchMessagesPage = async (
@@ -65,7 +52,7 @@ const fetchMessagesPage = async (
 ): Promise<ListMessagesPageResult> =>
   await listMessagesWithDetails({
     pageToken,
-    maxResults: pageToken ? 25 : 100,
+    maxResults: pageToken ? 25 : 50,
     cachedMessagesById,
     loadCachedMessages: loadPersistedMessages,
     persistFetchedMessages,
@@ -132,14 +119,6 @@ const mergeRefreshedPages = (
   };
 };
 
-const getCurrentSyncIntervalMs = () => {
-  if (typeof document === "undefined") return GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS;
-
-  return document.visibilityState === "visible"
-    ? GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS
-    : GMAIL_QUERY_BACKGROUND_SYNC_INTERVAL_MS;
-};
-
 const ensureInboxAccess = query(async () => {
   "use server";
 
@@ -199,15 +178,11 @@ function HomePage() {
       ];
 
       const shouldDeepReconcile =
-        syncAttemptCount % DEEP_RECONCILE_EVERY_SYNC === 0 &&
-        (currentMessages?.pages.length ?? 0) > 1;
+        syncAttemptCount % 20 === 0 && (currentMessages?.pages.length ?? 0) > 1;
 
       if (shouldDeepReconcile) {
         let pageToken = refreshedPages[0]?.nextPageToken;
-        const maxPagesToRefresh = Math.min(
-          DEEP_RECONCILE_MAX_REFRESHED_PAGES,
-          currentMessages?.pages.length ?? 1,
-        );
+        const maxPagesToRefresh = Math.min(2, currentMessages?.pages.length ?? 1);
 
         for (let pageIndex = 1; pageIndex < maxPagesToRefresh && pageToken; pageIndex += 1) {
           const nextPage = await fetchMessagesPage(pageToken, cachedMessages, signal);
@@ -222,19 +197,18 @@ function HomePage() {
 
       return refreshedPages[0];
     },
-    enabled:
-      !messagesQuery.isPending &&
-      !messagesQuery.isError &&
-      Boolean(messagesQuery.data?.pages.length),
+    enabled: !messagesQuery.isPending && !messagesQuery.isError,
     staleTime: GMAIL_QUERY_STALE_TIME_MS,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: "always",
-    refetchOnReconnect: "always",
-    refetchInterval: () => getCurrentSyncIntervalMs(),
-    refetchIntervalInBackground: true,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchInterval: 20000,
+    refetchIntervalInBackground: false,
   }));
 
   const refreshMessages = async () => {
+    await queryClient.cancelQueries({ queryKey: LIVE_SYNC_QUERY_KEY });
+
     if (!messagesQuery.data?.pages.length) {
       await messagesQuery.refetch();
       return;
