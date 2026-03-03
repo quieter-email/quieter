@@ -14,6 +14,14 @@ export const GMAIL_QUERY_STALE_TIME_MS = 1000 * 60 * 2;
 export const GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS = 1000 * 10;
 export const GMAIL_QUERY_BACKGROUND_SYNC_INTERVAL_MS = 1000 * 60;
 
+export const MAILBOX_LABELS = {
+  inbox: "INBOX",
+  sent: "SENT",
+  trash: "TRASH",
+} as const;
+
+export type MailboxCategory = keyof typeof MAILBOX_LABELS;
+
 const findHeaders = (
   obj: MessagePart | undefined,
 ): { name: string; value: string }[] | undefined => {
@@ -146,6 +154,7 @@ const getMessageDetailsWithConcurrency = async (
 export const listMessages = async (opts?: {
   pageToken?: string;
   maxResults?: number;
+  mailbox?: MailboxCategory;
   accessToken?: string | null;
   signal?: AbortSignal;
 }) => {
@@ -154,9 +163,16 @@ export const listMessages = async (opts?: {
   const url = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
   url.searchParams.set("maxResults", String(opts?.maxResults ?? 20));
   if (opts?.pageToken) url.searchParams.set("pageToken", opts.pageToken);
+  if (opts?.mailbox) {
+    url.searchParams.append("labelIds", MAILBOX_LABELS[opts.mailbox]);
+    if (opts.mailbox === "trash") {
+      url.searchParams.set("includeSpamTrash", "true");
+    }
+  }
 
   const response = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
     signal: opts?.signal,
   });
   if (!response.ok) throw createApiError("Failed to list messages", response.status);
@@ -245,6 +261,7 @@ const withSenderAvatars = async (messages: MessageListItem[]): Promise<MessageLi
 export const listMessagesWithDetails = async (opts?: {
   pageToken?: string;
   maxResults?: number;
+  mailbox?: MailboxCategory;
   accessToken?: string | null;
   cachedMessagesById?: ReadonlyMap<string, MessageListItem>;
   loadCachedMessages?: LoadCachedMessagesFn;
@@ -256,6 +273,7 @@ export const listMessagesWithDetails = async (opts?: {
   const list = await listMessages({
     pageToken: opts?.pageToken,
     maxResults: opts?.maxResults,
+    mailbox: opts?.mailbox,
     accessToken,
     signal: opts?.signal,
   });
@@ -279,6 +297,16 @@ export const listMessagesWithDetails = async (opts?: {
 
   const messagesStillMissing = missingMessageRefs.filter(
     (message) => !persistedMessagesById.has(message.id),
+  );
+
+  const fallbackMessagesById = new Map<string, MessageListItem>(
+    messagesStillMissing.map((message) => [
+      message.id,
+      {
+        id: message.id,
+        threadId: message.threadId,
+      },
+    ]),
   );
 
   const details =
@@ -305,7 +333,8 @@ export const listMessagesWithDetails = async (opts?: {
       return (
         opts?.cachedMessagesById?.get(message.id) ??
         persistedMessagesById.get(message.id) ??
-        fetchedMessagesById.get(message.id)
+        fetchedMessagesById.get(message.id) ??
+        fallbackMessagesById.get(message.id)
       );
     })
     .filter((message): message is MessageListItem => Boolean(message));
@@ -347,6 +376,7 @@ export const getThreadWithDetails = async (
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
+    cache: "no-store",
     signal: opts?.signal,
   });
   if (!response.ok) throw createApiError("Failed to get thread", response.status);
@@ -386,6 +416,7 @@ export const getMessage = async (
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
+    cache: "no-store",
     signal: opts?.signal,
   });
   if (!response.ok) throw createApiError("Failed to get message", response.status);

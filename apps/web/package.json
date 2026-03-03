@@ -43,9 +43,6 @@
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "typescript": "catalog:",
-    "vite": "npm:rolldown-vite@latest"
-  },
-  "overrides": {
-    "vite": "npm:rolldown-vite@latest"
+    "vite": "catalog:"
   }
 }

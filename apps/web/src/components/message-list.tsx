@@ -1,5 +1,5 @@
 import { Button } from "@quietr/ui";
-import { IconRefresh } from "@tabler/icons-solidjs";
+import { IconArrowUp, IconLoader, IconRefresh } from "@tabler/icons-solidjs";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import { For, Show, createEffect, createMemo } from "solid-js";
 import type { ListMessagesPageResult } from "~/lib/gmail/gmail";
@@ -21,8 +21,29 @@ type MessageListProps = {
 
 export const MessageList = (props: MessageListProps) => {
   let scrollRef: HTMLDivElement | null = null;
+  const SCROLL_TOP_EPSILON_PX = 2;
+  const SCROLL_WAIT_TIMEOUT_MS = 600;
+  let isProgrammaticScrollToTop = false;
 
   const flattenedMessages = createMemo(() => props.messages.flatMap((page) => page.messages));
+  const flattenedMessageIds = createMemo(() => flattenedMessages().map((message) => message.id));
+
+  const areMessageIdsEqual = (
+    previousMessageIds: readonly string[] | undefined,
+    nextMessageIds: readonly string[],
+  ) => {
+    if (!previousMessageIds || previousMessageIds.length !== nextMessageIds.length) {
+      return false;
+    }
+
+    for (let index = 0; index < nextMessageIds.length; index += 1) {
+      if (previousMessageIds[index] !== nextMessageIds[index]) {
+        return false;
+      }
+    }
+
+    return true;
+  };
 
   const messageVirtualizer = createVirtualizer<HTMLDivElement, HTMLLIElement>({
     get count() {
@@ -32,7 +53,20 @@ export const MessageList = (props: MessageListProps) => {
     estimateSize: () => 64,
     overscan: 8,
     gap: 8,
-    getItemKey: (index) => flattenedMessages()[index]?.id ?? index,
+    get getItemKey() {
+      const messageIds = flattenedMessageIds();
+      return (index: number) => messageIds[index] ?? index;
+    },
+  });
+
+  createEffect((previousMessageIds: readonly string[] | undefined) => {
+    const nextMessageIds = flattenedMessageIds();
+
+    if (!areMessageIdsEqual(previousMessageIds, nextMessageIds)) {
+      messageVirtualizer.measure();
+    }
+
+    return nextMessageIds;
   });
 
   const tryLoadMore = () => {
@@ -60,9 +94,69 @@ export const MessageList = (props: MessageListProps) => {
     maybeLoadMore();
   });
 
-  const refreshList = () => {
-    scrollRef?.scrollTo({ top: 0, behavior: "smooth" });
-    void props.onRefresh();
+  const waitForSmoothScrollTop = async (element: HTMLDivElement): Promise<void> => {
+    await new Promise<void>((resolve) => {
+      let done = false;
+
+      const cleanup = () => {
+        element.removeEventListener("scroll", onScroll);
+        element.removeEventListener("scrollend", onScrollEnd as EventListener);
+        clearTimeout(timeoutId);
+      };
+
+      const finish = () => {
+        if (done) return;
+        done = true;
+        cleanup();
+        resolve();
+      };
+
+      const onScroll = () => {
+        if (element.scrollTop <= SCROLL_TOP_EPSILON_PX) finish();
+      };
+
+      const onScrollEnd = () => {
+        finish();
+      };
+
+      const timeoutId = setTimeout(finish, SCROLL_WAIT_TIMEOUT_MS);
+
+      element.addEventListener("scroll", onScroll, { passive: true });
+
+      if ("onscrollend" in element) {
+        element.addEventListener("scrollend", onScrollEnd as EventListener, { passive: true });
+      }
+
+      if (element.scrollTop <= SCROLL_TOP_EPSILON_PX) {
+        finish();
+      }
+    });
+  };
+
+  const waitForNextPaint = async (): Promise<void> => {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          resolve();
+        });
+      });
+    });
+  };
+
+  const scrollListToTop = async () => {
+    const element = scrollRef;
+
+    if (element && element.scrollTop > SCROLL_TOP_EPSILON_PX) {
+      isProgrammaticScrollToTop = true;
+
+      try {
+        element.scrollTo({ top: 0, behavior: "smooth" });
+        await waitForSmoothScrollTop(element);
+        await waitForNextPaint();
+      } finally {
+        isProgrammaticScrollToTop = false;
+      }
+    }
   };
 
   return (
@@ -73,7 +167,7 @@ export const MessageList = (props: MessageListProps) => {
             variant="outline"
             size="icon-sm"
             disabled={props.isRefreshing}
-            onClick={() => refreshList()}
+            onClick={() => void props.onRefresh()}
           >
             <SpinWhileActive active={props.isRefreshing}>
               <IconRefresh />
@@ -86,6 +180,10 @@ export const MessageList = (props: MessageListProps) => {
             class="h-8 min-w-0 flex-1 border border-input bg-background px-3 text-xs text-foreground shadow-sm outline-none placeholder:text-muted-foreground"
             aria-label="Search mail (coming soon)"
           />
+
+          <Button variant="outline" size="icon-sm" onClick={() => void scrollListToTop()}>
+            <IconArrowUp />
+          </Button>
         </div>
       </div>
 
@@ -94,10 +192,15 @@ export const MessageList = (props: MessageListProps) => {
           scrollRef = el;
         }}
         class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3 sm:p-4"
-        onScroll={() => maybeLoadMore()}
+        onScroll={() => {
+          if (isProgrammaticScrollToTop) return;
+          maybeLoadMore();
+        }}
       >
         <Show when={props.isPending && flattenedMessages().length === 0} fallback={null}>
-          <p class="px-2 py-6 text-sm text-muted-foreground">Loading messages...</p>
+          <div class="px-2 py-6">
+            <IconLoader class="animate-spin text-muted-foreground" />
+          </div>
         </Show>
 
         <Show when={props.isError} fallback={null}>
@@ -113,18 +216,21 @@ export const MessageList = (props: MessageListProps) => {
           >
             <For each={messageVirtualizer.getVirtualItems()}>
               {(virtualItem) => {
-                const message = flattenedMessages()[virtualItem.index];
-                if (!message) return null;
+                const message = () => flattenedMessages()[virtualItem.index];
 
                 return (
-                  <MessageRow
-                    message={message}
-                    onActivateMessage={props.onActivateMessage}
-                    class="absolute top-0 left-0 w-full will-change-transform"
-                    style={{
-                      transform: `translateY(${virtualItem.start}px)`,
-                    }}
-                  />
+                  <Show when={message()} keyed>
+                    {(resolvedMessage) => (
+                      <MessageRow
+                        message={resolvedMessage}
+                        onActivateMessage={props.onActivateMessage}
+                        class="absolute top-0 left-0 w-full will-change-transform"
+                        style={{
+                          transform: `translateY(${virtualItem.start}px)`,
+                        }}
+                      />
+                    )}
+                  </Show>
                 );
               }}
             </For>
@@ -140,11 +246,13 @@ export const MessageList = (props: MessageListProps) => {
 
         <Show when={!props.isError && flattenedMessages().length > 0} fallback={null}>
           <p class="px-2 py-4 text-xs text-muted-foreground">
-            {props.isFetchingNextPage
-              ? "Loading more messages..."
-              : props.hasNextPage
-                ? "Fetching ahead before you reach the end..."
-                : "You're all caught up."}
+            {props.isFetchingNextPage ? (
+              <IconLoader class="animate-spin text-muted-foreground" />
+            ) : props.hasNextPage ? (
+              <IconLoader class="animate-spin text-muted-foreground" />
+            ) : (
+              "You're all caught up."
+            )}
           </p>
         </Show>
       </div>

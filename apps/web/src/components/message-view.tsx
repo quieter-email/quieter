@@ -1,3 +1,4 @@
+import { IconLoader } from "@tabler/icons-solidjs";
 import { useQuery } from "@tanstack/solid-query";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import { type MessageListItem } from "~/lib/gmail/gmail";
@@ -62,7 +63,7 @@ export const MessageView = (props: MessageViewProps) => {
         </p>
 
         <Show when={threadQuery.isPending && !threadQuery.data}>
-          <p class="mt-2 animate-pulse text-sm text-muted-foreground">Loading conversation...</p>
+          <IconLoader class="mt-2 animate-spin text-muted-foreground" />
         </Show>
 
         <Show when={threadQuery.isError}>

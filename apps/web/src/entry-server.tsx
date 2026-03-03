@@ -1,4 +1,5 @@
 // @refresh reload
+import { ColorModeScript } from "@quietr/ui";
 import { StartServer, createHandler } from "@solidjs/start/server";
 
 const faviconHref =
@@ -13,6 +14,7 @@ export default createHandler(() => (
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <title>quietr</title>
           <link rel="icon" type="image/svg+xml" href={faviconHref} />
+          <ColorModeScript initialColorMode="system" />
           {args.assets}
         </head>
         <body>

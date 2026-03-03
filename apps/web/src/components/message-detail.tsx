@@ -1,3 +1,4 @@
+import { IconLoader } from "@tabler/icons-solidjs";
 import { Show, Suspense } from "solid-js";
 import type { MessageListItem } from "~/lib/gmail/gmail";
 import { EmptyMessageState } from "./empty-message-state";
@@ -18,7 +19,7 @@ export const MessageDetail = (props: MessageDetailProps) => (
           <Suspense
             fallback={
               <div class="grid h-full place-items-center text-sm text-muted-foreground">
-                Loading conversation...
+                <IconLoader class="animate-spin text-muted-foreground" />
               </div>
             }
           >

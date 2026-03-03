@@ -53,6 +53,15 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - `packages/trpc` is the boundary between app and database logic.
 - `packages/database` should own schema and migration concerns.
 
+### TanStack Query and queryOptions
+
+- Use `queryOptions` (from `@tanstack/solid-query`) when:
+  - A query config is needed in more than one place (e.g. `useQuery` and `prefetchQuery`, or `getQueryData` / `invalidateQueries` / `cancelQueries`).
+  - You want a single source of truth for query keys and config.
+- Prefer extracting query options into shared modules (e.g. `*-query.ts`) when used across components.
+- Examples: `apps/web/src/lib/gmail/thread-query.ts` defines `getThreadWithDetailsOptions(threadId)` for thread details; `apps/web/src/lib/gmail/inbox-query.ts` defines `messagesQueryOptions` and `liveSyncQueryOptions` for the inbox list and sync, used by `useInfiniteQuery`, `useQuery`, `cancelQueries`, and `getQueryData`/`setQueryData`.
+- Pass the result of `queryOptions(...)` directly to `useQuery`, `prefetchQuery`, or other query methods; avoid duplicating query keys or config inline.
+
 ### API and data flow
 
 - App calls `@quietr/trpc` client from `apps/web/src/lib/trpc.ts`.
@@ -124,3 +133,4 @@ Package-level commands:
 4. Respect generated files: do not manually rewrite generated route tree or migration metadata without clear reason.
 5. For schema changes, always generate and apply migrations, and verify app behavior end-to-end.
 6. Before finishing work, run lint, fmt:check, typecheck, and build from repo root.
+7. Use `queryOptions` when adding or refactoring TanStack Query usage: for `useQuery`, `prefetchQuery`, or whenever query keys/config are needed in two or more places.
