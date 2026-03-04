@@ -7,7 +7,11 @@ import { MessageRow } from "./message-row";
 import { SpinWhileActive } from "./spin-while-active";
 
 type MessageListProps = {
+  activeMessageId?: string | null;
   onActivateMessage: (messageId: string) => void;
+  onMarkAsRead: (messageId: string) => void | Promise<void>;
+  onMarkAsUnread: (messageId: string) => void | Promise<void>;
+  isReadStatePending?: (messageId: string) => boolean;
   onRefresh: () => void | Promise<void>;
   isRefreshing: boolean;
   isPending: boolean;
@@ -220,10 +224,14 @@ export const MessageList = (props: MessageListProps) => {
 
                 return (
                   <Show when={message()} keyed>
-                    {(resolvedMessage) => (
+                    {(message) => (
                       <MessageRow
-                        message={resolvedMessage}
+                        message={message}
+                        isActive={props.activeMessageId === message.id}
                         onActivateMessage={props.onActivateMessage}
+                        onMarkAsRead={props.onMarkAsRead}
+                        onMarkAsUnread={props.onMarkAsUnread}
+                        isReadStatePending={props.isReadStatePending?.(message.id)}
                         class="absolute top-0 left-0 w-full will-change-transform"
                         style={{
                           transform: `translateY(${virtualItem.start}px)`,

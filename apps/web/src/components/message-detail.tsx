@@ -6,6 +6,9 @@ import { MessageView } from "./message-view";
 
 type MessageDetailProps = {
   selectedMessage: MessageListItem | null;
+  onMarkAsRead?: (messageId: string) => void | Promise<void>;
+  onMarkAsUnread?: (messageId: string) => void | Promise<void>;
+  isReadStatePending?: boolean;
 };
 
 export const MessageDetail = (props: MessageDetailProps) => (
@@ -23,7 +26,12 @@ export const MessageDetail = (props: MessageDetailProps) => (
               </div>
             }
           >
-            <MessageView message={msg} />
+            <MessageView
+              message={msg}
+              onMarkAsRead={props.onMarkAsRead}
+              onMarkAsUnread={props.onMarkAsUnread}
+              isReadStatePending={props.isReadStatePending}
+            />
           </Suspense>
         )}
       </Show>

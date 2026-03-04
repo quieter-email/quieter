@@ -21,6 +21,10 @@
   - `src/entry-server.tsx`: server document and render entrypoint
   - `src/routes/index.tsx`: minimal landing page
   - `src/routes/api/trpc/[...path].ts`: tRPC HTTP endpoint
+  - `src/lib/trpc.ts`: shared tRPC client instance for the app
+  - `src/lib/query-persister.ts`: shared TanStack query persister utilities (including manual persist on cache writes)
+  - `src/lib/google-api/client.ts`: reusable typed Google API fetch client + endpoint contract helpers
+  - `src/lib/gmail/gmail-api.ts`: Gmail endpoint contracts (path/query/response schema) and typed wrappers
 - `packages/database`: Drizzle schema, client, and migrations
   - `src/schema.ts`: auth + app schema definitions
   - `src/client.ts`: Neon + Drizzle client
@@ -53,6 +57,8 @@
 - Polling is list-first: compare message IDs from `messages.list`, then fetch metadata only for unseen IDs.
 - Message IDs and metadata are also persisted server-side in Postgres through tRPC, so repeated metadata calls are reduced across browser sessions.
 - Thread bodies are fetched on click for fast navigation with minimal background API usage.
+- Manual `queryClient.setQueryData` updates are immediately written to local persistence via `persistQueryByKey` so optimistic UI changes survive reloads.
+- Gmail REST calls are centralized through endpoint contracts in `src/lib/gmail/gmail-api.ts`, so adding new Google API calls only requires defining a new endpoint and wrapper instead of wiring ad hoc fetch + schema parsing each time.
 
 ## SolidStart routing notes
 

@@ -1,7 +1,8 @@
+import { Button } from "@quietr/ui";
 import { IconLoader } from "@tabler/icons-solidjs";
 import { useQuery } from "@tanstack/solid-query";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
-import { type MessageListItem } from "~/lib/gmail/gmail";
+import { isMessageUnread, type MessageListItem } from "~/lib/gmail/gmail";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
 import { MessageBody } from "./message-body";
@@ -9,6 +10,9 @@ import { SenderAvatar } from "./sender-avatar";
 
 type MessageViewProps = {
   message: MessageListItem;
+  onMarkAsRead?: (messageId: string) => void | Promise<void>;
+  onMarkAsUnread?: (messageId: string) => void | Promise<void>;
+  isReadStatePending?: boolean;
 };
 
 export const MessageView = (props: MessageViewProps) => {
@@ -27,6 +31,21 @@ export const MessageView = (props: MessageViewProps) => {
   const subject = createMemo(
     () => threadQuery.data?.subject || selectedMessage().subject || "(No subject)",
   );
+
+  // Derive unread state from thread cache first (patched by optimistic updates),
+  // falling back to the prop message from the mailbox list cache.
+  const selectedMessageIsUnread = createMemo(() => {
+    const messageId = selectedMessage().id;
+    const threadMessages = threadQuery.data?.messages;
+
+    if (threadMessages?.length) {
+      const threadMessage = threadMessages.find((m) => m.id === messageId);
+      if (threadMessage) return isMessageUnread(threadMessage);
+    }
+
+    return isMessageUnread(selectedMessage());
+  });
+  const isReadStatePending = createMemo(() => Boolean(props.isReadStatePending));
 
   const [expandedMessageId, setExpandedMessageId] = createSignal<string | null>(null);
 
@@ -55,9 +74,29 @@ export const MessageView = (props: MessageViewProps) => {
   return (
     <article class="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
       <header class="mb-6 border-b border-border/50 pb-4 sm:mb-4">
-        <h1 class="text-xl leading-tight font-medium tracking-tight text-foreground-dark sm:text-2xl">
-          {subject()}
-        </h1>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h1 class="text-xl leading-tight font-medium tracking-tight text-foreground-dark sm:text-2xl">
+            {subject()}
+          </h1>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={
+              isReadStatePending() ||
+              (selectedMessageIsUnread() ? !props.onMarkAsRead : !props.onMarkAsUnread)
+            }
+            onClick={() => {
+              if (selectedMessageIsUnread()) {
+                void props.onMarkAsRead?.(selectedMessage().id);
+                return;
+              }
+
+              void props.onMarkAsUnread?.(selectedMessage().id);
+            }}
+          >
+            {selectedMessageIsUnread() ? "Mark as Read" : "Mark as Unread"}
+          </Button>
+        </div>
         <p class="mt-2 text-sm text-muted-foreground">
           {messages().length} {messages().length === 1 ? "message" : "messages"}
         </p>

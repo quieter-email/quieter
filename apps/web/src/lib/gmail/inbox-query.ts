@@ -1,13 +1,21 @@
 import type { QueryClient } from "@tanstack/solid-query";
 import { queryOptions } from "@tanstack/solid-query";
+import { persistQueryByKey } from "~/lib/query-persister";
 import { trpc } from "~/lib/trpc";
 import {
+  addUnreadLabel,
   GMAIL_QUERY_STALE_TIME_MS,
+  isMessageUnread,
   listMessagesWithDetails,
+  markMessageAsRead,
+  markMessageAsUnread,
+  removeUnreadLabel,
   type ListMessagesPageResult,
   type MailboxCategory,
   type MessageListItem,
+  type ThreadMessagesResult,
 } from "./gmail";
+import { getThreadQueryKey } from "./thread-query";
 
 export const getMessagesQueryKey = (mailbox: MailboxCategory) => ["messages", mailbox] as const;
 export const getLiveSyncQueryKey = (mailbox: MailboxCategory) =>
@@ -86,6 +94,135 @@ const toLoadedPagesData = (
   pageParams,
 });
 
+const updateMessageInQueryData = (
+  data: MessagesQueryData | undefined,
+  messageId: string,
+  updater: (message: MessageListItem) => MessageListItem,
+): MessagesQueryData | undefined => {
+  if (!data) return data;
+
+  let hasChanges = false;
+  const pages = data.pages.map((page) => {
+    let pageChanged = false;
+    const messages = page.messages.map((message) => {
+      if (message.id !== messageId) return message;
+
+      const nextMessage = updater(message);
+      if (nextMessage === message) return message;
+
+      pageChanged = true;
+      hasChanges = true;
+      return nextMessage;
+    });
+
+    return pageChanged ? { ...page, messages } : page;
+  });
+
+  if (!hasChanges) return data;
+
+  return {
+    ...data,
+    pages,
+  };
+};
+
+const findMessageInQueryData = (
+  data: MessagesQueryData | undefined,
+  messageId: string,
+): MessageListItem | undefined => {
+  if (!data) return undefined;
+
+  for (const page of data.pages) {
+    for (const message of page.messages) {
+      if (message.id === messageId) {
+        return message;
+      }
+    }
+  }
+
+  return undefined;
+};
+
+const updateMessageInThreadData = (
+  data: ThreadMessagesResult | undefined,
+  messageId: string,
+  updater: (message: MessageListItem) => MessageListItem,
+): ThreadMessagesResult | undefined => {
+  if (!data) return data;
+
+  let hasChanges = false;
+  const messages = data.messages.map((message) => {
+    if (message.id !== messageId) return message;
+
+    const nextMessage = updater(message);
+    if (nextMessage === message) return message;
+
+    hasChanges = true;
+    return nextMessage;
+  });
+
+  if (!hasChanges) return data;
+
+  return {
+    ...data,
+    messages,
+  };
+};
+
+const markMessageReadLocally = (message: MessageListItem): MessageListItem => {
+  if (!isMessageUnread(message)) return message;
+
+  return {
+    ...message,
+    labelIds: removeUnreadLabel(message.labelIds),
+    isUnread: false,
+  };
+};
+
+const markMessageUnreadLocally = (message: MessageListItem): MessageListItem => {
+  if (isMessageUnread(message)) return message;
+
+  return {
+    ...message,
+    labelIds: addUnreadLabel(message.labelIds),
+    isUnread: true,
+  };
+};
+
+const areLabelIdsEquivalent = (
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined,
+): boolean => {
+  if (!left?.length && !right?.length) return true;
+  if (!left || !right || left.length !== right.length) return false;
+
+  const rightSet = new Set(right);
+
+  for (const labelId of left) {
+    if (!rightSet.has(labelId)) return false;
+  }
+
+  return true;
+};
+
+const applyMessageReadState = (
+  message: MessageListItem,
+  next: { labelIds: string[] | undefined; isUnread: boolean },
+): MessageListItem => {
+  if (
+    message.isUnread === next.isUnread &&
+    areLabelIdsEquivalent(message.labelIds, next.labelIds)
+  ) {
+    return message;
+  }
+
+  return {
+    ...message,
+    labelIds: next.labelIds,
+    isUnread: next.isUnread,
+  };
+};
+
 export const refreshMessagesFirstPage = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
@@ -102,6 +239,7 @@ export const refreshMessagesFirstPage = async (
     getMessagesQueryKey(mailbox),
     toFirstPageData(refreshedFirstPage),
   );
+  await persistQueryByKey(queryClient, getMessagesQueryKey(mailbox));
 
   return refreshedFirstPage;
 };
@@ -134,8 +272,149 @@ export const refreshLoadedMessagesPages = async (
     messagesQueryKey,
     toLoadedPagesData(refreshedPages, refreshedPageParams),
   );
+  await persistQueryByKey(queryClient, messagesQueryKey);
 
   return refreshedPages[0];
+};
+
+export const markMessageAsReadInMailbox = async (
+  queryClient: QueryClient,
+  mailbox: MailboxCategory,
+  messageId: string,
+  signal?: AbortSignal,
+) => {
+  const messagesQueryKey = getMessagesQueryKey(mailbox);
+  const previousData = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
+  const messageToUpdate = findMessageInQueryData(previousData, messageId);
+  const threadId = messageToUpdate?.threadId;
+  const threadQueryKey = threadId ? getThreadQueryKey(threadId) : null;
+  const previousThreadData = threadQueryKey
+    ? queryClient.getQueryData<ThreadMessagesResult>(threadQueryKey)
+    : undefined;
+
+  queryClient.setQueryData<MessagesQueryData | undefined>(messagesQueryKey, (currentData) =>
+    updateMessageInQueryData(currentData, messageId, markMessageReadLocally),
+  );
+  if (threadQueryKey) {
+    queryClient.setQueryData<ThreadMessagesResult | undefined>(threadQueryKey, (currentData) =>
+      updateMessageInThreadData(currentData, messageId, markMessageReadLocally),
+    );
+  }
+  await persistQueryByKey(queryClient, messagesQueryKey);
+  if (threadQueryKey) {
+    await persistQueryByKey(queryClient, threadQueryKey);
+  }
+
+  try {
+    const updatedMessage = await markMessageAsRead(messageId, { signal });
+
+    queryClient.setQueryData<MessagesQueryData | undefined>(messagesQueryKey, (currentData) =>
+      updateMessageInQueryData(currentData, messageId, (message) => {
+        const optimisticMessage = markMessageReadLocally(message);
+
+        return applyMessageReadState(optimisticMessage, {
+          labelIds: updatedMessage.labelIds ?? removeUnreadLabel(optimisticMessage.labelIds),
+          isUnread: updatedMessage.isUnread,
+        });
+      }),
+    );
+    if (threadQueryKey) {
+      queryClient.setQueryData<ThreadMessagesResult | undefined>(threadQueryKey, (currentData) =>
+        updateMessageInThreadData(currentData, messageId, (message) => {
+          const optimisticMessage = markMessageReadLocally(message);
+
+          return applyMessageReadState(optimisticMessage, {
+            labelIds: updatedMessage.labelIds ?? removeUnreadLabel(optimisticMessage.labelIds),
+            isUnread: updatedMessage.isUnread,
+          });
+        }),
+      );
+    }
+    await persistQueryByKey(queryClient, messagesQueryKey);
+    if (threadQueryKey) {
+      await persistQueryByKey(queryClient, threadQueryKey);
+    }
+  } catch (error) {
+    queryClient.setQueryData(messagesQueryKey, previousData);
+    if (threadQueryKey) {
+      queryClient.setQueryData(threadQueryKey, previousThreadData);
+    }
+    await persistQueryByKey(queryClient, messagesQueryKey);
+    if (threadQueryKey) {
+      await persistQueryByKey(queryClient, threadQueryKey);
+    }
+    throw error;
+  }
+};
+
+export const markMessageAsUnreadInMailbox = async (
+  queryClient: QueryClient,
+  mailbox: MailboxCategory,
+  messageId: string,
+  signal?: AbortSignal,
+) => {
+  const messagesQueryKey = getMessagesQueryKey(mailbox);
+  const previousData = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
+  const messageToUpdate = findMessageInQueryData(previousData, messageId);
+  const threadId = messageToUpdate?.threadId;
+  const threadQueryKey = threadId ? getThreadQueryKey(threadId) : null;
+  const previousThreadData = threadQueryKey
+    ? queryClient.getQueryData<ThreadMessagesResult>(threadQueryKey)
+    : undefined;
+
+  queryClient.setQueryData<MessagesQueryData | undefined>(messagesQueryKey, (currentData) =>
+    updateMessageInQueryData(currentData, messageId, markMessageUnreadLocally),
+  );
+  if (threadQueryKey) {
+    queryClient.setQueryData<ThreadMessagesResult | undefined>(threadQueryKey, (currentData) =>
+      updateMessageInThreadData(currentData, messageId, markMessageUnreadLocally),
+    );
+  }
+  await persistQueryByKey(queryClient, messagesQueryKey);
+  if (threadQueryKey) {
+    await persistQueryByKey(queryClient, threadQueryKey);
+  }
+
+  try {
+    const updatedMessage = await markMessageAsUnread(messageId, { signal });
+
+    queryClient.setQueryData<MessagesQueryData | undefined>(messagesQueryKey, (currentData) =>
+      updateMessageInQueryData(currentData, messageId, (message) => {
+        const optimisticMessage = markMessageUnreadLocally(message);
+
+        return applyMessageReadState(optimisticMessage, {
+          labelIds: updatedMessage.labelIds ?? addUnreadLabel(optimisticMessage.labelIds),
+          isUnread: updatedMessage.isUnread,
+        });
+      }),
+    );
+    if (threadQueryKey) {
+      queryClient.setQueryData<ThreadMessagesResult | undefined>(threadQueryKey, (currentData) =>
+        updateMessageInThreadData(currentData, messageId, (message) => {
+          const optimisticMessage = markMessageUnreadLocally(message);
+
+          return applyMessageReadState(optimisticMessage, {
+            labelIds: updatedMessage.labelIds ?? addUnreadLabel(optimisticMessage.labelIds),
+            isUnread: updatedMessage.isUnread,
+          });
+        }),
+      );
+    }
+    await persistQueryByKey(queryClient, messagesQueryKey);
+    if (threadQueryKey) {
+      await persistQueryByKey(queryClient, threadQueryKey);
+    }
+  } catch (error) {
+    queryClient.setQueryData(messagesQueryKey, previousData);
+    if (threadQueryKey) {
+      queryClient.setQueryData(threadQueryKey, previousThreadData);
+    }
+    await persistQueryByKey(queryClient, messagesQueryKey);
+    if (threadQueryKey) {
+      await persistQueryByKey(queryClient, threadQueryKey);
+    }
+    throw error;
+  }
 };
 
 export const messagesQueryOptions = (queryClient: QueryClient, mailbox: MailboxCategory) => ({

@@ -23,6 +23,9 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
   - `src/routes/index.tsx`: Minimal landing page scaffold.
   - `src/routes/api/trpc/[...path].ts`: HTTP endpoint for tRPC requests (`/api/trpc`).
   - `src/lib/trpc.ts`: Shared tRPC client instance for the app.
+  - `src/lib/query-persister.ts`: Shared TanStack query persister helpers for manual cache writes.
+  - `src/lib/google-api/client.ts`: Reusable typed Google API client + endpoint contract helpers.
+  - `src/lib/gmail/gmail-api.ts`: Gmail endpoint contracts (path/query/schema) and typed wrappers.
 - `packages/database/`: Shared database package.
   - `src/schema.ts`: Drizzle schema definitions.
   - `src/client.ts`: Neon and Drizzle client setup.
@@ -70,6 +73,8 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - Postgres persistence is managed in `packages/database/src/client.ts`.
 - Inbox synchronization currently uses periodic polling + manual refresh (no Gmail Pub/Sub in this phase).
 - Inbox metadata caching is shared: browser-local TanStack persistence plus server-side Postgres cache accessed via tRPC.
+- Manual `queryClient.setQueryData` writes are persisted with `persistQueryByKey` to keep optimistic cache updates durable across reloads.
+- Gmail REST calls are defined in `apps/web/src/lib/gmail/gmail-api.ts` and executed through `apps/web/src/lib/google-api/client.ts` to keep new Google API integrations consistent and easy to extend.
 
 ### Routing + SSR behavior
 

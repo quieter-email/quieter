@@ -10,11 +10,11 @@ const toggleButtonVariants = cva(
     variants: {
       variant: {
         default:
-          "border-input bg-background text-foreground shadow-sm hover:border-foreground/25 hover:bg-muted/60 hover:shadow-md data-[pressed]:border-primary data-[pressed]:bg-primary data-[pressed]:text-primary-foreground",
+          "border-input bg-background text-foreground shadow-sm hover:border-foreground/25 hover:bg-muted/60 hover:shadow-md data-pressed:border-primary data-pressed:bg-primary data-pressed:text-primary-foreground",
         ghost:
-          "border-transparent bg-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground data-[pressed]:border-border data-[pressed]:bg-muted data-[pressed]:text-foreground",
+          "border-transparent bg-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground data-pressed:border-border data-pressed:bg-muted data-pressed:text-foreground",
         destructive:
-          "border-destructive/30 bg-destructive/10 text-destructive hover:border-destructive/60 hover:bg-destructive/20 data-[pressed]:border-destructive data-[pressed]:bg-destructive data-[pressed]:text-destructive-foreground",
+          "border-destructive/30 bg-destructive/10 text-destructive hover:border-destructive/60 hover:bg-destructive/20 data-pressed:border-destructive data-pressed:bg-destructive data-pressed:text-destructive-foreground",
       },
       size: {
         sm: "h-8 px-3 text-xs",

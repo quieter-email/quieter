@@ -37,7 +37,7 @@ export const ContextMenuContent = (props: ContextMenuContentProps) => {
   return (
     <ContextMenuPrimitive.Content
       class={cn(
-        "data-[expanded]:animate-in data-[closed]:animate-out data-[expanded]:fade-in-0 data-[closed]:fade-out-0 z-50 min-w-52 border border-border bg-popover p-1 text-sm text-popover-foreground",
+        "data-expanded:animate-in data-expanded:fade-in-0 z-50 min-w-52 border border-border bg-popover p-1 text-sm text-popover-foreground data-closed:pointer-events-none data-closed:opacity-0",
         local.class,
       )}
       {...others}
@@ -85,7 +85,7 @@ export const ContextMenuItem = (props: ContextMenuItemProps) => {
   return (
     <ContextMenuPrimitive.Item
       class={cn(
-        "relative flex min-h-9 cursor-default items-center gap-2 border border-transparent px-2.5 text-sm text-foreground transition-colors outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:border-border data-[highlighted]:bg-muted/60",
+        "relative flex min-h-9 cursor-default items-center gap-2 border border-transparent px-2.5 text-sm text-foreground transition-colors outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:border-border data-highlighted:bg-muted/60",
         local.class,
       )}
       {...others}
@@ -143,7 +143,7 @@ export const ContextMenuCheckboxItem = (props: ContextMenuCheckboxItemProps) => 
   return (
     <ContextMenuPrimitive.CheckboxItem
       class={cn(
-        "relative flex min-h-9 cursor-default items-center gap-2 border border-transparent px-2.5 text-sm text-foreground transition-colors outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:border-border data-[highlighted]:bg-muted/60",
+        "relative flex min-h-9 cursor-default items-center gap-2 border border-transparent px-2.5 text-sm text-foreground transition-colors outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:border-border data-highlighted:bg-muted/60",
         "pl-8",
         local.class,
       )}
@@ -166,7 +166,7 @@ export const ContextMenuRadioItem = (props: ContextMenuRadioItemProps) => {
   return (
     <ContextMenuPrimitive.RadioItem
       class={cn(
-        "relative flex min-h-9 cursor-default items-center gap-2 border border-transparent px-2.5 text-sm text-foreground transition-colors outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:border-border data-[highlighted]:bg-muted/60",
+        "relative flex min-h-9 cursor-default items-center gap-2 border border-transparent px-2.5 text-sm text-foreground transition-colors outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:border-border data-highlighted:bg-muted/60",
         "pl-8",
         local.class,
       )}
@@ -197,7 +197,7 @@ export const ContextMenuSubTrigger = (props: ContextMenuSubTriggerProps) => {
   return (
     <ContextMenuPrimitive.SubTrigger
       class={cn(
-        "relative flex min-h-9 cursor-default items-center gap-2 border border-transparent px-2.5 text-sm text-foreground transition-colors outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:border-border data-[highlighted]:bg-muted/60",
+        "relative flex min-h-9 cursor-default items-center gap-2 border border-transparent px-2.5 text-sm text-foreground transition-colors outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:border-border data-highlighted:bg-muted/60",
         local.class,
       )}
       {...others}
@@ -213,7 +213,7 @@ export const ContextMenuSubContent = (props: ContextMenuSubContentProps) => {
   return (
     <ContextMenuPrimitive.SubContent
       class={cn(
-        "data-[expanded]:animate-in data-[closed]:animate-out data-[expanded]:fade-in-0 data-[closed]:fade-out-0 z-50 min-w-52 border border-border bg-popover p-1 text-sm text-popover-foreground",
+        "data-expanded:animate-in data-expanded:fade-in-0 z-50 min-w-52 border border-border bg-popover p-1 text-sm text-popover-foreground data-closed:pointer-events-none data-closed:opacity-0",
         local.class,
       )}
       {...others}

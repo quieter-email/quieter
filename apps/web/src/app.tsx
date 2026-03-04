@@ -1,27 +1,20 @@
 import { ColorModeProvider } from "@quietr/ui";
 import { Router } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start/router";
-import { experimental_createQueryPersister } from "@tanstack/query-persist-client-core";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 import { ErrorBoundary as SolidErrorBoundary, type JSX } from "solid-js";
 import { isServer } from "solid-js/web";
 import { ErrorBoundary } from "~/components/error-boundary";
+import { queryPersisterFn } from "~/lib/query-persister";
 import "~/styles.css";
 
 const QUERY_GC_TIME_MS = 1000 * 60 * 30;
-const QUERY_PERSIST_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
 
 const createQueryClient = () => {
-  const persister = experimental_createQueryPersister({
-    storage: isServer ? undefined : localStorage,
-    refetchOnRestore: "always",
-    maxAge: QUERY_PERSIST_MAX_AGE_MS,
-  });
-
   return new QueryClient({
     defaultOptions: {
       queries: {
-        persister: persister.persisterFn,
+        persister: queryPersisterFn,
         gcTime: QUERY_GC_TIME_MS,
       },
     },

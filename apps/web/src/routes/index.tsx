@@ -2,15 +2,17 @@ import { createAsync, query, redirect, useSearchParams } from "@solidjs/router";
 import { clientOnly } from "@solidjs/start";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/solid-query";
 import { createEffect, createMemo, createSignal } from "solid-js";
-import type { MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
 import { MailSidebar } from "~/components/mail-sidebar";
 import { MessageDetail } from "~/components/message-detail";
 import { MessageList } from "~/components/message-list";
 import { getGoogleRelinkUrl, getGoogleScopeStatus, getSession } from "~/lib/auth";
+import { isMessageUnread, type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
 import {
   getLiveSyncQueryKey,
   getMessagesQueryKey,
   liveSyncQueryOptions,
+  markMessageAsReadInMailbox,
+  markMessageAsUnreadInMailbox,
   messagesQueryOptions,
   refreshLoadedMessagesPages,
 } from "~/lib/gmail/inbox-query";
@@ -47,6 +49,28 @@ function HomePage() {
     mailbox?: MailboxCategory;
   }>();
   const [isManualRefreshing, setIsManualRefreshing] = createSignal(false);
+  const [pendingReadStateMessageIds, setPendingReadStateMessageIds] = createSignal<
+    ReadonlySet<string>
+  >(new Set());
+
+  const isReadStatePending = (messageId: string | null | undefined): boolean => {
+    if (!messageId) return false;
+    return pendingReadStateMessageIds().has(messageId);
+  };
+
+  const setReadStatePending = (messageId: string, pending: boolean) => {
+    setPendingReadStateMessageIds((current) => {
+      const next = new Set(current);
+
+      if (pending) {
+        next.add(messageId);
+      } else {
+        next.delete(messageId);
+      }
+
+      return next;
+    });
+  };
 
   const activeMailbox = createMemo<MailboxCategory>(() => {
     return parseMailboxCategory(searchParams.mailbox);
@@ -120,6 +144,46 @@ function HomePage() {
     void messagesQuery.fetchNextPage();
   };
 
+  const markMessageAsRead = async (messageId: string) => {
+    if (isReadStatePending(messageId)) return;
+
+    setReadStatePending(messageId, true);
+    try {
+      await markMessageAsReadInMailbox(queryClient, activeMailbox(), messageId);
+    } finally {
+      setReadStatePending(messageId, false);
+    }
+  };
+
+  const markMessageAsUnread = async (messageId: string) => {
+    if (isReadStatePending(messageId)) return;
+
+    setReadStatePending(messageId, true);
+    try {
+      await markMessageAsUnreadInMailbox(queryClient, activeMailbox(), messageId);
+    } finally {
+      setReadStatePending(messageId, false);
+    }
+  };
+
+  createEffect((previousMessageId: string | null) => {
+    const message = selectedMessage();
+    const currentMessageId = message?.id ?? null;
+    if (!currentMessageId) return currentMessageId;
+    if (!message) return currentMessageId;
+
+    const hasReadState = message.isUnread != null || message.labelIds != null;
+    if (!hasReadState) {
+      return previousMessageId;
+    }
+
+    if (currentMessageId !== previousMessageId && isMessageUnread(message)) {
+      void markMessageAsRead(currentMessageId);
+    }
+
+    return currentMessageId;
+  }, null);
+
   const selectMailbox = (mailbox: MailboxCategory) => {
     if (mailbox === activeMailbox()) return;
     setSearchParams({ mailbox, messageId: undefined }, { replace: true, scroll: false });
@@ -132,7 +196,15 @@ function HomePage() {
       <div class="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,38%)_minmax(0,62%)] lg:grid-rows-[minmax(0,1fr)]">
         <section class="flex min-h-0 min-w-0 flex-col border-b border-border bg-background-light lg:border-r lg:border-b-0">
           <MessageList
+            activeMessageId={activeMessageId()}
             onActivateMessage={activateMessage}
+            onMarkAsRead={(messageId) => {
+              void markMessageAsRead(messageId);
+            }}
+            onMarkAsUnread={(messageId) => {
+              void markMessageAsUnread(messageId);
+            }}
+            isReadStatePending={isReadStatePending}
             onRefresh={() => void refreshMessages()}
             isRefreshing={
               isManualRefreshing() ||
@@ -150,7 +222,16 @@ function HomePage() {
         </section>
 
         <div class="flex min-h-0 min-w-0 flex-col overflow-hidden">
-          <MessageDetail selectedMessage={selectedMessage()} />
+          <MessageDetail
+            selectedMessage={selectedMessage()}
+            onMarkAsRead={(messageId) => {
+              void markMessageAsRead(messageId);
+            }}
+            onMarkAsUnread={(messageId) => {
+              void markMessageAsUnread(messageId);
+            }}
+            isReadStatePending={isReadStatePending(selectedMessage()?.id)}
+          />
         </div>
       </div>
     </main>

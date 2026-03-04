@@ -1,11 +1,14 @@
-import type { z } from "zod";
-import { getAccessToken } from "~/lib/auth";
+import { resolveProviderAccessToken } from "../google-api/client";
+import {
+  gmailApi,
+  type GmailListMessagesResponse,
+  type GmailMessage,
+  type GmailMessagePart,
+} from "./gmail-api";
 import { decodeMimeHeaderValue, extractMessageContent } from "./message-content";
-import { getMessageSchema, getThreadSchema, listMessagesSchema } from "./schema";
 import { getSenderAvatarUrl } from "./sender-avatar";
 
-type MessagePart = z.infer<typeof getMessageSchema>["payload"];
-type GmailMessage = z.infer<typeof getMessageSchema>;
+type MessagePart = GmailMessagePart;
 
 const MESSAGE_DETAILS_CONCURRENCY = 8;
 const RATE_LIMIT_MAX_RETRIES = 2;
@@ -19,6 +22,8 @@ export const MAILBOX_LABELS = {
   sent: "SENT",
   trash: "TRASH",
 } as const;
+
+export const GMAIL_UNREAD_LABEL = "UNREAD";
 
 export type MailboxCategory = keyof typeof MAILBOX_LABELS;
 
@@ -45,6 +50,35 @@ export type MessageListItem = {
   bodyHtml?: string;
   bodyText?: string;
   senderAvatarUrl?: string;
+  labelIds?: string[];
+  isUnread?: boolean;
+};
+
+const normalizeLabelIds = (labelIds: string[] | undefined): string[] | undefined => {
+  if (!labelIds?.length) return undefined;
+
+  const normalized = Array.from(new Set(labelIds.map((labelId) => labelId.trim()).filter(Boolean)));
+
+  return normalized.length > 0 ? normalized : undefined;
+};
+
+const hasUnreadLabel = (labelIds: string[] | undefined): boolean => {
+  return Boolean(labelIds?.includes(GMAIL_UNREAD_LABEL));
+};
+
+export const removeUnreadLabel = (labelIds: string[] | undefined): string[] | undefined => {
+  return normalizeLabelIds(labelIds?.filter((labelId) => labelId !== GMAIL_UNREAD_LABEL));
+};
+
+export const addUnreadLabel = (labelIds: string[] | undefined): string[] | undefined => {
+  const mergedLabelIds = [...(labelIds ?? []), GMAIL_UNREAD_LABEL];
+  return normalizeLabelIds(mergedLabelIds);
+};
+
+export const isMessageUnread = (
+  message: Pick<MessageListItem, "isUnread" | "labelIds">,
+): boolean => {
+  return message.isUnread ?? hasUnreadLabel(message.labelIds);
 };
 
 export type ThreadMessagesResult = {
@@ -71,18 +105,7 @@ type PersistFetchedMessagesFn = (
 ) => Promise<void>;
 
 const resolveGoogleAccessToken = async (accessToken?: string | null): Promise<string> => {
-  if (accessToken) return accessToken;
-
-  const resolvedAccessToken = await getAccessToken("google");
-  if (!resolvedAccessToken) throw new Error("Failed to get access token");
-
-  return resolvedAccessToken;
-};
-
-const createApiError = (message: string, status: number): Error & { status: number } => {
-  const error = new Error(`${message} (${status})`) as Error & { status: number };
-  error.status = status;
-  return error;
+  return await resolveProviderAccessToken("google", accessToken);
 };
 
 const sleep = async (delayMs: number): Promise<void> => {
@@ -157,26 +180,21 @@ export const listMessages = async (opts?: {
   mailbox?: MailboxCategory;
   accessToken?: string | null;
   signal?: AbortSignal;
-}) => {
+}): Promise<GmailListMessagesResponse> => {
   const accessToken = await resolveGoogleAccessToken(opts?.accessToken);
 
-  const url = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
-  url.searchParams.set("maxResults", String(opts?.maxResults ?? 20));
-  if (opts?.pageToken) url.searchParams.set("pageToken", opts.pageToken);
-  if (opts?.mailbox) {
-    url.searchParams.append("labelIds", MAILBOX_LABELS[opts.mailbox]);
-    if (opts.mailbox === "trash") {
-      url.searchParams.set("includeSpamTrash", "true");
-    }
-  }
-
-  const response = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    cache: "no-store",
-    signal: opts?.signal,
-  });
-  if (!response.ok) throw createApiError("Failed to list messages", response.status);
-  return listMessagesSchema.parse(await response.json());
+  return await gmailApi.listMessages(
+    {
+      maxResults: opts?.maxResults ?? 20,
+      pageToken: opts?.pageToken,
+      labelIds: opts?.mailbox ? [MAILBOX_LABELS[opts.mailbox]] : undefined,
+      includeSpamTrash: opts?.mailbox === "trash" ? true : undefined,
+    },
+    {
+      accessToken,
+      signal: opts?.signal,
+    },
+  );
 };
 
 const extractEmailFromFrom = (from?: string): string | undefined => {
@@ -200,6 +218,7 @@ const getMessageTimestamp = (message: MessageListItem): number => {
 
 const toMessageListItem = (message: GmailMessage, includeBody = false): MessageListItem => {
   const headers = findHeaders(message.payload) ?? message.payload?.headers;
+  const labelIds = normalizeLabelIds(message.labelIds);
   const content = includeBody
     ? extractMessageContent(message.payload)
     : { html: undefined, text: undefined };
@@ -218,6 +237,8 @@ const toMessageListItem = (message: GmailMessage, includeBody = false): MessageL
     internalDate: message.internalDate,
     bodyHtml: content.html,
     bodyText: content.text,
+    labelIds,
+    isUnread: hasUnreadLabel(labelIds),
   };
 };
 
@@ -278,9 +299,12 @@ export const listMessagesWithDetails = async (opts?: {
     signal: opts?.signal,
   });
 
-  const missingMessageRefs = list.messages.filter(
-    (message) => !opts?.cachedMessagesById?.has(message.id),
-  );
+  const missingMessageRefs = list.messages.filter((message) => {
+    const cachedMessage = opts?.cachedMessagesById?.get(message.id);
+    if (!cachedMessage) return true;
+
+    return cachedMessage.isUnread == null;
+  });
 
   const persistedMessagesById = new Map<string, MessageListItem>();
 
@@ -295,9 +319,12 @@ export const listMessagesWithDetails = async (opts?: {
     }
   }
 
-  const messagesStillMissing = missingMessageRefs.filter(
-    (message) => !persistedMessagesById.has(message.id),
-  );
+  const messagesStillMissing = missingMessageRefs.filter((message) => {
+    const persistedMessage = persistedMessagesById.get(message.id);
+    if (!persistedMessage) return true;
+
+    return persistedMessage.isUnread == null;
+  });
 
   const fallbackMessagesById = new Map<string, MessageListItem>(
     messagesStillMissing.map((message) => [
@@ -330,10 +357,15 @@ export const listMessagesWithDetails = async (opts?: {
 
   const messages = list.messages
     .map((message) => {
+      const cachedMessage = opts?.cachedMessagesById?.get(message.id);
+      if (cachedMessage?.isUnread != null) {
+        return cachedMessage;
+      }
+
       return (
-        opts?.cachedMessagesById?.get(message.id) ??
-        persistedMessagesById.get(message.id) ??
         fetchedMessagesById.get(message.id) ??
+        cachedMessage ??
+        persistedMessagesById.get(message.id) ??
         fallbackMessagesById.get(message.id)
       );
     })
@@ -369,19 +401,16 @@ export const getThreadWithDetails = async (
 ): Promise<ThreadMessagesResult> => {
   const accessToken = await resolveGoogleAccessToken(opts?.accessToken);
 
-  const endpoint = new URL(`https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}`);
-  endpoint.searchParams.set("format", "full");
-
-  const response = await fetch(endpoint, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
+  const thread = await gmailApi.getThread(
+    threadId,
+    {
+      format: "full",
     },
-    cache: "no-store",
-    signal: opts?.signal,
-  });
-  if (!response.ok) throw createApiError("Failed to get thread", response.status);
-
-  const thread = getThreadSchema.parse(await response.json());
+    {
+      accessToken,
+      signal: opts?.signal,
+    },
+  );
   const sortedMessages = (thread.messages ?? [])
     .map((message) => toMessageListItem(message, true))
     .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
@@ -406,19 +435,67 @@ export const getMessage = async (
 ) => {
   const accessToken = await resolveGoogleAccessToken(opts?.accessToken);
 
-  const endpoint = new URL(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}`);
-  endpoint.searchParams.set("format", "metadata");
-  endpoint.searchParams.append("metadataHeaders", "Subject");
-  endpoint.searchParams.append("metadataHeaders", "From");
-  endpoint.searchParams.append("metadataHeaders", "Date");
-
-  const response = await fetch(endpoint, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
+  return await gmailApi.getMessage(
+    messageId,
+    {
+      format: "metadata",
+      metadataHeaders: ["Subject", "From", "Date"],
     },
-    cache: "no-store",
-    signal: opts?.signal,
-  });
-  if (!response.ok) throw createApiError("Failed to get message", response.status);
-  return getMessageSchema.parse(await response.json());
+    {
+      accessToken,
+      signal: opts?.signal,
+    },
+  );
+};
+
+export const markMessageAsRead = async (
+  messageId: string,
+  opts?: { accessToken?: string | null; signal?: AbortSignal },
+) => {
+  const accessToken = await resolveGoogleAccessToken(opts?.accessToken);
+
+  const updatedMessage = await gmailApi.modifyMessage(
+    messageId,
+    {
+      removeLabelIds: [GMAIL_UNREAD_LABEL],
+    },
+    {
+      accessToken,
+      signal: opts?.signal,
+    },
+  );
+
+  const labelIds = normalizeLabelIds(updatedMessage.labelIds);
+
+  return {
+    id: updatedMessage.id,
+    labelIds,
+    isUnread: hasUnreadLabel(labelIds),
+  };
+};
+
+export const markMessageAsUnread = async (
+  messageId: string,
+  opts?: { accessToken?: string | null; signal?: AbortSignal },
+) => {
+  const accessToken = await resolveGoogleAccessToken(opts?.accessToken);
+
+  const updatedMessage = await gmailApi.modifyMessage(
+    messageId,
+    {
+      addLabelIds: [GMAIL_UNREAD_LABEL],
+    },
+    {
+      accessToken,
+      signal: opts?.signal,
+    },
+  );
+
+  const labelIds = normalizeLabelIds(updatedMessage.labelIds);
+
+  return {
+    id: updatedMessage.id,
+    labelIds,
+    isUnread: hasUnreadLabel(labelIds),
+  };
 };

@@ -1,7 +1,6 @@
-import type { z } from "zod";
-import type { getMessageSchema } from "./schema";
+import type { GmailMessagePart } from "./gmail-api";
 
-type MessagePart = z.infer<typeof getMessageSchema>["payload"];
+type MessagePart = GmailMessagePart;
 type ConcreteMessagePart = NonNullable<MessagePart>;
 
 export type ExtractedMessageContent = {
