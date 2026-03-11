@@ -6,105 +6,127 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 
 - Runtime and package manager: [Bun](https://bun.sh/)
 - Monorepo orchestration: [Turborepo](https://turbo.build/repo)
-- Frontend app: [SolidStart](https://docs.solidjs.com/solid-start) + [Vite](https://vite.dev/)
-- Routing: `@solidjs/router` file-based routing via `@solidjs/start/router`
+- Frontend app: [Next.js](https://nextjs.org/) App Router + [React](https://react.dev/)
+- Routing: `src/app/**` App Router segments with `page.tsx`, `layout.tsx`, and `route.ts`
+- URL query state: [nuqs](https://nuqs.dev/)
+- Theme management: [next-themes](https://github.com/pacocoursey/next-themes)
 - API layer: [tRPC v11](https://trpc.io/)
 - Database: [Drizzle ORM beta](https://orm.drizzle.team/) + Postgres (Neon HTTP)
 - Styling: [Tailwind CSS 4](https://tailwindcss.com/)
+- UI primitives: [Base UI](https://base-ui.com/)
+- Icons: [Hugeicons React](https://www.npmjs.com/package/@hugeicons/react)
+- Rich text editor: [Tiptap](https://tiptap.dev/)
 - Linting and formatting: [Oxlint](https://oxc.rs/docs/guide/usage/linter) + [Oxfmt](https://oxc.rs/docs/guide/usage/formatter)
 - Type checking: TypeScript native preview (`tsgo` from `@typescript/native-preview`)
 
 ## Project Structure
 
-- `apps/web/`: SolidStart application.
-  - `src/app.tsx`: Router setup, root shell, and global error boundary.
-  - `src/entry-client.tsx`: Client entrypoint.
-  - `src/entry-server.tsx`: Server entrypoint and HTML document shell.
-  - `src/routes/index.tsx`: Minimal landing page scaffold.
-  - `src/routes/api/trpc/[...path].ts`: HTTP endpoint for tRPC requests (`/api/trpc`).
+- `apps/web/`: Next.js App Router application.
+  - `src/app/layout.tsx`: Root HTML shell and client providers.
+  - `src/app/page.tsx`: Authenticated inbox route that server-loads the session before hydrating the client workspace.
+  - `src/app/auth/page.tsx`: Legacy auth route that redirects to `/login`.
+  - `src/app/home/page.tsx`: Public landing route that redirects authenticated users away.
+  - `src/app/login/page.tsx`: Public login route for magic-link, Google, and passkey sign-in.
+  - `src/app/signup/page.tsx`: Public signup route for magic-link registration plus Google and passkey entry points.
+  - `src/app/settings/page.tsx`: Authenticated settings route with server-side guard.
+  - `src/app/api/trpc/[...path]/route.ts`: HTTP endpoint for tRPC requests (`/api/trpc`).
+  - `src/app/api/auth/[...all]/route.ts`: Better Auth route handler.
+  - `src/app/api/auth-email-preview/route.ts`: Placeholder auth-email preview endpoint for magic-link and verification URLs during local development.
+  - `src/app/api/auth-user-status/route.ts`: Email existence lookup used to keep login and signup flows distinct.
   - `src/lib/trpc.ts`: Shared tRPC client instance for the app.
+  - `src/lib/server-auth.ts`: Cached server-side session helpers and redirects.
+  - `src/lib/query-client.ts`: Shared React Query client factory.
   - `src/lib/query-persister.ts`: Shared TanStack query persister helpers for manual cache writes.
-  - `src/lib/google-api/client.ts`: Reusable typed Google API client + endpoint contract helpers.
-  - `src/lib/gmail/gmail-api.ts`: Gmail endpoint contracts (path/query/schema) and typed wrappers.
+  - `src/lib/search-params.ts`: Shared nuqs parsers/loaders/serializers for app URL state.
+  - `src/lib/auth.ts`: Better Auth React client wrapper.
+  - `src/lib/gmail/compose.ts`: User-scoped draft hydration helpers, attachment runtime store, and compose state types.
+  - `src/lib/gmail/compose-query.ts`: Persisted compose session query keys keyed by user id.
+  - `src/lib/gmail/inbox-query.ts`: User-scoped inbox query keys, sync helpers, and optimistic message actions.
+  - `src/lib/gmail/thread-query.ts`: Thread query helpers.
+  - `src/lib/gmail/labels-query.ts`: Shared `queryOptions(...)` helpers for Gmail label metadata.
+  - `src/components/providers.tsx`: Client-side next-themes and React Query providers.
+  - `src/components/mailbox-workspace.tsx`: Interactive inbox shell, search-param state, message panes, and compose modal.
+  - `src/components/auth-screen.tsx`: Client auth UI for separate login/signup routes, magic-link placeholders, Google, and passkeys.
+  - `src/components/settings-screen.tsx`: Client settings UI for theme, profile, passkeys, sign-out, account deletion, and placeholder email-change verification.
+  - `src/components/compose-dialog.tsx`: `New Mail` modal with autosave and continue-last-draft affordance.
+  - `src/components/compose-editor.tsx`: Tiptap editor shell and toolbar used by compose.
+  - `src/components/mail-sidebar.tsx`: Sidebar showing the current user profile and mailbox-folder navigation.
+- `packages/auth/`: Better Auth server package.
+  - `src/index.ts`: Better Auth configuration with Google OAuth, passkeys, magic links, email-change verification placeholders, account deletion, and Next.js cookies.
+  - `src/email-placeholder.ts`: In-memory placeholder store for magic-link and verification URLs.
+  - `src/google-scopes.ts`: Required Google OAuth scopes.
 - `packages/database/`: Shared database package.
-  - `src/schema.ts`: Drizzle schema definitions.
+  - `src/schema.ts`: Drizzle schema definitions for auth, passkeys, plus Gmail message metadata cache/state tables keyed by user id.
   - `src/client.ts`: Neon and Drizzle client setup.
   - `drizzle.config.ts`: Drizzle Kit configuration.
-  - `drizzle/`: Generated migration artifacts.
 - `packages/trpc/`: Shared API contract + server/client helpers.
   - `src/context.ts`: tRPC context creation.
-  - `src/router.ts`: App router with Gmail cache procedures.
+  - `src/router.ts`: App router with user-scoped Gmail operations and Gmail metadata cache procedures.
+  - `src/gmail-service.ts`: Shared Gmail response typing and Gmail API helpers used by tRPC.
   - `src/server.ts`: `fetchRequestHandler` integration.
   - `src/client.ts`: Typed client factory.
   - `src/types.ts`: `RouterInputs` and `RouterOutputs` utility types.
 - `packages/ui/`: Shared UI package.
-  - `src/styles.css`: Tailwind v4 tokens and global base styles.
-  - `src/components/button.tsx`: Kobalte-based button primitive and variants.
-  - `src/components/text-field.tsx`: Kobalte-based text field primitives.
-  - `src/components/card.tsx`: Shared card/layout primitives.
-  - `src/index.ts`: Package exports for all shared UI primitives.
 - `packages/config/`: Shared TypeScript config package.
-  - `tsconfig/base.json`: Shared TypeScript compiler baseline.
-- `oxlint.json`: Root shared Oxlint config.
-- `oxfmt.json`: Root shared Oxfmt config.
 
 ## Core Concepts and Patterns
+
+### Product model
+
+- Quietr is a straightforward Gmail client.
+- The signed-in user is the center of the app.
+- There is no organization, shared-mailbox, or mailbox-connection model in the current implementation.
+- Google sign-in directly requests the Gmail scopes needed for inbox access, drafting, sending, and message actions.
+- Passkeys are optional secondary sign-in credentials that can be added from settings after the user signs in with Google or magic link.
+- Outbound auth email delivery is not configured right now, so magic links and email verification flows use local placeholder previews instead of real email sends.
 
 ### Monorepo boundaries
 
 - `apps/web` should consume shared functionality via package imports (`@quietr/trpc`, `@quietr/config`).
 - `packages/trpc` is the boundary between app and database logic.
 - `packages/database` should own schema and migration concerns.
+- `packages/auth` owns Better Auth configuration.
 
 ### TanStack Query and queryOptions
 
-- Use `queryOptions` (from `@tanstack/solid-query`) when:
-  - A query config is needed in more than one place (e.g. `useQuery` and `prefetchQuery`, or `getQueryData` / `invalidateQueries` / `cancelQueries`).
+- Use `queryOptions` (from `@tanstack/react-query`) when:
+  - A query config is needed in more than one place.
   - You want a single source of truth for query keys and config.
 - Prefer extracting query options into shared modules (e.g. `*-query.ts`) when used across components.
-- Examples: `apps/web/src/lib/gmail/thread-query.ts` defines `getThreadWithDetailsOptions(threadId)` for thread details; `apps/web/src/lib/gmail/inbox-query.ts` defines `messagesQueryOptions` and `liveSyncQueryOptions` for the inbox list and sync, used by `useInfiniteQuery`, `useQuery`, `cancelQueries`, and `getQueryData`/`setQueryData`.
 - Pass the result of `queryOptions(...)` directly to `useQuery`, `prefetchQuery`, or other query methods; avoid duplicating query keys or config inline.
 
 ### API and data flow
 
 - App calls `@quietr/trpc` client from `apps/web/src/lib/trpc.ts`.
-- Requests are handled in `apps/web/src/routes/api/trpc/[...path].ts` using `@quietr/trpc/server`.
-- Router procedures currently include Gmail metadata cache helpers.
-- Postgres persistence is managed in `packages/database/src/client.ts`.
-- Inbox synchronization currently uses periodic polling + manual refresh (no Gmail Pub/Sub in this phase).
-- Inbox metadata caching is shared: browser-local TanStack persistence plus server-side Postgres cache accessed via tRPC.
-- Manual `queryClient.setQueryData` writes are persisted with `persistQueryByKey` to keep optimistic cache updates durable across reloads.
-- Gmail REST calls are defined in `apps/web/src/lib/gmail/gmail-api.ts` and executed through `apps/web/src/lib/google-api/client.ts` to keep new Google API integrations consistent and easy to extend.
+- Requests are handled in `apps/web/src/app/api/trpc/[...path]/route.ts` using `@quietr/trpc/server`.
+- Router procedures cover Gmail list/thread/label/draft/message actions plus Gmail metadata cache helpers.
+- Postgres persistence is lightweight and user-scoped: Gmail message metadata cache plus sync status.
+- Sender avatars are derived at request time from the message sender and are not persisted in Postgres.
+- Manual `queryClient.setQueryData` writes are persisted with `persistQueryByKey` so optimistic cache updates survive reloads.
+- Gmail REST calls are executed server-side in `packages/trpc/src/gmail-service.ts`, with access tokens resolved from the signed-in user's linked Google account.
+- Compose state is a browser-local persisted session keyed by user id; draft content and attachments are synced to Gmail drafts via tRPC procedures.
 
 ### Routing + SSR behavior
 
-- `apps/web/src/app.tsx` must register `Router` + `FileRoutes` and keep root-level providers/shell concerns there.
-- Use route-level `route.preload` exports for navigation guards and required preloading.
-- Keep API handlers under `apps/web/src/routes/api/**` using SolidStart method exports (`GET`, `POST`, etc.).
+- `apps/web/src/app/layout.tsx` owns root-level providers, global styles, and the app shell.
+- Prefer server components for auth guards and initial data loading. Use `requireSession` and `redirectIfAuthenticated` before handing off to client components.
+- Keep API handlers under `apps/web/src/app/api/**/route.ts`.
+- Use client components for React Query, compose flows, and search-param-driven inbox state.
 
 ### Database and migrations
 
 - Schema changes go in `packages/database/src/schema.ts`.
-- Generate migrations with `bun run db:generate` (root) or package-local `db:generate`.
-- Apply migrations with `bun run db:migrate` (root) or package-local `db:migrate`.
-- Database connections use `DATABASE_URL` (required).
+- Use `bun run db:push` for local schema changes by default.
+- Generate migrations with `bun run db:generate` and apply them with `bun run db:migrate` only when migration files are explicitly needed.
+- Database connections use `DATABASE_URL`.
 
 ### Shared tooling and config
 
 - Each workspace package has its own scripts and dev dependencies for `oxlint`, `oxfmt`, and `tsgo`.
 - Shared TypeScript config is in `packages/config`, while Oxlint/Oxfmt config is at repo root.
-- Config files include JSON schemas:
-  - Oxlint schema: `./node_modules/oxlint/configuration_schema.json`
-  - Oxfmt schema: `./node_modules/oxfmt/configuration_schema.json`
-  - TSConfig schema: `https://json.schemastore.org/tsconfig`
-- Turborepo environment handling:
-  - `envMode` is `strict`.
-  - Required task variables are declared with per-task `env` keys in `turbo.json`.
-  - `VITE_LOGO_DEV_PUBLISHABLE_KEY` (Logo.dev publishable key) is used for company logo avatars in `apps/web/src/lib/gmail/sender-avatar.ts`.
-  - `.env*` files are included for hashing using `globalDependencies`.
-  - Turborepo does not load `.env` files for task runtime by itself.
-  - `packages/database` scripts load root `.env.local` explicitly with `bun --env-file=../../.env.local ...`.
-  - `@quietr/web` keeps `envDir: "../../"` and also hydrates non-prefixed env vars into `process.env` via `loadEnv(mode, "../../", "")` in `vite.config.ts` for server runtime code.
+- `NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY` is used for sender avatars in the inbox UI.
+- `VITE_LOGO_DEV_PUBLISHABLE_KEY` remains a backward-compatible fallback mapped through `apps/web/next.config.ts`.
+- Outbound auth email delivery is not configured in this repo right now, so magic links and email verification flows rely on placeholder previews during local development.
 
 ### Generated files
 
@@ -124,11 +146,7 @@ Root commands:
 - `bun run build`
 - `bun run db:generate`
 - `bun run db:migrate`
-
-Package-level commands:
-
-- `lint`, `lint:fix`, `fmt`, `fmt:check`, and `typecheck` in `apps/web`, `packages/config`, `packages/database`, `packages/trpc`, and `packages/ui`.
-- `db:generate` and `db:migrate` in `packages/database`.
+- `bun run db:push`
 
 ## Rules for Agents
 
@@ -136,6 +154,7 @@ Package-level commands:
 2. Preserve package boundaries: avoid direct app-to-database coupling; route through `@quietr/trpc`.
 3. Keep type safety strict: avoid `any`; prefer inference and exported shared types.
 4. Respect generated files: do not manually rewrite generated route tree or migration metadata without clear reason.
-5. For schema changes, always generate and apply migrations, and verify app behavior end-to-end.
+5. For schema changes, use `bun run db:push` by default and verify app behavior end-to-end; only generate/apply migrations when explicitly needed.
 6. Before finishing work, run lint, fmt:check, typecheck, and build from repo root.
-7. Use `queryOptions` when adding or refactoring TanStack Query usage: for `useQuery`, `prefetchQuery`, or whenever query keys/config are needed in two or more places.
+7. Use `queryOptions` when adding or refactoring TanStack Query usage.
+8. Prioritize clarity in inbox surfaces and keep the workflow simple.

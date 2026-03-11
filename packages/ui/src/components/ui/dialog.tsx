@@ -1,134 +1,74 @@
-import type { ComponentProps } from "solid-js";
-import * as DialogPrimitive from "@kobalte/core/dialog";
-import { splitProps } from "solid-js";
+"use client";
+
+import type { ComponentPropsWithoutRef } from "react";
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { cn } from "../../lib/cn";
+import { Button, buttonVariants } from "./button";
 
-export type DialogProps = ComponentProps<typeof DialogPrimitive.Root>;
+export const Dialog = DialogPrimitive.Root;
+export const DialogTrigger = DialogPrimitive.Trigger;
+export const DialogPortal = DialogPrimitive.Portal;
 
-export const Dialog = (props: DialogProps) => <DialogPrimitive.Root {...props} />;
-
-export type DialogTriggerProps = ComponentProps<typeof DialogPrimitive.Trigger>;
-
-export const DialogTrigger = (props: DialogTriggerProps) => {
-  const [local, others] = splitProps(props, ["class"]);
-
-  return (
-    <DialogPrimitive.Trigger
-      class={cn(
-        "outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        local.class,
+export const DialogContent = ({
+  children,
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof DialogPrimitive.Popup>) => (
+  <DialogPortal>
+    <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
+    <DialogPrimitive.Popup
+      className={cn(
+        "fixed top-1/2 left-1/2 z-50 w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-border bg-background-light text-foreground shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        className,
       )}
-      {...others}
-    />
-  );
-};
+      {...props}
+    >
+      {children}
+    </DialogPrimitive.Popup>
+  </DialogPortal>
+);
 
-export type DialogPortalProps = ComponentProps<typeof DialogPrimitive.Portal>;
+export const DialogHeader = ({ className, ...props }: ComponentPropsWithoutRef<"div">) => (
+  <div className={cn("px-5 py-4", className)} {...props} />
+);
 
-export const DialogPortal = (props: DialogPortalProps) => <DialogPrimitive.Portal {...props} />;
+export const DialogBody = ({ className, ...props }: ComponentPropsWithoutRef<"div">) => (
+  <div className={cn("px-5 py-4", className)} {...props} />
+);
 
-export type DialogOverlayProps = ComponentProps<typeof DialogPrimitive.Overlay>;
+export const DialogFooter = ({ className, ...props }: ComponentPropsWithoutRef<"div">) => (
+  <div className={cn("flex items-center justify-end gap-2 px-5 py-4", className)} {...props} />
+);
 
-export const DialogOverlay = (props: DialogOverlayProps) => {
-  const [local, others] = splitProps(props, ["class"]);
+export const DialogTitle = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof DialogPrimitive.Title>) => (
+  <DialogPrimitive.Title
+    className={cn("text-base font-semibold tracking-tight", className)}
+    {...props}
+  />
+);
 
-  return (
-    <DialogPrimitive.Overlay
-      class={cn("fixed inset-0 z-50 bg-black/55 backdrop-blur-[1px]", local.class)}
-      {...others}
-    />
-  );
-};
+export const DialogDescription = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof DialogPrimitive.Description>) => (
+  <DialogPrimitive.Description
+    className={cn("mt-2 text-sm text-muted-foreground", className)}
+    {...props}
+  />
+);
 
-export type DialogContentProps = ComponentProps<typeof DialogPrimitive.Content>;
-
-export const DialogContent = (props: DialogContentProps) => {
-  const [local, others] = splitProps(props, ["class", "children"]);
-
-  return (
-    <DialogPortal>
-      <DialogOverlay />
-      <DialogPrimitive.Content
-        class={cn(
-          "fixed top-1/2 left-1/2 z-50 w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 border-2 border-border bg-background text-foreground outline-none",
-          "focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-          local.class,
-        )}
-        {...others}
-      >
-        {local.children}
-      </DialogPrimitive.Content>
-    </DialogPortal>
-  );
-};
-
-export type DialogTitleProps = ComponentProps<typeof DialogPrimitive.Title>;
-
-export const DialogTitle = (props: DialogTitleProps) => {
-  const [local, others] = splitProps(props, ["class"]);
-
-  return (
-    <DialogPrimitive.Title
-      class={cn("text-base font-semibold tracking-tight", local.class)}
-      {...others}
-    />
-  );
-};
-
-export type DialogDescriptionProps = ComponentProps<typeof DialogPrimitive.Description>;
-
-export const DialogDescription = (props: DialogDescriptionProps) => {
-  const [local, others] = splitProps(props, ["class"]);
-
-  return (
-    <DialogPrimitive.Description
-      class={cn("mt-2 text-sm text-muted-foreground", local.class)}
-      {...others}
-    />
-  );
-};
-
-export type DialogCloseButtonProps = ComponentProps<typeof DialogPrimitive.CloseButton>;
-
-export const DialogCloseButton = (props: DialogCloseButtonProps) => {
-  const [local, others] = splitProps(props, ["class"]);
-
-  return (
-    <DialogPrimitive.CloseButton
-      class={cn(
-        "inline-flex h-9 min-w-20 items-center justify-center border border-border bg-background px-3 text-sm font-medium text-foreground",
-        "transition-all hover:-translate-y-px hover:bg-muted",
-        "active:translate-y-0",
-        "outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        local.class,
-      )}
-      {...others}
-    />
-  );
-};
-
-export const DialogHeader = (props: ComponentProps<"div">) => {
-  const [local, others] = splitProps(props, ["class"]);
-
-  return <div class={cn("border-b border-border px-5 py-4", local.class)} {...others} />;
-};
-
-export const DialogBody = (props: ComponentProps<"div">) => {
-  const [local, others] = splitProps(props, ["class"]);
-
-  return <div class={cn("px-5 py-4", local.class)} {...others} />;
-};
-
-export const DialogFooter = (props: ComponentProps<"div">) => {
-  const [local, others] = splitProps(props, ["class"]);
-
-  return (
-    <div
-      class={cn(
-        "flex items-center justify-end gap-2 border-t border-border px-5 py-4",
-        local.class,
-      )}
-      {...others}
-    />
-  );
-};
+export const DialogCloseButton = ({
+  className,
+  variant = "outline",
+  ...props
+}: ComponentPropsWithoutRef<typeof DialogPrimitive.Close> & {
+  variant?: ComponentPropsWithoutRef<typeof Button>["variant"];
+}) => (
+  <DialogPrimitive.Close
+    className={cn(buttonVariants({ size: "sm", variant }), "min-w-20", className)}
+    {...props}
+  />
+);

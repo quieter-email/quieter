@@ -1,93 +1,27 @@
-import type { JSX } from "solid-js";
-import { motion } from "motion-solid";
-import { createEffect, createSignal, on } from "solid-js";
+"use client";
 
-const SPIN_DURATION_SECONDS = 1;
+import type { PropsWithChildren } from "react";
+import { motion } from "motion/react";
 
-export const SpinWhileActive = (props: { active: boolean; children: JSX.Element }) => {
-  const [rotation, setRotation] = createSignal(0);
-  const [durationSeconds, setDurationSeconds] = createSignal(SPIN_DURATION_SECONDS);
+type SpinWhileActiveProps = PropsWithChildren<{
+  active: boolean;
+}>;
 
-  let animating = false;
-  let activeTargetRotation: number | undefined;
-  const resetInstantly = () => {
-    setDurationSeconds(0);
-    setRotation(0);
-  };
-
-  const incrementRotation = () => {
-    setRotation((currentRotation) => {
-      const nextRotation = currentRotation + 360;
-      activeTargetRotation = nextRotation;
-      return nextRotation;
-    });
-  };
-
-  const startSpin = () => {
-    if (animating) return;
-    animating = true;
-
-    if (durationSeconds() !== SPIN_DURATION_SECONDS) {
-      setDurationSeconds(SPIN_DURATION_SECONDS);
-      queueMicrotask(() => {
-        incrementRotation();
-      });
-      return;
+export const SpinWhileActive = ({ active, children }: SpinWhileActiveProps) => (
+  <motion.div
+    animate={active ? { rotate: 360 } : { rotate: 0 }}
+    transition={
+      active
+        ? {
+            duration: 0.9,
+            ease: "linear",
+            repeat: Number.POSITIVE_INFINITY,
+          }
+        : {
+            duration: 0.2,
+          }
     }
-
-    incrementRotation();
-  };
-
-  const onSpinComplete = (definition: unknown) => {
-    if (!animating) return;
-    const rotate =
-      typeof definition === "object" && definition !== null
-        ? (definition as { rotate?: unknown }).rotate
-        : undefined;
-    const completedRotation = typeof rotate === "number" ? rotate : undefined;
-
-    if (
-      completedRotation !== undefined &&
-      activeTargetRotation !== undefined &&
-      completedRotation !== activeTargetRotation
-    ) {
-      // Ignore stale completion callbacks from prior cycles.
-      return;
-    }
-
-    animating = false;
-    if (props.active) {
-      queueMicrotask(() => {
-        if (!props.active) {
-          resetInstantly();
-          return;
-        }
-        startSpin();
-      });
-      return;
-    }
-
-    resetInstantly();
-  };
-
-  createEffect(
-    on(
-      () => props.active,
-      (active) => {
-        if (!active) return;
-        startSpin();
-      },
-    ),
-  );
-
-  return (
-    <motion.span
-      class="inline-flex"
-      animate={{ rotate: rotation() }}
-      transition={{ duration: durationSeconds(), ease: [0.5, 0, 0.5, 1] }}
-      onAnimationComplete={onSpinComplete}
-    >
-      {props.children}
-    </motion.span>
-  );
-};
+  >
+    {children}
+  </motion.div>
+);

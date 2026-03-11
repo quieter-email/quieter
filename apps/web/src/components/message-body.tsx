@@ -1,54 +1,54 @@
-import { cn } from "@quietr/ui";
+"use client";
+
+import { cn, useColorMode } from "@quietr/ui";
 import DOMPurify from "isomorphic-dompurify";
-import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import { useEffect, useRef } from "react";
 
 type MessageBodyProps = {
   html?: string;
   text?: string;
   snippet?: string;
-  colorScheme?: "auto" | "light" | "dark";
   compact?: boolean;
 };
 
-type ResolvedColorScheme = "light" | "dark";
+type ResolvedColorMode = "light" | "dark";
 
-// Base typography/layout styles are injected into the Shadow DOM so email CSS stays isolated.
-const getBaseStyles = (colorScheme: ResolvedColorScheme): string => `<style>
+const getBaseStyles = (colorMode: ResolvedColorMode): string => {
+  const bg = colorMode === "dark" ? "#18181b" : "#ffffff";
+  const fg = colorMode === "dark" ? "#e4e4e7" : "#18181b";
+  const link = colorMode === "dark" ? "#60a5fa" : "#2563eb";
+  const muted = colorMode === "dark" ? "#a1a1aa" : "#71717a";
+  const border = colorMode === "dark" ? "#3f3f46" : "#e4e4e7";
+
+  return `<style>
   :host {
     display: block;
-    color-scheme: ${colorScheme};
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    -webkit-text-size-adjust: 100%;
-    line-height: 1.5;
+    background: ${bg};
+    color: ${fg};
     overflow-wrap: break-word;
     word-break: break-word;
   }
-  :where(body) { margin: 0; }
-  :where(img) { max-width: 100%; height: auto; }
+  :where(html, body) { margin: 0; padding: 0; }
+  :where(img, picture, svg) { max-width: 100%; height: auto; }
+  * { color: inherit !important; }
+  :where(html, body, div, td, th, table, tr, span, p, section, article, header, footer, main, aside, nav, blockquote) {
+    background-color: transparent !important;
+    background-image: none !important;
+  }
+  a, a * { color: ${link} !important; text-decoration: underline; }
+  :where(hr) { border-color: ${border}; }
+  :where(blockquote) { border-left: 3px solid ${border}; padding-left: 12px; color: ${muted} !important; }
 </style>`;
+};
 
-const TRUE_MEDIA_CONDITION = "(min-width: 0px)";
-const FALSE_MEDIA_CONDITION = "(max-width: 0px)";
-
-// Regex cleanup handles known email-client artifacts that can break rendering.
 const LINK_TAG_REGEX = /<link\b[^>]*>/gi;
 const LEGACY_VIEWPORT_AT_RULE_REGEX = /@(?:-ms-)?viewport\s*{[\s\S]*?}/gi;
 const MALFORMED_VIEWPORT_DECLARATION_REGEX = /width\s*(?:=|\uFFFD)\s*(?:de)?vice-width/gi;
 const REPLACEMENT_CHARACTER_REGEX = /\uFFFD/g;
 const DOCUMENT_WRAPPER_REGEX = /<\/?(html|head)\b[^>]*>/gi;
+const STYLE_TAG_REGEX = /<style\b[^>]*>[\s\S]*?<\/style\s*>/gi;
 
-const EMAIL_ADD_TAGS = [
-  "html",
-  "head",
-  "body",
-  "style",
-  "img",
-  "picture",
-  "source",
-  "center",
-  "font",
-];
-
+const EMAIL_ADD_TAGS = ["html", "head", "body", "img", "picture", "source", "center", "font"];
 const EMAIL_ADD_ATTR = [
   "target",
   "align",
@@ -63,7 +63,6 @@ const EMAIL_ADD_ATTR = [
   "referrerpolicy",
 ];
 
-// Always enforce safe rel values on external links while preserving existing rel tokens.
 const mergeRelValues = (value: string | undefined): string => {
   const values = new Set(["noopener", "noreferrer"]);
   for (const token of value?.split(/\s+/) ?? []) {
@@ -89,7 +88,6 @@ const registerEmailSanitizeHooks = () => {
   if (emailSanitizeHooksRegistered || !DOMPurify.isSupported) return;
   emailSanitizeHooksRegistered = true;
 
-  // Normalize anchor/image attributes post-sanitize for security and email UX.
   DOMPurify.addHook("afterSanitizeAttributes", (node) => {
     if (node.tagName === "A") {
       node.setAttribute("target", "_blank");
@@ -109,129 +107,55 @@ const registerEmailSanitizeHooks = () => {
 
 registerEmailSanitizeHooks();
 
-// Flip prefers-color-scheme media queries so we can force a single visual mode.
-const forcePrefersColorSchemeQueries = (html: string, colorScheme: ResolvedColorScheme): string => {
-  const targetScheme = colorScheme === "dark" ? "dark" : "light";
-  const oppositeScheme = targetScheme === "dark" ? "light" : "dark";
-
-  let normalized = html.replace(
-    new RegExp(`\\(\\s*prefers-color-scheme\\s*:\\s*${targetScheme}\\s*\\)`, "gi"),
-    TRUE_MEDIA_CONDITION,
-  );
-
-  normalized = normalized.replace(
-    new RegExp(`\\(\\s*prefers-color-scheme\\s*:\\s*${oppositeScheme}\\s*\\)`, "gi"),
-    FALSE_MEDIA_CONDITION,
-  );
-
-  return normalized;
-};
-
-// Final sanitize pass strips unsafe content plus problematic legacy email rules.
 const sanitizeHtml = (rawHtml: string): string => {
   const sanitized = String(DOMPurify.sanitize(rawHtml, EMAIL_SANITIZE_CONFIG));
   return sanitized
+    .replaceAll(STYLE_TAG_REGEX, "")
     .replaceAll(LINK_TAG_REGEX, "")
     .replaceAll(LEGACY_VIEWPORT_AT_RULE_REGEX, "")
     .replaceAll(MALFORMED_VIEWPORT_DECLARATION_REGEX, "width: device-width")
     .replaceAll(REPLACEMENT_CHARACTER_REGEX, "");
 };
 
-// Build the exact HTML payload that gets mounted into Shadow DOM.
-const prepareShadowContent = (rawHtml: string, colorScheme: ResolvedColorScheme): string => {
+const prepareShadowContent = (rawHtml: string, colorMode: ResolvedColorMode): string => {
   const sanitized = sanitizeHtml(rawHtml);
-  const withScheme = forcePrefersColorSchemeQueries(sanitized.trim(), colorScheme);
-  const content = withScheme.replaceAll(DOCUMENT_WRAPPER_REGEX, "");
-  return `${getBaseStyles(colorScheme)}${content}`;
+  const content = sanitized.trim().replaceAll(DOCUMENT_WRAPPER_REGEX, "");
+  return `${getBaseStyles(colorMode)}${content}`;
 };
 
-// Read host app theme classes/attributes and map to a strict light/dark value.
-const resolveDocumentColorScheme = (): ResolvedColorScheme => {
-  if (typeof document === "undefined") return "light";
+const HtmlMessageBody = ({ compact, html }: { html: string; compact?: boolean }) => {
+  const { colorMode } = useColorMode();
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const shadowRootRef = useRef<ShadowRoot | null>(null);
 
-  const root = document.documentElement;
-  const body = document.body;
-  const dataTheme = root.getAttribute("data-theme")?.toLowerCase();
-  const bodyDataTheme = body?.getAttribute("data-theme")?.toLowerCase();
+  useEffect(() => {
+    if (!hostRef.current) return;
 
-  if (root.classList.contains("dark") || dataTheme === "dark") return "dark";
-  if (body?.classList.contains("dark") || bodyDataTheme === "dark") return "dark";
-  if (root.classList.contains("light") || dataTheme === "light") return "light";
-  if (body?.classList.contains("light") || bodyDataTheme === "light") return "light";
+    shadowRootRef.current ??= hostRef.current.attachShadow({ mode: "open" });
+    shadowRootRef.current.innerHTML = prepareShadowContent(
+      html,
+      colorMode === "dark" ? "dark" : "light",
+    );
+  }, [colorMode, html]);
 
-  return "light";
+  return <div className={cn(compact ? "mt-3" : "mt-6")} ref={hostRef} />;
 };
 
-export const MessageBody = (props: MessageBodyProps) => {
-  const fallbackText = () => props.text?.trim() || props.snippet?.trim() || "No content.";
-  const [autoColorScheme, setAutoColorScheme] = createSignal<ResolvedColorScheme>(
-    resolveDocumentColorScheme(),
-  );
+export const MessageBody = ({ compact, html, snippet, text }: MessageBodyProps) => {
+  const fallbackText = text?.trim() || snippet?.trim() || "No content.";
 
-  onMount(() => {
-    const root = document.documentElement;
-    const body = document.body;
+  if (!html?.trim()) {
+    return (
+      <p
+        className={cn(
+          "text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground",
+          compact ? "mt-3" : "mt-6",
+        )}
+      >
+        {fallbackText}
+      </p>
+    );
+  }
 
-    const update = () => {
-      setAutoColorScheme(resolveDocumentColorScheme());
-    };
-
-    update();
-    // Keep auto mode aligned with host app theme changes (class/data-theme toggles).
-    const observer = new MutationObserver(update);
-    observer.observe(root, {
-      attributes: true,
-      attributeFilter: ["class", "data-theme"],
-    });
-
-    const bodyObserver = body ? new MutationObserver(update) : null;
-    if (bodyObserver && body) {
-      bodyObserver.observe(body, {
-        attributes: true,
-        attributeFilter: ["class", "data-theme"],
-      });
-    }
-
-    onCleanup(() => {
-      observer.disconnect();
-      bodyObserver?.disconnect();
-    });
-  });
-
-  const colorScheme = (): ResolvedColorScheme => {
-    // Explicit prop wins; "auto" follows the observed document theme.
-    if (props.colorScheme === "light") return "light";
-    if (props.colorScheme === "dark") return "dark";
-    return autoColorScheme();
-  };
-
-  return (
-    <Show
-      when={props.html?.trim()}
-      keyed
-      fallback={
-        <p
-          class={cn(
-            "text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground",
-            props.compact ? "mt-3" : "mt-6",
-          )}
-        >
-          {fallbackText()}
-        </p>
-      }
-    >
-      {(html) => (
-        <div
-          class={cn(props.compact ? "mt-3" : "mt-6")}
-          ref={(el) => {
-            const shadow = el.attachShadow({ mode: "open" });
-            createEffect(() => {
-              // Re-render sanitized email HTML whenever content or resolved theme changes.
-              shadow.innerHTML = prepareShadowContent(html, colorScheme());
-            });
-          }}
-        />
-      )}
-    </Show>
-  );
+  return <HtmlMessageBody compact={compact} html={html} />;
 };

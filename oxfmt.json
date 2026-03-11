@@ -24,5 +24,5 @@
     "stylesheet": "packages/ui/src/styles.css",
     "functions": ["clsx", "cn", "twMerge"]
   },
-  "ignorePatterns": ["routeTree.gen.ts"]
+  "ignorePatterns": ["routeTree.gen.ts", "**/.next/**"]
 }

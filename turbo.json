@@ -6,9 +6,16 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "env": ["BETTER_AUTH_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "DATABASE_URL", "VITE_LOGO_DEV_PUBLISHABLE_KEY"],
+      "env": [
+        "BETTER_AUTH_SECRET",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "DATABASE_URL",
+        "VITE_LOGO_DEV_PUBLISHABLE_KEY",
+        "NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY"
+      ],
       "inputs": ["$TURBO_DEFAULT$"],
-      "outputs": ["dist/**", ".output/**", "!.output/cache/**"]
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**", ".output/**", "!.output/cache/**"]
     },
     "lint": {
       "dependsOn": ["^lint"],
@@ -51,10 +58,16 @@
       "outputs": []
     },
     "dev": {
-      "env": ["BETTER_AUTH_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "DATABASE_URL", "VITE_LOGO_DEV_PUBLISHABLE_KEY"],
+      "env": [
+        "BETTER_AUTH_SECRET",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "DATABASE_URL",
+        "VITE_LOGO_DEV_PUBLISHABLE_KEY",
+        "NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY"
+      ],
       "cache": false,
       "persistent": true
     }
   }
 }
-

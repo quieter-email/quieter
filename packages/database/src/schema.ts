@@ -1,4 +1,4 @@
-import { bigint, boolean, integer, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { bigint, boolean, index, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
 import { defineRelations } from "drizzle-orm/relations";
 
 export const user = pgTable("user", {
@@ -7,28 +7,8 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("emailVerified").notNull(),
   image: text("image"),
-  twoFactorEnabled: boolean("twoFactorEnabled").default(false),
   createdAt: timestamp("createdAt").notNull(),
   updatedAt: timestamp("updatedAt").notNull(),
-});
-
-export const organization = pgTable("organization", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
-  logo: text("logo"),
-  metadata: text("metadata"),
-  createdAt: timestamp("createdAt").notNull(),
-});
-
-export const team = pgTable("team", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  organizationId: text("organizationId")
-    .notNull()
-    .references(() => organization.id),
-  createdAt: timestamp("createdAt").notNull(),
-  updatedAt: timestamp("updatedAt"),
 });
 
 export const session = pgTable("session", {
@@ -42,8 +22,6 @@ export const session = pgTable("session", {
   userId: text("userId")
     .notNull()
     .references(() => user.id),
-  activeOrganizationId: text("activeOrganizationId").references(() => organization.id),
-  activeTeamId: text("activeTeamId").references(() => team.id),
 });
 
 export const account = pgTable(
@@ -77,77 +55,28 @@ export const verification = pgTable("verification", {
   updatedAt: timestamp("updatedAt").notNull(),
 });
 
-export const twoFactor = pgTable("twoFactor", {
-  id: text("id").primaryKey(),
-  secret: text("secret").notNull(),
-  backupCodes: text("backupCodes").notNull(),
-  userId: text("userId")
-    .notNull()
-    .references(() => user.id)
-    .unique(),
-});
-
-export const passkey = pgTable("passkey", {
-  id: text("id").primaryKey(),
-  name: text("name"),
-  publicKey: text("publicKey").notNull(),
-  userId: text("userId")
-    .notNull()
-    .references(() => user.id),
-  credentialID: text("credentialID").notNull().unique(),
-  counter: integer("counter").notNull(),
-  deviceType: text("deviceType").notNull(),
-  backedUp: boolean("backedUp").notNull(),
-  transports: text("transports"),
-  createdAt: timestamp("createdAt").notNull(),
-  aaguid: text("aaguid"),
-});
-
-export const member = pgTable(
-  "member",
+export const passkey = pgTable(
+  "passkey",
   {
     id: text("id").primaryKey(),
-    organizationId: text("organizationId")
-      .notNull()
-      .references(() => organization.id),
+    name: text("name"),
+    publicKey: text("publicKey").notNull(),
     userId: text("userId")
       .notNull()
       .references(() => user.id),
-    role: text("role").notNull().default("member"),
+    credentialID: text("credentialID").notNull(),
+    counter: bigint("counter", { mode: "number" }).notNull(),
+    deviceType: text("deviceType").notNull(),
+    backedUp: boolean("backedUp").notNull(),
+    transports: text("transports"),
     createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+    aaguid: text("aaguid"),
   },
-  (table) => [unique().on(table.organizationId, table.userId)],
-);
-
-export const invitation = pgTable("invitation", {
-  id: text("id").primaryKey(),
-  organizationId: text("organizationId")
-    .notNull()
-    .references(() => organization.id),
-  email: text("email").notNull(),
-  role: text("role"),
-  teamId: text("teamId").references(() => team.id),
-  status: text("status").notNull().default("pending"),
-  expiresAt: timestamp("expiresAt").notNull(),
-  createdAt: timestamp("createdAt").notNull(),
-  inviterId: text("inviterId")
-    .notNull()
-    .references(() => user.id),
-});
-
-export const teamMember = pgTable(
-  "teamMember",
-  {
-    id: text("id").primaryKey(),
-    teamId: text("teamId")
-      .notNull()
-      .references(() => team.id),
-    userId: text("userId")
-      .notNull()
-      .references(() => user.id),
-    createdAt: timestamp("createdAt").notNull(),
-  },
-  (table) => [unique().on(table.teamId, table.userId)],
+  (table) => [
+    index("passkey_user_id_idx").on(table.userId),
+    unique("passkey_credential_id_unique").on(table.credentialID),
+  ],
 );
 
 export const gmailMailboxState = pgTable("gmailMailboxState", {
@@ -175,58 +104,27 @@ export const gmailMessageCache = pgTable(
     from: text("from"),
     date: text("date"),
     internalDateMs: bigint("internalDateMs", { mode: "number" }),
-    senderAvatarUrl: text("senderAvatarUrl"),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [unique().on(table.userId, table.messageId)],
 );
 
-export const organizationRole = pgTable(
-  "organizationRole",
-  {
-    id: text("id").primaryKey(),
-    organizationId: text("organizationId")
-      .notNull()
-      .references(() => organization.id),
-    role: text("role").notNull(),
-    permission: text("permission").notNull(),
-    createdAt: timestamp("createdAt").notNull(),
-    updatedAt: timestamp("updatedAt"),
-  },
-  (table) => [unique().on(table.organizationId, table.role)],
-);
-
 export const tables = {
   user,
-  organization,
-  team,
   session,
   account,
   verification,
-  twoFactor,
   passkey,
-  member,
-  invitation,
-  teamMember,
   gmailMailboxState,
   gmailMessageCache,
-  organizationRole,
 };
 
 export const authRelations = defineRelations(tables, (r) => ({
   user: {
     accounts: r.many.account({ from: r.user.id, to: r.account.userId }),
     sessions: r.many.session({ from: r.user.id, to: r.session.userId }),
-    twoFactor: r.one.twoFactor({
-      from: r.user.id,
-      to: r.twoFactor.userId,
-      optional: true,
-    }),
     passkeys: r.many.passkey({ from: r.user.id, to: r.passkey.userId }),
-    memberships: r.many.member({ from: r.user.id, to: r.member.userId }),
-    invitationsSent: r.many.invitation({ from: r.user.id, to: r.invitation.inviterId }),
-    teamMemberships: r.many.teamMember({ from: r.user.id, to: r.teamMember.userId }),
     gmailMailboxState: r.one.gmailMailboxState({
       from: r.user.id,
       to: r.gmailMailboxState.userId,
@@ -237,6 +135,13 @@ export const authRelations = defineRelations(tables, (r) => ({
       to: r.gmailMessageCache.userId,
     }),
   },
+  session: {
+    user: r.one.user({
+      from: r.session.userId,
+      to: r.user.id,
+      optional: false,
+    }),
+  },
   account: {
     user: r.one.user({
       from: r.account.userId,
@@ -244,97 +149,9 @@ export const authRelations = defineRelations(tables, (r) => ({
       optional: false,
     }),
   },
-  session: {
-    user: r.one.user({
-      from: r.session.userId,
-      to: r.user.id,
-      optional: false,
-    }),
-    activeOrganization: r.one.organization({
-      from: r.session.activeOrganizationId,
-      to: r.organization.id,
-      optional: true,
-    }),
-    activeTeam: r.one.team({
-      from: r.session.activeTeamId,
-      to: r.team.id,
-      optional: true,
-    }),
-  },
-  twoFactor: {
-    user: r.one.user({
-      from: r.twoFactor.userId,
-      to: r.user.id,
-      optional: false,
-    }),
-  },
   passkey: {
     user: r.one.user({
       from: r.passkey.userId,
-      to: r.user.id,
-      optional: false,
-    }),
-  },
-  organization: {
-    members: r.many.member({ from: r.organization.id, to: r.member.organizationId }),
-    invitations: r.many.invitation({ from: r.organization.id, to: r.invitation.organizationId }),
-    teams: r.many.team({ from: r.organization.id, to: r.team.organizationId }),
-    roles: r.many.organizationRole({
-      from: r.organization.id,
-      to: r.organizationRole.organizationId,
-    }),
-    sessionsAsActive: r.many.session({
-      from: r.organization.id,
-      to: r.session.activeOrganizationId,
-    }),
-  },
-  member: {
-    organization: r.one.organization({
-      from: r.member.organizationId,
-      to: r.organization.id,
-      optional: false,
-    }),
-    user: r.one.user({
-      from: r.member.userId,
-      to: r.user.id,
-      optional: false,
-    }),
-  },
-  invitation: {
-    organization: r.one.organization({
-      from: r.invitation.organizationId,
-      to: r.organization.id,
-      optional: false,
-    }),
-    inviter: r.one.user({
-      from: r.invitation.inviterId,
-      to: r.user.id,
-      optional: false,
-    }),
-    team: r.one.team({
-      from: r.invitation.teamId,
-      to: r.team.id,
-      optional: true,
-    }),
-  },
-  team: {
-    organization: r.one.organization({
-      from: r.team.organizationId,
-      to: r.organization.id,
-      optional: false,
-    }),
-    members: r.many.teamMember({ from: r.team.id, to: r.teamMember.teamId }),
-    invitations: r.many.invitation({ from: r.team.id, to: r.invitation.teamId }),
-    sessionsUsingAsActive: r.many.session({ from: r.team.id, to: r.session.activeTeamId }),
-  },
-  teamMember: {
-    team: r.one.team({
-      from: r.teamMember.teamId,
-      to: r.team.id,
-      optional: false,
-    }),
-    user: r.one.user({
-      from: r.teamMember.userId,
       to: r.user.id,
       optional: false,
     }),
@@ -350,13 +167,6 @@ export const authRelations = defineRelations(tables, (r) => ({
     user: r.one.user({
       from: r.gmailMessageCache.userId,
       to: r.user.id,
-      optional: false,
-    }),
-  },
-  organizationRole: {
-    organization: r.one.organization({
-      from: r.organizationRole.organizationId,
-      to: r.organization.id,
       optional: false,
     }),
   },

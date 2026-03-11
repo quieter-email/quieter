@@ -1,17 +1,28 @@
-import { Button } from "@quietr/ui";
-import { IconArrowUp, IconLoader, IconRefresh } from "@tabler/icons-solidjs";
-import { createVirtualizer } from "@tanstack/solid-virtual";
-import { For, Show, createEffect, createMemo } from "solid-js";
-import type { ListMessagesPageResult } from "~/lib/gmail/gmail";
+"use client";
+
+import { ArrowUp01Icon, Loading03Icon, RefreshIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Button, TextField, TextFieldInput } from "@quietr/ui";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useEffect, useRef } from "react";
+import type { ListMessagesPageResult, MailboxCategory } from "~/lib/gmail/gmail";
+import { buildThreadListEntries } from "~/lib/gmail/thread-list";
 import { MessageRow } from "./message-row";
 import { SpinWhileActive } from "./spin-while-active";
 
 type MessageListProps = {
+  activeMailbox: MailboxCategory;
   activeMessageId?: string | null;
   onActivateMessage: (messageId: string) => void;
   onMarkAsRead: (messageId: string) => void | Promise<void>;
   onMarkAsUnread: (messageId: string) => void | Promise<void>;
-  isReadStatePending?: (messageId: string) => boolean;
+  onUpdateLabels: (
+    messageId: string,
+    changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
+  ) => void | Promise<void>;
+  onMoveToTrash: (messageId: string) => void | Promise<void>;
+  onDeletePermanently: (messageId: string) => void | Promise<void>;
+  isMessageActionPending?: (messageId: string) => boolean;
   onRefresh: () => void | Promise<void>;
   isRefreshing: boolean;
   isPending: boolean;
@@ -23,59 +34,51 @@ type MessageListProps = {
   onLoadMore: () => void;
 };
 
-export const MessageList = (props: MessageListProps) => {
-  let scrollRef: HTMLDivElement | null = null;
-  const SCROLL_TOP_EPSILON_PX = 2;
-  const SCROLL_WAIT_TIMEOUT_MS = 600;
-  let isProgrammaticScrollToTop = false;
+const SCROLL_TOP_EPSILON_PX = 2;
+const SCROLL_WAIT_TIMEOUT_MS = 600;
 
-  const flattenedMessages = createMemo(() => props.messages.flatMap((page) => page.messages));
-  const flattenedMessageIds = createMemo(() => flattenedMessages().map((message) => message.id));
+export const MessageList = ({
+  activeMailbox,
+  activeMessageId,
+  error,
+  hasNextPage,
+  isError,
+  isFetchingNextPage,
+  isMessageActionPending,
+  isPending,
+  isRefreshing,
+  messages,
+  onActivateMessage,
+  onDeletePermanently,
+  onLoadMore,
+  onMarkAsRead,
+  onMarkAsUnread,
+  onMoveToTrash,
+  onRefresh,
+  onUpdateLabels,
+}: MessageListProps) => {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const isProgrammaticScrollToTopRef = useRef(false);
 
-  const areMessageIdsEqual = (
-    previousMessageIds: readonly string[] | undefined,
-    nextMessageIds: readonly string[],
-  ) => {
-    if (!previousMessageIds || previousMessageIds.length !== nextMessageIds.length) {
-      return false;
-    }
+  const flattenedMessages = messages.flatMap((page) => page.messages);
+  const threadedMessages = buildThreadListEntries(flattenedMessages);
+  const threadedMessageIds = threadedMessages.map((thread) => thread.threadId);
+  const activeThreadId = activeMessageId
+    ? (flattenedMessages.find((message) => message.id === activeMessageId)?.threadId ?? null)
+    : null;
 
-    for (let index = 0; index < nextMessageIds.length; index += 1) {
-      if (previousMessageIds[index] !== nextMessageIds[index]) {
-        return false;
-      }
-    }
-
-    return true;
-  };
-
-  const messageVirtualizer = createVirtualizer<HTMLDivElement, HTMLLIElement>({
-    get count() {
-      return flattenedMessages().length;
-    },
-    getScrollElement: () => scrollRef,
-    estimateSize: () => 64,
+  const messageVirtualizer = useVirtualizer({
+    count: threadedMessages.length,
+    estimateSize: () => 72,
+    gap: 4,
+    getItemKey: (index) => threadedMessageIds[index] ?? index,
+    getScrollElement: () => scrollRef.current,
     overscan: 8,
-    gap: 8,
-    get getItemKey() {
-      const messageIds = flattenedMessageIds();
-      return (index: number) => messageIds[index] ?? index;
-    },
-  });
-
-  createEffect((previousMessageIds: readonly string[] | undefined) => {
-    const nextMessageIds = flattenedMessageIds();
-
-    if (!areMessageIdsEqual(previousMessageIds, nextMessageIds)) {
-      messageVirtualizer.measure();
-    }
-
-    return nextMessageIds;
   });
 
   const tryLoadMore = () => {
-    if (!props.hasNextPage || props.isFetchingNextPage || props.isPending || props.isError) return;
-    props.onLoadMore();
+    if (!hasNextPage || isFetchingNextPage || isPending || isError) return;
+    onLoadMore();
   };
 
   const shouldPrefetch = (element: HTMLDivElement) => {
@@ -86,19 +89,17 @@ export const MessageList = (props: MessageListProps) => {
   };
 
   const maybeLoadMore = () => {
-    if (!scrollRef) return;
-    if (!shouldPrefetch(scrollRef)) return;
+    if (!scrollRef.current) return;
+    if (!shouldPrefetch(scrollRef.current)) return;
     tryLoadMore();
   };
 
-  createEffect(() => {
-    const messageCount = flattenedMessages().length;
-    if (messageCount === 0 || !scrollRef) return;
-
+  useEffect(() => {
+    if (threadedMessages.length === 0 || !scrollRef.current) return;
     maybeLoadMore();
-  });
+  }, [messages]);
 
-  const waitForSmoothScrollTop = async (element: HTMLDivElement): Promise<void> => {
+  const waitForSmoothScrollTop = async (element: HTMLDivElement) => {
     await new Promise<void>((resolve) => {
       let done = false;
 
@@ -119,10 +120,7 @@ export const MessageList = (props: MessageListProps) => {
         if (element.scrollTop <= SCROLL_TOP_EPSILON_PX) finish();
       };
 
-      const onScrollEnd = () => {
-        finish();
-      };
-
+      const onScrollEnd = () => finish();
       const timeoutId = setTimeout(finish, SCROLL_WAIT_TIMEOUT_MS);
 
       element.addEventListener("scroll", onScroll, { passive: true });
@@ -131,138 +129,131 @@ export const MessageList = (props: MessageListProps) => {
         element.addEventListener("scrollend", onScrollEnd as EventListener, { passive: true });
       }
 
-      if (element.scrollTop <= SCROLL_TOP_EPSILON_PX) {
-        finish();
-      }
+      if (element.scrollTop <= SCROLL_TOP_EPSILON_PX) finish();
     });
   };
 
-  const waitForNextPaint = async (): Promise<void> => {
+  const waitForNextPaint = async () => {
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          resolve();
-        });
+        requestAnimationFrame(() => resolve());
       });
     });
   };
 
   const scrollListToTop = async () => {
-    const element = scrollRef;
-
-    if (element && element.scrollTop > SCROLL_TOP_EPSILON_PX) {
-      isProgrammaticScrollToTop = true;
+    if (scrollRef.current && scrollRef.current.scrollTop > SCROLL_TOP_EPSILON_PX) {
+      isProgrammaticScrollToTopRef.current = true;
 
       try {
-        element.scrollTo({ top: 0, behavior: "smooth" });
-        await waitForSmoothScrollTop(element);
+        scrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
+        await waitForSmoothScrollTop(scrollRef.current);
         await waitForNextPaint();
       } finally {
-        isProgrammaticScrollToTop = false;
+        isProgrammaticScrollToTopRef.current = false;
       }
     }
   };
 
   return (
-    <div class="flex min-h-0 flex-1 flex-col">
-      <div class="border-b border-border/70 px-3 py-3 sm:px-4">
-        <div class="flex items-center gap-2">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="border-b border-border bg-background-light px-4 py-3">
+        <div className="flex items-center gap-2">
           <Button
-            variant="outline"
+            disabled={isRefreshing}
+            onClick={() => void onRefresh()}
             size="icon-sm"
-            disabled={props.isRefreshing}
-            onClick={() => void props.onRefresh()}
+            variant="outline"
           >
-            <SpinWhileActive active={props.isRefreshing}>
-              <IconRefresh />
+            <SpinWhileActive active={isRefreshing}>
+              <HugeiconsIcon icon={RefreshIcon} />
             </SpinWhileActive>
           </Button>
 
-          <input
-            type="search"
-            placeholder="Search mail (coming soon)"
-            class="h-8 min-w-0 flex-1 border border-input bg-background px-3 text-xs text-foreground shadow-sm outline-none placeholder:text-muted-foreground"
-            aria-label="Search mail (coming soon)"
-          />
+          <TextField>
+            <TextFieldInput
+              size="sm"
+              className="grow"
+              placeholder="Search mail (coming soon)"
+              type="search"
+            />
+          </TextField>
 
-          <Button variant="outline" size="icon-sm" onClick={() => void scrollListToTop()}>
-            <IconArrowUp />
+          <Button onClick={() => void scrollListToTop()} size="icon-sm" variant="outline">
+            <HugeiconsIcon icon={ArrowUp01Icon} />
           </Button>
         </div>
       </div>
 
       <div
-        ref={(el) => {
-          scrollRef = el;
-        }}
-        class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3 sm:p-4"
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-4"
         onScroll={() => {
-          if (isProgrammaticScrollToTop) return;
+          if (isProgrammaticScrollToTopRef.current) return;
           maybeLoadMore();
         }}
+        ref={scrollRef}
       >
-        <Show when={props.isPending && flattenedMessages().length === 0} fallback={null}>
-          <div class="px-2 py-6">
-            <IconLoader class="animate-spin text-muted-foreground" />
+        {isPending && threadedMessages.length === 0 ? (
+          <div className="grid place-items-center px-2 py-8">
+            <HugeiconsIcon className="animate-spin text-muted-foreground" icon={Loading03Icon} />
           </div>
-        </Show>
+        ) : null}
 
-        <Show when={props.isError} fallback={null}>
-          <p class="px-2 py-6 text-sm text-destructive">{props.error?.message}</p>
-        </Show>
+        {isError ? <p className="px-2 py-8 text-sm text-destructive">{error?.message}</p> : null}
 
-        <Show when={!props.isError && flattenedMessages().length > 0} fallback={null}>
+        {!isError && threadedMessages.length > 0 ? (
           <ul
-            class="relative"
+            className="relative"
             style={{
               height: `${messageVirtualizer.getTotalSize()}px`,
             }}
           >
-            <For each={messageVirtualizer.getVirtualItems()}>
-              {(virtualItem) => {
-                const message = () => flattenedMessages()[virtualItem.index];
+            {messageVirtualizer.getVirtualItems().map((virtualItem) => {
+              const thread = threadedMessages[virtualItem.index];
 
-                return (
-                  <Show when={message()} keyed>
-                    {(message) => (
-                      <MessageRow
-                        message={message}
-                        isActive={props.activeMessageId === message.id}
-                        onActivateMessage={props.onActivateMessage}
-                        onMarkAsRead={props.onMarkAsRead}
-                        onMarkAsUnread={props.onMarkAsUnread}
-                        isReadStatePending={props.isReadStatePending?.(message.id)}
-                        class="absolute top-0 left-0 w-full will-change-transform"
-                        style={{
-                          transform: `translateY(${virtualItem.start}px)`,
-                        }}
-                      />
-                    )}
-                  </Show>
-                );
-              }}
-            </For>
+              return thread ? (
+                <MessageRow
+                  activeMailbox={activeMailbox}
+                  className="absolute top-0 left-0 w-full will-change-transform"
+                  dataIndex={virtualItem.index}
+                  isActionPending={isMessageActionPending?.(thread.anchorMessage.id)}
+                  isActive={activeThreadId === thread.threadId}
+                  key={thread.threadId}
+                  onActivateMessage={onActivateMessage}
+                  onDeletePermanently={onDeletePermanently}
+                  onMarkAsRead={onMarkAsRead}
+                  onMarkAsUnread={onMarkAsUnread}
+                  onMoveToTrash={onMoveToTrash}
+                  onUpdateLabels={onUpdateLabels}
+                  rowRef={(element) => {
+                    if (!element?.isConnected) return;
+                    messageVirtualizer.measureElement(element);
+                  }}
+                  style={{
+                    transform: `translateY(${virtualItem.start}px)`,
+                  }}
+                  thread={thread}
+                />
+              ) : null;
+            })}
           </ul>
-        </Show>
+        ) : null}
 
-        <Show
-          when={!props.isPending && !props.isError && flattenedMessages().length === 0}
-          fallback={null}
-        >
-          <p class="px-2 py-6 text-sm text-muted-foreground">No messages.</p>
-        </Show>
+        {!isPending && !isError && threadedMessages.length === 0 ? (
+          <p className="px-2 py-8 text-sm text-muted-foreground">No messages.</p>
+        ) : null}
 
-        <Show when={!props.isError && flattenedMessages().length > 0} fallback={null}>
-          <p class="px-2 py-4 text-xs text-muted-foreground">
-            {props.isFetchingNextPage ? (
-              <IconLoader class="animate-spin text-muted-foreground" />
-            ) : props.hasNextPage ? (
-              <IconLoader class="animate-spin text-muted-foreground" />
+        {!isError && threadedMessages.length > 0 ? (
+          <p className="px-2 py-5 text-center text-xs text-muted-foreground">
+            {isFetchingNextPage ? (
+              <HugeiconsIcon className="animate-spin text-muted-foreground" icon={Loading03Icon} />
+            ) : hasNextPage ? (
+              <HugeiconsIcon className="animate-spin text-muted-foreground" icon={Loading03Icon} />
             ) : (
               "You're all caught up."
             )}
           </p>
-        </Show>
+        ) : null}
       </div>
     </div>
   );

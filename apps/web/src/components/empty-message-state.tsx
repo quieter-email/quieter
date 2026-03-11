@@ -1,8 +1,8 @@
 export const EmptyMessageState = () => (
-  <div class="grid h-full min-h-56 place-items-center">
-    <div class="max-w-sm border border-border bg-muted/30 px-7 py-6 text-center">
-      <p class="text-sm font-medium text-foreground">Nothing here yet...</p>
-      <p class="mt-1 text-xs text-muted-foreground">Select an email to view</p>
+  <div className="grid h-full min-h-56 place-items-center">
+    <div className="max-w-sm rounded-xl border border-border bg-background-light px-8 py-8 text-center">
+      <p className="text-sm font-semibold tracking-tight text-foreground">Nothing here yet</p>
+      <p className="mt-1.5 text-sm text-muted-foreground">Select an email to view.</p>
     </div>
   </div>
 );

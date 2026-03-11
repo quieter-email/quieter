@@ -4,8 +4,11 @@
   "type": "module",
   "exports": {
     ".": "./src/client.ts",
+    "./context": "./src/context.ts",
     "./server": "./src/server.ts",
-    "./router": "./src/router.ts"
+    "./router": "./src/router.ts",
+    "./gmail-service": "./src/gmail-service.ts",
+    "./sender-avatar": "./src/sender-avatar.ts"
   },
   "scripts": {
     "fmt": "oxfmt --config ../../oxfmt.json .",

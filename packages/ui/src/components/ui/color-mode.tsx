@@ -1,100 +1,65 @@
-import type { ComponentProps } from "solid-js";
-import {
-  COLOR_MODE_STORAGE_KEY,
-  ColorModeProvider as ColorModeProviderPrimitive,
-  ColorModeScript as ColorModeScriptPrimitive,
-  type ColorModeProviderProps as PrimitiveColorModeProviderProps,
-  type ColorModeScriptProps as PrimitiveColorModeScriptProps,
-  type ConfigColorMode,
-  useColorMode,
-  useColorModeValue,
-} from "@kobalte/core/color-mode";
-import { createEffect, splitProps } from "solid-js";
-import { cn } from "../../lib/cn";
-import { ToggleButton } from "./toggle-button";
+"use client";
 
-export type ColorModeProviderProps = PrimitiveColorModeProviderProps;
+import { ThemeProvider, useTheme } from "next-themes";
+import { useEffect, useState, type PropsWithChildren } from "react";
 
-const setDocumentTheme = (value: "light" | "dark") => {
-  if (typeof document === "undefined") return;
+export const COLOR_MODE_STORAGE_KEY = "quietr-color-mode";
 
-  const root = document.documentElement;
-  root.classList.toggle("dark", value === "dark");
-  root.classList.toggle("light", value === "light");
-  root.setAttribute("data-theme", value);
-  root.dataset.kbTheme = value;
-  root.style.colorScheme = value;
-};
+export type ColorMode = "light" | "dark";
+export type ConfigColorMode = ColorMode | "system";
 
-const ColorModeDocumentSync = () => {
-  const { colorMode } = useColorMode();
+export type ColorModeProviderProps = PropsWithChildren<{
+  initialColorMode?: ConfigColorMode;
+}>;
 
-  createEffect(() => {
-    setDocumentTheme(colorMode());
-  });
-
-  return null;
-};
-
-export const ColorModeProvider = (props: ColorModeProviderProps) => {
-  const [local, others] = splitProps(props, ["children"]);
-
+export const ColorModeProvider = ({
+  children,
+  initialColorMode = "system",
+}: ColorModeProviderProps) => {
   return (
-    <ColorModeProviderPrimitive {...others}>
-      <ColorModeDocumentSync />
-      {local.children}
-    </ColorModeProviderPrimitive>
-  );
-};
-
-export type ColorModeScriptProps = PrimitiveColorModeScriptProps;
-
-const colorModeClassSyncScript =
-  "!function(){try{var r=document.documentElement;var t=r.dataset.kbTheme;if(t!=='dark'&&t!=='light')return;r.classList.toggle('dark',t==='dark');r.classList.toggle('light',t==='light');r.setAttribute('data-theme',t);r.style.colorScheme=t;}catch(e){}}();";
-
-export const ColorModeScript = (props: ColorModeScriptProps) => {
-  const [local, others] = splitProps(props, ["nonce"]);
-
-  return (
-    <>
-      <ColorModeScriptPrimitive nonce={local.nonce} {...others} />
-      <script
-        id="quietr-color-mode-class-sync-script"
-        nonce={local.nonce}
-        innerHTML={colorModeClassSyncScript}
-      />
-    </>
-  );
-};
-
-export type ColorModeToggleProps = Omit<
-  ComponentProps<typeof ToggleButton>,
-  "onChange" | "pressed" | "children"
-> & {
-  lightLabel?: string;
-  darkLabel?: string;
-};
-
-export const ColorModeToggle = (props: ColorModeToggleProps) => {
-  const [local, others] = splitProps(props, ["class", "lightLabel", "darkLabel", "variant"]);
-  const { colorMode, setColorMode } = useColorMode();
-
-  return (
-    <ToggleButton
-      variant={local.variant ?? "default"}
-      pressed={colorMode() === "dark"}
-      onChange={(pressed) => {
-        const next: ConfigColorMode = pressed ? "dark" : "light";
-        setColorMode(next);
-      }}
-      class={cn("min-w-24", local.class)}
-      {...others}
+    <ThemeProvider
+      attribute="class"
+      defaultTheme={initialColorMode}
+      disableTransitionOnChange
+      enableColorScheme
+      enableSystem
+      storageKey={COLOR_MODE_STORAGE_KEY}
     >
-      <span class="truncate">
-        {colorMode() === "dark" ? (local.darkLabel ?? "Dark") : (local.lightLabel ?? "Light")}
-      </span>
-    </ToggleButton>
+      {children}
+    </ThemeProvider>
   );
 };
 
-export { COLOR_MODE_STORAGE_KEY, useColorMode, useColorModeValue };
+export const useColorMode = () => {
+  const { resolvedTheme, setTheme, theme } = useTheme();
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const configColorMode =
+    theme === "light" || theme === "dark" || theme === "system" ? theme : "system";
+  const colorMode: ColorMode = isMounted && resolvedTheme === "dark" ? "dark" : "light";
+  const setColorMode = (value: ConfigColorMode) => {
+    setTheme(value);
+  };
+
+  return {
+    colorMode,
+    configColorMode,
+    isMounted,
+    setColorMode,
+  };
+};
+
+export const useColorModeValue = <T,>(light: T, dark: T) => {
+  const { colorMode } = useColorMode();
+  return colorMode === "dark" ? dark : light;
+};
+
+export const ColorModeScript = ({
+  initialColorMode: _initialColorMode = "system",
+}: {
+  initialColorMode?: ConfigColorMode;
+}) => null;

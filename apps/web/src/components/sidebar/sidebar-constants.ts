@@ -1,4 +1,5 @@
-import { IconInbox, IconSend, IconTrash } from "@tabler/icons-solidjs";
+import type { IconSvgElement } from "@hugeicons/react";
+import { Delete01Icon, InboxIcon, MailSend02Icon } from "@hugeicons/core-free-icons";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 
 export const SIDEBAR_WIDTH = 224;
@@ -6,11 +7,11 @@ export const SIDEBAR_WIDTH = 224;
 export type SidebarMailboxItem = {
   id: MailboxCategory;
   label: string;
-  icon: typeof IconInbox;
+  icon: IconSvgElement;
 };
 
 export const SIDEBAR_MAILBOX_ITEMS: ReadonlyArray<SidebarMailboxItem> = [
-  { id: "inbox", label: "Inbox", icon: IconInbox },
-  { id: "sent", label: "Sent", icon: IconSend },
-  { id: "trash", label: "Trash", icon: IconTrash },
+  { id: "inbox", label: "Inbox", icon: InboxIcon },
+  { id: "sent", label: "Sent", icon: MailSend02Icon },
+  { id: "trash", label: "Trash", icon: Delete01Icon },
 ];

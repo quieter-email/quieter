@@ -1,185 +1,288 @@
-import { Button } from "@quietr/ui";
-import { IconLoader } from "@tabler/icons-solidjs";
-import { useQuery } from "@tanstack/solid-query";
-import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
-import { isMessageUnread, type MessageListItem } from "~/lib/gmail/gmail";
+"use client";
+
+import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { cn } from "@quietr/ui";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { useEffect, useState, type ReactNode } from "react";
+import { isMessageUnread, type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
+import { MessageActionsDropdown } from "./message-actions";
 import { MessageBody } from "./message-body";
 import { SenderAvatar } from "./sender-avatar";
 
 type MessageViewProps = {
+  activeMailbox: MailboxCategory;
   message: MessageListItem;
+  onMarkThreadAsRead?: (threadId: string) => void | Promise<void>;
+  onMarkThreadAsUnread?: (threadId: string) => void | Promise<void>;
   onMarkAsRead?: (messageId: string) => void | Promise<void>;
   onMarkAsUnread?: (messageId: string) => void | Promise<void>;
-  isReadStatePending?: boolean;
+  onUpdateLabels?: (
+    messageId: string,
+    changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
+  ) => void | Promise<void>;
+  onMoveToTrash?: (messageId: string) => void | Promise<void>;
+  onDeletePermanently?: (messageId: string) => void | Promise<void>;
+  isActionPending?: boolean;
 };
 
-export const MessageView = (props: MessageViewProps) => {
-  const selectedMessage = () => props.message;
+type MessageHeaderContentProps = {
+  message: MessageListItem;
+  className?: string;
+  isExpanded?: boolean;
+  previewMode?: "none" | "collapsed";
+  senderNameClassName?: string;
+  trailing?: ReactNode;
+};
 
-  const threadQuery = useQuery(() => getThreadWithDetailsOptions(selectedMessage().threadId));
-
-  const messages = createMemo<MessageListItem[]>(() => {
-    const threadMessages = threadQuery.data?.messages;
-    if (threadMessages?.length) {
-      return [...threadMessages].reverse();
-    }
-    return [selectedMessage()];
-  });
-
-  const subject = createMemo(
-    () => threadQuery.data?.subject || selectedMessage().subject || "(No subject)",
-  );
-
-  // Derive unread state from thread cache first (patched by optimistic updates),
-  // falling back to the prop message from the mailbox list cache.
-  const selectedMessageIsUnread = createMemo(() => {
-    const messageId = selectedMessage().id;
-    const threadMessages = threadQuery.data?.messages;
-
-    if (threadMessages?.length) {
-      const threadMessage = threadMessages.find((m) => m.id === messageId);
-      if (threadMessage) return isMessageUnread(threadMessage);
-    }
-
-    return isMessageUnread(selectedMessage());
-  });
-  const isReadStatePending = createMemo(() => Boolean(props.isReadStatePending));
-
-  const [expandedMessageId, setExpandedMessageId] = createSignal<string | null>(null);
-
-  createEffect(() => {
-    const orderedMessages = messages();
-    const newestMessageId = orderedMessages[0]?.id ?? null;
-
-    if (!newestMessageId) {
-      setExpandedMessageId(null);
-      return;
-    }
-
-    const currentExpanded = expandedMessageId();
-    const hasExpandedMessage =
-      currentExpanded !== null && orderedMessages.some((message) => message.id === currentExpanded);
-
-    if (!hasExpandedMessage) {
-      setExpandedMessageId(newestMessageId);
-    }
-  });
-
-  const toggleExpandedMessage = (messageId: string) => {
-    setExpandedMessageId((current) => (current === messageId ? null : messageId));
-  };
+const MessageHeaderContent = ({
+  className,
+  isExpanded,
+  message,
+  previewMode,
+  senderNameClassName,
+  trailing,
+}: MessageHeaderContentProps) => {
+  const sender = parseSender(message.from);
+  const senderName = sender.name || sender.display || "Unknown sender";
+  const senderEmail = sender.email || "";
+  const senderInitial = (senderName.trim().charAt(0) || "?").toUpperCase();
+  const date = formatMessageDate(message, "full") || "--";
+  const preview = previewMode === "collapsed" && !isExpanded ? message.snippet?.trim() || "" : "";
 
   return (
-    <article class="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
-      <header class="mb-6 border-b border-border/50 pb-4 sm:mb-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <h1 class="text-xl leading-tight font-medium tracking-tight text-foreground-dark sm:text-2xl">
-            {subject()}
-          </h1>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={
-              isReadStatePending() ||
-              (selectedMessageIsUnread() ? !props.onMarkAsRead : !props.onMarkAsUnread)
-            }
-            onClick={() => {
-              if (selectedMessageIsUnread()) {
-                void props.onMarkAsRead?.(selectedMessage().id);
-                return;
-              }
+    <div className={cn("flex gap-4", preview ? "items-start" : "items-center", className)}>
+      <div className="mt-0.5 shrink-0">
+        <SenderAvatar
+          avatarUrlDark={message.senderAvatarUrls?.dark}
+          avatarUrlLight={message.senderAvatarUrls?.light}
+          className="size-10"
+          fallbackLabel={senderInitial}
+        />
+      </div>
 
-              void props.onMarkAsUnread?.(selectedMessage().id);
-            }}
-          >
-            {selectedMessageIsUnread() ? "Mark as Read" : "Mark as Unread"}
-          </Button>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+              {isMessageUnread(message) ? (
+                <span aria-hidden className="size-2 rounded-full bg-foreground/75" />
+              ) : null}
+
+              <span
+                className={cn(
+                  "truncate text-sm text-foreground sm:text-[15px]",
+                  senderNameClassName,
+                  isExpanded || isMessageUnread(message)
+                    ? "font-semibold text-foreground-dark"
+                    : "font-medium",
+                )}
+              >
+                {senderName}
+              </span>
+
+              {senderEmail ? (
+                <span className="truncate text-xs text-muted-foreground sm:text-sm">
+                  {senderEmail}
+                </span>
+              ) : null}
+            </div>
+
+            {preview ? (
+              <p className="mt-1 truncate text-sm text-foreground-light">{preview}</p>
+            ) : null}
+          </div>
+
+          <div className="ml-2 flex shrink-0 items-center gap-3 pl-2">
+            <span className="text-xs text-muted-foreground sm:text-sm">{date}</span>
+            {trailing}
+          </div>
         </div>
-        <p class="mt-2 text-sm text-muted-foreground">
-          {messages().length} {messages().length === 1 ? "message" : "messages"}
-        </p>
+      </div>
+    </div>
+  );
+};
 
-        <Show when={threadQuery.isPending && !threadQuery.data}>
-          <IconLoader class="mt-2 animate-spin text-muted-foreground" />
-        </Show>
+const ThreadMessageBody = ({
+  compact,
+  expanded,
+  message,
+}: {
+  expanded: boolean;
+  message: MessageListItem;
+  compact?: boolean;
+}) => (
+  <div
+    aria-hidden={!expanded}
+    className="grid overflow-hidden"
+    style={{
+      gridTemplateRows: expanded ? "1fr" : "0fr",
+      pointerEvents: expanded ? "auto" : "none",
+      transition: "grid-template-rows 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease-out",
+    }}
+  >
+    <div className="min-h-0 overflow-hidden">
+      <div
+        className={cn(
+          "px-4 pb-4 transition-[opacity,transform,padding] duration-200 ease-out sm:px-5 sm:pb-5",
+          expanded ? "translate-y-0 pt-2 opacity-100" : "-translate-y-1 pt-0 opacity-0",
+        )}
+      >
+        <div className="border-t border-border/60 pt-4 sm:pt-5">
+          <MessageBody
+            compact={compact}
+            html={message.bodyHtml}
+            snippet={message.snippet}
+            text={message.bodyText}
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
-        <Show when={threadQuery.isError}>
-          <p class="mt-2 text-sm text-destructive">
-            Could not load the full thread. Showing the selected email only.
+export const MessageView = ({
+  activeMailbox,
+  isActionPending,
+  message,
+  onDeletePermanently,
+  onMarkAsRead,
+  onMarkAsUnread,
+  onMarkThreadAsRead,
+  onMarkThreadAsUnread,
+  onMoveToTrash,
+  onUpdateLabels,
+}: MessageViewProps) => {
+  const threadQuery = useSuspenseQuery(
+    getThreadWithDetailsOptions(activeMailbox, message.threadId),
+  );
+
+  const messages = threadQuery.data?.messages?.length
+    ? [...threadQuery.data.messages].reverse()
+    : [message];
+  const subject = threadQuery.data?.subject || message.subject || "(No subject)";
+  const threadIsUnread = messages.some((entry) => isMessageUnread(entry));
+  const isSingleMessageThread = messages.length === 1;
+
+  const [expandedMessageId, setExpandedMessageId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setExpandedMessageId(messages.length > 1 ? (messages[0]?.id ?? null) : null);
+  }, [message.threadId]);
+
+  return (
+    <article className="mx-auto w-full max-w-5xl space-y-4">
+      <header className="rounded-xl border border-border bg-background-light px-5 py-5 sm:px-6 sm:py-6">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-8">
+          <h1 className="min-w-0 text-lg leading-tight font-medium tracking-tight wrap-break-word text-foreground-dark sm:text-xl">
+            {subject}
+          </h1>
+
+          <MessageActionsDropdown
+            isPending={isActionPending}
+            isUnread={threadIsUnread}
+            mailbox={activeMailbox}
+            message={message}
+            onDeletePermanently={onDeletePermanently}
+            onMarkAsRead={(messageId) => {
+              void (onMarkThreadAsRead?.(message.threadId) ?? onMarkAsRead?.(messageId));
+            }}
+            onMarkAsUnread={(messageId) => {
+              void (onMarkThreadAsUnread?.(message.threadId) ?? onMarkAsUnread?.(messageId));
+            }}
+            onMoveToTrash={onMoveToTrash}
+            onUpdateLabels={onUpdateLabels}
+          />
+        </div>
+
+        {!isSingleMessageThread ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            {messages.length} {messages.length === 1 ? "message" : "messages"}
           </p>
-        </Show>
+        ) : null}
       </header>
 
-      <div class="flex flex-col">
-        <For each={messages()}>
-          {(message) => {
-            const sender = parseSender(message.from);
-            const senderName = sender.name || sender.display || "Unknown sender";
-            const senderEmail = sender.email || "";
-            const senderInitial = (senderName.trim().charAt(0) || "?").toUpperCase();
-            const date = formatMessageDate(message, "full") || "--";
-            const preview = message.snippet?.trim();
+      {!isSingleMessageThread ? (
+        <div className="flex flex-col gap-3">
+          {messages.map((threadMessage) => {
+            const isExpanded = expandedMessageId === threadMessage.id;
 
             return (
-              <section class="border-b border-border/40 py-4 sm:py-6">
+              <section
+                className={cn(
+                  "overflow-hidden rounded-xl border border-border transition-colors duration-200",
+                  {
+                    "bg-background-light": isExpanded,
+                    "bg-muted/40": isMessageUnread(threadMessage) && !isExpanded,
+                    "bg-background hover:bg-muted/30":
+                      !isExpanded && !isMessageUnread(threadMessage),
+                  },
+                )}
+                key={threadMessage.id}
+              >
                 <button
-                  type="button"
-                  class="flex w-full cursor-pointer items-start gap-4 text-left transition-opacity outline-none hover:opacity-80"
-                  aria-expanded={expandedMessageId() === message.id}
+                  aria-controls={`message-body-${threadMessage.id}`}
+                  aria-expanded={isExpanded}
+                  className="w-full text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
                   onClick={() => {
-                    toggleExpandedMessage(message.id);
+                    setExpandedMessageId((current) =>
+                      current === threadMessage.id ? null : threadMessage.id,
+                    );
                   }}
+                  type="button"
                 >
-                  <div class="mt-0.5 shrink-0">
-                    <SenderAvatar
-                      avatarUrl={message.senderAvatarUrl}
-                      fallbackLabel={senderInitial}
-                    />
-                  </div>
-
-                  <div class="min-w-0 flex-1">
-                    <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                      <span class="truncate text-sm font-semibold text-foreground-dark sm:text-base">
-                        {senderName}
-                      </span>
-                      <Show when={senderEmail} keyed>
-                        {(email) => (
-                          <span class="truncate font-mono text-xs text-muted-foreground sm:text-sm">
-                            {email}
-                          </span>
+                  <MessageHeaderContent
+                    className="px-4 py-4 sm:px-5 sm:py-4"
+                    isExpanded={isExpanded}
+                    message={threadMessage}
+                    previewMode="collapsed"
+                    trailing={
+                      <HugeiconsIcon
+                        aria-hidden="true"
+                        className={cn(
+                          "size-4 text-muted-foreground transition-transform duration-200",
+                          isExpanded && "rotate-180 text-foreground/80",
                         )}
-                      </Show>
-                    </div>
-
-                    <Show when={preview} keyed>
-                      {(snippet) => (
-                        <p class="mt-1 truncate text-sm text-foreground-light">{snippet}</p>
-                      )}
-                    </Show>
-                  </div>
-
-                  <div class="ml-2 flex shrink-0 items-center gap-3">
-                    <span class="text-xs text-muted-foreground sm:text-sm">{date}</span>
-                  </div>
+                        icon={ArrowDown01Icon}
+                      />
+                    }
+                  />
                 </button>
 
-                <Show when={expandedMessageId() === message.id}>
-                  <div class="pt-3 pl-12">
-                    <MessageBody
-                      html={message.bodyHtml}
-                      text={message.bodyText}
-                      snippet={message.snippet}
-                      compact
-                    />
-                  </div>
-                </Show>
+                <div id={`message-body-${threadMessage.id}`}>
+                  <ThreadMessageBody compact expanded={isExpanded} message={threadMessage} />
+                </div>
               </section>
             );
-          }}
-        </For>
-      </div>
+          })}
+        </div>
+      ) : (
+        messages.map((threadMessage) => (
+          <section
+            className="overflow-hidden rounded-xl border border-border bg-background-light"
+            key={threadMessage.id}
+          >
+            <MessageHeaderContent
+              className="px-4 py-4 sm:px-5 sm:py-5"
+              message={threadMessage}
+              senderNameClassName="text-base"
+            />
+
+            <div className="px-4 pb-4 sm:px-5 sm:pb-5">
+              <div className="border-t border-border/60 pt-4 sm:pt-5">
+                <MessageBody
+                  compact
+                  html={threadMessage.bodyHtml}
+                  snippet={threadMessage.snippet}
+                  text={threadMessage.bodyText}
+                />
+              </div>
+            </div>
+          </section>
+        ))
+      )}
     </article>
   );
 };

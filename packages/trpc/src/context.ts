@@ -1,9 +1,12 @@
-import { db } from "@quietr/database";
+import { assertDatabaseConfigured, db } from "@quietr/database";
 
 export function createTrpcContext(options: { req: Request }) {
+  assertDatabaseConfigured();
+
   return {
     db,
     req: options.req,
+    url: new URL(options.req.url),
   };
 }
 

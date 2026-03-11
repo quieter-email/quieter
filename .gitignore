@@ -22,6 +22,7 @@ coverage
 .vercel
 
 # Build Outputs
+.next/
 out/
 build
 dist
@@ -47,3 +48,7 @@ packages/database/dev.db-wal
 # Local scratch scaffolds
 scratch-start/
 scratch-solid/
+
+# Local naming experiments
+scratch-start/domain-name-check.ts
+scratch-start/domain-results/
