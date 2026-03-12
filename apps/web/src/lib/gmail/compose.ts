@@ -1,4 +1,5 @@
 import { trpc } from "~/lib/trpc";
+export { loadAttachmentFromServer } from "./attachments";
 
 const MAX_TOTAL_ATTACHMENT_BYTES = 24 * 1024 * 1024;
 const MAX_VISIBLE_INLINE_DRAFTS = 2;
@@ -449,21 +450,6 @@ export const swapComposeDrafts = (session: ComposeSessionState): ComposeSessionS
     activeDraft: cloneComposeDraft(session.lastDraft),
     lastDraft: cloneComposeDraft(session.activeDraft),
   };
-};
-
-export const loadAttachmentFromServer = async (
-  messageId: string,
-  attachmentId: string,
-  fileName: string,
-  mimeType: string,
-  signal?: AbortSignal,
-) => {
-  const attachment = await trpc.gmail.getAttachment.query({ messageId, attachmentId }, { signal });
-  const bytes = Uint8Array.from(attachment.bytes);
-  return new File([bytes], fileName, {
-    type: mimeType,
-    lastModified: now(),
-  });
 };
 
 export { decodeBase64UrlToBytes, encodeBase64UrlFromBytes };

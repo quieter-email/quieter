@@ -1,7 +1,10 @@
 "use client";
 
 import { cn } from "@quietr/ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+const isDarkMode = () =>
+  typeof document !== "undefined" && document.documentElement.classList.contains("dark");
 
 type SenderAvatarProps = {
   avatarUrlLight?: string;
@@ -19,8 +22,20 @@ export const SenderAvatar = ({
   labelClassName,
 }: SenderAvatarProps) => {
   const hasAvatar = Boolean(avatarUrlLight || avatarUrlDark);
-  const [showFallback, setShowFallback] = useState(!hasAvatar);
+  const [showFallback, setShowFallback] = useState(true);
   const isSameUrl = avatarUrlLight && avatarUrlDark && avatarUrlLight === avatarUrlDark;
+
+  useEffect(() => {
+    if (hasAvatar) setShowFallback(true);
+  }, [hasAvatar, avatarUrlLight, avatarUrlDark]);
+
+  const handleLoad = () => setShowFallback(false);
+  const handleErrorLight = () => {
+    if (!isDarkMode()) setShowFallback(true);
+  };
+  const handleErrorDark = () => {
+    if (isDarkMode()) setShowFallback(true);
+  };
 
   return (
     <div
@@ -32,33 +47,42 @@ export const SenderAvatar = ({
     >
       {showFallback ? <span className={labelClassName}>{fallbackLabel}</span> : null}
 
-      {!showFallback && isSameUrl ? (
+      {hasAvatar && isSameUrl && avatarUrlLight ? (
         <img
           alt="Sender Avatar"
-          className="absolute inset-0 size-full object-cover"
+          className={cn("absolute inset-0 size-full object-cover", showFallback && "opacity-0")}
           loading="lazy"
+          onLoad={handleLoad}
           onError={() => setShowFallback(true)}
           src={avatarUrlLight}
         />
       ) : null}
 
-      {!showFallback && !isSameUrl && avatarUrlLight ? (
+      {hasAvatar && !isSameUrl && avatarUrlLight ? (
         <img
           alt="Sender Avatar"
-          className="absolute inset-0 size-full object-cover dark:hidden"
+          className={cn(
+            "absolute inset-0 size-full object-cover dark:hidden",
+            showFallback && "opacity-0",
+          )}
           loading="lazy"
-          onError={() => setShowFallback(true)}
+          onLoad={handleLoad}
+          onError={handleErrorLight}
           src={avatarUrlLight}
         />
       ) : null}
 
-      {!showFallback && !isSameUrl && avatarUrlDark ? (
+      {hasAvatar && !isSameUrl && avatarUrlDark ? (
         <img
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 hidden size-full object-cover dark:block"
+          className={cn(
+            "absolute inset-0 hidden size-full object-cover dark:block",
+            showFallback && "opacity-0",
+          )}
           loading="lazy"
-          onError={() => setShowFallback(true)}
+          onLoad={handleLoad}
+          onError={handleErrorDark}
           src={avatarUrlDark}
         />
       ) : null}

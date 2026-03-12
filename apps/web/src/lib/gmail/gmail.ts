@@ -4,13 +4,13 @@ export {
   type GmailLabelListItem,
   type ListMessagesPageResult,
   type MailboxCategory,
+  type MessageAttachment,
   type MessageListItem,
   type ThreadMessagesResult,
 } from "@quietr/trpc/gmail-service";
 
 export const GMAIL_QUERY_STALE_TIME_MS = 1000 * 60 * 2;
-export const GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS = 1000 * 10;
-export const GMAIL_QUERY_BACKGROUND_SYNC_INTERVAL_MS = 1000 * 60;
+export const GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS = 1000 * 60;
 
 export const normalizeLabelIds = (labelIds: string[] | undefined): string[] | undefined => {
   if (!labelIds?.length) return undefined;

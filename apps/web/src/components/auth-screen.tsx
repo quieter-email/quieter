@@ -1,12 +1,16 @@
 "use client";
 
-import { Key02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
+import type { FormEvent } from "react";
+import { GoogleIcon, Key02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, TextField, TextFieldInput } from "@quietr/ui";
+import { revalidateLogic, useForm } from "@tanstack/react-form";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { z } from "zod";
 import { signIn } from "~/lib/auth";
+import { useTRPC } from "~/lib/trpc";
 
 type AuthMode = "login" | "signup";
 
@@ -14,19 +18,21 @@ type AuthScreenProps = {
   mode: AuthMode;
 };
 
-type PlaceholderPreview = {
-  createdAt: number;
-  email: string;
-  token: string;
-  type: "magic-link" | "verification";
-  url: string;
-};
+const emailSchema = z.string().trim().min(1, "Email is required.").email("Enter a valid email.");
 
-type AuthUserStatus = {
-  email: string;
-  exists: boolean;
-  hasGoogleAccount: boolean;
-};
+const baseAuthFormSchema = z.object({
+  email: emailSchema,
+  name: z.string(),
+});
+
+type AuthFormValues = z.infer<typeof baseAuthFormSchema>;
+
+const authFormSchemas = {
+  login: baseAuthFormSchema,
+  signup: baseAuthFormSchema.extend({
+    name: z.string().trim().min(1, "Name is required."),
+  }),
+} satisfies Record<AuthMode, z.ZodType<AuthFormValues>>;
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error instanceof Error && error.message) {
@@ -34,6 +40,23 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   }
 
   return fallback;
+};
+
+const getFieldErrorMessage = (error: unknown) => {
+  if (typeof error === "string") {
+    return error;
+  }
+
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+
+  return null;
 };
 
 const getAuthErrorLabel = (code: string | null) => {
@@ -49,17 +72,54 @@ const getAuthErrorLabel = (code: string | null) => {
   }
 };
 
+const getAuthResponseError = (response: unknown, fallback: string) => {
+  if (response && typeof response === "object" && "error" in response && response.error) {
+    return getErrorMessage(response.error, fallback);
+  }
+
+  return null;
+};
+
+const getLatestAuthAction = (
+  magicLinkSubmittedAt: number,
+  googleSubmittedAt: number,
+  passkeySubmittedAt: number,
+) => {
+  const latestSubmittedAt = Math.max(magicLinkSubmittedAt, googleSubmittedAt, passkeySubmittedAt);
+
+  if (latestSubmittedAt === 0) {
+    return {
+      latestAction: null,
+      latestSubmittedAt,
+    } as const;
+  }
+
+  if (latestSubmittedAt === magicLinkSubmittedAt) {
+    return {
+      latestAction: "magic-link",
+      latestSubmittedAt,
+    } as const;
+  }
+
+  if (latestSubmittedAt === googleSubmittedAt) {
+    return {
+      latestAction: "google",
+      latestSubmittedAt,
+    } as const;
+  }
+
+  return {
+    latestAction: "passkey",
+    latestSubmittedAt,
+  } as const;
+};
+
 export const AuthScreen = ({ mode }: AuthScreenProps) => {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
+  const trpc = useTRPC();
   const authError = getAuthErrorLabel(searchParams.get("error"));
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(authError);
-  const [isGooglePending, setIsGooglePending] = useState(false);
-  const [isMagicLinkPending, setIsMagicLinkPending] = useState(false);
-  const [isPasskeyPending, setIsPasskeyPending] = useState(false);
-  const [preview, setPreview] = useState<PlaceholderPreview | null>(null);
 
   const isSignup = mode === "signup";
   const pageTitle = isSignup ? "Sign up" : "Log in";
@@ -67,95 +127,45 @@ export const AuthScreen = ({ mode }: AuthScreenProps) => {
   const alternateHref = isSignup ? "/login" : "/signup";
   const alternateLabel = isSignup ? "Log in" : "Sign up";
 
-  const loadUserStatus = async (nextEmail: string) => {
-    const statusResponse = await fetch(
-      `/api/auth-user-status?email=${encodeURIComponent(nextEmail.trim().toLowerCase())}`,
-      {
-        cache: "no-store",
-      },
-    );
-
-    if (!statusResponse.ok) {
-      throw new Error("Could not check that email.");
-    }
-
-    return (await statusResponse.json()) as AuthUserStatus;
-  };
-
-  const loadPreview = async (nextEmail: string) => {
-    const previewResponse = await fetch(
-      `/api/auth-email-preview?email=${encodeURIComponent(nextEmail.trim().toLowerCase())}`,
-      {
-        cache: "no-store",
-      },
-    );
-
-    if (!previewResponse.ok) {
-      setPreview(null);
-      return;
-    }
-
-    const nextPreview = (await previewResponse.json()) as PlaceholderPreview;
-    setPreview(nextPreview);
-  };
-
-  const handleGoogleSignIn = async () => {
-    setError(null);
-    setIsGooglePending(true);
-
-    try {
-      await signIn.social({
+  const googleMutation = useMutation({
+    mutationFn: async () => {
+      const response = await signIn.social({
         provider: "google",
         callbackURL: "/",
       });
-    } catch (signInError) {
-      setError(getErrorMessage(signInError, "Could not start Google sign-in."));
-    } finally {
-      setIsGooglePending(false);
-    }
-  };
+      const responseError = getAuthResponseError(response, "Could not start Google sign-in.");
+      if (responseError) {
+        throw new Error(responseError);
+      }
+    },
+    mutationKey: ["auth", mode, "google"],
+  });
 
-  const handlePasskeySignIn = async () => {
-    setError(null);
-    setIsPasskeyPending(true);
-
-    try {
+  const passkeyMutation = useMutation({
+    mutationFn: async () => {
       const response = await signIn.passkey();
-
-      if (response?.error) {
-        throw new Error(getErrorMessage(response.error, "Could not sign in with a passkey."));
+      const responseError = getAuthResponseError(response, "Could not sign in with a passkey.");
+      if (responseError) {
+        throw new Error(responseError);
       }
 
       router.push("/");
-    } catch (signInError) {
-      setError(getErrorMessage(signInError, "Could not sign in with a passkey."));
-    } finally {
-      setIsPasskeyPending(false);
-    }
-  };
+    },
+    mutationKey: ["auth", mode, "passkey"],
+  });
 
-  const handleMagicLink = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-    setPreview(null);
-
-    const trimmedEmail = email.trim().toLowerCase();
-    const trimmedName = name.trim();
-
-    if (trimmedEmail.length === 0) {
-      setError("Email is required.");
-      return;
-    }
-
-    if (isSignup && trimmedName.length === 0) {
-      setError("Name is required.");
-      return;
-    }
-
-    setIsMagicLinkPending(true);
-
-    try {
-      const status = await loadUserStatus(trimmedEmail);
+  const magicLinkMutation = useMutation({
+    mutationFn: async ({ email, name }: AuthFormValues) => {
+      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedName = name.trim();
+      const status = await queryClient.fetchQuery(
+        trpc.auth.getUserStatus.queryOptions(
+          { email: normalizedEmail },
+          {
+            staleTime: 0,
+          },
+        ),
+      );
 
       if (isSignup && status.exists) {
         throw new Error("That email already has an account.");
@@ -167,58 +177,132 @@ export const AuthScreen = ({ mode }: AuthScreenProps) => {
 
       const response = await signIn.magicLink({
         callbackURL: "/",
-        email: trimmedEmail,
+        email: normalizedEmail,
         errorCallbackURL: isSignup ? "/signup" : "/login",
-        name: isSignup ? trimmedName : undefined,
+        name: isSignup ? normalizedName : undefined,
         newUserCallbackURL: "/",
       });
-
-      if (response && typeof response === "object" && "error" in response && response.error) {
-        throw new Error(getErrorMessage(response.error, "Could not create a magic link."));
+      const responseError = getAuthResponseError(response, "Could not create a magic link.");
+      if (responseError) {
+        throw new Error(responseError);
       }
 
-      await loadPreview(trimmedEmail);
-    } catch (magicLinkError) {
-      setError(getErrorMessage(magicLinkError, "Could not create a magic link."));
-    } finally {
-      setIsMagicLinkPending(false);
-    }
+      return await queryClient.fetchQuery(
+        trpc.auth.getEmailPreview.queryOptions(
+          { email: normalizedEmail },
+          {
+            staleTime: 0,
+          },
+        ),
+      );
+    },
+    mutationKey: ["auth", mode, "magic-link"],
+  });
+
+  const form = useForm({
+    defaultValues: {
+      email: "",
+      name: "",
+    } satisfies AuthFormValues,
+    onSubmit: async ({ value }) => {
+      await magicLinkMutation.mutateAsync(value);
+    },
+    validationLogic: revalidateLogic(),
+    validators: {
+      onDynamic: authFormSchemas[mode],
+    },
+  });
+
+  const { latestAction, latestSubmittedAt } = getLatestAuthAction(
+    magicLinkMutation.submittedAt,
+    googleMutation.submittedAt,
+    passkeyMutation.submittedAt,
+  );
+
+  const latestMutationError =
+    latestAction === "magic-link"
+      ? magicLinkMutation.status === "error"
+        ? getErrorMessage(magicLinkMutation.error, "Could not create a magic link.")
+        : null
+      : latestAction === "google"
+        ? googleMutation.status === "error"
+          ? getErrorMessage(googleMutation.error, "Could not start Google sign-in.")
+          : null
+        : latestAction === "passkey"
+          ? passkeyMutation.status === "error"
+            ? getErrorMessage(passkeyMutation.error, "Could not sign in with a passkey.")
+            : null
+          : null;
+
+  const preview =
+    latestAction === "magic-link" && magicLinkMutation.status === "success"
+      ? magicLinkMutation.data
+      : null;
+
+  const isAnyPending =
+    googleMutation.isPending || magicLinkMutation.isPending || passkeyMutation.isPending;
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void form.handleSubmit();
   };
 
   return (
     <div className="grid min-h-dvh w-full place-items-center bg-background px-6 py-10">
       <div className="w-full max-w-md rounded-2xl border border-border bg-background-light p-8 shadow-sm">
-        <div className="space-y-2">
-          <p className="text-xs tracking-[0.22em] text-muted-foreground uppercase">Quietr</p>
-          <h1 className="text-3xl font-medium tracking-tight text-foreground-dark">{pageTitle}</h1>
-        </div>
+        <h1 className="text-3xl font-medium tracking-tight text-foreground-dark">{pageTitle}</h1>
 
-        <form className="mt-8 space-y-3" onSubmit={handleMagicLink}>
+        <form className="mt-8 space-y-3" onSubmit={handleSubmit}>
           {isSignup ? (
-            <TextField>
-              <TextFieldInput
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Name"
-                value={name}
-              />
-            </TextField>
+            <form.Field name="name">
+              {(field) => {
+                const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
+
+                return (
+                  <TextField>
+                    <TextFieldInput
+                      aria-invalid={fieldError ? true : undefined}
+                      autoComplete="name"
+                      name={field.name}
+                      onBlur={() => field.handleBlur()}
+                      onChange={(event) => field.handleChange(event.target.value)}
+                      placeholder="Name"
+                      value={field.state.value}
+                    />
+                    {fieldError ? <p className="text-xs text-destructive">{fieldError}</p> : null}
+                  </TextField>
+                );
+              }}
+            </form.Field>
           ) : null}
 
-          <TextField>
-            <TextFieldInput
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="Email"
-              type="email"
-              value={email}
-            />
-          </TextField>
+          <form.Field name="email">
+            {(field) => {
+              const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
 
-          <Button
-            className="w-full justify-center gap-3"
-            disabled={isMagicLinkPending}
-            type="submit"
-          >
-            {isMagicLinkPending ? (
+              return (
+                <TextField>
+                  <TextFieldInput
+                    aria-invalid={fieldError ? true : undefined}
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    autoCorrect="off"
+                    name={field.name}
+                    onBlur={() => field.handleBlur()}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    placeholder="Email"
+                    type="email"
+                    value={field.state.value}
+                  />
+                  {fieldError ? <p className="text-xs text-destructive">{fieldError}</p> : null}
+                </TextField>
+              );
+            }}
+          </form.Field>
+
+          <Button className="w-full justify-center gap-3" disabled={isAnyPending} type="submit">
+            {magicLinkMutation.isPending ? (
               "Sending..."
             ) : (
               <>
@@ -229,36 +313,60 @@ export const AuthScreen = ({ mode }: AuthScreenProps) => {
           </Button>
         </form>
 
+        <div className="w-full h-px bg-border mb-3 mt-6" />
+
         <Button
           className="mt-3 w-full justify-center gap-3"
-          disabled={isGooglePending}
-          onClick={() => void handleGoogleSignIn()}
+          disabled={isAnyPending}
+          onClick={() => void googleMutation.mutateAsync()}
+          type="button"
           variant="outline"
         >
-          <HugeiconsIcon className="size-4 shrink-0" icon={Mail01Icon} />
-          {isSignup ? "Continue with Google" : "Google"}
+          <HugeiconsIcon className="size-4 shrink-0" icon={GoogleIcon} />
+          Continue with Google
         </Button>
 
         <Button
           className="mt-3 w-full justify-center gap-3"
-          disabled={isPasskeyPending}
-          onClick={() => void handlePasskeySignIn()}
+          disabled={isAnyPending}
+          onClick={() => void passkeyMutation.mutateAsync()}
+          type="button"
           variant="outline"
         >
           <HugeiconsIcon className="size-4 shrink-0" icon={Key02Icon} />
           Continue with passkey
         </Button>
 
-        {preview ? (
-          <div className="mt-4 rounded-md border border-border px-3 py-3 text-sm">
-            <p className="text-muted-foreground">Placeholder link</p>
-            <Link className="mt-2 block break-all text-foreground underline" href={preview.url}>
-              {preview.url}
-            </Link>
-          </div>
-        ) : null}
+        <form.Subscribe
+          selector={(state) => ({
+            email: state.values.email,
+            isDirty: state.isDirty,
+          })}
+        >
+          {({ email, isDirty }) => {
+            const normalizedEmail = email.trim().toLowerCase();
+            const error = latestSubmittedAt === 0 && !isDirty ? authError : latestMutationError;
+            const activePreview = preview?.email === normalizedEmail ? preview : null;
 
-        {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
+            return (
+              <>
+                {activePreview ? (
+                  <div className="mt-4 rounded-md border border-border px-3 py-3 text-sm">
+                    <p className="text-muted-foreground">Placeholder link</p>
+                    <Link
+                      className="mt-2 block break-all text-foreground underline"
+                      href={activePreview.url}
+                    >
+                      {activePreview.url}
+                    </Link>
+                  </div>
+                ) : null}
+
+                {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
+              </>
+            );
+          }}
+        </form.Subscribe>
 
         <p className="mt-6 text-sm text-muted-foreground">
           <Link className="text-foreground underline" href={alternateHref}>

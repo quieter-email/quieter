@@ -9,6 +9,7 @@ import { isMessageUnread, type MailboxCategory, type MessageListItem } from "~/l
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
 import { MessageActionsDropdown } from "./message-actions";
+import { MessageAttachments } from "./message-attachments";
 import { MessageBody } from "./message-body";
 import { SenderAvatar } from "./sender-avatar";
 
@@ -165,6 +166,12 @@ export const MessageView = ({
   const subject = threadQuery.data?.subject || message.subject || "(No subject)";
   const threadIsUnread = messages.some((entry) => isMessageUnread(entry));
   const isSingleMessageThread = messages.length === 1;
+  const threadAttachments = messages.flatMap((threadMessage) =>
+    (threadMessage.attachments ?? []).map((attachment) => ({
+      ...attachment,
+      messageId: threadMessage.id,
+    })),
+  );
 
   const [expandedMessageId, setExpandedMessageId] = useState<string | null>(null);
 
@@ -202,6 +209,8 @@ export const MessageView = ({
             {messages.length} {messages.length === 1 ? "message" : "messages"}
           </p>
         ) : null}
+
+        <MessageAttachments attachments={threadAttachments} className="mt-4" />
       </header>
 
       {!isSingleMessageThread ? (

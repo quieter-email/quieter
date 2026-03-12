@@ -5,6 +5,7 @@ import { trpc } from "~/lib/trpc";
 import {
   addUnreadLabel,
   applyLabelIdChanges,
+  GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
   GMAIL_QUERY_STALE_TIME_MS,
   isMessageUnread,
   removeUnreadLabel,
@@ -19,8 +20,6 @@ export const getMessagesQueryKey = (mailbox: MailboxCategory) => ["messages", ma
 
 export const getLiveSyncQueryKey = (mailbox: MailboxCategory) =>
   [...getMessagesQueryKey(mailbox), "live-sync"] as const;
-
-const LIVE_SYNC_REFETCH_INTERVAL_MS = 20000;
 
 export type MessagesQueryData = {
   pages: ListMessagesPageResult[];
@@ -56,6 +55,21 @@ const toLoadedPagesData = (
   pages,
   pageParams,
 });
+
+const updateFirstPageHistoryId = (
+  data: MessagesQueryData | undefined,
+  historyId: string,
+): MessagesQueryData | undefined => {
+  const firstPage = data?.pages[0];
+  if (!data || !firstPage || firstPage.historyId === historyId) {
+    return data;
+  }
+
+  return {
+    ...data,
+    pages: [{ ...firstPage, historyId }, ...data.pages.slice(1)],
+  };
+};
 
 const updateMessageInQueryData = (
   data: MessagesQueryData | undefined,
@@ -301,6 +315,49 @@ export const refreshLoadedMessagesPages = async (
   );
   await persistQueryByKey(queryClient, messagesQueryKey);
   return refreshedPages[0];
+};
+
+const syncLoadedMessagesPages = async (
+  queryClient: QueryClient,
+  mailbox: MailboxCategory,
+  signal?: AbortSignal,
+) => {
+  const messagesQueryKey = getMessagesQueryKey(mailbox);
+  const currentMessages = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
+  const startHistoryId = currentMessages?.pages[0]?.historyId;
+
+  if (!currentMessages?.pages.length || !startHistoryId) {
+    return await refreshLoadedMessagesPages(queryClient, mailbox, signal);
+  }
+
+  const loadedMessageIds = Array.from(
+    new Set(currentMessages.pages.flatMap((page) => page.messages.map((message) => message.id))),
+  ).slice(0, 500);
+
+  const syncStatus = await trpc.gmail.getMailboxSyncStatus.query(
+    {
+      category: mailbox,
+      startHistoryId,
+      loadedMessageIds,
+    },
+    { signal },
+  );
+
+  if (syncStatus.requiresRefresh) {
+    return await refreshLoadedMessagesPages(queryClient, mailbox, signal);
+  }
+
+  if (syncStatus.historyId && syncStatus.historyId !== startHistoryId) {
+    queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
+      updateFirstPageHistoryId(data, syncStatus.historyId ?? startHistoryId),
+    );
+    await persistQueryByKey(queryClient, messagesQueryKey);
+  }
+
+  return (
+    queryClient.getQueryData<MessagesQueryData>(messagesQueryKey)?.pages[0] ??
+    currentMessages.pages[0]
+  );
 };
 
 const updateSingleMessageMutation = async (
@@ -663,15 +720,15 @@ export const liveSyncQueryOptions = (
 ) =>
   queryOptions({
     queryKey: getLiveSyncQueryKey(mailbox),
-    queryFn: ({ signal }) => refreshLoadedMessagesPages(queryClient, mailbox, signal),
+    queryFn: ({ signal }) => syncLoadedMessagesPages(queryClient, mailbox, signal),
     enabled,
     initialData: () =>
       queryClient.getQueryData<MessagesQueryData>(getMessagesQueryKey(mailbox))?.pages[0],
     persister: undefined,
-    staleTime: GMAIL_QUERY_STALE_TIME_MS,
-    refetchOnMount: false,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    refetchInterval: LIVE_SYNC_REFETCH_INTERVAL_MS,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
+    refetchInterval: GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
     refetchIntervalInBackground: false,
   });

@@ -38,11 +38,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
-  const [isWindowActive, setIsWindowActive] = useState(() =>
-    typeof document === "undefined"
-      ? true
-      : document.visibilityState === "visible" && document.hasFocus(),
-  );
+  const [isWindowActive, setIsWindowActive] = useState(false);
   const [composeRequestId, setComposeRequestId] = useState(0);
   const [pendingMessageActionIds, setPendingMessageActionIds] = useState<ReadonlySet<string>>(
     new Set(),

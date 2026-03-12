@@ -7,9 +7,10 @@
 - Runtime and package manager: Bun
 - Monorepo orchestration: Turborepo
 - App framework: Next.js App Router + React
+- Forms: TanStack Form
 - URL query state: nuqs
 - Theme management: next-themes
-- API layer: tRPC v11
+- API layer: tRPC v11 + `@trpc/tanstack-react-query`
 - Database layer: Drizzle ORM beta + Postgres (Neon HTTP)
 - Styling: Tailwind CSS v4
 - UI primitives: Base UI
@@ -32,20 +33,21 @@
   - `src/app/api/auth/[...all]/route.ts`: Better Auth Next.js route handler
   - `src/app/api/auth-email-preview/route.ts`: placeholder auth-email preview endpoint for magic-link and verification URLs during local development
   - `src/app/api/auth-user-status/route.ts`: email existence lookup used to keep login and signup flows distinct
-  - `src/lib/trpc.ts`: shared tRPC client instance for the app
+  - `src/lib/trpc.ts`: shared raw tRPC client plus TanStack Query tRPC context helpers for the app
   - `src/lib/server-auth.ts`: cached server-side session helpers and redirects
   - `src/lib/query-client.ts`: shared React Query client factory
-  - `src/lib/query-persister.ts`: shared TanStack query persistence helpers
+  - `src/lib/query-persister.ts`: shared TanStack query persistence helpers with eager browser-cache restore
   - `src/lib/search-params.ts`: shared nuqs parsers/loaders/serializers for URL state
   - `src/lib/auth.ts`: Better Auth React client wrapper
   - `src/lib/gmail/compose.ts`: compose state, draft hydration, attachment runtime handling, and send/delete helpers through tRPC
   - `src/lib/gmail/compose-query.ts`: persisted compose session query keys scoped by `userId`
-  - `src/lib/gmail/inbox-query.ts`: inbox query keys, live sync, and optimistic message action helpers
+  - `src/lib/gmail/attachments.ts`: on-demand Gmail attachment download helpers used by mail detail surfaces
+  - `src/lib/gmail/inbox-query.ts`: inbox query keys, history-based live sync, and optimistic message action helpers
   - `src/lib/gmail/thread-query.ts`: thread query options
   - `src/lib/gmail/labels-query.ts`: Gmail label query options used by message actions
-  - `src/components/providers.tsx`: client providers for next-themes and React Query
+  - `src/components/providers.tsx`: client providers for next-themes, React Query, and the tRPC TanStack context
   - `src/components/mailbox-workspace.tsx`: interactive inbox shell using React Query, nuqs URL state, and compose/message state
-  - `src/components/auth-screen.tsx`: minimal auth UI for separate login/signup routes, magic-link placeholders, Google, and passkeys
+  - `src/components/auth-screen.tsx`: auth UI for separate login/signup routes using TanStack Form, TanStack Query mutations, and tRPC auth lookups
   - `src/components/settings-screen.tsx`: settings UI for theme, account profile, passkeys, sign-out, account deletion, and placeholder email-change verification
   - `src/components/compose-dialog.tsx`: `New Mail` modal with autosave and continue-last-draft affordance
   - `src/components/compose-editor.tsx`: Tiptap editor shell and toolbar used by compose
@@ -55,11 +57,11 @@
   - `src/email-placeholder.ts`: in-memory placeholder store for magic-link and verification URLs
   - `src/google-scopes.ts`: required Google scopes for Gmail access
 - `packages/database`: Drizzle schema, client, and migrations
-  - `src/schema.ts`: auth tables, passkeys, and Gmail message metadata cache/state tables keyed by `userId`
+  - `src/schema.ts`: auth tables and passkeys
   - `src/client.ts`: Neon + Drizzle client
   - `drizzle.config.ts`: Drizzle Kit config
 - `packages/trpc`: shared tRPC router, context, server handler, and client
-  - `src/router.ts`: user-scoped Gmail procedures plus Gmail metadata cache procedures
+  - `src/router.ts`: auth lookup procedures plus user-scoped Gmail procedures and mailbox history sync procedures
   - `src/gmail-service.ts`: shared Gmail API helpers and response typing used by the router and web app
   - `src/server.ts`: `fetchRequestHandler` wrapper
   - `src/client.ts`: typed `createTrpcClient`
@@ -77,19 +79,20 @@
 
 ## Architecture flow
 
-1. `apps/web` uses `@quietr/trpc` client in `src/lib/trpc.ts`.
+1. `apps/web` uses `@quietr/trpc` through the shared raw client and TanStack Query tRPC context in `src/lib/trpc.ts`.
 2. Browser requests hit `apps/web/src/app/api/trpc/[...path]/route.ts`.
 3. `@quietr/trpc/server` handles requests through the shared router.
-4. `@quietr/database` persists lightweight Gmail message metadata in Postgres via `DATABASE_URL`.
+4. Browser-side TanStack Query persistence restores mailbox state before network sync, while tRPC talks directly to Gmail for deltas, reloads, and mutations.
+5. Auth form preflight checks such as email-status and placeholder preview lookups run through tRPC query options instead of manual client `fetch` calls.
 
 ## Inbox sync strategy
 
-- Inbox list data is cached with TanStack Query and persisted in `localStorage` for fast reloads.
-- Freshness uses periodic polling plus manual refresh.
-- Polling is list-first: compare message IDs from Gmail, then fetch metadata only for unseen IDs.
-- Message metadata is also persisted server-side in Postgres per user through tRPC so repeated metadata calls are reduced across sessions.
+- Inbox list and thread data are cached with TanStack Query and restored from browser storage before any network sync runs.
+- Freshness uses Gmail `historyId` checks on mount, focus/reconnect, interval polling, and manual refresh.
+- Automatic sync only reloads the loaded mailbox pages when Gmail history shows a relevant add/delete/move/read-state change for that mailbox view.
+- Mailbox reloads still fetch Gmail metadata directly, but `messages.get` calls are batched and trimmed with partial-response `fields` so refreshes are much cheaper.
 - Sender avatars are derived at request time from the message sender and are not stored in Postgres.
-- Thread bodies are fetched on click for fast navigation with minimal background API usage.
+- Thread bodies and non-inline attachment metadata are fetched on click for fast navigation with minimal background API usage.
 - Manual `queryClient.setQueryData` updates are immediately written to local persistence via `persistQueryByKey` so optimistic UI changes survive reloads.
 - Gmail REST calls are centralized server-side in `packages/trpc/src/gmail-service.ts`, with access tokens resolved from the signed-in user's linked Google account.
 - Compose state is persisted locally per user while draft content and attachments are synced to Gmail drafts through tRPC-backed Gmail draft APIs.

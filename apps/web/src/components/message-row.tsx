@@ -2,9 +2,11 @@
 
 import type { CSSProperties } from "react";
 import { cn } from "@quietr/ui";
+import { useQuery } from "@tanstack/react-query";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
+import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
 import { MessageActionsContextMenu } from "./message-actions";
 import { SenderAvatar } from "./sender-avatar";
 
@@ -53,6 +55,15 @@ export const MessageRow = ({
   const date = formatMessageDate(anchorMessage, "compact");
   const unread = thread.unreadCount > 0;
   const threaded = thread.messageCount > 1;
+  const threadDetailsQuery = useQuery({
+    ...getThreadWithDetailsOptions(activeMailbox, thread.threadId),
+    enabled: Boolean(isActive),
+  });
+  const attachmentCount =
+    threadDetailsQuery.data?.messages.reduce(
+      (count, message) => count + (message.attachments?.length ?? 0),
+      0,
+    ) ?? 0;
   const metaTextClassName = cn("text-xs tabular-nums", {
     "font-semibold text-foreground/90": unread,
     "text-muted-foreground": !unread,
@@ -107,6 +118,18 @@ export const MessageRow = ({
               </p>
 
               <div className="flex shrink-0 items-center gap-1.5">
+                {attachmentCount > 0 ? (
+                  <span
+                    className="text-[11px] text-muted-foreground"
+                    title={
+                      attachmentCount === 1
+                        ? "This thread has 1 attachment."
+                        : `This thread has ${attachmentCount} attachments.`
+                    }
+                  >
+                    {attachmentCount === 1 ? "file" : `${attachmentCount} files`}
+                  </span>
+                ) : null}
                 {threaded && <span className={metaTextClassName}>{thread.messageCount}x</span>}
                 <span className={metaTextClassName}>{date || "--"}</span>
               </div>

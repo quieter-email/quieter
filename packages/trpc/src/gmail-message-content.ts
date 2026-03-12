@@ -15,6 +15,13 @@ export type ExtractedMessageContent = {
   text?: string;
 };
 
+export type ExtractedMessageAttachment = {
+  attachmentId: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+};
+
 const UTF8_CHARSET = "utf-8";
 
 const EDGE_NOISE_REGEX = /^[\s\p{Cf}\u034F]+|[\s\p{Cf}\u034F]+$/gu;
@@ -158,6 +165,8 @@ const decodeHtmlEntities = (value: string): string => {
   return decoded;
 };
 
+const CID_REFERENCE_REGEX = /cid:([^"' >]+)/gi;
+
 const stripInlineNoise = (value: string): string => value.replace(INLINE_NOISE_REGEX, "");
 
 const trimBoundaryNoise = (value: string): string => value.replace(EDGE_NOISE_REGEX, "");
@@ -257,6 +266,12 @@ const collectParts = (part: GmailMessagePart | undefined): GmailMessagePart[] =>
   return [part, ...nested];
 };
 
+const getAttachmentFileName = (part: GmailMessagePart, index: number): string => {
+  const decoded = decodeMimeHeaderValue(part.filename?.trim())?.trim();
+  if (decoded) return decoded;
+  return `attachment-${index + 1}`;
+};
+
 const findRenderablePart = (
   payload: GmailMessagePart | undefined,
   mimeType: "text/html" | "text/plain",
@@ -285,6 +300,27 @@ const decodePartBody = (part: GmailMessagePart): string | undefined => {
   return decoded || undefined;
 };
 
+const normalizeContentId = (value?: string): string | undefined => {
+  const normalized = value?.trim().replace(/^<|>$/g, "").toLowerCase();
+  return normalized || undefined;
+};
+
+const extractReferencedInlineContentIds = (
+  payload: GmailMessagePart | undefined,
+): ReadonlySet<string> => {
+  const htmlPart = findRenderablePart(payload, "text/html");
+  const html = htmlPart ? decodePartBody(htmlPart) : undefined;
+  if (!html) return new Set();
+
+  const contentIds = new Set<string>();
+  for (const match of html.matchAll(CID_REFERENCE_REGEX)) {
+    const contentId = normalizeContentId(match[1]);
+    if (contentId) contentIds.add(contentId);
+  }
+
+  return contentIds;
+};
+
 export const extractMessageContent = (
   payload: GmailMessagePart | undefined,
 ): ExtractedMessageContent => {
@@ -295,4 +331,34 @@ export const extractMessageContent = (
     html: htmlPart ? decodePartBody(htmlPart) : undefined,
     text: textPart ? decodePartBody(textPart) : undefined,
   };
+};
+
+export const extractMessageAttachments = (
+  payload: GmailMessagePart | undefined,
+): ExtractedMessageAttachment[] => {
+  const attachments: ExtractedMessageAttachment[] = [];
+  const seenAttachments = new Set<string>();
+  const referencedInlineContentIds = extractReferencedInlineContentIds(payload);
+
+  for (const [index, part] of collectParts(payload).entries()) {
+    const attachmentId = part.body?.attachmentId?.trim();
+    if (!attachmentId) continue;
+
+    const contentId = normalizeContentId(getHeader(part, "Content-ID"));
+    if (contentId && referencedInlineContentIds.has(contentId)) continue;
+
+    const fileName = getAttachmentFileName(part, index);
+    const dedupeKey = `${attachmentId}:${fileName}`;
+    if (seenAttachments.has(dedupeKey)) continue;
+    seenAttachments.add(dedupeKey);
+
+    attachments.push({
+      attachmentId,
+      fileName,
+      mimeType: normalizeMimeType(part.mimeType) || "application/octet-stream",
+      size: part.body?.size ?? 0,
+    });
+  }
+
+  return attachments;
 };

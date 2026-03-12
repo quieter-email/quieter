@@ -28,12 +28,13 @@ import {
   TextFieldInput,
   useColorMode,
 } from "@quietr/ui";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useQueryStates } from "nuqs";
 import { useEffect, useMemo, useState } from "react";
 import { authClient, signOut } from "~/lib/auth";
 import { settingsSearchParams, type SettingsTab } from "~/lib/search-params";
+import { useTRPC } from "~/lib/trpc";
 
 type SettingsUser = {
   email: string;
@@ -90,37 +91,6 @@ const formatPasskeyDate = (value: AuthPasskey["createdAt"]) => {
   return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(date);
 };
 
-const loadPreview = async (email: string) => {
-  const previewResponse = await fetch(
-    `/api/auth-email-preview?email=${encodeURIComponent(email)}`,
-    {
-      cache: "no-store",
-    },
-  );
-
-  if (!previewResponse.ok) {
-    return null;
-  }
-
-  return (await previewResponse.json()) as PlaceholderPreview;
-};
-
-const loadUserStatus = async (email: string) => {
-  const statusResponse = await fetch(`/api/auth-user-status?email=${encodeURIComponent(email)}`, {
-    cache: "no-store",
-  });
-
-  if (!statusResponse.ok) {
-    throw new Error("Could not check that email.");
-  }
-
-  return (await statusResponse.json()) as {
-    email: string;
-    exists: boolean;
-    hasGoogleAccount: boolean;
-  };
-};
-
 type SettingsRowProps = {
   action: ReactNode;
   label: string;
@@ -143,6 +113,7 @@ export const SettingsScreen = ({ from, initialTab, initialUser }: SettingsScreen
   const passkeysState = authClient.useListPasskeys();
   const queryClient = useQueryClient();
   const router = useRouter();
+  const trpc = useTRPC();
   const [{ from: queryFrom, tab }, setSettingsQuery] = useQueryStates(settingsSearchParams, {
     history: "replace",
     scroll: false,
@@ -152,21 +123,98 @@ export const SettingsScreen = ({ from, initialTab, initialUser }: SettingsScreen
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [editMailOpen, setEditMailOpen] = useState(false);
   const [editMailError, setEditMailError] = useState<string | null>(null);
-  const [editMailPending, setEditMailPending] = useState(false);
   const [editMailPreview, setEditMailPreview] = useState<PlaceholderPreview | null>(null);
   const [editMailValue, setEditMailValue] = useState(initialUser.email);
   const [editNameError, setEditNameError] = useState<string | null>(null);
-  const [editNamePending, setEditNamePending] = useState(false);
   const [editNameOpen, setEditNameOpen] = useState(false);
-  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-  const [isSigningOut, setIsSigningOut] = useState(false);
   const [nextName, setNextName] = useState(initialUser.name);
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
   const [passkeyLabel, setPasskeyLabel] = useState("");
   const [passkeyModalOpen, setPasskeyModalOpen] = useState(false);
-  const [passkeyPending, setPasskeyPending] = useState(false);
   const [removingPasskeyId, setRemovingPasskeyId] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
+
+  const updateUserMutation = useMutation({
+    mutationFn: async (input: { name: string }) => {
+      return unwrapAuthResult(await authClient.updateUser(input), "Could not update name.");
+    },
+    mutationKey: ["auth", "update-user"],
+  });
+  const changeEmailMutation = useMutation({
+    mutationFn: async (input: { callbackURL: string; newEmail: string }) => {
+      const status = await queryClient.fetchQuery(
+        trpc.auth.getUserStatus.queryOptions(
+          { email: input.newEmail },
+          {
+            staleTime: 0,
+          },
+        ),
+      );
+
+      if (status.exists) {
+        throw new Error("That email already has an account.");
+      }
+
+      await unwrapAuthResult(await authClient.changeEmail(input), "Could not start email change.");
+
+      return await queryClient.fetchQuery(
+        trpc.auth.getEmailPreview.queryOptions(
+          { email: input.newEmail },
+          {
+            staleTime: 0,
+          },
+        ),
+      );
+    },
+  });
+  const addPasskeyMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const response = await authClient.passkey.addPasskey({
+        authenticatorAttachment: "platform",
+        name: name.trim() || undefined,
+      });
+
+      return unwrapAuthResult(response, "Could not create a passkey.");
+    },
+    mutationKey: ["auth", "passkeys", "add"],
+  });
+  const deletePasskeyMutation = useMutation({
+    mutationFn: async (input: { id: string }) => {
+      const response = await authClient.$fetch("/passkey/delete-passkey", {
+        body: input,
+        method: "POST",
+        throw: false,
+      });
+
+      return unwrapAuthResult(response, "Could not remove the passkey.");
+    },
+    mutationKey: ["auth", "passkeys", "delete"],
+  });
+  const signOutMutation = useMutation({
+    mutationFn: async () => {
+      return unwrapAuthResult(await signOut(), "Could not sign out.");
+    },
+    mutationKey: ["auth", "sign-out"],
+    onSuccess: () => {
+      queryClient.clear();
+      router.push("/home");
+    },
+  });
+  const deleteAccountMutation = useMutation({
+    mutationFn: async () => {
+      return unwrapAuthResult(
+        await authClient.deleteUser({
+          callbackURL: "/home",
+        }),
+        "Could not delete the account.",
+      );
+    },
+    mutationKey: ["auth", "delete-user"],
+    onSuccess: () => {
+      queryClient.clear();
+      router.push("/home");
+    },
+  });
 
   const activeTab = tab || initialTab;
   const backTarget = queryFrom || from;
@@ -182,6 +230,11 @@ export const SettingsScreen = ({ from, initialTab, initialUser }: SettingsScreen
     [initialUser, sessionUser],
   );
   const passkeys = passkeysState.data ?? [];
+  const isEditNamePending = updateUserMutation.isPending;
+  const isEditMailPending = changeEmailMutation.isPending;
+  const isSigningOut = signOutMutation.isPending;
+  const isPasskeyPending = addPasskeyMutation.isPending;
+  const isDeletingAccount = deleteAccountMutation.isPending;
   const supportsPasskeys =
     typeof window !== "undefined" &&
     typeof window.PublicKeyCredential !== "undefined" &&
@@ -223,16 +276,10 @@ export const SettingsScreen = ({ from, initialTab, initialUser }: SettingsScreen
 
   const handleSignOut = async () => {
     setSessionError(null);
-    setIsSigningOut(true);
-
     try {
-      await signOut();
-      queryClient.clear();
-      router.push("/home");
+      await signOutMutation.mutateAsync();
     } catch (error) {
       setSessionError(getErrorMessage(error, "Could not sign out."));
-    } finally {
-      setIsSigningOut(false);
     }
   };
 
@@ -246,19 +293,12 @@ export const SettingsScreen = ({ from, initialTab, initialUser }: SettingsScreen
       return;
     }
 
-    setEditNamePending(true);
-
     try {
-      unwrapAuthResult(
-        await authClient.updateUser({ name: trimmedName }),
-        "Could not update name.",
-      );
+      await updateUserMutation.mutateAsync({ name: trimmedName });
       await sessionState.refetch();
       setEditNameOpen(false);
     } catch (error) {
       setEditNameError(getErrorMessage(error, "Could not update name."));
-    } finally {
-      setEditNamePending(false);
     }
   };
 
@@ -278,27 +318,16 @@ export const SettingsScreen = ({ from, initialTab, initialUser }: SettingsScreen
       return;
     }
 
-    setEditMailPending(true);
-
     try {
-      const status = await loadUserStatus(nextEmail);
-
-      if (status.exists) {
-        throw new Error("That email already has an account.");
-      }
-
-      unwrapAuthResult(
-        await authClient.changeEmail({
-          callbackURL: "/settings?tab=account",
-          newEmail: nextEmail,
-        }),
-        "Could not start email change.",
+      const preview = await changeEmailMutation.mutateAsync({
+        callbackURL: "/settings?tab=account",
+        newEmail: nextEmail,
+      });
+      setEditMailPreview(
+        preview && "url" in preview && preview.url ? (preview as PlaceholderPreview) : null,
       );
-      setEditMailPreview(await loadPreview(nextEmail));
     } catch (error) {
       setEditMailError(getErrorMessage(error, "Could not start email change."));
-    } finally {
-      setEditMailPending(false);
     }
   };
 
@@ -311,36 +340,19 @@ export const SettingsScreen = ({ from, initialTab, initialUser }: SettingsScreen
       return;
     }
 
-    setPasskeyPending(true);
-
     try {
-      unwrapAuthResult(
-        await authClient.passkey.addPasskey({
-          authenticatorAttachment: "platform",
-          name: passkeyLabel.trim() || undefined,
-        }),
-        "Could not create a passkey.",
-      );
+      await addPasskeyMutation.mutateAsync(passkeyLabel);
       setPasskeyLabel("");
     } catch (error) {
       setPasskeyError(getErrorMessage(error, "Could not create a passkey."));
-    } finally {
-      setPasskeyPending(false);
     }
   };
 
   const handlePasskeyDelete = async (passkeyId: string) => {
     setPasskeyError(null);
-    setRemovingPasskeyId(passkeyId);
-
     try {
-      const response = await authClient.$fetch("/passkey/delete-passkey", {
-        body: { id: passkeyId },
-        method: "POST",
-        throw: false,
-      });
-
-      unwrapAuthResult(response, "Could not remove the passkey.");
+      setRemovingPasskeyId(passkeyId);
+      await deletePasskeyMutation.mutateAsync({ id: passkeyId });
     } catch (error) {
       setPasskeyError(getErrorMessage(error, "Could not remove the passkey."));
     } finally {
@@ -355,21 +367,11 @@ export const SettingsScreen = ({ from, initialTab, initialUser }: SettingsScreen
     }
 
     setDeleteError(null);
-    setIsDeletingAccount(true);
 
     try {
-      unwrapAuthResult(
-        await authClient.deleteUser({
-          callbackURL: "/home",
-        }),
-        "Could not delete the account.",
-      );
-      queryClient.clear();
-      router.push("/home");
+      await deleteAccountMutation.mutateAsync();
     } catch (error) {
       setDeleteError(getErrorMessage(error, "Could not delete the account."));
-    } finally {
-      setIsDeletingAccount(false);
     }
   };
 
@@ -540,9 +542,9 @@ export const SettingsScreen = ({ from, initialTab, initialUser }: SettingsScreen
             </DialogBody>
 
             <DialogFooter>
-              <DialogCloseButton disabled={editNamePending}>Cancel</DialogCloseButton>
-              <Button disabled={editNamePending} size="sm" type="submit">
-                {editNamePending ? (
+              <DialogCloseButton disabled={isEditNamePending}>Cancel</DialogCloseButton>
+              <Button disabled={isEditNamePending} size="sm" type="submit">
+                {isEditNamePending ? (
                   <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
                 ) : (
                   <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
@@ -582,9 +584,9 @@ export const SettingsScreen = ({ from, initialTab, initialUser }: SettingsScreen
             </DialogBody>
 
             <DialogFooter>
-              <DialogCloseButton disabled={editMailPending}>Cancel</DialogCloseButton>
-              <Button disabled={editMailPending} size="sm" type="submit">
-                {editMailPending ? (
+              <DialogCloseButton disabled={isEditMailPending}>Cancel</DialogCloseButton>
+              <Button disabled={isEditMailPending} size="sm" type="submit">
+                {isEditMailPending ? (
                   <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
                 ) : (
                   <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
@@ -612,8 +614,8 @@ export const SettingsScreen = ({ from, initialTab, initialUser }: SettingsScreen
                 />
               </TextField>
 
-              <Button disabled={passkeyPending || !supportsPasskeys} size="sm" type="submit">
-                {passkeyPending ? (
+              <Button disabled={isPasskeyPending || !supportsPasskeys} size="sm" type="submit">
+                {isPasskeyPending ? (
                   <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
                 ) : (
                   <HugeiconsIcon aria-hidden className="size-4" icon={Key02Icon} />

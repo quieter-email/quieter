@@ -79,45 +79,12 @@ export const passkey = pgTable(
   ],
 );
 
-export const gmailMailboxState = pgTable("gmailMailboxState", {
-  userId: text("userId")
-    .notNull()
-    .references(() => user.id)
-    .primaryKey(),
-  lastSyncAt: timestamp("lastSyncAt"),
-  lastError: text("lastError"),
-  createdAt: timestamp("createdAt").notNull(),
-  updatedAt: timestamp("updatedAt").notNull(),
-});
-
-export const gmailMessageCache = pgTable(
-  "gmailMessageCache",
-  {
-    id: text("id").primaryKey(),
-    userId: text("userId")
-      .notNull()
-      .references(() => user.id),
-    messageId: text("messageId").notNull(),
-    threadId: text("threadId").notNull(),
-    snippet: text("snippet"),
-    subject: text("subject"),
-    from: text("from"),
-    date: text("date"),
-    internalDateMs: bigint("internalDateMs", { mode: "number" }),
-    createdAt: timestamp("createdAt").notNull(),
-    updatedAt: timestamp("updatedAt").notNull(),
-  },
-  (table) => [unique().on(table.userId, table.messageId)],
-);
-
 export const tables = {
   user,
   session,
   account,
   verification,
   passkey,
-  gmailMailboxState,
-  gmailMessageCache,
 };
 
 export const authRelations = defineRelations(tables, (r) => ({
@@ -125,15 +92,6 @@ export const authRelations = defineRelations(tables, (r) => ({
     accounts: r.many.account({ from: r.user.id, to: r.account.userId }),
     sessions: r.many.session({ from: r.user.id, to: r.session.userId }),
     passkeys: r.many.passkey({ from: r.user.id, to: r.passkey.userId }),
-    gmailMailboxState: r.one.gmailMailboxState({
-      from: r.user.id,
-      to: r.gmailMailboxState.userId,
-      optional: true,
-    }),
-    gmailMessageCache: r.many.gmailMessageCache({
-      from: r.user.id,
-      to: r.gmailMessageCache.userId,
-    }),
   },
   session: {
     user: r.one.user({
@@ -152,20 +110,6 @@ export const authRelations = defineRelations(tables, (r) => ({
   passkey: {
     user: r.one.user({
       from: r.passkey.userId,
-      to: r.user.id,
-      optional: false,
-    }),
-  },
-  gmailMailboxState: {
-    user: r.one.user({
-      from: r.gmailMailboxState.userId,
-      to: r.user.id,
-      optional: false,
-    }),
-  },
-  gmailMessageCache: {
-    user: r.one.user({
-      from: r.gmailMessageCache.userId,
       to: r.user.id,
       optional: false,
     }),
