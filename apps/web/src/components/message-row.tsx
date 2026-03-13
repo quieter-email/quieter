@@ -1,8 +1,8 @@
 "use client";
 
-import type { CSSProperties } from "react";
 import { cn } from "@quietr/ui";
 import { useQuery } from "@tanstack/react-query";
+import { memo, type CSSProperties } from "react";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
@@ -30,53 +30,46 @@ type MessageRowProps = {
   dataIndex?: number;
 };
 
-export const MessageRow = ({
-  activeMailbox,
-  className,
-  dataIndex,
-  isActionPending,
-  isActive,
-  onActivateMessage,
-  onDeletePermanently,
-  onMarkAsRead,
-  onMarkAsUnread,
-  onMoveToTrash,
-  onUpdateLabels,
-  rowRef,
-  style,
-  thread,
-}: MessageRowProps) => {
-  const anchorMessage = thread.anchorMessage;
-  const subject = anchorMessage.subject || "(No subject)";
-  const sender = parseSender(anchorMessage.from);
-  const senderLabel = sender.name || sender.email || sender.display;
-  const senderEmail = sender.name ? sender.email : "";
-  const senderInitial = (senderLabel.trim().charAt(0) || "?").toUpperCase();
-  const date = formatMessageDate(anchorMessage, "compact");
-  const unread = thread.unreadCount > 0;
-  const threaded = thread.messageCount > 1;
-  const threadDetailsQuery = useQuery({
-    ...getThreadWithDetailsOptions(activeMailbox, thread.threadId),
-    enabled: Boolean(isActive),
-  });
-  const attachmentCount =
-    threadDetailsQuery.data?.messages.reduce(
-      (count, message) => count + (message.attachments?.length ?? 0),
-      0,
-    ) ?? 0;
-  const metaTextClassName = cn("text-xs tabular-nums", {
-    "font-semibold text-foreground/90": unread,
-    "text-muted-foreground": !unread,
-    "text-foreground/75": isActive && !unread,
-  });
+type MessageRowContentProps = Omit<MessageRowProps, "className" | "dataIndex" | "rowRef" | "style">;
 
-  return (
-    <li
-      className={cn("group relative", className)}
-      data-index={dataIndex}
-      ref={rowRef}
-      style={style}
-    >
+const MessageRowContent = memo(
+  ({
+    activeMailbox,
+    isActionPending,
+    isActive,
+    onActivateMessage,
+    onDeletePermanently,
+    onMarkAsRead,
+    onMarkAsUnread,
+    onMoveToTrash,
+    onUpdateLabels,
+    thread,
+  }: MessageRowContentProps) => {
+    const anchorMessage = thread.anchorMessage;
+    const subject = anchorMessage.subject || "(No subject)";
+    const sender = parseSender(anchorMessage.from);
+    const senderLabel = sender.name || sender.email || sender.display;
+    const senderEmail = sender.name ? sender.email : "";
+    const senderInitial = (senderLabel.trim().charAt(0) || "?").toUpperCase();
+    const date = formatMessageDate(anchorMessage, "compact");
+    const unread = thread.unreadCount > 0;
+    const threaded = thread.messageCount > 1;
+    const threadDetailsQuery = useQuery({
+      ...getThreadWithDetailsOptions(activeMailbox, thread.threadId),
+      enabled: Boolean(isActive),
+    });
+    const attachmentCount =
+      threadDetailsQuery.data?.messages.reduce(
+        (count, message) => count + (message.attachments?.length ?? 0),
+        0,
+      ) ?? 0;
+    const metaTextClassName = cn("text-xs tabular-nums", {
+      "font-semibold text-foreground/90": unread,
+      "text-muted-foreground": !unread,
+      "text-foreground/75": isActive && !unread,
+    });
+
+    return (
       <MessageActionsContextMenu
         isPending={isActionPending}
         mailbox={activeMailbox}
@@ -146,6 +139,45 @@ export const MessageRow = ({
           </div>
         </div>
       </MessageActionsContextMenu>
+    );
+  },
+);
+
+export const MessageRow = ({
+  activeMailbox,
+  className,
+  dataIndex,
+  isActionPending,
+  isActive,
+  onActivateMessage,
+  onDeletePermanently,
+  onMarkAsRead,
+  onMarkAsUnread,
+  onMoveToTrash,
+  onUpdateLabels,
+  rowRef,
+  style,
+  thread,
+}: MessageRowProps) => {
+  return (
+    <li
+      className={cn("group relative", className)}
+      data-index={dataIndex}
+      ref={rowRef}
+      style={style}
+    >
+      <MessageRowContent
+        activeMailbox={activeMailbox}
+        isActionPending={isActionPending}
+        isActive={isActive}
+        onActivateMessage={onActivateMessage}
+        onDeletePermanently={onDeletePermanently}
+        onMarkAsRead={onMarkAsRead}
+        onMarkAsUnread={onMarkAsUnread}
+        onMoveToTrash={onMoveToTrash}
+        onUpdateLabels={onUpdateLabels}
+        thread={thread}
+      />
     </li>
   );
 };

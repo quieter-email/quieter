@@ -447,6 +447,7 @@ const listMessages = async (
     pageToken?: string;
     maxResults?: number;
     mailbox?: MailboxCategory;
+    query?: string;
     signal?: AbortSignal;
   },
 ) => {
@@ -457,6 +458,7 @@ const listMessages = async (
       pageToken: options?.pageToken,
       labelIds: options?.mailbox ? [MAILBOX_LABELS[options.mailbox]] : undefined,
       includeSpamTrash: options?.mailbox === "trash" ? true : undefined,
+      q: options?.query?.trim() || undefined,
     },
     signal: options?.signal,
   });
@@ -616,6 +618,7 @@ export const listMessagesWithDetails = async (
     pageToken?: string;
     maxResults?: number;
     mailbox?: MailboxCategory;
+    query?: string;
     signal?: AbortSignal;
   },
 ): Promise<ListMessagesPageResult> => {

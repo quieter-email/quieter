@@ -304,6 +304,7 @@ export const appRouter = t.router({
           category: mailboxCategorySchema,
           pageToken: z.string().optional(),
           maxResults: z.number().int().positive().max(100).optional(),
+          query: z.string().optional(),
         }),
       )
       .query(async ({ ctx, input }) => {
@@ -312,6 +313,7 @@ export const appRouter = t.router({
           mailbox: input.category,
           pageToken: input.pageToken,
           maxResults: input.maxResults,
+          query: input.query?.trim() || undefined,
         });
         return result;
       }),

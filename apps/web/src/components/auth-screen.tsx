@@ -7,7 +7,7 @@ import { Button, TextField, TextFieldInput } from "@quietr/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { signIn } from "~/lib/auth";
 import { useTRPC } from "~/lib/trpc";
@@ -15,6 +15,7 @@ import { useTRPC } from "~/lib/trpc";
 type AuthMode = "login" | "signup";
 
 type AuthScreenProps = {
+  authErrorCode?: string | null;
   mode: AuthMode;
 };
 
@@ -114,12 +115,11 @@ const getLatestAuthAction = (
   } as const;
 };
 
-export const AuthScreen = ({ mode }: AuthScreenProps) => {
+export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const searchParams = useSearchParams();
   const trpc = useTRPC();
-  const authError = getAuthErrorLabel(searchParams.get("error"));
+  const authError = getAuthErrorLabel(authErrorCode);
 
   const isSignup = mode === "signup";
   const pageTitle = isSignup ? "Sign up" : "Log in";
@@ -313,7 +313,7 @@ export const AuthScreen = ({ mode }: AuthScreenProps) => {
           </Button>
         </form>
 
-        <div className="w-full h-px bg-border mb-3 mt-6" />
+        <div className="mt-6 mb-3 h-px w-full bg-border" />
 
         <Button
           className="mt-3 w-full justify-center gap-3"

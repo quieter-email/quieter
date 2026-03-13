@@ -37,16 +37,16 @@
   - `src/lib/server-auth.ts`: cached server-side session helpers and redirects
   - `src/lib/query-client.ts`: shared React Query client factory
   - `src/lib/query-persister.ts`: shared TanStack query persistence helpers with eager browser-cache restore
-  - `src/lib/search-params.ts`: shared nuqs parsers/loaders/serializers for URL state
+  - `src/lib/search-params.ts`: shared nuqs parsers/loaders/serializers for mailbox, message, and search URL state
   - `src/lib/auth.ts`: Better Auth React client wrapper
   - `src/lib/gmail/compose.ts`: compose state, draft hydration, attachment runtime handling, and send/delete helpers through tRPC
   - `src/lib/gmail/compose-query.ts`: persisted compose session query keys scoped by `userId`
   - `src/lib/gmail/attachments.ts`: on-demand Gmail attachment download helpers used by mail detail surfaces
-  - `src/lib/gmail/inbox-query.ts`: inbox query keys, history-based live sync, and optimistic message action helpers
+  - `src/lib/gmail/inbox-query.ts`: inbox query keys, Gmail-search-aware list loading, history-based live sync for unfiltered views, and optimistic message action helpers
   - `src/lib/gmail/thread-query.ts`: thread query options
   - `src/lib/gmail/labels-query.ts`: Gmail label query options used by message actions
   - `src/components/providers.tsx`: client providers for next-themes, React Query, and the tRPC TanStack context
-  - `src/components/mailbox-workspace.tsx`: interactive inbox shell using React Query, nuqs URL state, and compose/message state
+  - `src/components/mailbox-workspace.tsx`: interactive inbox shell using React Query, nuqs URL state, Gmail search queries, and compose/message state
   - `src/components/auth-screen.tsx`: auth UI for separate login/signup routes using TanStack Form, TanStack Query mutations, and tRPC auth lookups
   - `src/components/settings-screen.tsx`: settings UI for theme, account profile, passkeys, sign-out, account deletion, and placeholder email-change verification
   - `src/components/compose-dialog.tsx`: `New Mail` modal with autosave and continue-last-draft affordance
@@ -61,8 +61,8 @@
   - `src/client.ts`: Neon + Drizzle client
   - `drizzle.config.ts`: Drizzle Kit config
 - `packages/trpc`: shared tRPC router, context, server handler, and client
-  - `src/router.ts`: auth lookup procedures plus user-scoped Gmail procedures and mailbox history sync procedures
-  - `src/gmail-service.ts`: shared Gmail API helpers and response typing used by the router and web app
+  - `src/router.ts`: auth lookup procedures plus user-scoped Gmail list/search procedures and mailbox history sync procedures
+  - `src/gmail-service.ts`: shared Gmail API helpers and response typing used by the router and web app, including raw Gmail `q` filtering
   - `src/server.ts`: `fetchRequestHandler` wrapper
   - `src/client.ts`: typed `createTrpcClient`
 - `packages/ui`: shared Tailwind theme, next-themes wrapper, and UI components
@@ -88,8 +88,10 @@
 ## Inbox sync strategy
 
 - Inbox list and thread data are cached with TanStack Query and restored from browser storage before any network sync runs.
+- The inbox search bar forwards raw Gmail advanced-search syntax to the Gmail API `q` parameter while still respecting the currently selected mailbox label.
 - Freshness uses Gmail `historyId` checks on mount, focus/reconnect, interval polling, and manual refresh.
 - Automatic sync only reloads the loaded mailbox pages when Gmail history shows a relevant add/delete/move/read-state change for that mailbox view.
+- Filtered search views fall back to manual refresh instead of history-based live sync.
 - Mailbox reloads still fetch Gmail metadata directly, but `messages.get` calls are batched and trimmed with partial-response `fields` so refreshes are much cheaper.
 - Sender avatars are derived at request time from the message sender and are not stored in Postgres.
 - Thread bodies and non-inline attachment metadata are fetched on click for fast navigation with minimal background API usage.
@@ -147,4 +149,5 @@ bun run db:push
 ## Dependency management
 
 - Root `package.json` uses Bun workspaces and `workspaces.catalog` for version pinning.
+- Root `package.json` also mirrors the React/Next entries in a top-level `catalog` field so external tooling that does not understand `workspaces.catalog` can still detect the app stack.
 - Workspace packages consume shared versions via `catalog:` references.

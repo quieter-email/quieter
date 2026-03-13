@@ -8,6 +8,7 @@ export type SettingsTab = (typeof settingsTabs)[number];
 export const mailboxSearchParams = {
   mailbox: parseAsStringLiteral(mailboxCategories).withDefault("inbox"),
   messageId: parseAsString,
+  query: parseAsString.withDefault(""),
 };
 
 export const settingsSearchParams = {

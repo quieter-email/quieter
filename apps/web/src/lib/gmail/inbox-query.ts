@@ -16,10 +16,16 @@ import {
 } from "./gmail";
 import { getThreadQueryKey } from "./thread-query";
 
-export const getMessagesQueryKey = (mailbox: MailboxCategory) => ["messages", mailbox] as const;
+const normalizeSearchQuery = (searchQuery: string | null | undefined) => {
+  const normalized = searchQuery?.trim();
+  return normalized && normalized.length > 0 ? normalized : undefined;
+};
 
-export const getLiveSyncQueryKey = (mailbox: MailboxCategory) =>
-  [...getMessagesQueryKey(mailbox), "live-sync"] as const;
+export const getMessagesQueryKey = (mailbox: MailboxCategory, searchQuery?: string | null) =>
+  ["messages", mailbox, normalizeSearchQuery(searchQuery) ?? ""] as const;
+
+export const getLiveSyncQueryKey = (mailbox: MailboxCategory, searchQuery?: string | null) =>
+  [...getMessagesQueryKey(mailbox, searchQuery), "live-sync"] as const;
 
 export type MessagesQueryData = {
   pages: ListMessagesPageResult[];
@@ -262,6 +268,7 @@ const applyMessageLabelChangesLocally = (
 const fetchMessagesPage = async (
   mailbox: MailboxCategory,
   pageToken: string | undefined,
+  searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
   return await trpc.gmail.listMessages.query(
@@ -269,6 +276,7 @@ const fetchMessagesPage = async (
       category: mailbox,
       pageToken,
       maxResults: pageToken ? 25 : 50,
+      query: normalizeSearchQuery(searchQuery),
     },
     { signal },
   );
@@ -277,23 +285,25 @@ const fetchMessagesPage = async (
 export const refreshMessagesFirstPage = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
+  searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
-  const refreshedFirstPage = await fetchMessagesPage(mailbox, undefined, signal);
+  const refreshedFirstPage = await fetchMessagesPage(mailbox, undefined, searchQuery, signal);
   queryClient.setQueryData<MessagesQueryData>(
-    getMessagesQueryKey(mailbox),
+    getMessagesQueryKey(mailbox, searchQuery),
     toFirstPageData(refreshedFirstPage),
   );
-  await persistQueryByKey(queryClient, getMessagesQueryKey(mailbox));
+  await persistQueryByKey(queryClient, getMessagesQueryKey(mailbox, searchQuery));
   return refreshedFirstPage;
 };
 
 export const refreshLoadedMessagesPages = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
+  searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
-  const messagesQueryKey = getMessagesQueryKey(mailbox);
+  const messagesQueryKey = getMessagesQueryKey(mailbox, searchQuery);
   const currentMessages = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
   const loadedPageCount = Math.max(currentMessages?.pages.length ?? 0, 1);
 
@@ -303,7 +313,7 @@ export const refreshLoadedMessagesPages = async (
 
   for (let pageIndex = 0; pageIndex < loadedPageCount; pageIndex += 1) {
     refreshedPageParams.push(pageToken);
-    const refreshedPage = await fetchMessagesPage(mailbox, pageToken, signal);
+    const refreshedPage = await fetchMessagesPage(mailbox, pageToken, searchQuery, signal);
     refreshedPages.push(refreshedPage);
     if (!refreshedPage.nextPageToken) break;
     pageToken = refreshedPage.nextPageToken;
@@ -320,14 +330,19 @@ export const refreshLoadedMessagesPages = async (
 const syncLoadedMessagesPages = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
+  searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
-  const messagesQueryKey = getMessagesQueryKey(mailbox);
+  if (normalizeSearchQuery(searchQuery)) {
+    return await refreshLoadedMessagesPages(queryClient, mailbox, searchQuery, signal);
+  }
+
+  const messagesQueryKey = getMessagesQueryKey(mailbox, searchQuery);
   const currentMessages = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
   const startHistoryId = currentMessages?.pages[0]?.historyId;
 
   if (!currentMessages?.pages.length || !startHistoryId) {
-    return await refreshLoadedMessagesPages(queryClient, mailbox, signal);
+    return await refreshLoadedMessagesPages(queryClient, mailbox, searchQuery, signal);
   }
 
   const loadedMessageIds = Array.from(
@@ -344,7 +359,7 @@ const syncLoadedMessagesPages = async (
   );
 
   if (syncStatus.requiresRefresh) {
-    return await refreshLoadedMessagesPages(queryClient, mailbox, signal);
+    return await refreshLoadedMessagesPages(queryClient, mailbox, searchQuery, signal);
   }
 
   if (syncStatus.historyId && syncStatus.historyId !== startHistoryId) {
@@ -363,12 +378,13 @@ const syncLoadedMessagesPages = async (
 const updateSingleMessageMutation = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
+  searchQuery: string | null | undefined,
   messageId: string,
   mutation: (signal?: AbortSignal) => Promise<MessageMetadataMutationResult>,
   optimisticUpdater: (message: MessageListItem) => MessageListItem,
   signal?: AbortSignal,
 ) => {
-  const messagesQueryKey = getMessagesQueryKey(mailbox);
+  const messagesQueryKey = getMessagesQueryKey(mailbox, searchQuery);
   const previousData = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
   const messageToUpdate = findMessageInQueryData(previousData, messageId);
   const threadId = messageToUpdate?.threadId;
@@ -426,12 +442,14 @@ const updateSingleMessageMutation = async (
 export const markMessageAsReadInMailbox = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
+  searchQuery: string | null | undefined,
   messageId: string,
   signal?: AbortSignal,
 ) => {
   await updateSingleMessageMutation(
     queryClient,
     mailbox,
+    searchQuery,
     messageId,
     async (mutationSignal) =>
       await trpc.gmail.markMessageAsRead.mutate({ messageId }, { signal: mutationSignal }),
@@ -443,12 +461,14 @@ export const markMessageAsReadInMailbox = async (
 export const markMessageAsUnreadInMailbox = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
+  searchQuery: string | null | undefined,
   messageId: string,
   signal?: AbortSignal,
 ) => {
   await updateSingleMessageMutation(
     queryClient,
     mailbox,
+    searchQuery,
     messageId,
     async (mutationSignal) =>
       await trpc.gmail.markMessageAsUnread.mutate({ messageId }, { signal: mutationSignal }),
@@ -460,12 +480,13 @@ export const markMessageAsUnreadInMailbox = async (
 const updateThreadMutation = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
+  searchQuery: string | null | undefined,
   threadId: string,
   mutation: (signal?: AbortSignal) => Promise<ThreadMetadataMutationResult>,
   optimisticUpdater: (message: MessageListItem) => MessageListItem,
   signal?: AbortSignal,
 ) => {
-  const messagesQueryKey = getMessagesQueryKey(mailbox);
+  const messagesQueryKey = getMessagesQueryKey(mailbox, searchQuery);
   const threadQueryKey = getThreadQueryKey(threadId);
   const previousData = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
   const previousThreadData = queryClient.getQueryData<ThreadMessagesResult>(threadQueryKey);
@@ -532,12 +553,14 @@ const updateThreadMutation = async (
 export const markThreadAsReadInMailbox = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
+  searchQuery: string | null | undefined,
   threadId: string,
   signal?: AbortSignal,
 ) => {
   await updateThreadMutation(
     queryClient,
     mailbox,
+    searchQuery,
     threadId,
     async (mutationSignal) =>
       await trpc.gmail.markThreadAsRead.mutate({ threadId }, { signal: mutationSignal }),
@@ -549,12 +572,14 @@ export const markThreadAsReadInMailbox = async (
 export const markThreadAsUnreadInMailbox = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
+  searchQuery: string | null | undefined,
   threadId: string,
   signal?: AbortSignal,
 ) => {
   await updateThreadMutation(
     queryClient,
     mailbox,
+    searchQuery,
     threadId,
     async (mutationSignal) =>
       await trpc.gmail.markThreadAsUnread.mutate({ threadId }, { signal: mutationSignal }),
@@ -566,11 +591,12 @@ export const markThreadAsUnreadInMailbox = async (
 export const updateMessageLabelsInMailbox = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
+  searchQuery: string | null | undefined,
   messageId: string,
   changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   signal?: AbortSignal,
 ) => {
-  const messagesQueryKey = getMessagesQueryKey(mailbox);
+  const messagesQueryKey = getMessagesQueryKey(mailbox, searchQuery);
   const previousData = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
   const messageToUpdate = findMessageInQueryData(previousData, messageId);
   const threadId = messageToUpdate?.threadId;
@@ -639,10 +665,11 @@ export const updateMessageLabelsInMailbox = async (
 export const moveMessageToTrashInMailbox = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
+  searchQuery: string | null | undefined,
   messageId: string,
   signal?: AbortSignal,
 ) => {
-  const messagesQueryKey = getMessagesQueryKey(mailbox);
+  const messagesQueryKey = getMessagesQueryKey(mailbox, searchQuery);
   const currentData = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
   const messageToUpdate = findMessageInQueryData(currentData, messageId);
   const threadId = messageToUpdate?.threadId;
@@ -671,10 +698,11 @@ export const moveMessageToTrashInMailbox = async (
 export const deleteMessagePermanentlyInMailbox = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
+  searchQuery: string | null | undefined,
   messageId: string,
   signal?: AbortSignal,
 ) => {
-  const messagesQueryKey = getMessagesQueryKey(mailbox);
+  const messagesQueryKey = getMessagesQueryKey(mailbox, searchQuery);
   const currentData = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
   const messageToUpdate = findMessageInQueryData(currentData, messageId);
   const threadId = messageToUpdate?.threadId;
@@ -698,11 +726,12 @@ export const deleteMessagePermanentlyInMailbox = async (
 export const messagesQueryOptions = (
   _queryClient: QueryClient,
   mailbox: MailboxCategory,
+  searchQuery?: string | null,
   enabled = true,
 ) => ({
-  queryKey: getMessagesQueryKey(mailbox),
+  queryKey: getMessagesQueryKey(mailbox, searchQuery),
   queryFn: (ctx: { pageParam: unknown; signal: AbortSignal }) => {
-    return fetchMessagesPage(mailbox, parsePageToken(ctx.pageParam), ctx.signal);
+    return fetchMessagesPage(mailbox, parsePageToken(ctx.pageParam), searchQuery, ctx.signal);
   },
   initialPageParam: undefined as string | undefined,
   getNextPageParam: (lastPage: ListMessagesPageResult) => lastPage.nextPageToken ?? undefined,
@@ -716,14 +745,16 @@ export const messagesQueryOptions = (
 export const liveSyncQueryOptions = (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
+  searchQuery?: string | null,
   enabled = true,
 ) =>
   queryOptions({
-    queryKey: getLiveSyncQueryKey(mailbox),
-    queryFn: ({ signal }) => syncLoadedMessagesPages(queryClient, mailbox, signal),
+    queryKey: getLiveSyncQueryKey(mailbox, searchQuery),
+    queryFn: ({ signal }) => syncLoadedMessagesPages(queryClient, mailbox, searchQuery, signal),
     enabled,
     initialData: () =>
-      queryClient.getQueryData<MessagesQueryData>(getMessagesQueryKey(mailbox))?.pages[0],
+      queryClient.getQueryData<MessagesQueryData>(getMessagesQueryKey(mailbox, searchQuery))
+        ?.pages[0],
     persister: undefined,
     staleTime: 0,
     refetchOnMount: "always",

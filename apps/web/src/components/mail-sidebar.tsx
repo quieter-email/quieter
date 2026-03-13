@@ -46,12 +46,12 @@ export const MailSidebar = ({
 }: MailSidebarProps) => {
   const pathname = usePathname();
   const router = useRouter();
-  const [{ mailbox, messageId }] = useQueryStates(mailboxSearchParams);
+  const [{ mailbox, messageId, query }] = useQueryStates(mailboxSearchParams);
   const { colorMode, isMounted, setColorMode } = useColorMode();
 
   const profileName = user.name?.trim() || user.email?.trim() || "Profile";
   const profileEmail = user.email?.trim() || "No email available";
-  const currentLocation = serializeMailboxSearchParams(pathname, { mailbox, messageId });
+  const currentLocation = serializeMailboxSearchParams(pathname, { mailbox, messageId, query });
   const settingsHref = serializeSettingsSearchParams("/settings", { from: currentLocation });
   const isDarkMode = isMounted && colorMode === "dark";
 
