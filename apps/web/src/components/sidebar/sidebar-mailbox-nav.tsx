@@ -1,9 +1,19 @@
 "use client";
 
-import { HugeiconsIcon } from "@hugeicons/react";
+import { Delete01Icon, InboxIcon, MailSend02Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { Button, cn } from "@quietr/ui";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
-import { SIDEBAR_MAILBOX_ITEMS } from "./sidebar-constants";
+
+const SIDEBAR_MAILBOX_ITEMS: ReadonlyArray<{
+  id: MailboxCategory;
+  icon: IconSvgElement;
+  label: string;
+}> = [
+  { id: "inbox", label: "Inbox", icon: InboxIcon },
+  { id: "sent", label: "Sent", icon: MailSend02Icon },
+  { id: "trash", label: "Trash", icon: Delete01Icon },
+];
 
 type SidebarMailboxNavProps = {
   selectedMailbox: MailboxCategory;

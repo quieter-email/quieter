@@ -1,0 +1,66 @@
+"use client";
+
+import type { ComponentPropsWithoutRef } from "react";
+import { NumberField as NumberFieldPrimitive } from "@base-ui/react/number-field";
+import { cn } from "../../lib/cn";
+import { MinusIcon, PlusIcon } from "./icons";
+import { inputVariants } from "./input-styles";
+
+export const NumberField = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof NumberFieldPrimitive.Root>) => (
+  <NumberFieldPrimitive.Root className={cn("grid w-full gap-1.5", className)} {...props} />
+);
+
+export const NumberFieldGroup = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof NumberFieldPrimitive.Group>) => (
+  <NumberFieldPrimitive.Group
+    className={cn(
+      "flex items-center overflow-hidden rounded-md border border-input bg-background shadow-sm focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20",
+      className,
+    )}
+    {...props}
+  />
+);
+
+export const NumberFieldInput = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof NumberFieldPrimitive.Input>) => (
+  <NumberFieldPrimitive.Input
+    className={cn(inputVariants({ chrome: "ghost", size: "default" }), "text-center", className)}
+    {...props}
+  />
+);
+
+const numberFieldButtonClassName =
+  "flex size-10 shrink-0 items-center justify-center bg-background text-muted-foreground outline-none transition-colors duration-150 ease-out hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 focus-visible:bg-muted/60 focus-visible:text-foreground";
+
+export const NumberFieldIncrement = ({
+  children,
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof NumberFieldPrimitive.Increment>) => (
+  <NumberFieldPrimitive.Increment
+    className={cn(numberFieldButtonClassName, "border-l border-border", className)}
+    {...props}
+  >
+    {children ?? <PlusIcon className="size-4" />}
+  </NumberFieldPrimitive.Increment>
+);
+
+export const NumberFieldDecrement = ({
+  children,
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof NumberFieldPrimitive.Decrement>) => (
+  <NumberFieldPrimitive.Decrement
+    className={cn(numberFieldButtonClassName, "border-r border-border", className)}
+    {...props}
+  >
+    {children ?? <MinusIcon className="size-4" />}
+  </NumberFieldPrimitive.Decrement>
+);

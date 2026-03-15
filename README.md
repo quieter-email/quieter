@@ -14,6 +14,8 @@
 - Database layer: Drizzle ORM beta + Postgres (Neon HTTP)
 - Styling: Tailwind CSS v4
 - UI primitives: Base UI
+- Drawer and sheet primitives: Vaul
+- Toast notifications: Sonner
 - Icons: Hugeicons React
 - Rich text editor: Tiptap
 - Linting and formatting: Oxlint + Oxfmt
@@ -65,7 +67,7 @@
   - `src/gmail-service.ts`: shared Gmail API helpers and response typing used by the router and web app, including raw Gmail `q` filtering
   - `src/server.ts`: `fetchRequestHandler` wrapper
   - `src/client.ts`: typed `createTrpcClient`
-- `packages/ui`: shared Tailwind theme, next-themes wrapper, and UI components
+- `packages/ui`: shared Tailwind theme, next-themes wrapper, and styled UI components built on Base UI, Vaul, and Sonner
 - `packages/config`: shared TypeScript config package
 
 ## Product shape
@@ -84,6 +86,12 @@
 3. `@quietr/trpc/server` handles requests through the shared router.
 4. Browser-side TanStack Query persistence restores mailbox state before network sync, while tRPC talks directly to Gmail for deltas, reloads, and mutations.
 5. Auth form preflight checks such as email-status and placeholder preview lookups run through tRPC query options instead of manual client `fetch` calls.
+
+## UI boundary
+
+- `packages/ui` owns the shared, styled component surface for the monorepo.
+- App code should import reusable controls from `@quietr/ui` instead of importing Base UI, Vaul, or Sonner directly.
+- When a new primitive is needed, add or extend the wrapper in `packages/ui` first and then consume it from the app.
 
 ## Inbox sync strategy
 

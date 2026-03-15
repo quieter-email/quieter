@@ -57,8 +57,6 @@ type PlaceholderPreview = {
   url: string;
 };
 
-const DELETE_CONFIRMATION = "delete my account";
-
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -361,8 +359,8 @@ export const SettingsScreen = ({ from, initialTab, initialUser }: SettingsScreen
   };
 
   const handleDeleteAccount = async () => {
-    if (deleteConfirmation.trim().toLowerCase() !== DELETE_CONFIRMATION) {
-      setDeleteError(`Type "${DELETE_CONFIRMATION}".`);
+    if (deleteConfirmation.trim().toLowerCase() !== "delete my account") {
+      setDeleteError(`Type "delete my account".`);
       return;
     }
 
@@ -680,13 +678,13 @@ export const SettingsScreen = ({ from, initialTab, initialUser }: SettingsScreen
 
           <DialogBody className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Type <span className="font-medium text-foreground">{DELETE_CONFIRMATION}</span>
+              Type <span className="font-medium text-foreground">delete my account</span>
             </p>
             <TextField>
               <TextFieldInput
                 autoFocus
                 onChange={(event) => setDeleteConfirmation(event.target.value)}
-                placeholder={DELETE_CONFIRMATION}
+                placeholder="delete my account"
                 value={deleteConfirmation}
               />
             </TextField>

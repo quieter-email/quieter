@@ -15,6 +15,8 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - Database: [Drizzle ORM beta](https://orm.drizzle.team/) + Postgres (Neon HTTP)
 - Styling: [Tailwind CSS 4](https://tailwindcss.com/)
 - UI primitives: [Base UI](https://base-ui.com/)
+- Drawer and sheet primitives: [Vaul](https://vaul.emilkowal.ski/)
+- Toast notifications: [Sonner](https://sonner.emilkowal.ski/)
 - Icons: [Hugeicons React](https://www.npmjs.com/package/@hugeicons/react)
 - Rich text editor: [Tiptap](https://tiptap.dev/)
 - Linting and formatting: [Oxlint](https://oxc.rs/docs/guide/usage/linter) + [Oxfmt](https://oxc.rs/docs/guide/usage/formatter)
@@ -68,7 +70,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
   - `src/server.ts`: `fetchRequestHandler` integration.
   - `src/client.ts`: Typed client factory.
   - `src/types.ts`: `RouterInputs` and `RouterOutputs` utility types.
-- `packages/ui/`: Shared UI package.
+- `packages/ui/`: Shared UI package with the Tailwind theme, next-themes wrapper, and styled component wrappers built on Base UI, Vaul, and Sonner.
 - `packages/config/`: Shared TypeScript config package.
 
 ## Core Concepts and Patterns
@@ -85,6 +87,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 ### Monorepo boundaries
 
 - `apps/web` should consume shared functionality via package imports (`@quietr/trpc`, `@quietr/config`).
+- `apps/*` should consume reusable UI through `@quietr/ui`; do not import Base UI, Vaul, or Sonner directly in app code unless `packages/ui` is being extended in the same change.
 - `packages/trpc` is the boundary between app and database logic.
 - `packages/database` should own schema and migration concerns.
 - `packages/auth` owns Better Auth configuration.

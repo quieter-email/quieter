@@ -1,44 +1,38 @@
 "use client";
 
-import {
-  ArrowUp01Icon,
-  Loading03Icon,
-  Refresh01Icon,
-  Search01Icon,
-} from "@hugeicons/core-free-icons";
+import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, TextField, TextFieldInput } from "@quietr/ui";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useMemo, useRef } from "react";
 import type { ListMessagesPageResult, MailboxCategory } from "~/lib/gmail/gmail";
 import { buildThreadListEntries } from "~/lib/gmail/thread-list";
+import { MessageListSearch } from "./message-list-search/message-list-search";
 import { MessageRow } from "./message-row";
-import { SpinWhileActive } from "./spin-while-active";
 
 type MessageListProps = {
   activeMailbox: MailboxCategory;
   activeMessageId?: string | null;
+  error: Error | null;
+  hasNextPage: boolean;
+  isError: boolean;
+  isFetchingNextPage: boolean;
+  isMessageActionPending?: (messageId: string) => boolean;
+  isPending: boolean;
+  isRefreshing: boolean;
+  messages: ListMessagesPageResult[];
   onActivateMessage: (messageId: string) => void;
+  onDeletePermanently: (messageId: string) => void | Promise<void>;
+  onLoadMore: () => void;
   onMarkAsRead: (messageId: string) => void | Promise<void>;
   onMarkAsUnread: (messageId: string) => void | Promise<void>;
+  onMoveToTrash: (messageId: string) => void | Promise<void>;
+  onRefresh: () => void | Promise<void>;
+  onSearch: (query: string) => void;
   onUpdateLabels: (
     messageId: string,
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => void | Promise<void>;
-  onMoveToTrash: (messageId: string) => void | Promise<void>;
-  onDeletePermanently: (messageId: string) => void | Promise<void>;
-  isMessageActionPending?: (messageId: string) => boolean;
-  onRefresh: () => void | Promise<void>;
-  isRefreshing: boolean;
-  isPending: boolean;
-  isError: boolean;
-  error: Error | null;
-  messages: ListMessagesPageResult[];
   searchQuery: string;
-  hasNextPage: boolean;
-  isFetchingNextPage: boolean;
-  onLoadMore: () => void;
-  onSearch: (query: string) => void;
 };
 
 const SCROLL_TOP_EPSILON_PX = 2;
@@ -46,85 +40,6 @@ const SCROLL_WAIT_TIMEOUT_MS = 600;
 const MESSAGE_ROW_HEIGHT_PX = 72;
 const MESSAGE_ROW_GAP_PX = 4;
 const MESSAGE_LIST_OVERSCAN = 12;
-
-type MessageListSearchProps = {
-  isRefreshing: boolean;
-  onRefresh: () => void | Promise<void>;
-  onScrollToTop: () => void | Promise<void>;
-  onSearch: (query: string) => void;
-  searchQuery: string;
-};
-
-const MessageListSearch = ({
-  isRefreshing,
-  onRefresh,
-  onScrollToTop,
-  onSearch,
-  searchQuery,
-}: MessageListSearchProps) => {
-  const draftSearchQueryRef = useRef(searchQuery);
-
-  const applySearch = () => {
-    void onScrollToTop();
-    onSearch(draftSearchQueryRef.current);
-  };
-
-  return (
-    <div className="border-b border-border bg-background-light px-4 py-3" role="search">
-      <div className="flex items-center gap-2">
-        <Button
-          disabled={isRefreshing}
-          onClick={() => void onRefresh()}
-          size="icon-sm"
-          variant="outline"
-        >
-          <SpinWhileActive active={isRefreshing}>
-            <HugeiconsIcon icon={Refresh01Icon} />
-          </SpinWhileActive>
-        </Button>
-
-        <div className="relative min-w-0 flex-1">
-          <TextField className="min-w-0">
-            <TextFieldInput
-              autoCapitalize="off"
-              autoCorrect="off"
-              className="pr-10"
-              defaultValue={searchQuery}
-              name="query"
-              onChange={(event) => {
-                draftSearchQueryRef.current = event.target.value;
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  applySearch();
-                }
-              }}
-              placeholder="Search"
-              size="sm"
-              spellCheck={false}
-              type="search"
-            />
-          </TextField>
-
-          <Button
-            aria-label="Search"
-            className="absolute top-1 right-1 bottom-1 size-6 text-muted-foreground hover:text-foreground"
-            onClick={applySearch}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
-            <HugeiconsIcon icon={Search01Icon} />
-          </Button>
-        </div>
-
-        <Button onClick={() => void onScrollToTop()} size="icon-sm" type="button" variant="outline">
-          <HugeiconsIcon icon={ArrowUp01Icon} />
-        </Button>
-      </div>
-    </div>
-  );
-};
 
 export const MessageList = ({
   activeMailbox,
@@ -183,7 +98,6 @@ export const MessageList = ({
   const shouldPrefetch = (element: HTMLDivElement) => {
     const distanceToBottom = element.scrollHeight - (element.scrollTop + element.clientHeight);
     const threshold = Math.max(element.clientHeight, 400);
-
     return distanceToBottom <= threshold;
   };
 
@@ -258,7 +172,6 @@ export const MessageList = ({
     <div className="flex min-h-0 flex-1 flex-col">
       <MessageListSearch
         isRefreshing={isRefreshing}
-        key={searchQuery}
         onRefresh={onRefresh}
         onScrollToTop={scrollListToTop}
         onSearch={onSearch}
@@ -266,7 +179,7 @@ export const MessageList = ({
       />
 
       <div
-        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-4 [contain:strict]"
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-4 contain-strict"
         onScroll={() => {
           if (isProgrammaticScrollToTopRef.current) return;
           maybeLoadMore();
@@ -323,9 +236,7 @@ export const MessageList = ({
 
         {!isError && threadedMessages.length > 0 ? (
           <p className="px-2 py-5 text-center text-xs text-muted-foreground">
-            {isFetchingNextPage ? (
-              <HugeiconsIcon className="animate-spin text-muted-foreground" icon={Loading03Icon} />
-            ) : hasNextPage ? (
+            {isFetchingNextPage || hasNextPage ? (
               <HugeiconsIcon className="animate-spin text-muted-foreground" icon={Loading03Icon} />
             ) : (
               "You're all caught up."

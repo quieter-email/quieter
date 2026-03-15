@@ -25,7 +25,6 @@ import {
   serializeMailboxSearchParams,
   serializeSettingsSearchParams,
 } from "~/lib/search-params";
-import { SIDEBAR_WIDTH } from "./sidebar/sidebar-constants";
 import { SidebarMailboxNav } from "./sidebar/sidebar-mailbox-nav";
 
 type MailSidebarProps = {
@@ -58,7 +57,7 @@ export const MailSidebar = ({
   return (
     <aside
       className="relative hidden h-full shrink-0 border-r border-border bg-background text-foreground lg:flex lg:flex-col"
-      style={{ width: `${SIDEBAR_WIDTH}px` }}
+      style={{ width: "224px" }}
     >
       <div className="flex min-h-0 flex-1 flex-col px-4 py-6">
         <div className="flex min-w-0 items-start justify-between gap-3 pl-2">

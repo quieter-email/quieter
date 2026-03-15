@@ -22,11 +22,11 @@ export const buttonVariants = cva(
       },
       size: {
         sm: "h-8 px-3.5 text-[13px]",
-        default: "h-10 px-4 text-sm",
-        lg: "h-11 px-5 text-base",
+        default: "h-9 px-4 text-sm",
+        lg: "h-10 px-5 text-base",
         "icon-sm": "size-8 p-0 [&_svg]:size-3.5",
-        icon: "size-10 p-0 [&_svg]:size-4.5",
-        "icon-lg": "size-11 p-0 [&_svg]:size-5",
+        icon: "size-9 p-0 [&_svg]:size-4",
+        "icon-lg": "size-10 p-0 [&_svg]:size-4.5",
       },
     },
     defaultVariants: {
