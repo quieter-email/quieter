@@ -65,6 +65,7 @@ export const MessageList = ({
 }: MessageListProps) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isProgrammaticScrollToTopRef = useRef(false);
+  const hasViewportAutoPrefetchedRef = useRef(false);
 
   const flattenedMessages = useMemo(() => messages.flatMap((page) => page.messages), [messages]);
   const threadedMessages = useMemo(
@@ -108,9 +109,21 @@ export const MessageList = ({
   };
 
   useEffect(() => {
-    if (threadedMessages.length === 0 || !scrollRef.current) return;
+    hasViewportAutoPrefetchedRef.current = false;
+  }, [activeMailbox, searchQuery]);
+
+  useEffect(() => {
+    if (
+      threadedMessages.length === 0 ||
+      !scrollRef.current ||
+      hasViewportAutoPrefetchedRef.current
+    ) {
+      return;
+    }
+
+    hasViewportAutoPrefetchedRef.current = true;
     maybeLoadMore();
-  }, [messages]);
+  }, [activeMailbox, searchQuery, threadedMessages.length]);
 
   const waitForSmoothScrollTop = async (element: HTMLDivElement) => {
     await new Promise<void>((resolve) => {
@@ -237,7 +250,10 @@ export const MessageList = ({
         {!isError && threadedMessages.length > 0 ? (
           <p className="px-2 py-5 text-center text-xs text-muted-foreground">
             {isFetchingNextPage || hasNextPage ? (
-              <HugeiconsIcon className="animate-spin text-muted-foreground" icon={Loading03Icon} />
+              <HugeiconsIcon
+                className="mx-auto animate-spin text-muted-foreground"
+                icon={Loading03Icon}
+              />
             ) : (
               "You're all caught up."
             )}

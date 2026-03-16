@@ -200,10 +200,13 @@ export type GmailProfile = z.infer<typeof gmailProfileSchema>;
 export type GmailMessage = z.infer<typeof gmailMessageSchema>;
 export type GmailDraft = z.infer<typeof gmailDraftSchema>;
 export type GmailAttachment = z.infer<typeof gmailAttachmentSchema>;
-export type MailboxSyncStatus = {
+export type MailboxSyncDelta = {
   historyId?: string;
   hasChanges: boolean;
-  requiresRefresh: boolean;
+  refreshFirstPage: boolean;
+  removedMessageIds: string[];
+  requiresFullRefresh: boolean;
+  updatedMessages: MessageListItem[];
 };
 export { decodeMimeHeaderValue, extractMessageContent };
 
@@ -701,21 +704,21 @@ export const listLabels = async (
   });
 };
 
-export const getMailboxSyncStatus = async (
+export const getMailboxSyncDelta = async (
   accessToken: string,
   options: {
     mailbox: MailboxCategory;
     startHistoryId: string;
-    loadedMessageIds?: readonly string[];
     signal?: AbortSignal;
   },
-): Promise<MailboxSyncStatus> => {
-  const loadedMessageIds = new Set(options.loadedMessageIds ?? []);
+): Promise<MailboxSyncDelta> => {
   const mailboxLabel = MAILBOX_LABELS[options.mailbox];
   let pageToken: string | undefined;
-  const messageIdsToCheck = new Set<string>();
+  const changedMessageIds = new Set<string>();
+  const mailboxAdditionCandidateIds = new Set<string>();
+  const removedMessageIds = new Set<string>();
   let nextHistoryId = options.startHistoryId;
-  let requiresRefresh = false;
+  let refreshFirstPage = false;
 
   try {
     do {
@@ -739,72 +742,96 @@ export const getMailboxSyncStatus = async (
 
       for (const historyRecord of response.history ?? []) {
         for (const deleted of historyRecord.messagesDeleted ?? []) {
-          if (loadedMessageIds.has(deleted.message.id)) {
-            requiresRefresh = true;
-          }
+          removedMessageIds.add(deleted.message.id);
+          changedMessageIds.delete(deleted.message.id);
+          mailboxAdditionCandidateIds.delete(deleted.message.id);
+          refreshFirstPage = true;
         }
 
         for (const labelsAdded of historyRecord.labelsAdded ?? []) {
           const labelIds = normalizeLabelIds(labelsAdded.labelIds);
-          if (labelIds?.includes(mailboxLabel)) {
-            requiresRefresh = true;
-          }
+          changedMessageIds.add(labelsAdded.message.id);
 
-          if (
-            labelIds?.includes(GMAIL_UNREAD_LABEL) &&
-            loadedMessageIds.has(labelsAdded.message.id)
-          ) {
-            requiresRefresh = true;
+          if (labelIds?.includes(mailboxLabel)) {
+            removedMessageIds.delete(labelsAdded.message.id);
+            mailboxAdditionCandidateIds.add(labelsAdded.message.id);
+            refreshFirstPage = true;
           }
         }
 
         for (const labelsRemoved of historyRecord.labelsRemoved ?? []) {
           const labelIds = normalizeLabelIds(labelsRemoved.labelIds);
-          if (labelIds?.includes(mailboxLabel) && loadedMessageIds.has(labelsRemoved.message.id)) {
-            requiresRefresh = true;
+          if (labelIds?.includes(mailboxLabel)) {
+            removedMessageIds.add(labelsRemoved.message.id);
+            changedMessageIds.delete(labelsRemoved.message.id);
+            mailboxAdditionCandidateIds.delete(labelsRemoved.message.id);
+            refreshFirstPage = true;
+            continue;
           }
 
-          if (
-            labelIds?.includes(GMAIL_UNREAD_LABEL) &&
-            loadedMessageIds.has(labelsRemoved.message.id)
-          ) {
-            requiresRefresh = true;
-          }
+          changedMessageIds.add(labelsRemoved.message.id);
         }
 
         for (const added of historyRecord.messagesAdded ?? []) {
-          messageIdsToCheck.add(added.message.id);
+          if (removedMessageIds.has(added.message.id)) {
+            removedMessageIds.delete(added.message.id);
+          }
+
+          changedMessageIds.add(added.message.id);
+          mailboxAdditionCandidateIds.add(added.message.id);
         }
       }
 
       pageToken = response.nextPageToken;
-    } while (pageToken && !requiresRefresh);
+    } while (pageToken);
   } catch (error) {
     if (isErrorWithStatus(error) && error.status === 404) {
       return {
         historyId: undefined,
         hasChanges: true,
-        requiresRefresh: true,
+        refreshFirstPage: false,
+        removedMessageIds: [],
+        requiresFullRefresh: true,
+        updatedMessages: [],
       };
     }
 
     throw error;
   }
 
-  if (!requiresRefresh && messageIdsToCheck.size > 0) {
-    const addedMessages = await getGmailMessagesMetadata(
+  const updatedMessages: MessageListItem[] = [];
+
+  if (changedMessageIds.size > 0) {
+    const changedMessages = await getGmailMessagesMetadata(
       accessToken,
-      Array.from(messageIdsToCheck),
+      Array.from(changedMessageIds),
       options.signal,
     );
 
-    requiresRefresh = addedMessages.some((message) => message?.labelIds?.includes(mailboxLabel));
+    for (const changedMessage of changedMessages) {
+      if (!changedMessage) continue;
+
+      const labelIds = normalizeLabelIds(changedMessage.labelIds);
+      if (!labelIds?.includes(mailboxLabel)) {
+        removedMessageIds.add(changedMessage.id);
+        continue;
+      }
+
+      if (mailboxAdditionCandidateIds.has(changedMessage.id)) {
+        refreshFirstPage = true;
+      }
+
+      updatedMessages.push(await toMessageListItem(changedMessage));
+    }
   }
 
   return {
     historyId: nextHistoryId,
     hasChanges: nextHistoryId !== options.startHistoryId,
-    requiresRefresh,
+    refreshFirstPage,
+    removedMessageIds: Array.from(removedMessageIds),
+    requiresFullRefresh: false,
+    updatedMessages,
   };
 };
 

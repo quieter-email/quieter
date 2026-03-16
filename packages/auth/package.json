@@ -19,7 +19,8 @@
     "@better-auth/core": "catalog:",
     "@better-auth/passkey": "catalog:",
     "@quietr/database": "workspace:*",
-    "better-auth": "catalog:"
+    "better-auth": "catalog:",
+    "drizzle-orm": "catalog:"
   },
   "devDependencies": {
     "@quietr/config": "workspace:*",

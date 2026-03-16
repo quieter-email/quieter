@@ -36,39 +36,63 @@ export const Calendar = ({
 }: CalendarProps) => (
   <DayPicker
     animate={animate}
-    className={cn("quietr-calendar w-fit rounded-lg p-2", className)}
+    className={cn("quietr-calendar w-fit", className)}
     classNames={{
       ...defaultClassNames,
       root: cn("w-fit text-sm text-foreground", defaultClassNames.root),
-      months: "flex",
-      month: "space-y-3",
-      month_caption: "relative flex h-8 items-center justify-center px-8",
-      caption_label: "text-sm font-medium text-foreground",
-      nav: "absolute inset-x-0 top-0 flex h-8 items-center justify-between",
+      months: cn("flex flex-col gap-4 sm:flex-row", defaultClassNames.months),
+      month: cn("relative flex w-full flex-col gap-4", defaultClassNames.month),
+      month_caption: cn(
+        "flex h-8 items-center justify-center px-8",
+        defaultClassNames.month_caption,
+      ),
+      caption_label: cn("text-sm font-medium text-foreground", defaultClassNames.caption_label),
+      nav: cn(
+        "absolute inset-x-0 top-0 flex h-8 items-center justify-between",
+        defaultClassNames.nav,
+      ),
       button_previous: cn(
         buttonVariants({ size: "icon-sm", variant: "ghost" }),
-        "size-7 rounded-md text-muted-foreground hover:text-foreground",
+        "absolute top-0 left-0 size-7 rounded-md bg-transparent p-0 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground",
+        defaultClassNames.button_previous,
       ),
       button_next: cn(
         buttonVariants({ size: "icon-sm", variant: "ghost" }),
-        "size-7 rounded-md text-muted-foreground hover:text-foreground",
+        "absolute top-0 right-0 size-7 rounded-md bg-transparent p-0 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground",
+        defaultClassNames.button_next,
       ),
-      chevron: "text-current",
-      month_grid: "w-full border-collapse",
-      weekdays: "grid grid-cols-7",
-      weekday: "flex h-8 items-center justify-center text-[11px] font-normal text-muted-foreground",
-      week: "mt-1 grid grid-cols-7",
-      day: "flex size-8 items-center justify-center p-0 text-sm",
+      chevron: cn("text-current", defaultClassNames.chevron),
+      month_grid: cn("w-full border-collapse", defaultClassNames.month_grid),
+      weekdays: cn("grid grid-cols-7 gap-0.5", defaultClassNames.weekdays),
+      weekday: cn(
+        "flex h-8 items-center justify-center text-[11px] font-medium text-muted-foreground",
+        defaultClassNames.weekday,
+      ),
+      weeks: cn("flex flex-col gap-0.5", defaultClassNames.weeks),
+      week: cn("grid grid-cols-7 gap-0.5", defaultClassNames.week),
+      day: cn("flex size-8 items-center justify-center p-0 text-sm", defaultClassNames.day),
       day_button: cn(
         buttonVariants({ size: "icon-sm", variant: "ghost" }),
-        "size-8 rounded-md p-0 text-[13px] font-normal text-foreground ring-offset-0",
+        "size-8 rounded-md bg-transparent p-0 text-[13px] font-normal text-foreground ring-offset-0 hover:bg-muted hover:text-foreground",
+        defaultClassNames.day_button,
       ),
-      today: "[&>button]:font-medium",
-      selected:
-        "[&>button]:bg-foreground [&>button]:text-background [&>button]:hover:bg-foreground [&>button]:active:bg-foreground",
-      outside: "text-muted-foreground/45",
-      disabled: "text-muted-foreground/35",
-      hidden: "invisible",
+      today: cn(
+        "[&>button]:font-medium [&>button]:ring-1 [&>button]:ring-border",
+        defaultClassNames.today,
+      ),
+      selected: cn(
+        "[&>button]:bg-primary [&>button]:text-primary-foreground [&>button]:shadow-sm [&>button]:hover:bg-primary [&>button]:hover:text-primary-foreground [&>button]:focus:bg-primary [&>button]:focus:text-primary-foreground",
+        defaultClassNames.selected,
+      ),
+      outside: cn(
+        "text-muted-foreground/45 [&>button]:text-muted-foreground/45",
+        defaultClassNames.outside,
+      ),
+      disabled: cn(
+        "text-muted-foreground/35 [&>button]:cursor-not-allowed [&>button]:opacity-50",
+        defaultClassNames.disabled,
+      ),
+      hidden: cn("invisible", defaultClassNames.hidden),
       ...classNames,
     }}
     components={{

@@ -62,6 +62,20 @@ const toLoadedPagesData = (
   pageParams,
 });
 
+const replaceFirstPageInQueryData = (
+  data: MessagesQueryData | undefined,
+  firstPage: ListMessagesPageResult,
+): MessagesQueryData => {
+  if (!data?.pages.length) {
+    return toFirstPageData(firstPage);
+  }
+
+  return {
+    pages: [firstPage, ...data.pages.slice(1)],
+    pageParams: [undefined, ...data.pageParams.slice(1)],
+  };
+};
+
 const updateFirstPageHistoryId = (
   data: MessagesQueryData | undefined,
   historyId: string,
@@ -265,6 +279,106 @@ const applyMessageLabelChangesLocally = (
   });
 };
 
+const getMessageSortTimestamp = (
+  message: Pick<MessageListItem, "date" | "internalDate">,
+): number => {
+  const source = message.internalDate ?? message.date;
+  if (!source) return 0;
+
+  const numeric = Number(source);
+  const parsedDate = Number.isFinite(numeric) ? new Date(numeric) : new Date(source);
+  const timestamp = parsedDate.getTime();
+
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+};
+
+const applySyncDeltaToQueryData = (
+  data: MessagesQueryData | undefined,
+  updatedMessages: readonly MessageListItem[],
+  removedMessageIds: readonly string[],
+): MessagesQueryData | undefined => {
+  if (!data?.pages.length) return data;
+
+  const currentMessages = data.pages.flatMap((page) => page.messages);
+  if (!currentMessages.length && updatedMessages.length === 0 && removedMessageIds.length === 0) {
+    return data;
+  }
+
+  const updatedMessagesById = new Map(
+    updatedMessages.map((message) => [message.id, message] as const),
+  );
+  const removedMessageIdsSet = new Set(removedMessageIds);
+  const currentMessageOrder = new Map(
+    currentMessages.map((message, index) => [message.id, index] as const),
+  );
+  const originalLoadedCount = currentMessages.length;
+  const oldestLoadedMessage = currentMessages[currentMessages.length - 1];
+  const oldestLoadedTimestamp =
+    oldestLoadedMessage != null
+      ? getMessageSortTimestamp(oldestLoadedMessage)
+      : Number.NEGATIVE_INFINITY;
+
+  const nextMessages = currentMessages
+    .filter((message) => !removedMessageIdsSet.has(message.id))
+    .map((message) => updatedMessagesById.get(message.id) ?? message);
+  const nextMessageIds = new Set(nextMessages.map((message) => message.id));
+
+  for (const updatedMessage of updatedMessages) {
+    if (nextMessageIds.has(updatedMessage.id)) continue;
+
+    if (
+      nextMessages.length < originalLoadedCount ||
+      getMessageSortTimestamp(updatedMessage) >= oldestLoadedTimestamp
+    ) {
+      nextMessages.push(updatedMessage);
+      nextMessageIds.add(updatedMessage.id);
+    }
+  }
+
+  nextMessages.sort((left, right) => {
+    const timestampDifference = getMessageSortTimestamp(right) - getMessageSortTimestamp(left);
+    if (timestampDifference !== 0) {
+      return timestampDifference;
+    }
+
+    const leftOrder = currentMessageOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = currentMessageOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+    return leftOrder - rightOrder;
+  });
+
+  if (nextMessages.length > originalLoadedCount) {
+    nextMessages.length = originalLoadedCount;
+  }
+
+  const nextPages: ListMessagesPageResult[] = [];
+  const nextPageParams: Array<string | undefined> = [];
+  let messageIndex = 0;
+
+  for (const [pageIndex, page] of data.pages.entries()) {
+    const pageSize = page.messages.length;
+    const pageMessages = nextMessages.slice(messageIndex, messageIndex + pageSize);
+
+    if (pageIndex > 0 && pageMessages.length === 0) {
+      break;
+    }
+
+    nextPages.push({ ...page, messages: pageMessages });
+    nextPageParams.push(data.pageParams[pageIndex]);
+    messageIndex += pageMessages.length;
+  }
+
+  if (nextPages.length === 0) {
+    nextPages.push({ ...data.pages[0], messages: [] });
+    nextPageParams.push(data.pageParams[0]);
+  }
+
+  return {
+    ...data,
+    pages: nextPages,
+    pageParams: nextPageParams,
+  };
+};
+
 const fetchMessagesPage = async (
   mailbox: MailboxCategory,
   pageToken: string | undefined,
@@ -288,12 +402,12 @@ export const refreshMessagesFirstPage = async (
   searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
+  const messagesQueryKey = getMessagesQueryKey(mailbox, searchQuery);
   const refreshedFirstPage = await fetchMessagesPage(mailbox, undefined, searchQuery, signal);
-  queryClient.setQueryData<MessagesQueryData>(
-    getMessagesQueryKey(mailbox, searchQuery),
-    toFirstPageData(refreshedFirstPage),
+  queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
+    replaceFirstPageInQueryData(data, refreshedFirstPage),
   );
-  await persistQueryByKey(queryClient, getMessagesQueryKey(mailbox, searchQuery));
+  await persistQueryByKey(queryClient, messagesQueryKey);
   return refreshedFirstPage;
 };
 
@@ -327,14 +441,72 @@ export const refreshLoadedMessagesPages = async (
   return refreshedPages[0];
 };
 
-const syncLoadedMessagesPages = async (
+const applyMailboxSyncDelta = async (
+  queryClient: QueryClient,
+  messagesQueryKey: ReturnType<typeof getMessagesQueryKey>,
+  startHistoryId: string,
+  updatedMessages: readonly MessageListItem[],
+  removedMessageIds: readonly string[],
+  nextHistoryId?: string,
+) => {
+  const currentMessages = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
+  const removedMessageThreadIds = new Map<string, string>();
+
+  for (const removedMessageId of removedMessageIds) {
+    const removedMessage = findMessageInQueryData(currentMessages, removedMessageId);
+    if (removedMessage) {
+      removedMessageThreadIds.set(removedMessageId, removedMessage.threadId);
+    }
+  }
+
+  if (updatedMessages.length > 0 || removedMessageIds.length > 0) {
+    queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
+      applySyncDeltaToQueryData(data, updatedMessages, removedMessageIds),
+    );
+  }
+
+  if (nextHistoryId && nextHistoryId !== startHistoryId) {
+    queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
+      updateFirstPageHistoryId(data, nextHistoryId),
+    );
+  }
+
+  await persistQueryByKey(queryClient, messagesQueryKey);
+
+  const touchedThreadQueryKeys = new Map<string, ReturnType<typeof getThreadQueryKey>>();
+
+  for (const updatedMessage of updatedMessages) {
+    const threadQueryKey = getThreadQueryKey(updatedMessage.threadId);
+    touchedThreadQueryKeys.set(threadQueryKey.join("::"), threadQueryKey);
+    queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
+      updateMessageInThreadData(currentData, updatedMessage.id, () => updatedMessage),
+    );
+  }
+
+  for (const removedMessageId of removedMessageIds) {
+    const removedThreadId = removedMessageThreadIds.get(removedMessageId);
+    if (!removedThreadId) continue;
+
+    const threadQueryKey = getThreadQueryKey(removedThreadId);
+    touchedThreadQueryKeys.set(threadQueryKey.join("::"), threadQueryKey);
+    queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
+      removeMessageFromThreadData(currentData, removedMessageId),
+    );
+  }
+
+  for (const threadQueryKey of touchedThreadQueryKeys.values()) {
+    await persistQueryByKey(queryClient, threadQueryKey);
+  }
+};
+
+export const syncMessages = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
   searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
   if (normalizeSearchQuery(searchQuery)) {
-    return await refreshLoadedMessagesPages(queryClient, mailbox, searchQuery, signal);
+    return await refreshMessagesFirstPage(queryClient, mailbox, searchQuery, signal);
   }
 
   const messagesQueryKey = getMessagesQueryKey(mailbox, searchQuery);
@@ -345,29 +517,30 @@ const syncLoadedMessagesPages = async (
     return await refreshLoadedMessagesPages(queryClient, mailbox, searchQuery, signal);
   }
 
-  const loadedMessageIds = Array.from(
-    new Set(currentMessages.pages.flatMap((page) => page.messages.map((message) => message.id))),
-  ).slice(0, 500);
-
-  const syncStatus = await trpc.gmail.getMailboxSyncStatus.query(
+  const syncDelta = await trpc.gmail.getMailboxSyncDelta.query(
     {
       category: mailbox,
       startHistoryId,
-      loadedMessageIds,
     },
     { signal },
   );
 
-  if (syncStatus.requiresRefresh) {
+  if (syncDelta.requiresFullRefresh) {
     return await refreshLoadedMessagesPages(queryClient, mailbox, searchQuery, signal);
   }
 
-  if (syncStatus.historyId && syncStatus.historyId !== startHistoryId) {
-    queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
-      updateFirstPageHistoryId(data, syncStatus.historyId ?? startHistoryId),
-    );
-    await persistQueryByKey(queryClient, messagesQueryKey);
+  if (syncDelta.refreshFirstPage) {
+    await refreshMessagesFirstPage(queryClient, mailbox, searchQuery, signal);
   }
+
+  await applyMailboxSyncDelta(
+    queryClient,
+    messagesQueryKey,
+    startHistoryId,
+    syncDelta.updatedMessages,
+    syncDelta.removedMessageIds,
+    syncDelta.historyId,
+  );
 
   return (
     queryClient.getQueryData<MessagesQueryData>(messagesQueryKey)?.pages[0] ??
@@ -750,7 +923,7 @@ export const liveSyncQueryOptions = (
 ) =>
   queryOptions({
     queryKey: getLiveSyncQueryKey(mailbox, searchQuery),
-    queryFn: ({ signal }) => syncLoadedMessagesPages(queryClient, mailbox, searchQuery, signal),
+    queryFn: ({ signal }) => syncMessages(queryClient, mailbox, searchQuery, signal),
     enabled,
     initialData: () =>
       queryClient.getQueryData<MessagesQueryData>(getMessagesQueryKey(mailbox, searchQuery))

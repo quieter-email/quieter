@@ -84,7 +84,7 @@
 1. `apps/web` uses `@quietr/trpc` through the shared raw client and TanStack Query tRPC context in `src/lib/trpc.ts`.
 2. Browser requests hit `apps/web/src/app/api/trpc/[...path]/route.ts`.
 3. `@quietr/trpc/server` handles requests through the shared router.
-4. Browser-side TanStack Query persistence restores mailbox state before network sync, while tRPC talks directly to Gmail for deltas, reloads, and mutations.
+4. Browser-side TanStack Query persistence restores mailbox state before network sync, while tRPC talks directly to Gmail for deltas, reloads, and mutations. Manual refreshes for unfiltered mailbox views now walk Gmail history to completion, reconcile all loaded cached rows by message id, and only fall back to a broader page reload when Gmail history can no longer describe the delta.
 5. Auth form preflight checks such as email-status and placeholder preview lookups run through tRPC query options instead of manual client `fetch` calls.
 
 ## UI boundary
@@ -96,9 +96,11 @@
 ## Inbox sync strategy
 
 - Inbox list and thread data are cached with TanStack Query and restored from browser storage before any network sync runs.
+- The message list will auto-prefetch at most one extra page on mount to fill an empty viewport, which avoids chain-loading many pages before the user scrolls.
 - The inbox search bar forwards raw Gmail advanced-search syntax to the Gmail API `q` parameter while still respecting the currently selected mailbox label.
 - Freshness uses Gmail `historyId` checks on mount, focus/reconnect, interval polling, and manual refresh.
-- Automatic sync only reloads the loaded mailbox pages when Gmail history shows a relevant add/delete/move/read-state change for that mailbox view.
+- Automatic sync now consumes Gmail history deltas directly and patches/removes loaded cached messages by id instead of relying on a fixed loaded-message cutoff.
+- Mailbox membership changes still refresh page 1 so the top of the list and Gmail pagination cursor stay canonical without brute-force reloading every cached page.
 - Filtered search views fall back to manual refresh instead of history-based live sync.
 - Mailbox reloads still fetch Gmail metadata directly, but `messages.get` calls are batched and trimmed with partial-response `fields` so refreshes are much cheaper.
 - Sender avatars are derived at request time from the message sender and are not stored in Postgres.

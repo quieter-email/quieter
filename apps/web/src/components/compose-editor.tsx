@@ -20,6 +20,7 @@ import Underline from "@tiptap/extension-underline";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef } from "react";
+import { normalizeComposeBodyHtml } from "~/lib/gmail/compose";
 
 const ComposeImage = Image.extend({
   addAttributes() {
@@ -41,13 +42,7 @@ type ComposeEditorProps = {
 };
 
 const normalizeMarkup = (value: string) => {
-  const normalized = value.trim();
-
-  if (!normalized || normalized === "<p></p>" || normalized === "<p><br></p>") {
-    return "";
-  }
-
-  return normalized;
+  return normalizeComposeBodyHtml(value);
 };
 
 export const ComposeEditor = ({

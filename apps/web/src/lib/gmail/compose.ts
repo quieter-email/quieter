@@ -59,7 +59,7 @@ const isBrowser = typeof window !== "undefined";
 const createLocalId = () => crypto.randomUUID();
 const now = () => Date.now();
 
-const normalizeString = (value: string): string => value.trim();
+const normalizeString = (value: string): string => value.replaceAll(/\u200B/g, "").trim();
 
 const createEmptyRecipients = (): ComposeRecipientFields => ({
   to: "",
@@ -166,14 +166,36 @@ const htmlToText = (html: string): string => {
   return doc.body.textContent?.replace(/\s+\n/g, "\n").trim() ?? "";
 };
 
+const hasMeaningfulBodyHtml = (bodyHtml: string): boolean => {
+  const normalizedHtml = bodyHtml.trim();
+  if (!normalizedHtml) return false;
+
+  if (!isBrowser) {
+    return /<(img|video|audio|iframe)\b/i.test(normalizedHtml);
+  }
+
+  const doc = new DOMParser().parseFromString(normalizedHtml, "text/html");
+  return Boolean(doc.body.querySelector("img,video,audio,iframe"));
+};
+
+export const normalizeComposeBodyHtml = (bodyHtml: string, bodyText?: string): string => {
+  const normalizedHtml = bodyHtml.trim();
+  if (!normalizedHtml) return "";
+
+  if (normalizeString(bodyText ?? htmlToText(normalizedHtml))) {
+    return normalizedHtml;
+  }
+
+  return hasMeaningfulBodyHtml(normalizedHtml) ? normalizedHtml : "";
+};
+
 export const hasComposeDraftContent = (draft: ComposeDraftState): boolean => {
   return Boolean(
     normalizeString(draft.recipients.to) ||
     normalizeString(draft.recipients.cc) ||
     normalizeString(draft.recipients.bcc) ||
     normalizeString(draft.subject) ||
-    normalizeString(draft.bodyHtml) ||
-    normalizeString(draft.bodyText) ||
+    normalizeComposeBodyHtml(draft.bodyHtml, draft.bodyText) ||
     draft.attachments.length > 0 ||
     draft.inlineImages.length > 0,
   );

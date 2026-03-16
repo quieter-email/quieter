@@ -26,6 +26,7 @@ import {
   messagesQueryOptions,
   moveMessageToTrashInMailbox,
   refreshLoadedMessagesPages,
+  syncMessages,
   updateMessageLabelsInMailbox,
 } from "~/lib/gmail/inbox-query";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
@@ -354,7 +355,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       value: true,
     });
     try {
-      await refreshLoadedMessagesPages(queryClient, activeMailbox, activeSearchQuery);
+      await syncMessages(queryClient, activeMailbox, activeSearchQuery);
     } finally {
       dispatch({
         type: "manual-refresh/set",

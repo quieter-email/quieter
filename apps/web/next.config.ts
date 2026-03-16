@@ -4,6 +4,12 @@ import path from "node:path";
 const workspaceRoot = path.join(__dirname, "../..");
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "gravatar.com", pathname: "/avatar/**" },
+      { protocol: "https", hostname: "img.logo.dev", pathname: "/**" },
+    ],
+  },
   outputFileTracingRoot: workspaceRoot,
   reactStrictMode: true,
   transpilePackages: ["@quietr/auth", "@quietr/database", "@quietr/trpc", "@quietr/ui"],

@@ -11,7 +11,7 @@ import {
   deleteMessagePermanently,
   getDraft,
   getMessageAttachment,
-  getMailboxSyncStatus,
+  getMailboxSyncDelta,
   getThreadWithDetails,
   listLabels,
   listMessagesWithDetails,
@@ -317,20 +317,18 @@ export const appRouter = t.router({
         });
         return result;
       }),
-    getMailboxSyncStatus: protectedProcedure
+    getMailboxSyncDelta: protectedProcedure
       .input(
         z.object({
           category: mailboxCategorySchema,
           startHistoryId: z.string().min(1),
-          loadedMessageIds: z.array(z.string()).max(500).optional(),
         }),
       )
       .query(async ({ ctx, input }) => {
         const accessToken = await getGoogleAccessToken(ctx);
-        return await getMailboxSyncStatus(accessToken, {
+        return await getMailboxSyncDelta(accessToken, {
           mailbox: input.category,
           startHistoryId: input.startHistoryId,
-          loadedMessageIds: input.loadedMessageIds,
         });
       }),
     getThread: protectedProcedure

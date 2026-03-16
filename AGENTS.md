@@ -111,6 +111,9 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - Manual `queryClient.setQueryData` writes are persisted with `persistQueryByKey` so optimistic cache updates survive reloads.
 - Gmail REST calls are executed server-side in `packages/trpc/src/gmail-service.ts`, with access tokens resolved from the signed-in user's linked Google account.
 - Mailbox freshness uses Gmail history IDs, so background polling only reloads loaded pages when Gmail reports a relevant change.
+- Manual refreshes for unfiltered mailbox views now walk Gmail history deltas to completion, reconcile loaded cached rows by message id, and only fall back to a broader page reload when Gmail history can no longer describe the mailbox state.
+- Loaded mailbox rows are no longer gated by a fixed loaded-message sync cutoff; Gmail history deltas are intersected against the full cached mailbox window on the client.
+- Message-list viewport prefetch is intentionally capped to one extra page on mount so tall windows do not chain-load many pages before the user scrolls.
 - Filtered search views are refreshed manually instead of participating in history-based live sync.
 - Thread bodies and non-inline attachment metadata are still fetched on demand from Gmail.
 - Compose state is a browser-local persisted session keyed by user id; draft content and attachments are synced to Gmail drafts via tRPC procedures.
@@ -162,9 +165,10 @@ Root commands:
 
 1. Keep docs current: if architecture, package layout, routing, API contracts, schema, or tooling changes, update both `README.md` and `AGENTS.md` in the same PR.
 2. Preserve package boundaries: avoid direct app-to-database coupling; route through `@quietr/trpc`.
-3. Keep type safety strict: avoid `any`; prefer inference and exported shared types.
+3. Keep type safety strict: never use `any` or explicit casts unless absolutely necessary or you are told to do so; prefer inference and exported shared types.
 4. Respect generated files: do not manually rewrite generated route tree or migration metadata without clear reason.
-5. For schema changes, use `bun run db:push` by default and verify app behavior end-to-end; only generate/apply migrations when explicitly needed.
-6. Before finishing work, run lint, fmt:check, typecheck, and build from repo root.
+5. For schema changes, use `bun run db:push` by default and verify app behavior end-to-end; only generate/apply migrations when explicitly asked for, for now.
+6. Before finishing work, first format using `bun run fmt`, then run `bun run lint:fix` and `bun run typecheck`, and fix any errors or warnings from the that come up.
 7. Use `queryOptions` when adding or refactoring TanStack Query usage.
 8. Prioritize clarity in inbox surfaces and keep the workflow simple.
+9. For incremental UI refinement requests, preserve the existing layout, density, and component hierarchy unless the user explicitly asks for a redesign. Do not add helper copy, oversized controls, extra empty space, or decorative sections when the request is for a minimal change.
