@@ -6,6 +6,11 @@
       "sourceType": "github",
       "computedHash": "ae9bd37665a525bdb056ff6f27afc0f9c7c75809e3e23ed85c0d398dd10f6a96"
     },
+    "emil-design-eng": {
+      "source": "emilkowalski/skill",
+      "sourceType": "github",
+      "computedHash": "eff737930f2b993a2a6cb4df3cf4876ba0cf8383db591819e2398f439217d85a"
+    },
     "frontend-design": {
       "source": "anthropics/skills",
       "sourceType": "github",

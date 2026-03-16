@@ -53,9 +53,11 @@ type MessageActionsSharedProps = {
   mailbox: MailboxCategory;
   isUnread?: boolean;
   onMarkAsRead?: (messageId: string) => void | Promise<void>;
+  onMarkAsSpam?: (messageId: string) => void | Promise<void>;
   onMarkAsUnread?: (messageId: string) => void | Promise<void>;
   onUpdateLabels?: (messageId: string, changes: LabelChanges) => void | Promise<void>;
   onMoveToTrash?: (messageId: string) => void | Promise<void>;
+  onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
   onDeletePermanently?: (messageId: string) => void | Promise<void>;
   isPending?: boolean;
 };
@@ -337,10 +339,12 @@ const MessageActionsDialogs = ({
 
 const useMessageActionEntries = (props: MessageActionsSharedProps) => {
   const isUnread = props.isUnread ?? isMessageUnread(props.message);
+  const isSpamMailbox = props.mailbox === "spam";
   const isTrashMailbox = props.mailbox === "trash";
   const isBusy = Boolean(props.isPending);
   const [openLabelsDialog, setOpenLabelsDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const showMarkAsSpam = props.mailbox === "inbox";
 
   const entries: MenuEntry[] = [
     {
@@ -370,6 +374,35 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
       type: "separator",
       id: "separator",
     },
+    ...(showMarkAsSpam
+      ? [
+          {
+            type: "item" as const,
+            id: "mark-as-spam",
+            destructive: true,
+            disabled: isBusy || !props.onMarkAsSpam,
+            icon: Delete02Icon,
+            label: "Mark as Spam",
+            onSelect: () => {
+              void props.onMarkAsSpam?.(props.message.id);
+            },
+          },
+        ]
+      : []),
+    ...(isSpamMailbox
+      ? [
+          {
+            type: "item" as const,
+            id: "unmark-as-spam",
+            disabled: isBusy || !props.onUnmarkAsSpam,
+            icon: Mail01Icon,
+            label: "Unmark as Spam",
+            onSelect: () => {
+              void props.onUnmarkAsSpam?.(props.message.id);
+            },
+          },
+        ]
+      : []),
     {
       type: "item",
       id: isTrashMailbox ? "delete-permanently" : "move-to-trash",

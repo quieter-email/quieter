@@ -85,7 +85,7 @@ const getLogoDevAvatarUrl = (domain: string, size: number, theme: ResolvedColorS
   url.searchParams.set("size", String(size));
   url.searchParams.set("theme", theme);
   url.searchParams.set("format", "webp");
-  url.searchParams.set("fallback", "monogram");
+  url.searchParams.set("fallback", "404");
   return url.toString();
 };
 

@@ -13,6 +13,12 @@ export type ComposeRecipientFields = {
   bcc: string;
 };
 
+export type ComposeReplyContext = {
+  threadId: string;
+  messageHeaderId?: string;
+  references: string[];
+};
+
 export type ComposeAttachment = {
   id: string;
   name: string;
@@ -31,6 +37,7 @@ export type ComposeDraftState = {
   localId: string;
   draftId?: string;
   messageId?: string;
+  replyContext?: ComposeReplyContext | null;
   recipients: ComposeRecipientFields;
   subject: string;
   bodyHtml: string;
@@ -69,6 +76,7 @@ const createEmptyRecipients = (): ComposeRecipientFields => ({
 
 export const createEmptyComposeDraft = (): ComposeDraftState => ({
   localId: createLocalId(),
+  replyContext: null,
   recipients: createEmptyRecipients(),
   subject: "",
   bodyHtml: "",
@@ -90,6 +98,12 @@ const cloneAttachment = <T extends ComposeAttachment | ComposeInlineImage>(attac
 
 export const cloneComposeDraft = (draft: ComposeDraftState): ComposeDraftState => ({
   ...draft,
+  replyContext: draft.replyContext
+    ? {
+        ...draft.replyContext,
+        references: [...draft.replyContext.references],
+      }
+    : null,
   recipients: { ...draft.recipients },
   attachments: draft.attachments.map((attachment) => cloneAttachment(attachment)),
   inlineImages: draft.inlineImages.map((image) => cloneAttachment(image)),

@@ -16,12 +16,14 @@ type MessageRowProps = {
   isActive?: boolean;
   onActivateMessage: (messageId: string) => void;
   onMarkAsRead?: (messageId: string) => void | Promise<void>;
+  onMarkAsSpam?: (messageId: string) => void | Promise<void>;
   onMarkAsUnread?: (messageId: string) => void | Promise<void>;
   onUpdateLabels?: (
     messageId: string,
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => void | Promise<void>;
   onMoveToTrash?: (messageId: string) => void | Promise<void>;
+  onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
   onDeletePermanently?: (messageId: string) => void | Promise<void>;
   isActionPending?: boolean;
   className?: string;
@@ -40,8 +42,10 @@ const MessageRowContent = memo(
     onActivateMessage,
     onDeletePermanently,
     onMarkAsRead,
+    onMarkAsSpam,
     onMarkAsUnread,
     onMoveToTrash,
+    onUnmarkAsSpam,
     onUpdateLabels,
     thread,
   }: MessageRowContentProps) => {
@@ -76,8 +80,10 @@ const MessageRowContent = memo(
         message={anchorMessage}
         onDeletePermanently={onDeletePermanently}
         onMarkAsRead={onMarkAsRead}
+        onMarkAsSpam={onMarkAsSpam}
         onMarkAsUnread={onMarkAsUnread}
         onMoveToTrash={onMoveToTrash}
+        onUnmarkAsSpam={onUnmarkAsSpam}
         onTriggerClick={() => {
           void onMarkAsRead?.(anchorMessage.id);
           onActivateMessage(anchorMessage.id);
@@ -152,8 +158,10 @@ export const MessageRow = ({
   onActivateMessage,
   onDeletePermanently,
   onMarkAsRead,
+  onMarkAsSpam,
   onMarkAsUnread,
   onMoveToTrash,
+  onUnmarkAsSpam,
   onUpdateLabels,
   rowRef,
   style,
@@ -173,8 +181,10 @@ export const MessageRow = ({
         onActivateMessage={onActivateMessage}
         onDeletePermanently={onDeletePermanently}
         onMarkAsRead={onMarkAsRead}
+        onMarkAsSpam={onMarkAsSpam}
         onMarkAsUnread={onMarkAsUnread}
         onMoveToTrash={onMoveToTrash}
+        onUnmarkAsSpam={onUnmarkAsSpam}
         onUpdateLabels={onUpdateLabels}
         thread={thread}
       />

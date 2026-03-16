@@ -24,10 +24,12 @@ type MessageListProps = {
   onDeletePermanently: (messageId: string) => void | Promise<void>;
   onLoadMore: () => void;
   onMarkAsRead: (messageId: string) => void | Promise<void>;
+  onMarkAsSpam: (messageId: string) => void | Promise<void>;
   onMarkAsUnread: (messageId: string) => void | Promise<void>;
   onMoveToTrash: (messageId: string) => void | Promise<void>;
   onRefresh: () => void | Promise<void>;
   onSearch: (query: string) => void;
+  onUnmarkAsSpam: (messageId: string) => void | Promise<void>;
   onUpdateLabels: (
     messageId: string,
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
@@ -57,10 +59,12 @@ export const MessageList = ({
   onDeletePermanently,
   onLoadMore,
   onMarkAsRead,
+  onMarkAsSpam,
   onMarkAsUnread,
   onMoveToTrash,
   onRefresh,
   onUpdateLabels,
+  onUnmarkAsSpam,
   searchQuery,
 }: MessageListProps) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -228,8 +232,10 @@ export const MessageList = ({
                   onActivateMessage={onActivateMessage}
                   onDeletePermanently={onDeletePermanently}
                   onMarkAsRead={onMarkAsRead}
+                  onMarkAsSpam={onMarkAsSpam}
                   onMarkAsUnread={onMarkAsUnread}
                   onMoveToTrash={onMoveToTrash}
+                  onUnmarkAsSpam={onUnmarkAsSpam}
                   onUpdateLabels={onUpdateLabels}
                   style={{
                     transform: `translateY(${virtualItem.start}px)`,

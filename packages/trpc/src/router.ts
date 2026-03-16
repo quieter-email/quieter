@@ -31,6 +31,7 @@ const publicProcedure = t.procedure;
 
 const mailboxCategorySchema = z.enum([
   "inbox",
+  "spam",
   "sent",
   "trash",
 ] satisfies readonly MailboxCategory[]);
@@ -43,6 +44,14 @@ const composeDraftInputSchema = z.object({
   localId: z.string(),
   draftId: z.string().nullable().optional(),
   messageId: z.string().nullable().optional(),
+  replyContext: z
+    .object({
+      threadId: z.string(),
+      messageHeaderId: z.string().optional(),
+      references: z.array(z.string()).default([]),
+    })
+    .nullable()
+    .optional(),
   recipients: z.object({
     to: z.string(),
     cc: z.string(),
@@ -125,20 +134,42 @@ const base64WithCrlf = (value: Uint8Array) => {
 
 const collectRecipients = (value: string) =>
   value
-    .split(",")
+    .split(/[\n,;]/g)
     .map((entry) => entry.trim())
     .filter(Boolean);
+
+const collectReplyReferences = (draft: ComposeDraftInput) => {
+  const values = [...(draft.replyContext?.references ?? []), draft.replyContext?.messageHeaderId];
+  const seen = new Set<string>();
+  const references: string[] = [];
+
+  for (const value of values) {
+    const normalized = value?.trim();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    references.push(normalized);
+  }
+
+  return references;
+};
 
 const buildMimeMessage = (draft: ComposeDraftInput) => {
   const headers: string[] = [];
   const toRecipients = collectRecipients(draft.recipients.to);
   const ccRecipients = collectRecipients(draft.recipients.cc);
   const bccRecipients = collectRecipients(draft.recipients.bcc);
+  const replyReferences = collectReplyReferences(draft);
 
   if (toRecipients.length > 0) headers.push(`To: ${toRecipients.join(", ")}`);
   if (ccRecipients.length > 0) headers.push(`Cc: ${ccRecipients.join(", ")}`);
   if (bccRecipients.length > 0) headers.push(`Bcc: ${bccRecipients.join(", ")}`);
   if (draft.subject.trim()) headers.push(`Subject: ${encodeMimeHeaderValue(draft.subject)}`);
+  if (draft.replyContext?.messageHeaderId) {
+    headers.push(`In-Reply-To: ${draft.replyContext.messageHeaderId}`);
+  }
+  if (replyReferences.length > 0) {
+    headers.push(`References: ${replyReferences.join(" ")}`);
+  }
   headers.push("MIME-Version: 1.0");
 
   const alternativeBoundary = createMimeBoundary("alt");
@@ -405,8 +436,13 @@ export const appRouter = t.router({
         const accessToken = await getGoogleAccessToken(ctx);
         const raw = arrayBufferToBase64Url(new TextEncoder().encode(buildMimeMessage(input.draft)));
         const response = input.draft.draftId
-          ? await updateDraft(accessToken, input.draft.draftId, raw)
-          : await createDraft(accessToken, raw);
+          ? await updateDraft(
+              accessToken,
+              input.draft.draftId,
+              raw,
+              input.draft.replyContext?.threadId,
+            )
+          : await createDraft(accessToken, raw, input.draft.replyContext?.threadId);
 
         const parsed = parseDraftMessage(response);
         return {
@@ -428,7 +464,11 @@ export const appRouter = t.router({
           const raw = arrayBufferToBase64Url(
             new TextEncoder().encode(buildMimeMessage(input.draft)),
           );
-          const savedDraft = await createDraft(accessToken, raw);
+          const savedDraft = await createDraft(
+            accessToken,
+            raw,
+            input.draft.replyContext?.threadId,
+          );
           draftId = savedDraft.id;
         }
 

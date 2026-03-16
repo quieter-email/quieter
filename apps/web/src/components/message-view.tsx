@@ -5,6 +5,12 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@quietr/ui";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
+import type { ComposeDraftState } from "~/lib/gmail/compose";
+import {
+  buildComposeDraftFromMessageAction,
+  getPreferredThreadActionMessage,
+  hasDistinctReplyAllRecipients,
+} from "~/lib/gmail/compose-actions";
 import { isMessageUnread, type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
@@ -15,16 +21,20 @@ import { SenderAvatar } from "./sender-avatar";
 
 type MessageViewProps = {
   activeMailbox: MailboxCategory;
+  currentUserEmail?: string | null;
   message: MessageListItem;
+  onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onMarkThreadAsRead?: (threadId: string) => void | Promise<void>;
   onMarkThreadAsUnread?: (threadId: string) => void | Promise<void>;
   onMarkAsRead?: (messageId: string) => void | Promise<void>;
+  onMarkAsSpam?: (messageId: string) => void | Promise<void>;
   onMarkAsUnread?: (messageId: string) => void | Promise<void>;
   onUpdateLabels?: (
     messageId: string,
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => void | Promise<void>;
   onMoveToTrash?: (messageId: string) => void | Promise<void>;
+  onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
   onDeletePermanently?: (messageId: string) => void | Promise<void>;
   isActionPending?: boolean;
 };
@@ -106,11 +116,44 @@ const MessageHeaderContent = ({
   );
 };
 
+const replyActionButtonClassName =
+  "inline-flex h-8 items-center rounded-md border border-border/70 bg-background/70 px-3 text-xs font-medium text-foreground-light transition-colors outline-none hover:border-border hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30";
+
+const MessageComposeActions = ({
+  className,
+  onForward,
+  onReply,
+  onReplyAll,
+  showReplyAll = true,
+}: {
+  className?: string;
+  onForward: () => void;
+  onReply: () => void;
+  onReplyAll: () => void;
+  showReplyAll?: boolean;
+}) => (
+  <div className={cn("flex flex-wrap items-center gap-2", className)}>
+    <button className={replyActionButtonClassName} onClick={onReply} type="button">
+      Reply
+    </button>
+    {showReplyAll ? (
+      <button className={replyActionButtonClassName} onClick={onReplyAll} type="button">
+        Reply all
+      </button>
+    ) : null}
+    <button className={replyActionButtonClassName} onClick={onForward} type="button">
+      Forward
+    </button>
+  </div>
+);
+
 const ThreadMessageBody = ({
+  actions,
   compact,
   expanded,
   message,
 }: {
+  actions?: ReactNode;
   expanded: boolean;
   message: MessageListItem;
   compact?: boolean;
@@ -138,6 +181,7 @@ const ThreadMessageBody = ({
             snippet={message.snippet}
             text={message.bodyText}
           />
+          {actions ? <div className="mt-4 border-t border-border/60 pt-4">{actions}</div> : null}
         </div>
       </div>
     </div>
@@ -146,14 +190,18 @@ const ThreadMessageBody = ({
 
 export const MessageView = ({
   activeMailbox,
+  currentUserEmail,
   isActionPending,
   message,
+  onComposeDraftRequested,
   onDeletePermanently,
   onMarkAsRead,
+  onMarkAsSpam,
   onMarkAsUnread,
   onMarkThreadAsRead,
   onMarkThreadAsUnread,
   onMoveToTrash,
+  onUnmarkAsSpam,
   onUpdateLabels,
 }: MessageViewProps) => {
   const threadQuery = useSuspenseQuery(
@@ -172,12 +220,33 @@ export const MessageView = ({
       messageId: threadMessage.id,
     })),
   );
+  const threadActionMessage = getPreferredThreadActionMessage(messages, currentUserEmail);
+  const showThreadReplyAll = threadActionMessage
+    ? hasDistinctReplyAllRecipients(threadActionMessage, currentUserEmail)
+    : false;
 
   const [expandedMessageId, setExpandedMessageId] = useState<string | null>(null);
 
   useEffect(() => {
     setExpandedMessageId(messages.length > 1 ? (messages[0]?.id ?? null) : null);
   }, [message.threadId]);
+
+  const openComposeAction = (
+    action: "reply" | "reply-all" | "forward",
+    sourceMessage: MessageListItem | null,
+  ) => {
+    if (!sourceMessage || !onComposeDraftRequested) {
+      return;
+    }
+
+    onComposeDraftRequested(
+      buildComposeDraftFromMessageAction({
+        action,
+        currentUserEmail,
+        message: sourceMessage,
+      }),
+    );
+  };
 
   return (
     <article className="mx-auto w-full max-w-5xl space-y-4">
@@ -196,10 +265,12 @@ export const MessageView = ({
             onMarkAsRead={(messageId) => {
               void (onMarkThreadAsRead?.(message.threadId) ?? onMarkAsRead?.(messageId));
             }}
+            onMarkAsSpam={onMarkAsSpam}
             onMarkAsUnread={(messageId) => {
               void (onMarkThreadAsUnread?.(message.threadId) ?? onMarkAsUnread?.(messageId));
             }}
             onMoveToTrash={onMoveToTrash}
+            onUnmarkAsSpam={onUnmarkAsSpam}
             onUpdateLabels={onUpdateLabels}
           />
         </div>
@@ -211,6 +282,16 @@ export const MessageView = ({
         ) : null}
 
         <MessageAttachments attachments={threadAttachments} className="mt-4" />
+
+        {!isSingleMessageThread && threadActionMessage ? (
+          <MessageComposeActions
+            className="mt-4 border-t border-border/60 pt-4"
+            onForward={() => openComposeAction("forward", threadActionMessage)}
+            onReply={() => openComposeAction("reply", threadActionMessage)}
+            onReplyAll={() => openComposeAction("reply-all", threadActionMessage)}
+            showReplyAll={showThreadReplyAll}
+          />
+        ) : null}
       </header>
 
       {!isSingleMessageThread ? (
@@ -261,7 +342,22 @@ export const MessageView = ({
                 </button>
 
                 <div id={`message-body-${threadMessage.id}`}>
-                  <ThreadMessageBody compact expanded={isExpanded} message={threadMessage} />
+                  <ThreadMessageBody
+                    actions={
+                      <MessageComposeActions
+                        onForward={() => openComposeAction("forward", threadMessage)}
+                        onReply={() => openComposeAction("reply", threadMessage)}
+                        onReplyAll={() => openComposeAction("reply-all", threadMessage)}
+                        showReplyAll={hasDistinctReplyAllRecipients(
+                          threadMessage,
+                          currentUserEmail,
+                        )}
+                      />
+                    }
+                    compact
+                    expanded={isExpanded}
+                    message={threadMessage}
+                  />
                 </div>
               </section>
             );
@@ -286,6 +382,13 @@ export const MessageView = ({
                   html={threadMessage.bodyHtml}
                   snippet={threadMessage.snippet}
                   text={threadMessage.bodyText}
+                />
+                <MessageComposeActions
+                  className="mt-4 border-t border-border/60 pt-4"
+                  onForward={() => openComposeAction("forward", threadMessage)}
+                  onReply={() => openComposeAction("reply", threadMessage)}
+                  onReplyAll={() => openComposeAction("reply-all", threadMessage)}
+                  showReplyAll={hasDistinctReplyAllRecipients(threadMessage, currentUserEmail)}
                 />
               </div>
             </div>

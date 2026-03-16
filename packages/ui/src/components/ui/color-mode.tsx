@@ -1,7 +1,7 @@
 "use client";
 
 import { ThemeProvider, useTheme } from "next-themes";
-import { useEffect, useState, type PropsWithChildren } from "react";
+import { useSyncExternalStore, type PropsWithChildren } from "react";
 
 export const COLOR_MODE_STORAGE_KEY = "quietr-color-mode";
 
@@ -11,6 +11,10 @@ export type ConfigColorMode = ColorMode | "system";
 export type ColorModeProviderProps = PropsWithChildren<{
   initialColorMode?: ConfigColorMode;
 }>;
+
+const subscribeToHydration = () => () => {};
+const getClientHydrationSnapshot = () => true;
+const getServerHydrationSnapshot = () => false;
 
 export const ColorModeProvider = ({
   children,
@@ -32,11 +36,11 @@ export const ColorModeProvider = ({
 
 export const useColorMode = () => {
   const { resolvedTheme, setTheme, theme } = useTheme();
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  const isMounted = useSyncExternalStore(
+    subscribeToHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot,
+  );
 
   const configColorMode =
     theme === "light" || theme === "dark" || theme === "system" ? theme : "system";

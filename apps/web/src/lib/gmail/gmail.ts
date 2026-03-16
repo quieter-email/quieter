@@ -1,3 +1,5 @@
+import { MAILBOX_LABELS, type MailboxCategory } from "@quietr/trpc/gmail-service";
+
 export {
   GMAIL_UNREAD_LABEL,
   MAILBOX_LABELS,
@@ -49,4 +51,25 @@ export const applyLabelIdChanges = (
 
 export const isMessageUnread = (message: { isUnread?: boolean; labelIds?: string[] }) => {
   return message.isUnread ?? Boolean(message.labelIds?.includes("UNREAD"));
+};
+
+export const isMessageInMailbox = (message: { labelIds?: string[] }, mailbox: MailboxCategory) => {
+  const labelIds = message.labelIds;
+  if (!labelIds?.includes(MAILBOX_LABELS[mailbox])) {
+    return false;
+  }
+
+  if (mailbox === "trash") {
+    return true;
+  }
+
+  if (labelIds.includes(MAILBOX_LABELS.trash)) {
+    return false;
+  }
+
+  if (mailbox !== "spam" && labelIds.includes(MAILBOX_LABELS.spam)) {
+    return false;
+  }
+
+  return true;
 };

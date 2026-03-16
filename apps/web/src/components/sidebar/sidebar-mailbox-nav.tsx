@@ -1,6 +1,6 @@
 "use client";
 
-import { Delete01Icon, InboxIcon, MailSend02Icon } from "@hugeicons/core-free-icons";
+import { Delete01Icon, Delete02Icon, InboxIcon, MailSend02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { Button, cn } from "@quietr/ui";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
@@ -13,6 +13,7 @@ const SIDEBAR_MAILBOX_ITEMS: ReadonlyArray<{
   { id: "inbox", label: "Inbox", icon: InboxIcon },
   { id: "sent", label: "Sent", icon: MailSend02Icon },
   { id: "trash", label: "Trash", icon: Delete01Icon },
+  { id: "spam", label: "Spam", icon: Delete02Icon },
 ];
 
 type SidebarMailboxNavProps = {

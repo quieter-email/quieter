@@ -9,6 +9,7 @@ import {
 import { usePathname } from "next/navigation";
 import { useQueryStates } from "nuqs";
 import { type Dispatch, useEffect, useReducer } from "react";
+import { cloneComposeDraft, type ComposeDraftState } from "~/lib/gmail/compose";
 import {
   type ListMessagesPageResult,
   type MailboxCategory,
@@ -20,6 +21,7 @@ import {
   getMessagesQueryKey,
   liveSyncQueryOptions,
   markMessageAsReadInMailbox,
+  markMessageAsSpamInMailbox,
   markMessageAsUnreadInMailbox,
   markThreadAsReadInMailbox,
   markThreadAsUnreadInMailbox,
@@ -27,6 +29,7 @@ import {
   moveMessageToTrashInMailbox,
   refreshLoadedMessagesPages,
   syncMessages,
+  unmarkMessageAsSpamInMailbox,
   updateMessageLabelsInMailbox,
 } from "~/lib/gmail/inbox-query";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
@@ -51,6 +54,7 @@ type LabelChangeSet = {
 
 type MailboxWorkspaceState = {
   composeRequestId: number;
+  requestedDraft: ComposeDraftState | null;
   isManualRefreshing: boolean;
   isWindowActive: boolean;
   pendingMessageActionIds: ReadonlySet<string>;
@@ -60,6 +64,7 @@ type MailboxWorkspaceState = {
 type MailboxWorkspaceAction =
   | {
       type: "compose/requested";
+      draft?: ComposeDraftState | null;
     }
   | {
       type: "manual-refresh/set";
@@ -93,10 +98,12 @@ type MailboxWorkspaceViewProps = {
   isThreadActionPending: (threadId: string | null | undefined) => boolean;
   messages: ListMessagesPageResult[];
   onActivateMessage: (messageId: string) => void;
+  onComposeDraftRequested: (draft: ComposeDraftState) => void;
   onComposeNewMail: () => void;
   onDeletePermanently: (messageId: string) => void;
   onLoadMore: () => void;
   onMarkAsRead: (messageId: string) => void;
+  onMarkAsSpam: (messageId: string) => void;
   onMarkAsUnread: (messageId: string) => void;
   onMarkThreadAsRead: (threadId: string) => void;
   onMarkThreadAsUnread: (threadId: string) => void;
@@ -104,6 +111,7 @@ type MailboxWorkspaceViewProps = {
   onRefresh: () => void;
   onSearch: (query: string) => void;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
+  onUnmarkAsSpam: (messageId: string) => void;
   onUpdateLabels: (messageId: string, changes: LabelChangeSet) => void;
   searchQuery: string;
   selectedMessage: MessageListItem | null;
@@ -122,6 +130,7 @@ type MailboxActionHandlerArgs = {
 
 const initialMailboxWorkspaceState: MailboxWorkspaceState = {
   composeRequestId: 0,
+  requestedDraft: null,
   isManualRefreshing: false,
   isWindowActive: false,
   pendingMessageActionIds: new Set(),
@@ -153,6 +162,7 @@ const mailboxWorkspaceReducer = (
       return {
         ...state,
         composeRequestId: state.composeRequestId + 1,
+        requestedDraft: action.draft ? cloneComposeDraft(action.draft) : null,
       };
     case "manual-refresh/set":
       return {
@@ -252,6 +262,12 @@ const createMailboxActionHandlers = ({
     });
   };
 
+  const markMessageAsSpam = async (messageId: string) => {
+    await runMessageAction(messageId, async () => {
+      await markMessageAsSpamInMailbox(queryClient, activeMailbox, activeSearchQuery, messageId);
+    });
+  };
+
   const markThreadAsRead = async (threadId: string) => {
     await runThreadAction(threadId, async () => {
       await markThreadAsReadInMailbox(queryClient, activeMailbox, activeSearchQuery, threadId);
@@ -282,6 +298,12 @@ const createMailboxActionHandlers = ({
     });
   };
 
+  const unmarkMessageAsSpam = async (messageId: string) => {
+    await runMessageAction(messageId, async () => {
+      await unmarkMessageAsSpamInMailbox(queryClient, activeMailbox, activeSearchQuery, messageId);
+    });
+  };
+
   const deleteMessagePermanently = async (messageId: string) => {
     await runMessageAction(messageId, async () => {
       await deleteMessagePermanentlyInMailbox(
@@ -298,10 +320,12 @@ const createMailboxActionHandlers = ({
     isMessageActionPending,
     isThreadActionPending,
     markMessageAsRead,
+    markMessageAsSpam,
     markMessageAsUnread,
     markThreadAsRead,
     markThreadAsUnread,
     moveMessageToTrash,
+    unmarkMessageAsSpam,
     updateMessageLabels,
   };
 };
@@ -315,6 +339,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   );
   const {
     composeRequestId,
+    requestedDraft,
     isManualRefreshing,
     isWindowActive,
     pendingMessageActionIds,
@@ -431,10 +456,12 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     isMessageActionPending,
     isThreadActionPending,
     markMessageAsRead,
+    markMessageAsSpam,
     markMessageAsUnread,
     markThreadAsRead,
     markThreadAsUnread,
     moveMessageToTrash,
+    unmarkMessageAsSpam,
     updateMessageLabels,
   } = createMailboxActionHandlers({
     activeMailbox,
@@ -515,12 +542,21 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
             type: "compose/requested",
           });
         }}
+        onComposeDraftRequested={(draft) => {
+          dispatch({
+            type: "compose/requested",
+            draft,
+          });
+        }}
         onDeletePermanently={(messageId) => {
           void deleteMessagePermanently(messageId);
         }}
         onLoadMore={loadMoreMessages}
         onMarkAsRead={(messageId) => {
           void markMessageAsRead(messageId);
+        }}
+        onMarkAsSpam={(messageId) => {
+          void markMessageAsSpam(messageId);
         }}
         onMarkAsUnread={(messageId) => {
           void markMessageAsUnread(messageId);
@@ -539,6 +575,9 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         }}
         onSearch={applySearch}
         onSelectMailbox={selectMailbox}
+        onUnmarkAsSpam={(messageId) => {
+          void unmarkMessageAsSpam(messageId);
+        }}
         onUpdateLabels={(messageId, changes) => {
           void updateMessageLabels(messageId, changes);
         }}
@@ -550,6 +589,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       <ComposeDialog
         composeRequestId={composeRequestId}
         queryClient={queryClient}
+        requestedDraft={requestedDraft}
         userId={user.id ?? null}
       />
       <LogoDevFooter />
@@ -570,10 +610,12 @@ const MailboxWorkspaceView = ({
   isThreadActionPending,
   messages,
   onActivateMessage,
+  onComposeDraftRequested,
   onComposeNewMail,
   onDeletePermanently,
   onLoadMore,
   onMarkAsRead,
+  onMarkAsSpam,
   onMarkAsUnread,
   onMarkThreadAsRead,
   onMarkThreadAsUnread,
@@ -581,6 +623,7 @@ const MailboxWorkspaceView = ({
   onRefresh,
   onSearch,
   onSelectMailbox,
+  onUnmarkAsSpam,
   onUpdateLabels,
   searchQuery,
   selectedMessage,
@@ -615,10 +658,12 @@ const MailboxWorkspaceView = ({
               onDeletePermanently={onDeletePermanently}
               onLoadMore={onLoadMore}
               onMarkAsRead={onMarkAsRead}
+              onMarkAsSpam={onMarkAsSpam}
               onMarkAsUnread={onMarkAsUnread}
               onMoveToTrash={onMoveToTrash}
               onRefresh={onRefresh}
               onSearch={onSearch}
+              onUnmarkAsSpam={onUnmarkAsSpam}
               onUpdateLabels={onUpdateLabels}
               searchQuery={searchQuery}
             />
@@ -627,16 +672,20 @@ const MailboxWorkspaceView = ({
           <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-background">
             <MessageDetail
               activeMailbox={activeMailbox}
+              currentUserEmail={user.email ?? null}
               isActionPending={
                 isMessageActionPending(selectedMessage?.id) ||
                 isThreadActionPending(selectedMessage?.threadId)
               }
+              onComposeDraftRequested={onComposeDraftRequested}
               onDeletePermanently={onDeletePermanently}
               onMarkAsRead={onMarkAsRead}
+              onMarkAsSpam={onMarkAsSpam}
               onMarkAsUnread={onMarkAsUnread}
               onMarkThreadAsRead={onMarkThreadAsRead}
               onMarkThreadAsUnread={onMarkThreadAsUnread}
               onMoveToTrash={onMoveToTrash}
+              onUnmarkAsSpam={onUnmarkAsSpam}
               onUpdateLabels={onUpdateLabels}
               selectedMessage={selectedMessage}
             />

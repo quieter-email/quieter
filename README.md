@@ -39,7 +39,7 @@
   - `src/lib/server-auth.ts`: cached server-side session helpers and redirects
   - `src/lib/query-client.ts`: shared React Query client factory
   - `src/lib/query-persister.ts`: shared TanStack query persistence helpers with eager browser-cache restore
-  - `src/lib/search-params.ts`: shared nuqs parsers/loaders/serializers for mailbox, message, and search URL state
+  - `src/lib/search-params.ts`: shared nuqs parsers/loaders/serializers for mailbox, message, and search URL state, including the Spam mailbox
   - `src/lib/auth.ts`: Better Auth React client wrapper
   - `src/lib/gmail/compose.ts`: compose state, draft hydration, attachment runtime handling, and send/delete helpers through tRPC
   - `src/lib/gmail/compose-query.ts`: persisted compose session query keys scoped by `userId`
@@ -53,7 +53,7 @@
   - `src/components/settings-screen.tsx`: settings UI for theme, account profile, passkeys, sign-out, account deletion, and placeholder email-change verification
   - `src/components/compose-dialog.tsx`: `New Mail` modal with autosave and continue-last-draft affordance
   - `src/components/compose-editor.tsx`: Tiptap editor shell and toolbar used by compose
-  - `src/components/mail-sidebar.tsx`: user profile and mailbox-folder navigation
+  - `src/components/mail-sidebar.tsx`: user profile and mailbox-folder navigation, including Inbox, Spam, Sent, and Trash
 - `packages/auth`: Better Auth server configuration
   - `src/index.ts`: Better Auth config with Google OAuth, passkeys, magic links, email-change verification placeholders, account deletion, and Next.js cookies
   - `src/email-placeholder.ts`: in-memory placeholder store for magic-link and verification URLs
@@ -63,8 +63,8 @@
   - `src/client.ts`: Neon + Drizzle client
   - `drizzle.config.ts`: Drizzle Kit config
 - `packages/trpc`: shared tRPC router, context, server handler, and client
-  - `src/router.ts`: auth lookup procedures plus user-scoped Gmail list/search procedures and mailbox history sync procedures
-  - `src/gmail-service.ts`: shared Gmail API helpers and response typing used by the router and web app, including raw Gmail `q` filtering
+  - `src/router.ts`: auth lookup procedures plus user-scoped Gmail list/search procedures, mailbox history sync procedures, and message actions for Spam/Trash flows
+  - `src/gmail-service.ts`: shared Gmail API helpers and response typing used by the router and web app, including raw Gmail `q` filtering and Gmail system-label mailbox mapping
   - `src/server.ts`: `fetchRequestHandler` wrapper
   - `src/client.ts`: typed `createTrpcClient`
 - `packages/ui`: shared Tailwind theme, next-themes wrapper, and styled UI components built on Base UI, Vaul, and Sonner
@@ -97,7 +97,7 @@
 
 - Inbox list and thread data are cached with TanStack Query and restored from browser storage before any network sync runs.
 - The message list will auto-prefetch at most one extra page on mount to fill an empty viewport, which avoids chain-loading many pages before the user scrolls.
-- The inbox search bar forwards raw Gmail advanced-search syntax to the Gmail API `q` parameter while still respecting the currently selected mailbox label.
+- The inbox search bar forwards raw Gmail advanced-search syntax to the Gmail API `q` parameter while still respecting the currently selected mailbox label, including Spam.
 - Freshness uses Gmail `historyId` checks on mount, focus/reconnect, interval polling, and manual refresh.
 - Automatic sync now consumes Gmail history deltas directly and patches/removes loaded cached messages by id instead of relying on a fixed loaded-message cutoff.
 - Mailbox membership changes still refresh page 1 so the top of the list and Gmail pagination cursor stay canonical without brute-force reloading every cached page.

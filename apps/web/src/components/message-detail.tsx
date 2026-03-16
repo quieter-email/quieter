@@ -3,35 +3,44 @@
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Suspense } from "react";
+import type { ComposeDraftState } from "~/lib/gmail/compose";
 import type { MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
 import { EmptyMessageState } from "./empty-message-state";
 import { MessageView } from "./message-view";
 
 type MessageDetailProps = {
   activeMailbox: MailboxCategory;
+  currentUserEmail?: string | null;
   selectedMessage: MessageListItem | null;
+  onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onMarkThreadAsRead?: (threadId: string) => void | Promise<void>;
   onMarkThreadAsUnread?: (threadId: string) => void | Promise<void>;
   onMarkAsRead?: (messageId: string) => void | Promise<void>;
+  onMarkAsSpam?: (messageId: string) => void | Promise<void>;
   onMarkAsUnread?: (messageId: string) => void | Promise<void>;
   onUpdateLabels?: (
     messageId: string,
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => void | Promise<void>;
   onMoveToTrash?: (messageId: string) => void | Promise<void>;
+  onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
   onDeletePermanently?: (messageId: string) => void | Promise<void>;
   isActionPending?: boolean;
 };
 
 export const MessageDetail = ({
   activeMailbox,
+  currentUserEmail,
   isActionPending,
+  onComposeDraftRequested,
   onDeletePermanently,
   onMarkAsRead,
+  onMarkAsSpam,
   onMarkAsUnread,
   onMarkThreadAsRead,
   onMarkThreadAsUnread,
   onMoveToTrash,
+  onUnmarkAsSpam,
   onUpdateLabels,
   selectedMessage,
 }: MessageDetailProps) => (
@@ -50,14 +59,18 @@ export const MessageDetail = ({
         >
           <MessageView
             activeMailbox={activeMailbox}
+            currentUserEmail={currentUserEmail}
             isActionPending={isActionPending}
             message={selectedMessage}
+            onComposeDraftRequested={onComposeDraftRequested}
             onDeletePermanently={onDeletePermanently}
             onMarkAsRead={onMarkAsRead}
+            onMarkAsSpam={onMarkAsSpam}
             onMarkAsUnread={onMarkAsUnread}
             onMarkThreadAsRead={onMarkThreadAsRead}
             onMarkThreadAsUnread={onMarkThreadAsUnread}
             onMoveToTrash={onMoveToTrash}
+            onUnmarkAsSpam={onUnmarkAsSpam}
             onUpdateLabels={onUpdateLabels}
           />
         </Suspense>

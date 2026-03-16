@@ -31,6 +31,7 @@ import { ComposeEditor } from "./compose-editor";
 type ComposeDialogProps = {
   composeRequestId: number;
   queryClient: QueryClient;
+  requestedDraft: ComposeDraftState | null;
   userId: string | null;
 };
 
@@ -80,6 +81,7 @@ const formValuesToDraft = (
     | "localId"
     | "draftId"
     | "messageId"
+    | "replyContext"
     | "attachments"
     | "inlineImages"
     | "saveStatus"
@@ -155,12 +157,17 @@ const cloneFormValues = (values: ComposeFormValues): ComposeFormValues => ({
   ...values,
 });
 
-export const ComposeDialog = ({ composeRequestId, queryClient, userId }: ComposeDialogProps) => {
+export const ComposeDialog = ({
+  composeRequestId,
+  queryClient,
+  requestedDraft,
+  userId,
+}: ComposeDialogProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
   const [transitionBusy, setTransitionBusy] = useState(false);
-  const [composeSession, setComposeSessionState] = useState<ComposeSessionState>(
+  const [composeSession, setComposeSessionState] = useState<ComposeSessionState>(() =>
     createInitialComposeSessionState(),
   );
   const [formValues, setFormValuesState] = useState<ComposeFormValues>(emptyFormValues);
@@ -245,6 +252,7 @@ export const ComposeDialog = ({ composeRequestId, queryClient, userId }: Compose
       localId: meta.localId,
       draftId: meta.draftId,
       messageId: meta.messageId,
+      replyContext: meta.replyContext,
       attachments: meta.attachments,
       inlineImages: meta.inlineImages,
       saveStatus: "idle",
@@ -332,7 +340,7 @@ export const ComposeDialog = ({ composeRequestId, queryClient, userId }: Compose
     }, 500);
   };
 
-  const openNewMail = () => {
+  const openComposeDraft = (nextDraft: ComposeDraftState | null) => {
     if (!userId) {
       return;
     }
@@ -340,26 +348,32 @@ export const ComposeDialog = ({ composeRequestId, queryClient, userId }: Compose
     clearTimeout(autosaveTimerRef.current);
 
     const currentDraft = buildDraftFromForm(formValuesRef.current);
-    const nextActiveDraft = createEmptyComposeDraft();
+    const currentSession = composeSessionRef.current;
+    const nextActiveDraft = nextDraft ? cloneComposeDraft(nextDraft) : createEmptyComposeDraft();
     const nextLastDraft = hasComposeDraftContent(currentDraft)
       ? cloneComposeDraft(currentDraft)
-      : lastDraft
-        ? cloneComposeDraft(lastDraft)
+      : currentSession.lastDraft
+        ? cloneComposeDraft(currentSession.lastDraft)
         : null;
-
-    setComposeSession({
+    const nextSession = {
       activeDraft: nextActiveDraft,
       lastDraft: nextLastDraft,
-    });
-    resetComposeForm(emptyFormValues);
-    setShowCc(false);
-    setShowBcc(false);
+    };
+
+    setComposeSession(nextSession);
+    syncComposeDraftIntoForm(nextActiveDraft);
     setDialogOpen(true);
 
     if (hasComposeDraftContent(currentDraft)) {
       const localId = currentDraft.localId;
-      const savingSession = cloneComposeSessionState(composeSessionRef.current);
-      savingSession.activeDraft = { ...currentDraft, saveStatus: "saving", errorMessage: null };
+      const savingSession = cloneComposeSessionState(nextSession);
+      if (savingSession.lastDraft?.localId === localId) {
+        savingSession.lastDraft = {
+          ...savingSession.lastDraft,
+          saveStatus: "saving",
+          errorMessage: null,
+        };
+      }
       setComposeSession(savingSession);
 
       void saveComposeDraft(currentDraft)
@@ -516,8 +530,8 @@ export const ComposeDialog = ({ composeRequestId, queryClient, userId }: Compose
     }
 
     lastComposeRequestIdRef.current = composeRequestId;
-    openNewMail();
-  }, [composeRequestId, userId]);
+    openComposeDraft(requestedDraft);
+  }, [composeRequestId, requestedDraft, userId]);
 
   useEffect(() => {
     return () => {

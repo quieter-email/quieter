@@ -40,7 +40,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
   - `src/lib/server-auth.ts`: Cached server-side session helpers and redirects.
   - `src/lib/query-client.ts`: Shared React Query client factory.
   - `src/lib/query-persister.ts`: Shared TanStack query persister helpers for eager browser-cache restore and manual cache writes.
-  - `src/lib/search-params.ts`: Shared nuqs parsers/loaders/serializers for app URL state, including mailbox search queries.
+  - `src/lib/search-params.ts`: Shared nuqs parsers/loaders/serializers for app URL state, including mailbox search queries and the Spam mailbox.
   - `src/lib/auth.ts`: Better Auth React client wrapper.
   - `src/lib/gmail/compose.ts`: User-scoped draft hydration helpers, attachment runtime store, and compose state types.
   - `src/lib/gmail/compose-query.ts`: Persisted compose session query keys keyed by user id.
@@ -54,7 +54,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
   - `src/components/settings-screen.tsx`: Client settings UI for theme, profile, passkeys, sign-out, account deletion, and placeholder email-change verification.
   - `src/components/compose-dialog.tsx`: `New Mail` modal with autosave and continue-last-draft affordance.
   - `src/components/compose-editor.tsx`: Tiptap editor shell and toolbar used by compose.
-  - `src/components/mail-sidebar.tsx`: Sidebar showing the current user profile and mailbox-folder navigation.
+  - `src/components/mail-sidebar.tsx`: Sidebar showing the current user profile and mailbox-folder navigation across Inbox, Spam, Sent, and Trash.
 - `packages/auth/`: Better Auth server package.
   - `src/index.ts`: Better Auth configuration with Google OAuth, passkeys, magic links, email-change verification placeholders, account deletion, and Next.js cookies.
   - `src/email-placeholder.ts`: In-memory placeholder store for magic-link and verification URLs.
@@ -104,8 +104,8 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 
 - App calls `@quietr/trpc` from `apps/web/src/lib/trpc.ts` through the shared raw client and TanStack Query tRPC context.
 - Requests are handled in `apps/web/src/app/api/trpc/[...path]/route.ts` using `@quietr/trpc/server`.
-- Router procedures cover auth email-status/preview lookups plus Gmail list/thread/history-sync/label/draft/attachment/message actions.
-- Mailbox list queries can forward raw Gmail advanced-search syntax through the Gmail API `q` parameter while still applying the selected mailbox label.
+- Router procedures cover auth email-status/preview lookups plus Gmail list/thread/history-sync/label/draft/attachment/message actions, including Spam/Not Spam flows.
+- Mailbox list queries can forward raw Gmail advanced-search syntax through the Gmail API `q` parameter while still applying the selected mailbox label, including Spam.
 - Browser-side TanStack Query persistence is the primary Gmail cache and is restored before inbox queries mount.
 - Sender avatars are derived at request time from the message sender and are not persisted in Postgres.
 - Manual `queryClient.setQueryData` writes are persisted with `persistQueryByKey` so optimistic cache updates survive reloads.

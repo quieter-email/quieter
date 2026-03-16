@@ -8,6 +8,7 @@ import { getSenderAvatarUrls } from "./sender-avatar";
 
 export const MAILBOX_LABELS = {
   inbox: "INBOX",
+  spam: "SPAM",
   sent: "SENT",
   trash: "TRASH",
 } as const;
@@ -164,6 +165,11 @@ export type MessageListItem = {
   snippet?: string;
   subject?: string;
   from?: string;
+  to?: string;
+  cc?: string;
+  replyTo?: string;
+  messageHeaderId?: string;
+  references?: string;
   date?: string;
   internalDate?: string;
   bodyHtml?: string;
@@ -213,7 +219,16 @@ export { decodeMimeHeaderValue, extractMessageContent };
 const GMAIL_BATCH_MESSAGE_CHUNK_SIZE = 25;
 const GMAIL_METADATA_RETRY_LIMIT = 2;
 const GMAIL_METADATA_RETRY_BASE_DELAY_MS = 250;
-const GMAIL_MESSAGE_METADATA_HEADERS = ["Subject", "From", "Date"] as const;
+const GMAIL_MESSAGE_METADATA_HEADERS = [
+  "Subject",
+  "From",
+  "To",
+  "Cc",
+  "Reply-To",
+  "Date",
+  "Message-ID",
+  "References",
+] as const;
 const GMAIL_MESSAGE_METADATA_FIELDS =
   "id,threadId,labelIds,snippet,historyId,internalDate,payload(headers(name,value))";
 const GMAIL_MESSAGE_LIST_FIELDS = "messages(id,threadId),nextPageToken,resultSizeEstimate";
@@ -422,6 +437,11 @@ const toMessageListItem = async (
     snippet: decodeMimeHeaderValue(message.snippet),
     subject: getHeader(message, "Subject"),
     from,
+    to: getHeader(message, "To"),
+    cc: getHeader(message, "Cc"),
+    replyTo: getHeader(message, "Reply-To"),
+    messageHeaderId: getHeader(message, "Message-ID"),
+    references: getHeader(message, "References"),
     date: getHeader(message, "Date"),
     internalDate: message.internalDate,
     bodyHtml: content.html,
@@ -454,13 +474,15 @@ const listMessages = async (
     signal?: AbortSignal;
   },
 ) => {
+  const includesSpamTrash = options?.mailbox === "spam" || options?.mailbox === "trash";
+
   return await requestGmail(accessToken, "/gmail/v1/users/me/messages", listMessagesSchema, {
     query: {
       fields: GMAIL_MESSAGE_LIST_FIELDS,
       maxResults: options?.maxResults ?? 20,
       pageToken: options?.pageToken,
       labelIds: options?.mailbox ? [MAILBOX_LABELS[options.mailbox]] : undefined,
-      includeSpamTrash: options?.mailbox === "trash" ? true : undefined,
+      includeSpamTrash: includesSpamTrash ? true : undefined,
       q: options?.query?.trim() || undefined,
     },
     signal: options?.signal,
@@ -1019,11 +1041,17 @@ export const getDraft = async (
 export const createDraft = async (
   accessToken: string,
   raw: string,
+  threadId?: string,
   signal?: AbortSignal,
 ): Promise<GmailDraft> => {
   return await requestGmail(accessToken, "/gmail/v1/users/me/drafts", gmailDraftSchema, {
     method: "POST",
-    body: { message: { raw } },
+    body: {
+      message: {
+        raw,
+        threadId,
+      },
+    },
     signal,
   });
 };
@@ -1032,6 +1060,7 @@ export const updateDraft = async (
   accessToken: string,
   draftId: string,
   raw: string,
+  threadId?: string,
   signal?: AbortSignal,
 ): Promise<GmailDraft> => {
   return await requestGmail(
@@ -1040,7 +1069,13 @@ export const updateDraft = async (
     gmailDraftSchema,
     {
       method: "PUT",
-      body: { id: draftId, message: { raw } },
+      body: {
+        id: draftId,
+        message: {
+          raw,
+          threadId,
+        },
+      },
       signal,
     },
   );
