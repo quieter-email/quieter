@@ -1,10 +1,9 @@
 "use client";
 
-import type { VariantProps } from "class-variance-authority";
 import type { ComponentPropsWithoutRef } from "react";
 import { Field as FieldPrimitive } from "@base-ui/react/field";
+import type { InputChrome, InputSize } from "./input";
 import { cn } from "../../lib/cn";
-import { inputVariants } from "./input-styles";
 
 export const Field = ({
   className,
@@ -45,7 +44,22 @@ export const FieldControl = ({
   className,
   size,
   ...props
-}: Omit<ComponentPropsWithoutRef<typeof FieldPrimitive.Control>, "size"> &
-  VariantProps<typeof inputVariants>) => (
-  <FieldPrimitive.Control className={cn(inputVariants({ chrome, size }), className)} {...props} />
+}: Omit<ComponentPropsWithoutRef<typeof FieldPrimitive.Control>, "size"> & {
+  chrome?: InputChrome;
+  size?: InputSize;
+}) => (
+  <FieldPrimitive.Control
+    className={cn(
+      "w-full text-foreground transition-colors duration-150 ease-out outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:ring-destructive/20",
+      chrome !== "ghost" &&
+        "rounded-md border border-input bg-background shadow-sm read-only:cursor-default read-only:bg-muted/30 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20",
+      chrome === "ghost" &&
+        "border-0 bg-transparent shadow-none read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0",
+      size === "sm" && "h-8 px-3 text-[13px]",
+      (size === undefined || size === "default") && "h-9 px-3 text-sm",
+      size === "lg" && "h-10 px-4 text-base",
+      className,
+    )}
+    {...props}
+  />
 );

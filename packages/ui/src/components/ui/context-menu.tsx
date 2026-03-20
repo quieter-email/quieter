@@ -10,6 +10,7 @@ export const ContextMenuPortal = ContextMenuPrimitive.Portal;
 
 export const ContextMenuContent = ({
   align = "center",
+  alignOffset = 0,
   className,
   side = "bottom",
   sideOffset = 6,
@@ -17,13 +18,19 @@ export const ContextMenuContent = ({
 }: ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Popup> &
   Pick<
     ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Positioner>,
-    "align" | "side" | "sideOffset"
+    "align" | "alignOffset" | "side" | "sideOffset"
   >) => (
   <ContextMenuPortal>
-    <ContextMenuPrimitive.Positioner align={align} side={side} sideOffset={sideOffset}>
+    <ContextMenuPrimitive.Positioner
+      align={align}
+      alignOffset={alignOffset}
+      className="z-50"
+      side={side}
+      sideOffset={sideOffset}
+    >
       <ContextMenuPrimitive.Popup
         className={cn(
-          "z-50 min-w-52 rounded-lg border border-border bg-popover p-1 text-sm text-popover-foreground shadow-md",
+          "z-50 min-w-52 origin-[var(--transform-origin)] rounded-lg border border-border bg-popover p-1 text-sm text-popover-foreground shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] outline-none data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[instant]:transition-none data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
           className,
         )}
         {...props}

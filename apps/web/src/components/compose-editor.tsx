@@ -4,14 +4,13 @@ import {
   ArrowTurnBackwardIcon,
   LeftToRightListBulletIcon,
   LeftToRightListNumberIcon,
-  Link01Icon,
   QuoteUpIcon,
   TextBoldIcon,
   TextItalicIcon,
   TextUnderlineIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { cn } from "@quietr/ui";
+import { cn, IconButtonTooltip } from "@quietr/ui";
 import FileHandler from "@tiptap/extension-file-handler";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
@@ -41,10 +40,6 @@ type ComposeEditorProps = {
   onInlineImageFiles: (files: File[]) => void | Promise<void>;
 };
 
-const normalizeMarkup = (value: string) => {
-  return normalizeComposeBodyHtml(value);
-};
-
 export const ComposeEditor = ({
   disabled,
   html,
@@ -53,6 +48,7 @@ export const ComposeEditor = ({
   onInlineImageFiles,
 }: ComposeEditorProps) => {
   const lastSyncedHtmlRef = useRef(html);
+  const editorPlaceholderClassName = "min-h-72 text-[15px] leading-[1.75] text-muted-foreground/75";
 
   const editor = useEditor({
     autofocus: false,
@@ -70,7 +66,7 @@ export const ComposeEditor = ({
       }),
       Underline,
       Link.configure({
-        openOnClick: false,
+        openOnClick: true,
         autolink: true,
         defaultProtocol: "https",
       }),
@@ -103,6 +99,8 @@ export const ComposeEditor = ({
     },
   });
 
+  // Tiptap's useEditor with default deps merges options but preserves `editable`; toggling
+  // `disabled` must call setEditable so the instance matches without recreating the editor.
   useEffect(() => {
     if (!editor) return;
     editor.setEditable(!disabled);
@@ -111,30 +109,13 @@ export const ComposeEditor = ({
   useEffect(() => {
     if (!editor) return;
 
-    const current = normalizeMarkup(editor.getHTML());
-    const next = normalizeMarkup(html);
+    const current = normalizeComposeBodyHtml(editor.getHTML());
+    const next = normalizeComposeBodyHtml(html);
 
-    if (current === next || normalizeMarkup(lastSyncedHtmlRef.current) === next) return;
+    if (current === next || normalizeComposeBodyHtml(lastSyncedHtmlRef.current) === next) return;
     editor.commands.setContent(next || "<p></p>", { emitUpdate: false });
     lastSyncedHtmlRef.current = editor.getHTML();
   }, [editor, html]);
-
-  const openLinkPrompt = () => {
-    if (!editor || disabled) return;
-
-    const previousUrl = editor.getAttributes("link").href as string | undefined;
-    const url = window.prompt("Enter link URL", previousUrl ?? "https://");
-
-    if (url === null) return;
-    const normalizedUrl = url.trim();
-
-    if (!normalizedUrl) {
-      editor.chain().focus().unsetLink().run();
-      return;
-    }
-
-    editor.chain().focus().extendMarkRange("link").setLink({ href: normalizedUrl }).run();
-  };
 
   const toolbarActions = [
     {
@@ -160,14 +141,6 @@ export const ComposeEditor = ({
       active: Boolean(editor?.isActive("underline")),
       disabled: !editor?.can().chain().focus().toggleUnderline().run(),
       onClick: () => editor?.chain().focus().toggleUnderline().run(),
-    },
-    {
-      id: "link",
-      label: "Link",
-      icon: Link01Icon,
-      active: Boolean(editor?.isActive("link")),
-      disabled: !editor,
-      onClick: openLinkPrompt,
     },
     {
       id: "bullet-list",
@@ -217,7 +190,13 @@ export const ComposeEditor = ({
       )}
     >
       <div className="px-4 py-4">
-        <EditorContent editor={editor} />
+        {editor ? (
+          <EditorContent editor={editor} />
+        ) : (
+          <div aria-hidden className={editorPlaceholderClassName}>
+            Write your message...
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-1 px-3 pb-3">
@@ -225,24 +204,25 @@ export const ComposeEditor = ({
           const isDisabled = Boolean(disabled || action.disabled);
 
           return (
-            <button
-              aria-label={action.label}
-              className={cn(
-                "inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/55 hover:text-foreground focus-visible:outline-none",
-                action.active && "bg-muted/75 text-foreground",
-                isDisabled && "opacity-35 hover:bg-transparent hover:text-muted-foreground",
-              )}
-              disabled={isDisabled}
-              key={action.id}
-              onClick={() => action.onClick()}
-              onMouseDown={(event) => event.preventDefault()}
-              type="button"
-            >
-              <HugeiconsIcon
-                className={cn("size-4", action.id === "redo" && "-scale-x-100")}
-                icon={action.icon}
-              />
-            </button>
+            <IconButtonTooltip key={action.id} label={action.label}>
+              <button
+                aria-label={action.label}
+                className={cn(
+                  "inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/55 hover:text-foreground focus-visible:outline-none",
+                  action.active && "bg-muted/75 text-foreground",
+                  isDisabled && "opacity-35 hover:bg-transparent hover:text-muted-foreground",
+                )}
+                disabled={isDisabled}
+                onClick={() => action.onClick()}
+                onMouseDown={(event) => event.preventDefault()}
+                type="button"
+              >
+                <HugeiconsIcon
+                  className={cn("size-4", action.id === "redo" && "-scale-x-100")}
+                  icon={action.icon}
+                />
+              </button>
+            </IconButtonTooltip>
           );
         })}
       </div>

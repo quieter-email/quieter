@@ -8,15 +8,19 @@ import {
 } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
 import { useQueryStates } from "nuqs";
-import { type Dispatch, useEffect, useReducer } from "react";
-import { cloneComposeDraft, type ComposeDraftState } from "~/lib/gmail/compose";
+import { type Dispatch, useEffect, useLayoutEffect, useReducer, useRef } from "react";
+import type { ComposeDraftState } from "~/lib/gmail/compose";
+import type { ThreadListEntry } from "~/lib/gmail/thread-list";
+import { buildComposeDraftFromSavedDraftMessage } from "~/lib/gmail/compose-actions";
 import {
   type ListMessagesPageResult,
   type MailboxCategory,
   type MessageListItem,
 } from "~/lib/gmail/gmail";
 import {
+  deleteDraftInMailbox,
   deleteMessagePermanentlyInMailbox,
+  deleteThreadPermanentlyInMailbox,
   getLiveSyncQueryKey,
   getMessagesQueryKey,
   liveSyncQueryOptions,
@@ -24,17 +28,20 @@ import {
   markMessageAsSpamInMailbox,
   markMessageAsUnreadInMailbox,
   markThreadAsReadInMailbox,
+  markThreadAsSpamInMailbox,
   markThreadAsUnreadInMailbox,
   messagesQueryOptions,
+  moveThreadToTrashInMailbox,
   moveMessageToTrashInMailbox,
   refreshLoadedMessagesPages,
   syncMessages,
+  unmarkThreadAsSpamInMailbox,
   unmarkMessageAsSpamInMailbox,
   updateMessageLabelsInMailbox,
 } from "~/lib/gmail/inbox-query";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
 import { mailboxSearchParams } from "~/lib/search-params";
-import { ComposeDialog } from "./compose-dialog";
+import { type ComposeDialogHandle, ComposeDialog } from "./compose-dialog";
 import { MailSidebar } from "./mail-sidebar";
 import { MessageDetail } from "./message-detail";
 import { MessageList } from "./message-list";
@@ -53,8 +60,6 @@ type LabelChangeSet = {
 };
 
 type MailboxWorkspaceState = {
-  composeRequestId: number;
-  requestedDraft: ComposeDraftState | null;
   isManualRefreshing: boolean;
   isWindowActive: boolean;
   pendingMessageActionIds: ReadonlySet<string>;
@@ -62,10 +67,6 @@ type MailboxWorkspaceState = {
 };
 
 type MailboxWorkspaceAction =
-  | {
-      type: "compose/requested";
-      draft?: ComposeDraftState | null;
-    }
   | {
       type: "manual-refresh/set";
       value: boolean;
@@ -80,17 +81,35 @@ type MailboxWorkspaceAction =
       pending: boolean;
     }
   | {
+      type: "message-pending-many/set";
+      messageIds: string[];
+      pending: boolean;
+    }
+  | {
       type: "thread-pending/set";
       pending: boolean;
       threadId: string;
+    }
+  | {
+      type: "thread-pending-many/set";
+      pending: boolean;
+      threadIds: string[];
     };
 
 type MailboxWorkspaceViewProps = {
   activeMailbox: MailboxCategory;
   activeMessageId: string | null;
+  onBulkDeleteDrafts: (threads: ThreadListEntry[]) => void;
+  onBulkDeletePermanently: (threads: ThreadListEntry[]) => void;
+  onBulkMarkAsRead: (threads: ThreadListEntry[]) => void;
+  onBulkMarkAsSpam: (threads: ThreadListEntry[]) => void;
+  onBulkMarkAsUnread: (threads: ThreadListEntry[]) => void;
+  onBulkMoveToTrash: (threads: ThreadListEntry[]) => void;
+  onBulkUnmarkAsSpam: (threads: ThreadListEntry[]) => void;
   error: Error | null;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
+  onDeleteDraft: (message: MessageListItem) => void;
   isMessageActionPending: (messageId: string | null | undefined) => boolean;
   isMessagesError: boolean;
   isMessagesPending: boolean;
@@ -108,6 +127,7 @@ type MailboxWorkspaceViewProps = {
   onMarkThreadAsRead: (threadId: string) => void;
   onMarkThreadAsUnread: (threadId: string) => void;
   onMoveToTrash: (messageId: string) => void;
+  onOpenDraft: (message: MessageListItem) => void;
   onRefresh: () => void;
   onSearch: (query: string) => void;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
@@ -129,8 +149,6 @@ type MailboxActionHandlerArgs = {
 };
 
 const initialMailboxWorkspaceState: MailboxWorkspaceState = {
-  composeRequestId: 0,
-  requestedDraft: null,
   isManualRefreshing: false,
   isWindowActive: false,
   pendingMessageActionIds: new Set(),
@@ -139,15 +157,17 @@ const initialMailboxWorkspaceState: MailboxWorkspaceState = {
 
 const updatePendingIds = (
   current: ReadonlySet<string>,
-  id: string,
+  ids: readonly string[],
   pending: boolean,
 ): ReadonlySet<string> => {
   const next = new Set(current);
 
-  if (pending) {
-    next.add(id);
-  } else {
-    next.delete(id);
+  for (const id of ids) {
+    if (pending) {
+      next.add(id);
+    } else {
+      next.delete(id);
+    }
   }
 
   return next;
@@ -158,12 +178,6 @@ const mailboxWorkspaceReducer = (
   action: MailboxWorkspaceAction,
 ): MailboxWorkspaceState => {
   switch (action.type) {
-    case "compose/requested":
-      return {
-        ...state,
-        composeRequestId: state.composeRequestId + 1,
-        requestedDraft: action.draft ? cloneComposeDraft(action.draft) : null,
-      };
     case "manual-refresh/set":
       return {
         ...state,
@@ -179,7 +193,16 @@ const mailboxWorkspaceReducer = (
         ...state,
         pendingMessageActionIds: updatePendingIds(
           state.pendingMessageActionIds,
-          action.messageId,
+          [action.messageId],
+          action.pending,
+        ),
+      };
+    case "message-pending-many/set":
+      return {
+        ...state,
+        pendingMessageActionIds: updatePendingIds(
+          state.pendingMessageActionIds,
+          action.messageIds,
           action.pending,
         ),
       };
@@ -188,7 +211,16 @@ const mailboxWorkspaceReducer = (
         ...state,
         pendingThreadActionIds: updatePendingIds(
           state.pendingThreadActionIds,
-          action.threadId,
+          [action.threadId],
+          action.pending,
+        ),
+      };
+    case "thread-pending-many/set":
+      return {
+        ...state,
+        pendingThreadActionIds: updatePendingIds(
+          state.pendingThreadActionIds,
+          action.threadIds,
           action.pending,
         ),
       };
@@ -210,6 +242,9 @@ const createMailboxActionHandlers = ({
   const isThreadActionPending = (threadId: string | null | undefined) =>
     threadId ? pendingThreadActionIds.has(threadId) : false;
 
+  const getUniqueIds = (ids: readonly string[]) =>
+    Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+
   const setMessageActionPending = (messageId: string, pending: boolean) => {
     dispatch({
       type: "message-pending/set",
@@ -223,6 +258,24 @@ const createMailboxActionHandlers = ({
       type: "thread-pending/set",
       pending,
       threadId,
+    });
+  };
+
+  const setMessageActionsPending = (messageIds: string[], pending: boolean) => {
+    if (messageIds.length === 0) return;
+    dispatch({
+      type: "message-pending-many/set",
+      messageIds,
+      pending,
+    });
+  };
+
+  const setThreadActionsPending = (threadIds: string[], pending: boolean) => {
+    if (threadIds.length === 0) return;
+    dispatch({
+      type: "thread-pending-many/set",
+      pending,
+      threadIds,
     });
   };
 
@@ -247,6 +300,86 @@ const createMailboxActionHandlers = ({
       await refreshSearchResultsIfNeeded();
     } finally {
       setThreadActionPending(threadId, false);
+    }
+  };
+
+  const runBulkMessageAction = async (
+    messageIds: readonly string[],
+    action: (messageId: string) => Promise<void>,
+  ) => {
+    const actionableMessageIds = getUniqueIds(messageIds).filter(
+      (messageId) => !isMessageActionPending(messageId),
+    );
+    if (actionableMessageIds.length === 0) return;
+
+    setMessageActionsPending(actionableMessageIds, true);
+
+    let actionError: unknown = null;
+    let shouldRefreshSearchResults = false;
+
+    try {
+      for (const messageId of actionableMessageIds) {
+        await action(messageId);
+        shouldRefreshSearchResults = true;
+      }
+    } catch (error) {
+      actionError = error;
+    } finally {
+      setMessageActionsPending(actionableMessageIds, false);
+    }
+
+    if (shouldRefreshSearchResults) {
+      try {
+        await refreshSearchResultsIfNeeded();
+      } catch (refreshError) {
+        if (!actionError) {
+          throw refreshError;
+        }
+      }
+    }
+
+    if (actionError) {
+      throw actionError;
+    }
+  };
+
+  const runBulkThreadAction = async (
+    threadIds: readonly string[],
+    action: (threadId: string) => Promise<void>,
+  ) => {
+    const actionableThreadIds = getUniqueIds(threadIds).filter(
+      (threadId) => !isThreadActionPending(threadId),
+    );
+    if (actionableThreadIds.length === 0) return;
+
+    setThreadActionsPending(actionableThreadIds, true);
+
+    let actionError: unknown = null;
+    let shouldRefreshSearchResults = false;
+
+    try {
+      for (const threadId of actionableThreadIds) {
+        await action(threadId);
+        shouldRefreshSearchResults = true;
+      }
+    } catch (error) {
+      actionError = error;
+    } finally {
+      setThreadActionsPending(actionableThreadIds, false);
+    }
+
+    if (shouldRefreshSearchResults) {
+      try {
+        await refreshSearchResultsIfNeeded();
+      } catch (refreshError) {
+        if (!actionError) {
+          throw refreshError;
+        }
+      }
+    }
+
+    if (actionError) {
+      throw actionError;
     }
   };
 
@@ -304,6 +437,20 @@ const createMailboxActionHandlers = ({
     });
   };
 
+  const deleteDraft = async (message: MessageListItem) => {
+    if (!message.draftId) return;
+
+    await runMessageAction(message.id, async () => {
+      await deleteDraftInMailbox(
+        queryClient,
+        activeMailbox,
+        activeSearchQuery,
+        message.id,
+        message.draftId!,
+      );
+    });
+  };
+
   const deleteMessagePermanently = async (messageId: string) => {
     await runMessageAction(messageId, async () => {
       await deleteMessagePermanentlyInMailbox(
@@ -315,16 +462,98 @@ const createMailboxActionHandlers = ({
     });
   };
 
+  const deleteDrafts = async (threads: ThreadListEntry[]) => {
+    const draftsByMessageId = new Map(
+      threads.flatMap((thread) => {
+        const message = thread.anchorMessage;
+        return message.draftId ? [[message.id, message.draftId] as const] : [];
+      }),
+    );
+
+    await runBulkMessageAction(Array.from(draftsByMessageId.keys()), async (messageId) => {
+      const draftId = draftsByMessageId.get(messageId);
+      if (!draftId) return;
+      await deleteDraftInMailbox(queryClient, activeMailbox, activeSearchQuery, messageId, draftId);
+    });
+  };
+
+  const markThreadsAsRead = async (threads: ThreadListEntry[]) => {
+    await runBulkThreadAction(
+      threads.map((thread) => thread.threadId),
+      async (threadId) => {
+        await markThreadAsReadInMailbox(queryClient, activeMailbox, activeSearchQuery, threadId);
+      },
+    );
+  };
+
+  const markThreadsAsUnread = async (threads: ThreadListEntry[]) => {
+    await runBulkThreadAction(
+      threads.map((thread) => thread.threadId),
+      async (threadId) => {
+        await markThreadAsUnreadInMailbox(queryClient, activeMailbox, activeSearchQuery, threadId);
+      },
+    );
+  };
+
+  const markThreadsAsSpam = async (threads: ThreadListEntry[]) => {
+    await runBulkThreadAction(
+      threads.map((thread) => thread.threadId),
+      async (threadId) => {
+        await markThreadAsSpamInMailbox(queryClient, activeMailbox, activeSearchQuery, threadId);
+      },
+    );
+  };
+
+  const unmarkThreadsAsSpam = async (threads: ThreadListEntry[]) => {
+    await runBulkThreadAction(
+      threads.map((thread) => thread.threadId),
+      async (threadId) => {
+        await unmarkThreadAsSpamInMailbox(queryClient, activeMailbox, activeSearchQuery, threadId);
+      },
+    );
+  };
+
+  const moveThreadsToTrash = async (threads: ThreadListEntry[]) => {
+    await runBulkThreadAction(
+      threads.map((thread) => thread.threadId),
+      async (threadId) => {
+        await moveThreadToTrashInMailbox(queryClient, activeMailbox, activeSearchQuery, threadId);
+      },
+    );
+  };
+
+  const deleteThreadsPermanently = async (threads: ThreadListEntry[]) => {
+    await runBulkThreadAction(
+      threads.map((thread) => thread.threadId),
+      async (threadId) => {
+        await deleteThreadPermanentlyInMailbox(
+          queryClient,
+          activeMailbox,
+          activeSearchQuery,
+          threadId,
+        );
+      },
+    );
+  };
+
   return {
+    deleteDraft,
+    deleteDrafts,
     deleteMessagePermanently,
+    deleteThreadsPermanently,
     isMessageActionPending,
     isThreadActionPending,
     markMessageAsRead,
     markMessageAsSpam,
     markMessageAsUnread,
     markThreadAsRead,
+    markThreadsAsRead,
+    markThreadsAsSpam,
+    markThreadsAsUnread,
     markThreadAsUnread,
+    moveThreadsToTrash,
     moveMessageToTrash,
+    unmarkThreadsAsSpam,
     unmarkMessageAsSpam,
     updateMessageLabels,
   };
@@ -333,18 +562,13 @@ const createMailboxActionHandlers = ({
 export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const pathname = usePathname();
   const queryClient = useQueryClient();
+  const composeDialogRef = useRef<ComposeDialogHandle | null>(null);
   const [workspaceState, dispatch] = useReducer(
     mailboxWorkspaceReducer,
     initialMailboxWorkspaceState,
   );
-  const {
-    composeRequestId,
-    requestedDraft,
-    isManualRefreshing,
-    isWindowActive,
-    pendingMessageActionIds,
-    pendingThreadActionIds,
-  } = workspaceState;
+  const { isManualRefreshing, isWindowActive, pendingMessageActionIds, pendingThreadActionIds } =
+    workspaceState;
   const [{ mailbox: activeMailbox, messageId: activeMessageId, query }, setMailboxQuery] =
     useQueryStates(mailboxSearchParams, {
       history: "replace",
@@ -358,6 +582,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const hasLoadedMessages = Boolean(messagesQuery.data?.pages.length);
   const isLiveSyncEnabled =
     pathname === "/" &&
+    activeMailbox !== "drafts" &&
     activeSearchQuery.length === 0 &&
     isWindowActive &&
     hasLoadedMessages &&
@@ -395,7 +620,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   };
 
   let selectedMessage: MessageListItem | null = null;
-  if (activeMessageId) {
+  if (activeMailbox !== "drafts" && activeMessageId) {
     for (const message of flattenedMessages) {
       if (message.id === activeMessageId) {
         selectedMessage = message;
@@ -424,15 +649,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     };
   }, []);
 
-  useEffect(() => {
-    if (isLiveSyncEnabled) return;
-
-    void queryClient.cancelQueries({
-      queryKey: getLiveSyncQueryKey(activeMailbox, activeSearchQuery),
-    });
-  }, [activeMailbox, activeSearchQuery, isLiveSyncEnabled, queryClient]);
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (
       !activeMessageId ||
       messagesQuery.isPending ||
@@ -452,15 +669,23 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   ]);
 
   const {
+    deleteDraft,
+    deleteDrafts,
     deleteMessagePermanently,
+    deleteThreadsPermanently,
     isMessageActionPending,
     isThreadActionPending,
     markMessageAsRead,
     markMessageAsSpam,
     markMessageAsUnread,
     markThreadAsRead,
+    markThreadsAsRead,
+    markThreadsAsSpam,
+    markThreadsAsUnread,
     markThreadAsUnread,
+    moveThreadsToTrash,
     moveMessageToTrash,
+    unmarkThreadsAsSpam,
     unmarkMessageAsSpam,
     updateMessageLabels,
   } = createMailboxActionHandlers({
@@ -473,7 +698,24 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     refreshSearchResultsIfNeeded,
   });
 
+  const openDraft = (message: MessageListItem) => {
+    if (!message.draftId) {
+      return;
+    }
+
+    void setMailboxQuery({ messageId: null });
+    composeDialogRef.current?.openDraft(buildComposeDraftFromSavedDraftMessage(message));
+  };
+
   const activateMessage = (messageId: string) => {
+    if (activeMailbox === "drafts") {
+      const draftMessage = flattenedMessages.find((message) => message.id === messageId);
+      if (draftMessage) {
+        openDraft(draftMessage);
+      }
+      return;
+    }
+
     if (activeMessageId === messageId) return;
     const threadId = flattenedMessages.find((message) => message.id === messageId)?.threadId;
 
@@ -527,9 +769,33 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       <MailboxWorkspaceView
         activeMailbox={activeMailbox}
         activeMessageId={activeMessageId}
+        onBulkDeleteDrafts={(threads) => {
+          void deleteDrafts(threads);
+        }}
+        onBulkDeletePermanently={(threads) => {
+          void deleteThreadsPermanently(threads);
+        }}
+        onBulkMarkAsRead={(threads) => {
+          void markThreadsAsRead(threads);
+        }}
+        onBulkMarkAsSpam={(threads) => {
+          void markThreadsAsSpam(threads);
+        }}
+        onBulkMarkAsUnread={(threads) => {
+          void markThreadsAsUnread(threads);
+        }}
+        onBulkMoveToTrash={(threads) => {
+          void moveThreadsToTrash(threads);
+        }}
+        onBulkUnmarkAsSpam={(threads) => {
+          void unmarkThreadsAsSpam(threads);
+        }}
         error={messagesQuery.error ?? null}
         hasNextPage={Boolean(messagesQuery.hasNextPage)}
         isFetchingNextPage={messagesQuery.isFetchingNextPage}
+        onDeleteDraft={(message) => {
+          void deleteDraft(message);
+        }}
         isMessageActionPending={isMessageActionPending}
         isMessagesError={messagesQuery.isError}
         isMessagesPending={messagesQuery.isPending}
@@ -538,15 +804,10 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         messages={messagesQuery.data?.pages ?? []}
         onActivateMessage={activateMessage}
         onComposeNewMail={() => {
-          dispatch({
-            type: "compose/requested",
-          });
+          composeDialogRef.current?.openNewMail();
         }}
         onComposeDraftRequested={(draft) => {
-          dispatch({
-            type: "compose/requested",
-            draft,
-          });
+          composeDialogRef.current?.openDraft(draft);
         }}
         onDeletePermanently={(messageId) => {
           void deleteMessagePermanently(messageId);
@@ -570,6 +831,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         onMoveToTrash={(messageId) => {
           void moveMessageToTrash(messageId);
         }}
+        onOpenDraft={openDraft}
         onRefresh={() => {
           void refreshMessages();
         }}
@@ -587,9 +849,8 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       />
 
       <ComposeDialog
-        composeRequestId={composeRequestId}
-        queryClient={queryClient}
-        requestedDraft={requestedDraft}
+        key={user.id ?? "signed-out"}
+        ref={composeDialogRef}
         userId={user.id ?? null}
       />
       <LogoDevFooter />
@@ -600,9 +861,17 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
 const MailboxWorkspaceView = ({
   activeMailbox,
   activeMessageId,
+  onBulkDeleteDrafts,
+  onBulkDeletePermanently,
+  onBulkMarkAsRead,
+  onBulkMarkAsSpam,
+  onBulkMarkAsUnread,
+  onBulkMoveToTrash,
+  onBulkUnmarkAsSpam,
   error,
   hasNextPage,
   isFetchingNextPage,
+  onDeleteDraft,
   isMessageActionPending,
   isMessagesError,
   isMessagesPending,
@@ -620,6 +889,7 @@ const MailboxWorkspaceView = ({
   onMarkThreadAsRead,
   onMarkThreadAsUnread,
   onMoveToTrash,
+  onOpenDraft,
   onRefresh,
   onSearch,
   onSelectMailbox,
@@ -646,10 +916,19 @@ const MailboxWorkspaceView = ({
             <MessageList
               activeMailbox={activeMailbox}
               activeMessageId={activeMessageId}
+              isThreadActionPending={isThreadActionPending}
+              onBulkDeleteDrafts={onBulkDeleteDrafts}
+              onBulkDeletePermanently={onBulkDeletePermanently}
+              onBulkMarkAsRead={onBulkMarkAsRead}
+              onBulkMarkAsSpam={onBulkMarkAsSpam}
+              onBulkMarkAsUnread={onBulkMarkAsUnread}
+              onBulkMoveToTrash={onBulkMoveToTrash}
+              onBulkUnmarkAsSpam={onBulkUnmarkAsSpam}
               error={error}
               hasNextPage={hasNextPage}
               isError={isMessagesError}
               isFetchingNextPage={isFetchingNextPage}
+              onDeleteDraft={onDeleteDraft}
               isMessageActionPending={isMessageActionPending}
               isPending={isMessagesPending}
               isRefreshing={isRefreshing}
@@ -661,6 +940,7 @@ const MailboxWorkspaceView = ({
               onMarkAsSpam={onMarkAsSpam}
               onMarkAsUnread={onMarkAsUnread}
               onMoveToTrash={onMoveToTrash}
+              onOpenDraft={onOpenDraft}
               onRefresh={onRefresh}
               onSearch={onSearch}
               onUnmarkAsSpam={onUnmarkAsSpam}

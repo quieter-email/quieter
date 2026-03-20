@@ -22,6 +22,7 @@
     "@quietr/ui": "workspace:*",
     "@tanstack/query-persist-client-core": "catalog:",
     "@tanstack/react-form": "catalog:",
+    "@tanstack/react-hotkeys": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-virtual": "catalog:",
     "@tiptap/core": "^3.20.1",

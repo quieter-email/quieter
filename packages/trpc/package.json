@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/client.ts",
+    "./compose": "./src/compose.ts",
     "./context": "./src/context.ts",
     "./server": "./src/server.ts",
     "./router": "./src/router.ts",

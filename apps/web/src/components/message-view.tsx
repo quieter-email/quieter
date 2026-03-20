@@ -4,7 +4,7 @@ import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@quietr/ui";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { ComposeDraftState } from "~/lib/gmail/compose";
 import {
   buildComposeDraftFromMessageAction,
@@ -188,6 +188,104 @@ const ThreadMessageBody = ({
   </div>
 );
 
+const ThreadMessageList = ({
+  currentUserEmail,
+  messages,
+  onComposeDraftRequested,
+}: {
+  currentUserEmail?: string | null;
+  messages: MessageListItem[];
+  onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+}) => {
+  const [expandedMessageId, setExpandedMessageId] = useState<string | null>(
+    messages[0]?.id ?? null,
+  );
+
+  const openComposeAction = (
+    action: "reply" | "reply-all" | "forward",
+    sourceMessage: MessageListItem | null,
+  ) => {
+    if (!sourceMessage || !onComposeDraftRequested) {
+      return;
+    }
+
+    onComposeDraftRequested(
+      buildComposeDraftFromMessageAction({
+        action,
+        currentUserEmail,
+        message: sourceMessage,
+      }),
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      {messages.map((threadMessage) => {
+        const isExpanded = expandedMessageId === threadMessage.id;
+
+        return (
+          <section
+            className={cn(
+              "overflow-hidden rounded-xl border border-border transition-colors duration-200",
+              {
+                "bg-background-light": isExpanded,
+                "bg-muted/40": isMessageUnread(threadMessage) && !isExpanded,
+                "bg-background hover:bg-muted/30": !isExpanded && !isMessageUnread(threadMessage),
+              },
+            )}
+            key={threadMessage.id}
+          >
+            <button
+              aria-controls={`message-body-${threadMessage.id}`}
+              aria-expanded={isExpanded}
+              className="w-full text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              onClick={() => {
+                setExpandedMessageId((current) =>
+                  current === threadMessage.id ? null : threadMessage.id,
+                );
+              }}
+              type="button"
+            >
+              <MessageHeaderContent
+                className="px-4 py-4 sm:px-5 sm:py-4"
+                isExpanded={isExpanded}
+                message={threadMessage}
+                previewMode="collapsed"
+                trailing={
+                  <HugeiconsIcon
+                    aria-hidden="true"
+                    className={cn(
+                      "size-4 text-muted-foreground transition-transform duration-200",
+                      isExpanded && "rotate-180 text-foreground/80",
+                    )}
+                    icon={ArrowDown01Icon}
+                  />
+                }
+              />
+            </button>
+
+            <div id={`message-body-${threadMessage.id}`}>
+              <ThreadMessageBody
+                actions={
+                  <MessageComposeActions
+                    onForward={() => openComposeAction("forward", threadMessage)}
+                    onReply={() => openComposeAction("reply", threadMessage)}
+                    onReplyAll={() => openComposeAction("reply-all", threadMessage)}
+                    showReplyAll={hasDistinctReplyAllRecipients(threadMessage, currentUserEmail)}
+                  />
+                }
+                compact
+                expanded={isExpanded}
+                message={threadMessage}
+              />
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+};
+
 export const MessageView = ({
   activeMailbox,
   currentUserEmail,
@@ -224,12 +322,6 @@ export const MessageView = ({
   const showThreadReplyAll = threadActionMessage
     ? hasDistinctReplyAllRecipients(threadActionMessage, currentUserEmail)
     : false;
-
-  const [expandedMessageId, setExpandedMessageId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setExpandedMessageId(messages.length > 1 ? (messages[0]?.id ?? null) : null);
-  }, [message.threadId]);
 
   const openComposeAction = (
     action: "reply" | "reply-all" | "forward",
@@ -295,74 +387,12 @@ export const MessageView = ({
       </header>
 
       {!isSingleMessageThread ? (
-        <div className="flex flex-col gap-3">
-          {messages.map((threadMessage) => {
-            const isExpanded = expandedMessageId === threadMessage.id;
-
-            return (
-              <section
-                className={cn(
-                  "overflow-hidden rounded-xl border border-border transition-colors duration-200",
-                  {
-                    "bg-background-light": isExpanded,
-                    "bg-muted/40": isMessageUnread(threadMessage) && !isExpanded,
-                    "bg-background hover:bg-muted/30":
-                      !isExpanded && !isMessageUnread(threadMessage),
-                  },
-                )}
-                key={threadMessage.id}
-              >
-                <button
-                  aria-controls={`message-body-${threadMessage.id}`}
-                  aria-expanded={isExpanded}
-                  className="w-full text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-                  onClick={() => {
-                    setExpandedMessageId((current) =>
-                      current === threadMessage.id ? null : threadMessage.id,
-                    );
-                  }}
-                  type="button"
-                >
-                  <MessageHeaderContent
-                    className="px-4 py-4 sm:px-5 sm:py-4"
-                    isExpanded={isExpanded}
-                    message={threadMessage}
-                    previewMode="collapsed"
-                    trailing={
-                      <HugeiconsIcon
-                        aria-hidden="true"
-                        className={cn(
-                          "size-4 text-muted-foreground transition-transform duration-200",
-                          isExpanded && "rotate-180 text-foreground/80",
-                        )}
-                        icon={ArrowDown01Icon}
-                      />
-                    }
-                  />
-                </button>
-
-                <div id={`message-body-${threadMessage.id}`}>
-                  <ThreadMessageBody
-                    actions={
-                      <MessageComposeActions
-                        onForward={() => openComposeAction("forward", threadMessage)}
-                        onReply={() => openComposeAction("reply", threadMessage)}
-                        onReplyAll={() => openComposeAction("reply-all", threadMessage)}
-                        showReplyAll={hasDistinctReplyAllRecipients(
-                          threadMessage,
-                          currentUserEmail,
-                        )}
-                      />
-                    }
-                    compact
-                    expanded={isExpanded}
-                    message={threadMessage}
-                  />
-                </div>
-              </section>
-            );
-          })}
-        </div>
+        <ThreadMessageList
+          currentUserEmail={currentUserEmail}
+          key={message.threadId}
+          messages={messages}
+          onComposeDraftRequested={onComposeDraftRequested}
+        />
       ) : (
         messages.map((threadMessage) => (
           <section

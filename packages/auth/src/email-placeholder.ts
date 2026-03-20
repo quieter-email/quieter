@@ -10,20 +10,18 @@ type AuthEmailPreview = {
 
 const previews = new Map<string, AuthEmailPreview>();
 
-const normalizeEmail = (email: string) => email.trim().toLowerCase();
-
 export const storeAuthEmailPreview = (
   preview: Omit<AuthEmailPreview, "createdAt" | "email"> & {
     email: string;
   },
 ) => {
-  previews.set(normalizeEmail(preview.email), {
+  previews.set(preview.email.trim().toLowerCase(), {
     ...preview,
     createdAt: Date.now(),
-    email: normalizeEmail(preview.email),
+    email: preview.email.trim().toLowerCase(),
   });
 };
 
 export const getAuthEmailPreview = (email: string) => {
-  return previews.get(normalizeEmail(email)) ?? null;
+  return previews.get(email.trim().toLowerCase()) ?? null;
 };

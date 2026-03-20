@@ -22,6 +22,10 @@ export type ExtractedMessageAttachment = {
   size: number;
 };
 
+export type ExtractedInlineMessageAttachment = ExtractedMessageAttachment & {
+  contentId: string;
+};
+
 const UTF8_CHARSET = "utf-8";
 
 const EDGE_NOISE_REGEX = /^[\s\p{Cf}\u034F]+|[\s\p{Cf}\u034F]+$/gu;
@@ -354,6 +358,37 @@ export const extractMessageAttachments = (
 
     attachments.push({
       attachmentId,
+      fileName,
+      mimeType: normalizeMimeType(part.mimeType) || "application/octet-stream",
+      size: part.body?.size ?? 0,
+    });
+  }
+
+  return attachments;
+};
+
+export const extractInlineMessageAttachments = (
+  payload: GmailMessagePart | undefined,
+): ExtractedInlineMessageAttachment[] => {
+  const attachments: ExtractedInlineMessageAttachment[] = [];
+  const seenAttachments = new Set<string>();
+  const referencedInlineContentIds = extractReferencedInlineContentIds(payload);
+
+  for (const [index, part] of collectParts(payload).entries()) {
+    const attachmentId = part.body?.attachmentId?.trim();
+    if (!attachmentId) continue;
+
+    const contentId = normalizeContentId(getHeader(part, "Content-ID"));
+    if (!contentId || !referencedInlineContentIds.has(contentId)) continue;
+
+    const fileName = getAttachmentFileName(part, index);
+    const dedupeKey = `${attachmentId}:${fileName}:${contentId}`;
+    if (seenAttachments.has(dedupeKey)) continue;
+    seenAttachments.add(dedupeKey);
+
+    attachments.push({
+      attachmentId,
+      contentId,
       fileName,
       mimeType: normalizeMimeType(part.mimeType) || "application/octet-stream",
       size: part.body?.size ?? 0,

@@ -1,11 +1,7 @@
 import { db, tables } from "@quietr/database";
 import { eq, sql } from "drizzle-orm";
 
-const normalizeEmail = (email: string) => email.trim().toLowerCase();
-
 export const getAuthUserStatus = async (email: string) => {
-  const normalizedEmail = normalizeEmail(email);
-
   const [result] = await db
     .select({
       email: tables.user.email,
@@ -18,11 +14,11 @@ export const getAuthUserStatus = async (email: string) => {
       )`,
     })
     .from(tables.user)
-    .where(eq(tables.user.email, normalizedEmail))
+    .where(eq(tables.user.email, email.trim().toLowerCase()))
     .limit(1);
 
   return {
-    email: normalizedEmail,
+    email: email.trim().toLowerCase(),
     exists: result?.exists ?? false,
     hasGoogleAccount: result?.hasGoogleAccount ?? false,
   };

@@ -9,7 +9,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
-import { signIn } from "~/lib/auth";
+import { authClient } from "~/lib/auth";
+import { getErrorMessage, getFieldErrorMessage } from "~/lib/errors";
 import { useTRPC } from "~/lib/trpc";
 
 type AuthMode = "login" | "signup";
@@ -34,31 +35,6 @@ const authFormSchemas = {
     name: z.string().trim().min(1, "Name is required."),
   }),
 } satisfies Record<AuthMode, z.ZodType<AuthFormValues>>;
-
-const getErrorMessage = (error: unknown, fallback: string) => {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  return fallback;
-};
-
-const getFieldErrorMessage = (error: unknown) => {
-  if (typeof error === "string") {
-    return error;
-  }
-
-  if (
-    error &&
-    typeof error === "object" &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
-    return error.message;
-  }
-
-  return null;
-};
 
 const getAuthErrorLabel = (code: string | null) => {
   switch (code) {
@@ -129,7 +105,7 @@ export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
 
   const googleMutation = useMutation({
     mutationFn: async () => {
-      const response = await signIn.social({
+      const response = await authClient.signIn.social({
         provider: "google",
         callbackURL: "/",
       });
@@ -143,7 +119,7 @@ export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
 
   const passkeyMutation = useMutation({
     mutationFn: async () => {
-      const response = await signIn.passkey();
+      const response = await authClient.signIn.passkey();
       const responseError = getAuthResponseError(response, "Could not sign in with a passkey.");
       if (responseError) {
         throw new Error(responseError);
@@ -175,7 +151,7 @@ export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
         throw new Error("That email needs to sign up first.");
       }
 
-      const response = await signIn.magicLink({
+      const response = await authClient.signIn.magicLink({
         callbackURL: "/",
         email: normalizedEmail,
         errorCallbackURL: isSignup ? "/signup" : "/login",

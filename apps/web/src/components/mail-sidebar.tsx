@@ -15,6 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  IconButtonTooltip,
   useColorMode,
 } from "@quietr/ui";
 import { usePathname, useRouter } from "next/navigation";
@@ -69,12 +70,14 @@ export const MailSidebar = ({
           </div>
 
           <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label="Settings"
-              className="flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            >
-              <HugeiconsIcon aria-hidden className="size-4" icon={Menu04Icon} />
-            </DropdownMenuTrigger>
+            <IconButtonTooltip label="Profile options">
+              <DropdownMenuTrigger
+                aria-label="Profile options"
+                className="flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              >
+                <HugeiconsIcon aria-hidden className="size-4" icon={Menu04Icon} />
+              </DropdownMenuTrigger>
+            </IconButtonTooltip>
 
             <DropdownMenuContent className="min-w-48" side="right">
               <DropdownMenuItem

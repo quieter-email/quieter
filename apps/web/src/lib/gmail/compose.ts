@@ -1,4 +1,6 @@
+import { findInvalidMailAddresses } from "@quietr/trpc/compose";
 import { trpc } from "~/lib/trpc";
+import { loadAttachmentFromServer } from "./attachments";
 export { loadAttachmentFromServer } from "./attachments";
 
 const MAX_TOTAL_ATTACHMENT_BYTES = 24 * 1024 * 1024;
@@ -30,6 +32,17 @@ export type ComposeAttachment = {
 };
 
 export type ComposeInlineImage = ComposeAttachment & {
+  contentId: string;
+};
+
+type DraftAttachmentPayload = {
+  attachmentId: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+};
+
+type DraftInlineImagePayload = DraftAttachmentPayload & {
   contentId: string;
 };
 
@@ -149,23 +162,7 @@ export const clearComposeDraftRuntimeFiles = (draft: ComposeDraftState) => {
   }
 };
 
-const splitRecipients = (value: string): string[] =>
-  value
-    .split(/[\n,;]/g)
-    .map((part) => normalizeString(part))
-    .filter(Boolean);
-
-const extractAddress = (value: string): string => {
-  const match = value.match(/<([^>]+)>/);
-  return normalizeString(match?.[1] ?? value);
-};
-
-export const validateRecipientInput = (value: string): string[] => {
-  return splitRecipients(value).filter((recipient) => {
-    const address = extractAddress(recipient);
-    return !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(address);
-  });
-};
+export const validateRecipientInput = (value: string): string[] => findInvalidMailAddresses(value);
 
 const htmlToText = (html: string): string => {
   if (!html) return "";
@@ -233,28 +230,36 @@ const hydrateBytesFromRuntime = async <T extends ComposeAttachment | ComposeInli
   } as T;
 };
 
-const createInlineImageFromFile = async (file: File): Promise<ComposeInlineImage> => {
-  const id = createLocalId();
+const createInlineImageFromFile = async (
+  file: File,
+  options?: { contentId?: string; gmailAttachmentId?: string; id?: string },
+): Promise<ComposeInlineImage> => {
+  const id = options?.id ?? createLocalId();
   rememberRuntimeFile(id, file);
   return {
     id,
     name: file.name,
     mimeType: file.type || "application/octet-stream",
     size: file.size,
-    contentId: `${CONTENT_ID_PREFIX}-${id}`,
+    contentId: options?.contentId ?? `${CONTENT_ID_PREFIX}-${id}`,
+    gmailAttachmentId: options?.gmailAttachmentId,
     bytes: await fileToBytes(file),
     isInline: true,
   };
 };
 
-const createAttachmentFromFile = async (file: File): Promise<ComposeAttachment> => {
-  const id = createLocalId();
+const createAttachmentFromFile = async (
+  file: File,
+  options?: { gmailAttachmentId?: string; id?: string },
+): Promise<ComposeAttachment> => {
+  const id = options?.id ?? createLocalId();
   rememberRuntimeFile(id, file);
   return {
     id,
     name: file.name,
     mimeType: file.type || "application/octet-stream",
     size: file.size,
+    gmailAttachmentId: options?.gmailAttachmentId,
     bytes: await fileToBytes(file),
     isInline: false,
   };
@@ -334,20 +339,70 @@ const updateInlineImageHtml = (
   if (!html || !isBrowser) return html;
 
   const inlineImageById = new Map(inlineImages.map((image) => [image.id, image] as const));
+  const inlineImageByContentId = new Map(
+    inlineImages.map((image) => [
+      image.contentId.trim().replace(/^<|>$/g, "").toLowerCase(),
+      image,
+    ]),
+  );
   const doc = new DOMParser().parseFromString(html, "text/html");
 
-  for (const image of Array.from(doc.querySelectorAll("img[data-compose-inline-id]"))) {
+  for (const image of Array.from(doc.querySelectorAll("img"))) {
     const imageId = image.getAttribute("data-compose-inline-id");
-    if (!imageId) continue;
-    const asset = inlineImageById.get(imageId);
+    const cidSource = image.getAttribute("src") ?? "";
+    const cidMatch = cidSource.match(/^cid:(.+)$/i);
+    const normalizedContentId = cidMatch?.[1]?.trim().replace(/^<|>$/g, "").toLowerCase();
+    const asset = imageId
+      ? inlineImageById.get(imageId)
+      : normalizedContentId
+        ? inlineImageByContentId.get(normalizedContentId)
+        : undefined;
     if (!asset) continue;
     const objectUrl = getComposeRuntimeObjectUrl(asset.id);
     if (objectUrl) {
       image.setAttribute("src", objectUrl);
+      image.setAttribute("data-compose-inline-id", asset.id);
     }
   }
 
   return doc.body.innerHTML.trim();
+};
+
+const hydrateDraftAttachment = async (
+  messageId: string,
+  attachment: DraftAttachmentPayload,
+  signal?: AbortSignal,
+) => {
+  const file = await loadAttachmentFromServer(
+    messageId,
+    attachment.attachmentId,
+    attachment.fileName,
+    attachment.mimeType,
+    signal,
+  );
+
+  return await createAttachmentFromFile(file, {
+    gmailAttachmentId: attachment.attachmentId,
+  });
+};
+
+const hydrateDraftInlineImage = async (
+  messageId: string,
+  inlineImage: DraftInlineImagePayload,
+  signal?: AbortSignal,
+) => {
+  const file = await loadAttachmentFromServer(
+    messageId,
+    inlineImage.attachmentId,
+    inlineImage.fileName,
+    inlineImage.mimeType,
+    signal,
+  );
+
+  return await createInlineImageFromFile(file, {
+    contentId: inlineImage.contentId,
+    gmailAttachmentId: inlineImage.attachmentId,
+  });
 };
 
 export const hydrateComposeDraftRuntime = async (
@@ -357,15 +412,35 @@ export const hydrateComposeDraftRuntime = async (
   if (!draft.draftId) return draft;
 
   const response = await trpc.gmail.loadDraft.query({ draftId: draft.draftId }, { signal });
+  const attachments =
+    response.messageId && response.attachments.length > 0
+      ? await Promise.all(
+          response.attachments.map(
+            async (attachment) =>
+              await hydrateDraftAttachment(response.messageId!, attachment, signal),
+          ),
+        )
+      : [];
+  const inlineImages =
+    response.messageId && response.inlineImages.length > 0
+      ? await Promise.all(
+          response.inlineImages.map(
+            async (inlineImage) =>
+              await hydrateDraftInlineImage(response.messageId!, inlineImage, signal),
+          ),
+        )
+      : [];
 
   return {
     ...draft,
     messageId: response.messageId ?? draft.messageId,
     recipients: response.recipients,
     subject: response.subject,
+    attachments,
+    inlineImages,
     bodyHtml: updateInlineImageHtml(
       response.bodyHtml,
-      draft.inlineImages.slice(0, MAX_VISIBLE_INLINE_DRAFTS),
+      inlineImages.slice(0, MAX_VISIBLE_INLINE_DRAFTS),
     ),
     bodyText: response.bodyText || htmlToText(response.bodyHtml),
     saveStatus: "saved",

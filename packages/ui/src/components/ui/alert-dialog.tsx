@@ -2,9 +2,8 @@
 
 import type { ComponentPropsWithoutRef } from "react";
 import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog";
+import type { ButtonProps } from "./button";
 import { cn } from "../../lib/cn";
-import { buttonVariants } from "./button";
-import { overlayBackdropClassName, overlayPanelClassName } from "./shared";
 
 export const AlertDialog = AlertDialogPrimitive.Root;
 export const AlertDialogTrigger = AlertDialogPrimitive.Trigger;
@@ -16,11 +15,14 @@ export const AlertDialogContent = ({
   ...props
 }: ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Popup>) => (
   <AlertDialogPortal>
-    <AlertDialogPrimitive.Backdrop className={overlayBackdropClassName} />
+    <AlertDialogPrimitive.Backdrop
+      className={cn(
+        "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity duration-150 ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
+      )}
+    />
     <AlertDialogPrimitive.Popup
       className={cn(
-        overlayPanelClassName,
-        "fixed top-1/2 left-1/2 z-50 w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "fixed top-1/2 left-1/2 z-50 w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0",
         className,
       )}
       {...props}
@@ -67,10 +69,21 @@ export const AlertDialogCloseButton = ({
   variant = "outline",
   ...props
 }: ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Close> & {
-  variant?: "default" | "outline" | "ghost" | "destructive";
+  variant?: ButtonProps["variant"];
 }) => (
   <AlertDialogPrimitive.Close
-    className={cn(buttonVariants({ size: "sm", variant }), "min-w-20", className)}
+    className={cn(
+      "inline-flex min-w-20 shrink-0 items-center justify-center gap-2 rounded-md px-3.5 text-[13px] leading-none font-medium whitespace-nowrap transition-colors duration-150 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+      variant === "default" &&
+        "h-8 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/85",
+      variant === "outline" &&
+        "h-8 border border-input bg-background text-foreground shadow-sm hover:bg-muted/60 active:bg-muted/80",
+      variant === "ghost" &&
+        "h-8 bg-transparent text-foreground-light hover:bg-muted/60 hover:text-foreground active:bg-muted/80",
+      variant === "destructive" &&
+        "h-8 bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
+      className,
+    )}
     {...props}
   />
 );

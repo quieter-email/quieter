@@ -72,7 +72,12 @@ const UNMARK_AS_SPAM_LABEL_CHANGES = {
 
 const MOVE_TO_TRASH_LABEL_CHANGES = {
   addLabelIds: [MAILBOX_LABELS.trash],
-  removeLabelIds: [MAILBOX_LABELS.inbox, MAILBOX_LABELS.spam],
+  removeLabelIds: [
+    MAILBOX_LABELS.inbox,
+    MAILBOX_LABELS.spam,
+    MAILBOX_LABELS.sent,
+    MAILBOX_LABELS.drafts,
+  ],
 } as const;
 
 const parsePageToken = (value: unknown): string | undefined => {
@@ -231,11 +236,18 @@ const removeMessageFromQueryData = (
   data: MessagesQueryData | undefined,
   messageId: string,
 ): MessagesQueryData | undefined => {
+  return removeMessagesFromQueryData(data, (message) => message.id === messageId);
+};
+
+const removeMessagesFromQueryData = (
+  data: MessagesQueryData | undefined,
+  predicate: (message: MessageListItem) => boolean,
+): MessagesQueryData | undefined => {
   if (!data) return data;
 
   let hasChanges = false;
   const pages = data.pages.map((page) => {
-    const messages = page.messages.filter((message) => message.id !== messageId);
+    const messages = page.messages.filter((message) => !predicate(message));
     if (messages.length === page.messages.length) return page;
     hasChanges = true;
     return { ...page, messages };
@@ -248,8 +260,15 @@ const removeMessageFromThreadData = (
   data: ThreadMessagesResult | undefined,
   messageId: string,
 ): ThreadMessagesResult | undefined => {
+  return removeMessagesFromThreadData(data, (message) => message.id === messageId);
+};
+
+const removeMessagesFromThreadData = (
+  data: ThreadMessagesResult | undefined,
+  predicate: (message: MessageListItem) => boolean,
+): ThreadMessagesResult | undefined => {
   if (!data) return data;
-  const messages = data.messages.filter((message) => message.id !== messageId);
+  const messages = data.messages.filter((message) => !predicate(message));
   return messages.length === data.messages.length ? data : { ...data, messages };
 };
 
@@ -428,7 +447,11 @@ const applySyncDeltaToQueryData = (
 };
 
 const isMailboxCategory = (value: unknown): value is MailboxCategory =>
-  value === "inbox" || value === "spam" || value === "sent" || value === "trash";
+  value === "inbox" ||
+  value === "spam" ||
+  value === "sent" ||
+  value === "trash" ||
+  value === "drafts";
 
 const getCachedMessagesQueries = (queryClient: QueryClient): CachedMessagesQuery[] => {
   return queryClient
@@ -563,10 +586,17 @@ const updateMessagesInCachedMailboxQueries = (
 };
 
 const removeMessageFromCachedMailboxQueries = (queryClient: QueryClient, messageId: string) => {
+  return removeMessagesFromCachedMailboxQueries(queryClient, (message) => message.id === messageId);
+};
+
+const removeMessagesFromCachedMailboxQueries = (
+  queryClient: QueryClient,
+  predicate: (message: MessageListItem) => boolean,
+) => {
   const touchedQueryKeys: Array<ReturnType<typeof getMessagesQueryKey>> = [];
 
   for (const cachedQuery of getCachedMessagesQueries(queryClient)) {
-    const nextData = removeMessageFromQueryData(cachedQuery.data, messageId);
+    const nextData = removeMessagesFromQueryData(cachedQuery.data, predicate);
     if (nextData === cachedQuery.data) continue;
 
     queryClient.setQueryData(cachedQuery.queryKey, nextData);
@@ -576,12 +606,50 @@ const removeMessageFromCachedMailboxQueries = (queryClient: QueryClient, message
   return touchedQueryKeys;
 };
 
+const applyResolvedThreadMetadataToCaches = async (
+  queryClient: QueryClient,
+  updatedThread: ThreadMetadataMutationResult,
+) => {
+  const threadQueryKey = getThreadQueryKey(updatedThread.threadId);
+  const updatesById = toMessageMetadataById(updatedThread.messages);
+  const touchedQueryKeys: Array<readonly unknown[]> = [];
+
+  for (const updatedMessage of updatedThread.messages) {
+    const previousMessage = findMessageInCachedMailboxQueries(queryClient, updatedMessage.id);
+    if (!previousMessage) continue;
+
+    const resolvedMessage = applyMessageMetadata(previousMessage, {
+      labelIds: updatedMessage.labelIds,
+      isUnread: updatedMessage.isUnread,
+    });
+    touchedQueryKeys.push(...applyMessageToCachedMailboxQueries(queryClient, resolvedMessage));
+    prefetchNewMailboxQueries(queryClient, previousMessage, resolvedMessage);
+  }
+
+  queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
+    updateMessagesInThreadData(
+      currentData,
+      (message) => updatesById.has(message.id),
+      (message) => {
+        const nextMessage = updatesById.get(message.id);
+        if (!nextMessage) return message;
+        return applyMessageMetadata(message, {
+          labelIds: nextMessage.labelIds,
+          isUnread: nextMessage.isUnread,
+        });
+      },
+    ),
+  );
+
+  await persistQueryKeys(queryClient, [...touchedQueryKeys, threadQueryKey]);
+};
+
 const prefetchNewMailboxQueries = (
   queryClient: QueryClient,
   previousMessage: MessageListItem,
   nextMessage: MessageListItem,
 ) => {
-  for (const mailbox of ["inbox", "spam", "sent", "trash"] satisfies MailboxCategory[]) {
+  for (const mailbox of ["inbox", "spam", "sent", "trash", "drafts"] satisfies MailboxCategory[]) {
     if (
       !isMessageInMailbox(nextMessage, mailbox) ||
       isMessageInMailbox(previousMessage, mailbox) ||
@@ -656,6 +724,27 @@ export const refreshLoadedMessagesPages = async (
   return refreshedPages[0];
 };
 
+export const refreshCachedMailboxQueries = async (
+  queryClient: QueryClient,
+  mailbox: MailboxCategory,
+) => {
+  const cachedQueries = getCachedMessagesQueries(queryClient).filter(
+    (cachedQuery) => cachedQuery.mailbox === mailbox,
+  );
+
+  if (cachedQueries.length === 0) {
+    await refreshLoadedMessagesPages(queryClient, mailbox);
+    return;
+  }
+
+  await Promise.all(
+    cachedQueries.map(
+      async (cachedQuery) =>
+        await refreshLoadedMessagesPages(queryClient, mailbox, cachedQuery.searchQuery),
+    ),
+  );
+};
+
 const applyMailboxSyncDelta = async (
   queryClient: QueryClient,
   messagesQueryKey: ReturnType<typeof getMessagesQueryKey>,
@@ -720,6 +809,10 @@ export const syncMessages = async (
   searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
+  if (mailbox === "drafts") {
+    return await refreshLoadedMessagesPages(queryClient, mailbox, searchQuery, signal);
+  }
+
   if (normalizeSearchQuery(searchQuery)) {
     return await refreshMessagesFirstPage(queryClient, mailbox, searchQuery, signal);
   }
@@ -1002,6 +1095,26 @@ export const markThreadAsUnreadInMailbox = async (
   );
 };
 
+export const updateThreadLabelsInMailbox = async (
+  queryClient: QueryClient,
+  _mailbox: MailboxCategory,
+  _searchQuery: string | null | undefined,
+  threadId: string,
+  changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
+  signal?: AbortSignal,
+) => {
+  const updatedThread = await trpc.gmail.updateThreadLabels.mutate(
+    {
+      threadId,
+      addLabelIds: changes.addLabelIds,
+      removeLabelIds: changes.removeLabelIds,
+    },
+    { signal },
+  );
+
+  await applyResolvedThreadMetadataToCaches(queryClient, updatedThread);
+};
+
 export const updateMessageLabelsInMailbox = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
@@ -1130,6 +1243,26 @@ export const markMessageAsSpamInMailbox = async (
   );
 };
 
+export const markThreadAsSpamInMailbox = async (
+  queryClient: QueryClient,
+  mailbox: MailboxCategory,
+  searchQuery: string | null | undefined,
+  threadId: string,
+  signal?: AbortSignal,
+) => {
+  await updateThreadLabelsInMailbox(
+    queryClient,
+    mailbox,
+    searchQuery,
+    threadId,
+    {
+      addLabelIds: [...MARK_AS_SPAM_LABEL_CHANGES.addLabelIds],
+      removeLabelIds: [...MARK_AS_SPAM_LABEL_CHANGES.removeLabelIds],
+    },
+    signal,
+  );
+};
+
 export const unmarkMessageAsSpamInMailbox = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
@@ -1142,6 +1275,26 @@ export const unmarkMessageAsSpamInMailbox = async (
     mailbox,
     searchQuery,
     messageId,
+    {
+      addLabelIds: [...UNMARK_AS_SPAM_LABEL_CHANGES.addLabelIds],
+      removeLabelIds: [...UNMARK_AS_SPAM_LABEL_CHANGES.removeLabelIds],
+    },
+    signal,
+  );
+};
+
+export const unmarkThreadAsSpamInMailbox = async (
+  queryClient: QueryClient,
+  mailbox: MailboxCategory,
+  searchQuery: string | null | undefined,
+  threadId: string,
+  signal?: AbortSignal,
+) => {
+  await updateThreadLabelsInMailbox(
+    queryClient,
+    mailbox,
+    searchQuery,
+    threadId,
     {
       addLabelIds: [...UNMARK_AS_SPAM_LABEL_CHANGES.addLabelIds],
       removeLabelIds: [...UNMARK_AS_SPAM_LABEL_CHANGES.removeLabelIds],
@@ -1243,6 +1396,17 @@ export const moveMessageToTrashInMailbox = async (
   }
 };
 
+export const moveThreadToTrashInMailbox = async (
+  queryClient: QueryClient,
+  _mailbox: MailboxCategory,
+  _searchQuery: string | null | undefined,
+  threadId: string,
+  signal?: AbortSignal,
+) => {
+  const updatedThread = await trpc.gmail.moveThreadToTrash.mutate({ threadId }, { signal });
+  await applyResolvedThreadMetadataToCaches(queryClient, updatedThread);
+};
+
 export const deleteMessagePermanentlyInMailbox = async (
   queryClient: QueryClient,
   mailbox: MailboxCategory,
@@ -1284,6 +1448,87 @@ export const deleteMessagePermanentlyInMailbox = async (
 
   try {
     await trpc.gmail.deleteMessagePermanently.mutate({ messageId }, { signal });
+  } catch (error) {
+    restoreMessagesQueries(queryClient, previousMessagesQueries);
+    if (previousThreadQuery) {
+      queryClient.setQueryData(previousThreadQuery.queryKey, previousThreadQuery.data);
+    }
+    await persistQueryKeys(
+      queryClient,
+      previousThreadQuery
+        ? [
+            ...previousMessagesQueries.map((snapshot) => snapshot.queryKey),
+            previousThreadQuery.queryKey,
+          ]
+        : previousMessagesQueries.map((snapshot) => snapshot.queryKey),
+    );
+    throw error;
+  }
+};
+
+export const deleteThreadPermanentlyInMailbox = async (
+  queryClient: QueryClient,
+  _mailbox: MailboxCategory,
+  _searchQuery: string | null | undefined,
+  threadId: string,
+  signal?: AbortSignal,
+) => {
+  await trpc.gmail.deleteThreadPermanently.mutate({ threadId }, { signal });
+
+  const threadQueryKey = getThreadQueryKey(threadId);
+  const touchedQueryKeys = removeMessagesFromCachedMailboxQueries(
+    queryClient,
+    (message) => message.threadId === threadId,
+  );
+  queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
+    removeMessagesFromThreadData(currentData, () => true),
+  );
+
+  await persistQueryKeys(queryClient, [...touchedQueryKeys, threadQueryKey]);
+};
+
+export const deleteDraftInMailbox = async (
+  queryClient: QueryClient,
+  mailbox: MailboxCategory,
+  searchQuery: string | null | undefined,
+  messageId: string,
+  draftId: string,
+  signal?: AbortSignal,
+) => {
+  const messagesQueryKey = getMessagesQueryKey(mailbox, searchQuery);
+  const messageToUpdate =
+    findMessageInQueryData(
+      queryClient.getQueryData<MessagesQueryData>(messagesQueryKey),
+      messageId,
+    ) ?? findMessageInCachedMailboxQueries(queryClient, messageId);
+
+  if (!messageToUpdate) {
+    await trpc.gmail.deleteDraft.mutate({ draftId }, { signal });
+    return;
+  }
+
+  const previousMessagesQueries = snapshotMessagesQueries(queryClient);
+  const threadQueryKey = messageToUpdate.threadId
+    ? getThreadQueryKey(messageToUpdate.threadId)
+    : null;
+  const previousThreadQuery = threadQueryKey
+    ? snapshotThreadQuery(queryClient, threadQueryKey)
+    : null;
+  const optimisticTouchedQueryKeys = removeMessageFromCachedMailboxQueries(queryClient, messageId);
+
+  if (threadQueryKey) {
+    queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
+      removeMessageFromThreadData(currentData, messageId),
+    );
+  }
+
+  await persistQueryKeys(
+    queryClient,
+    threadQueryKey ? [...optimisticTouchedQueryKeys, threadQueryKey] : optimisticTouchedQueryKeys,
+  );
+
+  try {
+    await trpc.gmail.deleteDraft.mutate({ draftId }, { signal });
   } catch (error) {
     restoreMessagesQueries(queryClient, previousMessagesQueries);
     if (previousThreadQuery) {

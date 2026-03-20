@@ -4,7 +4,6 @@ import type { ComponentPropsWithoutRef } from "react";
 import { NumberField as NumberFieldPrimitive } from "@base-ui/react/number-field";
 import { cn } from "../../lib/cn";
 import { MinusIcon, PlusIcon } from "./icons";
-import { inputVariants } from "./input-styles";
 
 export const NumberField = ({
   className,
@@ -31,7 +30,10 @@ export const NumberFieldInput = ({
   ...props
 }: ComponentPropsWithoutRef<typeof NumberFieldPrimitive.Input>) => (
   <NumberFieldPrimitive.Input
-    className={cn(inputVariants({ chrome: "ghost", size: "default" }), "text-center", className)}
+    className={cn(
+      "h-9 w-full border-0 bg-transparent px-3 text-center text-sm text-foreground shadow-none transition-colors duration-150 ease-out outline-none placeholder:text-muted-foreground read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:ring-destructive/20",
+      className,
+    )}
     {...props}
   />
 );

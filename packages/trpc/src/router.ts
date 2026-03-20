@@ -4,25 +4,38 @@ import { getAuthUserStatus } from "@quietr/auth/user-status";
 import { TRPCError, initTRPC } from "@trpc/server";
 import { z } from "zod";
 import type { TrpcContext } from "./context";
-import { extractMessageContent } from "./gmail-message-content";
+import {
+  composeDraftInputSchema,
+  composeSendDraftInputSchema,
+  splitMailAddressList,
+} from "./compose";
+import {
+  extractInlineMessageAttachments,
+  extractMessageAttachments,
+  extractMessageContent,
+} from "./gmail-message-content";
 import {
   createDraft,
   deleteDraft,
   deleteMessagePermanently,
+  deleteThreadPermanently,
   getDraft,
   getMessageAttachment,
   getMailboxSyncDelta,
   getThreadWithDetails,
   listLabels,
+  listDraftsWithDetails,
   listMessagesWithDetails,
   markMessageAsRead,
   markMessageAsUnread,
   markThreadAsRead,
   markThreadAsUnread,
   moveMessageToTrash,
+  moveThreadToTrash,
   sendDraft,
   updateDraft,
   updateMessageLabels,
+  updateThreadLabels,
   type MailboxCategory,
 } from "./gmail-service";
 
@@ -34,59 +47,13 @@ const mailboxCategorySchema = z.enum([
   "spam",
   "sent",
   "trash",
+  "drafts",
 ] satisfies readonly MailboxCategory[]);
+
+const historySyncMailboxCategorySchema = z.enum(["inbox", "spam", "sent", "trash"]);
 
 const authEmailInputSchema = z.object({
   email: z.string().trim().email(),
-});
-
-const composeDraftInputSchema = z.object({
-  localId: z.string(),
-  draftId: z.string().nullable().optional(),
-  messageId: z.string().nullable().optional(),
-  replyContext: z
-    .object({
-      threadId: z.string(),
-      messageHeaderId: z.string().optional(),
-      references: z.array(z.string()).default([]),
-    })
-    .nullable()
-    .optional(),
-  recipients: z.object({
-    to: z.string(),
-    cc: z.string(),
-    bcc: z.string(),
-  }),
-  subject: z.string(),
-  bodyHtml: z.string(),
-  bodyText: z.string(),
-  attachments: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      size: z.number(),
-      mimeType: z.string(),
-      isInline: z.boolean(),
-      contentId: z.string().nullable().optional(),
-      fileName: z.string().optional(),
-      bytes: z.array(z.number().int().min(0).max(255)).optional(),
-    }),
-  ),
-  inlineImages: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      mimeType: z.string(),
-      size: z.number(),
-      contentId: z.string(),
-      bytes: z.array(z.number().int().min(0).max(255)).optional(),
-      isInline: z.boolean().optional(),
-    }),
-  ),
-  saveStatus: z.string(),
-  errorMessage: z.string().nullable().optional(),
-  lastSavedAt: z.number().nullable().optional(),
-  updatedAt: z.number(),
 });
 
 type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
@@ -132,11 +99,7 @@ const base64WithCrlf = (value: Uint8Array) => {
   return output;
 };
 
-const collectRecipients = (value: string) =>
-  value
-    .split(/[\n,;]/g)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
+const collectRecipients = (value: string) => splitMailAddressList(value);
 
 const collectReplyReferences = (draft: ComposeDraftInput) => {
   const values = [...(draft.replyContext?.references ?? []), draft.replyContext?.messageHeaderId];
@@ -263,6 +226,8 @@ const parseDraftMessage = (draft: Awaited<ReturnType<typeof getDraft>>) => {
         bcc: "",
       },
       messageId: null,
+      attachments: [],
+      inlineImages: [],
     };
   }
 
@@ -281,6 +246,8 @@ const parseDraftMessage = (draft: Awaited<ReturnType<typeof getDraft>>) => {
       bcc: readHeader("Bcc"),
     },
     messageId: message.id,
+    attachments: extractMessageAttachments(message.payload),
+    inlineImages: extractInlineMessageAttachments(message.payload),
   };
 };
 
@@ -340,18 +307,25 @@ export const appRouter = t.router({
       )
       .query(async ({ ctx, input }) => {
         const accessToken = await getGoogleAccessToken(ctx);
-        const result = await listMessagesWithDetails(accessToken, {
-          mailbox: input.category,
-          pageToken: input.pageToken,
-          maxResults: input.maxResults,
-          query: input.query?.trim() || undefined,
-        });
+        const result =
+          input.category === "drafts"
+            ? await listDraftsWithDetails(accessToken, {
+                pageToken: input.pageToken,
+                maxResults: input.maxResults,
+                query: input.query?.trim() || undefined,
+              })
+            : await listMessagesWithDetails(accessToken, {
+                mailbox: input.category,
+                pageToken: input.pageToken,
+                maxResults: input.maxResults,
+                query: input.query?.trim() || undefined,
+              });
         return result;
       }),
     getMailboxSyncDelta: protectedProcedure
       .input(
         z.object({
-          category: mailboxCategorySchema,
+          category: historySyncMailboxCategorySchema,
           startHistoryId: z.string().min(1),
         }),
       )
@@ -396,6 +370,21 @@ export const appRouter = t.router({
         const accessToken = await getGoogleAccessToken(ctx);
         return await markThreadAsUnread(accessToken, input.threadId);
       }),
+    updateThreadLabels: protectedProcedure
+      .input(
+        z.object({
+          threadId: z.string(),
+          addLabelIds: z.array(z.string()).optional(),
+          removeLabelIds: z.array(z.string()).optional(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        const accessToken = await getGoogleAccessToken(ctx);
+        return await updateThreadLabels(accessToken, input.threadId, {
+          addLabelIds: input.addLabelIds,
+          removeLabelIds: input.removeLabelIds,
+        });
+      }),
     updateMessageLabels: protectedProcedure
       .input(
         z.object({
@@ -417,11 +406,23 @@ export const appRouter = t.router({
         const accessToken = await getGoogleAccessToken(ctx);
         return await moveMessageToTrash(accessToken, input.messageId);
       }),
+    moveThreadToTrash: protectedProcedure
+      .input(z.object({ threadId: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const accessToken = await getGoogleAccessToken(ctx);
+        return await moveThreadToTrash(accessToken, input.threadId);
+      }),
     deleteMessagePermanently: protectedProcedure
       .input(z.object({ messageId: z.string() }))
       .mutation(async ({ ctx, input }) => {
         const accessToken = await getGoogleAccessToken(ctx);
         return await deleteMessagePermanently(accessToken, input.messageId);
+      }),
+    deleteThreadPermanently: protectedProcedure
+      .input(z.object({ threadId: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const accessToken = await getGoogleAccessToken(ctx);
+        return await deleteThreadPermanently(accessToken, input.threadId);
       }),
     loadDraft: protectedProcedure
       .input(z.object({ draftId: z.string() }))
@@ -455,7 +456,7 @@ export const appRouter = t.router({
         };
       }),
     sendDraft: protectedProcedure
-      .input(z.object({ draft: composeDraftInputSchema }))
+      .input(z.object({ draft: composeSendDraftInputSchema }))
       .mutation(async ({ ctx, input }) => {
         const accessToken = await getGoogleAccessToken(ctx);
 

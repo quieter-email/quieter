@@ -2,7 +2,7 @@
 
 import { ArrowUp01Icon, Refresh01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, Field, Input } from "@quietr/ui";
+import { Button, Field, IconButtonTooltip, Input } from "@quietr/ui";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -66,18 +66,21 @@ export const MessageListSearch = ({
 }: MessageListSearchProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLElement>(null!);
-  const [draftSearchState, setDraftSearchState] = useState(() =>
-    parseStructuredSearchQuery(searchQuery),
-  );
+  const [draftSearchState, setDraftSearchState] = useState<{
+    baseQuery: string;
+    value: StructuredSearchState;
+  } | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [openSection, setOpenSection] = useState<SearchDropdownSectionId | null>(null);
 
   const labelsQuery = useQuery(labelsQueryOptions(isDropdownOpen));
+  const committedSearchState = useMemo(
+    () => parseStructuredSearchQuery(searchQuery),
+    [searchQuery],
+  );
+  const currentSearchState =
+    draftSearchState?.baseQuery === searchQuery ? draftSearchState.value : committedSearchState;
   const userLabels = useMemo(() => getUserLabels(labelsQuery.data ?? []), [labelsQuery.data]);
-
-  useEffect(() => {
-    setDraftSearchState(parseStructuredSearchQuery(searchQuery));
-  }, [searchQuery]);
 
   const closeDropdown = useCallback(() => {
     setIsDropdownOpen(false);
@@ -86,12 +89,15 @@ export const MessageListSearch = ({
 
   const commitSearchState = useCallback(
     (nextState: StructuredSearchState, closeAfterCommit = false) => {
-      setDraftSearchState(nextState);
+      setDraftSearchState({
+        baseQuery: searchQuery,
+        value: nextState,
+      });
       void onScrollToTop();
       onSearch(serializeStructuredSearchQuery(nextState));
       if (closeAfterCommit) closeDropdown();
     },
-    [closeDropdown, onScrollToTop, onSearch],
+    [closeDropdown, onScrollToTop, onSearch, searchQuery],
   );
 
   const updateSearchState = useCallback(
@@ -99,25 +105,25 @@ export const MessageListSearch = ({
       updater: StructuredSearchState | ((current: StructuredSearchState) => StructuredSearchState),
       closeAfterCommit = false,
     ) => {
-      const nextState = typeof updater === "function" ? updater(draftSearchState) : updater;
+      const nextState = typeof updater === "function" ? updater(currentSearchState) : updater;
       commitSearchState(nextState, closeAfterCommit);
     },
-    [commitSearchState, draftSearchState],
+    [commitSearchState, currentSearchState],
   );
 
   const selectedSearchChips = useMemo(
     () => [
-      ...(draftSearchState.categoryFilter
+      ...(currentSearchState.categoryFilter
         ? [
             {
-              key: `category:${draftSearchState.categoryFilter}`,
-              label: SEARCH_CATEGORY_FILTER_OPTIONS_BY_ID[draftSearchState.categoryFilter].label,
+              key: `category:${currentSearchState.categoryFilter}`,
+              label: SEARCH_CATEGORY_FILTER_OPTIONS_BY_ID[currentSearchState.categoryFilter].label,
               onRemove: () =>
                 updateSearchState((current) => ({ ...current, categoryFilter: null })),
             },
           ]
         : []),
-      ...draftSearchState.userLabels.map((userLabel) => ({
+      ...currentSearchState.userLabels.map((userLabel) => ({
         key: `label:${normalizeLabelSelectionKey(userLabel)}`,
         label:
           userLabels.find(
@@ -131,7 +137,7 @@ export const MessageListSearch = ({
           })),
       })),
     ],
-    [draftSearchState, updateSearchState, userLabels],
+    [currentSearchState, updateSearchState, userLabels],
   );
 
   useEffect(() => {
@@ -161,16 +167,19 @@ export const MessageListSearch = ({
       <div ref={containerRef} className="space-y-2">
         {/* ── Row 1: Refresh + Search input + Scroll-to-top ── */}
         <div className="flex items-center gap-2">
-          <Button
-            disabled={isRefreshing}
-            onClick={() => void onRefresh()}
-            size="icon-sm"
-            variant="outline"
-          >
-            <SpinWhileActive active={isRefreshing}>
-              <HugeiconsIcon icon={Refresh01Icon} />
-            </SpinWhileActive>
-          </Button>
+          <IconButtonTooltip label="Refresh list">
+            <Button
+              aria-label="Refresh list"
+              disabled={isRefreshing}
+              onClick={() => void onRefresh()}
+              size="icon-sm"
+              variant="outline"
+            >
+              <SpinWhileActive active={isRefreshing}>
+                <HugeiconsIcon icon={Refresh01Icon} />
+              </SpinWhileActive>
+            </Button>
+          </IconButtonTooltip>
 
           <Field className="min-w-0 flex-1">
             <div
@@ -189,15 +198,18 @@ export const MessageListSearch = ({
                 className="min-w-[10ch] flex-1 px-0 text-[13px] focus-visible:ring-0"
                 name="query"
                 onChange={(event) => {
-                  setDraftSearchState((current) => ({
-                    ...current,
-                    text: event.currentTarget.value,
-                  }));
+                  setDraftSearchState({
+                    baseQuery: searchQuery,
+                    value: {
+                      ...currentSearchState,
+                      text: event.currentTarget.value,
+                    },
+                  });
                 }}
                 onFocus={() => setIsDropdownOpen(true)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
-                    commitSearchState(draftSearchState, true);
+                    commitSearchState(currentSearchState, true);
                     return;
                   }
                   if (event.key === "Escape") {
@@ -205,9 +217,9 @@ export const MessageListSearch = ({
                     event.currentTarget.blur();
                     return;
                   }
-                  if (event.key === "Backspace" && draftSearchState.text.length === 0) {
+                  if (event.key === "Backspace" && currentSearchState.text.length === 0) {
                     event.preventDefault();
-                    updateSearchState(removeLastStructuredSearchChip(draftSearchState));
+                    updateSearchState(removeLastStructuredSearchChip(currentSearchState));
                   }
                 }}
                 placeholder="Search"
@@ -215,36 +227,41 @@ export const MessageListSearch = ({
                 size="sm"
                 spellCheck={false}
                 type="search"
-                value={draftSearchState.text}
+                value={currentSearchState.text}
               />
 
-              <Button
-                aria-label="Search"
-                className="h-6 w-6 shrink-0 self-center text-muted-foreground hover:text-foreground"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  commitSearchState(draftSearchState, true);
-                }}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                }}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <HugeiconsIcon icon={Search01Icon} />
-              </Button>
+              <IconButtonTooltip label="Run search">
+                <Button
+                  aria-label="Run search"
+                  className="h-6 w-6 shrink-0 self-center text-muted-foreground hover:text-foreground"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    commitSearchState(currentSearchState, true);
+                  }}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                  }}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <HugeiconsIcon icon={Search01Icon} />
+                </Button>
+              </IconButtonTooltip>
             </div>
           </Field>
 
-          <Button
-            onClick={() => void onScrollToTop()}
-            size="icon-sm"
-            type="button"
-            variant="outline"
-          >
-            <HugeiconsIcon icon={ArrowUp01Icon} />
-          </Button>
+          <IconButtonTooltip label="Scroll to top">
+            <Button
+              aria-label="Scroll to top"
+              onClick={() => void onScrollToTop()}
+              size="icon-sm"
+              type="button"
+              variant="outline"
+            >
+              <HugeiconsIcon icon={ArrowUp01Icon} />
+            </Button>
+          </IconButtonTooltip>
         </div>
 
         {/* ── Row 2: Active filter pills ── */}
@@ -285,7 +302,7 @@ export const MessageListSearch = ({
               }}
             >
               <MessageListSearchDropdown
-                draftSearchState={draftSearchState}
+                draftSearchState={currentSearchState}
                 labelsErrorMessage={
                   labelsQuery.isPending ? null : (labelsQuery.error?.message ?? null)
                 }

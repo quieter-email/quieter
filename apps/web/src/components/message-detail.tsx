@@ -43,40 +43,55 @@ export const MessageDetail = ({
   onUnmarkAsSpam,
   onUpdateLabels,
   selectedMessage,
-}: MessageDetailProps) => (
-  <section className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
-    <div
-      className="h-full overflow-y-auto px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6"
-      data-message-detail-scroll-container
-    >
-      {selectedMessage ? (
-        <Suspense
-          fallback={
-            <div className="grid h-full place-items-center text-sm text-muted-foreground">
-              <HugeiconsIcon className="animate-spin text-muted-foreground" icon={Loading03Icon} />
-            </div>
-          }
-        >
-          <MessageView
-            activeMailbox={activeMailbox}
-            currentUserEmail={currentUserEmail}
-            isActionPending={isActionPending}
-            message={selectedMessage}
-            onComposeDraftRequested={onComposeDraftRequested}
-            onDeletePermanently={onDeletePermanently}
-            onMarkAsRead={onMarkAsRead}
-            onMarkAsSpam={onMarkAsSpam}
-            onMarkAsUnread={onMarkAsUnread}
-            onMarkThreadAsRead={onMarkThreadAsRead}
-            onMarkThreadAsUnread={onMarkThreadAsUnread}
-            onMoveToTrash={onMoveToTrash}
-            onUnmarkAsSpam={onUnmarkAsSpam}
-            onUpdateLabels={onUpdateLabels}
-          />
-        </Suspense>
-      ) : (
-        <EmptyMessageState />
-      )}
-    </div>
-  </section>
-);
+}: MessageDetailProps) => {
+  const emptyState =
+    activeMailbox === "drafts" ? (
+      <EmptyMessageState
+        description="Open a draft from the list to continue editing it."
+        title="Drafts stay editable"
+      />
+    ) : (
+      <EmptyMessageState />
+    );
+
+  return (
+    <section className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
+      <div
+        className="h-full overflow-y-auto px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6"
+        data-message-detail-scroll-container
+      >
+        {selectedMessage ? (
+          <Suspense
+            fallback={
+              <div className="grid h-full place-items-center text-sm text-muted-foreground">
+                <HugeiconsIcon
+                  className="animate-spin text-muted-foreground"
+                  icon={Loading03Icon}
+                />
+              </div>
+            }
+          >
+            <MessageView
+              activeMailbox={activeMailbox}
+              currentUserEmail={currentUserEmail}
+              isActionPending={isActionPending}
+              message={selectedMessage}
+              onComposeDraftRequested={onComposeDraftRequested}
+              onDeletePermanently={onDeletePermanently}
+              onMarkAsRead={onMarkAsRead}
+              onMarkAsSpam={onMarkAsSpam}
+              onMarkAsUnread={onMarkAsUnread}
+              onMarkThreadAsRead={onMarkThreadAsRead}
+              onMarkThreadAsUnread={onMarkThreadAsUnread}
+              onMoveToTrash={onMoveToTrash}
+              onUnmarkAsSpam={onUnmarkAsSpam}
+              onUpdateLabels={onUpdateLabels}
+            />
+          </Suspense>
+        ) : (
+          emptyState
+        )}
+      </div>
+    </section>
+  );
+};

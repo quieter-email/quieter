@@ -1,3 +1,4 @@
+import { getMailAddressKey, splitMailAddressList } from "@quietr/trpc/compose";
 import type { MessageListItem } from "./gmail";
 import {
   createEmptyComposeDraft,
@@ -8,62 +9,6 @@ import { formatMessageDate, parseSender } from "./message-utils";
 
 export type ComposeActionType = "reply" | "reply-all" | "forward";
 
-const EMAIL_ADDRESS_PATTERN = /([a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+)/i;
-
-const splitAddressHeader = (value: string | undefined): string[] => {
-  const normalized = value?.replaceAll(/\r?\n\s+/g, " ").trim();
-  if (!normalized) return [];
-
-  const parts: string[] = [];
-  let current = "";
-  let inQuotes = false;
-  let angleDepth = 0;
-
-  for (const character of normalized) {
-    if (character === '"') {
-      inQuotes = !inQuotes;
-      current += character;
-      continue;
-    }
-
-    if (!inQuotes && character === "<") {
-      angleDepth += 1;
-      current += character;
-      continue;
-    }
-
-    if (!inQuotes && character === ">" && angleDepth > 0) {
-      angleDepth -= 1;
-      current += character;
-      continue;
-    }
-
-    if (
-      !inQuotes &&
-      angleDepth === 0 &&
-      (character === "," || character === ";" || character === "\n")
-    ) {
-      const nextPart = current.trim();
-      if (nextPart) parts.push(nextPart);
-      current = "";
-      continue;
-    }
-
-    current += character;
-  }
-
-  const finalPart = current.trim();
-  if (finalPart) parts.push(finalPart);
-
-  return parts;
-};
-
-const extractAddressKey = (value: string): string => {
-  const normalized = value.trim().toLowerCase();
-  const emailMatch = normalized.match(EMAIL_ADDRESS_PATTERN);
-  return emailMatch?.[1] ?? normalized;
-};
-
 const dedupeAddresses = (values: readonly string[]): string[] => {
   const seen = new Set<string>();
   const deduped: string[] = [];
@@ -71,7 +16,7 @@ const dedupeAddresses = (values: readonly string[]): string[] => {
   for (const value of values) {
     const normalized = value.trim();
     if (!normalized) continue;
-    const addressKey = extractAddressKey(normalized);
+    const addressKey = getMailAddressKey(normalized);
     if (seen.has(addressKey)) continue;
     seen.add(addressKey);
     deduped.push(normalized);
@@ -83,8 +28,8 @@ const dedupeAddresses = (values: readonly string[]): string[] => {
 const buildOwnedAddressKeys = (currentUserEmail: string | null | undefined) => {
   const owned = new Set<string>();
 
-  for (const entry of splitAddressHeader(currentUserEmail ?? "")) {
-    owned.add(extractAddressKey(entry));
+  for (const entry of splitMailAddressList(currentUserEmail ?? "")) {
+    owned.add(getMailAddressKey(entry));
   }
 
   const normalizedEmail = currentUserEmail?.trim().toLowerCase();
@@ -98,7 +43,7 @@ const buildOwnedAddressKeys = (currentUserEmail: string | null | undefined) => {
 const filterOutOwnedAddresses = (
   values: readonly string[],
   ownedAddressKeys: ReadonlySet<string>,
-) => values.filter((value) => !ownedAddressKeys.has(extractAddressKey(value)));
+) => values.filter((value) => !ownedAddressKeys.has(getMailAddressKey(value)));
 
 const escapeHtml = (value: string) =>
   value
@@ -204,11 +149,11 @@ const getReplyRecipients = (
   includeAll: boolean,
 ) => {
   const ownedAddressKeys = buildOwnedAddressKeys(currentUserEmail);
-  const fromEntries = dedupeAddresses(splitAddressHeader(message.from));
-  const replyToEntries = dedupeAddresses(splitAddressHeader(message.replyTo));
-  const toEntries = dedupeAddresses(splitAddressHeader(message.to));
-  const ccEntries = dedupeAddresses(splitAddressHeader(message.cc));
-  const senderIsOwned = fromEntries.some((entry) => ownedAddressKeys.has(extractAddressKey(entry)));
+  const fromEntries = dedupeAddresses(splitMailAddressList(message.from));
+  const replyToEntries = dedupeAddresses(splitMailAddressList(message.replyTo));
+  const toEntries = dedupeAddresses(splitMailAddressList(message.to));
+  const ccEntries = dedupeAddresses(splitMailAddressList(message.cc));
+  const senderIsOwned = fromEntries.some((entry) => ownedAddressKeys.has(getMailAddressKey(entry)));
 
   let primaryRecipients = filterOutOwnedAddresses(replyToEntries, ownedAddressKeys);
   if (primaryRecipients.length === 0) {
@@ -222,14 +167,14 @@ const getReplyRecipients = (
   }
 
   const toRecipients = dedupeAddresses(primaryRecipients);
-  const toRecipientKeys = new Set(toRecipients.map((entry) => extractAddressKey(entry)));
+  const toRecipientKeys = new Set(toRecipients.map((entry) => getMailAddressKey(entry)));
 
   const ccRecipients = includeAll
     ? dedupeAddresses(
         filterOutOwnedAddresses(
           senderIsOwned ? ccEntries : [...fromEntries, ...toEntries, ...ccEntries],
           ownedAddressKeys,
-        ).filter((entry) => !toRecipientKeys.has(extractAddressKey(entry))),
+        ).filter((entry) => !toRecipientKeys.has(getMailAddressKey(entry))),
       )
     : [];
 
@@ -267,9 +212,9 @@ export const getPreferredThreadActionMessage = (
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (!message) continue;
-    const senderEntries = dedupeAddresses(splitAddressHeader(message.from));
+    const senderEntries = dedupeAddresses(splitMailAddressList(message.from));
     const isOwnedMessage = senderEntries.some((entry) =>
-      ownedAddressKeys.has(extractAddressKey(entry)),
+      ownedAddressKeys.has(getMailAddressKey(entry)),
     );
 
     if (!isOwnedMessage) {
@@ -334,5 +279,27 @@ export const buildComposeDraftFromMessageAction = ({
     subject: withSubjectPrefix(message.subject, "Re:", /^re:/i),
     bodyHtml: `<p><br></p><p>${escapeHtml(lead)}</p><blockquote>${getMessageBodyHtml(message)}</blockquote>`,
     bodyText: ["", "", lead, quotePlainText(getMessageBodyText(message))].join("\n"),
+  };
+};
+
+export const buildComposeDraftFromSavedDraftMessage = (
+  message: MessageListItem,
+): ComposeDraftState => {
+  const draft = createEmptyComposeDraft();
+
+  return {
+    ...draft,
+    draftId: message.draftId,
+    messageId: message.id,
+    recipients: {
+      to: message.to ?? "",
+      cc: message.cc ?? "",
+      bcc: message.bcc ?? "",
+    },
+    subject: message.subject ?? "",
+    bodyHtml: message.bodyHtml ?? "",
+    bodyText: message.bodyText ?? message.snippet ?? "",
+    saveStatus: message.draftId ? "saved" : "idle",
+    updatedAt: Date.now(),
   };
 };

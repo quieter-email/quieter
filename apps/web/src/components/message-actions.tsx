@@ -1,9 +1,10 @@
 "use client";
 
-import type { CSSProperties, MouseEventHandler, PropsWithChildren } from "react";
+import type { CSSProperties, PropsWithChildren } from "react";
 import {
   Delete01Icon,
   Delete02Icon,
+  Edit01Icon,
   Loading03Icon,
   Mail01Icon,
   MailOpen02Icon,
@@ -31,10 +32,11 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  cn,
+  IconButtonTooltip,
 } from "@quietr/ui";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { getErrorMessage } from "~/lib/errors";
 import {
   type GmailLabelListItem,
   isMessageUnread,
@@ -52,9 +54,11 @@ type MessageActionsSharedProps = {
   message: MessageListItem;
   mailbox: MailboxCategory;
   isUnread?: boolean;
+  onDeleteDraft?: (message: MessageListItem) => void | Promise<void>;
   onMarkAsRead?: (messageId: string) => void | Promise<void>;
   onMarkAsSpam?: (messageId: string) => void | Promise<void>;
   onMarkAsUnread?: (messageId: string) => void | Promise<void>;
+  onOpenDraft?: (message: MessageListItem) => void | Promise<void>;
   onUpdateLabels?: (messageId: string, changes: LabelChanges) => void | Promise<void>;
   onMoveToTrash?: (messageId: string) => void | Promise<void>;
   onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
@@ -68,8 +72,6 @@ type MessageActionsContextMenuProps = PropsWithChildren<
   MessageActionsSharedProps & {
     triggerClassName?: string;
     triggerStyle?: CSSProperties;
-    triggerAriaCurrent?: "true";
-    onTriggerClick?: MouseEventHandler<HTMLButtonElement>;
   }
 >;
 
@@ -167,38 +169,36 @@ const MessageActionsDialogs = ({
     userLabels.some((label) => label.id === labelId),
   );
 
-  const [draftLabelIds, setDraftLabelIds] = useState<string[]>([]);
+  const [draftLabelIds, setDraftLabelIds] = useState<string[] | null>(null);
   const [labelError, setLabelError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isApplyingLabels, setIsApplyingLabels] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  useEffect(() => {
-    if (!openLabelsDialog) return;
-    setDraftLabelIds(currentUserLabelIds);
-    setLabelError(null);
-  }, [currentUserLabelIds, openLabelsDialog]);
-
-  const labelsChanged = !areStringArraysEqual(currentUserLabelIds, draftLabelIds);
+  const selectedLabelIds = draftLabelIds ?? currentUserLabelIds;
+  const labelsChanged = !areStringArraysEqual(currentUserLabelIds, selectedLabelIds);
   const isLabelsBusy = isPending || isApplyingLabels;
   const isDeleteBusy = isPending || isDeleting;
 
   const toggleDraftLabel = (labelId: string, checked: boolean) => {
     setDraftLabelIds((current) => {
+      const nextCurrent = current ?? currentUserLabelIds;
+
       if (checked) {
-        if (current.includes(labelId)) return current;
-        return [...current, labelId];
+        if (nextCurrent.includes(labelId)) return nextCurrent;
+        return [...nextCurrent, labelId];
       }
 
-      return current.filter((value) => value !== labelId);
+      return nextCurrent.filter((value) => value !== labelId);
     });
   };
 
   const applyLabels = async () => {
     if (!onUpdateLabels || isLabelsBusy) return;
 
-    const nextLabelIdSet = new Set(draftLabelIds);
-    const addLabelIds = draftLabelIds.filter((labelId) => !currentUserLabelIds.includes(labelId));
+    const nextLabelIdSet = new Set(selectedLabelIds);
+    const addLabelIds = selectedLabelIds.filter(
+      (labelId) => !currentUserLabelIds.includes(labelId),
+    );
     const removeLabelIds = currentUserLabelIds.filter((labelId) => !nextLabelIdSet.has(labelId));
 
     if (addLabelIds.length === 0 && removeLabelIds.length === 0) {
@@ -216,7 +216,7 @@ const MessageActionsDialogs = ({
       });
       onOpenLabelsDialog(false);
     } catch (error) {
-      setLabelError(error instanceof Error ? error.message : "Could not update labels.");
+      setLabelError(getErrorMessage(error, "Could not update labels."));
     } finally {
       setIsApplyingLabels(false);
     }
@@ -232,7 +232,7 @@ const MessageActionsDialogs = ({
       await onDeletePermanently(message.id);
       onOpenDeleteDialog(false);
     } catch (error) {
-      setDeleteError(error instanceof Error ? error.message : "Could not delete this message.");
+      setDeleteError(getErrorMessage(error, "Could not delete this message."));
     } finally {
       setIsDeleting(false);
     }
@@ -243,10 +243,9 @@ const MessageActionsDialogs = ({
       <Dialog
         onOpenChange={(open) => {
           onOpenLabelsDialog(open);
-          if (!open) {
-            setLabelError(null);
-            setIsApplyingLabels(false);
-          }
+          setDraftLabelIds(null);
+          setLabelError(null);
+          if (!open) setIsApplyingLabels(false);
         }}
         open={openLabelsDialog}
       >
@@ -270,7 +269,7 @@ const MessageActionsDialogs = ({
                 {userLabels.map((label) => (
                   <label className="flex items-center gap-2 text-sm text-foreground" key={label.id}>
                     <input
-                      checked={draftLabelIds.includes(label.id)}
+                      checked={selectedLabelIds.includes(label.id)}
                       className="size-4 rounded-md accent-foreground"
                       disabled={isLabelsBusy}
                       onChange={(event) => toggleDraftLabel(label.id, event.currentTarget.checked)}
@@ -339,12 +338,47 @@ const MessageActionsDialogs = ({
 
 const useMessageActionEntries = (props: MessageActionsSharedProps) => {
   const isUnread = props.isUnread ?? isMessageUnread(props.message);
+  const isDraftMailbox = props.mailbox === "drafts";
   const isSpamMailbox = props.mailbox === "spam";
   const isTrashMailbox = props.mailbox === "trash";
   const isBusy = Boolean(props.isPending);
   const [openLabelsDialog, setOpenLabelsDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const showMarkAsSpam = props.mailbox === "inbox";
+
+  if (isDraftMailbox) {
+    return {
+      dialogs: null,
+      entries: [
+        {
+          type: "item",
+          id: "open-draft",
+          disabled: isBusy || !props.onOpenDraft,
+          icon: Edit01Icon,
+          label: "Open draft",
+          onSelect: () => {
+            void props.onOpenDraft?.(props.message);
+          },
+        },
+        {
+          type: "separator",
+          id: "separator",
+        },
+        {
+          type: "item",
+          id: "delete-draft",
+          destructive: true,
+          disabled: isBusy || !props.onDeleteDraft,
+          icon: Delete02Icon,
+          label: "Delete draft",
+          onSelect: () => {
+            void props.onDeleteDraft?.(props.message);
+          },
+        },
+      ] satisfies MenuEntry[],
+      isBusy,
+    };
+  }
 
   const entries: MenuEntry[] = [
     {
@@ -448,14 +482,16 @@ export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger
-          aria-label="Open message actions"
-          className="inline-flex size-9 items-center justify-center rounded-md border border-input bg-background shadow-sm transition-colors outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50"
-          disabled={isBusy}
-          type="button"
-        >
-          <HugeiconsIcon aria-hidden className="size-4" icon={MoreVerticalIcon} />
-        </DropdownMenuTrigger>
+        <IconButtonTooltip label="Message actions">
+          <DropdownMenuTrigger
+            aria-label="Open message actions"
+            className="inline-flex size-9 items-center justify-center rounded-md border border-input bg-background shadow-sm transition-colors outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50"
+            disabled={isBusy}
+            type="button"
+          >
+            <HugeiconsIcon aria-hidden className="size-4" icon={MoreVerticalIcon} />
+          </DropdownMenuTrigger>
+        </IconButtonTooltip>
 
         <DropdownMenuContent>
           {entries.map((entry) => renderDropdownEntry(entry))}
@@ -469,8 +505,6 @@ export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
 
 export const MessageActionsContextMenu = ({
   children,
-  onTriggerClick,
-  triggerAriaCurrent,
   triggerClassName,
   triggerStyle,
   ...props
@@ -480,10 +514,8 @@ export const MessageActionsContextMenu = ({
   return (
     <>
       <ContextMenu>
-        <ContextMenuTrigger className={cn(triggerClassName)} style={triggerStyle}>
-          <button aria-current={triggerAriaCurrent} onClick={onTriggerClick} type="button">
-            {children}
-          </button>
+        <ContextMenuTrigger className={triggerClassName} style={triggerStyle}>
+          {children}
         </ContextMenuTrigger>
 
         <ContextMenuContent>{entries.map((entry) => renderContextEntry(entry))}</ContextMenuContent>

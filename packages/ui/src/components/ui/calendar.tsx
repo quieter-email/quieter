@@ -4,7 +4,6 @@ import type { ComponentProps } from "react";
 import { format } from "date-fns";
 import { DayPicker, getDefaultClassNames, type ChevronProps } from "react-day-picker";
 import { cn } from "../../lib/cn";
-import { buttonVariants } from "./button";
 import { ChevronDownIcon } from "./icons";
 
 const defaultClassNames = getDefaultClassNames();
@@ -52,13 +51,11 @@ export const Calendar = ({
         defaultClassNames.nav,
       ),
       button_previous: cn(
-        buttonVariants({ size: "icon-sm", variant: "ghost" }),
-        "absolute top-0 left-0 size-7 rounded-md bg-transparent p-0 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground",
+        "absolute top-0 left-0 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-transparent p-0 text-muted-foreground transition-colors duration-150 ease-out outline-none select-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
         defaultClassNames.button_previous,
       ),
       button_next: cn(
-        buttonVariants({ size: "icon-sm", variant: "ghost" }),
-        "absolute top-0 right-0 size-7 rounded-md bg-transparent p-0 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground",
+        "absolute top-0 right-0 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-transparent p-0 text-muted-foreground transition-colors duration-150 ease-out outline-none select-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
         defaultClassNames.button_next,
       ),
       chevron: cn("text-current", defaultClassNames.chevron),
@@ -72,8 +69,7 @@ export const Calendar = ({
       week: cn("grid grid-cols-7 gap-0.5", defaultClassNames.week),
       day: cn("flex size-8 items-center justify-center p-0 text-sm", defaultClassNames.day),
       day_button: cn(
-        buttonVariants({ size: "icon-sm", variant: "ghost" }),
-        "size-8 rounded-md bg-transparent p-0 text-[13px] font-normal text-foreground ring-offset-0 hover:bg-muted hover:text-foreground",
+        "inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-transparent p-0 text-[13px] font-normal text-foreground transition-colors duration-150 ease-out outline-none select-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         defaultClassNames.day_button,
       ),
       today: cn(

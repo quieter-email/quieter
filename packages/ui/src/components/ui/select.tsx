@@ -3,14 +3,33 @@
 import type { ComponentPropsWithoutRef } from "react";
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 import { cn } from "../../lib/cn";
-import { buttonVariants } from "./button";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "./icons";
-import { floatingPanelClassName } from "./shared";
 
 export const Select = SelectPrimitive.Root;
 export const SelectPortal = SelectPrimitive.Portal;
-export const SelectValue = SelectPrimitive.Value;
 export const SelectGroup = SelectPrimitive.Group;
+export const SelectBackdrop = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof SelectPrimitive.Backdrop>) => (
+  <SelectPrimitive.Backdrop
+    className={cn(
+      "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity duration-150 ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
+      className,
+    )}
+    {...props}
+  />
+);
+
+export const SelectValue = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof SelectPrimitive.Value>) => (
+  <SelectPrimitive.Value
+    className={cn("min-w-0 flex-1 truncate data-[placeholder]:text-muted-foreground", className)}
+    {...props}
+  />
+);
 
 export const SelectTrigger = ({
   children,
@@ -19,13 +38,12 @@ export const SelectTrigger = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>) => (
   <SelectPrimitive.Trigger
     className={cn(
-      buttonVariants({ size: "default", variant: "outline" }),
-      "w-full justify-between px-3.5 font-normal",
+      "inline-flex h-9 w-full shrink-0 items-center justify-between gap-2 rounded-md border border-input bg-background px-3.5 text-sm leading-none font-normal whitespace-nowrap text-foreground shadow-sm transition-colors duration-150 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
       className,
     )}
     {...props}
   >
-    <span className="min-w-0 flex-1 truncate">{children}</span>
+    {children}
     <SelectPrimitive.Icon className="shrink-0 text-muted-foreground">
       <ChevronDownIcon className="size-4" />
     </SelectPrimitive.Icon>
@@ -34,20 +52,34 @@ export const SelectTrigger = ({
 
 export const SelectContent = ({
   align = "center",
+  alignOffset = 0,
   children,
   className,
+  positionerClassName,
   side = "bottom",
   sideOffset = 6,
   ...props
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.Popup> &
   Pick<
     ComponentPropsWithoutRef<typeof SelectPrimitive.Positioner>,
-    "align" | "side" | "sideOffset"
-  >) => (
+    "align" | "alignItemWithTrigger" | "alignOffset" | "side" | "sideOffset"
+  > & {
+    positionerClassName?: string;
+  }) => (
   <SelectPortal>
-    <SelectPrimitive.Positioner align={align} side={side} sideOffset={sideOffset}>
+    <SelectPrimitive.Positioner
+      align={align}
+      alignOffset={alignOffset}
+      alignItemWithTrigger={false}
+      className={cn("z-50", positionerClassName)}
+      side={side}
+      sideOffset={sideOffset}
+    >
       <SelectPrimitive.Popup
-        className={cn(floatingPanelClassName, "overflow-hidden p-1", className)}
+        className={cn(
+          "z-50 min-w-52 origin-[var(--transform-origin)] overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] outline-none data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[instant]:transition-none data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
+          className,
+        )}
         {...props}
       >
         {children}
@@ -61,7 +93,10 @@ export const SelectScrollUpArrow = ({
   ...props
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollUpArrow>) => (
   <SelectPrimitive.ScrollUpArrow
-    className={cn("flex h-7 items-center justify-center text-muted-foreground", className)}
+    className={cn(
+      "flex h-7 items-center justify-center text-muted-foreground transition-opacity duration-150 ease-out data-[ending-style]:opacity-0 data-[instant]:transition-none data-[starting-style]:opacity-0",
+      className,
+    )}
     {...props}
   >
     <ChevronUpIcon className="size-4" />
@@ -73,7 +108,10 @@ export const SelectScrollDownArrow = ({
   ...props
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollDownArrow>) => (
   <SelectPrimitive.ScrollDownArrow
-    className={cn("flex h-7 items-center justify-center text-muted-foreground", className)}
+    className={cn(
+      "flex h-7 items-center justify-center text-muted-foreground transition-opacity duration-150 ease-out data-[ending-style]:opacity-0 data-[instant]:transition-none data-[starting-style]:opacity-0",
+      className,
+    )}
     {...props}
   >
     <ChevronDownIcon className="size-4" />

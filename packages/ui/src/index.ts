@@ -1,4 +1,4 @@
-export { Button, buttonVariants, type ButtonProps } from "./components/ui/button";
+export { Button, type ButtonProps } from "./components/ui/button";
 export {
   Accordion,
   AccordionHeader,
@@ -83,6 +83,7 @@ export {
 } from "./components/ui/field";
 export { Fieldset, FieldsetLegend } from "./components/ui/fieldset";
 export { Input } from "./components/ui/input";
+export { IconButtonTooltip } from "./components/ui/icon-button-tooltip";
 export {
   NumberField,
   NumberFieldDecrement,
@@ -119,6 +120,7 @@ export {
 } from "./components/ui/scroll-area";
 export {
   Select,
+  SelectBackdrop,
   SelectContent,
   SelectGroup,
   SelectGroupLabel,

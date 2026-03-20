@@ -1,7 +1,7 @@
 import { createLoader, createSerializer, parseAsString, parseAsStringLiteral } from "nuqs/server";
 
-const mailboxCategories = ["inbox", "spam", "sent", "trash"] as const;
-const settingsTabs = ["general", "account"] as const;
+const mailboxCategories = ["inbox", "spam", "sent", "trash", "drafts"] as const;
+const settingsTabs = ["general", "account", "organization"] as const;
 
 export type SettingsTab = (typeof settingsTabs)[number];
 

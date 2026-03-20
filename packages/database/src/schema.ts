@@ -11,6 +11,24 @@ export const user = pgTable("user", {
   updatedAt: timestamp("updatedAt").notNull(),
 });
 
+export const organization = pgTable(
+  "organization",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    logo: text("logo"),
+    metadata: text("metadata"),
+    personalOwnerUserId: text("personalOwnerUserId"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt"),
+  },
+  (table) => [
+    unique("organization_slug_unique").on(table.slug),
+    unique("organization_personal_owner_user_id_unique").on(table.personalOwnerUserId),
+  ],
+);
+
 export const session = pgTable("session", {
   id: text("id").primaryKey(),
   expiresAt: timestamp("expiresAt").notNull(),
@@ -19,6 +37,7 @@ export const session = pgTable("session", {
   updatedAt: timestamp("updatedAt").notNull(),
   ipAddress: text("ipAddress"),
   userAgent: text("userAgent"),
+  activeOrganizationId: text("activeOrganizationId").references(() => organization.id),
   userId: text("userId")
     .notNull()
     .references(() => user.id),
@@ -79,21 +98,80 @@ export const passkey = pgTable(
   ],
 );
 
+export const member = pgTable(
+  "member",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id),
+    role: text("role").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => [
+    index("member_organization_id_idx").on(table.organizationId),
+    index("member_user_id_idx").on(table.userId),
+    unique("member_organization_id_user_id_unique").on(table.organizationId, table.userId),
+  ],
+);
+
+export const invitation = pgTable(
+  "invitation",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id),
+    email: text("email").notNull(),
+    role: text("role").notNull(),
+    status: text("status").notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    inviterId: text("inviterId")
+      .notNull()
+      .references(() => user.id),
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => [
+    index("invitation_organization_id_idx").on(table.organizationId),
+    index("invitation_email_idx").on(table.email),
+  ],
+);
+
 export const tables = {
   user,
+  organization,
   session,
   account,
   verification,
   passkey,
+  member,
+  invitation,
 };
 
 export const authRelations = defineRelations(tables, (r) => ({
   user: {
     accounts: r.many.account({ from: r.user.id, to: r.account.userId }),
+    invitations: r.many.invitation({ from: r.user.id, to: r.invitation.inviterId }),
+    memberships: r.many.member({ from: r.user.id, to: r.member.userId }),
     sessions: r.many.session({ from: r.user.id, to: r.session.userId }),
     passkeys: r.many.passkey({ from: r.user.id, to: r.passkey.userId }),
   },
+  organization: {
+    invitations: r.many.invitation({
+      from: r.organization.id,
+      to: r.invitation.organizationId,
+    }),
+    members: r.many.member({ from: r.organization.id, to: r.member.organizationId }),
+  },
   session: {
+    activeOrganization: r.one.organization({
+      from: r.session.activeOrganizationId,
+      to: r.organization.id,
+      optional: true,
+    }),
     user: r.one.user({
       from: r.session.userId,
       to: r.user.id,
@@ -111,6 +189,30 @@ export const authRelations = defineRelations(tables, (r) => ({
     user: r.one.user({
       from: r.passkey.userId,
       to: r.user.id,
+      optional: false,
+    }),
+  },
+  member: {
+    organization: r.one.organization({
+      from: r.member.organizationId,
+      to: r.organization.id,
+      optional: false,
+    }),
+    user: r.one.user({
+      from: r.member.userId,
+      to: r.user.id,
+      optional: false,
+    }),
+  },
+  invitation: {
+    inviter: r.one.user({
+      from: r.invitation.inviterId,
+      to: r.user.id,
+      optional: false,
+    }),
+    organization: r.one.organization({
+      from: r.invitation.organizationId,
+      to: r.organization.id,
       optional: false,
     }),
   },

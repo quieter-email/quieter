@@ -11,6 +11,7 @@ export const MAILBOX_LABELS = {
   spam: "SPAM",
   sent: "SENT",
   trash: "TRASH",
+  drafts: "DRAFT",
 } as const;
 
 export type MailboxCategory = keyof typeof MAILBOX_LABELS;
@@ -89,6 +90,25 @@ const gmailAttachmentSchema = z.object({
   data: z.string().optional(),
 });
 
+const gmailApiErrorSchema = z.object({
+  error: z.object({
+    code: z.number().optional(),
+    message: z.string().optional(),
+    status: z.string().optional(),
+    errors: z
+      .array(
+        z.object({
+          domain: z.string().optional(),
+          location: z.string().optional(),
+          locationType: z.string().optional(),
+          message: z.string().optional(),
+          reason: z.string().optional(),
+        }),
+      )
+      .optional(),
+  }),
+});
+
 const gmailLabelSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -106,6 +126,24 @@ const gmailProfileSchema = z.object({
 
 const listMessagesSchema = z.object({
   messages: z.array(z.object({ id: z.string(), threadId: z.string() })).default([]),
+  nextPageToken: z.string().optional(),
+  resultSizeEstimate: z.number().optional(),
+});
+
+const listDraftsSchema = z.object({
+  drafts: z
+    .array(
+      z.object({
+        id: z.string(),
+        message: z
+          .object({
+            id: z.string(),
+            threadId: z.string(),
+          })
+          .optional(),
+      }),
+    )
+    .default([]),
   nextPageToken: z.string().optional(),
   resultSizeEstimate: z.number().optional(),
 });
@@ -162,11 +200,13 @@ const listHistorySchema = z.object({
 export type MessageListItem = {
   id: string;
   threadId: string;
+  draftId?: string;
   snippet?: string;
   subject?: string;
   from?: string;
   to?: string;
   cc?: string;
+  bcc?: string;
   replyTo?: string;
   messageHeaderId?: string;
   references?: string;
@@ -224,6 +264,7 @@ const GMAIL_MESSAGE_METADATA_HEADERS = [
   "From",
   "To",
   "Cc",
+  "Bcc",
   "Reply-To",
   "Date",
   "Message-ID",
@@ -232,6 +273,7 @@ const GMAIL_MESSAGE_METADATA_HEADERS = [
 const GMAIL_MESSAGE_METADATA_FIELDS =
   "id,threadId,labelIds,snippet,historyId,internalDate,payload(headers(name,value))";
 const GMAIL_MESSAGE_LIST_FIELDS = "messages(id,threadId),nextPageToken,resultSizeEstimate";
+const GMAIL_DRAFT_LIST_FIELDS = "drafts(id,message(id,threadId)),nextPageToken,resultSizeEstimate";
 const GMAIL_LABEL_LIST_FIELDS = "labels(id,name,type,labelListVisibility,messageListVisibility)";
 const GMAIL_PROFILE_FIELDS = "emailAddress,historyId,messagesTotal,threadsTotal";
 const GMAIL_HISTORY_FIELDS =
@@ -249,9 +291,28 @@ const hasUnreadLabel = (labelIds: string[] | undefined): boolean =>
 
 const createGoogleApiError = async (response: Response) => {
   const body = await response.text().catch(() => "");
-  const error = new Error(
-    body || `Google API request failed with status ${response.status}.`,
-  ) as Error & {
+  const parsedBody = (() => {
+    if (!body.trim()) {
+      return null;
+    }
+
+    try {
+      return gmailApiErrorSchema.parse(JSON.parse(body));
+    } catch {
+      return null;
+    }
+  })();
+  const googleMessage = parsedBody?.error.message?.trim();
+  const googleReason = parsedBody?.error.errors?.[0]?.reason?.trim().toLowerCase();
+  const message =
+    googleReason === "invalidargument" && googleMessage === "Invalid To header"
+      ? "Check the To field. One or more recipient addresses are invalid."
+      : googleReason === "invalidargument" && googleMessage === "Invalid Cc header"
+        ? "Check the Cc field. One or more recipient addresses are invalid."
+        : googleReason === "invalidargument" && googleMessage === "Invalid Bcc header"
+          ? "Check the Bcc field. One or more recipient addresses are invalid."
+          : googleMessage || body || `Google API request failed with status ${response.status}.`;
+  const error = new Error(message) as Error & {
     status: number;
     retryAfterMs?: number;
   };
@@ -439,6 +500,7 @@ const toMessageListItem = async (
     from,
     to: getHeader(message, "To"),
     cc: getHeader(message, "Cc"),
+    bcc: getHeader(message, "Bcc"),
     replyTo: getHeader(message, "Reply-To"),
     messageHeaderId: getHeader(message, "Message-ID"),
     references: getHeader(message, "References"),
@@ -483,6 +545,26 @@ const listMessages = async (
       pageToken: options?.pageToken,
       labelIds: options?.mailbox ? [MAILBOX_LABELS[options.mailbox]] : undefined,
       includeSpamTrash: includesSpamTrash ? true : undefined,
+      q: options?.query?.trim() || undefined,
+    },
+    signal: options?.signal,
+  });
+};
+
+const listDrafts = async (
+  accessToken: string,
+  options?: {
+    pageToken?: string;
+    maxResults?: number;
+    query?: string;
+    signal?: AbortSignal;
+  },
+) => {
+  return await requestGmail(accessToken, "/gmail/v1/users/me/drafts", listDraftsSchema, {
+    query: {
+      fields: GMAIL_DRAFT_LIST_FIELDS,
+      maxResults: options?.maxResults ?? 20,
+      pageToken: options?.pageToken,
       q: options?.query?.trim() || undefined,
     },
     signal: options?.signal,
@@ -668,6 +750,64 @@ export const listMessagesWithDetails = async (
     nextPageToken: list.nextPageToken,
     resultSizeEstimate: list.resultSizeEstimate,
     historyId,
+  };
+};
+
+export const listDraftsWithDetails = async (
+  accessToken: string,
+  options?: {
+    pageToken?: string;
+    maxResults?: number;
+    query?: string;
+    signal?: AbortSignal;
+  },
+): Promise<ListMessagesPageResult> => {
+  const list = await listDrafts(accessToken, options);
+  const draftRefs = list.drafts.flatMap((draft) => {
+    if (!draft.message?.id) {
+      return [];
+    }
+
+    return [
+      {
+        draftId: draft.id,
+        messageId: draft.message.id,
+      },
+    ];
+  });
+  const details = await getGmailMessagesMetadata(
+    accessToken,
+    draftRefs.map((draft) => draft.messageId),
+    options?.signal,
+  );
+  const detailsById = new Map(
+    details
+      .filter((message): message is GmailMessage => Boolean(message))
+      .map((message) => [message.id, message] as const),
+  );
+  const orderedDrafts = draftRefs.flatMap((draft) => {
+    const message = detailsById.get(draft.messageId);
+    if (!message) {
+      return [];
+    }
+
+    return [
+      {
+        draftId: draft.draftId,
+        message,
+      },
+    ];
+  });
+
+  return {
+    messages: await Promise.all(
+      orderedDrafts.map(async (draft) => ({
+        ...(await toMessageListItem(draft.message)),
+        draftId: draft.draftId,
+      })),
+    ),
+    nextPageToken: list.nextPageToken,
+    resultSizeEstimate: list.resultSizeEstimate,
   };
 };
 
@@ -960,6 +1100,29 @@ export const markThreadAsUnread = async (
   return toThreadMetadataUpdate(updated);
 };
 
+export const updateThreadLabels = async (
+  accessToken: string,
+  threadId: string,
+  changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
+  signal?: AbortSignal,
+) => {
+  const updated = await requestGmail(
+    accessToken,
+    `/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}/modify`,
+    gmailThreadMutationSchema,
+    {
+      method: "POST",
+      query: {
+        fields: "id,historyId,messages(id,labelIds,historyId)",
+      },
+      body: changes,
+      signal,
+    },
+  );
+
+  return toThreadMetadataUpdate(updated);
+};
+
 export const updateMessageLabels = async (
   accessToken: string,
   messageId: string,
@@ -981,6 +1144,27 @@ export const updateMessageLabels = async (
   );
 
   return toMessageMetadataUpdate(updated);
+};
+
+export const moveThreadToTrash = async (
+  accessToken: string,
+  threadId: string,
+  signal?: AbortSignal,
+) => {
+  const updated = await requestGmail(
+    accessToken,
+    `/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}/trash`,
+    gmailThreadMutationSchema,
+    {
+      method: "POST",
+      query: {
+        fields: "id,historyId,messages(id,labelIds,historyId)",
+      },
+      signal,
+    },
+  );
+
+  return toThreadMetadataUpdate(updated);
 };
 
 export const moveMessageToTrash = async (
@@ -1020,6 +1204,24 @@ export const deleteMessagePermanently = async (
   );
 
   return { id: messageId };
+};
+
+export const deleteThreadPermanently = async (
+  accessToken: string,
+  threadId: string,
+  signal?: AbortSignal,
+) => {
+  await requestGmail(
+    accessToken,
+    `/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}`,
+    z.object({}).passthrough(),
+    {
+      method: "DELETE",
+      signal,
+    },
+  );
+
+  return { threadId };
 };
 
 export const getDraft = async (

@@ -2,9 +2,8 @@
 
 import type { ComponentPropsWithoutRef } from "react";
 import { Drawer as DrawerPrimitive } from "vaul";
+import type { ButtonProps } from "./button";
 import { cn } from "../../lib/cn";
-import { buttonVariants } from "./button";
-import { overlayBackdropClassName, overlayPanelClassName } from "./shared";
 
 export const Drawer = DrawerPrimitive.Root;
 export const DrawerTrigger = DrawerPrimitive.Trigger;
@@ -14,7 +13,10 @@ export const DrawerOverlay = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Overlay>) => (
-  <DrawerPrimitive.Overlay className={cn(overlayBackdropClassName, className)} {...props} />
+  <DrawerPrimitive.Overlay
+    className={cn("fixed inset-0 z-50 bg-black/50 backdrop-blur-sm", className)}
+    {...props}
+  />
 );
 
 export const DrawerHandle = ({
@@ -39,8 +41,7 @@ export const DrawerContent = ({
     <DrawerOverlay />
     <DrawerPrimitive.Content
       className={cn(
-        overlayPanelClassName,
-        "fixed z-50 flex flex-col overflow-hidden bg-background-light",
+        "fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-background-light text-popover-foreground shadow-lg outline-none",
         "data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=bottom]:bottom-0 data-[vaul-drawer-direction=bottom]:max-h-[96vh] data-[vaul-drawer-direction=bottom]:rounded-t-[10px] data-[vaul-drawer-direction=bottom]:border-t",
         "data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=top]:max-h-[96vh] data-[vaul-drawer-direction=top]:rounded-b-[10px] data-[vaul-drawer-direction=top]:border-b",
         "data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=left]:h-full data-[vaul-drawer-direction=left]:w-[min(92vw,32rem)] data-[vaul-drawer-direction=left]:rounded-r-2xl data-[vaul-drawer-direction=left]:border-r",
@@ -98,10 +99,21 @@ export const DrawerCloseButton = ({
   variant = "outline",
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Close> & {
-  variant?: "default" | "outline" | "ghost" | "destructive";
+  variant?: ButtonProps["variant"];
 }) => (
   <DrawerPrimitive.Close
-    className={cn(buttonVariants({ size: "sm", variant }), "min-w-20", className)}
+    className={cn(
+      "inline-flex min-w-20 shrink-0 items-center justify-center gap-2 rounded-md px-3.5 text-[13px] leading-none font-medium whitespace-nowrap transition-colors duration-150 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+      variant === "default" &&
+        "h-8 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/85",
+      variant === "outline" &&
+        "h-8 border border-input bg-background text-foreground shadow-sm hover:bg-muted/60 active:bg-muted/80",
+      variant === "ghost" &&
+        "h-8 bg-transparent text-foreground-light hover:bg-muted/60 hover:text-foreground active:bg-muted/80",
+      variant === "destructive" &&
+        "h-8 bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
+      className,
+    )}
     {...props}
   />
 );

@@ -3,4 +3,4 @@ import { toNextJsHandler } from "better-auth/next-js";
 
 export const runtime = "nodejs";
 
-export const { GET, POST } = toNextJsHandler(auth);
+export const { GET, POST, PUT, PATCH, DELETE } = toNextJsHandler(auth);
