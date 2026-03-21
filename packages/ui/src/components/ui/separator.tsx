@@ -11,7 +11,7 @@ export const Separator = ({
 }: ComponentPropsWithoutRef<typeof SeparatorPrimitive>) => (
   <SeparatorPrimitive
     className={cn(
-      orientation === "horizontal" ? "h-px w-full" : "h-full w-px",
+      { "h-px w-full": orientation === "horizontal", "h-full w-px": orientation !== "horizontal" },
       "shrink-0 bg-border",
       className,
     )}

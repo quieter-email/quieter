@@ -12,9 +12,11 @@ const CalendarChevron = ({ className, orientation = "left" }: ChevronProps) => (
   <ChevronDownIcon
     className={cn(
       "size-4",
-      orientation === "left" && "rotate-90",
-      orientation === "right" && "-rotate-90",
-      orientation === "up" && "rotate-180",
+      {
+        "rotate-90": orientation === "left",
+        "-rotate-90": orientation === "right",
+        "rotate-180": orientation === "up",
+      },
       className,
     )}
   />

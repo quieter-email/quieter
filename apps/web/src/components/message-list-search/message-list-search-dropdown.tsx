@@ -47,7 +47,7 @@ const SearchAccordionTrigger = ({
     aria-expanded={open}
     className={cn(
       "flex min-h-8 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground transition-colors outline-none hover:bg-muted focus-visible:bg-muted",
-      open && "bg-muted/80 font-medium",
+      { "bg-muted/80 font-medium": open },
     )}
     onClick={onClick}
     type="button"
@@ -56,10 +56,10 @@ const SearchAccordionTrigger = ({
     <span className="min-w-0 flex-1 truncate">{children}</span>
     <HugeiconsIcon
       aria-hidden
-      className={cn(
-        "size-3.5 shrink-0 text-muted-foreground transition-transform duration-150",
-        open ? "rotate-90" : "rotate-0",
-      )}
+      className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform duration-150", {
+        "rotate-90": open,
+        "rotate-0": !open,
+      })}
       icon={open ? Cancel01Icon : ArrowRight01Icon}
     />
   </button>
@@ -78,7 +78,7 @@ const SearchIndentedButton = ({
     aria-pressed={pressed}
     className={cn(
       "flex min-h-8 w-full items-center rounded-md px-2.5 py-1.5 pl-9 text-left text-[13px] text-foreground transition-colors outline-none hover:bg-muted focus-visible:bg-muted",
-      pressed && "bg-muted ring-1 ring-border ring-inset",
+      { "bg-muted ring-1 ring-border ring-inset": pressed },
     )}
     onClick={onClick}
     type="button"

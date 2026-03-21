@@ -64,7 +64,13 @@ const MessageHeaderContent = ({
   const preview = previewMode === "collapsed" && !isExpanded ? message.snippet?.trim() || "" : "";
 
   return (
-    <div className={cn("flex gap-4", preview ? "items-start" : "items-center", className)}>
+    <div
+      className={cn(
+        "flex gap-4",
+        { "items-start": Boolean(preview), "items-center": !preview },
+        className,
+      )}
+    >
       <div className="mt-0.5 shrink-0">
         <SenderAvatar
           avatarUrlDark={message.senderAvatarUrls?.dark}
@@ -86,9 +92,11 @@ const MessageHeaderContent = ({
                 className={cn(
                   "truncate text-sm text-foreground sm:text-[15px]",
                   senderNameClassName,
-                  isExpanded || isMessageUnread(message)
-                    ? "font-semibold text-foreground-dark"
-                    : "font-medium",
+                  {
+                    "font-semibold text-foreground-dark":
+                      Boolean(isExpanded) || isMessageUnread(message),
+                    "font-medium": !isExpanded && !isMessageUnread(message),
+                  },
                 )}
               >
                 {senderName}
@@ -171,7 +179,10 @@ const ThreadMessageBody = ({
       <div
         className={cn(
           "px-4 pb-4 transition-[opacity,transform,padding] duration-200 ease-out sm:px-5 sm:pb-5",
-          expanded ? "translate-y-0 pt-2 opacity-100" : "-translate-y-1 pt-0 opacity-0",
+          {
+            "translate-y-0 pt-2 opacity-100": expanded,
+            "-translate-y-1 pt-0 opacity-0": !expanded,
+          },
         )}
       >
         <div className="border-t border-border/60 pt-4 sm:pt-5">
@@ -256,7 +267,7 @@ const ThreadMessageList = ({
                     aria-hidden="true"
                     className={cn(
                       "size-4 text-muted-foreground transition-transform duration-200",
-                      isExpanded && "rotate-180 text-foreground/80",
+                      { "rotate-180 text-foreground/80": isExpanded },
                     )}
                     icon={ArrowDown01Icon}
                   />

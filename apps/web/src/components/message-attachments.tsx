@@ -72,7 +72,7 @@ export const MessageAttachments = ({ attachments, className }: MessageAttachment
               <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
                 <HugeiconsIcon
                   aria-hidden="true"
-                  className={cn("size-4", isDownloading && "text-foreground")}
+                  className={cn("size-4", { "text-foreground": isDownloading })}
                   icon={isDownloading ? Download01Icon : Attachment01Icon}
                 />
               </span>

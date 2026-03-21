@@ -2,6 +2,7 @@
 
 import {
   ArrowTurnBackwardIcon,
+  ArrowTurnForwardIcon,
   LeftToRightListBulletIcon,
   LeftToRightListNumberIcon,
   QuoteUpIcon,
@@ -176,7 +177,7 @@ export const ComposeEditor = ({
     {
       id: "redo",
       label: "Redo",
-      icon: ArrowTurnBackwardIcon,
+      icon: ArrowTurnForwardIcon,
       disabled: !editor?.can().chain().focus().redo().run(),
       onClick: () => editor?.chain().focus().redo().run(),
     },
@@ -186,7 +187,7 @@ export const ComposeEditor = ({
     <div
       className={cn(
         "overflow-hidden rounded-lg border border-input bg-background transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20",
-        disabled && "pointer-events-none opacity-80",
+        { "pointer-events-none opacity-80": disabled },
       )}
     >
       <div className="px-4 py-4">
@@ -209,18 +210,17 @@ export const ComposeEditor = ({
                 aria-label={action.label}
                 className={cn(
                   "inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/55 hover:text-foreground focus-visible:outline-none",
-                  action.active && "bg-muted/75 text-foreground",
-                  isDisabled && "opacity-35 hover:bg-transparent hover:text-muted-foreground",
+                  {
+                    "bg-muted/75 text-foreground": action.active,
+                    "opacity-35 hover:bg-transparent hover:text-muted-foreground": isDisabled,
+                  },
                 )}
                 disabled={isDisabled}
                 onClick={() => action.onClick()}
                 onMouseDown={(event) => event.preventDefault()}
                 type="button"
               >
-                <HugeiconsIcon
-                  className={cn("size-4", action.id === "redo" && "-scale-x-100")}
-                  icon={action.icon}
-                />
+                <HugeiconsIcon className="size-4" icon={action.icon} />
               </button>
             </IconButtonTooltip>
           );

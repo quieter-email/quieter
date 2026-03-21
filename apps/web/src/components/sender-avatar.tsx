@@ -43,7 +43,7 @@ export const SenderAvatar = ({
     <div
       className={cn(
         "relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg text-sm font-medium text-muted-foreground",
-        showFallback && "bg-muted/80",
+        { "bg-muted/80": showFallback },
         className,
       )}
     >
@@ -53,7 +53,9 @@ export const SenderAvatar = ({
         <Image
           alt=""
           aria-hidden="true"
-          className={cn("absolute inset-0 size-full object-cover", showFallback && "opacity-0")}
+          className={cn("absolute inset-0 size-full object-cover", {
+            "opacity-0": showFallback,
+          })}
           fill
           onError={() => {
             updateAvatarStatus(avatarUrlLight, "error");
@@ -70,10 +72,9 @@ export const SenderAvatar = ({
         <Image
           alt=""
           aria-hidden="true"
-          className={cn(
-            "absolute inset-0 size-full object-cover dark:hidden",
-            showFallback && "opacity-0",
-          )}
+          className={cn("absolute inset-0 size-full object-cover dark:hidden", {
+            "opacity-0": showFallback,
+          })}
           fill
           onError={() => {
             updateAvatarStatus(avatarUrlLight, "error");
@@ -90,10 +91,9 @@ export const SenderAvatar = ({
         <Image
           alt=""
           aria-hidden="true"
-          className={cn(
-            "absolute inset-0 hidden size-full object-cover dark:block",
-            showFallback && "opacity-0",
-          )}
+          className={cn("absolute inset-0 hidden size-full object-cover dark:block", {
+            "opacity-0": showFallback,
+          })}
           fill
           onError={() => {
             updateAvatarStatus(avatarUrlDark, "error");

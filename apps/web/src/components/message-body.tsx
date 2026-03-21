@@ -138,7 +138,7 @@ const HtmlMessageBody = ({ compact, html }: { html: string; compact?: boolean })
     );
   }, [colorMode, html]);
 
-  return <div className={cn(compact ? "mt-3" : "mt-6")} ref={hostRef} />;
+  return <div className={cn({ "mt-3": compact, "mt-6": !compact })} ref={hostRef} />;
 };
 
 export const MessageBody = ({ compact, html, snippet, text }: MessageBodyProps) => {
@@ -147,10 +147,10 @@ export const MessageBody = ({ compact, html, snippet, text }: MessageBodyProps) 
   if (!html?.trim()) {
     return (
       <p
-        className={cn(
-          "text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground",
-          compact ? "mt-3" : "mt-6",
-        )}
+        className={cn("text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground", {
+          "mt-3": compact,
+          "mt-6": !compact,
+        })}
       >
         {fallbackText}
       </p>

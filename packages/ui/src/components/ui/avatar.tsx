@@ -16,9 +16,11 @@ export const Avatar = ({
   <AvatarPrimitive.Root
     className={cn(
       "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-foreground",
-      size === "sm" && "size-8 text-xs",
-      size === "default" && "size-10 text-sm",
-      size === "lg" && "size-12 text-base",
+      {
+        "size-8 text-xs": size === "sm",
+        "size-10 text-sm": size === "default",
+        "size-12 text-base": size === "lg",
+      },
       className,
     )}
     {...props}

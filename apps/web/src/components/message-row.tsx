@@ -162,9 +162,10 @@ const MessageRowContent = memo(
             aria-pressed={Boolean(isSelected)}
             className={cn(
               "absolute inset-0 flex items-center justify-center rounded-lg transition-[opacity,transform] duration-100 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
-              showSelectionControl
-                ? "pointer-events-none scale-95 opacity-0"
-                : "scale-100 opacity-100",
+              {
+                "pointer-events-none scale-95 opacity-0": showSelectionControl,
+                "scale-100 opacity-100": !showSelectionControl,
+              },
             )}
             disabled={isActionPending}
             onKeyDown={handleSelectionKeyDown}
@@ -184,9 +185,10 @@ const MessageRowContent = memo(
             aria-pressed={Boolean(isSelected)}
             className={cn(
               "absolute inset-0 flex items-center justify-center rounded-lg transition-[opacity,transform] duration-100 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
-              showSelectionControl
-                ? "scale-100 opacity-100"
-                : "pointer-events-none scale-95 opacity-0",
+              {
+                "scale-100 opacity-100": showSelectionControl,
+                "pointer-events-none scale-95 opacity-0": !showSelectionControl,
+              },
             )}
             disabled={isActionPending}
             onKeyDown={handleSelectionKeyDown}
@@ -197,8 +199,10 @@ const MessageRowContent = memo(
               aria-hidden="true"
               className={cn(
                 "flex size-[18px] items-center justify-center rounded-[5px] border bg-background text-transparent shadow-xs transition-[background-color,border-color,color,box-shadow] duration-100 ease-out",
-                isSelected && "border-primary bg-primary text-primary-foreground",
-                !isSelected && "border-input",
+                {
+                  "border-primary bg-primary text-primary-foreground": isSelected,
+                  "border-input": !isSelected,
+                },
               )}
             >
               <svg
@@ -245,7 +249,7 @@ const MessageRowContent = memo(
                     {isDraftMailbox ? (
                       <span className="font-medium text-muted-foreground">To </span>
                     ) : null}
-                    <span className={cn(unread ? "font-semibold" : "font-medium")}>
+                    <span className={cn({ "font-semibold": unread, "font-medium": !unread })}>
                       {senderLabel}
                     </span>
                     {senderEmail ? (

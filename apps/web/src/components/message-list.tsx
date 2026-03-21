@@ -14,6 +14,7 @@ import {
   Button,
   Checkbox,
   CheckboxIndicator,
+  cn,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -147,7 +148,7 @@ const MessageListBulkActions = ({
       {actions.map((action) => (
         <div key={action.id}>
           <DropdownMenuItem
-            className={action.destructive ? "text-destructive" : undefined}
+            className={cn({ "text-destructive": action.destructive })}
             onSelect={() => {
               void action.onSelect();
             }}

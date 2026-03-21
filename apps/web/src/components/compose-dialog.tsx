@@ -828,7 +828,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
 
                 {canDiscardDraft ? (
                   <Button
-                    className={composeError ? undefined : "mr-auto"}
+                    className={cn({ "mr-auto": !composeError })}
                     disabled={
                       transitionBusy ||
                       activeDraft.saveStatus === "discarding" ||

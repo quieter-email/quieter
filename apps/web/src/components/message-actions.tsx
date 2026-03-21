@@ -14,6 +14,7 @@ import {
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
   Button,
+  cn,
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -113,7 +114,7 @@ const renderDropdownEntry = (entry: MenuEntry) => {
 
   return (
     <DropdownMenuItem
-      className={entry.destructive ? "text-destructive" : undefined}
+      className={cn({ "text-destructive": entry.destructive })}
       disabled={entry.disabled}
       key={entry.id}
       onSelect={entry.onSelect}
@@ -131,7 +132,7 @@ const renderContextEntry = (entry: MenuEntry) => {
 
   return (
     <ContextMenuItem
-      className={entry.destructive ? "text-destructive" : undefined}
+      className={cn({ "text-destructive": entry.destructive })}
       disabled={entry.disabled}
       key={entry.id}
       onSelect={entry.onSelect}

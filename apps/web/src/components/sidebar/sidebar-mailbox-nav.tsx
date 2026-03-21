@@ -38,9 +38,12 @@ export const SidebarMailboxNav = ({ onSelectMailbox, selectedMailbox }: SidebarM
           aria-current={isActive ? "page" : undefined}
           className={cn(
             "group relative h-9 w-full justify-start gap-3 rounded-md px-3 text-left text-sm font-medium",
-            isActive
-              ? "bg-secondary text-foreground shadow-sm hover:bg-secondary active:bg-secondary"
-              : "text-foreground-light hover:bg-secondary/50 hover:text-foreground active:bg-secondary/80",
+            {
+              "bg-secondary text-foreground shadow-sm hover:bg-secondary active:bg-secondary":
+                isActive,
+              "text-foreground-light hover:bg-secondary/50 hover:text-foreground active:bg-secondary/80":
+                !isActive,
+            },
           )}
           key={item.id}
           onClick={() => onSelectMailbox(item.id)}
