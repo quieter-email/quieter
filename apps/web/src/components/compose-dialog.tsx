@@ -6,7 +6,7 @@ import { composeDraftFormValuesSchema, composeSendFormValuesSchema } from "@quie
 import { Button, Dialog, DialogContent, cn } from "@quietr/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { z } from "zod";
 import { getErrorMessage, getFieldErrorMessage } from "~/lib/errors";
@@ -112,6 +112,7 @@ const canSaveComposeFormValues = (values: ComposeFormValues) =>
 export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>(
   function ComposeDialog({ userId }, ref) {
     const queryClient = useQueryClient();
+    const prefersReducedMotion = useReducedMotion();
     const [dialogOpen, setDialogOpen] = useState(false);
     const [showCc, setShowCc] = useState(false);
     const [showBcc, setShowBcc] = useState(false);
@@ -602,12 +603,10 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
       <Dialog onOpenChange={handleDialogOpenChange} open={dialogOpen}>
         <DialogContent className="max-h-[85vh] w-[min(92vw,46rem)] overflow-hidden bg-background-light p-0 transition-opacity duration-100 data-[ending-style]:scale-100 data-[starting-style]:scale-100">
           <form
-            className="max-h-[85vh] overflow-y-auto px-5 py-5 sm:px-6 sm:py-6"
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void form.handleSubmit();
+            action={async () => {
+              await form.handleSubmit();
             }}
+            className="max-h-[85vh] overflow-y-auto px-5 py-5 sm:px-6 sm:py-6"
           >
             <div className="space-y-4">
               <div className="flex items-start justify-between gap-4 pb-1">
@@ -696,105 +695,131 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
                   }}
                 </form.Field>
 
-                <AnimatePresence initial={false}>
-                  {showCc ? (
-                    <motion.div
-                      animate={{ height: "auto", marginTop: 12, opacity: 1, y: 0 }}
-                      className="overflow-hidden"
-                      exit={{ height: 0, marginTop: 0, opacity: 0, y: -4 }}
-                      id="compose-cc-field"
-                      initial={{ height: 0, marginTop: 0, opacity: 0, y: -4 }}
-                      transition={recipientFieldTransition}
-                    >
-                      <form.Field name="cc">
-                        {(field) => {
-                          const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
-
-                          return (
-                            <div className="space-y-2">
-                              <div
-                                className={cn(fieldContainerClass, {
-                                  "bg-destructive/10": Boolean(fieldError),
-                                })}
-                              >
-                                <input
-                                  aria-invalid={fieldError ? true : undefined}
-                                  aria-label="Cc recipients"
-                                  autoComplete="off"
-                                  className={fieldInputClass}
-                                  onBlur={() => field.handleBlur()}
-                                  onChange={(event) => {
-                                    clearActiveDraftError();
-                                    field.handleChange(event.currentTarget.value);
-                                    scheduleAutosave();
-                                  }}
-                                  placeholder="Cc"
-                                  spellCheck={false}
-                                  type="text"
-                                  value={field.state.value}
-                                />
-                              </div>
-
-                              {fieldError ? (
-                                <p className="pl-1 text-xs text-destructive">{fieldError}</p>
-                              ) : null}
-                            </div>
-                          );
+                <LazyMotion features={domAnimation}>
+                  <AnimatePresence initial={false}>
+                    {showCc ? (
+                      <m.div
+                        animate={{ height: "auto", marginTop: 12, opacity: 1, y: 0 }}
+                        className="overflow-hidden"
+                        exit={{
+                          height: 0,
+                          marginTop: 0,
+                          opacity: 0,
+                          y: prefersReducedMotion ? 0 : -4,
                         }}
-                      </form.Field>
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
-
-                <AnimatePresence initial={false}>
-                  {showBcc ? (
-                    <motion.div
-                      animate={{ height: "auto", marginTop: 12, opacity: 1, y: 0 }}
-                      className="overflow-hidden"
-                      exit={{ height: 0, marginTop: 0, opacity: 0, y: -4 }}
-                      id="compose-bcc-field"
-                      initial={{ height: 0, marginTop: 0, opacity: 0, y: -4 }}
-                      transition={recipientFieldTransition}
-                    >
-                      <form.Field name="bcc">
-                        {(field) => {
-                          const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
-
-                          return (
-                            <div className="space-y-2">
-                              <div
-                                className={cn(fieldContainerClass, {
-                                  "bg-destructive/10": Boolean(fieldError),
-                                })}
-                              >
-                                <input
-                                  aria-invalid={fieldError ? true : undefined}
-                                  aria-label="Bcc recipients"
-                                  autoComplete="off"
-                                  className={fieldInputClass}
-                                  onBlur={() => field.handleBlur()}
-                                  onChange={(event) => {
-                                    clearActiveDraftError();
-                                    field.handleChange(event.currentTarget.value);
-                                    scheduleAutosave();
-                                  }}
-                                  placeholder="Bcc"
-                                  spellCheck={false}
-                                  type="text"
-                                  value={field.state.value}
-                                />
-                              </div>
-
-                              {fieldError ? (
-                                <p className="pl-1 text-xs text-destructive">{fieldError}</p>
-                              ) : null}
-                            </div>
-                          );
+                        id="compose-cc-field"
+                        initial={{
+                          height: 0,
+                          marginTop: 0,
+                          opacity: 0,
+                          y: prefersReducedMotion ? 0 : -4,
                         }}
-                      </form.Field>
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
+                        transition={
+                          prefersReducedMotion ? { duration: 0 } : recipientFieldTransition
+                        }
+                      >
+                        <form.Field name="cc">
+                          {(field) => {
+                            const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
+
+                            return (
+                              <div className="space-y-2">
+                                <div
+                                  className={cn(fieldContainerClass, {
+                                    "bg-destructive/10": Boolean(fieldError),
+                                  })}
+                                >
+                                  <input
+                                    aria-invalid={fieldError ? true : undefined}
+                                    aria-label="Cc recipients"
+                                    autoComplete="off"
+                                    className={fieldInputClass}
+                                    onBlur={() => field.handleBlur()}
+                                    onChange={(event) => {
+                                      clearActiveDraftError();
+                                      field.handleChange(event.currentTarget.value);
+                                      scheduleAutosave();
+                                    }}
+                                    placeholder="Cc"
+                                    spellCheck={false}
+                                    type="text"
+                                    value={field.state.value}
+                                  />
+                                </div>
+
+                                {fieldError ? (
+                                  <p className="pl-1 text-xs text-destructive">{fieldError}</p>
+                                ) : null}
+                              </div>
+                            );
+                          }}
+                        </form.Field>
+                      </m.div>
+                    ) : null}
+                  </AnimatePresence>
+
+                  <AnimatePresence initial={false}>
+                    {showBcc ? (
+                      <m.div
+                        animate={{ height: "auto", marginTop: 12, opacity: 1, y: 0 }}
+                        className="overflow-hidden"
+                        exit={{
+                          height: 0,
+                          marginTop: 0,
+                          opacity: 0,
+                          y: prefersReducedMotion ? 0 : -4,
+                        }}
+                        id="compose-bcc-field"
+                        initial={{
+                          height: 0,
+                          marginTop: 0,
+                          opacity: 0,
+                          y: prefersReducedMotion ? 0 : -4,
+                        }}
+                        transition={
+                          prefersReducedMotion ? { duration: 0 } : recipientFieldTransition
+                        }
+                      >
+                        <form.Field name="bcc">
+                          {(field) => {
+                            const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
+
+                            return (
+                              <div className="space-y-2">
+                                <div
+                                  className={cn(fieldContainerClass, {
+                                    "bg-destructive/10": Boolean(fieldError),
+                                  })}
+                                >
+                                  <input
+                                    aria-invalid={fieldError ? true : undefined}
+                                    aria-label="Bcc recipients"
+                                    autoComplete="off"
+                                    className={fieldInputClass}
+                                    onBlur={() => field.handleBlur()}
+                                    onChange={(event) => {
+                                      clearActiveDraftError();
+                                      field.handleChange(event.currentTarget.value);
+                                      scheduleAutosave();
+                                    }}
+                                    placeholder="Bcc"
+                                    spellCheck={false}
+                                    type="text"
+                                    value={field.state.value}
+                                  />
+                                </div>
+
+                                {fieldError ? (
+                                  <p className="pl-1 text-xs text-destructive">{fieldError}</p>
+                                ) : null}
+                              </div>
+                            );
+                          }}
+                        </form.Field>
+                      </m.div>
+                    ) : null}
+                  </AnimatePresence>
+                </LazyMotion>
 
                 <form.Field name="subject">
                   {(field) => (

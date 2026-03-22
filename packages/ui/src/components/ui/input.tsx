@@ -6,7 +6,7 @@ import { cn } from "../../lib/cn";
 
 export type InputChrome = "default" | "ghost";
 export type InputSize = "sm" | "default" | "lg";
-export type InputProps = Omit<ComponentPropsWithoutRef<typeof InputPrimitive>, "size"> & {
+type InputProps = Omit<ComponentPropsWithoutRef<typeof InputPrimitive>, "size"> & {
   chrome?: InputChrome;
   size?: InputSize;
 };

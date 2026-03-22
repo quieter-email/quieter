@@ -36,7 +36,7 @@ import {
   IconButtonTooltip,
 } from "@quietr/ui";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useReducer, useState } from "react";
 import { getErrorMessage } from "~/lib/errors";
 import {
   type GmailLabelListItem,
@@ -145,6 +145,105 @@ const renderContextEntry = (entry: MenuEntry) => {
   );
 };
 
+type MessageActionsDialogsState = {
+  deleteError: string | null;
+  draftLabelIds: string[] | null;
+  isApplyingLabels: boolean;
+  isDeleting: boolean;
+  labelError: string | null;
+};
+
+type MessageActionsDialogsAction =
+  | {
+      type: "delete/error";
+      value: string | null;
+    }
+  | {
+      type: "delete/pending";
+      value: boolean;
+    }
+  | {
+      type: "delete/reset";
+    }
+  | {
+      checked: boolean;
+      currentUserLabelIds: readonly string[];
+      labelId: string;
+      type: "labels/toggle";
+    }
+  | {
+      type: "labels/error";
+      value: string | null;
+    }
+  | {
+      type: "labels/pending";
+      value: boolean;
+    }
+  | {
+      type: "labels/reset";
+    };
+
+const initialMessageActionsDialogsState: MessageActionsDialogsState = {
+  deleteError: null,
+  draftLabelIds: null,
+  isApplyingLabels: false,
+  isDeleting: false,
+  labelError: null,
+};
+
+const messageActionsDialogsReducer = (
+  state: MessageActionsDialogsState,
+  action: MessageActionsDialogsAction,
+): MessageActionsDialogsState => {
+  switch (action.type) {
+    case "delete/error":
+      return {
+        ...state,
+        deleteError: action.value,
+      };
+    case "delete/pending":
+      return {
+        ...state,
+        isDeleting: action.value,
+      };
+    case "delete/reset":
+      return {
+        ...state,
+        deleteError: null,
+        isDeleting: false,
+      };
+    case "labels/toggle": {
+      const nextCurrent = state.draftLabelIds ?? [...action.currentUserLabelIds];
+
+      return {
+        ...state,
+        draftLabelIds: action.checked
+          ? nextCurrent.includes(action.labelId)
+            ? nextCurrent
+            : [...nextCurrent, action.labelId]
+          : nextCurrent.filter((value) => value !== action.labelId),
+      };
+    }
+    case "labels/error":
+      return {
+        ...state,
+        labelError: action.value,
+      };
+    case "labels/pending":
+      return {
+        ...state,
+        isApplyingLabels: action.value,
+      };
+    case "labels/reset":
+      return {
+        ...state,
+        draftLabelIds: null,
+        isApplyingLabels: false,
+        labelError: null,
+      };
+  }
+};
+
 const MessageActionsDialogs = ({
   isPending,
   isTrashMailbox,
@@ -173,27 +272,21 @@ const MessageActionsDialogs = ({
   const currentUserLabelIds = (message.labelIds ?? []).filter((labelId) =>
     userLabels.some((label) => label.id === labelId),
   );
-
-  const [draftLabelIds, setDraftLabelIds] = useState<string[] | null>(null);
-  const [labelError, setLabelError] = useState<string | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [isApplyingLabels, setIsApplyingLabels] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const selectedLabelIds = draftLabelIds ?? currentUserLabelIds;
+  const [state, dispatch] = useReducer(
+    messageActionsDialogsReducer,
+    initialMessageActionsDialogsState,
+  );
+  const selectedLabelIds = state.draftLabelIds ?? currentUserLabelIds;
   const labelsChanged = !areStringArraysEqual(currentUserLabelIds, selectedLabelIds);
-  const isLabelsBusy = isPending || isApplyingLabels;
-  const isDeleteBusy = isPending || isDeleting;
+  const isLabelsBusy = isPending || state.isApplyingLabels;
+  const isDeleteBusy = isPending || state.isDeleting;
 
   const toggleDraftLabel = (labelId: string, checked: boolean) => {
-    setDraftLabelIds((current) => {
-      const nextCurrent = current ?? currentUserLabelIds;
-
-      if (checked) {
-        if (nextCurrent.includes(labelId)) return nextCurrent;
-        return [...nextCurrent, labelId];
-      }
-
-      return nextCurrent.filter((value) => value !== labelId);
+    dispatch({
+      checked,
+      currentUserLabelIds,
+      labelId,
+      type: "labels/toggle",
     });
   };
 
@@ -211,8 +304,14 @@ const MessageActionsDialogs = ({
       return;
     }
 
-    setIsApplyingLabels(true);
-    setLabelError(null);
+    dispatch({
+      type: "labels/pending",
+      value: true,
+    });
+    dispatch({
+      type: "labels/error",
+      value: null,
+    });
 
     try {
       await onUpdateLabels(message.id, {
@@ -221,25 +320,43 @@ const MessageActionsDialogs = ({
       });
       onOpenLabelsDialog(false);
     } catch (error) {
-      setLabelError(getErrorMessage(error, "Could not update labels."));
+      dispatch({
+        type: "labels/error",
+        value: getErrorMessage(error, "Could not update labels."),
+      });
     } finally {
-      setIsApplyingLabels(false);
+      dispatch({
+        type: "labels/pending",
+        value: false,
+      });
     }
   };
 
   const confirmDelete = async () => {
     if (!onDeletePermanently || !isTrashMailbox || isDeleteBusy) return;
 
-    setIsDeleting(true);
-    setDeleteError(null);
+    dispatch({
+      type: "delete/pending",
+      value: true,
+    });
+    dispatch({
+      type: "delete/error",
+      value: null,
+    });
 
     try {
       await onDeletePermanently(message.id);
       onOpenDeleteDialog(false);
     } catch (error) {
-      setDeleteError(getErrorMessage(error, "Could not delete this message."));
+      dispatch({
+        type: "delete/error",
+        value: getErrorMessage(error, "Could not delete this message."),
+      });
     } finally {
-      setIsDeleting(false);
+      dispatch({
+        type: "delete/pending",
+        value: false,
+      });
     }
   };
 
@@ -248,9 +365,7 @@ const MessageActionsDialogs = ({
       <Dialog
         onOpenChange={(open) => {
           onOpenLabelsDialog(open);
-          setDraftLabelIds(null);
-          setLabelError(null);
-          if (!open) setIsApplyingLabels(false);
+          dispatch({ type: "labels/reset" });
         }}
         open={openLabelsDialog}
       >
@@ -288,7 +403,9 @@ const MessageActionsDialogs = ({
               <p className="text-sm text-muted-foreground">No custom labels.</p>
             )}
 
-            {labelError ? <p className="text-sm text-destructive">{labelError}</p> : null}
+            {state.labelError ? (
+              <p className="text-sm text-destructive">{state.labelError}</p>
+            ) : null}
           </DialogBody>
 
           <DialogFooter>
@@ -309,8 +426,7 @@ const MessageActionsDialogs = ({
         onOpenChange={(open) => {
           onOpenDeleteDialog(open);
           if (!open) {
-            setDeleteError(null);
-            setIsDeleting(false);
+            dispatch({ type: "delete/reset" });
           }
         }}
         open={openDeleteDialog}
@@ -322,7 +438,9 @@ const MessageActionsDialogs = ({
           </DialogHeader>
 
           <DialogBody>
-            {deleteError ? <p className="text-sm text-destructive">{deleteError}</p> : null}
+            {state.deleteError ? (
+              <p className="text-sm text-destructive">{state.deleteError}</p>
+            ) : null}
           </DialogBody>
 
           <DialogFooter>

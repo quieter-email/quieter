@@ -293,10 +293,8 @@ const CreateOrganizationDialog = () => {
           </DialogHeader>
 
           <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void form.handleSubmit();
+            action={async () => {
+              await form.handleSubmit();
             }}
           >
             <DialogBody className="space-y-3">
@@ -458,10 +456,8 @@ const EditOrganizationDialog = ({
           </DialogHeader>
 
           <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void form.handleSubmit();
+            action={async () => {
+              await form.handleSubmit();
             }}
           >
             <DialogBody className="space-y-3">
@@ -582,10 +578,8 @@ const ManagePeopleMemberRoleForm = ({
       {canUpdateMemberRole && !isActiveMember ? (
         <form
           className="flex flex-wrap items-center justify-end gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void form.handleSubmit();
+          action={async () => {
+            await form.handleSubmit();
           }}
         >
           <form.Field name="role">
@@ -679,6 +673,116 @@ const ManagePeopleMemberRoleForm = ({
     </div>
   );
 };
+
+const ManagePeoplePendingInvitations = ({
+  canCancelInvitations,
+  isCancelInvitationPending,
+  onCancelInvitation,
+  pendingInvitationId,
+  pendingInvitations,
+}: {
+  canCancelInvitations: boolean;
+  isCancelInvitationPending: boolean;
+  onCancelInvitation: (invitationId: string) => Promise<void>;
+  pendingInvitationId: string | null;
+  pendingInvitations: ActiveOrganization["invitations"];
+}) => {
+  if (pendingInvitations.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
+        Pending
+      </p>
+
+      <div className="divide-y divide-border/70">
+        {pendingInvitations.map((invitation) => {
+          const isCancelingInvitation =
+            pendingInvitationId === invitation.id && isCancelInvitationPending;
+
+          return (
+            <div
+              className="flex flex-col gap-3 py-3 md:flex-row md:items-center"
+              key={invitation.id}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm text-foreground">{invitation.email}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {formatRoleLabel(invitation.role)}
+                </p>
+              </div>
+
+              {canCancelInvitations ? (
+                <Button
+                  disabled={isCancelingInvitation}
+                  onClick={() => void onCancelInvitation(invitation.id)}
+                  size="sm"
+                  variant="outline"
+                >
+                  {isCancelingInvitation ? (
+                    <HugeiconsIcon
+                      aria-hidden
+                      className="size-4 animate-spin"
+                      icon={Loading03Icon}
+                    />
+                  ) : (
+                    <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+                  )}
+                  Cancel
+                </Button>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const ManagePeopleMembersSection = ({
+  activeMember,
+  canRemoveMembers,
+  canUpdateMemberRole,
+  members,
+  onRemoveMember,
+  onUpdateRole,
+  pendingMemberId,
+  removeMemberPending,
+  updateMemberRolePending,
+}: {
+  activeMember: ActiveMember | null;
+  canRemoveMembers: boolean;
+  canUpdateMemberRole: boolean;
+  members: OrganizationMember[];
+  onRemoveMember: (memberId: string) => Promise<void>;
+  onUpdateRole: (memberId: string, role: OrganizationRoleOption) => Promise<void>;
+  pendingMemberId: string | null;
+  removeMemberPending: boolean;
+  updateMemberRolePending: boolean;
+}) => (
+  <div className="space-y-3">
+    <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">Members</p>
+
+    <div className="divide-y divide-border/70">
+      {members.map((member) => (
+        <ManagePeopleMemberRoleForm
+          activeMember={activeMember}
+          canRemoveMembers={canRemoveMembers}
+          canUpdateMemberRole={canUpdateMemberRole}
+          key={`${member.id}:${member.role}`}
+          member={member}
+          onRemoveMember={onRemoveMember}
+          onUpdateRole={onUpdateRole}
+          pendingMemberId={pendingMemberId}
+          removeMemberPending={removeMemberPending}
+          updateMemberRolePending={updateMemberRolePending}
+        />
+      ))}
+    </div>
+  </div>
+);
 
 const ManagePeopleDialog = ({
   activeMember,
@@ -870,10 +974,8 @@ const ManagePeopleDialog = ({
             {canInviteMembers ? (
               <form
                 className="space-y-3"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void inviteForm.handleSubmit();
+                action={async () => {
+                  await inviteForm.handleSubmit();
                 }}
               >
                 <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem_auto] md:items-start">
@@ -951,77 +1053,25 @@ const ManagePeopleDialog = ({
               </form>
             ) : null}
 
-            <div className="space-y-3">
-              <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
-                Members
-              </p>
+            <ManagePeopleMembersSection
+              activeMember={activeMember}
+              canRemoveMembers={canRemoveMembers}
+              canUpdateMemberRole={canUpdateMemberRole}
+              members={members}
+              onRemoveMember={handleRemoveMember}
+              onUpdateRole={handleRoleChange}
+              pendingMemberId={pendingMemberId}
+              removeMemberPending={removeMemberMutation.isPending}
+              updateMemberRolePending={updateMemberRoleMutation.isPending}
+            />
 
-              <div className="divide-y divide-border/70">
-                {members.map((member) => (
-                  <ManagePeopleMemberRoleForm
-                    activeMember={activeMember}
-                    canRemoveMembers={canRemoveMembers}
-                    canUpdateMemberRole={canUpdateMemberRole}
-                    key={`${member.id}:${member.role}`}
-                    member={member}
-                    onRemoveMember={handleRemoveMember}
-                    onUpdateRole={handleRoleChange}
-                    pendingMemberId={pendingMemberId}
-                    removeMemberPending={removeMemberMutation.isPending}
-                    updateMemberRolePending={updateMemberRoleMutation.isPending}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {pendingInvitations.length > 0 ? (
-              <div className="space-y-3">
-                <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
-                  Pending
-                </p>
-
-                <div className="divide-y divide-border/70">
-                  {pendingInvitations.map((invitation) => {
-                    const isCancelingInvitation =
-                      pendingInvitationId === invitation.id && cancelInvitationMutation.isPending;
-
-                    return (
-                      <div
-                        className="flex flex-col gap-3 py-3 md:flex-row md:items-center"
-                        key={invitation.id}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm text-foreground">{invitation.email}</p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {formatRoleLabel(invitation.role)}
-                          </p>
-                        </div>
-
-                        {canCancelInvitations ? (
-                          <Button
-                            disabled={isCancelingInvitation}
-                            onClick={() => void handleCancelInvitation(invitation.id)}
-                            size="sm"
-                            variant="outline"
-                          >
-                            {isCancelingInvitation ? (
-                              <HugeiconsIcon
-                                aria-hidden
-                                className="size-4 animate-spin"
-                                icon={Loading03Icon}
-                              />
-                            ) : (
-                              <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
-                            )}
-                            Cancel
-                          </Button>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
+            <ManagePeoplePendingInvitations
+              canCancelInvitations={canCancelInvitations}
+              isCancelInvitationPending={cancelInvitationMutation.isPending}
+              onCancelInvitation={handleCancelInvitation}
+              pendingInvitationId={pendingInvitationId}
+              pendingInvitations={pendingInvitations}
+            />
 
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
           </DialogBody>
@@ -1117,10 +1167,8 @@ const LeaveOrganizationDialog = ({
           </DialogHeader>
 
           <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void form.handleSubmit();
+            action={async () => {
+              await form.handleSubmit();
             }}
           >
             <DialogBody className="space-y-3">
@@ -1261,10 +1309,8 @@ const DeleteOrganizationDialog = ({
           </DialogHeader>
 
           <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void form.handleSubmit();
+            action={async () => {
+              await form.handleSubmit();
             }}
           >
             <DialogBody className="space-y-3">

@@ -223,12 +223,10 @@ export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
         <h1 className="text-3xl font-medium tracking-tight text-foreground-dark">{pageTitle}</h1>
 
         <form
-          className="mt-8 space-y-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void form.handleSubmit();
+          action={async () => {
+            await form.handleSubmit();
           }}
+          className="mt-8 space-y-3"
         >
           {isSignup ? (
             <form.Field name="name">

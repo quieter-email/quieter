@@ -140,10 +140,8 @@ const EditNameDialog = ({
           </DialogHeader>
 
           <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void form.handleSubmit();
+            action={async () => {
+              await form.handleSubmit();
             }}
           >
             <DialogBody className="space-y-3">
@@ -291,10 +289,8 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
           </DialogHeader>
 
           <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void form.handleSubmit();
+            action={async () => {
+              await form.handleSubmit();
             }}
           >
             <DialogBody className="space-y-3">
@@ -465,10 +461,8 @@ const PasskeysDialog = ({
           <DialogBody className="space-y-4">
             <form
               className="space-y-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                void form.handleSubmit();
+              action={async () => {
+                await form.handleSubmit();
               }}
             >
               <form.Field name="label">
@@ -627,10 +621,8 @@ const DeleteAccountDialog = () => {
           </DialogHeader>
 
           <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void form.handleSubmit();
+            action={async () => {
+              await form.handleSubmit();
             }}
           >
             <DialogBody className="space-y-3">

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import {
   ArrowRight01Icon,
   Cancel01Icon,
@@ -8,7 +9,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { cn } from "@quietr/ui";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 import {
   SEARCH_CATEGORY_FILTER_OPTIONS,
@@ -157,36 +158,70 @@ const AccordionSection = ({
   open,
   sectionId,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   icon: IconSvgElement;
   label: string;
   onToggle: (id: SearchDropdownSectionId) => void;
   open: boolean;
   sectionId: SearchDropdownSectionId;
 }) => (
-  <div>
-    <SearchAccordionTrigger icon={icon} onClick={() => onToggle(sectionId)} open={open}>
-      {label}
-    </SearchAccordionTrigger>
-    <AnimatePresence initial={false}>
-      {open ? (
-        <motion.div
-          key={sectionId}
-          animate={{ opacity: 1, height: "auto" }}
-          className="overflow-hidden"
-          exit={{ opacity: 0, height: 0 }}
-          initial={{ opacity: 0, height: 0 }}
-          transition={{
-            height: { duration: 0.2, ease: "easeOut" },
-            ...fadeTransition,
-          }}
-        >
-          <div className="pt-1">{children}</div>
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
-  </div>
+  <AccordionSectionInner
+    icon={icon}
+    label={label}
+    onToggle={onToggle}
+    open={open}
+    sectionId={sectionId}
+  >
+    {children}
+  </AccordionSectionInner>
 );
+
+const AccordionSectionInner = ({
+  children,
+  icon,
+  label,
+  onToggle,
+  open,
+  sectionId,
+}: {
+  children: ReactNode;
+  icon: IconSvgElement;
+  label: string;
+  onToggle: (id: SearchDropdownSectionId) => void;
+  open: boolean;
+  sectionId: SearchDropdownSectionId;
+}) => {
+  const prefersReducedMotion = useReducedMotion();
+
+  return (
+    <div>
+      <SearchAccordionTrigger icon={icon} onClick={() => onToggle(sectionId)} open={open}>
+        {label}
+      </SearchAccordionTrigger>
+      <AnimatePresence initial={false}>
+        {open ? (
+          <m.div
+            key={sectionId}
+            animate={{ opacity: 1, height: "auto" }}
+            className="overflow-hidden"
+            exit={{ opacity: 0, height: 0 }}
+            initial={{ opacity: 0, height: 0 }}
+            transition={
+              prefersReducedMotion
+                ? { duration: 0 }
+                : {
+                    height: { duration: 0.2, ease: "easeOut" },
+                    ...fadeTransition,
+                  }
+            }
+          >
+            <div className="pt-1">{children}</div>
+          </m.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+};
 
 export const MessageListSearchDropdown = ({
   draftSearchState,
@@ -208,34 +243,36 @@ export const MessageListSearchDropdown = ({
   };
 
   return (
-    <div className="space-y-1">
-      <AccordionSection
-        icon={SECTION_META.categories.icon}
-        label={SECTION_META.categories.label}
-        onToggle={handleSectionToggle}
-        open={openSection === "categories"}
-        sectionId="categories"
-      >
-        <SearchCategoriesBody
-          categoryFilter={draftSearchState.categoryFilter}
-          updateSearchState={updateSearchState}
-        />
-      </AccordionSection>
+    <LazyMotion features={domAnimation}>
+      <div className="space-y-1">
+        <AccordionSection
+          icon={SECTION_META.categories.icon}
+          label={SECTION_META.categories.label}
+          onToggle={handleSectionToggle}
+          open={openSection === "categories"}
+          sectionId="categories"
+        >
+          <SearchCategoriesBody
+            categoryFilter={draftSearchState.categoryFilter}
+            updateSearchState={updateSearchState}
+          />
+        </AccordionSection>
 
-      <AccordionSection
-        icon={SECTION_META.labels.icon}
-        label={SECTION_META.labels.label}
-        onToggle={handleSectionToggle}
-        open={openSection === "labels"}
-        sectionId="labels"
-      >
-        <SearchLabelsBody
-          draftSearchState={draftSearchState}
-          labelsErrorMessage={labelsErrorMessage}
-          updateSearchState={updateSearchState}
-          userLabels={userLabels}
-        />
-      </AccordionSection>
-    </div>
+        <AccordionSection
+          icon={SECTION_META.labels.icon}
+          label={SECTION_META.labels.label}
+          onToggle={handleSectionToggle}
+          open={openSection === "labels"}
+          sectionId="labels"
+        >
+          <SearchLabelsBody
+            draftSearchState={draftSearchState}
+            labelsErrorMessage={labelsErrorMessage}
+            updateSearchState={updateSearchState}
+            userLabels={userLabels}
+          />
+        </AccordionSection>
+      </div>
+    </LazyMotion>
   );
 };

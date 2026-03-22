@@ -4,7 +4,7 @@ import { ArrowUp01Icon, Refresh01Icon, Search01Icon } from "@hugeicons/core-free
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, Field, IconButtonTooltip, Input } from "@quietr/ui";
 import { useQuery } from "@tanstack/react-query";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
 import { SpinWhileActive } from "../spin-while-active";
@@ -31,7 +31,7 @@ export type MessageListSearchProps = {
 };
 
 const SearchFilterChip = ({ label, onRemove }: { label: string; onRemove: () => void }) => (
-  <motion.span
+  <m.span
     animate={{ opacity: 1 }}
     className="inline-flex max-w-full items-center gap-1 rounded-md border border-input px-1.5 py-0.5 text-xs text-foreground"
     exit={{ opacity: 0 }}
@@ -55,7 +55,7 @@ const SearchFilterChip = ({ label, onRemove }: { label: string; onRemove: () => 
     >
       ×
     </button>
-  </motion.span>
+  </m.span>
 );
 
 export const MessageListSearch = ({
@@ -68,6 +68,7 @@ export const MessageListSearch = ({
 }: MessageListSearchProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLElement>(null!);
+  const prefersReducedMotion = useReducedMotion();
   const [draftSearchState, setDraftSearchState] = useState<{
     baseQuery: string;
     value: StructuredSearchState;
@@ -165,160 +166,170 @@ export const MessageListSearch = ({
   }, [closeDropdown, isDropdownOpen]);
 
   return (
-    <div className="border-b border-border bg-background-light px-4 py-3" role="search">
-      <div ref={containerRef} className="space-y-2">
-        {/* ── Row 1: Refresh + Search input + Scroll-to-top ── */}
-        <div className="flex items-center gap-2">
-          <IconButtonTooltip label="Refresh list">
-            <Button
-              aria-label="Refresh list"
-              disabled={isRefreshing}
-              onClick={() => void onRefresh()}
-              size="icon-sm"
-              variant="outline"
-            >
-              <SpinWhileActive active={isRefreshing}>
-                <HugeiconsIcon icon={Refresh01Icon} />
-              </SpinWhileActive>
-            </Button>
-          </IconButtonTooltip>
+    <LazyMotion features={domAnimation}>
+      <div className="border-b border-border bg-background-light px-4 py-3" role="search">
+        <div ref={containerRef} className="space-y-2">
+          {/* ── Row 1: Refresh + Search input + Scroll-to-top ── */}
+          <div className="flex items-center gap-2">
+            <IconButtonTooltip label="Refresh list">
+              <Button
+                aria-label="Refresh list"
+                disabled={isRefreshing}
+                onClick={() => void onRefresh()}
+                size="icon-sm"
+                variant="outline"
+              >
+                <SpinWhileActive active={isRefreshing}>
+                  <HugeiconsIcon icon={Refresh01Icon} />
+                </SpinWhileActive>
+              </Button>
+            </IconButtonTooltip>
 
-          <Field className="min-w-0 flex-1">
-            <div
-              className="flex h-8 w-full items-center gap-2 rounded-md border border-input bg-background px-2 shadow-sm transition-colors duration-150 ease-out focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20"
-              onPointerDown={(event) => {
-                if (!(event.target instanceof Element)) return;
-                if (event.target.closest("button, input")) return;
-                setIsDropdownOpen(true);
-                searchInputRef.current?.focus();
-              }}
-            >
-              <Input
-                autoCapitalize="off"
-                autoCorrect="off"
-                chrome="ghost"
-                className="min-w-[10ch] flex-1 px-0 text-[13px] focus-visible:ring-0"
-                name="query"
-                onChange={(event) => {
-                  setDraftSearchState({
-                    baseQuery: searchQuery,
-                    value: {
-                      ...currentSearchState,
-                      text: event.currentTarget.value,
-                    },
-                  });
+            <Field className="min-w-0 flex-1">
+              <div
+                className="flex h-8 w-full items-center gap-2 rounded-md border border-input bg-background px-2 shadow-sm transition-colors duration-150 ease-out focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20"
+                onPointerDown={(event) => {
+                  if (!(event.target instanceof Element)) return;
+                  if (event.target.closest("button, input")) return;
+                  setIsDropdownOpen(true);
+                  searchInputRef.current?.focus();
                 }}
-                onFocus={() => setIsDropdownOpen(true)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    commitSearchState(currentSearchState, true);
-                    return;
-                  }
-                  if (event.key === "Escape") {
-                    closeDropdown();
-                    event.currentTarget.blur();
-                    return;
-                  }
-                  if (event.key === "Backspace" && currentSearchState.text.length === 0) {
-                    event.preventDefault();
-                    updateSearchState(removeLastStructuredSearchChip(currentSearchState));
-                  }
-                }}
-                placeholder="Search"
-                ref={searchInputRef}
-                size="sm"
-                spellCheck={false}
-                type="search"
-                value={currentSearchState.text}
-              />
-
-              <IconButtonTooltip label="Run search">
-                <Button
-                  aria-label="Run search"
-                  className="h-6 w-6 shrink-0 self-center text-muted-foreground hover:text-foreground"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    commitSearchState(currentSearchState, true);
+              >
+                <Input
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  chrome="ghost"
+                  className="min-w-[10ch] flex-1 px-0 text-[13px] focus-visible:ring-0"
+                  name="query"
+                  onChange={(event) => {
+                    setDraftSearchState({
+                      baseQuery: searchQuery,
+                      value: {
+                        ...currentSearchState,
+                        text: event.currentTarget.value,
+                      },
+                    });
                   }}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
+                  onFocus={() => setIsDropdownOpen(true)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      commitSearchState(currentSearchState, true);
+                      return;
+                    }
+                    if (event.key === "Escape") {
+                      closeDropdown();
+                      event.currentTarget.blur();
+                      return;
+                    }
+                    if (event.key === "Backspace" && currentSearchState.text.length === 0) {
+                      event.preventDefault();
+                      updateSearchState(removeLastStructuredSearchChip(currentSearchState));
+                    }
                   }}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <HugeiconsIcon icon={Search01Icon} />
-                </Button>
-              </IconButtonTooltip>
-            </div>
-          </Field>
+                  placeholder="Search"
+                  ref={searchInputRef}
+                  size="sm"
+                  spellCheck={false}
+                  type="search"
+                  value={currentSearchState.text}
+                />
 
-          <IconButtonTooltip label="Scroll to top">
-            <Button
-              aria-label="Scroll to top"
-              onClick={() => void onScrollToTop()}
-              size="icon-sm"
-              type="button"
-              variant="outline"
-            >
-              <HugeiconsIcon icon={ArrowUp01Icon} />
-            </Button>
-          </IconButtonTooltip>
-        </div>
+                <IconButtonTooltip label="Run search">
+                  <Button
+                    aria-label="Run search"
+                    className="h-6 w-6 shrink-0 self-center text-muted-foreground hover:text-foreground"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      commitSearchState(currentSearchState, true);
+                    }}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                    }}
+                    size="icon-sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <HugeiconsIcon icon={Search01Icon} />
+                  </Button>
+                </IconButtonTooltip>
+              </div>
+            </Field>
 
-        {/* ── Row 2: Active filter pills ── */}
-        <AnimatePresence initial={false}>
-          {selectedSearchChips.length > 0 ? (
-            <motion.div
-              key="filter-pills"
-              animate={{ opacity: 1, height: "auto" }}
-              className="flex flex-wrap gap-1.5 overflow-hidden"
-              exit={{ opacity: 0, height: 0 }}
-              initial={{ opacity: 0, height: 0 }}
-              transition={{
-                opacity: { duration: 0.14, ease: "easeOut" },
-                height: { duration: 0.18, ease: "easeOut" },
-              }}
-            >
-              <AnimatePresence initial={false}>
-                {selectedSearchChips.map((chip) => (
-                  <SearchFilterChip key={chip.key} label={chip.label} onRemove={chip.onRemove} />
-                ))}
-              </AnimatePresence>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+            <IconButtonTooltip label="Scroll to top">
+              <Button
+                aria-label="Scroll to top"
+                onClick={() => void onScrollToTop()}
+                size="icon-sm"
+                type="button"
+                variant="outline"
+              >
+                <HugeiconsIcon icon={ArrowUp01Icon} />
+              </Button>
+            </IconButtonTooltip>
+          </div>
 
-        {/* ── Dropdown ── */}
-        <AnimatePresence initial={false}>
-          {isDropdownOpen ? (
-            <motion.div
-              key="message-list-search-dropdown"
-              animate={{ opacity: 1, y: 0 }}
-              className="overflow-hidden rounded-lg border border-border bg-popover p-2 shadow-lg"
-              exit={{ opacity: 0, y: -4 }}
-              initial={{ opacity: 0, y: -4 }}
-              transition={{
-                opacity: { duration: 0.14, ease: "easeOut" },
-                y: { duration: 0.14, ease: "easeOut" },
-              }}
-            >
-              <MessageListSearchDropdown
-                draftSearchState={currentSearchState}
-                labelsErrorMessage={
-                  labelsQuery.isPending ? null : (labelsQuery.error?.message ?? null)
+          {/* ── Row 2: Active filter pills ── */}
+          <AnimatePresence initial={false}>
+            {selectedSearchChips.length > 0 ? (
+              <m.div
+                key="filter-pills"
+                animate={{ opacity: 1, height: "auto" }}
+                className="flex flex-wrap gap-1.5 overflow-hidden"
+                exit={{ opacity: 0, height: 0 }}
+                initial={{ opacity: 0, height: 0 }}
+                transition={
+                  prefersReducedMotion
+                    ? { duration: 0 }
+                    : {
+                        opacity: { duration: 0.14, ease: "easeOut" },
+                        height: { duration: 0.18, ease: "easeOut" },
+                      }
                 }
-                onOpenSectionChange={(value) => {
-                  setOpenSection(value);
-                }}
-                openSection={openSection}
-                updateSearchState={updateSearchState}
-                userLabels={labelsQuery.isPending ? [] : userLabels}
-              />
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+              >
+                <AnimatePresence initial={false}>
+                  {selectedSearchChips.map((chip) => (
+                    <SearchFilterChip key={chip.key} label={chip.label} onRemove={chip.onRemove} />
+                  ))}
+                </AnimatePresence>
+              </m.div>
+            ) : null}
+          </AnimatePresence>
+
+          {/* ── Dropdown ── */}
+          <AnimatePresence initial={false}>
+            {isDropdownOpen ? (
+              <m.div
+                key="message-list-search-dropdown"
+                animate={{ opacity: 1, y: 0 }}
+                className="overflow-hidden rounded-lg border border-border bg-popover p-2 shadow-lg"
+                exit={{ opacity: 0, y: prefersReducedMotion ? 0 : -4 }}
+                initial={{ opacity: 0, y: prefersReducedMotion ? 0 : -4 }}
+                transition={
+                  prefersReducedMotion
+                    ? { duration: 0 }
+                    : {
+                        opacity: { duration: 0.14, ease: "easeOut" },
+                        y: { duration: 0.14, ease: "easeOut" },
+                      }
+                }
+              >
+                <MessageListSearchDropdown
+                  draftSearchState={currentSearchState}
+                  labelsErrorMessage={
+                    labelsQuery.isPending ? null : (labelsQuery.error?.message ?? null)
+                  }
+                  onOpenSectionChange={(value) => {
+                    setOpenSection(value);
+                  }}
+                  openSection={openSection}
+                  updateSearchState={updateSearchState}
+                  userLabels={labelsQuery.isPending ? [] : userLabels}
+                />
+              </m.div>
+            ) : null}
+          </AnimatePresence>
+        </div>
       </div>
-    </div>
+    </LazyMotion>
   );
 };

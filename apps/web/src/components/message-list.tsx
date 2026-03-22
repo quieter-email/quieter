@@ -398,66 +398,26 @@ const MessageListScrollPane = ({
   );
 };
 
-export const MessageList = ({
+const useMessageListSelection = ({
   activeMailbox,
-  activeMessageId,
-  userId,
-  onBulkDeleteDrafts,
-  onBulkDeletePermanently,
-  onBulkMarkAsRead,
-  onBulkMarkAsSpam,
-  onBulkMarkAsUnread,
-  onBulkMoveToTrash,
-  onBulkUnmarkAsSpam,
-  error,
-  hasNextPage,
-  isError,
-  isFetchingNextPage,
-  onDeleteDraft,
-  isMessageActionPending,
-  isThreadActionPending,
-  isPending,
-  isRefreshing,
-  messages,
-  onSearch,
+  activeThreadId,
   onActivateMessage,
-  onDeletePermanently,
-  onLoadMore,
-  onMarkAsRead,
-  onMarkAsSpam,
-  onMarkAsUnread,
-  onMoveToTrash,
-  onOpenDraft,
-  onRefresh,
-  onUpdateLabels,
-  onUnsubscribe,
-  onUnmarkAsSpam,
   searchQuery,
-}: MessageListProps) => {
+  threadedMessages,
+}: {
+  activeMailbox: MailboxCategory;
+  activeThreadId: string | null;
+  onActivateMessage: (messageId: string) => void;
+  searchQuery: string;
+  threadedMessages: ThreadListEntry[];
+}) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isProgrammaticScrollToTopRef = useRef(false);
   const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(new Set());
   const [selectionAnchorThreadId, setSelectionAnchorThreadId] = useState<string | null>(null);
-  const flattenedMessages = useMemo(() => messages.flatMap((page) => page.messages), [messages]);
-  const threadedMessages = useMemo(
-    () =>
-      activeMailbox === "drafts"
-        ? flattenedMessages.map((message) => buildDraftListEntry(message))
-        : buildThreadListEntries(flattenedMessages),
-    [activeMailbox, flattenedMessages],
-  );
   const loadedThreadIds = useMemo(
     () => threadedMessages.map((thread) => thread.threadId),
     [threadedMessages],
-  );
-  const messageThreadIds = useMemo(
-    () =>
-      new Map(
-        flattenedMessages.map((message) => {
-          return [message.id, message.threadId] as const;
-        }),
-      ),
-    [flattenedMessages],
   );
   const threadById = useMemo(
     () => new Map(threadedMessages.map((thread) => [thread.threadId, thread] as const)),
@@ -467,10 +427,6 @@ export const MessageList = ({
     () => new Map(loadedThreadIds.map((threadId, index) => [threadId, index] as const)),
     [loadedThreadIds],
   );
-  const activeThreadId =
-    activeMailbox === "drafts" || !activeMessageId
-      ? null
-      : (messageThreadIds.get(activeMessageId) ?? null);
   const selectedThreads = useMemo(
     () =>
       Array.from(selectedThreadIds)
@@ -483,10 +439,6 @@ export const MessageList = ({
   const isSelectionMode = selectedCount > 0;
   const allSelected = totalCount > 0 && selectedCount === totalCount;
   const selectionIndeterminate = selectedCount > 0 && !allSelected;
-  const isBulkActionPending = selectedThreads.some(
-    (thread) =>
-      isMessageActionPending?.(thread.anchorMessage.id) || isThreadActionPending?.(thread.threadId),
-  );
 
   const waitForSmoothScrollTop = async (element: HTMLDivElement) => {
     await new Promise<void>((resolve) => {
@@ -742,6 +694,106 @@ export const MessageList = ({
       preventDefault: true,
       stopPropagation: true,
     },
+  );
+
+  return {
+    allSelected,
+    clearSelection,
+    handleThreadPress,
+    handleThreadSelectionPress,
+    isProgrammaticScrollToTopRef,
+    isSelectionMode,
+    scrollListToTop,
+    scrollRef,
+    selectedCount,
+    selectedThreadIds,
+    selectedThreads,
+    selectionIndeterminate,
+    toggleAllLoadedThreads,
+  };
+};
+
+export const MessageList = ({
+  activeMailbox,
+  activeMessageId,
+  userId,
+  onBulkDeleteDrafts,
+  onBulkDeletePermanently,
+  onBulkMarkAsRead,
+  onBulkMarkAsSpam,
+  onBulkMarkAsUnread,
+  onBulkMoveToTrash,
+  onBulkUnmarkAsSpam,
+  error,
+  hasNextPage,
+  isError,
+  isFetchingNextPage,
+  onDeleteDraft,
+  isMessageActionPending,
+  isThreadActionPending,
+  isPending,
+  isRefreshing,
+  messages,
+  onSearch,
+  onActivateMessage,
+  onDeletePermanently,
+  onLoadMore,
+  onMarkAsRead,
+  onMarkAsSpam,
+  onMarkAsUnread,
+  onMoveToTrash,
+  onOpenDraft,
+  onRefresh,
+  onUpdateLabels,
+  onUnsubscribe,
+  onUnmarkAsSpam,
+  searchQuery,
+}: MessageListProps) => {
+  const flattenedMessages = useMemo(() => messages.flatMap((page) => page.messages), [messages]);
+  const threadedMessages = useMemo(
+    () =>
+      activeMailbox === "drafts"
+        ? flattenedMessages.map((message) => buildDraftListEntry(message))
+        : buildThreadListEntries(flattenedMessages),
+    [activeMailbox, flattenedMessages],
+  );
+  const messageThreadIds = useMemo(
+    () =>
+      new Map(
+        flattenedMessages.map((message) => {
+          return [message.id, message.threadId] as const;
+        }),
+      ),
+    [flattenedMessages],
+  );
+  const activeThreadId =
+    activeMailbox === "drafts" || !activeMessageId
+      ? null
+      : (messageThreadIds.get(activeMessageId) ?? null);
+  const {
+    allSelected,
+    clearSelection,
+    handleThreadPress,
+    handleThreadSelectionPress,
+    isProgrammaticScrollToTopRef,
+    isSelectionMode,
+    scrollListToTop,
+    scrollRef,
+    selectedCount,
+    selectedThreadIds,
+    selectedThreads,
+    selectionIndeterminate,
+    toggleAllLoadedThreads,
+  } = useMessageListSelection({
+    activeMailbox,
+    activeThreadId,
+    onActivateMessage,
+    searchQuery,
+    threadedMessages,
+  });
+  const isBulkActionPending = selectedThreads.some(
+    (thread) =>
+      isMessageActionPending?.(thread.anchorMessage.id) || isThreadActionPending?.(thread.threadId),
   );
 
   const runBulkAction = async (

@@ -35,7 +35,7 @@ export const getLiveSyncQueryKey = (
   searchQuery?: string | null,
 ) => [...getMessagesQueryKey(userId, mailbox, searchQuery), "live-sync"] as const;
 
-export type MessagesQueryData = {
+type MessagesQueryData = {
   pages: ListMessagesPageResult[];
   pageParams: Array<string | undefined>;
 };

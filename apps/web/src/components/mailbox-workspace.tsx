@@ -657,7 +657,7 @@ const createMailboxActionHandlers = ({
   };
 };
 
-export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
+const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const trpc = useTRPC();
@@ -872,99 +872,106 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     syncQuery.isFetching ||
     (messagesQuery.isRefetching && !messagesQuery.isFetchingNextPage);
 
+  return {
+    composeDialogKey: user.id ?? "signed-out",
+    composeDialogRef,
+    composeDialogUserId: user.id ?? null,
+    viewProps: {
+      activeMailbox,
+      activeMessageId,
+      error: messagesQuery.error ?? null,
+      hasNextPage: Boolean(messagesQuery.hasNextPage),
+      isFetchingNextPage: messagesQuery.isFetchingNextPage,
+      isMessageActionPending,
+      isMessagesError: messagesQuery.isError,
+      isMessagesPending: messagesQuery.isPending,
+      isRefreshing,
+      isThreadActionPending,
+      messages: messagesQuery.data?.pages ?? [],
+      onActivateMessage: activateMessage,
+      onBulkDeleteDrafts: (threads) => {
+        void deleteDrafts(threads);
+      },
+      onBulkDeletePermanently: (threads) => {
+        void deleteThreadsPermanently(threads);
+      },
+      onBulkMarkAsRead: (threads) => {
+        void markThreadsAsRead(threads);
+      },
+      onBulkMarkAsSpam: (threads) => {
+        void markThreadsAsSpam(threads);
+      },
+      onBulkMarkAsUnread: (threads) => {
+        void markThreadsAsUnread(threads);
+      },
+      onBulkMoveToTrash: (threads) => {
+        void moveThreadsToTrash(threads);
+      },
+      onBulkUnmarkAsSpam: (threads) => {
+        void unmarkThreadsAsSpam(threads);
+      },
+      onComposeDraftRequested: (draft) => {
+        composeDialogRef.current?.openDraft(draft);
+      },
+      onComposeNewMail: () => {
+        composeDialogRef.current?.openNewMail();
+      },
+      onDeleteDraft: (message) => {
+        void deleteDraft(message);
+      },
+      onDeletePermanently: (messageId) => {
+        void deleteMessagePermanently(messageId);
+      },
+      onLoadMore: loadMoreMessages,
+      onMarkAsRead: (messageId) => {
+        void markMessageAsRead(messageId);
+      },
+      onMarkAsSpam: (messageId) => {
+        void markMessageAsSpam(messageId);
+      },
+      onMarkAsUnread: (messageId) => {
+        void markMessageAsUnread(messageId);
+      },
+      onMarkThreadAsRead: (threadId) => {
+        void markThreadAsRead(threadId);
+      },
+      onMarkThreadAsUnread: (threadId) => {
+        void markThreadAsUnread(threadId);
+      },
+      onMoveToTrash: (messageId) => {
+        void moveMessageToTrash(messageId);
+      },
+      onOpenDraft: openDraft,
+      onRefresh: () => {
+        void refreshMessages();
+      },
+      onSearch: applySearch,
+      onSelectMailbox: selectMailbox,
+      onUnmarkAsSpam: (messageId) => {
+        void unmarkMessageAsSpam(messageId);
+      },
+      onUnsubscribe: (messageId) => {
+        void unsubscribeFromMessage(messageId);
+      },
+      onUpdateLabels: (messageId, changes) => {
+        void updateMessageLabels(messageId, changes);
+      },
+      searchQuery: activeSearchQuery,
+      selectedMessage,
+      user,
+      userId,
+    } satisfies MailboxWorkspaceViewProps,
+  };
+};
+
+export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
+  const { composeDialogKey, composeDialogRef, composeDialogUserId, viewProps } =
+    useMailboxWorkspaceModel(user);
+
   return (
     <>
-      <MailboxWorkspaceView
-        activeMailbox={activeMailbox}
-        activeMessageId={activeMessageId}
-        onBulkDeleteDrafts={(threads) => {
-          void deleteDrafts(threads);
-        }}
-        onBulkDeletePermanently={(threads) => {
-          void deleteThreadsPermanently(threads);
-        }}
-        onBulkMarkAsRead={(threads) => {
-          void markThreadsAsRead(threads);
-        }}
-        onBulkMarkAsSpam={(threads) => {
-          void markThreadsAsSpam(threads);
-        }}
-        onBulkMarkAsUnread={(threads) => {
-          void markThreadsAsUnread(threads);
-        }}
-        onBulkMoveToTrash={(threads) => {
-          void moveThreadsToTrash(threads);
-        }}
-        onBulkUnmarkAsSpam={(threads) => {
-          void unmarkThreadsAsSpam(threads);
-        }}
-        error={messagesQuery.error ?? null}
-        hasNextPage={Boolean(messagesQuery.hasNextPage)}
-        isFetchingNextPage={messagesQuery.isFetchingNextPage}
-        onDeleteDraft={(message) => {
-          void deleteDraft(message);
-        }}
-        isMessageActionPending={isMessageActionPending}
-        isMessagesError={messagesQuery.isError}
-        isMessagesPending={messagesQuery.isPending}
-        isRefreshing={isRefreshing}
-        isThreadActionPending={isThreadActionPending}
-        messages={messagesQuery.data?.pages ?? []}
-        onActivateMessage={activateMessage}
-        onComposeNewMail={() => {
-          composeDialogRef.current?.openNewMail();
-        }}
-        onComposeDraftRequested={(draft) => {
-          composeDialogRef.current?.openDraft(draft);
-        }}
-        onDeletePermanently={(messageId) => {
-          void deleteMessagePermanently(messageId);
-        }}
-        onLoadMore={loadMoreMessages}
-        onMarkAsRead={(messageId) => {
-          void markMessageAsRead(messageId);
-        }}
-        onMarkAsSpam={(messageId) => {
-          void markMessageAsSpam(messageId);
-        }}
-        onMarkAsUnread={(messageId) => {
-          void markMessageAsUnread(messageId);
-        }}
-        onMarkThreadAsRead={(threadId) => {
-          void markThreadAsRead(threadId);
-        }}
-        onMarkThreadAsUnread={(threadId) => {
-          void markThreadAsUnread(threadId);
-        }}
-        onMoveToTrash={(messageId) => {
-          void moveMessageToTrash(messageId);
-        }}
-        onOpenDraft={openDraft}
-        onRefresh={() => {
-          void refreshMessages();
-        }}
-        onSearch={applySearch}
-        onSelectMailbox={selectMailbox}
-        onUnsubscribe={(messageId) => {
-          void unsubscribeFromMessage(messageId);
-        }}
-        onUnmarkAsSpam={(messageId) => {
-          void unmarkMessageAsSpam(messageId);
-        }}
-        onUpdateLabels={(messageId, changes) => {
-          void updateMessageLabels(messageId, changes);
-        }}
-        searchQuery={activeSearchQuery}
-        selectedMessage={selectedMessage}
-        userId={userId}
-        user={user}
-      />
-
-      <ComposeDialog
-        key={user.id ?? "signed-out"}
-        ref={composeDialogRef}
-        userId={user.id ?? null}
-      />
+      <MailboxWorkspaceView {...viewProps} />
+      <ComposeDialog key={composeDialogKey} ref={composeDialogRef} userId={composeDialogUserId} />
       <LogoDevFooter />
     </>
   );

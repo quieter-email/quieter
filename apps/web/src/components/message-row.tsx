@@ -250,7 +250,7 @@ const MessageRowContent = memo(
               )}
             />
 
-            <div className="relative z-10 flex min-w-0 flex-1 items-center gap-3.5 px-3 pr-1">
+            <div className="relative z-10 flex min-w-0 flex-1 items-center gap-3.5 px-4">
               <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 overflow-hidden">
                 <div className="flex w-full min-w-0 items-center justify-between gap-2">
                   <p className="min-w-0 truncate text-left text-sm text-foreground">
