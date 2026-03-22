@@ -18,6 +18,7 @@ type MessageRowSelectionGesture = {
 
 type MessageRowProps = {
   activeMailbox: MailboxCategory;
+  userId: string;
   isActive?: boolean;
   isSelected?: boolean;
   isSelectionMode?: boolean;
@@ -26,6 +27,7 @@ type MessageRowProps = {
   onMarkAsSpam?: (messageId: string) => void | Promise<void>;
   onMarkAsUnread?: (messageId: string) => void | Promise<void>;
   onOpenDraft?: (message: ThreadListEntry["anchorMessage"]) => void | Promise<void>;
+  onUnsubscribe?: (messageId: string) => void | Promise<void>;
   onUpdateLabels?: (
     messageId: string,
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
@@ -61,9 +63,11 @@ const MessageRowContent = memo(
     onOpenDraft,
     onPress,
     onSelectionPress,
+    onUnsubscribe,
     onUnmarkAsSpam,
     onUpdateLabels,
     thread,
+    userId,
   }: MessageRowContentProps) => {
     const anchorMessage = thread.anchorMessage;
     const subject = anchorMessage.subject || "(No subject)";
@@ -78,10 +82,9 @@ const MessageRowContent = memo(
     const date = formatMessageDate(anchorMessage, "compact");
     const unread = !isDraftMailbox && thread.unreadCount > 0;
     const threaded = thread.messageCount > 1;
-    const threadDetailsQuery = useQuery({
-      ...getThreadWithDetailsOptions(activeMailbox, thread.threadId),
-      enabled: Boolean(isActive),
-    });
+    const threadDetailsQuery = useQuery(
+      getThreadWithDetailsOptions(userId, activeMailbox, thread.threadId, Boolean(isActive)),
+    );
     const attachmentCount =
       threadDetailsQuery.data?.messages.reduce(
         (count, message) => count + (message.attachments?.length ?? 0),
@@ -215,6 +218,7 @@ const MessageRowContent = memo(
           onDeleteDraft={onDeleteDraft}
           mailbox={activeMailbox}
           message={anchorMessage}
+          userId={userId}
           onDeletePermanently={onDeletePermanently}
           onMarkAsRead={onMarkAsRead}
           onMarkAsSpam={onMarkAsSpam}
@@ -222,6 +226,7 @@ const MessageRowContent = memo(
           onMoveToTrash={onMoveToTrash}
           onOpenDraft={onOpenDraft}
           onUnmarkAsSpam={onUnmarkAsSpam}
+          onUnsubscribe={onUnsubscribe}
           onUpdateLabels={onUpdateLabels}
           triggerClassName={cn("flex h-full min-w-0 flex-1")}
         >
@@ -319,11 +324,13 @@ export const MessageRow = ({
   onOpenDraft,
   onPress,
   onSelectionPress,
+  onUnsubscribe,
   onUnmarkAsSpam,
   onUpdateLabels,
   rowRef,
   style,
   thread,
+  userId,
 }: MessageRowProps) => {
   return (
     <li
@@ -347,9 +354,11 @@ export const MessageRow = ({
         onOpenDraft={onOpenDraft}
         onPress={onPress}
         onSelectionPress={onSelectionPress}
+        onUnsubscribe={onUnsubscribe}
         onUnmarkAsSpam={onUnmarkAsSpam}
         onUpdateLabels={onUpdateLabels}
         thread={thread}
+        userId={userId}
       />
     </li>
   );

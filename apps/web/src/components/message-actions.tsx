@@ -52,6 +52,7 @@ type LabelChanges = {
 };
 
 type MessageActionsSharedProps = {
+  userId: string;
   message: MessageListItem;
   mailbox: MailboxCategory;
   isUnread?: boolean;
@@ -60,6 +61,7 @@ type MessageActionsSharedProps = {
   onMarkAsSpam?: (messageId: string) => void | Promise<void>;
   onMarkAsUnread?: (messageId: string) => void | Promise<void>;
   onOpenDraft?: (message: MessageListItem) => void | Promise<void>;
+  onUnsubscribe?: (messageId: string) => void | Promise<void>;
   onUpdateLabels?: (messageId: string, changes: LabelChanges) => void | Promise<void>;
   onMoveToTrash?: (messageId: string) => void | Promise<void>;
   onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
@@ -147,6 +149,7 @@ const MessageActionsDialogs = ({
   isPending,
   isTrashMailbox,
   message,
+  userId,
   onDeletePermanently,
   onOpenDeleteDialog,
   onOpenLabelsDialog,
@@ -154,6 +157,7 @@ const MessageActionsDialogs = ({
   openDeleteDialog,
   openLabelsDialog,
 }: {
+  userId: string;
   message: MessageListItem;
   isPending: boolean;
   isTrashMailbox: boolean;
@@ -164,7 +168,7 @@ const MessageActionsDialogs = ({
   onUpdateLabels?: (messageId: string, changes: LabelChanges) => void | Promise<void>;
   onDeletePermanently?: (messageId: string) => void | Promise<void>;
 }) => {
-  const labelsQuery = useQuery(labelsQueryOptions(openLabelsDialog));
+  const labelsQuery = useQuery(labelsQueryOptions(userId, openLabelsDialog));
   const userLabels = getUserLabels(labelsQuery.data ?? []);
   const currentUserLabelIds = (message.labelIds ?? []).filter((labelId) =>
     userLabels.some((label) => label.id === labelId),
@@ -346,6 +350,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
   const [openLabelsDialog, setOpenLabelsDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const showMarkAsSpam = props.mailbox === "inbox";
+  const showUnsubscribe = Boolean(props.message.unsubscribeMailto);
 
   if (isDraftMailbox) {
     return {
@@ -405,6 +410,20 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
       label: "Modify Labels",
       onSelect: () => setOpenLabelsDialog(true),
     },
+    ...(showUnsubscribe
+      ? [
+          {
+            type: "item" as const,
+            id: "unsubscribe",
+            disabled: isBusy || !props.onUnsubscribe,
+            icon: Mail01Icon,
+            label: "Unsubscribe",
+            onSelect: () => {
+              void props.onUnsubscribe?.(props.message.id);
+            },
+          },
+        ]
+      : []),
     {
       type: "separator",
       id: "separator",
@@ -461,6 +480,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
       isPending={isBusy}
       isTrashMailbox={isTrashMailbox}
       message={props.message}
+      userId={props.userId}
       onDeletePermanently={props.onDeletePermanently}
       onOpenDeleteDialog={setOpenDeleteDialog}
       onOpenLabelsDialog={setOpenLabelsDialog}

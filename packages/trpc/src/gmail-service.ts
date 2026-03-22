@@ -217,6 +217,7 @@ export type MessageListItem = {
   bodyHtml?: string;
   bodyText?: string;
   attachments?: MessageAttachment[];
+  unsubscribeMailto?: string;
   senderAvatarUrls?: { light: string; dark: string };
   labelIds?: string[];
   isUnread?: boolean;
@@ -271,6 +272,7 @@ const GMAIL_MESSAGE_METADATA_HEADERS = [
   "Date",
   "Message-ID",
   "References",
+  "List-Unsubscribe",
 ] as const;
 const GMAIL_MESSAGE_METADATA_FIELDS =
   "id,threadId,labelIds,snippet,historyId,internalDate,payload(headers(name,value))";
@@ -484,6 +486,40 @@ const getHeader = (message: GmailMessage, name: string): string | undefined => {
   );
 };
 
+export const extractListUnsubscribeMailto = (value: string | undefined) => {
+  const normalized = decodeMimeHeaderValue(value)?.trim();
+  if (!normalized) return undefined;
+
+  const entries = normalized.match(/<[^>]+>|[^,]+/g) ?? [];
+
+  for (const entry of entries) {
+    const candidate = entry.trim().replace(/^<|>$/g, "").trim();
+    if (!candidate || !candidate.toLowerCase().startsWith("mailto:")) {
+      continue;
+    }
+
+    try {
+      const url = new URL(candidate);
+      if (url.protocol !== "mailto:") {
+        continue;
+      }
+
+      const pathname = decodeURIComponent(url.pathname).trim();
+      const queryTo = url.searchParams.get("to")?.trim();
+
+      if (!pathname && !queryTo) {
+        continue;
+      }
+
+      return candidate;
+    } catch {
+      continue;
+    }
+  }
+
+  return undefined;
+};
+
 const resolveRenderablePartBody = async (
   accessToken: string,
   message: GmailMessage,
@@ -565,6 +601,7 @@ const toMessageListItem = async (
     bodyHtml: content.html,
     bodyText: content.text,
     attachments: includeBody ? extractMessageAttachments(message.payload) : undefined,
+    unsubscribeMailto: extractListUnsubscribeMailto(getHeader(message, "List-Unsubscribe")),
     senderAvatarUrls: await getSenderAvatarUrls(from),
     labelIds,
     isUnread: hasUnreadLabel(labelIds),
@@ -639,7 +676,7 @@ export const getGmailProfile = async (
   });
 };
 
-const getGmailMessageMetadata = async (
+export const getGmailMessageMetadata = async (
   accessToken: string,
   messageId: string,
   signal?: AbortSignal,
@@ -1349,6 +1386,18 @@ export const sendDraft = async (
   return await requestGmail(accessToken, "/gmail/v1/users/me/drafts/send", gmailMessageSchema, {
     method: "POST",
     body: { id: draftId },
+    signal,
+  });
+};
+
+export const sendRawMessage = async (
+  accessToken: string,
+  raw: string,
+  signal?: AbortSignal,
+): Promise<GmailMessage> => {
+  return await requestGmail(accessToken, "/gmail/v1/users/me/messages/send", gmailMessageSchema, {
+    method: "POST",
+    body: { raw },
     signal,
   });
 };

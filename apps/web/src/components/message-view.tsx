@@ -22,6 +22,7 @@ import { SenderAvatar } from "./sender-avatar";
 type MessageViewProps = {
   activeMailbox: MailboxCategory;
   currentUserEmail?: string | null;
+  userId: string;
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onMarkThreadAsRead?: (threadId: string) => void | Promise<void>;
@@ -34,6 +35,7 @@ type MessageViewProps = {
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => void | Promise<void>;
   onMoveToTrash?: (messageId: string) => void | Promise<void>;
+  onUnsubscribe?: (messageId: string) => void | Promise<void>;
   onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
   onDeletePermanently?: (messageId: string) => void | Promise<void>;
   isActionPending?: boolean;
@@ -310,11 +312,13 @@ export const MessageView = ({
   onMarkThreadAsRead,
   onMarkThreadAsUnread,
   onMoveToTrash,
+  onUnsubscribe,
   onUnmarkAsSpam,
   onUpdateLabels,
+  userId,
 }: MessageViewProps) => {
   const threadQuery = useSuspenseQuery(
-    getThreadWithDetailsOptions(activeMailbox, message.threadId),
+    getThreadWithDetailsOptions(userId, activeMailbox, message.threadId),
   );
 
   const messages = threadQuery.data?.messages?.length
@@ -386,6 +390,7 @@ export const MessageView = ({
             isUnread={threadIsUnread}
             mailbox={activeMailbox}
             message={message}
+            userId={userId}
             onDeletePermanently={onDeletePermanently}
             onMarkAsRead={(messageId) => {
               void (onMarkThreadAsRead?.(message.threadId) ?? onMarkAsRead?.(messageId));
@@ -395,6 +400,7 @@ export const MessageView = ({
               void (onMarkThreadAsUnread?.(message.threadId) ?? onMarkAsUnread?.(messageId));
             }}
             onMoveToTrash={onMoveToTrash}
+            onUnsubscribe={onUnsubscribe}
             onUnmarkAsSpam={onUnmarkAsSpam}
             onUpdateLabels={onUpdateLabels}
           />

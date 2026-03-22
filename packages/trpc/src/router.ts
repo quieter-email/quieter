@@ -19,7 +19,9 @@ import {
   deleteDraft,
   deleteMessagePermanently,
   deleteThreadPermanently,
+  extractListUnsubscribeMailto,
   getDraft,
+  getGmailMessageMetadata,
   getMessageAttachment,
   getMailboxSyncDelta,
   getThreadWithDetails,
@@ -33,6 +35,7 @@ import {
   moveMessageToTrash,
   moveThreadToTrash,
   sendDraft,
+  sendRawMessage,
   updateDraft,
   updateMessageLabels,
   updateThreadLabels,
@@ -211,6 +214,71 @@ const buildMimeMessage = (draft: ComposeDraftInput) => {
   }
 
   return [...headers, `Content-Type: ${contentType}`, "", body].join("\r\n");
+};
+
+const buildPlainTextMessage = ({
+  body,
+  subject,
+  to,
+}: {
+  body: string;
+  subject: string;
+  to: string;
+}) => {
+  const headers = [`To: ${to}`];
+
+  if (subject.trim()) {
+    headers.push(`Subject: ${encodeMimeHeaderValue(subject)}`);
+  }
+
+  return [
+    ...headers,
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: quoted-printable",
+    "",
+    encodeQuotedPrintable(body),
+  ].join("\r\n");
+};
+
+const parseListUnsubscribeMailto = (value: string) => {
+  let url: URL;
+
+  try {
+    url = new URL(value);
+  } catch {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "This message does not expose a valid unsubscribe address.",
+    });
+  }
+
+  if (url.protocol !== "mailto:") {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "This message does not expose a valid unsubscribe address.",
+    });
+  }
+
+  const recipients = Array.from(
+    new Set([
+      ...splitMailAddressList(decodeURIComponent(url.pathname)),
+      ...splitMailAddressList(url.searchParams.get("to") ?? ""),
+    ]),
+  );
+
+  if (recipients.length === 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "This message does not expose a valid unsubscribe address.",
+    });
+  }
+
+  return {
+    body: url.searchParams.get("body") ?? "",
+    subject: url.searchParams.get("subject") ?? "",
+    to: recipients.join(", "),
+  };
 };
 
 const parseDraftMessage = (draft: Awaited<ReturnType<typeof getDraft>>) => {
@@ -488,6 +556,34 @@ export const appRouter = t.router({
         const accessToken = await getGoogleAccessToken(ctx);
         await deleteDraft(accessToken, input.draftId);
         return { deleted: true };
+      }),
+    unsubscribeFromMessage: protectedProcedure
+      .input(z.object({ messageId: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const accessToken = await getGoogleAccessToken(ctx);
+        const message = await getGmailMessageMetadata(accessToken, input.messageId);
+        const unsubscribeMailto = extractListUnsubscribeMailto(
+          message.payload?.headers?.find(
+            (header) => header.name.toLowerCase() === "list-unsubscribe",
+          )?.value,
+        );
+
+        if (!unsubscribeMailto) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "This message does not expose a valid unsubscribe address.",
+          });
+        }
+
+        const raw = arrayBufferToBase64Url(
+          new TextEncoder().encode(
+            buildPlainTextMessage(parseListUnsubscribeMailto(unsubscribeMailto)),
+          ),
+        );
+
+        await sendRawMessage(accessToken, raw);
+
+        return { sent: true };
       }),
     getAttachment: protectedProcedure
       .input(

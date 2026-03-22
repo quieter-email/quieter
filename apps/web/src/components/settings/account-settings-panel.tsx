@@ -23,12 +23,13 @@ import {
   TextFieldInput,
 } from "@quietr/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { mutationOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
 import { getErrorMessage, getFieldErrorMessage, unwrapResultError } from "~/lib/errors";
+import { clearPersistedQueryCache } from "~/lib/query-persister";
 import { useTRPC } from "~/lib/trpc";
 
 type SettingsUser = {
@@ -82,11 +83,12 @@ const EditNameDialog = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const updateUserMutation = useMutation({
+  const updateUserMutationOptions = mutationOptions({
     mutationFn: async (input: { name: string }) =>
       unwrapResultError(await authClient.updateUser(input), "Could not update name."),
     mutationKey: ["auth", "update-user"],
   });
+  const updateUserMutation = useMutation(updateUserMutationOptions);
   const form = useForm({
     defaultValues: {
       name: currentName,
@@ -194,7 +196,7 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const trpc = useTRPC();
-  const changeEmailMutation = useMutation({
+  const changeEmailMutationOptions = mutationOptions({
     mutationFn: async (input: { callbackURL: string; newEmail: string }) => {
       const status = await queryClient.fetchQuery(
         trpc.auth.getUserStatus.queryOptions(
@@ -221,6 +223,7 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
       );
     },
   });
+  const changeEmailMutation = useMutation(changeEmailMutationOptions);
   const form = useForm({
     defaultValues: {
       email: currentEmail,
@@ -361,7 +364,7 @@ const PasskeysDialog = ({
   const [open, setOpen] = useState(false);
   const [removingPasskeyId, setRemovingPasskeyId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const addPasskeyMutation = useMutation({
+  const addPasskeyMutationOptions = mutationOptions({
     mutationFn: async (name: string) =>
       unwrapResultError(
         await authClient.passkey.addPasskey({
@@ -371,7 +374,8 @@ const PasskeysDialog = ({
       ),
     mutationKey: ["auth", "passkeys", "add"],
   });
-  const deletePasskeyMutation = useMutation({
+  const addPasskeyMutation = useMutation(addPasskeyMutationOptions);
+  const deletePasskeyMutationOptions = mutationOptions({
     mutationFn: async (input: { id: string }) => {
       const response = await authClient.$fetch("/passkey/delete-passkey", {
         body: input,
@@ -383,6 +387,7 @@ const PasskeysDialog = ({
     },
     mutationKey: ["auth", "passkeys", "delete"],
   });
+  const deletePasskeyMutation = useMutation(deletePasskeyMutationOptions);
 
   const supportsPasskeys =
     typeof window !== "undefined" &&
@@ -553,7 +558,7 @@ const DeleteAccountDialog = () => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const router = useRouter();
-  const deleteAccountMutation = useMutation({
+  const deleteAccountMutationOptions = mutationOptions({
     mutationFn: async () =>
       unwrapResultError(
         await authClient.deleteUser({
@@ -562,11 +567,13 @@ const DeleteAccountDialog = () => {
         "Could not delete the account.",
       ),
     mutationKey: ["auth", "delete-user"],
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.clear();
+      await clearPersistedQueryCache();
       router.push("/home");
     },
   });
+  const deleteAccountMutation = useMutation(deleteAccountMutationOptions);
   const form = useForm({
     defaultValues: {
       confirmation: "",
@@ -694,14 +701,16 @@ export const AccountSettingsPanel = ({ initialUser }: AccountSettingsPanelProps)
     name: sessionUser?.name ?? initialUser.name,
   };
   const passkeys = passkeysState.data ?? [];
-  const signOutMutation = useMutation({
+  const signOutMutationOptions = mutationOptions({
     mutationFn: async () => unwrapResultError(await authClient.signOut(), "Could not sign out."),
     mutationKey: ["auth", "sign-out"],
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.clear();
+      await clearPersistedQueryCache();
       router.push("/home");
     },
   });
+  const signOutMutation = useMutation(signOutMutationOptions);
 
   const handleSignOut = async () => {
     setSessionError(null);

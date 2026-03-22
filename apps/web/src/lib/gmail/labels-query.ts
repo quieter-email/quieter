@@ -1,11 +1,11 @@
 import { queryOptions } from "@tanstack/react-query";
 import { trpc } from "~/lib/trpc";
 
-export const getLabelsQueryKey = () => ["gmail-labels"] as const;
+export const getLabelsQueryKey = (userId: string) => ["gmail-labels", userId] as const;
 
-export const labelsQueryOptions = (enabled = true) =>
+export const labelsQueryOptions = (userId: string, enabled = true) =>
   queryOptions({
-    queryKey: getLabelsQueryKey(),
+    queryKey: getLabelsQueryKey(userId),
     queryFn: ({ signal }) => trpc.gmail.listLabels.query(undefined, { signal }),
     enabled,
     staleTime: 1000 * 60 * 10,

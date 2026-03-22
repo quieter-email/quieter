@@ -27,6 +27,7 @@ export type MessageListSearchProps = {
   onScrollToTop: () => void | Promise<void>;
   onSearch: (query: string) => void;
   searchQuery: string;
+  userId: string;
 };
 
 const SearchFilterChip = ({ label, onRemove }: { label: string; onRemove: () => void }) => (
@@ -63,6 +64,7 @@ export const MessageListSearch = ({
   onScrollToTop,
   onSearch,
   searchQuery,
+  userId,
 }: MessageListSearchProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLElement>(null!);
@@ -73,7 +75,7 @@ export const MessageListSearch = ({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [openSection, setOpenSection] = useState<SearchDropdownSectionId | null>(null);
 
-  const labelsQuery = useQuery(labelsQueryOptions(isDropdownOpen));
+  const labelsQuery = useQuery(labelsQueryOptions(userId, isDropdownOpen));
   const committedSearchState = useMemo(
     () => parseStructuredSearchQuery(searchQuery),
     [searchQuery],

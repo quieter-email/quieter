@@ -38,14 +38,14 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
   - `src/lib/trpc.ts`: Shared raw tRPC client plus TanStack Query tRPC context helpers for the app.
   - `src/lib/server-auth.ts`: Cached server-side session helpers and redirects.
   - `src/lib/query-client.ts`: Shared React Query client factory.
-  - `src/lib/query-persister.ts`: Shared TanStack query persister helpers for eager browser-cache restore and manual cache writes.
+  - `src/lib/query-persister.ts`: Shared TanStack query persister helpers for eager browser-cache restore, manual cache writes, and persister-backed cache removal.
   - `src/lib/search-params.ts`: Shared nuqs parsers/loaders/serializers for app URL state, including mailbox search queries and the Drafts and Spam mailboxes.
   - `src/lib/auth.ts`: Better Auth React client wrapper.
   - `src/lib/errors.ts`: Shared client-side helpers for turning auth, tRPC, provider, and JSON-shaped failures into user-facing messages.
   - `src/lib/gmail/compose.ts`: User-scoped Gmail draft hydration helpers, attachment runtime store, and compose state types.
   - `src/lib/gmail/compose-query.ts`: Persisted compose session query keys keyed by user id.
   - `src/lib/gmail/attachments.ts`: On-demand Gmail attachment download helpers for mail detail surfaces.
-  - `src/lib/gmail/inbox-query.ts`: User-scoped inbox query keys, Gmail-search-aware loading, history-based sync helpers for unfiltered views, optimistic message actions, and thread-aware mailbox action helpers used by bulk selection.
+  - `src/lib/gmail/inbox-query.ts`: User-scoped inbox query keys, Gmail-search-aware loading, history-based sync helpers for unfiltered views, optimistic message actions, mailto-based unsubscribe actions, and thread-aware mailbox action helpers used by bulk selection.
   - `src/lib/gmail/thread-query.ts`: Thread query helpers.
   - `src/lib/gmail/labels-query.ts`: Shared `queryOptions(...)` helpers for Gmail label metadata.
   - `src/components/providers.tsx`: Client-side next-themes, React Query, and tRPC TanStack providers.
@@ -67,8 +67,8 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - `packages/trpc/`: Shared API contract + server/client helpers.
   - `src/compose.ts`: Shared compose schemas plus robust mail-address parsing used by both the web app and Gmail draft mutations.
   - `src/context.ts`: tRPC context creation.
-  - `src/router.ts`: App router with auth lookup procedures plus user-scoped Gmail operations, list/search procedures, Drafts listing/loading, mailbox history sync procedures, and thread-level mailbox mutations used by bulk selection.
-  - `src/gmail-service.ts`: Shared Gmail response typing plus batched Gmail API helpers used by tRPC, including raw Gmail `q` filtering, Gmail Drafts API helpers, and thread-level Gmail mutations.
+  - `src/router.ts`: App router with auth lookup procedures plus user-scoped Gmail operations, list/search procedures, Drafts listing/loading, mailbox history sync procedures, mailto-based unsubscribe sending, and thread-level mailbox mutations used by bulk selection.
+  - `src/gmail-service.ts`: Shared Gmail response typing plus batched Gmail API helpers used by tRPC, including raw Gmail `q` filtering, Gmail Drafts API helpers, `List-Unsubscribe` mailto parsing, and thread-level Gmail mutations.
   - `src/server.ts`: `fetchRequestHandler` integration.
   - `src/client.ts`: Typed client factory.
   - `src/types.ts`: `RouterInputs` and `RouterOutputs` utility types.
@@ -84,6 +84,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - Organizations are managed directly through Better Auth's organization plugin. Users can belong to zero or more organizations, and the active organization stays empty until the user selects one or accepts an invitation.
 - Organizations currently support account/settings structure only. There is still no shared-mailbox or mailbox-connection model in the current implementation.
 - Google sign-in directly requests the Gmail scopes needed for inbox access, drafting, sending, and message actions.
+- When Gmail exposes a `List-Unsubscribe` mailto target, message menus expose a single unsubscribe action that auto-sends the unsubscribe email through the signed-in account.
 - Passkeys are optional secondary sign-in credentials that can be added from settings after the user signs in with Google or magic link.
 - Outbound auth email delivery is not configured right now, so magic links and email verification flows use local placeholder previews instead of real email sends.
 - Inbox list views support row selection with mailbox-aware bulk actions for loaded conversations and drafts, including avatar-slot selection, Shift range selection, Ctrl/Cmd toggles, and `Mod+A` / `Escape` list hotkeys.
@@ -97,13 +98,17 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - `packages/auth` owns Better Auth configuration.
 - Icon-only interactive controls should use the shared tooltip wrapper from `@quietr/ui`, keep a concise `aria-label`, and stay visually compact.
 
-### TanStack Query and queryOptions
+### TanStack Query and mutationOptions
 
-- Use `queryOptions` (from `@tanstack/react-query`) when:
-  - A query config is needed in more than one place.
-  - You want a single source of truth for query keys and config.
-- Prefer extracting query options into shared modules (e.g. `*-query.ts`) when used across components.
-- Pass the result of `queryOptions(...)` directly to `useQuery`, `prefetchQuery`, or other query methods; avoid duplicating query keys or config inline.
+- Use TanStack Query first for app-owned async UI state in React code.
+- Use named `queryOptions(...)` and `mutationOptions(...)` when:
+  - A query or mutation config is needed in more than one place.
+  - You want a single source of truth for query keys, mutation keys, or cache behavior.
+- Prefer extracting shared query and mutation options into colocated `*-query.ts` modules when they are reused.
+- Pass the result of `queryOptions(...)` directly to `useQuery`, `prefetchQuery`, or other query methods, and pass the result of `mutationOptions(...)` to `useMutation(...)`; avoid duplicating keys or config inline.
+- Keep Better Auth's native reactive hooks as the source of truth for auth-owned state such as `useSession`, `useActiveOrganization`, `useListOrganizations`, and `useListPasskeys`.
+- In non-hook code, prefer query-client reads when shared caching matters, but call the underlying client directly for one-off writes when TanStack would only add indirection.
+- User-scoped data must include `userId` in its query keys so persisted browser caches do not bleed across accounts.
 
 ### API and data flow
 
@@ -112,6 +117,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - Router procedures cover auth email-status/preview lookups plus Gmail list/thread/history-sync/label/draft/attachment/message actions, including Drafts listing/loading and Spam/Not Spam flows.
 - Mailbox list queries can forward raw Gmail advanced-search syntax through the Gmail API `q` parameter while still applying the selected mailbox label, including Drafts and Spam.
 - Browser-side TanStack Query persistence is the primary Gmail cache and is restored before inbox queries mount.
+- User-scoped Gmail and auth-adjacent read models must include `userId` in their query keys so persisted browser caches stay isolated per signed-in account.
 - Sender avatars are derived at request time from the message sender and are not persisted in Postgres.
 - Manual `queryClient.setQueryData` writes are persisted with `persistQueryByKey` so optimistic cache updates survive reloads.
 - Gmail REST calls are executed server-side in `packages/trpc/src/gmail-service.ts`, with access tokens resolved from the signed-in user's linked Google account.
@@ -175,7 +181,7 @@ Root commands:
 4. Respect generated files: do not manually rewrite generated route tree or migration metadata without clear reason.
 5. For schema changes, use `bun run db:push` by default and verify app behavior end-to-end; only generate/apply migrations when explicitly asked for, for now.
 6. Before finishing work, first format using `bun run fmt`, then run `bun run lint:fix` and `bun run typecheck`, and fix any errors or warnings from the that come up.
-7. Use `queryOptions` when adding or refactoring TanStack Query usage.
+7. Use `queryOptions` and `mutationOptions` when adding or refactoring TanStack Query usage in React code, but keep Better Auth's native reactive hooks native.
 8. Prioritize clarity in inbox surfaces and keep the workflow simple.
 9. For incremental UI refinement requests, preserve the existing layout, density, and component hierarchy unless the user explicitly asks for a redesign. Do not add helper copy, oversized controls, extra empty space, or decorative sections when the request is for a minimal change.
 10. Follow [React's guidance on avoiding unnecessary Effects](https://react.dev/learn/you-might-not-need-an-effect): do not use `useEffect` to reset or mirror local UI state such as dialog forms when the same behavior can live in render logic, `key`s, or component events like `onOpenChange`.

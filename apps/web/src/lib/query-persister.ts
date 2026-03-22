@@ -19,6 +19,29 @@ const createBrowserQueryStorage = (): BrowserQueryStorage | undefined => {
     const storage = window.localStorage;
 
     return {
+      entries: async () => {
+        const entries: Array<[string, string]> = [];
+
+        for (let index = 0; index < storage.length; index += 1) {
+          try {
+            const key = storage.key(index);
+            if (!key) {
+              continue;
+            }
+
+            const value = storage.getItem(key);
+            if (value === null) {
+              continue;
+            }
+
+            entries.push([key, value]);
+          } catch {
+            continue;
+          }
+        }
+
+        return entries;
+      },
       getItem: (key) => {
         try {
           return storage.getItem(key);
@@ -65,6 +88,14 @@ export const persistQueryByKey = async (queryClient: QueryClient, queryKey: Quer
 
   try {
     await queryPersister.persistQueryByKey(queryKey, queryClient);
+  } catch {
+    return;
+  }
+};
+
+export const clearPersistedQueryCache = async () => {
+  try {
+    await queryPersister.removeQueries();
   } catch {
     return;
   }

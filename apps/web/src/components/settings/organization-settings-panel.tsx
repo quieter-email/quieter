@@ -34,7 +34,13 @@ import {
   TooltipTrigger,
 } from "@quietr/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  mutationOptions,
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useState } from "react";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
@@ -64,7 +70,8 @@ type UserInvitation = {
 };
 
 const organizationRoleOptions = ["owner", "admin", "member"] as const;
-const userInvitationsQueryKey = ["auth", "organization", "list-user-invitations"] as const;
+const getUserInvitationsQueryKey = (userId: string) =>
+  ["auth", userId, "organization", "list-user-invitations"] as const;
 
 type SettingsRowProps = {
   action: ReactNode;
@@ -156,6 +163,13 @@ const loadUserInvitations = async (): Promise<UserInvitation[]> =>
     ),
   );
 
+const userInvitationsQueryOptions = (userId: string, enabled = true) =>
+  queryOptions({
+    enabled,
+    queryFn: loadUserInvitations,
+    queryKey: getUserInvitationsQueryKey(userId),
+  });
+
 const SettingsRow = ({ action, label, value }: SettingsRowProps) => (
   <div className="flex flex-col items-start justify-between gap-4 border-b border-border/70 py-5 last:border-b-0 md:flex-row md:items-center">
     <div>
@@ -200,7 +214,7 @@ const MutedActionButton = ({
 const CreateOrganizationDialog = () => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const createOrganizationMutation = useMutation({
+  const createOrganizationMutationOptions = mutationOptions({
     mutationFn: async (input: { name: string; slug: string }) =>
       unwrapResultError(
         await authClient.organization.create(input),
@@ -208,6 +222,7 @@ const CreateOrganizationDialog = () => {
       ),
     mutationKey: ["auth", "organization", "create"],
   });
+  const createOrganizationMutation = useMutation(createOrganizationMutationOptions);
   const form = useForm({
     defaultValues: {
       name: "",
@@ -361,7 +376,7 @@ const EditOrganizationDialog = ({
 }) => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const updateOrganizationMutation = useMutation({
+  const updateOrganizationMutationOptions = mutationOptions({
     mutationFn: async (input: { name: string; slug: string }) =>
       unwrapResultError(
         await authClient.organization.update({
@@ -372,6 +387,7 @@ const EditOrganizationDialog = ({
       ),
     mutationKey: ["auth", "organization", "update"],
   });
+  const updateOrganizationMutation = useMutation(updateOrganizationMutationOptions);
   const form = useForm({
     defaultValues: {
       name: activeOrganization.name,
@@ -683,7 +699,7 @@ const ManagePeopleDialog = ({
   const [open, setOpen] = useState(false);
   const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(null);
   const [pendingMemberId, setPendingMemberId] = useState<string | null>(null);
-  const inviteMemberMutation = useMutation({
+  const inviteMemberMutationOptions = mutationOptions({
     mutationFn: async (input: { email: string; role: OrganizationRoleOption }) =>
       unwrapResultError(
         await authClient.organization.inviteMember({
@@ -695,7 +711,8 @@ const ManagePeopleDialog = ({
       ),
     mutationKey: ["auth", "organization", "invite-member"],
   });
-  const cancelInvitationMutation = useMutation({
+  const inviteMemberMutation = useMutation(inviteMemberMutationOptions);
+  const cancelInvitationMutationOptions = mutationOptions({
     mutationFn: async (invitationId: string) =>
       unwrapResultError(
         await authClient.organization.cancelInvitation({ invitationId }),
@@ -703,7 +720,8 @@ const ManagePeopleDialog = ({
       ),
     mutationKey: ["auth", "organization", "cancel-invitation"],
   });
-  const removeMemberMutation = useMutation({
+  const cancelInvitationMutation = useMutation(cancelInvitationMutationOptions);
+  const removeMemberMutationOptions = mutationOptions({
     mutationFn: async (memberId: string) =>
       unwrapResultError(
         await authClient.organization.removeMember({
@@ -714,7 +732,8 @@ const ManagePeopleDialog = ({
       ),
     mutationKey: ["auth", "organization", "remove-member"],
   });
-  const updateMemberRoleMutation = useMutation({
+  const removeMemberMutation = useMutation(removeMemberMutationOptions);
+  const updateMemberRoleMutationOptions = mutationOptions({
     mutationFn: async (input: { memberId: string; role: OrganizationRoleOption }) =>
       unwrapResultError(
         await authClient.organization.updateMemberRole({
@@ -726,6 +745,7 @@ const ManagePeopleDialog = ({
       ),
     mutationKey: ["auth", "organization", "update-member-role"],
   });
+  const updateMemberRoleMutation = useMutation(updateMemberRoleMutationOptions);
   const inviteForm = useForm({
     defaultValues: {
       email: "",
@@ -1024,16 +1044,25 @@ const LeaveOrganizationDialog = ({
 }) => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const leaveOrganizationMutation = useMutation({
-    mutationFn: async () =>
-      unwrapResultError(
+  const leaveOrganizationMutationOptions = mutationOptions({
+    mutationFn: async () => {
+      await unwrapResultError(
         await authClient.organization.leave({
           organizationId: activeOrganization.id,
         }),
         "Could not leave organization.",
-      ),
+      );
+
+      if (nextOrganizationId) {
+        await unwrapResultError(
+          await authClient.organization.setActive({ organizationId: nextOrganizationId }),
+          "Could not switch organization.",
+        );
+      }
+    },
     mutationKey: ["auth", "organization", "leave"],
   });
+  const leaveOrganizationMutation = useMutation(leaveOrganizationMutationOptions);
   const form = useForm({
     defaultValues: {
       confirmation: "",
@@ -1043,14 +1072,6 @@ const LeaveOrganizationDialog = ({
 
       try {
         await leaveOrganizationMutation.mutateAsync();
-
-        if (nextOrganizationId) {
-          await unwrapResultError(
-            await authClient.organization.setActive({ organizationId: nextOrganizationId }),
-            "Could not switch organization.",
-          );
-        }
-
         handleOpenChange(false);
       } catch (mutationError) {
         setSubmitError(getErrorMessage(mutationError, "Could not leave organization."));
@@ -1167,16 +1188,25 @@ const DeleteOrganizationDialog = ({
 }) => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const deleteOrganizationMutation = useMutation({
-    mutationFn: async () =>
-      unwrapResultError(
+  const deleteOrganizationMutationOptions = mutationOptions({
+    mutationFn: async () => {
+      await unwrapResultError(
         await authClient.organization.delete({
           organizationId: activeOrganization.id,
         }),
         "Could not delete organization.",
-      ),
+      );
+
+      if (nextOrganizationId) {
+        await unwrapResultError(
+          await authClient.organization.setActive({ organizationId: nextOrganizationId }),
+          "Could not switch organization.",
+        );
+      }
+    },
     mutationKey: ["auth", "organization", "delete"],
   });
+  const deleteOrganizationMutation = useMutation(deleteOrganizationMutationOptions);
   const form = useForm({
     defaultValues: {
       confirmation: "",
@@ -1186,14 +1216,6 @@ const DeleteOrganizationDialog = ({
 
       try {
         await deleteOrganizationMutation.mutateAsync();
-
-        if (nextOrganizationId) {
-          await unwrapResultError(
-            await authClient.organization.setActive({ organizationId: nextOrganizationId }),
-            "Could not switch organization.",
-          );
-        }
-
         handleOpenChange(false);
       } catch (mutationError) {
         setSubmitError(getErrorMessage(mutationError, "Could not delete organization."));
@@ -1306,13 +1328,12 @@ const PendingInvitationsSection = () => {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(null);
-  const userInvitationsQuery = useQuery({
-    enabled: Boolean(sessionState.data?.user.email),
-    queryFn: loadUserInvitations,
-    queryKey: userInvitationsQueryKey,
-  });
+  const userId = sessionState.data?.user.id ?? "";
+  const userInvitationsQuery = useQuery(
+    userInvitationsQueryOptions(userId, Boolean(sessionState.data?.user.email)),
+  );
 
-  const acceptInvitationMutation = useMutation({
+  const acceptInvitationMutationOptions = mutationOptions({
     mutationFn: async (invitationId: string) =>
       unwrapResultError(
         await authClient.organization.acceptInvitation({ invitationId }),
@@ -1320,10 +1341,11 @@ const PendingInvitationsSection = () => {
       ),
     mutationKey: ["auth", "organization", "accept-invitation"],
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: userInvitationsQueryKey });
+      await queryClient.invalidateQueries({ queryKey: getUserInvitationsQueryKey(userId) });
     },
   });
-  const rejectInvitationMutation = useMutation({
+  const acceptInvitationMutation = useMutation(acceptInvitationMutationOptions);
+  const rejectInvitationMutationOptions = mutationOptions({
     mutationFn: async (invitationId: string) =>
       unwrapResultError(
         await authClient.organization.rejectInvitation({ invitationId }),
@@ -1331,9 +1353,10 @@ const PendingInvitationsSection = () => {
       ),
     mutationKey: ["auth", "organization", "reject-invitation"],
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: userInvitationsQueryKey });
+      await queryClient.invalidateQueries({ queryKey: getUserInvitationsQueryKey(userId) });
     },
   });
+  const rejectInvitationMutation = useMutation(rejectInvitationMutationOptions);
 
   const invitations = [...(userInvitationsQuery.data ?? [])].sort((left, right) =>
     left.organizationName.localeCompare(right.organizationName),
@@ -1481,7 +1504,7 @@ const OrganizationList = ({
 }) => {
   const [error, setError] = useState<string | null>(null);
   const [pendingOrganizationId, setPendingOrganizationId] = useState<string | null>(null);
-  const setActiveOrganizationMutation = useMutation({
+  const setActiveOrganizationMutationOptions = mutationOptions({
     mutationFn: async (organizationId: string) =>
       unwrapResultError(
         await authClient.organization.setActive({ organizationId }),
@@ -1489,6 +1512,7 @@ const OrganizationList = ({
       ),
     mutationKey: ["auth", "organization", "set-active"],
   });
+  const setActiveOrganizationMutation = useMutation(setActiveOrganizationMutationOptions);
 
   const handleSetActiveOrganization = async (organizationId: string) => {
     if (organizationId === activeOrganizationId) {

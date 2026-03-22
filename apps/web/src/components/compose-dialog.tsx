@@ -277,7 +277,12 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
       })();
 
       await savePromiseRef.current;
-      return composeSessionRef.current.activeDraft;
+      const savedDraft = composeSessionRef.current.activeDraft;
+      if (savedDraft.saveStatus === "error") {
+        throw new Error(savedDraft.errorMessage ?? "Could not save draft.");
+      }
+
+      return savedDraft;
     };
 
     const scheduleAutosave = () => {
@@ -298,7 +303,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
       }
 
       autosaveTimerRef.current = setTimeout(() => {
-        void flushActiveSave();
+        void flushActiveSave().catch(() => {});
       }, 500);
     };
 
@@ -438,8 +443,8 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
         setDialogOpen(false);
         await persistSession(clearedSession);
         await Promise.all([
-          refreshCachedMailboxQueries(queryClient, "drafts"),
-          refreshCachedMailboxQueries(queryClient, "sent"),
+          refreshCachedMailboxQueries(queryClient, userId, "drafts"),
+          refreshCachedMailboxQueries(queryClient, userId, "sent"),
         ]);
       } catch (error) {
         setActiveDraftErrorMessage(getErrorMessage(error, "Could not send message."));
@@ -476,7 +481,9 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
         setShowBcc(false);
         setDialogOpen(false);
         await persistSession(clearedSession);
-        await refreshCachedMailboxQueries(queryClient, "drafts");
+        if (userId) {
+          await refreshCachedMailboxQueries(queryClient, userId, "drafts");
+        }
       } catch (error) {
         setActiveDraftErrorMessage(
           getErrorMessage(
@@ -487,27 +494,42 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
       }
     };
 
-    const handleDialogOpenChange = (open: boolean) => {
-      setDialogOpen(open);
-
-      if (open) {
+    const closeComposeDialog = async () => {
+      if (transitionBusy || activeDraft.saveStatus === "sending") {
         return;
       }
 
+      setTransitionBusy(true);
       clearTimeout(autosaveTimerRef.current);
-      const draft = buildDraftFromForm(getCurrentFormValues());
 
-      if (hasComposeDraftContent(draft) && userId) {
-        void flushActiveSave()
-          .then(async () => {
-            await persistSession();
-            await refreshCachedMailboxQueries(queryClient, "drafts");
-          })
-          .catch(() => {});
+      try {
+        const draft = buildDraftFromForm(getCurrentFormValues());
+
+        if (hasComposeDraftContent(draft) && userId) {
+          await flushActiveSave();
+          await Promise.all([
+            persistSession(),
+            refreshCachedMailboxQueries(queryClient, userId, "drafts"),
+          ]);
+        } else {
+          await persistSession();
+        }
+
+        setDialogOpen(false);
+      } catch (error) {
+        setActiveDraftErrorMessage(getErrorMessage(error, "Could not save draft."));
+      } finally {
+        setTransitionBusy(false);
+      }
+    };
+
+    const handleDialogOpenChange = (open: boolean) => {
+      if (open) {
+        setDialogOpen(true);
         return;
       }
 
-      void persistSession();
+      void closeComposeDialog();
     };
 
     const addInlineImageFiles = async (files: File[]) => {

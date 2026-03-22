@@ -3,7 +3,7 @@ import { GoogleIcon, Key02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, TextField, TextFieldInput } from "@quietr/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { mutationOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
@@ -90,7 +90,7 @@ export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
   const alternateHref = isSignup ? "/login" : "/signup";
   const alternateLabel = isSignup ? "Log in" : "Sign up";
 
-  const googleMutation = useMutation({
+  const googleMutationOptions = mutationOptions({
     mutationFn: async () => {
       const response = await authClient.signIn.social({
         provider: "google",
@@ -103,8 +103,9 @@ export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
     },
     mutationKey: ["auth", mode, "google"],
   });
+  const googleMutation = useMutation(googleMutationOptions);
 
-  const passkeyMutation = useMutation({
+  const passkeyMutationOptions = mutationOptions({
     mutationFn: async () => {
       const response = await authClient.signIn.passkey();
       const responseError = getAuthResponseError(response, "Could not sign in with a passkey.");
@@ -116,8 +117,9 @@ export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
     },
     mutationKey: ["auth", mode, "passkey"],
   });
+  const passkeyMutation = useMutation(passkeyMutationOptions);
 
-  const magicLinkMutation = useMutation({
+  const magicLinkMutationOptions = mutationOptions({
     mutationFn: async ({ email, name }: AuthFormValues) => {
       const normalizedEmail = email.trim().toLowerCase();
       const normalizedName = name.trim();
@@ -161,6 +163,7 @@ export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
     },
     mutationKey: ["auth", mode, "magic-link"],
   });
+  const magicLinkMutation = useMutation(magicLinkMutationOptions);
 
   const form = useForm({
     defaultValues: {

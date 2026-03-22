@@ -3,6 +3,7 @@
 import {
   type QueryClient,
   useInfiniteQuery,
+  useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -41,6 +42,7 @@ import {
 } from "~/lib/gmail/inbox-query";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
 import { mailboxSearchParams } from "~/lib/search-params";
+import { useTRPC } from "~/lib/trpc";
 import { type ComposeDialogHandle, ComposeDialog } from "./compose-dialog";
 import { MailSidebar } from "./mail-sidebar";
 import { MessageDetail } from "./message-detail";
@@ -131,10 +133,12 @@ type MailboxWorkspaceViewProps = {
   onRefresh: () => void;
   onSearch: (query: string) => void;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
+  onUnsubscribe: (messageId: string) => void;
   onUnmarkAsSpam: (messageId: string) => void;
   onUpdateLabels: (messageId: string, changes: LabelChangeSet) => void;
   searchQuery: string;
   selectedMessage: MessageListItem | null;
+  userId: string;
   user: MailboxWorkspaceProps["user"];
 };
 
@@ -146,6 +150,8 @@ type MailboxActionHandlerArgs = {
   pendingThreadActionIds: ReadonlySet<string>;
   queryClient: QueryClient;
   refreshSearchResultsIfNeeded: () => Promise<void>;
+  unsubscribeFromMessageMutation: (messageId: string) => Promise<void>;
+  userId: string;
 };
 
 const initialMailboxWorkspaceState: MailboxWorkspaceState = {
@@ -235,6 +241,8 @@ const createMailboxActionHandlers = ({
   pendingThreadActionIds,
   queryClient,
   refreshSearchResultsIfNeeded,
+  unsubscribeFromMessageMutation,
+  userId,
 }: MailboxActionHandlerArgs) => {
   const isMessageActionPending = (messageId: string | null | undefined) =>
     messageId ? pendingMessageActionIds.has(messageId) : false;
@@ -385,31 +393,61 @@ const createMailboxActionHandlers = ({
 
   const markMessageAsRead = async (messageId: string) => {
     await runMessageAction(messageId, async () => {
-      await markMessageAsReadInMailbox(queryClient, activeMailbox, activeSearchQuery, messageId);
+      await markMessageAsReadInMailbox(
+        queryClient,
+        userId,
+        activeMailbox,
+        activeSearchQuery,
+        messageId,
+      );
     });
   };
 
   const markMessageAsUnread = async (messageId: string) => {
     await runMessageAction(messageId, async () => {
-      await markMessageAsUnreadInMailbox(queryClient, activeMailbox, activeSearchQuery, messageId);
+      await markMessageAsUnreadInMailbox(
+        queryClient,
+        userId,
+        activeMailbox,
+        activeSearchQuery,
+        messageId,
+      );
     });
   };
 
   const markMessageAsSpam = async (messageId: string) => {
     await runMessageAction(messageId, async () => {
-      await markMessageAsSpamInMailbox(queryClient, activeMailbox, activeSearchQuery, messageId);
+      await markMessageAsSpamInMailbox(
+        queryClient,
+        userId,
+        activeMailbox,
+        activeSearchQuery,
+        messageId,
+      );
     });
   };
 
   const markThreadAsRead = async (threadId: string) => {
     await runThreadAction(threadId, async () => {
-      await markThreadAsReadInMailbox(queryClient, activeMailbox, activeSearchQuery, threadId);
+      await markThreadAsReadInMailbox(
+        queryClient,
+        userId,
+        activeMailbox,
+        activeSearchQuery,
+        threadId,
+      );
     });
   };
 
   const markThreadAsUnread = async (threadId: string) => {
     await runThreadAction(threadId, async () => {
-      await markThreadAsUnreadInMailbox(queryClient, activeMailbox, activeSearchQuery, threadId);
+      await markThreadAsUnreadInMailbox(
+        queryClient,
+        userId,
+        activeMailbox,
+        activeSearchQuery,
+        threadId,
+      );
     });
   };
 
@@ -417,6 +455,7 @@ const createMailboxActionHandlers = ({
     await runMessageAction(messageId, async () => {
       await updateMessageLabelsInMailbox(
         queryClient,
+        userId,
         activeMailbox,
         activeSearchQuery,
         messageId,
@@ -427,13 +466,31 @@ const createMailboxActionHandlers = ({
 
   const moveMessageToTrash = async (messageId: string) => {
     await runMessageAction(messageId, async () => {
-      await moveMessageToTrashInMailbox(queryClient, activeMailbox, activeSearchQuery, messageId);
+      await moveMessageToTrashInMailbox(
+        queryClient,
+        userId,
+        activeMailbox,
+        activeSearchQuery,
+        messageId,
+      );
+    });
+  };
+
+  const unsubscribeFromMessage = async (messageId: string) => {
+    await runMessageAction(messageId, async () => {
+      await unsubscribeFromMessageMutation(messageId);
     });
   };
 
   const unmarkMessageAsSpam = async (messageId: string) => {
     await runMessageAction(messageId, async () => {
-      await unmarkMessageAsSpamInMailbox(queryClient, activeMailbox, activeSearchQuery, messageId);
+      await unmarkMessageAsSpamInMailbox(
+        queryClient,
+        userId,
+        activeMailbox,
+        activeSearchQuery,
+        messageId,
+      );
     });
   };
 
@@ -443,6 +500,7 @@ const createMailboxActionHandlers = ({
     await runMessageAction(message.id, async () => {
       await deleteDraftInMailbox(
         queryClient,
+        userId,
         activeMailbox,
         activeSearchQuery,
         message.id,
@@ -455,6 +513,7 @@ const createMailboxActionHandlers = ({
     await runMessageAction(messageId, async () => {
       await deleteMessagePermanentlyInMailbox(
         queryClient,
+        userId,
         activeMailbox,
         activeSearchQuery,
         messageId,
@@ -473,7 +532,14 @@ const createMailboxActionHandlers = ({
     await runBulkMessageAction(Array.from(draftsByMessageId.keys()), async (messageId) => {
       const draftId = draftsByMessageId.get(messageId);
       if (!draftId) return;
-      await deleteDraftInMailbox(queryClient, activeMailbox, activeSearchQuery, messageId, draftId);
+      await deleteDraftInMailbox(
+        queryClient,
+        userId,
+        activeMailbox,
+        activeSearchQuery,
+        messageId,
+        draftId,
+      );
     });
   };
 
@@ -481,7 +547,13 @@ const createMailboxActionHandlers = ({
     await runBulkThreadAction(
       threads.map((thread) => thread.threadId),
       async (threadId) => {
-        await markThreadAsReadInMailbox(queryClient, activeMailbox, activeSearchQuery, threadId);
+        await markThreadAsReadInMailbox(
+          queryClient,
+          userId,
+          activeMailbox,
+          activeSearchQuery,
+          threadId,
+        );
       },
     );
   };
@@ -490,7 +562,13 @@ const createMailboxActionHandlers = ({
     await runBulkThreadAction(
       threads.map((thread) => thread.threadId),
       async (threadId) => {
-        await markThreadAsUnreadInMailbox(queryClient, activeMailbox, activeSearchQuery, threadId);
+        await markThreadAsUnreadInMailbox(
+          queryClient,
+          userId,
+          activeMailbox,
+          activeSearchQuery,
+          threadId,
+        );
       },
     );
   };
@@ -499,7 +577,13 @@ const createMailboxActionHandlers = ({
     await runBulkThreadAction(
       threads.map((thread) => thread.threadId),
       async (threadId) => {
-        await markThreadAsSpamInMailbox(queryClient, activeMailbox, activeSearchQuery, threadId);
+        await markThreadAsSpamInMailbox(
+          queryClient,
+          userId,
+          activeMailbox,
+          activeSearchQuery,
+          threadId,
+        );
       },
     );
   };
@@ -508,7 +592,13 @@ const createMailboxActionHandlers = ({
     await runBulkThreadAction(
       threads.map((thread) => thread.threadId),
       async (threadId) => {
-        await unmarkThreadAsSpamInMailbox(queryClient, activeMailbox, activeSearchQuery, threadId);
+        await unmarkThreadAsSpamInMailbox(
+          queryClient,
+          userId,
+          activeMailbox,
+          activeSearchQuery,
+          threadId,
+        );
       },
     );
   };
@@ -517,7 +607,13 @@ const createMailboxActionHandlers = ({
     await runBulkThreadAction(
       threads.map((thread) => thread.threadId),
       async (threadId) => {
-        await moveThreadToTrashInMailbox(queryClient, activeMailbox, activeSearchQuery, threadId);
+        await moveThreadToTrashInMailbox(
+          queryClient,
+          userId,
+          activeMailbox,
+          activeSearchQuery,
+          threadId,
+        );
       },
     );
   };
@@ -528,6 +624,7 @@ const createMailboxActionHandlers = ({
       async (threadId) => {
         await deleteThreadPermanentlyInMailbox(
           queryClient,
+          userId,
           activeMailbox,
           activeSearchQuery,
           threadId,
@@ -553,6 +650,7 @@ const createMailboxActionHandlers = ({
     markThreadAsUnread,
     moveThreadsToTrash,
     moveMessageToTrash,
+    unsubscribeFromMessage,
     unmarkThreadsAsSpam,
     unmarkMessageAsSpam,
     updateMessageLabels,
@@ -562,6 +660,7 @@ const createMailboxActionHandlers = ({
 export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const pathname = usePathname();
   const queryClient = useQueryClient();
+  const trpc = useTRPC();
   const composeDialogRef = useRef<ComposeDialogHandle | null>(null);
   const [workspaceState, dispatch] = useReducer(
     mailboxWorkspaceReducer,
@@ -575,9 +674,13 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       scroll: false,
     });
   const activeSearchQuery = query.trim();
+  const userId = user.id ?? "";
+
+  const unsubscribeMutationOptions = trpc.gmail.unsubscribeFromMessage.mutationOptions();
+  const unsubscribeMutation = useMutation(unsubscribeMutationOptions);
 
   const messagesQuery = useInfiniteQuery(
-    messagesQueryOptions(queryClient, activeMailbox, activeSearchQuery),
+    messagesQueryOptions(userId, activeMailbox, activeSearchQuery),
   );
   const hasLoadedMessages = Boolean(messagesQuery.data?.pages.length);
   const isLiveSyncEnabled =
@@ -588,14 +691,14 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     hasLoadedMessages &&
     !isManualRefreshing;
   const syncQuery = useQuery(
-    liveSyncQueryOptions(queryClient, activeMailbox, activeSearchQuery, isLiveSyncEnabled),
+    liveSyncQueryOptions(queryClient, userId, activeMailbox, activeSearchQuery, isLiveSyncEnabled),
   );
 
   const flattenedMessages = messagesQuery.data?.pages.flatMap((page) => page.messages) ?? [];
 
   const refreshMessages = async () => {
-    const liveSyncQueryKey = getLiveSyncQueryKey(activeMailbox, activeSearchQuery);
-    const messagesQueryKey = getMessagesQueryKey(activeMailbox, activeSearchQuery);
+    const liveSyncQueryKey = getLiveSyncQueryKey(userId, activeMailbox, activeSearchQuery);
+    const messagesQueryKey = getMessagesQueryKey(userId, activeMailbox, activeSearchQuery);
 
     await queryClient.cancelQueries({ queryKey: liveSyncQueryKey });
     await queryClient.cancelQueries({ queryKey: messagesQueryKey });
@@ -605,7 +708,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       value: true,
     });
     try {
-      await syncMessages(queryClient, activeMailbox, activeSearchQuery);
+      await syncMessages(queryClient, userId, activeMailbox, activeSearchQuery);
     } finally {
       dispatch({
         type: "manual-refresh/set",
@@ -616,7 +719,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
 
   const refreshSearchResultsIfNeeded = async () => {
     if (activeSearchQuery.length === 0) return;
-    await refreshLoadedMessagesPages(queryClient, activeMailbox, activeSearchQuery);
+    await refreshLoadedMessagesPages(queryClient, userId, activeMailbox, activeSearchQuery);
   };
 
   let selectedMessage: MessageListItem | null = null;
@@ -685,6 +788,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     markThreadAsUnread,
     moveThreadsToTrash,
     moveMessageToTrash,
+    unsubscribeFromMessage,
     unmarkThreadsAsSpam,
     unmarkMessageAsSpam,
     updateMessageLabels,
@@ -696,6 +800,10 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     pendingThreadActionIds,
     queryClient,
     refreshSearchResultsIfNeeded,
+    unsubscribeFromMessageMutation: async (messageId) => {
+      await unsubscribeMutation.mutateAsync({ messageId });
+    },
+    userId,
   });
 
   const openDraft = (message: MessageListItem) => {
@@ -722,7 +830,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     void setMailboxQuery({ messageId });
 
     if (threadId) {
-      void queryClient.prefetchQuery(getThreadWithDetailsOptions(activeMailbox, threadId));
+      void queryClient.prefetchQuery(getThreadWithDetailsOptions(userId, activeMailbox, threadId));
     }
   };
 
@@ -837,6 +945,9 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         }}
         onSearch={applySearch}
         onSelectMailbox={selectMailbox}
+        onUnsubscribe={(messageId) => {
+          void unsubscribeFromMessage(messageId);
+        }}
         onUnmarkAsSpam={(messageId) => {
           void unmarkMessageAsSpam(messageId);
         }}
@@ -845,6 +956,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         }}
         searchQuery={activeSearchQuery}
         selectedMessage={selectedMessage}
+        userId={userId}
         user={user}
       />
 
@@ -893,10 +1005,12 @@ const MailboxWorkspaceView = ({
   onRefresh,
   onSearch,
   onSelectMailbox,
+  onUnsubscribe,
   onUnmarkAsSpam,
   onUpdateLabels,
   searchQuery,
   selectedMessage,
+  userId,
   user,
 }: MailboxWorkspaceViewProps) => {
   return (
@@ -943,9 +1057,11 @@ const MailboxWorkspaceView = ({
               onOpenDraft={onOpenDraft}
               onRefresh={onRefresh}
               onSearch={onSearch}
+              onUnsubscribe={onUnsubscribe}
               onUnmarkAsSpam={onUnmarkAsSpam}
               onUpdateLabels={onUpdateLabels}
               searchQuery={searchQuery}
+              userId={userId}
             />
           </section>
 
@@ -965,9 +1081,11 @@ const MailboxWorkspaceView = ({
               onMarkThreadAsRead={onMarkThreadAsRead}
               onMarkThreadAsUnread={onMarkThreadAsUnread}
               onMoveToTrash={onMoveToTrash}
+              onUnsubscribe={onUnsubscribe}
               onUnmarkAsSpam={onUnmarkAsSpam}
               onUpdateLabels={onUpdateLabels}
               selectedMessage={selectedMessage}
+              userId={userId}
             />
           </div>
         </div>
