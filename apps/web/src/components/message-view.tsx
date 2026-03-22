@@ -265,7 +265,7 @@ const MessageInspectorPanel = ({
               {inspector.rawText ? (
                 <section className="space-y-2">
                   <h3 className={detailsSectionTitleClassName}>Decoded source</h3>
-                  <pre className="overflow-x-auto whitespace-pre-wrap text-sm text-foreground-light">
+                  <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground-light">
                     {inspector.rawText}
                   </pre>
                 </section>
@@ -274,7 +274,7 @@ const MessageInspectorPanel = ({
               {inspector.raw ? (
                 <section className="space-y-2">
                   <h3 className={detailsSectionTitleClassName}>Raw Gmail payload</h3>
-                  <pre className="overflow-x-auto whitespace-pre-wrap break-all text-sm text-foreground-light">
+                  <pre className="overflow-x-auto text-sm break-all whitespace-pre-wrap text-foreground-light">
                     {inspector.raw}
                   </pre>
                 </section>
@@ -283,7 +283,7 @@ const MessageInspectorPanel = ({
               {payloadText ? (
                 <section className="space-y-2">
                   <h3 className={detailsSectionTitleClassName}>Structured payload</h3>
-                  <pre className="overflow-x-auto whitespace-pre-wrap text-sm text-foreground-light">
+                  <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground-light">
                     {payloadText}
                   </pre>
                 </section>

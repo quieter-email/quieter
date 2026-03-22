@@ -31,13 +31,7 @@ export type MessageListSearchProps = {
 };
 
 const SearchFilterChip = ({ label, onRemove }: { label: string; onRemove: () => void }) => (
-  <m.span
-    animate={{ opacity: 1 }}
-    className="inline-flex max-w-full items-center gap-1 rounded-md border border-input px-1.5 py-0.5 text-xs text-foreground"
-    exit={{ opacity: 0 }}
-    initial={{ opacity: 0 }}
-    transition={{ opacity: { duration: 0.12, ease: "easeOut" } }}
-  >
+  <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-input px-1.5 py-0.5 text-xs text-foreground">
     <span className="truncate">{label}</span>
     <button
       aria-label={`Remove ${label} filter`}
@@ -55,7 +49,7 @@ const SearchFilterChip = ({ label, onRemove }: { label: string; onRemove: () => 
     >
       ×
     </button>
-  </m.span>
+  </span>
 );
 
 export const MessageListSearch = ({
@@ -68,11 +62,13 @@ export const MessageListSearch = ({
 }: MessageListSearchProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLElement>(null!);
+  const openWithAnimationRef = useRef(false);
   const prefersReducedMotion = useReducedMotion();
   const [draftSearchState, setDraftSearchState] = useState<{
     baseQuery: string;
     value: StructuredSearchState;
   } | null>(null);
+  const [animateDropdown, setAnimateDropdown] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [openSection, setOpenSection] = useState<SearchDropdownSectionId | null>(null);
 
@@ -85,8 +81,16 @@ export const MessageListSearch = ({
     draftSearchState?.baseQuery === searchQuery ? draftSearchState.value : committedSearchState;
   const userLabels = useMemo(() => getUserLabels(labelsQuery.data ?? []), [labelsQuery.data]);
 
+  const openDropdown = useCallback(() => {
+    setAnimateDropdown(openWithAnimationRef.current);
+    openWithAnimationRef.current = false;
+    setIsDropdownOpen(true);
+  }, []);
+
   const closeDropdown = useCallback(() => {
     setIsDropdownOpen(false);
+    setAnimateDropdown(false);
+    openWithAnimationRef.current = false;
     setOpenSection(null);
   }, []);
 
@@ -188,10 +192,15 @@ export const MessageListSearch = ({
             <Field className="min-w-0 flex-1">
               <div
                 className="flex h-8 w-full items-center gap-2 rounded-md border border-input bg-background px-2 shadow-sm transition-colors duration-150 ease-out focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20"
+                onPointerDownCapture={(event) => {
+                  if (event.pointerType) {
+                    openWithAnimationRef.current = true;
+                  }
+                }}
                 onPointerDown={(event) => {
                   if (!(event.target instanceof Element)) return;
                   if (event.target.closest("button, input")) return;
-                  setIsDropdownOpen(true);
+                  openDropdown();
                   searchInputRef.current?.focus();
                 }}
               >
@@ -210,7 +219,7 @@ export const MessageListSearch = ({
                       },
                     });
                   }}
-                  onFocus={() => setIsDropdownOpen(true)}
+                  onFocus={() => openDropdown()}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       commitSearchState(currentSearchState, true);
@@ -269,48 +278,41 @@ export const MessageListSearch = ({
           </div>
 
           {/* ── Row 2: Active filter pills ── */}
-          <AnimatePresence initial={false}>
-            {selectedSearchChips.length > 0 ? (
-              <m.div
-                key="filter-pills"
-                animate={{ opacity: 1, height: "auto" }}
-                className="flex flex-wrap gap-1.5 overflow-hidden"
-                exit={{ opacity: 0, height: 0 }}
-                initial={{ opacity: 0, height: 0 }}
-                transition={
-                  prefersReducedMotion
-                    ? { duration: 0 }
-                    : {
-                        opacity: { duration: 0.14, ease: "easeOut" },
-                        height: { duration: 0.18, ease: "easeOut" },
-                      }
-                }
-              >
-                <AnimatePresence initial={false}>
-                  {selectedSearchChips.map((chip) => (
-                    <SearchFilterChip key={chip.key} label={chip.label} onRemove={chip.onRemove} />
-                  ))}
-                </AnimatePresence>
-              </m.div>
-            ) : null}
-          </AnimatePresence>
+          {selectedSearchChips.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 overflow-hidden">
+              {selectedSearchChips.map((chip) => (
+                <SearchFilterChip key={chip.key} label={chip.label} onRemove={chip.onRemove} />
+              ))}
+            </div>
+          ) : null}
 
           {/* ── Dropdown ── */}
           <AnimatePresence initial={false}>
             {isDropdownOpen ? (
               <m.div
-                key="message-list-search-dropdown"
-                animate={{ opacity: 1, y: 0 }}
+                animate={{ opacity: 1, transform: "translateY(0px)" }}
                 className="overflow-hidden rounded-lg border border-border bg-popover p-2 shadow-lg"
-                exit={{ opacity: 0, y: prefersReducedMotion ? 0 : -4 }}
-                initial={{ opacity: 0, y: prefersReducedMotion ? 0 : -4 }}
+                exit={{
+                  opacity: 0,
+                  transform:
+                    animateDropdown && !prefersReducedMotion
+                      ? "translateY(-4px)"
+                      : "translateY(0px)",
+                }}
+                initial={{
+                  opacity: animateDropdown && !prefersReducedMotion ? 0 : 1,
+                  transform:
+                    animateDropdown && !prefersReducedMotion
+                      ? "translateY(-4px)"
+                      : "translateY(0px)",
+                }}
                 transition={
-                  prefersReducedMotion
-                    ? { duration: 0 }
-                    : {
+                  animateDropdown && !prefersReducedMotion
+                    ? {
                         opacity: { duration: 0.14, ease: "easeOut" },
-                        y: { duration: 0.14, ease: "easeOut" },
+                        transform: { duration: 0.14, ease: "easeOut" },
                       }
+                    : { duration: 0 }
                 }
               >
                 <MessageListSearchDropdown

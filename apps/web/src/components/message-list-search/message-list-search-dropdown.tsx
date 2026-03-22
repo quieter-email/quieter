@@ -9,7 +9,6 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { cn } from "@quietr/ui";
-import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 import {
   SEARCH_CATEGORY_FILTER_OPTIONS,
@@ -19,10 +18,6 @@ import {
   type SearchDropdownSectionId,
   type StructuredSearchState,
 } from "./message-list-search-state";
-
-const fadeTransition = {
-  opacity: { duration: 0.14, ease: "easeOut" as const },
-};
 
 const SECTION_META: Record<SearchDropdownSectionId, { icon: IconSvgElement; label: string }> = {
   categories: { icon: Folder01Icon, label: "Categories" },
@@ -190,38 +185,14 @@ const AccordionSectionInner = ({
   onToggle: (id: SearchDropdownSectionId) => void;
   open: boolean;
   sectionId: SearchDropdownSectionId;
-}) => {
-  const prefersReducedMotion = useReducedMotion();
-
-  return (
-    <div>
-      <SearchAccordionTrigger icon={icon} onClick={() => onToggle(sectionId)} open={open}>
-        {label}
-      </SearchAccordionTrigger>
-      <AnimatePresence initial={false}>
-        {open ? (
-          <m.div
-            key={sectionId}
-            animate={{ opacity: 1, height: "auto" }}
-            className="overflow-hidden"
-            exit={{ opacity: 0, height: 0 }}
-            initial={{ opacity: 0, height: 0 }}
-            transition={
-              prefersReducedMotion
-                ? { duration: 0 }
-                : {
-                    height: { duration: 0.2, ease: "easeOut" },
-                    ...fadeTransition,
-                  }
-            }
-          >
-            <div className="pt-1">{children}</div>
-          </m.div>
-        ) : null}
-      </AnimatePresence>
-    </div>
-  );
-};
+}) => (
+  <div>
+    <SearchAccordionTrigger icon={icon} onClick={() => onToggle(sectionId)} open={open}>
+      {label}
+    </SearchAccordionTrigger>
+    {open ? <div className="pt-1">{children}</div> : null}
+  </div>
+);
 
 export const MessageListSearchDropdown = ({
   draftSearchState,
@@ -243,36 +214,34 @@ export const MessageListSearchDropdown = ({
   };
 
   return (
-    <LazyMotion features={domAnimation}>
-      <div className="space-y-1">
-        <AccordionSection
-          icon={SECTION_META.categories.icon}
-          label={SECTION_META.categories.label}
-          onToggle={handleSectionToggle}
-          open={openSection === "categories"}
-          sectionId="categories"
-        >
-          <SearchCategoriesBody
-            categoryFilter={draftSearchState.categoryFilter}
-            updateSearchState={updateSearchState}
-          />
-        </AccordionSection>
+    <div className="space-y-1">
+      <AccordionSection
+        icon={SECTION_META.categories.icon}
+        label={SECTION_META.categories.label}
+        onToggle={handleSectionToggle}
+        open={openSection === "categories"}
+        sectionId="categories"
+      >
+        <SearchCategoriesBody
+          categoryFilter={draftSearchState.categoryFilter}
+          updateSearchState={updateSearchState}
+        />
+      </AccordionSection>
 
-        <AccordionSection
-          icon={SECTION_META.labels.icon}
-          label={SECTION_META.labels.label}
-          onToggle={handleSectionToggle}
-          open={openSection === "labels"}
-          sectionId="labels"
-        >
-          <SearchLabelsBody
-            draftSearchState={draftSearchState}
-            labelsErrorMessage={labelsErrorMessage}
-            updateSearchState={updateSearchState}
-            userLabels={userLabels}
-          />
-        </AccordionSection>
-      </div>
-    </LazyMotion>
+      <AccordionSection
+        icon={SECTION_META.labels.icon}
+        label={SECTION_META.labels.label}
+        onToggle={handleSectionToggle}
+        open={openSection === "labels"}
+        sectionId="labels"
+      >
+        <SearchLabelsBody
+          draftSearchState={draftSearchState}
+          labelsErrorMessage={labelsErrorMessage}
+          updateSearchState={updateSearchState}
+          userLabels={userLabels}
+        />
+      </AccordionSection>
+    </div>
   );
 };
