@@ -1,11 +1,10 @@
 "use client";
 
-import type { FormEvent } from "react";
 import { AlertCircleIcon, Loading03Icon, MailSend02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { composeDraftFormValuesSchema, composeSendFormValuesSchema } from "@quietr/trpc/compose";
 import { Button, Dialog, DialogContent, cn } from "@quietr/ui";
-import { useForm } from "@tanstack/react-form";
+import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
@@ -132,8 +131,9 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
       onSubmit: async ({ value }) => {
         await submitComposeForm(value);
       },
+      validationLogic: revalidateLogic(),
       validators: {
-        onChange: composeDraftFormValuesSchema,
+        onDynamic: composeDraftFormValuesSchema,
         onSubmit: composeSendFormValuesSchema,
       },
     });
@@ -536,12 +536,6 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
       }
     };
 
-    const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      void form.handleSubmit();
-    };
-
     useImperativeHandle(ref, () => ({
       openDraft: (draft) => {
         void openRequestedDraft(draft ? cloneComposeDraft(draft) : null);
@@ -587,7 +581,11 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
         <DialogContent className="max-h-[85vh] w-[min(92vw,46rem)] overflow-hidden bg-background-light p-0 transition-opacity duration-100 data-[ending-style]:scale-100 data-[starting-style]:scale-100">
           <form
             className="max-h-[85vh] overflow-y-auto px-5 py-5 sm:px-6 sm:py-6"
-            onSubmit={handleSubmit}
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void form.handleSubmit();
+            }}
           >
             <div className="space-y-4">
               <div className="flex items-start justify-between gap-4 pb-1">

@@ -33,10 +33,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@quietr/ui";
-import { useMutation } from "@tanstack/react-query";
+import { revalidateLogic, useForm } from "@tanstack/react-form";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { z } from "zod";
 import { authClient } from "~/lib/auth";
-import { getErrorMessage, unwrapResultError } from "~/lib/errors";
+import { getErrorMessage, getFieldErrorMessage, unwrapResultError } from "~/lib/errors";
 
 type ActiveOrganization = NonNullable<ReturnType<typeof authClient.useActiveOrganization>["data"]>;
 type ActiveMember = NonNullable<ReturnType<typeof authClient.useActiveMember>["data"]>;
@@ -48,6 +50,21 @@ type OrganizationSummary = NonNullable<
   ReturnType<typeof authClient.useListOrganizations>["data"]
 >[number];
 type OrganizationMember = ActiveOrganization["members"][number];
+type UserInvitation = {
+  createdAt: Date | string;
+  email: string;
+  expiresAt: Date | string;
+  id: string;
+  inviterId: string;
+  organizationId: string;
+  organizationName: string;
+  role: string;
+  status: string;
+  teamId?: string | null;
+};
+
+const organizationRoleOptions = ["owner", "admin", "member"] as const;
+const userInvitationsQueryKey = ["auth", "organization", "list-user-invitations"] as const;
 
 type SettingsRowProps = {
   action: ReactNode;
@@ -55,22 +72,24 @@ type SettingsRowProps = {
   value: ReactNode;
 };
 
-const organizationRoleOptions = ["owner", "admin", "member"] as const;
-
 type OrganizationRoleOption = (typeof organizationRoleOptions)[number];
 
-const formatCount = (count: number, singular: string, plural = `${singular}s`) => {
-  return count === 1 ? `1 ${singular}` : `${count} ${plural}`;
-};
+const formatCount = (count: number, singular: string, plural = `${singular}s`) =>
+  count === 1 ? `1 ${singular}` : `${count} ${plural}`;
 
-const formatRoleLabel = (value: string) => {
-  return value
+const splitOrganizationRoles = (value: string) =>
+  value
     .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean)
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+
+const formatRoleLabel = (value: string) =>
+  splitOrganizationRoles(value)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(", ");
-};
+
+const hasOrganizationRole = (value: string, role: OrganizationRoleOption) =>
+  splitOrganizationRoles(value).includes(role);
 
 const organizationRoleSelectItems = organizationRoleOptions.map((role) => ({
   label: formatRoleLabel(role),
@@ -78,30 +97,64 @@ const organizationRoleSelectItems = organizationRoleOptions.map((role) => ({
 }));
 
 const normalizeOrganizationRole = (value: string): OrganizationRoleOption => {
-  const primaryRole = value
-    .split(",")
-    .map((part) => part.trim().toLowerCase())
-    .find((part): part is OrganizationRoleOption =>
-      organizationRoleOptions.includes(part as OrganizationRoleOption),
-    );
+  const primaryRole = splitOrganizationRoles(value).find((part): part is OrganizationRoleOption =>
+    organizationRoleOptions.includes(part as OrganizationRoleOption),
+  );
 
   return primaryRole ?? "member";
 };
 
-const slugifyOrganizationName = (value: string) => {
-  return value
+const slugifyOrganizationName = (value: string) =>
+  value
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+
+const formatDate = (value: Date | string) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+
+  return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(date);
 };
 
 const hasOrganizationPermission = (
   role: OrganizationPermissionCheck["role"] | null,
   permissions: OrganizationPermissions,
-) => {
-  return role ? authClient.organization.checkRolePermission({ permissions, role }) : false;
+) => (role ? authClient.organization.checkRolePermission({ permissions, role }) : false);
+
+const isUserInvitation = (value: unknown): value is UserInvitation =>
+  typeof value === "object" &&
+  value !== null &&
+  "id" in value &&
+  typeof value.id === "string" &&
+  "organizationName" in value &&
+  typeof value.organizationName === "string" &&
+  "role" in value &&
+  typeof value.role === "string" &&
+  "expiresAt" in value;
+
+const normalizeUserInvitations = (value: unknown): UserInvitation[] => {
+  if (Array.isArray(value)) {
+    return value.filter(isUserInvitation);
+  }
+
+  if (typeof value === "object" && value !== null && "data" in value && Array.isArray(value.data)) {
+    return value.data.filter(isUserInvitation);
+  }
+
+  return [];
 };
+
+const loadUserInvitations = async (): Promise<UserInvitation[]> =>
+  normalizeUserInvitations(
+    unwrapResultError(
+      await authClient.organization.listUserInvitations(),
+      "Could not load invitations.",
+    ),
+  );
 
 const SettingsRow = ({ action, label, value }: SettingsRowProps) => (
   <div className="flex flex-col items-start justify-between gap-4 border-b border-border/70 py-5 last:border-b-0 md:flex-row md:items-center">
@@ -145,10 +198,8 @@ const MutedActionButton = ({
 );
 
 const CreateOrganizationDialog = () => {
-  const [error, setError] = useState<string | null>(null);
-  const [name, setName] = useState("");
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const [slug, setSlug] = useState("");
   const createOrganizationMutation = useMutation({
     mutationFn: async (input: { name: string; slug: string }) =>
       unwrapResultError(
@@ -157,48 +208,59 @@ const CreateOrganizationDialog = () => {
       ),
     mutationKey: ["auth", "organization", "create"],
   });
+  const form = useForm({
+    defaultValues: {
+      name: "",
+      slug: "",
+    },
+    onSubmit: async ({ value }) => {
+      setSubmitError(null);
+
+      const nextSlug = slugifyOrganizationName(value.slug || value.name);
+      if (nextSlug.length === 0) {
+        setSubmitError("Slug cannot be empty.");
+        return;
+      }
+
+      try {
+        await createOrganizationMutation.mutateAsync({
+          name: value.name.trim(),
+          slug: nextSlug,
+        });
+        handleOpenChange(false);
+      } catch (mutationError) {
+        setSubmitError(getErrorMessage(mutationError, "Could not create organization."));
+      }
+    },
+    validationLogic: revalidateLogic(),
+    validators: {
+      onDynamic: z.object({
+        name: z.string().trim().min(1, "Name cannot be empty."),
+        slug: z
+          .string()
+          .trim()
+          .regex(/^$|^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens."),
+      }),
+    },
+  });
 
   const openDialog = () => {
-    setError(null);
-    setName("");
-    setSlug("");
+    setSubmitError(null);
+    form.reset({
+      name: "",
+      slug: "",
+    });
     setOpen(true);
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (!nextOpen) {
-      setError(null);
-      setName("");
-      setSlug("");
-    }
-  };
-
-  const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-
-    const trimmedName = name.trim();
-    const nextSlug = slugifyOrganizationName(slug.trim() || trimmedName);
-
-    if (trimmedName.length === 0) {
-      setError("Name cannot be empty.");
-      return;
-    }
-
-    if (nextSlug.length === 0) {
-      setError("Slug cannot be empty.");
-      return;
-    }
-
-    try {
-      await createOrganizationMutation.mutateAsync({
-        name: trimmedName,
-        slug: nextSlug,
+      setSubmitError(null);
+      form.reset({
+        name: "",
+        slug: "",
       });
-      handleOpenChange(false);
-    } catch (mutationError) {
-      setError(getErrorMessage(mutationError, "Could not create organization."));
     }
   };
 
@@ -215,26 +277,61 @@ const CreateOrganizationDialog = () => {
             <DialogTitle>Create organization</DialogTitle>
           </DialogHeader>
 
-          <form onSubmit={handleCreate}>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void form.handleSubmit();
+            }}
+          >
             <DialogBody className="space-y-3">
-              <TextField>
-                <TextFieldInput
-                  autoFocus
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Organization name"
-                  value={name}
-                />
-              </TextField>
+              <form.Field name="name">
+                {(field) => {
+                  const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
 
-              <TextField>
-                <TextFieldInput
-                  onChange={(event) => setSlug(event.target.value)}
-                  placeholder="organization-slug"
-                  value={slug}
-                />
-              </TextField>
+                  return (
+                    <TextField>
+                      <TextFieldInput
+                        aria-invalid={fieldError ? true : undefined}
+                        name={field.name}
+                        onBlur={() => field.handleBlur()}
+                        onChange={(event) => {
+                          setSubmitError(null);
+                          field.handleChange(event.target.value);
+                        }}
+                        placeholder="Organization name"
+                        value={field.state.value}
+                      />
+                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                    </TextField>
+                  );
+                }}
+              </form.Field>
 
-              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+              <form.Field name="slug">
+                {(field) => {
+                  const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
+
+                  return (
+                    <TextField>
+                      <TextFieldInput
+                        aria-invalid={fieldError ? true : undefined}
+                        name={field.name}
+                        onBlur={() => field.handleBlur()}
+                        onChange={(event) => {
+                          setSubmitError(null);
+                          field.handleChange(event.target.value);
+                        }}
+                        placeholder="organization-slug"
+                        value={field.state.value}
+                      />
+                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                    </TextField>
+                  );
+                }}
+              </form.Field>
+
+              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
             </DialogBody>
 
             <DialogFooter>
@@ -257,139 +354,13 @@ const CreateOrganizationDialog = () => {
   );
 };
 
-const SwitchOrganizationDialog = ({
-  activeOrganizationId,
-  organizations,
-}: {
-  activeOrganizationId: string | null;
-  organizations: OrganizationSummary[];
-}) => {
-  const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-  const [selectedOrganizationId, setSelectedOrganizationId] = useState(
-    activeOrganizationId ?? organizations[0]?.id ?? "",
-  );
-  const organizationSelectItems = organizations.map((organization) => ({
-    label: organization.name,
-    value: organization.id,
-  }));
-  const setActiveOrganizationMutation = useMutation({
-    mutationFn: async (organizationId: string) =>
-      unwrapResultError(
-        await authClient.organization.setActive({ organizationId }),
-        "Could not switch organization.",
-      ),
-    mutationKey: ["auth", "organization", "set-active"],
-  });
-
-  const openDialog = () => {
-    setError(null);
-    setSelectedOrganizationId(activeOrganizationId ?? organizations[0]?.id ?? "");
-    setOpen(true);
-  };
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    setOpen(nextOpen);
-    if (!nextOpen) {
-      setError(null);
-      setSelectedOrganizationId(activeOrganizationId ?? organizations[0]?.id ?? "");
-    }
-  };
-
-  const handleSave = async () => {
-    setError(null);
-
-    if (!selectedOrganizationId) {
-      setError("Choose an organization.");
-      return;
-    }
-
-    if (selectedOrganizationId === activeOrganizationId) {
-      handleOpenChange(false);
-      return;
-    }
-
-    try {
-      await setActiveOrganizationMutation.mutateAsync(selectedOrganizationId);
-      handleOpenChange(false);
-    } catch (mutationError) {
-      setError(getErrorMessage(mutationError, "Could not switch organization."));
-    }
-  };
-
-  return (
-    <>
-      <Button onClick={openDialog} size="sm" variant="outline">
-        <HugeiconsIcon aria-hidden className="size-4" icon={UserGroupIcon} />
-        Switch
-      </Button>
-
-      <Dialog onOpenChange={handleOpenChange} open={open}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Active organization</DialogTitle>
-          </DialogHeader>
-
-          <DialogBody className="space-y-3">
-            <Select
-              items={organizationSelectItems}
-              modal={false}
-              onValueChange={(value) => {
-                if (value) {
-                  setSelectedOrganizationId(value);
-                }
-              }}
-              value={selectedOrganizationId}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Choose organization" />
-              </SelectTrigger>
-              <SelectContent positionerClassName="z-[60]">
-                <SelectList>
-                  {organizations.map((organization) => (
-                    <SelectItem key={organization.id} value={organization.id}>
-                      {organization.name}
-                    </SelectItem>
-                  ))}
-                </SelectList>
-              </SelectContent>
-            </Select>
-
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          </DialogBody>
-
-          <DialogFooter>
-            <DialogCloseButton disabled={setActiveOrganizationMutation.isPending}>
-              Cancel
-            </DialogCloseButton>
-            <Button
-              disabled={setActiveOrganizationMutation.isPending || !selectedOrganizationId}
-              onClick={() => void handleSave()}
-              size="sm"
-            >
-              {setActiveOrganizationMutation.isPending ? (
-                <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-              ) : (
-                <HugeiconsIcon aria-hidden className="size-4" icon={UserGroupIcon} />
-              )}
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-};
-
 const EditOrganizationDialog = ({
   activeOrganization,
 }: {
   activeOrganization: ActiveOrganization;
 }) => {
-  const [error, setError] = useState<string | null>(null);
-  const [name, setName] = useState(activeOrganization.name);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const [slug, setSlug] = useState(activeOrganization.slug);
   const updateOrganizationMutation = useMutation({
     mutationFn: async (input: { name: string; slug: string }) =>
       unwrapResultError(
@@ -401,48 +372,59 @@ const EditOrganizationDialog = ({
       ),
     mutationKey: ["auth", "organization", "update"],
   });
+  const form = useForm({
+    defaultValues: {
+      name: activeOrganization.name,
+      slug: activeOrganization.slug,
+    },
+    onSubmit: async ({ value }) => {
+      setSubmitError(null);
+
+      const nextSlug = slugifyOrganizationName(value.slug || value.name);
+      if (nextSlug.length === 0) {
+        setSubmitError("Slug cannot be empty.");
+        return;
+      }
+
+      try {
+        await updateOrganizationMutation.mutateAsync({
+          name: value.name.trim(),
+          slug: nextSlug,
+        });
+        handleOpenChange(false);
+      } catch (mutationError) {
+        setSubmitError(getErrorMessage(mutationError, "Could not update organization."));
+      }
+    },
+    validationLogic: revalidateLogic(),
+    validators: {
+      onDynamic: z.object({
+        name: z.string().trim().min(1, "Name cannot be empty."),
+        slug: z
+          .string()
+          .trim()
+          .regex(/^$|^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens."),
+      }),
+    },
+  });
 
   const openDialog = () => {
-    setError(null);
-    setName(activeOrganization.name);
-    setSlug(activeOrganization.slug);
+    setSubmitError(null);
+    form.reset({
+      name: activeOrganization.name,
+      slug: activeOrganization.slug,
+    });
     setOpen(true);
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (!nextOpen) {
-      setError(null);
-      setName(activeOrganization.name);
-      setSlug(activeOrganization.slug);
-    }
-  };
-
-  const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-
-    const trimmedName = name.trim();
-    const nextSlug = slugifyOrganizationName(slug.trim() || trimmedName);
-
-    if (trimmedName.length === 0) {
-      setError("Name cannot be empty.");
-      return;
-    }
-
-    if (nextSlug.length === 0) {
-      setError("Slug cannot be empty.");
-      return;
-    }
-
-    try {
-      await updateOrganizationMutation.mutateAsync({
-        name: trimmedName,
-        slug: nextSlug,
+      setSubmitError(null);
+      form.reset({
+        name: activeOrganization.name,
+        slug: activeOrganization.slug,
       });
-      handleOpenChange(false);
-    } catch (mutationError) {
-      setError(getErrorMessage(mutationError, "Could not update organization."));
     }
   };
 
@@ -459,21 +441,59 @@ const EditOrganizationDialog = ({
             <DialogTitle>Edit organization</DialogTitle>
           </DialogHeader>
 
-          <form onSubmit={handleSave}>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void form.handleSubmit();
+            }}
+          >
             <DialogBody className="space-y-3">
-              <TextField>
-                <TextFieldInput
-                  autoFocus
-                  onChange={(event) => setName(event.target.value)}
-                  value={name}
-                />
-              </TextField>
+              <form.Field name="name">
+                {(field) => {
+                  const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
 
-              <TextField>
-                <TextFieldInput onChange={(event) => setSlug(event.target.value)} value={slug} />
-              </TextField>
+                  return (
+                    <TextField>
+                      <TextFieldInput
+                        aria-invalid={fieldError ? true : undefined}
+                        name={field.name}
+                        onBlur={() => field.handleBlur()}
+                        onChange={(event) => {
+                          setSubmitError(null);
+                          field.handleChange(event.target.value);
+                        }}
+                        value={field.state.value}
+                      />
+                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                    </TextField>
+                  );
+                }}
+              </form.Field>
 
-              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+              <form.Field name="slug">
+                {(field) => {
+                  const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
+
+                  return (
+                    <TextField>
+                      <TextFieldInput
+                        aria-invalid={fieldError ? true : undefined}
+                        name={field.name}
+                        onBlur={() => field.handleBlur()}
+                        onChange={(event) => {
+                          setSubmitError(null);
+                          field.handleChange(event.target.value);
+                        }}
+                        value={field.state.value}
+                      />
+                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                    </TextField>
+                  );
+                }}
+              </form.Field>
+
+              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
             </DialogBody>
 
             <DialogFooter>
@@ -496,6 +516,154 @@ const EditOrganizationDialog = ({
   );
 };
 
+const ManagePeopleMemberRoleForm = ({
+  activeMember,
+  canRemoveMembers,
+  canUpdateMemberRole,
+  member,
+  onRemoveMember,
+  onUpdateRole,
+  pendingMemberId,
+  removeMemberPending,
+  updateMemberRolePending,
+}: {
+  activeMember: ActiveMember | null;
+  canRemoveMembers: boolean;
+  canUpdateMemberRole: boolean;
+  member: OrganizationMember;
+  onRemoveMember: (memberId: string) => Promise<void>;
+  onUpdateRole: (memberId: string, role: OrganizationRoleOption) => Promise<void>;
+  pendingMemberId: string | null;
+  removeMemberPending: boolean;
+  updateMemberRolePending: boolean;
+}) => {
+  const currentRole = normalizeOrganizationRole(member.role);
+  const isActiveMember = member.userId === activeMember?.userId;
+  const isSavingRole = pendingMemberId === member.id && updateMemberRolePending;
+  const isRemovingMember = pendingMemberId === member.id && removeMemberPending;
+  const form = useForm({
+    defaultValues: {
+      role: currentRole,
+    },
+    onSubmit: async ({ value }) => {
+      await onUpdateRole(member.id, value.role);
+    },
+    validationLogic: revalidateLogic(),
+    validators: {
+      onDynamic: z.object({
+        role: z.enum(organizationRoleOptions),
+      }),
+    },
+  });
+
+  return (
+    <div className="flex flex-col gap-3 py-3 md:flex-row md:items-center">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm text-foreground">{member.user.name}</p>
+        <p className="mt-1 truncate text-sm text-muted-foreground">{member.user.email}</p>
+      </div>
+
+      {canUpdateMemberRole && !isActiveMember ? (
+        <form
+          className="flex flex-wrap items-center justify-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void form.handleSubmit();
+          }}
+        >
+          <form.Field name="role">
+            {(field) => (
+              <Select
+                items={organizationRoleSelectItems}
+                modal={false}
+                onValueChange={(value) => {
+                  if (value) {
+                    field.handleChange(normalizeOrganizationRole(value));
+                    field.handleBlur();
+                  }
+                }}
+                value={field.state.value}
+              >
+                <SelectTrigger className="w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent positionerClassName="z-[60]">
+                  <SelectList>
+                    {organizationRoleOptions.map((role) => (
+                      <SelectItem key={role} value={role}>
+                        {formatRoleLabel(role)}
+                      </SelectItem>
+                    ))}
+                  </SelectList>
+                </SelectContent>
+              </Select>
+            )}
+          </form.Field>
+
+          <form.Subscribe selector={(state) => state.values.role}>
+            {(selectedRole) => (
+              <Button
+                disabled={selectedRole === currentRole || isSavingRole || isRemovingMember}
+                size="sm"
+                type="submit"
+                variant="outline"
+              >
+                {isSavingRole ? (
+                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                ) : (
+                  <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
+                )}
+                Save
+              </Button>
+            )}
+          </form.Subscribe>
+
+          {canRemoveMembers ? (
+            <Button
+              disabled={isSavingRole || isRemovingMember}
+              onClick={() => void onRemoveMember(member.id)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {isRemovingMember ? (
+                <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+              ) : (
+                <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+              )}
+              Remove
+            </Button>
+          ) : null}
+        </form>
+      ) : (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <p className="text-sm text-muted-foreground">
+            {formatRoleLabel(member.role)}
+            {isActiveMember ? " / You" : ""}
+          </p>
+
+          {canRemoveMembers && !isActiveMember ? (
+            <Button
+              disabled={isRemovingMember}
+              onClick={() => void onRemoveMember(member.id)}
+              size="sm"
+              variant="outline"
+            >
+              {isRemovingMember ? (
+                <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+              ) : (
+                <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+              )}
+              Remove
+            </Button>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ManagePeopleDialog = ({
   activeMember,
   activeOrganization,
@@ -511,10 +679,7 @@ const ManagePeopleDialog = ({
   canRemoveMembers: boolean;
   canUpdateMemberRole: boolean;
 }) => {
-  const [draftRoles, setDraftRoles] = useState<Record<string, OrganizationRoleOption>>({});
   const [error, setError] = useState<string | null>(null);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<OrganizationRoleOption>("member");
   const [open, setOpen] = useState(false);
   const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(null);
   const [pendingMemberId, setPendingMemberId] = useState<string | null>(null);
@@ -561,6 +726,35 @@ const ManagePeopleDialog = ({
       ),
     mutationKey: ["auth", "organization", "update-member-role"],
   });
+  const inviteForm = useForm({
+    defaultValues: {
+      email: "",
+      role: "member" as OrganizationRoleOption,
+    },
+    onSubmit: async ({ value }) => {
+      setError(null);
+
+      try {
+        await inviteMemberMutation.mutateAsync({
+          email: value.email.trim().toLowerCase(),
+          role: value.role,
+        });
+        inviteForm.reset({
+          email: "",
+          role: "member",
+        });
+      } catch (mutationError) {
+        setError(getErrorMessage(mutationError, "Could not invite member."));
+      }
+    },
+    validationLogic: revalidateLogic(),
+    validators: {
+      onDynamic: z.object({
+        email: z.string().trim().min(1, "Email is required.").email("Enter a valid email."),
+        role: z.enum(organizationRoleOptions),
+      }),
+    },
+  });
 
   const members = [...activeOrganization.members].sort((left, right) => {
     const isLeftActiveMember = left.userId === activeMember?.userId;
@@ -576,47 +770,26 @@ const ManagePeopleDialog = ({
     .sort((left, right) => left.email.localeCompare(right.email));
 
   const openDialog = () => {
-    setDraftRoles({});
     setError(null);
-    setInviteEmail("");
-    setInviteRole("member");
     setPendingInvitationId(null);
     setPendingMemberId(null);
+    inviteForm.reset({
+      email: "",
+      role: "member",
+    });
     setOpen(true);
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (!nextOpen) {
-      setDraftRoles({});
       setError(null);
-      setInviteEmail("");
-      setInviteRole("member");
       setPendingInvitationId(null);
       setPendingMemberId(null);
-    }
-  };
-
-  const handleInvite = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-
-    const email = inviteEmail.trim().toLowerCase();
-
-    if (email.length === 0) {
-      setError("Email is required.");
-      return;
-    }
-
-    try {
-      await inviteMemberMutation.mutateAsync({
-        email,
-        role: inviteRole,
+      inviteForm.reset({
+        email: "",
+        role: "member",
       });
-      setInviteEmail("");
-      setInviteRole("member");
-    } catch (mutationError) {
-      setError(getErrorMessage(mutationError, "Could not invite member."));
     }
   };
 
@@ -644,26 +817,14 @@ const ManagePeopleDialog = ({
     }
   };
 
-  const handleRoleChange = async (member: OrganizationMember) => {
-    const nextRole = draftRoles[member.id];
-    const currentRole = normalizeOrganizationRole(member.role);
-
-    if (!nextRole || nextRole === currentRole) {
-      return;
-    }
-
+  const handleRoleChange = async (memberId: string, role: OrganizationRoleOption) => {
     setError(null);
 
     try {
-      setPendingMemberId(member.id);
+      setPendingMemberId(memberId);
       await updateMemberRoleMutation.mutateAsync({
-        memberId: member.id,
-        role: nextRole,
-      });
-      setDraftRoles((currentRoles) => {
-        const nextRoles = { ...currentRoles };
-        delete nextRoles[member.id];
-        return nextRoles;
+        memberId,
+        role,
       });
     } catch (mutationError) {
       setError(getErrorMessage(mutationError, "Could not update member role."));
@@ -687,40 +848,72 @@ const ManagePeopleDialog = ({
 
           <DialogBody className="max-h-[70vh] space-y-5 overflow-y-auto">
             {canInviteMembers ? (
-              <form className="space-y-3" onSubmit={handleInvite}>
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem_auto] md:items-end">
-                  <TextField>
-                    <TextFieldInput
-                      onChange={(event) => setInviteEmail(event.target.value)}
-                      placeholder="name@example.com"
-                      type="email"
-                      value={inviteEmail}
-                    />
-                  </TextField>
+              <form
+                className="space-y-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void inviteForm.handleSubmit();
+                }}
+              >
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem_auto] md:items-start">
+                  <inviteForm.Field name="email">
+                    {(field) => {
+                      const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
 
-                  <Select
-                    items={organizationRoleSelectItems}
-                    modal={false}
-                    onValueChange={(value) => {
-                      if (value) {
-                        setInviteRole(normalizeOrganizationRole(value));
-                      }
+                      return (
+                        <div className="space-y-2">
+                          <TextField>
+                            <TextFieldInput
+                              aria-invalid={fieldError ? true : undefined}
+                              name={field.name}
+                              onBlur={() => field.handleBlur()}
+                              onChange={(event) => {
+                                setError(null);
+                                field.handleChange(event.target.value);
+                              }}
+                              placeholder="name@example.com"
+                              type="email"
+                              value={field.state.value}
+                            />
+                          </TextField>
+                          {fieldError ? (
+                            <p className="text-sm text-destructive">{fieldError}</p>
+                          ) : null}
+                        </div>
+                      );
                     }}
-                    value={inviteRole}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent positionerClassName="z-[60]">
-                      <SelectList>
-                        {organizationRoleOptions.map((role) => (
-                          <SelectItem key={role} value={role}>
-                            {formatRoleLabel(role)}
-                          </SelectItem>
-                        ))}
-                      </SelectList>
-                    </SelectContent>
-                  </Select>
+                  </inviteForm.Field>
+
+                  <inviteForm.Field name="role">
+                    {(field) => (
+                      <Select
+                        items={organizationRoleSelectItems}
+                        modal={false}
+                        onValueChange={(value) => {
+                          if (value) {
+                            setError(null);
+                            field.handleChange(normalizeOrganizationRole(value));
+                            field.handleBlur();
+                          }
+                        }}
+                        value={field.state.value}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent positionerClassName="z-[60]">
+                          <SelectList>
+                            {organizationRoleOptions.map((role) => (
+                              <SelectItem key={role} value={role}>
+                                {formatRoleLabel(role)}
+                              </SelectItem>
+                            ))}
+                          </SelectList>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </inviteForm.Field>
 
                   <Button disabled={inviteMemberMutation.isPending} size="sm" type="submit">
                     {inviteMemberMutation.isPending ? (
@@ -744,107 +937,20 @@ const ManagePeopleDialog = ({
               </p>
 
               <div className="divide-y divide-border/70">
-                {members.map((member) => {
-                  const currentRole = normalizeOrganizationRole(member.role);
-                  const draftRole = draftRoles[member.id] ?? currentRole;
-                  const isActiveMember = member.userId === activeMember?.userId;
-                  const isSavingRole =
-                    pendingMemberId === member.id && updateMemberRoleMutation.isPending;
-                  const isRemovingMember =
-                    pendingMemberId === member.id && removeMemberMutation.isPending;
-
-                  return (
-                    <div
-                      className="flex flex-col gap-3 py-3 md:flex-row md:items-center"
-                      key={member.id}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm text-foreground">{member.user.name}</p>
-                        <p className="mt-1 truncate text-sm text-muted-foreground">
-                          {member.user.email}
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        {canUpdateMemberRole && !isActiveMember ? (
-                          <>
-                            <Select
-                              items={organizationRoleSelectItems}
-                              modal={false}
-                              onValueChange={(value) => {
-                                if (value) {
-                                  setDraftRoles((currentRoles) => ({
-                                    ...currentRoles,
-                                    [member.id]: normalizeOrganizationRole(value),
-                                  }));
-                                }
-                              }}
-                              value={draftRole}
-                            >
-                              <SelectTrigger className="w-28">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent positionerClassName="z-[60]">
-                                <SelectList>
-                                  {organizationRoleOptions.map((role) => (
-                                    <SelectItem key={role} value={role}>
-                                      {formatRoleLabel(role)}
-                                    </SelectItem>
-                                  ))}
-                                </SelectList>
-                              </SelectContent>
-                            </Select>
-
-                            <Button
-                              disabled={
-                                draftRole === currentRole || isSavingRole || isRemovingMember
-                              }
-                              onClick={() => void handleRoleChange(member)}
-                              size="sm"
-                              variant="outline"
-                            >
-                              {isSavingRole ? (
-                                <HugeiconsIcon
-                                  aria-hidden
-                                  className="size-4 animate-spin"
-                                  icon={Loading03Icon}
-                                />
-                              ) : (
-                                <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
-                              )}
-                              Save
-                            </Button>
-                          </>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">
-                            {formatRoleLabel(member.role)}
-                            {isActiveMember ? " / You" : ""}
-                          </p>
-                        )}
-
-                        {canRemoveMembers && !isActiveMember ? (
-                          <Button
-                            disabled={isSavingRole || isRemovingMember}
-                            onClick={() => void handleRemoveMember(member.id)}
-                            size="sm"
-                            variant="outline"
-                          >
-                            {isRemovingMember ? (
-                              <HugeiconsIcon
-                                aria-hidden
-                                className="size-4 animate-spin"
-                                icon={Loading03Icon}
-                              />
-                            ) : (
-                              <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
-                            )}
-                            Remove
-                          </Button>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
+                {members.map((member) => (
+                  <ManagePeopleMemberRoleForm
+                    activeMember={activeMember}
+                    canRemoveMembers={canRemoveMembers}
+                    canUpdateMemberRole={canUpdateMemberRole}
+                    key={`${member.id}:${member.role}`}
+                    member={member}
+                    onRemoveMember={handleRemoveMember}
+                    onUpdateRole={handleRoleChange}
+                    pendingMemberId={pendingMemberId}
+                    removeMemberPending={removeMemberMutation.isPending}
+                    updateMemberRolePending={updateMemberRoleMutation.isPending}
+                  />
+                ))}
               </div>
             </div>
 
@@ -911,11 +1017,12 @@ const ManagePeopleDialog = ({
 
 const LeaveOrganizationDialog = ({
   activeOrganization,
+  nextOrganizationId,
 }: {
   activeOrganization: ActiveOrganization;
+  nextOrganizationId: string | null;
 }) => {
-  const [confirmation, setConfirmation] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const leaveOrganizationMutation = useMutation({
     mutationFn: async () =>
@@ -927,34 +1034,51 @@ const LeaveOrganizationDialog = ({
       ),
     mutationKey: ["auth", "organization", "leave"],
   });
+  const form = useForm({
+    defaultValues: {
+      confirmation: "",
+    },
+    onSubmit: async () => {
+      setSubmitError(null);
+
+      try {
+        await leaveOrganizationMutation.mutateAsync();
+
+        if (nextOrganizationId) {
+          await unwrapResultError(
+            await authClient.organization.setActive({ organizationId: nextOrganizationId }),
+            "Could not switch organization.",
+          );
+        }
+
+        handleOpenChange(false);
+      } catch (mutationError) {
+        setSubmitError(getErrorMessage(mutationError, "Could not leave organization."));
+      }
+    },
+    validationLogic: revalidateLogic(),
+    validators: {
+      onDynamic: z.object({
+        confirmation: z
+          .string()
+          .trim()
+          .toLowerCase()
+          .regex(/^leave organization$/, 'Type "leave organization".'),
+      }),
+    },
+  });
 
   const openDialog = () => {
-    setConfirmation("");
-    setError(null);
+    setSubmitError(null);
+    form.reset({ confirmation: "" });
     setOpen(true);
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (!nextOpen) {
-      setConfirmation("");
-      setError(null);
-    }
-  };
-
-  const handleLeave = async () => {
-    if (confirmation.trim().toLowerCase() !== "leave organization") {
-      setError('Type "leave organization".');
-      return;
-    }
-
-    setError(null);
-
-    try {
-      await leaveOrganizationMutation.mutateAsync();
-      handleOpenChange(false);
-    } catch (mutationError) {
-      setError(getErrorMessage(mutationError, "Could not leave organization."));
+      setSubmitError(null);
+      form.reset({ confirmation: "" });
     }
   };
 
@@ -971,39 +1095,63 @@ const LeaveOrganizationDialog = ({
             <DialogTitle>Leave organization</DialogTitle>
           </DialogHeader>
 
-          <DialogBody className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Type <span className="font-medium text-foreground">leave organization</span>
-            </p>
-            <TextField>
-              <TextFieldInput
-                autoFocus
-                onChange={(event) => setConfirmation(event.target.value)}
-                placeholder="leave organization"
-                value={confirmation}
-              />
-            </TextField>
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          </DialogBody>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void form.handleSubmit();
+            }}
+          >
+            <DialogBody className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Type <span className="font-medium text-foreground">leave organization</span>
+              </p>
 
-          <DialogFooter>
-            <DialogCloseButton disabled={leaveOrganizationMutation.isPending}>
-              Cancel
-            </DialogCloseButton>
-            <Button
-              disabled={leaveOrganizationMutation.isPending}
-              onClick={() => void handleLeave()}
-              size="sm"
-              variant="destructive"
-            >
-              {leaveOrganizationMutation.isPending ? (
-                <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-              ) : (
-                <HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />
-              )}
-              Leave
-            </Button>
-          </DialogFooter>
+              <form.Field name="confirmation">
+                {(field) => {
+                  const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
+
+                  return (
+                    <TextField>
+                      <TextFieldInput
+                        aria-invalid={fieldError ? true : undefined}
+                        name={field.name}
+                        onBlur={() => field.handleBlur()}
+                        onChange={(event) => {
+                          setSubmitError(null);
+                          field.handleChange(event.target.value);
+                        }}
+                        placeholder="leave organization"
+                        value={field.state.value}
+                      />
+                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                    </TextField>
+                  );
+                }}
+              </form.Field>
+
+              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+            </DialogBody>
+
+            <DialogFooter>
+              <DialogCloseButton disabled={leaveOrganizationMutation.isPending}>
+                Cancel
+              </DialogCloseButton>
+              <Button
+                disabled={leaveOrganizationMutation.isPending}
+                size="sm"
+                type="submit"
+                variant="destructive"
+              >
+                {leaveOrganizationMutation.isPending ? (
+                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                ) : (
+                  <HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />
+                )}
+                Leave
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </>
@@ -1012,11 +1160,12 @@ const LeaveOrganizationDialog = ({
 
 const DeleteOrganizationDialog = ({
   activeOrganization,
+  nextOrganizationId,
 }: {
   activeOrganization: ActiveOrganization;
+  nextOrganizationId: string | null;
 }) => {
-  const [confirmation, setConfirmation] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const deleteOrganizationMutation = useMutation({
     mutationFn: async () =>
@@ -1028,34 +1177,51 @@ const DeleteOrganizationDialog = ({
       ),
     mutationKey: ["auth", "organization", "delete"],
   });
+  const form = useForm({
+    defaultValues: {
+      confirmation: "",
+    },
+    onSubmit: async () => {
+      setSubmitError(null);
+
+      try {
+        await deleteOrganizationMutation.mutateAsync();
+
+        if (nextOrganizationId) {
+          await unwrapResultError(
+            await authClient.organization.setActive({ organizationId: nextOrganizationId }),
+            "Could not switch organization.",
+          );
+        }
+
+        handleOpenChange(false);
+      } catch (mutationError) {
+        setSubmitError(getErrorMessage(mutationError, "Could not delete organization."));
+      }
+    },
+    validationLogic: revalidateLogic(),
+    validators: {
+      onDynamic: z.object({
+        confirmation: z
+          .string()
+          .trim()
+          .toLowerCase()
+          .regex(/^delete organization$/, 'Type "delete organization".'),
+      }),
+    },
+  });
 
   const openDialog = () => {
-    setConfirmation("");
-    setError(null);
+    setSubmitError(null);
+    form.reset({ confirmation: "" });
     setOpen(true);
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (!nextOpen) {
-      setConfirmation("");
-      setError(null);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (confirmation.trim().toLowerCase() !== "delete organization") {
-      setError('Type "delete organization".');
-      return;
-    }
-
-    setError(null);
-
-    try {
-      await deleteOrganizationMutation.mutateAsync();
-      handleOpenChange(false);
-    } catch (mutationError) {
-      setError(getErrorMessage(mutationError, "Could not delete organization."));
+      setSubmitError(null);
+      form.reset({ confirmation: "" });
     }
   };
 
@@ -1072,42 +1238,344 @@ const DeleteOrganizationDialog = ({
             <DialogTitle>Delete organization</DialogTitle>
           </DialogHeader>
 
-          <DialogBody className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Type <span className="font-medium text-foreground">delete organization</span>
-            </p>
-            <TextField>
-              <TextFieldInput
-                autoFocus
-                onChange={(event) => setConfirmation(event.target.value)}
-                placeholder="delete organization"
-                value={confirmation}
-              />
-            </TextField>
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          </DialogBody>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void form.handleSubmit();
+            }}
+          >
+            <DialogBody className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Type <span className="font-medium text-foreground">delete organization</span>
+              </p>
 
-          <DialogFooter>
-            <DialogCloseButton disabled={deleteOrganizationMutation.isPending}>
-              Cancel
-            </DialogCloseButton>
-            <Button
-              disabled={deleteOrganizationMutation.isPending}
-              onClick={() => void handleDelete()}
-              size="sm"
-              variant="destructive"
-            >
-              {deleteOrganizationMutation.isPending ? (
-                <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-              ) : (
-                <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
-              )}
-              Delete
-            </Button>
-          </DialogFooter>
+              <form.Field name="confirmation">
+                {(field) => {
+                  const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
+
+                  return (
+                    <TextField>
+                      <TextFieldInput
+                        aria-invalid={fieldError ? true : undefined}
+                        name={field.name}
+                        onBlur={() => field.handleBlur()}
+                        onChange={(event) => {
+                          setSubmitError(null);
+                          field.handleChange(event.target.value);
+                        }}
+                        placeholder="delete organization"
+                        value={field.state.value}
+                      />
+                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                    </TextField>
+                  );
+                }}
+              </form.Field>
+
+              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+            </DialogBody>
+
+            <DialogFooter>
+              <DialogCloseButton disabled={deleteOrganizationMutation.isPending}>
+                Cancel
+              </DialogCloseButton>
+              <Button
+                disabled={deleteOrganizationMutation.isPending}
+                size="sm"
+                type="submit"
+                variant="destructive"
+              >
+                {deleteOrganizationMutation.isPending ? (
+                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                ) : (
+                  <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+                )}
+                Delete
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </>
+  );
+};
+
+const PendingInvitationsSection = () => {
+  const sessionState = authClient.useSession();
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(null);
+  const userInvitationsQuery = useQuery({
+    enabled: Boolean(sessionState.data?.user.email),
+    queryFn: loadUserInvitations,
+    queryKey: userInvitationsQueryKey,
+  });
+
+  const acceptInvitationMutation = useMutation({
+    mutationFn: async (invitationId: string) =>
+      unwrapResultError(
+        await authClient.organization.acceptInvitation({ invitationId }),
+        "Could not accept invitation.",
+      ),
+    mutationKey: ["auth", "organization", "accept-invitation"],
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: userInvitationsQueryKey });
+    },
+  });
+  const rejectInvitationMutation = useMutation({
+    mutationFn: async (invitationId: string) =>
+      unwrapResultError(
+        await authClient.organization.rejectInvitation({ invitationId }),
+        "Could not reject invitation.",
+      ),
+    mutationKey: ["auth", "organization", "reject-invitation"],
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: userInvitationsQueryKey });
+    },
+  });
+
+  const invitations = [...(userInvitationsQuery.data ?? [])].sort((left, right) =>
+    left.organizationName.localeCompare(right.organizationName),
+  );
+
+  const handleInvitationAction = async (
+    invitation: UserInvitation,
+    action: "accept" | "reject",
+  ) => {
+    setError(null);
+
+    try {
+      setPendingInvitationId(invitation.id);
+
+      if (action === "accept") {
+        await acceptInvitationMutation.mutateAsync(invitation.id);
+        return;
+      }
+
+      await rejectInvitationMutation.mutateAsync(invitation.id);
+    } catch (mutationError) {
+      setError(
+        getErrorMessage(
+          mutationError,
+          action === "accept" ? "Could not accept invitation." : "Could not reject invitation.",
+        ),
+      );
+    } finally {
+      setPendingInvitationId(null);
+    }
+  };
+
+  if (userInvitationsQuery.isPending) {
+    return (
+      <div className="space-y-3">
+        <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
+          Invitations
+        </p>
+        <p className="text-sm text-muted-foreground">Loading invitations...</p>
+      </div>
+    );
+  }
+
+  if (userInvitationsQuery.error) {
+    return (
+      <div className="space-y-3">
+        <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
+          Invitations
+        </p>
+        <p className="text-sm text-destructive">
+          {getErrorMessage(userInvitationsQuery.error, "Could not load invitations.")}
+        </p>
+      </div>
+    );
+  }
+
+  if (invitations.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
+          Invitations
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Review pending invitations before switching or creating another organization.
+        </p>
+      </div>
+
+      <div className="divide-y divide-border/70 rounded-xl border border-border/70">
+        {invitations.map((invitation) => {
+          const isPendingAction =
+            pendingInvitationId === invitation.id &&
+            (acceptInvitationMutation.isPending || rejectInvitationMutation.isPending);
+
+          return (
+            <div
+              className="flex flex-col gap-4 px-4 py-4 md:flex-row md:items-center md:justify-between"
+              key={invitation.id}
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-foreground">
+                  {invitation.organizationName}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {formatRoleLabel(invitation.role)} role
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Expires {formatDate(invitation.expiresAt)}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  disabled={isPendingAction}
+                  onClick={() => void handleInvitationAction(invitation, "accept")}
+                  size="sm"
+                >
+                  {isPendingAction && acceptInvitationMutation.isPending ? (
+                    <HugeiconsIcon
+                      aria-hidden
+                      className="size-4 animate-spin"
+                      icon={Loading03Icon}
+                    />
+                  ) : null}
+                  Accept
+                </Button>
+
+                <Button
+                  disabled={isPendingAction}
+                  onClick={() => void handleInvitationAction(invitation, "reject")}
+                  size="sm"
+                  variant="outline"
+                >
+                  {isPendingAction && rejectInvitationMutation.isPending ? (
+                    <HugeiconsIcon
+                      aria-hidden
+                      className="size-4 animate-spin"
+                      icon={Loading03Icon}
+                    />
+                  ) : null}
+                  Decline
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+    </div>
+  );
+};
+
+const OrganizationList = ({
+  activeOrganizationId,
+  activeRole,
+  organizations,
+}: {
+  activeOrganizationId: string | null;
+  activeRole: OrganizationRoleOption | null;
+  organizations: OrganizationSummary[];
+}) => {
+  const [error, setError] = useState<string | null>(null);
+  const [pendingOrganizationId, setPendingOrganizationId] = useState<string | null>(null);
+  const setActiveOrganizationMutation = useMutation({
+    mutationFn: async (organizationId: string) =>
+      unwrapResultError(
+        await authClient.organization.setActive({ organizationId }),
+        "Could not switch organization.",
+      ),
+    mutationKey: ["auth", "organization", "set-active"],
+  });
+
+  const handleSetActiveOrganization = async (organizationId: string) => {
+    if (organizationId === activeOrganizationId) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      setPendingOrganizationId(organizationId);
+      await setActiveOrganizationMutation.mutateAsync(organizationId);
+    } catch (mutationError) {
+      setError(getErrorMessage(mutationError, "Could not switch organization."));
+    } finally {
+      setPendingOrganizationId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
+            Your organizations
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Switch the active organization directly. Newly accepted invitations and newly created
+            organizations use Better Auth's built-in active-organization flow.
+          </p>
+        </div>
+
+        <CreateOrganizationDialog />
+      </div>
+
+      <div className="divide-y divide-border/70 rounded-xl border border-border/70">
+        {organizations.map((organization) => {
+          const isActive = organization.id === activeOrganizationId;
+          const isPending =
+            pendingOrganizationId === organization.id && setActiveOrganizationMutation.isPending;
+
+          return (
+            <div
+              className="flex flex-col gap-4 px-4 py-4 md:flex-row md:items-center md:justify-between"
+              key={organization.id}
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-foreground">{organization.name}</p>
+                <p className="mt-1 truncate text-sm text-muted-foreground">{organization.slug}</p>
+                {isActive && activeRole ? (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {formatRoleLabel(activeRole)} role
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {isActive ? (
+                  <span className="inline-flex h-8 items-center rounded-md border border-border/70 px-3 text-xs font-medium text-foreground">
+                    Active
+                  </span>
+                ) : (
+                  <Button
+                    disabled={isPending}
+                    onClick={() => void handleSetActiveOrganization(organization.id)}
+                    size="sm"
+                    variant="outline"
+                  >
+                    {isPending ? (
+                      <HugeiconsIcon
+                        aria-hidden
+                        className="size-4 animate-spin"
+                        icon={Loading03Icon}
+                      />
+                    ) : (
+                      <HugeiconsIcon aria-hidden className="size-4" icon={UserGroupIcon} />
+                    )}
+                    Set active
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+    </div>
   );
 };
 
@@ -1115,13 +1583,17 @@ export const OrganizationSettingsPanel = () => {
   const activeMemberState = authClient.useActiveMember();
   const activeOrganizationState = authClient.useActiveOrganization();
   const organizationsState = authClient.useListOrganizations();
-  const activeMember = activeMemberState.data;
-  const activeOrganization = activeOrganizationState.data;
+  const activeMember = activeMemberState.data ?? null;
+  const activeOrganization = activeOrganizationState.data ?? null;
   const organizations = organizationsState.data ?? [];
   const activeRole = activeMember ? normalizeOrganizationRole(activeMember.role) : null;
-  const currentUserId = activeMember?.userId ?? null;
   const pendingInvitations =
     activeOrganization?.invitations.filter((invitation) => invitation.status === "pending") ?? [];
+  const ownerCount =
+    activeOrganization?.members.filter((member) => hasOrganizationRole(member.role, "owner"))
+      .length ?? 0;
+  const nextOrganizationId =
+    organizations.find((organization) => organization.id !== activeOrganization?.id)?.id ?? null;
   const canCancelInvitations = hasOrganizationPermission(activeRole, {
     invitation: ["cancel"],
   });
@@ -1140,33 +1612,16 @@ export const OrganizationSettingsPanel = () => {
   const canUpdateOrganization = hasOrganizationPermission(activeRole, {
     organization: ["update"],
   });
-  const isCurrentUsersPersonalOrganization =
-    activeOrganization?.personalOwnerUserId === currentUserId;
-  const isProtectedPersonalOrganization = Boolean(activeOrganization?.personalOwnerUserId);
   const updateOrganizationReason =
     activeOrganization && !canUpdateOrganization
       ? "Only admins and owners can edit organization details."
       : null;
-  const leaveOrganizationReason = activeOrganization
-    ? isCurrentUsersPersonalOrganization
-      ? "You can't leave your personal organization."
-      : organizations.length <= 1
-        ? "You can't leave your last organization."
-        : null
-    : null;
-  const deleteOrganizationReason = activeOrganization
-    ? isProtectedPersonalOrganization
-      ? "Personal organizations can't be deleted."
-      : !canDeleteOrganization
-        ? "Only owners can delete organizations."
-        : organizations.length <= 1
-          ? "You can't delete your last organization."
-          : null
-    : null;
-
-  const organizationSummary = organizationsState.isPending
-    ? "Loading..."
-    : formatCount(organizations.length, "organization");
+  const leaveOrganizationReason =
+    activeOrganization && activeRole === "owner" && ownerCount <= 1
+      ? "Assign another owner before leaving."
+      : null;
+  const deleteOrganizationReason =
+    activeOrganization && !canDeleteOrganization ? "Only owners can delete organizations." : null;
   const peopleSummary = activeOrganization
     ? [
         formatCount(activeOrganization.members.length, "member"),
@@ -1178,116 +1633,144 @@ export const OrganizationSettingsPanel = () => {
         .join(", ")
     : null;
   const subtitle = activeOrganization
-    ? [activeOrganization.slug, activeRole ? formatRoleLabel(activeRole) : null]
+    ? [activeOrganization.slug, activeRole ? formatRoleLabel(activeRole) : null, peopleSummary]
         .filter(Boolean)
         .join(" / ")
     : organizationsState.isPending
       ? "Loading..."
       : organizations.length > 0
-        ? formatCount(organizations.length, "organization")
-        : "No organization";
+        ? "Choose an active organization to manage members and settings."
+        : "Create or accept an organization to get started.";
 
   return (
     <TooltipProvider>
-      <div>
-        <div className="pb-8">
-          <h1 className="text-2xl font-medium tracking-tight text-foreground">
-            {activeOrganization?.name ?? "Organization"}
-          </h1>
+      <div className="space-y-10">
+        <div>
+          <h1 className="text-2xl font-medium tracking-tight text-foreground">Organizations</h1>
           <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>
         </div>
 
-        <div>
-          {organizations.length > 1 || !activeOrganization ? (
-            <SettingsRow
-              action={
-                <SwitchOrganizationDialog
-                  activeOrganizationId={activeOrganization?.id ?? null}
-                  organizations={organizations}
-                />
-              }
-              label="Active organization"
-              value={activeOrganization?.name ?? "None"}
-            />
-          ) : null}
+        <PendingInvitationsSection />
 
-          <SettingsRow
-            action={<CreateOrganizationDialog />}
-            label="Create organization"
-            value={organizationSummary}
+        {organizationsState.isPending ? (
+          <div className="space-y-3">
+            <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
+              Your organizations
+            </p>
+            <p className="text-sm text-muted-foreground">Loading organizations...</p>
+          </div>
+        ) : organizations.length > 0 ? (
+          <OrganizationList
+            activeOrganizationId={activeOrganization?.id ?? null}
+            activeRole={activeRole}
+            organizations={organizations}
           />
+        ) : (
+          <div className="space-y-4 rounded-xl border border-dashed border-border/70 p-5">
+            <div>
+              <p className="text-sm font-medium text-foreground">No organizations yet</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Better Auth now owns organization membership and active-organization state directly.
+                Create one here or accept an invitation to start managing it.
+              </p>
+            </div>
 
-          {activeOrganization ? (
-            <SettingsRow
-              action={
-                updateOrganizationReason ? (
-                  <MutedActionButton
-                    icon={<HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />}
-                    label="Edit"
-                    reason={updateOrganizationReason}
+            <div>
+              <CreateOrganizationDialog />
+            </div>
+          </div>
+        )}
+
+        {activeOrganization ? (
+          <div>
+            <div className="pb-8">
+              <h2 className="text-xl font-medium tracking-tight text-foreground">
+                {activeOrganization.name}
+              </h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {[activeOrganization.slug, peopleSummary].filter(Boolean).join(" / ")}
+              </p>
+            </div>
+
+            <div>
+              <SettingsRow
+                action={
+                  updateOrganizationReason ? (
+                    <MutedActionButton
+                      icon={<HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />}
+                      label="Edit"
+                      reason={updateOrganizationReason}
+                    />
+                  ) : (
+                    <EditOrganizationDialog activeOrganization={activeOrganization} />
+                  )
+                }
+                label="Details"
+                value={activeOrganization.name}
+              />
+
+              <SettingsRow
+                action={
+                  <ManagePeopleDialog
+                    activeMember={activeMember}
+                    activeOrganization={activeOrganization}
+                    canCancelInvitations={canCancelInvitations}
+                    canInviteMembers={canInviteMembers}
+                    canRemoveMembers={canRemoveMembers}
+                    canUpdateMemberRole={canUpdateMemberRole}
                   />
-                ) : (
-                  <EditOrganizationDialog activeOrganization={activeOrganization} />
-                )
-              }
-              label="Name"
-              value={activeOrganization.name}
-            />
-          ) : null}
+                }
+                label="People"
+                value={peopleSummary ?? formatCount(activeOrganization.members.length, "member")}
+              />
 
-          {activeOrganization ? (
-            <SettingsRow
-              action={
-                <ManagePeopleDialog
-                  activeMember={activeMember}
-                  activeOrganization={activeOrganization}
-                  canCancelInvitations={canCancelInvitations}
-                  canInviteMembers={canInviteMembers}
-                  canRemoveMembers={canRemoveMembers}
-                  canUpdateMemberRole={canUpdateMemberRole}
-                />
-              }
-              label="People"
-              value={peopleSummary ?? formatCount(activeOrganization.members.length, "member")}
-            />
-          ) : null}
+              <SettingsRow
+                action={
+                  leaveOrganizationReason ? (
+                    <MutedActionButton
+                      icon={<HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />}
+                      label="Leave"
+                      reason={leaveOrganizationReason}
+                    />
+                  ) : (
+                    <LeaveOrganizationDialog
+                      activeOrganization={activeOrganization}
+                      nextOrganizationId={nextOrganizationId}
+                    />
+                  )
+                }
+                label="Leave organization"
+                value={activeRole ? formatRoleLabel(activeRole) : "Current organization"}
+              />
 
-          {activeOrganization ? (
-            <SettingsRow
-              action={
-                leaveOrganizationReason ? (
-                  <MutedActionButton
-                    icon={<HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />}
-                    label="Leave"
-                    reason={leaveOrganizationReason}
-                  />
-                ) : (
-                  <LeaveOrganizationDialog activeOrganization={activeOrganization} />
-                )
-              }
-              label="Leave organization"
-              value={activeRole ? formatRoleLabel(activeRole) : "Current organization"}
-            />
-          ) : null}
-
-          {activeOrganization ? (
-            <SettingsRow
-              action={
-                deleteOrganizationReason ? (
-                  <MutedActionButton
-                    icon={<HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />}
-                    label="Delete"
-                    reason={deleteOrganizationReason}
-                  />
-                ) : (
-                  <DeleteOrganizationDialog activeOrganization={activeOrganization} />
-                )
-              }
-              label="Delete organization"
-              value="Permanent"
-            />
-          ) : null}
-        </div>
+              <SettingsRow
+                action={
+                  deleteOrganizationReason ? (
+                    <MutedActionButton
+                      icon={<HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />}
+                      label="Delete"
+                      reason={deleteOrganizationReason}
+                    />
+                  ) : (
+                    <DeleteOrganizationDialog
+                      activeOrganization={activeOrganization}
+                      nextOrganizationId={nextOrganizationId}
+                    />
+                  )
+                }
+                label="Delete organization"
+                value="Permanent"
+              />
+            </div>
+          </div>
+        ) : organizations.length > 0 ? (
+          <div className="rounded-xl border border-dashed border-border/70 p-5">
+            <p className="text-sm font-medium text-foreground">No active organization selected</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Pick one above to edit its details, members, and invitations.
+            </p>
+          </div>
+        ) : null}
       </div>
     </TooltipProvider>
   );

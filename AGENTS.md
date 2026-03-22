@@ -57,7 +57,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
   - `src/components/compose-editor.tsx`: Tiptap editor shell and toolbar used by compose.
   - `src/components/mail-sidebar.tsx`: Sidebar showing the current user profile and mailbox-folder navigation across Inbox, Drafts, Spam, Sent, and Trash.
 - `packages/auth/`: Better Auth server package.
-  - `src/index.ts`: Better Auth configuration with Google OAuth, passkeys, magic links, auto-created personal organizations, organization self-healing, email-change verification placeholders, account deletion, and Next.js cookies. `baseURL` is `BETTER_AUTH_URL` when set, else `https://${VERCEL_URL}` when set, else `http://localhost:3000`. Session creation throws if the user row is missing when aligning `activeOrganizationId`.
+  - `src/index.ts`: Better Auth configuration with Google OAuth, passkeys, magic links, Better Auth's organization plugin, email-change verification placeholders, account deletion, and Next.js cookies. `baseURL` is `BETTER_AUTH_URL` when set, else `https://${VERCEL_URL}` when set, else `http://localhost:3000`.
   - `src/email-placeholder.ts`: In-memory placeholder store for magic-link and verification URLs.
   - `src/google-scopes.ts`: Required Google OAuth scopes.
 - `packages/database/`: Shared database package.
@@ -81,7 +81,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 
 - Quietr is a straightforward Gmail client.
 - The signed-in user is the center of the app.
-- Every user automatically gets a personal Better Auth organization. Users must always retain at least one organization, and auth requests self-heal missing personal organizations or missing active-organization session state.
+- Organizations are managed directly through Better Auth's organization plugin. Users can belong to zero or more organizations, and the active organization stays empty until the user selects one or accepts an invitation.
 - Organizations currently support account/settings structure only. There is still no shared-mailbox or mailbox-connection model in the current implementation.
 - Google sign-in directly requests the Gmail scopes needed for inbox access, drafting, sending, and message actions.
 - Passkeys are optional secondary sign-in credentials that can be added from settings after the user signs in with Google or magic link.
@@ -181,3 +181,4 @@ Root commands:
 10. Follow [React's guidance on avoiding unnecessary Effects](https://react.dev/learn/you-might-not-need-an-effect): do not use `useEffect` to reset or mirror local UI state such as dialog forms when the same behavior can live in render logic, `key`s, or component events like `onOpenChange`.
 11. Treat icon-only controls as ambiguous by default: give them a concise `aria-label` and a tooltip via the shared `@quietr/ui` wrapper unless there is a stronger established pattern in the same surface.
 12. Prefer object syntax in `cn(...)` and `className` composition for conditional classes. Rewrite patterns like `condition && "class"` or `condition ? "class-a" : "class-b"` to object entries such as `{ "class": condition }` and `{ "class-a": condition, "class-b": !condition }`.
+13. Inline simple one-off UI logic where practical. Prefer colocated TanStack Form schemas, string normalization, and submit/input handlers inside the owning component instead of extracting helper utilities or wrapper abstractions when the logic is only used once, even if that duplicates a small amount of code.

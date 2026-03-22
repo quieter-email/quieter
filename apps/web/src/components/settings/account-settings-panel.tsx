@@ -22,11 +22,13 @@ import {
   TextField,
   TextFieldInput,
 } from "@quietr/ui";
+import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { z } from "zod";
 import { authClient } from "~/lib/auth";
-import { getErrorMessage, unwrapResultError } from "~/lib/errors";
+import { getErrorMessage, getFieldErrorMessage, unwrapResultError } from "~/lib/errors";
 import { useTRPC } from "~/lib/trpc";
 
 type SettingsUser = {
@@ -78,45 +80,47 @@ const EditNameDialog = ({
   currentName: string;
   onSessionRefresh: () => Promise<unknown>;
 }) => {
-  const [error, setError] = useState<string | null>(null);
-  const [name, setName] = useState(currentName);
   const [open, setOpen] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const updateUserMutation = useMutation({
     mutationFn: async (input: { name: string }) =>
       unwrapResultError(await authClient.updateUser(input), "Could not update name."),
     mutationKey: ["auth", "update-user"],
   });
+  const form = useForm({
+    defaultValues: {
+      name: currentName,
+    },
+    onSubmit: async ({ value }) => {
+      setSubmitError(null);
+
+      try {
+        await updateUserMutation.mutateAsync({ name: value.name.trim() });
+        await onSessionRefresh();
+        handleOpenChange(false);
+      } catch (mutationError) {
+        setSubmitError(getErrorMessage(mutationError, "Could not update name."));
+      }
+    },
+    validationLogic: revalidateLogic(),
+    validators: {
+      onDynamic: z.object({
+        name: z.string().trim().min(1, "Name cannot be empty."),
+      }),
+    },
+  });
 
   const openDialog = () => {
-    setError(null);
-    setName(currentName);
+    setSubmitError(null);
+    form.reset({ name: currentName });
     setOpen(true);
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (!nextOpen) {
-      setError(null);
-      setName(currentName);
-    }
-  };
-
-  const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-
-    const trimmedName = name.trim();
-    if (trimmedName.length === 0) {
-      setError("Name cannot be empty.");
-      return;
-    }
-
-    try {
-      await updateUserMutation.mutateAsync({ name: trimmedName });
-      await onSessionRefresh();
-      handleOpenChange(false);
-    } catch (mutationError) {
-      setError(getErrorMessage(mutationError, "Could not update name."));
+      setSubmitError(null);
+      form.reset({ name: currentName });
     }
   };
 
@@ -133,16 +137,37 @@ const EditNameDialog = ({
             <DialogTitle>Edit name</DialogTitle>
           </DialogHeader>
 
-          <form onSubmit={handleSave}>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void form.handleSubmit();
+            }}
+          >
             <DialogBody className="space-y-3">
-              <TextField>
-                <TextFieldInput
-                  autoFocus
-                  onChange={(event) => setName(event.target.value)}
-                  value={name}
-                />
-              </TextField>
-              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+              <form.Field name="name">
+                {(field) => {
+                  const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
+
+                  return (
+                    <TextField>
+                      <TextFieldInput
+                        aria-invalid={fieldError ? true : undefined}
+                        name={field.name}
+                        onBlur={() => field.handleBlur()}
+                        onChange={(event) => {
+                          setSubmitError(null);
+                          field.handleChange(event.target.value);
+                        }}
+                        value={field.state.value}
+                      />
+                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                    </TextField>
+                  );
+                }}
+              </form.Field>
+
+              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
             </DialogBody>
 
             <DialogFooter>
@@ -164,10 +189,9 @@ const EditNameDialog = ({
 };
 
 const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
-  const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState<PlaceholderPreview | null>(null);
-  const [value, setValue] = useState(currentEmail);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const trpc = useTRPC();
   const changeEmailMutation = useMutation({
@@ -197,47 +221,56 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
       );
     },
   });
+  const form = useForm({
+    defaultValues: {
+      email: currentEmail,
+    },
+    onSubmit: async ({ value }) => {
+      setPreview(null);
+      setSubmitError(null);
+
+      try {
+        const nextPreview = await changeEmailMutation.mutateAsync({
+          callbackURL: "/settings?tab=account",
+          newEmail: value.email.trim().toLowerCase(),
+        });
+        setPreview(nextPreview);
+      } catch (mutationError) {
+        setSubmitError(getErrorMessage(mutationError, "Could not start email change."));
+      }
+    },
+    validationLogic: revalidateLogic(),
+    validators: {
+      onDynamic: z.object({
+        email: z
+          .string()
+          .trim()
+          .min(1, "Email is required.")
+          .email("Enter a valid email.")
+          .regex(
+            new RegExp(
+              `^(?!${currentEmail.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$).+$`,
+              "i",
+            ),
+            "Enter a different email.",
+          ),
+      }),
+    },
+  });
 
   const openDialog = () => {
-    setError(null);
     setPreview(null);
-    setValue(currentEmail);
+    setSubmitError(null);
+    form.reset({ email: currentEmail });
     setOpen(true);
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (!nextOpen) {
-      setError(null);
       setPreview(null);
-      setValue(currentEmail);
-    }
-  };
-
-  const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-    setPreview(null);
-
-    const nextEmail = value.trim().toLowerCase();
-    if (nextEmail.length === 0) {
-      setError("Email is required.");
-      return;
-    }
-
-    if (nextEmail === currentEmail.toLowerCase()) {
-      setError("Enter a different email.");
-      return;
-    }
-
-    try {
-      const nextPreview = await changeEmailMutation.mutateAsync({
-        callbackURL: "/settings?tab=account",
-        newEmail: nextEmail,
-      });
-      setPreview(nextPreview);
-    } catch (mutationError) {
-      setError(getErrorMessage(mutationError, "Could not start email change."));
+      setSubmitError(null);
+      form.reset({ email: currentEmail });
     }
   };
 
@@ -254,16 +287,40 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
             <DialogTitle>Edit mail</DialogTitle>
           </DialogHeader>
 
-          <form onSubmit={handleSave}>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void form.handleSubmit();
+            }}
+          >
             <DialogBody className="space-y-3">
-              <TextField>
-                <TextFieldInput
-                  autoFocus
-                  onChange={(event) => setValue(event.target.value)}
-                  type="email"
-                  value={value}
-                />
-              </TextField>
+              <form.Field name="email">
+                {(field) => {
+                  const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
+
+                  return (
+                    <TextField>
+                      <TextFieldInput
+                        aria-invalid={fieldError ? true : undefined}
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        name={field.name}
+                        onBlur={() => field.handleBlur()}
+                        onChange={(event) => {
+                          setPreview(null);
+                          setSubmitError(null);
+                          field.handleChange(event.target.value);
+                        }}
+                        type="email"
+                        value={field.state.value}
+                      />
+                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                    </TextField>
+                  );
+                }}
+              </form.Field>
+
               {preview ? (
                 <div className="space-y-2 text-sm">
                   <p className="text-muted-foreground">Placeholder verification link</p>
@@ -272,7 +329,8 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
                   </a>
                 </div>
               ) : null}
-              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
             </DialogBody>
 
             <DialogFooter>
@@ -300,10 +358,9 @@ const PasskeysDialog = ({
   isPasskeysPending: boolean;
   passkeys: AuthPasskey[];
 }) => {
-  const [error, setError] = useState<string | null>(null);
-  const [label, setLabel] = useState("");
   const [open, setOpen] = useState(false);
   const [removingPasskeyId, setRemovingPasskeyId] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const addPasskeyMutation = useMutation({
     mutationFn: async (name: string) =>
       unwrapResultError(
@@ -332,47 +389,56 @@ const PasskeysDialog = ({
     typeof window.PublicKeyCredential !== "undefined" &&
     typeof window.isSecureContext !== "undefined" &&
     window.isSecureContext;
+  const form = useForm({
+    defaultValues: {
+      label: "",
+    },
+    onSubmit: async ({ value }) => {
+      setSubmitError(null);
+
+      if (!supportsPasskeys) {
+        setSubmitError("Passkeys are not supported in this browser.");
+        return;
+      }
+
+      try {
+        await addPasskeyMutation.mutateAsync(value.label);
+        form.reset({ label: "" });
+      } catch (mutationError) {
+        setSubmitError(getErrorMessage(mutationError, "Could not create a passkey."));
+      }
+    },
+    validationLogic: revalidateLogic(),
+    validators: {
+      onDynamic: z.object({
+        label: z.string(),
+      }),
+    },
+  });
 
   const openDialog = () => {
-    setError(null);
-    setLabel("");
+    setSubmitError(null);
     setRemovingPasskeyId(null);
+    form.reset({ label: "" });
     setOpen(true);
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (!nextOpen) {
-      setError(null);
-      setLabel("");
+      setSubmitError(null);
       setRemovingPasskeyId(null);
-    }
-  };
-
-  const handlePasskeyCreate = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-
-    if (!supportsPasskeys) {
-      setError("Passkeys are not supported in this browser.");
-      return;
-    }
-
-    try {
-      await addPasskeyMutation.mutateAsync(label);
-      setLabel("");
-    } catch (mutationError) {
-      setError(getErrorMessage(mutationError, "Could not create a passkey."));
+      form.reset({ label: "" });
     }
   };
 
   const handlePasskeyDelete = async (passkeyId: string) => {
-    setError(null);
+    setSubmitError(null);
     try {
       setRemovingPasskeyId(passkeyId);
       await deletePasskeyMutation.mutateAsync({ id: passkeyId });
     } catch (mutationError) {
-      setError(getErrorMessage(mutationError, "Could not remove the passkey."));
+      setSubmitError(getErrorMessage(mutationError, "Could not remove the passkey."));
     } finally {
       setRemovingPasskeyId(null);
     }
@@ -392,14 +458,30 @@ const PasskeysDialog = ({
           </DialogHeader>
 
           <DialogBody className="space-y-4">
-            <form className="space-y-3" onSubmit={handlePasskeyCreate}>
-              <TextField>
-                <TextFieldInput
-                  onChange={(event) => setLabel(event.target.value)}
-                  placeholder="Passkey label"
-                  value={label}
-                />
-              </TextField>
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void form.handleSubmit();
+              }}
+            >
+              <form.Field name="label">
+                {(field) => (
+                  <TextField>
+                    <TextFieldInput
+                      name={field.name}
+                      onBlur={() => field.handleBlur()}
+                      onChange={(event) => {
+                        setSubmitError(null);
+                        field.handleChange(event.target.value);
+                      }}
+                      placeholder="Passkey label"
+                      value={field.state.value}
+                    />
+                  </TextField>
+                )}
+              </form.Field>
 
               <Button
                 disabled={addPasskeyMutation.isPending || !supportsPasskeys}
@@ -454,7 +536,7 @@ const PasskeysDialog = ({
               )}
             </div>
 
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
           </DialogBody>
 
           <DialogFooter>
@@ -467,9 +549,8 @@ const PasskeysDialog = ({
 };
 
 const DeleteAccountDialog = () => {
-  const [confirmation, setConfirmation] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const router = useRouter();
   const deleteAccountMutation = useMutation({
@@ -486,33 +567,42 @@ const DeleteAccountDialog = () => {
       router.push("/home");
     },
   });
+  const form = useForm({
+    defaultValues: {
+      confirmation: "",
+    },
+    onSubmit: async () => {
+      setSubmitError(null);
+
+      try {
+        await deleteAccountMutation.mutateAsync();
+      } catch (mutationError) {
+        setSubmitError(getErrorMessage(mutationError, "Could not delete the account."));
+      }
+    },
+    validationLogic: revalidateLogic(),
+    validators: {
+      onDynamic: z.object({
+        confirmation: z
+          .string()
+          .trim()
+          .toLowerCase()
+          .regex(/^delete my account$/, 'Type "delete my account".'),
+      }),
+    },
+  });
 
   const openDialog = () => {
-    setConfirmation("");
-    setError(null);
+    setSubmitError(null);
+    form.reset({ confirmation: "" });
     setOpen(true);
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (!nextOpen) {
-      setConfirmation("");
-      setError(null);
-    }
-  };
-
-  const handleDeleteAccount = async () => {
-    if (confirmation.trim().toLowerCase() !== "delete my account") {
-      setError('Type "delete my account".');
-      return;
-    }
-
-    setError(null);
-
-    try {
-      await deleteAccountMutation.mutateAsync();
-    } catch (mutationError) {
-      setError(getErrorMessage(mutationError, "Could not delete the account."));
+      setSubmitError(null);
+      form.reset({ confirmation: "" });
     }
   };
 
@@ -529,37 +619,63 @@ const DeleteAccountDialog = () => {
             <DialogTitle>Delete account</DialogTitle>
           </DialogHeader>
 
-          <DialogBody className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Type <span className="font-medium text-foreground">delete my account</span>
-            </p>
-            <TextField>
-              <TextFieldInput
-                autoFocus
-                onChange={(event) => setConfirmation(event.target.value)}
-                placeholder="delete my account"
-                value={confirmation}
-              />
-            </TextField>
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          </DialogBody>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void form.handleSubmit();
+            }}
+          >
+            <DialogBody className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Type <span className="font-medium text-foreground">delete my account</span>
+              </p>
 
-          <DialogFooter>
-            <DialogCloseButton disabled={deleteAccountMutation.isPending}>Cancel</DialogCloseButton>
-            <Button
-              disabled={deleteAccountMutation.isPending}
-              onClick={() => void handleDeleteAccount()}
-              size="sm"
-              variant="destructive"
-            >
-              {deleteAccountMutation.isPending ? (
-                <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-              ) : (
-                <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
-              )}
-              Delete
-            </Button>
-          </DialogFooter>
+              <form.Field name="confirmation">
+                {(field) => {
+                  const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
+
+                  return (
+                    <TextField>
+                      <TextFieldInput
+                        aria-invalid={fieldError ? true : undefined}
+                        name={field.name}
+                        onBlur={() => field.handleBlur()}
+                        onChange={(event) => {
+                          setSubmitError(null);
+                          field.handleChange(event.target.value);
+                        }}
+                        placeholder="delete my account"
+                        value={field.state.value}
+                      />
+                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                    </TextField>
+                  );
+                }}
+              </form.Field>
+
+              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+            </DialogBody>
+
+            <DialogFooter>
+              <DialogCloseButton disabled={deleteAccountMutation.isPending}>
+                Cancel
+              </DialogCloseButton>
+              <Button
+                disabled={deleteAccountMutation.isPending}
+                size="sm"
+                type="submit"
+                variant="destructive"
+              >
+                {deleteAccountMutation.isPending ? (
+                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                ) : (
+                  <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+                )}
+                Delete
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </>

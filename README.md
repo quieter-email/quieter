@@ -56,7 +56,7 @@
   - `src/components/compose-editor.tsx`: Tiptap editor shell and toolbar used by compose
   - `src/components/mail-sidebar.tsx`: user profile and mailbox-folder navigation, including Inbox, Drafts, Spam, Sent, and Trash
 - `packages/auth`: Better Auth server configuration
-  - `src/index.ts`: Better Auth config with Google OAuth, passkeys, magic links, auto-created personal organizations, organization self-healing, email-change verification placeholders, account deletion, and Next.js cookies
+  - `src/index.ts`: Better Auth config with Google OAuth, passkeys, magic links, Better Auth's organization plugin, email-change verification placeholders, account deletion, and Next.js cookies
   - `src/email-placeholder.ts`: in-memory placeholder store for magic-link and verification URLs
   - `src/google-scopes.ts`: required Google scopes for Gmail access
 - `packages/database`: Drizzle schema, client, and migrations
@@ -76,7 +76,7 @@
 
 - Quietr is a simple Gmail client again.
 - The signed-in user is the center of the app.
-- Every user automatically gets a personal Better Auth organization. Users must always keep at least one organization, and auth/session requests repair missing personal organizations or invalid active-organization state.
+- Organizations are managed directly through Better Auth's organization plugin. Users can belong to zero or more organizations, and the active organization stays empty until the user selects one or accepts an invitation.
 - A single Google auth flow grants the profile and Gmail scopes needed for reading, drafting, sending, and message actions.
 - Quietr supports Google, magic-link, and passkey sign-in.
 - Inbox views support row selection with mailbox-aware bulk actions for loaded conversations and drafts, including avatar-slot selection, Shift range selection, Ctrl/Cmd toggles, and `Mod+A` / `Escape` list hotkeys.

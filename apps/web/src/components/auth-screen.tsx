@@ -1,6 +1,4 @@
 "use client";
-
-import type { FormEvent } from "react";
 import { GoogleIcon, Key02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, TextField, TextFieldInput } from "@quietr/ui";
@@ -20,21 +18,10 @@ type AuthScreenProps = {
   mode: AuthMode;
 };
 
-const emailSchema = z.string().trim().min(1, "Email is required.").email("Enter a valid email.");
-
-const baseAuthFormSchema = z.object({
-  email: emailSchema,
-  name: z.string(),
-});
-
-type AuthFormValues = z.infer<typeof baseAuthFormSchema>;
-
-const authFormSchemas = {
-  login: baseAuthFormSchema,
-  signup: baseAuthFormSchema.extend({
-    name: z.string().trim().min(1, "Name is required."),
-  }),
-} satisfies Record<AuthMode, z.ZodType<AuthFormValues>>;
+type AuthFormValues = {
+  email: string;
+  name: string;
+};
 
 const getAuthErrorLabel = (code: string | null) => {
   switch (code) {
@@ -185,7 +172,16 @@ export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
     },
     validationLogic: revalidateLogic(),
     validators: {
-      onDynamic: authFormSchemas[mode],
+      onDynamic:
+        mode === "signup"
+          ? z.object({
+              email: z.string().trim().min(1, "Email is required.").email("Enter a valid email."),
+              name: z.string().trim().min(1, "Name is required."),
+            })
+          : z.object({
+              email: z.string().trim().min(1, "Email is required.").email("Enter a valid email."),
+              name: z.string(),
+            }),
     },
   });
 
@@ -218,18 +214,19 @@ export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
   const isAnyPending =
     googleMutation.isPending || magicLinkMutation.isPending || passkeyMutation.isPending;
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    void form.handleSubmit();
-  };
-
   return (
     <div className="grid min-h-dvh w-full place-items-center bg-background px-6 py-10">
       <div className="w-full max-w-md rounded-2xl border border-border bg-background-light p-8 shadow-sm">
         <h1 className="text-3xl font-medium tracking-tight text-foreground-dark">{pageTitle}</h1>
 
-        <form className="mt-8 space-y-3" onSubmit={handleSubmit}>
+        <form
+          className="mt-8 space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void form.handleSubmit();
+          }}
+        >
           {isSignup ? (
             <form.Field name="name">
               {(field) => {
