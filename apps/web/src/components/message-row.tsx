@@ -145,23 +145,13 @@ const MessageRowContent = memo(
     };
 
     return (
-      <div
-        className={cn(
-          "relative flex h-[72px] items-center gap-3 rounded-xl px-3 transition-[background-color,border-color,box-shadow] duration-100 ease-out focus-within:ring-2 focus-within:ring-ring/30",
-          {
-            "bg-muted/80 ring-1 ring-border/80 ring-inset": isSelected,
-            "bg-muted": isActive && !isSelected,
-            "bg-background-light/85": unread && !isActive && !isSelected,
-            "hover:bg-muted/45": !isActive && !isSelected,
-          },
-        )}
-      >
-        <div className="relative size-10 shrink-0">
+      <div className="relative flex h-[72px] items-stretch gap-3">
+        <div className="relative flex h-full w-10 shrink-0 items-center justify-center">
           <button
             aria-label={selectionAriaLabel}
             aria-pressed={Boolean(isSelected)}
             className={cn(
-              "absolute inset-0 flex items-center justify-center rounded-lg transition-[opacity,transform] duration-100 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
+              "absolute inset-0 flex items-center justify-center rounded-xl transition-[opacity,transform] duration-100 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
               {
                 "pointer-events-none scale-95 opacity-0": showSelectionControl,
                 "scale-100 opacity-100": !showSelectionControl,
@@ -184,7 +174,7 @@ const MessageRowContent = memo(
             aria-label={selectionAriaLabel}
             aria-pressed={Boolean(isSelected)}
             className={cn(
-              "absolute inset-0 flex items-center justify-center rounded-lg transition-[opacity,transform] duration-100 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
+              "absolute inset-0 flex items-center justify-center rounded-xl transition-[opacity,transform] duration-100 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
               {
                 "scale-100 opacity-100": showSelectionControl,
                 "pointer-events-none scale-95 opacity-0": !showSelectionControl,
@@ -233,16 +223,29 @@ const MessageRowContent = memo(
           onOpenDraft={onOpenDraft}
           onUnmarkAsSpam={onUnmarkAsSpam}
           onUpdateLabels={onUpdateLabels}
-          triggerClassName={cn("flex min-w-0 flex-1")}
+          triggerClassName={cn("flex h-full min-w-0 flex-1")}
         >
           <button
             aria-current={isActive ? "true" : undefined}
-            className="group relative flex h-full min-w-0 flex-1 items-center overflow-hidden rounded-[inherit] pr-1 text-left outline-none active:scale-[0.998]"
+            className="group relative flex h-full min-w-0 flex-1 items-center rounded-xl text-left transition-transform duration-100 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/30 active:scale-[0.998]"
             onClick={handleRowClick}
             onMouseDown={handleRowMouseDown}
             type="button"
           >
-            <div className="flex min-w-0 flex-1 items-center gap-3.5">
+            <span
+              aria-hidden="true"
+              className={cn(
+                "pointer-events-none absolute inset-x-0 inset-y-0.5 rounded-xl transition-[background-color,border-color,box-shadow] duration-100 ease-out",
+                {
+                  "bg-muted/80 ring-1 ring-border/80 ring-inset": isSelected,
+                  "bg-muted": isActive && !isSelected,
+                  "bg-background-light/85": unread && !isActive && !isSelected,
+                  "group-hover:bg-muted/45": !isActive && !isSelected,
+                },
+              )}
+            />
+
+            <div className="relative z-10 flex min-w-0 flex-1 items-center gap-3.5 px-3 pr-1">
               <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 overflow-hidden">
                 <div className="flex w-full min-w-0 items-center justify-between gap-2">
                   <p className="min-w-0 truncate text-left text-sm text-foreground">

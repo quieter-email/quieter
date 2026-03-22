@@ -80,7 +80,7 @@ type MessageListProps = {
 const SCROLL_TOP_EPSILON_PX = 2;
 const SCROLL_WAIT_TIMEOUT_MS = 600;
 const MESSAGE_ROW_HEIGHT_PX = 72;
-const MESSAGE_ROW_GAP_PX = 4;
+const MESSAGE_ROW_GAP_PX = 0;
 const MESSAGE_LIST_OVERSCAN = 12;
 
 type MessageListScrollPaneProps = Omit<
