@@ -23,6 +23,7 @@ import {
   getDraft,
   getGmailMessageMetadata,
   getMessageAttachment,
+  getMessageInspector,
   getMailboxSyncDelta,
   getThreadWithDetails,
   listLabels,
@@ -409,6 +410,12 @@ export const appRouter = t.router({
       .query(async ({ ctx, input }) => {
         const accessToken = await getGoogleAccessToken(ctx);
         return await getThreadWithDetails(accessToken, input.threadId);
+      }),
+    getMessageInspector: protectedProcedure
+      .input(z.object({ messageId: z.string() }))
+      .query(async ({ ctx, input }) => {
+        const accessToken = await getGoogleAccessToken(ctx);
+        return await getMessageInspector(accessToken, input.messageId);
       }),
     listLabels: protectedProcedure.query(async ({ ctx }) => {
       const accessToken = await getGoogleAccessToken(ctx);

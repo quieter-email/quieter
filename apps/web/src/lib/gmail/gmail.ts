@@ -2,11 +2,14 @@ import { MAILBOX_LABELS, type MailboxCategory } from "@quietr/trpc/gmail-service
 
 export {
   GMAIL_UNREAD_LABEL,
+  type GmailMessagePart,
   MAILBOX_LABELS,
   type GmailLabelListItem,
   type ListMessagesPageResult,
   type MailboxCategory,
   type MessageAttachment,
+  type MessageHeader,
+  type MessageInspectorResult,
   type MessageListItem,
   type ThreadMessagesResult,
 } from "@quietr/trpc/gmail-service";

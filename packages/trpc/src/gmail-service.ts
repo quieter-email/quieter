@@ -25,6 +25,8 @@ const headerSchema = z.object({
   value: z.string(),
 });
 
+export type MessageHeader = z.infer<typeof headerSchema>;
+
 type RecursiveMessagePart = {
   partId?: string;
   mimeType?: string;
@@ -199,6 +201,8 @@ const listHistorySchema = z.object({
   nextPageToken: z.string().optional(),
 });
 
+export type GmailMessagePart = RecursiveMessagePart;
+
 export type MessageListItem = {
   id: string;
   threadId: string;
@@ -228,6 +232,25 @@ export type MessageAttachment = {
   fileName: string;
   mimeType: string;
   size: number;
+};
+
+export type MessageInspectorResult = {
+  id: string;
+  snippet?: string;
+  subject?: string;
+  from?: string;
+  to?: string;
+  cc?: string;
+  bcc?: string;
+  replyTo?: string;
+  messageHeaderId?: string;
+  references?: string;
+  date?: string;
+  internalDate?: string;
+  headers: MessageHeader[];
+  payload?: GmailMessagePart;
+  raw?: string;
+  rawText?: string;
 };
 
 export type ListMessagesPageResult = {
@@ -484,6 +507,22 @@ const getHeader = (message: GmailMessage, name: string): string | undefined => {
   return decodeMimeHeaderValue(
     headers?.find((header) => header.name.toLowerCase() === name.toLowerCase())?.value,
   );
+};
+
+const decodeBase64UrlToBytes = (value: string) => {
+  const padded = value
+    .replaceAll("-", "+")
+    .replaceAll("_", "/")
+    .padEnd(Math.ceil(value.length / 4) * 4, "=");
+  return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
+};
+
+const decodeRawMessageText = (raw: string | undefined) => {
+  if (!raw?.trim()) {
+    return undefined;
+  }
+
+  return new TextDecoder().decode(decodeBase64UrlToBytes(raw));
 };
 
 export const extractListUnsubscribeMailto = (value: string | undefined) => {
@@ -937,6 +976,48 @@ export const getThreadWithDetails = async (
     snippet: decodeMimeHeaderValue(thread.snippet),
     subject,
     messages,
+  };
+};
+
+export const getMessageInspector = async (
+  accessToken: string,
+  messageId: string,
+  signal?: AbortSignal,
+): Promise<MessageInspectorResult> => {
+  const path = `/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}`;
+  const [fullMessage, rawMessage] = await Promise.all([
+    requestGmail(accessToken, path, gmailMessageSchema, {
+      query: { format: "full" },
+      signal,
+    }),
+    requestGmail(accessToken, path, gmailMessageSchema, {
+      query: { format: "raw" },
+      signal,
+    }),
+  ]);
+
+  const headers = (fullMessage.payload?.headers ?? []).map((header) => ({
+    name: header.name,
+    value: decodeMimeHeaderValue(header.value) ?? header.value,
+  }));
+
+  return {
+    id: fullMessage.id,
+    snippet: decodeMimeHeaderValue(fullMessage.snippet),
+    subject: getHeader(fullMessage, "Subject"),
+    from: getHeader(fullMessage, "From"),
+    to: getHeader(fullMessage, "To"),
+    cc: getHeader(fullMessage, "Cc"),
+    bcc: getHeader(fullMessage, "Bcc"),
+    replyTo: getHeader(fullMessage, "Reply-To"),
+    messageHeaderId: getHeader(fullMessage, "Message-ID"),
+    references: getHeader(fullMessage, "References"),
+    date: getHeader(fullMessage, "Date"),
+    internalDate: fullMessage.internalDate,
+    headers,
+    payload: fullMessage.payload,
+    raw: rawMessage.raw,
+    rawText: decodeRawMessageText(rawMessage.raw),
   };
 };
 

@@ -1,9 +1,19 @@
 "use client";
 
-import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { cn } from "@quietr/ui";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  cn,
+} from "@quietr/ui";
+import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ComposeDraftState } from "~/lib/gmail/compose";
 import {
@@ -12,6 +22,7 @@ import {
   hasDistinctReplyAllRecipients,
 } from "~/lib/gmail/compose-actions";
 import { isMessageUnread, type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
+import { getMessageInspectorOptions } from "~/lib/gmail/message-inspector-query";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
 import { MessageActionsDropdown } from "./message-actions";
@@ -50,6 +61,19 @@ type MessageHeaderContentProps = {
   trailing?: ReactNode;
 };
 
+const formatEnvelopeValue = (value?: string) => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+};
+
+const replyActionButtonClassName =
+  "inline-flex h-8 items-center rounded-md border border-border/70 bg-background/70 px-3 text-xs font-medium text-foreground-light transition-colors outline-none hover:border-border hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30";
+
+const inspectorToggleButtonClassName =
+  "inline-flex h-7 items-center rounded-md border border-border/70 bg-background/70 px-2.5 text-[11px] font-medium text-foreground-light transition-colors outline-none hover:border-border hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30";
+
+const detailsSectionTitleClassName = "text-sm font-semibold text-foreground";
+
 const MessageHeaderContent = ({
   className,
   isExpanded,
@@ -64,6 +88,12 @@ const MessageHeaderContent = ({
   const senderInitial = (senderName.trim().charAt(0) || "?").toUpperCase();
   const date = formatMessageDate(message, "full") || "--";
   const preview = previewMode === "collapsed" && !isExpanded ? message.snippet?.trim() || "" : "";
+  const participantRows = [
+    { label: "To", value: formatEnvelopeValue(message.to) },
+    { label: "From", value: formatEnvelopeValue(message.from) },
+  ].filter((row) => Boolean(row.value));
+  const showParticipants =
+    participantRows.length > 0 && (previewMode !== "collapsed" || Boolean(isExpanded));
 
   return (
     <div
@@ -114,6 +144,20 @@ const MessageHeaderContent = ({
             {preview ? (
               <p className="mt-1 truncate text-sm text-foreground-light">{preview}</p>
             ) : null}
+
+            {showParticipants ? (
+              <div className="mt-1.5 space-y-1">
+                {participantRows.map((row) => (
+                  <div
+                    className="flex min-w-0 items-baseline gap-2 text-xs sm:text-sm"
+                    key={row.label}
+                  >
+                    <span className="shrink-0 text-muted-foreground">{row.label}</span>
+                    <span className="min-w-0 truncate text-foreground-light">{row.value}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div className="ml-2 flex shrink-0 items-center gap-3 pl-2">
@@ -125,9 +169,6 @@ const MessageHeaderContent = ({
     </div>
   );
 };
-
-const replyActionButtonClassName =
-  "inline-flex h-8 items-center rounded-md border border-border/70 bg-background/70 px-3 text-xs font-medium text-foreground-light transition-colors outline-none hover:border-border hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30";
 
 const MessageComposeActions = ({
   className,
@@ -157,16 +198,165 @@ const MessageComposeActions = ({
   </div>
 );
 
+const MessageInspectorPanel = ({
+  message,
+  open,
+  userId,
+  onOpenChange,
+}: {
+  message: MessageListItem;
+  open: boolean;
+  userId: string;
+  onOpenChange: (open: boolean) => void;
+}) => {
+  const inspectorQuery = useQuery(getMessageInspectorOptions(userId, message.id, open));
+  const inspector = inspectorQuery.data;
+  const payloadText = inspector?.payload ? JSON.stringify(inspector.payload, null, 2) : "";
+
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="w-[min(92vw,56rem)]">
+        <DialogHeader>
+          <DialogTitle className="text-base font-bold">Full details</DialogTitle>
+          <DialogDescription className="text-foreground-light">
+            Headers, message source, and Gmail payload for this message.
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogBody className="max-h-[70vh] space-y-5 overflow-y-auto">
+          {inspectorQuery.isPending ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <HugeiconsIcon aria-hidden className="animate-spin" icon={Loading03Icon} />
+              <span>Loading message details...</span>
+            </div>
+          ) : inspectorQuery.isError ? (
+            <p className="text-sm text-destructive">
+              {inspectorQuery.error.message || "Could not load message details."}
+            </p>
+          ) : inspector ? (
+            <>
+              <section className="space-y-2">
+                <h3 className={detailsSectionTitleClassName}>Summary</h3>
+                {[
+                  { label: "Message ID", value: inspector.messageHeaderId },
+                  { label: "Subject", value: inspector.subject },
+                  { label: "Date", value: inspector.date },
+                  { label: "Snippet", value: inspector.snippet },
+                ]
+                  .filter((row) => Boolean(row.value?.trim()))
+                  .map((row) => (
+                    <p className="text-sm text-foreground-light" key={row.label}>
+                      <span className="font-semibold text-foreground">{row.label}: </span>
+                      <span className="break-words">{row.value}</span>
+                    </p>
+                  ))}
+              </section>
+
+              <section className="space-y-2">
+                <h3 className={detailsSectionTitleClassName}>Headers</h3>
+                {inspector.headers.map((header, index) => (
+                  <p className="text-sm text-foreground-light" key={`${header.name}-${index}`}>
+                    <span className="font-semibold text-foreground">{header.name}: </span>
+                    <span className="break-words">{header.value}</span>
+                  </p>
+                ))}
+              </section>
+
+              {inspector.rawText ? (
+                <section className="space-y-2">
+                  <h3 className={detailsSectionTitleClassName}>Decoded source</h3>
+                  <pre className="overflow-x-auto whitespace-pre-wrap text-sm text-foreground-light">
+                    {inspector.rawText}
+                  </pre>
+                </section>
+              ) : null}
+
+              {inspector.raw ? (
+                <section className="space-y-2">
+                  <h3 className={detailsSectionTitleClassName}>Raw Gmail payload</h3>
+                  <pre className="overflow-x-auto whitespace-pre-wrap break-all text-sm text-foreground-light">
+                    {inspector.raw}
+                  </pre>
+                </section>
+              ) : null}
+
+              {payloadText ? (
+                <section className="space-y-2">
+                  <h3 className={detailsSectionTitleClassName}>Structured payload</h3>
+                  <pre className="overflow-x-auto whitespace-pre-wrap text-sm text-foreground-light">
+                    {payloadText}
+                  </pre>
+                </section>
+              ) : null}
+            </>
+          ) : null}
+        </DialogBody>
+
+        <DialogFooter>
+          <DialogCloseButton>Close</DialogCloseButton>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const MessageContentSection = ({
+  actions,
+  compact,
+  message,
+  userId,
+}: {
+  actions?: ReactNode;
+  compact?: boolean;
+  message: MessageListItem;
+  userId: string;
+}) => {
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+
+  return (
+    <div className="border-t border-border/60 pt-4 sm:pt-5">
+      <MessageBody
+        compact={compact}
+        html={message.bodyHtml}
+        snippet={message.snippet}
+        text={message.bodyText}
+      />
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
+        {actions}
+        <button
+          className={inspectorToggleButtonClassName}
+          onClick={() => {
+            setDetailsDialogOpen(true);
+          }}
+          type="button"
+        >
+          Details
+        </button>
+      </div>
+
+      <MessageInspectorPanel
+        message={message}
+        onOpenChange={setDetailsDialogOpen}
+        open={detailsDialogOpen}
+        userId={userId}
+      />
+    </div>
+  );
+};
+
 const ThreadMessageBody = ({
   actions,
   compact,
   expanded,
   message,
+  userId,
 }: {
   actions?: ReactNode;
   expanded: boolean;
   message: MessageListItem;
   compact?: boolean;
+  userId: string;
 }) => (
   <div
     aria-hidden={!expanded}
@@ -187,15 +377,12 @@ const ThreadMessageBody = ({
           },
         )}
       >
-        <div className="border-t border-border/60 pt-4 sm:pt-5">
-          <MessageBody
-            compact={compact}
-            html={message.bodyHtml}
-            snippet={message.snippet}
-            text={message.bodyText}
-          />
-          {actions ? <div className="mt-4 border-t border-border/60 pt-4">{actions}</div> : null}
-        </div>
+        <MessageContentSection
+          actions={actions}
+          compact={compact}
+          message={message}
+          userId={userId}
+        />
       </div>
     </div>
   </div>
@@ -205,10 +392,12 @@ const ThreadMessageList = ({
   currentUserEmail,
   messages,
   onComposeDraftRequested,
+  userId,
 }: {
   currentUserEmail?: string | null;
   messages: MessageListItem[];
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+  userId: string;
 }) => {
   const [expandedMessageId, setExpandedMessageId] = useState<string | null>(
     messages[0]?.id ?? null,
@@ -269,7 +458,9 @@ const ThreadMessageList = ({
                     aria-hidden="true"
                     className={cn(
                       "size-4 text-muted-foreground transition-transform duration-200",
-                      { "rotate-180 text-foreground/80": isExpanded },
+                      {
+                        "rotate-180 text-foreground/80": isExpanded,
+                      },
                     )}
                     icon={ArrowDown01Icon}
                   />
@@ -290,6 +481,7 @@ const ThreadMessageList = ({
                 compact
                 expanded={isExpanded}
                 message={threadMessage}
+                userId={userId}
               />
             </div>
           </section>
@@ -431,6 +623,7 @@ export const MessageView = ({
           key={message.threadId}
           messages={messages}
           onComposeDraftRequested={onComposeDraftRequested}
+          userId={userId}
         />
       ) : (
         messages.map((threadMessage) => (
@@ -445,21 +638,19 @@ export const MessageView = ({
             />
 
             <div className="px-4 pb-4 sm:px-5 sm:pb-5">
-              <div className="border-t border-border/60 pt-4 sm:pt-5">
-                <MessageBody
-                  compact
-                  html={threadMessage.bodyHtml}
-                  snippet={threadMessage.snippet}
-                  text={threadMessage.bodyText}
-                />
-                <MessageComposeActions
-                  className="mt-4 border-t border-border/60 pt-4"
-                  onForward={() => openComposeAction("forward", threadMessage)}
-                  onReply={() => openComposeAction("reply", threadMessage)}
-                  onReplyAll={() => openComposeAction("reply-all", threadMessage)}
-                  showReplyAll={hasDistinctReplyAllRecipients(threadMessage, currentUserEmail)}
-                />
-              </div>
+              <MessageContentSection
+                actions={
+                  <MessageComposeActions
+                    onForward={() => openComposeAction("forward", threadMessage)}
+                    onReply={() => openComposeAction("reply", threadMessage)}
+                    onReplyAll={() => openComposeAction("reply-all", threadMessage)}
+                    showReplyAll={hasDistinctReplyAllRecipients(threadMessage, currentUserEmail)}
+                  />
+                }
+                compact
+                message={threadMessage}
+                userId={userId}
+              />
             </div>
           </section>
         ))
