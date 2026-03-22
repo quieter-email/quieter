@@ -1,8 +1,10 @@
 import { z } from "zod";
 import {
+  decodePartBody,
   decodeMimeHeaderValue,
   extractMessageAttachments,
   extractMessageContent,
+  findRenderablePart,
 } from "./gmail-message-content";
 import { getSenderAvatarUrls } from "./sender-avatar";
 
@@ -482,13 +484,67 @@ const getHeader = (message: GmailMessage, name: string): string | undefined => {
   );
 };
 
+const resolveRenderablePartBody = async (
+  accessToken: string,
+  message: GmailMessage,
+  mimeType: "text/html" | "text/plain",
+  signal?: AbortSignal,
+) => {
+  const renderablePart = findRenderablePart(message.payload, mimeType);
+  if (!renderablePart) {
+    return undefined;
+  }
+
+  if (renderablePart.body?.data) {
+    return decodePartBody(renderablePart);
+  }
+
+  const attachmentId = renderablePart.body?.attachmentId?.trim();
+  if (!attachmentId) {
+    return undefined;
+  }
+
+  const attachment = await getMessageAttachment(accessToken, message.id, attachmentId, signal);
+  if (!attachment.data) {
+    return undefined;
+  }
+
+  return decodePartBody({
+    ...renderablePart,
+    body: {
+      ...renderablePart.body,
+      data: attachment.data,
+    },
+  });
+};
+
+const resolveMessageContent = async (
+  accessToken: string,
+  message: GmailMessage,
+  signal?: AbortSignal,
+) => {
+  const inlineContent = extractMessageContent(message.payload);
+  const [html, text] = await Promise.all([
+    inlineContent.html
+      ? Promise.resolve(inlineContent.html)
+      : resolveRenderablePartBody(accessToken, message, "text/html", signal),
+    inlineContent.text
+      ? Promise.resolve(inlineContent.text)
+      : resolveRenderablePartBody(accessToken, message, "text/plain", signal),
+  ]);
+
+  return { html, text };
+};
+
 const toMessageListItem = async (
+  accessToken: string,
   message: GmailMessage,
   includeBody = false,
+  signal?: AbortSignal,
 ): Promise<MessageListItem> => {
   const labelIds = normalizeLabelIds(message.labelIds);
   const content = includeBody
-    ? extractMessageContent(message.payload)
+    ? await resolveMessageContent(accessToken, message, signal)
     : { html: undefined, text: undefined };
   const from = getHeader(message, "From");
 
@@ -745,7 +801,7 @@ export const listMessagesWithDetails = async (
 
   return {
     messages: await Promise.all(
-      orderedDetails.map(async (message) => await toMessageListItem(message)),
+      orderedDetails.map(async (message) => await toMessageListItem(accessToken, message)),
     ),
     nextPageToken: list.nextPageToken,
     resultSizeEstimate: list.resultSizeEstimate,
@@ -802,7 +858,7 @@ export const listDraftsWithDetails = async (
   return {
     messages: await Promise.all(
       orderedDrafts.map(async (draft) => ({
-        ...(await toMessageListItem(draft.message)),
+        ...(await toMessageListItem(accessToken, draft.message)),
         draftId: draft.draftId,
       })),
     ),
@@ -828,7 +884,9 @@ export const getThreadWithDetails = async (
 
   const messages = (
     await Promise.all(
-      (thread.messages ?? []).map(async (message) => await toMessageListItem(message, true)),
+      (thread.messages ?? []).map(
+        async (message) => await toMessageListItem(accessToken, message, true, signal),
+      ),
     )
   ).sort((left, right) => getMessageTimestamp(left) - getMessageTimestamp(right));
 
@@ -983,7 +1041,7 @@ export const getMailboxSyncDelta = async (
         refreshFirstPage = true;
       }
 
-      updatedMessages.push(await toMessageListItem(changedMessage));
+      updatedMessages.push(await toMessageListItem(accessToken, changedMessage));
     }
   }
 

@@ -22,15 +22,12 @@ export const SenderAvatar = ({
   labelClassName,
 }: SenderAvatarProps) => {
   const { colorMode } = useColorMode();
-  const hasAvatar = Boolean(avatarUrlLight || avatarUrlDark);
   const [avatarStatusByUrl, setAvatarStatusByUrl] = useState<Record<string, AvatarStatus>>({});
-  const isSameUrl = Boolean(avatarUrlLight && avatarUrlDark && avatarUrlLight === avatarUrlDark);
-  const activeAvatarUrl = isSameUrl
-    ? avatarUrlLight
-    : colorMode === "dark"
-      ? (avatarUrlDark ?? avatarUrlLight)
-      : (avatarUrlLight ?? avatarUrlDark);
-  const showFallback = !activeAvatarUrl || avatarStatusByUrl[activeAvatarUrl] !== "loaded";
+  const activeAvatarUrl =
+    colorMode === "dark" ? (avatarUrlDark ?? avatarUrlLight) : (avatarUrlLight ?? avatarUrlDark);
+  const activeAvatarStatus = activeAvatarUrl ? avatarStatusByUrl[activeAvatarUrl] : undefined;
+  const canRenderAvatar = Boolean(activeAvatarUrl) && activeAvatarStatus !== "error";
+  const showFallback = !activeAvatarUrl || activeAvatarStatus !== "loaded";
 
   const updateAvatarStatus = (url: string, status: AvatarStatus) => {
     setAvatarStatusByUrl((current) => {
@@ -49,7 +46,7 @@ export const SenderAvatar = ({
     >
       {showFallback ? <span className={labelClassName}>{fallbackLabel}</span> : null}
 
-      {hasAvatar && isSameUrl && avatarUrlLight ? (
+      {canRenderAvatar && activeAvatarUrl ? (
         <Image
           alt=""
           aria-hidden="true"
@@ -57,52 +54,15 @@ export const SenderAvatar = ({
             "opacity-0": showFallback,
           })}
           fill
+          key={activeAvatarUrl}
           onError={() => {
-            updateAvatarStatus(avatarUrlLight, "error");
+            updateAvatarStatus(activeAvatarUrl, "error");
           }}
           onLoad={() => {
-            updateAvatarStatus(avatarUrlLight, "loaded");
+            updateAvatarStatus(activeAvatarUrl, "loaded");
           }}
           sizes="40px"
-          src={avatarUrlLight}
-        />
-      ) : null}
-
-      {hasAvatar && !isSameUrl && avatarUrlLight ? (
-        <Image
-          alt=""
-          aria-hidden="true"
-          className={cn("absolute inset-0 size-full object-cover dark:hidden", {
-            "opacity-0": showFallback,
-          })}
-          fill
-          onError={() => {
-            updateAvatarStatus(avatarUrlLight, "error");
-          }}
-          onLoad={() => {
-            updateAvatarStatus(avatarUrlLight, "loaded");
-          }}
-          sizes="40px"
-          src={avatarUrlLight}
-        />
-      ) : null}
-
-      {hasAvatar && !isSameUrl && avatarUrlDark ? (
-        <Image
-          alt=""
-          aria-hidden="true"
-          className={cn("absolute inset-0 hidden size-full object-cover dark:block", {
-            "opacity-0": showFallback,
-          })}
-          fill
-          onError={() => {
-            updateAvatarStatus(avatarUrlDark, "error");
-          }}
-          onLoad={() => {
-            updateAvatarStatus(avatarUrlDark, "loaded");
-          }}
-          sizes="40px"
-          src={avatarUrlDark}
+          src={activeAvatarUrl}
         />
       ) : null}
     </div>

@@ -4,7 +4,7 @@ import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@quietr/ui";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ComposeDraftState } from "~/lib/gmail/compose";
 import {
   buildComposeDraftFromMessageAction,
@@ -333,6 +333,7 @@ export const MessageView = ({
   const showThreadReplyAll = threadActionMessage
     ? hasDistinctReplyAllRecipients(threadActionMessage, currentUserEmail)
     : false;
+  const autoMarkedThreadIdsRef = useRef<Set<string>>(new Set());
 
   const openComposeAction = (
     action: "reply" | "reply-all" | "forward",
@@ -350,6 +351,27 @@ export const MessageView = ({
       }),
     );
   };
+
+  useEffect(() => {
+    if (!threadIsUnread) {
+      autoMarkedThreadIdsRef.current.delete(message.threadId);
+      return;
+    }
+
+    if (
+      isActionPending ||
+      !onMarkThreadAsRead ||
+      autoMarkedThreadIdsRef.current.has(message.threadId)
+    ) {
+      return;
+    }
+
+    autoMarkedThreadIdsRef.current.add(message.threadId);
+
+    Promise.resolve(onMarkThreadAsRead(message.threadId)).catch(() => {
+      autoMarkedThreadIdsRef.current.delete(message.threadId);
+    });
+  }, [isActionPending, message.threadId, onMarkThreadAsRead, threadIsUnread]);
 
   return (
     <article className="mx-auto w-full max-w-5xl space-y-4">

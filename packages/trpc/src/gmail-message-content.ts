@@ -1,4 +1,4 @@
-type GmailMessagePart = {
+export type GmailMessagePart = {
   mimeType?: string;
   filename?: string;
   headers?: Array<{ name: string; value: string }>;
@@ -276,18 +276,26 @@ const getAttachmentFileName = (part: GmailMessagePart, index: number): string =>
   return `attachment-${index + 1}`;
 };
 
-const findRenderablePart = (
+export const findRenderablePart = (
   payload: GmailMessagePart | undefined,
   mimeType: "text/html" | "text/plain",
+  options?: { requireInlineData?: boolean },
 ): GmailMessagePart | undefined =>
   collectParts(payload).find(
     (part) =>
       normalizeMimeType(part.mimeType) === mimeType &&
-      Boolean(part.body?.data) &&
-      !isAttachmentPart(part),
+      !isAttachmentPart(part) &&
+      (options?.requireInlineData
+        ? Boolean(part.body?.data)
+        : Boolean(part.body?.data || part.body?.attachmentId)),
   );
 
-const decodePartBody = (part: GmailMessagePart): string | undefined => {
+const findRenderableInlinePart = (
+  payload: GmailMessagePart | undefined,
+  mimeType: "text/html" | "text/plain",
+) => findRenderablePart(payload, mimeType, { requireInlineData: true });
+
+export const decodePartBody = (part: GmailMessagePart): string | undefined => {
   const data = part.body?.data;
   if (!data) return undefined;
 
@@ -312,7 +320,7 @@ const normalizeContentId = (value?: string): string | undefined => {
 const extractReferencedInlineContentIds = (
   payload: GmailMessagePart | undefined,
 ): ReadonlySet<string> => {
-  const htmlPart = findRenderablePart(payload, "text/html");
+  const htmlPart = findRenderableInlinePart(payload, "text/html");
   const html = htmlPart ? decodePartBody(htmlPart) : undefined;
   if (!html) return new Set();
 
@@ -328,8 +336,8 @@ const extractReferencedInlineContentIds = (
 export const extractMessageContent = (
   payload: GmailMessagePart | undefined,
 ): ExtractedMessageContent => {
-  const htmlPart = findRenderablePart(payload, "text/html");
-  const textPart = findRenderablePart(payload, "text/plain");
+  const htmlPart = findRenderableInlinePart(payload, "text/html");
+  const textPart = findRenderableInlinePart(payload, "text/plain");
 
   return {
     html: htmlPart ? decodePartBody(htmlPart) : undefined,
@@ -347,6 +355,11 @@ export const extractMessageAttachments = (
   for (const [index, part] of collectParts(payload).entries()) {
     const attachmentId = part.body?.attachmentId?.trim();
     if (!attachmentId) continue;
+
+    const mimeType = normalizeMimeType(part.mimeType);
+    if (!isAttachmentPart(part) && (mimeType === "text/html" || mimeType === "text/plain")) {
+      continue;
+    }
 
     const contentId = normalizeContentId(getHeader(part, "Content-ID"));
     if (contentId && referencedInlineContentIds.has(contentId)) continue;
