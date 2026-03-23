@@ -611,10 +611,10 @@ const ManagePeopleMemberRoleForm = ({
             )}
           </form.Field>
 
-          <form.Subscribe selector={(state) => state.values.role}>
-            {(selectedRole) => (
+          <form.Subscribe<OrganizationRoleOption> selector={(state) => state.values.role}>
+            {(role) => (
               <Button
-                disabled={selectedRole === currentRole || isSavingRole || isRemovingMember}
+                disabled={role === currentRole || isSavingRole || isRemovingMember}
                 size="sm"
                 type="submit"
                 variant="outline"
