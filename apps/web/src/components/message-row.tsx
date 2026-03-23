@@ -18,7 +18,7 @@ type MessageRowSelectionGesture = {
 
 type MessageRowProps = {
   activeMailbox: MailboxCategory;
-  userId: string;
+  mailboxId: string;
   isActive?: boolean;
   isSelected?: boolean;
   isSelectionMode?: boolean;
@@ -33,6 +33,7 @@ type MessageRowProps = {
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => void | Promise<void>;
   onMoveToTrash?: (messageId: string) => void | Promise<void>;
+  onUntrash?: (messageId: string) => void | Promise<void>;
   onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
   onDeletePermanently?: (messageId: string) => void | Promise<void>;
   onPress?: (thread: ThreadListEntry, gesture: MessageRowSelectionGesture) => void;
@@ -63,11 +64,12 @@ const MessageRowContent = memo(
     onOpenDraft,
     onPress,
     onSelectionPress,
+    onUntrash,
     onUnsubscribe,
     onUnmarkAsSpam,
     onUpdateLabels,
     thread,
-    userId,
+    mailboxId,
   }: MessageRowContentProps) => {
     const anchorMessage = thread.anchorMessage;
     const subject = anchorMessage.subject || "(No subject)";
@@ -83,7 +85,7 @@ const MessageRowContent = memo(
     const unread = !isDraftMailbox && thread.unreadCount > 0;
     const threaded = thread.messageCount > 1;
     const threadDetailsQuery = useQuery(
-      getThreadWithDetailsOptions(userId, activeMailbox, thread.threadId, Boolean(isActive)),
+      getThreadWithDetailsOptions(mailboxId, activeMailbox, thread.threadId, Boolean(isActive)),
     );
     const attachmentCount =
       threadDetailsQuery.data?.messages.reduce(
@@ -154,7 +156,7 @@ const MessageRowContent = memo(
             aria-label={selectionAriaLabel}
             aria-pressed={Boolean(isSelected)}
             className={cn(
-              "absolute inset-0 flex items-center justify-center rounded-xl transition-[opacity,transform] duration-100 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
+              "absolute inset-0 flex items-center justify-center rounded-xl pl-3.5 transition-[opacity,transform] duration-100 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
               {
                 "pointer-events-none scale-95 opacity-0": showSelectionControl,
                 "scale-100 opacity-100": !showSelectionControl,
@@ -215,10 +217,10 @@ const MessageRowContent = memo(
 
         <MessageActionsContextMenu
           isPending={isActionPending}
+          mailboxId={mailboxId}
           onDeleteDraft={onDeleteDraft}
           mailbox={activeMailbox}
           message={anchorMessage}
-          userId={userId}
           onDeletePermanently={onDeletePermanently}
           onMarkAsRead={onMarkAsRead}
           onMarkAsSpam={onMarkAsSpam}
@@ -226,6 +228,7 @@ const MessageRowContent = memo(
           onMoveToTrash={onMoveToTrash}
           onOpenDraft={onOpenDraft}
           onUnmarkAsSpam={onUnmarkAsSpam}
+          onUntrash={onUntrash}
           onUnsubscribe={onUnsubscribe}
           onUpdateLabels={onUpdateLabels}
           triggerClassName={cn("flex h-full min-w-0 flex-1")}
@@ -250,7 +253,7 @@ const MessageRowContent = memo(
               )}
             />
 
-            <div className="relative z-10 flex min-w-0 flex-1 items-center gap-3.5 px-4">
+            <div className="relative z-10 flex min-w-0 flex-1 items-center gap-3.5 px-3.5">
               <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 overflow-hidden">
                 <div className="flex w-full min-w-0 items-center justify-between gap-2">
                   <p className="min-w-0 truncate text-left text-sm text-foreground">
@@ -324,13 +327,14 @@ export const MessageRow = ({
   onOpenDraft,
   onPress,
   onSelectionPress,
+  onUntrash,
   onUnsubscribe,
   onUnmarkAsSpam,
   onUpdateLabels,
   rowRef,
   style,
   thread,
-  userId,
+  mailboxId,
 }: MessageRowProps) => {
   return (
     <li
@@ -354,11 +358,12 @@ export const MessageRow = ({
         onOpenDraft={onOpenDraft}
         onPress={onPress}
         onSelectionPress={onSelectionPress}
+        onUntrash={onUntrash}
         onUnsubscribe={onUnsubscribe}
         onUnmarkAsSpam={onUnmarkAsSpam}
         onUpdateLabels={onUpdateLabels}
         thread={thread}
-        userId={userId}
+        mailboxId={mailboxId}
       />
     </li>
   );

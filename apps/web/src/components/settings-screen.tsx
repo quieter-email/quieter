@@ -5,6 +5,7 @@ import { useQueryStates } from "nuqs";
 import { settingsSearchParams, type SettingsTab } from "~/lib/search-params";
 import { AccountSettingsPanel } from "./settings/account-settings-panel";
 import { GeneralSettingsPanel } from "./settings/general-settings-panel";
+import { MailboxesSettingsPanel } from "./settings/mailboxes-settings-panel";
 import { OrganizationSettingsPanel } from "./settings/organization-settings-panel";
 import { SettingsSidebar } from "./settings/settings-sidebar";
 
@@ -47,6 +48,8 @@ export const SettingsScreen = ({ from, initialTab, initialUser }: SettingsScreen
         {activeTab === "general" && <GeneralSettingsPanel />}
 
         {activeTab === "account" && <AccountSettingsPanel initialUser={initialUser} />}
+
+        {activeTab === "mailboxes" && <MailboxesSettingsPanel />}
 
         {activeTab === "organization" && <OrganizationSettingsPanel />}
       </main>

@@ -6,6 +6,7 @@
     ".": "./src/client.ts",
     "./compose": "./src/compose.ts",
     "./context": "./src/context.ts",
+    "./mailbox-service": "./src/mailbox-service.ts",
     "./server": "./src/server.ts",
     "./router": "./src/router.ts",
     "./gmail-service": "./src/gmail-service.ts",

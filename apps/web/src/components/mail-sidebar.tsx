@@ -26,31 +26,36 @@ import {
   serializeMailboxSearchParams,
   serializeSettingsSearchParams,
 } from "~/lib/search-params";
+import { MailboxSwitcherDropdown } from "./mailbox-switcher";
 import { SidebarMailboxNav } from "./sidebar/sidebar-mailbox-nav";
 
 type MailSidebarProps = {
-  user: {
-    email?: string | null;
-    name?: string | null;
-  };
+  activeOrganizationName: string | null;
+  mailboxes: Array<{
+    id: string;
+    emailAddress: string;
+    displayName: string | null;
+  }>;
+  selectedMailboxId: string | null;
   selectedMailbox: MailboxCategory;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
+  onSelectMailboxId: (mailboxId: string) => void;
   onComposeNewMail: () => void;
 };
 
 export const MailSidebar = ({
+  activeOrganizationName,
+  mailboxes,
   onComposeNewMail,
   onSelectMailbox,
+  onSelectMailboxId,
+  selectedMailboxId,
   selectedMailbox,
-  user,
 }: MailSidebarProps) => {
   const pathname = usePathname();
   const router = useRouter();
   const [{ mailbox, messageId, query }] = useQueryStates(mailboxSearchParams);
   const { colorMode, isMounted, setColorMode } = useColorMode();
-
-  const profileName = user.name?.trim() || user.email?.trim() || "Profile";
-  const profileEmail = user.email?.trim() || "No email available";
   const currentLocation = serializeMailboxSearchParams(pathname, { mailbox, messageId, query });
   const settingsHref = serializeSettingsSearchParams("/settings", { from: currentLocation });
   const isDarkMode = isMounted && colorMode === "dark";
@@ -58,16 +63,16 @@ export const MailSidebar = ({
   return (
     <aside
       className="relative hidden h-full shrink-0 border-r border-border bg-background text-foreground lg:flex lg:flex-col"
-      style={{ width: "224px" }}
+      style={{ width: "248px" }}
     >
       <div className="flex min-h-0 flex-1 flex-col px-4 py-6">
         <div className="flex min-w-0 items-start justify-between gap-3 pl-2">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold tracking-tight text-foreground">
-              {profileName}
-            </p>
-            <p className="mt-1 truncate text-xs text-muted-foreground">{profileEmail}</p>
-          </div>
+          <MailboxSwitcherDropdown
+            activeOrganizationName={activeOrganizationName}
+            mailboxes={mailboxes}
+            onSelectMailboxId={onSelectMailboxId}
+            selectedMailboxId={selectedMailboxId}
+          />
 
           <DropdownMenu>
             <IconButtonTooltip label="Profile options">
@@ -120,6 +125,7 @@ export const MailSidebar = ({
         <div className="mt-6 p-1">
           <Button
             className="h-10 w-full justify-start rounded-md px-4"
+            disabled={!selectedMailboxId}
             onClick={onComposeNewMail}
             type="button"
           >

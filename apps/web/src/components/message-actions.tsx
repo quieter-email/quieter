@@ -5,6 +5,7 @@ import {
   Delete01Icon,
   Delete02Icon,
   Edit01Icon,
+  InboxIcon,
   Loading03Icon,
   Mail01Icon,
   MailOpen02Icon,
@@ -52,7 +53,7 @@ type LabelChanges = {
 };
 
 type MessageActionsSharedProps = {
-  userId: string;
+  mailboxId: string;
   message: MessageListItem;
   mailbox: MailboxCategory;
   isUnread?: boolean;
@@ -64,6 +65,7 @@ type MessageActionsSharedProps = {
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
   onUpdateLabels?: (messageId: string, changes: LabelChanges) => void | Promise<void>;
   onMoveToTrash?: (messageId: string) => void | Promise<void>;
+  onUntrash?: (messageId: string) => void | Promise<void>;
   onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
   onDeletePermanently?: (messageId: string) => void | Promise<void>;
   isPending?: boolean;
@@ -247,8 +249,8 @@ const messageActionsDialogsReducer = (
 const MessageActionsDialogs = ({
   isPending,
   isTrashMailbox,
+  mailboxId,
   message,
-  userId,
   onDeletePermanently,
   onOpenDeleteDialog,
   onOpenLabelsDialog,
@@ -256,7 +258,7 @@ const MessageActionsDialogs = ({
   openDeleteDialog,
   openLabelsDialog,
 }: {
-  userId: string;
+  mailboxId: string;
   message: MessageListItem;
   isPending: boolean;
   isTrashMailbox: boolean;
@@ -267,7 +269,7 @@ const MessageActionsDialogs = ({
   onUpdateLabels?: (messageId: string, changes: LabelChanges) => void | Promise<void>;
   onDeletePermanently?: (messageId: string) => void | Promise<void>;
 }) => {
-  const labelsQuery = useQuery(labelsQueryOptions(userId, openLabelsDialog));
+  const labelsQuery = useQuery(labelsQueryOptions(mailboxId, openLabelsDialog));
   const userLabels = getUserLabels(labelsQuery.data ?? []);
   const currentUserLabelIds = (message.labelIds ?? []).filter((labelId) =>
     userLabels.some((label) => label.id === labelId),
@@ -575,6 +577,20 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
           },
         ]
       : []),
+    ...(isTrashMailbox
+      ? [
+          {
+            type: "item" as const,
+            id: "remove-from-trash",
+            disabled: isBusy || !props.onUntrash,
+            icon: InboxIcon,
+            label: "Move to Inbox",
+            onSelect: () => {
+              void props.onUntrash?.(props.message.id);
+            },
+          },
+        ]
+      : []),
     {
       type: "item",
       id: isTrashMailbox ? "delete-permanently" : "move-to-trash",
@@ -597,8 +613,8 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
     <MessageActionsDialogs
       isPending={isBusy}
       isTrashMailbox={isTrashMailbox}
+      mailboxId={props.mailboxId}
       message={props.message}
-      userId={props.userId}
       onDeletePermanently={props.onDeletePermanently}
       onOpenDeleteDialog={setOpenDeleteDialog}
       onOpenLabelsDialog={setOpenLabelsDialog}

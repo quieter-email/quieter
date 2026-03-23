@@ -369,11 +369,13 @@ const updateInlineImageHtml = (
 };
 
 const hydrateDraftAttachment = async (
+  mailboxId: string,
   messageId: string,
   attachment: DraftAttachmentPayload,
   signal?: AbortSignal,
 ) => {
   const file = await loadAttachmentFromServer(
+    mailboxId,
     messageId,
     attachment.attachmentId,
     attachment.fileName,
@@ -387,11 +389,13 @@ const hydrateDraftAttachment = async (
 };
 
 const hydrateDraftInlineImage = async (
+  mailboxId: string,
   messageId: string,
   inlineImage: DraftInlineImagePayload,
   signal?: AbortSignal,
 ) => {
   const file = await loadAttachmentFromServer(
+    mailboxId,
     messageId,
     inlineImage.attachmentId,
     inlineImage.fileName,
@@ -406,18 +410,22 @@ const hydrateDraftInlineImage = async (
 };
 
 export const hydrateComposeDraftRuntime = async (
+  mailboxId: string,
   draft: ComposeDraftState,
   signal?: AbortSignal,
 ): Promise<ComposeDraftState> => {
   if (!draft.draftId) return draft;
 
-  const response = await trpc.gmail.loadDraft.query({ draftId: draft.draftId }, { signal });
+  const response = await trpc.mail.loadDraft.query(
+    { mailboxId, draftId: draft.draftId },
+    { signal },
+  );
   const attachments =
     response.messageId && response.attachments.length > 0
       ? await Promise.all(
           response.attachments.map(
             async (attachment) =>
-              await hydrateDraftAttachment(response.messageId!, attachment, signal),
+              await hydrateDraftAttachment(mailboxId, response.messageId!, attachment, signal),
           ),
         )
       : [];
@@ -426,7 +434,7 @@ export const hydrateComposeDraftRuntime = async (
       ? await Promise.all(
           response.inlineImages.map(
             async (inlineImage) =>
-              await hydrateDraftInlineImage(response.messageId!, inlineImage, signal),
+              await hydrateDraftInlineImage(mailboxId, response.messageId!, inlineImage, signal),
           ),
         )
       : [];
@@ -485,11 +493,12 @@ const serializeDraft = async (draft: ComposeDraftState) => {
 };
 
 export const saveComposeDraft = async (
+  mailboxId: string,
   draft: ComposeDraftState,
   signal?: AbortSignal,
 ): Promise<ComposeDraftState> => {
-  const response = await trpc.gmail.saveDraft.mutate(
-    { draft: await serializeDraft(draft) },
+  const response = await trpc.mail.saveDraft.mutate(
+    { mailboxId, draft: await serializeDraft(draft) },
     { signal },
   );
   const metadata = parseDraftResponse(response);
@@ -504,13 +513,24 @@ export const saveComposeDraft = async (
   };
 };
 
-export const sendComposeDraft = async (draft: ComposeDraftState, signal?: AbortSignal) => {
-  return await trpc.gmail.sendDraft.mutate({ draft: await serializeDraft(draft) }, { signal });
+export const sendComposeDraft = async (
+  mailboxId: string,
+  draft: ComposeDraftState,
+  signal?: AbortSignal,
+) => {
+  return await trpc.mail.sendDraft.mutate(
+    { mailboxId, draft: await serializeDraft(draft) },
+    { signal },
+  );
 };
 
-export const deleteComposeDraft = async (draft: ComposeDraftState, signal?: AbortSignal) => {
+export const deleteComposeDraft = async (
+  mailboxId: string,
+  draft: ComposeDraftState,
+  signal?: AbortSignal,
+) => {
   if (!draft.draftId) return;
-  await trpc.gmail.deleteDraft.mutate({ draftId: draft.draftId }, { signal });
+  await trpc.mail.deleteDraft.mutate({ mailboxId, draftId: draft.draftId }, { signal });
 };
 
 export const attachInlineImagesToHtml = (

@@ -24,16 +24,16 @@ const normalizeSearchQuery = (searchQuery: string | null | undefined) => {
 };
 
 export const getMessagesQueryKey = (
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery?: string | null,
-) => ["messages", userId, mailbox, normalizeSearchQuery(searchQuery) ?? ""] as const;
+) => ["messages", mailboxId, mailbox, normalizeSearchQuery(searchQuery) ?? ""] as const;
 
 export const getLiveSyncQueryKey = (
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery?: string | null,
-) => [...getMessagesQueryKey(userId, mailbox, searchQuery), "live-sync"] as const;
+) => [...getMessagesQueryKey(mailboxId, mailbox, searchQuery), "live-sync"] as const;
 
 type MessagesQueryData = {
   pages: ListMessagesPageResult[];
@@ -84,6 +84,11 @@ const MOVE_TO_TRASH_LABEL_CHANGES = {
     MAILBOX_LABELS.sent,
     MAILBOX_LABELS.drafts,
   ],
+} as const;
+
+const REMOVE_FROM_TRASH_LABEL_CHANGES = {
+  addLabelIds: [MAILBOX_LABELS.inbox],
+  removeLabelIds: [MAILBOX_LABELS.trash],
 } as const;
 
 const parsePageToken = (value: unknown): string | undefined => {
@@ -349,6 +354,9 @@ const applyMessageLabelChangesLocally = (
 const moveMessageToTrashLocally = (message: MessageListItem) =>
   applyMessageLabelChangesLocally(message, MOVE_TO_TRASH_LABEL_CHANGES);
 
+const removeMessageFromTrashLocally = (message: MessageListItem) =>
+  applyMessageLabelChangesLocally(message, REMOVE_FROM_TRASH_LABEL_CHANGES);
+
 const getMessageSortTimestamp = (
   message: Pick<MessageListItem, "date" | "internalDate">,
 ): number => {
@@ -461,17 +469,17 @@ const isMailboxCategory = (value: unknown): value is MailboxCategory =>
 
 const getCachedMessagesQueries = (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
 ): CachedMessagesQuery[] => {
   return queryClient
-    .getQueriesData<MessagesQueryData>({ queryKey: ["messages", userId] })
+    .getQueriesData<MessagesQueryData>({ queryKey: ["messages", mailboxId] })
     .flatMap(([queryKey, data]) => {
-      const [scope, queryUserId, mailbox, rawSearchQuery] = queryKey;
+      const [scope, queryMailboxId, mailbox, rawSearchQuery] = queryKey;
 
       if (
         queryKey.length !== 4 ||
         scope !== "messages" ||
-        queryUserId !== userId ||
+        queryMailboxId !== mailboxId ||
         !isMailboxCategory(mailbox) ||
         typeof rawSearchQuery !== "string" ||
         (data !== undefined && !isMessagesQueryData(data))
@@ -481,7 +489,7 @@ const getCachedMessagesQueries = (
 
       return [
         {
-          queryKey: getMessagesQueryKey(userId, mailbox, rawSearchQuery),
+          queryKey: getMessagesQueryKey(mailboxId, mailbox, rawSearchQuery),
           mailbox,
           searchQuery: normalizeSearchQuery(rawSearchQuery),
           data,
@@ -492,9 +500,9 @@ const getCachedMessagesQueries = (
 
 const snapshotMessagesQueries = (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
 ): MessagesQuerySnapshot[] => {
-  return getCachedMessagesQueries(queryClient, userId).map(({ queryKey, data }) => ({
+  return getCachedMessagesQueries(queryClient, mailboxId).map(({ queryKey, data }) => ({
     queryKey,
     data,
   }));
@@ -533,10 +541,10 @@ const persistQueryKeys = async (
 
 const findMessageInCachedMailboxQueries = (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   messageId: string,
 ) => {
-  for (const cachedQuery of getCachedMessagesQueries(queryClient, userId)) {
+  for (const cachedQuery of getCachedMessagesQueries(queryClient, mailboxId)) {
     const message = findMessageInQueryData(cachedQuery.data, messageId);
     if (message) {
       return message;
@@ -569,12 +577,12 @@ const reconcileMessageInCachedMailboxQuery = (
 
 const applyMessageToCachedMailboxQueries = (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   nextMessage: MessageListItem,
 ) => {
   const touchedQueryKeys: Array<ReturnType<typeof getMessagesQueryKey>> = [];
 
-  for (const cachedQuery of getCachedMessagesQueries(queryClient, userId)) {
+  for (const cachedQuery of getCachedMessagesQueries(queryClient, mailboxId)) {
     const nextData = reconcileMessageInCachedMailboxQuery(cachedQuery, nextMessage);
     if (nextData === cachedQuery.data) continue;
 
@@ -587,13 +595,13 @@ const applyMessageToCachedMailboxQueries = (
 
 const updateMessagesInCachedMailboxQueries = (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   predicate: (message: MessageListItem) => boolean,
   updater: (message: MessageListItem) => MessageListItem,
 ) => {
   const touchedQueryKeys: Array<ReturnType<typeof getMessagesQueryKey>> = [];
 
-  for (const cachedQuery of getCachedMessagesQueries(queryClient, userId)) {
+  for (const cachedQuery of getCachedMessagesQueries(queryClient, mailboxId)) {
     const nextData = updateMessagesInQueryData(cachedQuery.data, predicate, updater);
     if (nextData === cachedQuery.data) continue;
 
@@ -606,24 +614,24 @@ const updateMessagesInCachedMailboxQueries = (
 
 const removeMessageFromCachedMailboxQueries = (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   messageId: string,
 ) => {
   return removeMessagesFromCachedMailboxQueries(
     queryClient,
-    userId,
+    mailboxId,
     (message) => message.id === messageId,
   );
 };
 
 const removeMessagesFromCachedMailboxQueries = (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   predicate: (message: MessageListItem) => boolean,
 ) => {
   const touchedQueryKeys: Array<ReturnType<typeof getMessagesQueryKey>> = [];
 
-  for (const cachedQuery of getCachedMessagesQueries(queryClient, userId)) {
+  for (const cachedQuery of getCachedMessagesQueries(queryClient, mailboxId)) {
     const nextData = removeMessagesFromQueryData(cachedQuery.data, predicate);
     if (nextData === cachedQuery.data) continue;
 
@@ -636,17 +644,17 @@ const removeMessagesFromCachedMailboxQueries = (
 
 const applyResolvedThreadMetadataToCaches = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   updatedThread: ThreadMetadataMutationResult,
 ) => {
-  const threadQueryKey = getThreadQueryKey(userId, updatedThread.threadId);
+  const threadQueryKey = getThreadQueryKey(mailboxId, updatedThread.threadId);
   const updatesById = toMessageMetadataById(updatedThread.messages);
   const touchedQueryKeys: Array<readonly unknown[]> = [];
 
   for (const updatedMessage of updatedThread.messages) {
     const previousMessage = findMessageInCachedMailboxQueries(
       queryClient,
-      userId,
+      mailboxId,
       updatedMessage.id,
     );
     if (!previousMessage) continue;
@@ -656,9 +664,9 @@ const applyResolvedThreadMetadataToCaches = async (
       isUnread: updatedMessage.isUnread,
     });
     touchedQueryKeys.push(
-      ...applyMessageToCachedMailboxQueries(queryClient, userId, resolvedMessage),
+      ...applyMessageToCachedMailboxQueries(queryClient, mailboxId, resolvedMessage),
     );
-    prefetchNewMailboxQueries(queryClient, userId, previousMessage, resolvedMessage);
+    prefetchNewMailboxQueries(queryClient, mailboxId, previousMessage, resolvedMessage);
   }
 
   queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
@@ -681,7 +689,7 @@ const applyResolvedThreadMetadataToCaches = async (
 
 const prefetchNewMailboxQueries = (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   previousMessage: MessageListItem,
   nextMessage: MessageListItem,
 ) => {
@@ -689,24 +697,26 @@ const prefetchNewMailboxQueries = (
     if (
       !isMessageInMailbox(nextMessage, mailbox) ||
       isMessageInMailbox(previousMessage, mailbox) ||
-      queryClient.getQueryData<MessagesQueryData>(getMessagesQueryKey(userId, mailbox))?.pages
+      queryClient.getQueryData<MessagesQueryData>(getMessagesQueryKey(mailboxId, mailbox))?.pages
         .length
     ) {
       continue;
     }
 
-    void queryClient.prefetchInfiniteQuery(messagesQueryOptions(userId, mailbox));
+    void queryClient.prefetchInfiniteQuery(messagesQueryOptions(mailboxId, mailbox));
   }
 };
 
 const fetchMessagesPage = async (
+  mailboxId: string,
   mailbox: MailboxCategory,
   pageToken: string | undefined,
   searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
-  return await trpc.gmail.listMessages.query(
+  return await trpc.mail.listMessages.query(
     {
+      mailboxId,
       category: mailbox,
       pageToken,
       maxResults: pageToken ? 25 : 50,
@@ -718,13 +728,19 @@ const fetchMessagesPage = async (
 
 export const refreshMessagesFirstPage = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
-  const messagesQueryKey = getMessagesQueryKey(userId, mailbox, searchQuery);
-  const refreshedFirstPage = await fetchMessagesPage(mailbox, undefined, searchQuery, signal);
+  const messagesQueryKey = getMessagesQueryKey(mailboxId, mailbox, searchQuery);
+  const refreshedFirstPage = await fetchMessagesPage(
+    mailboxId,
+    mailbox,
+    undefined,
+    searchQuery,
+    signal,
+  );
   queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
     replaceFirstPageInQueryData(data, refreshedFirstPage),
   );
@@ -734,12 +750,12 @@ export const refreshMessagesFirstPage = async (
 
 export const refreshLoadedMessagesPages = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
-  const messagesQueryKey = getMessagesQueryKey(userId, mailbox, searchQuery);
+  const messagesQueryKey = getMessagesQueryKey(mailboxId, mailbox, searchQuery);
   const currentMessages = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
   const loadedPageCount = Math.max(currentMessages?.pages.length ?? 0, 1);
 
@@ -749,7 +765,13 @@ export const refreshLoadedMessagesPages = async (
 
   for (let pageIndex = 0; pageIndex < loadedPageCount; pageIndex += 1) {
     refreshedPageParams.push(pageToken);
-    const refreshedPage = await fetchMessagesPage(mailbox, pageToken, searchQuery, signal);
+    const refreshedPage = await fetchMessagesPage(
+      mailboxId,
+      mailbox,
+      pageToken,
+      searchQuery,
+      signal,
+    );
     refreshedPages.push(refreshedPage);
     if (!refreshedPage.nextPageToken) break;
     pageToken = refreshedPage.nextPageToken;
@@ -765,29 +787,29 @@ export const refreshLoadedMessagesPages = async (
 
 export const refreshCachedMailboxQueries = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
 ) => {
-  const cachedQueries = getCachedMessagesQueries(queryClient, userId).filter(
+  const cachedQueries = getCachedMessagesQueries(queryClient, mailboxId).filter(
     (cachedQuery) => cachedQuery.mailbox === mailbox,
   );
 
   if (cachedQueries.length === 0) {
-    await refreshLoadedMessagesPages(queryClient, userId, mailbox);
+    await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox);
     return;
   }
 
   await Promise.all(
     cachedQueries.map(
       async (cachedQuery) =>
-        await refreshLoadedMessagesPages(queryClient, userId, mailbox, cachedQuery.searchQuery),
+        await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, cachedQuery.searchQuery),
     ),
   );
 };
 
 const applyMailboxSyncDelta = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   messagesQueryKey: ReturnType<typeof getMessagesQueryKey>,
   startHistoryId: string,
   updatedMessages: readonly MessageListItem[],
@@ -821,7 +843,7 @@ const applyMailboxSyncDelta = async (
   const touchedThreadQueryKeys = new Map<string, ReturnType<typeof getThreadQueryKey>>();
 
   for (const updatedMessage of updatedMessages) {
-    const threadQueryKey = getThreadQueryKey(userId, updatedMessage.threadId);
+    const threadQueryKey = getThreadQueryKey(mailboxId, updatedMessage.threadId);
     touchedThreadQueryKeys.set(threadQueryKey.join("::"), threadQueryKey);
     queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
       updateMessageInThreadData(currentData, updatedMessage.id, () => updatedMessage),
@@ -832,7 +854,7 @@ const applyMailboxSyncDelta = async (
     const removedThreadId = removedMessageThreadIds.get(removedMessageId);
     if (!removedThreadId) continue;
 
-    const threadQueryKey = getThreadQueryKey(userId, removedThreadId);
+    const threadQueryKey = getThreadQueryKey(mailboxId, removedThreadId);
     touchedThreadQueryKeys.set(threadQueryKey.join("::"), threadQueryKey);
     queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
       removeMessageFromThreadData(currentData, removedMessageId),
@@ -846,29 +868,30 @@ const applyMailboxSyncDelta = async (
 
 export const syncMessages = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
   if (mailbox === "drafts") {
-    return await refreshLoadedMessagesPages(queryClient, userId, mailbox, searchQuery, signal);
+    return await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, searchQuery, signal);
   }
 
   if (normalizeSearchQuery(searchQuery)) {
-    return await refreshMessagesFirstPage(queryClient, userId, mailbox, searchQuery, signal);
+    return await refreshMessagesFirstPage(queryClient, mailboxId, mailbox, searchQuery, signal);
   }
 
-  const messagesQueryKey = getMessagesQueryKey(userId, mailbox, searchQuery);
+  const messagesQueryKey = getMessagesQueryKey(mailboxId, mailbox, searchQuery);
   const currentMessages = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
   const startHistoryId = currentMessages?.pages[0]?.historyId;
 
   if (!currentMessages?.pages.length || !startHistoryId) {
-    return await refreshLoadedMessagesPages(queryClient, userId, mailbox, searchQuery, signal);
+    return await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, searchQuery, signal);
   }
 
-  const syncDelta = await trpc.gmail.getMailboxSyncDelta.query(
+  const syncDelta = await trpc.mail.getMailboxSyncDelta.query(
     {
+      mailboxId,
       category: mailbox,
       startHistoryId,
     },
@@ -876,16 +899,16 @@ export const syncMessages = async (
   );
 
   if (syncDelta.requiresFullRefresh) {
-    return await refreshLoadedMessagesPages(queryClient, userId, mailbox, searchQuery, signal);
+    return await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, searchQuery, signal);
   }
 
   if (syncDelta.refreshFirstPage) {
-    await refreshMessagesFirstPage(queryClient, userId, mailbox, searchQuery, signal);
+    await refreshMessagesFirstPage(queryClient, mailboxId, mailbox, searchQuery, signal);
   }
 
   await applyMailboxSyncDelta(
     queryClient,
-    userId,
+    mailboxId,
     messagesQueryKey,
     startHistoryId,
     syncDelta.updatedMessages,
@@ -901,7 +924,7 @@ export const syncMessages = async (
 
 const updateSingleMessageMutation = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery: string | null | undefined,
   messageId: string,
@@ -909,21 +932,21 @@ const updateSingleMessageMutation = async (
   optimisticUpdater: (message: MessageListItem) => MessageListItem,
   signal?: AbortSignal,
 ) => {
-  const messagesQueryKey = getMessagesQueryKey(userId, mailbox, searchQuery);
+  const messagesQueryKey = getMessagesQueryKey(mailboxId, mailbox, searchQuery);
   const messageToUpdate =
     findMessageInQueryData(
       queryClient.getQueryData<MessagesQueryData>(messagesQueryKey),
       messageId,
-    ) ?? findMessageInCachedMailboxQueries(queryClient, userId, messageId);
+    ) ?? findMessageInCachedMailboxQueries(queryClient, mailboxId, messageId);
 
   if (!messageToUpdate) {
     await mutation(signal);
     return;
   }
 
-  const previousMessagesQueries = snapshotMessagesQueries(queryClient, userId);
+  const previousMessagesQueries = snapshotMessagesQueries(queryClient, mailboxId);
   const threadId = messageToUpdate?.threadId;
-  const threadQueryKey = threadId ? getThreadQueryKey(userId, threadId) : null;
+  const threadQueryKey = threadId ? getThreadQueryKey(mailboxId, threadId) : null;
   const previousThreadQuery = threadQueryKey
     ? snapshotThreadQuery(queryClient, threadQueryKey)
     : null;
@@ -931,7 +954,7 @@ const updateSingleMessageMutation = async (
 
   const optimisticTouchedQueryKeys = applyMessageToCachedMailboxQueries(
     queryClient,
-    userId,
+    mailboxId,
     optimisticMessage,
   );
   if (threadQueryKey) {
@@ -959,10 +982,10 @@ const updateSingleMessageMutation = async (
 
     const resolvedTouchedQueryKeys = applyMessageToCachedMailboxQueries(
       queryClient,
-      userId,
+      mailboxId,
       resolvedMessage,
     );
-    prefetchNewMailboxQueries(queryClient, userId, messageToUpdate, resolvedMessage);
+    prefetchNewMailboxQueries(queryClient, mailboxId, messageToUpdate, resolvedMessage);
 
     if (threadQueryKey) {
       queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
@@ -999,7 +1022,7 @@ const updateSingleMessageMutation = async (
 
 export const markMessageAsReadInMailbox = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery: string | null | undefined,
   messageId: string,
@@ -1007,12 +1030,15 @@ export const markMessageAsReadInMailbox = async (
 ) => {
   await updateSingleMessageMutation(
     queryClient,
-    userId,
+    mailboxId,
     mailbox,
     searchQuery,
     messageId,
     async (mutationSignal) =>
-      await trpc.gmail.markMessageAsRead.mutate({ messageId }, { signal: mutationSignal }),
+      await trpc.mail.markMessageAsRead.mutate(
+        { mailboxId, messageId },
+        { signal: mutationSignal },
+      ),
     markMessageReadLocally,
     signal,
   );
@@ -1020,7 +1046,7 @@ export const markMessageAsReadInMailbox = async (
 
 export const markMessageAsUnreadInMailbox = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery: string | null | undefined,
   messageId: string,
@@ -1028,12 +1054,15 @@ export const markMessageAsUnreadInMailbox = async (
 ) => {
   await updateSingleMessageMutation(
     queryClient,
-    userId,
+    mailboxId,
     mailbox,
     searchQuery,
     messageId,
     async (mutationSignal) =>
-      await trpc.gmail.markMessageAsUnread.mutate({ messageId }, { signal: mutationSignal }),
+      await trpc.mail.markMessageAsUnread.mutate(
+        { mailboxId, messageId },
+        { signal: mutationSignal },
+      ),
     markMessageUnreadLocally,
     signal,
   );
@@ -1041,7 +1070,7 @@ export const markMessageAsUnreadInMailbox = async (
 
 const updateThreadMutation = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   _mailbox: MailboxCategory,
   _searchQuery: string | null | undefined,
   threadId: string,
@@ -1049,13 +1078,13 @@ const updateThreadMutation = async (
   optimisticUpdater: (message: MessageListItem) => MessageListItem,
   signal?: AbortSignal,
 ) => {
-  const threadQueryKey = getThreadQueryKey(userId, threadId);
-  const previousMessagesQueries = snapshotMessagesQueries(queryClient, userId);
+  const threadQueryKey = getThreadQueryKey(mailboxId, threadId);
+  const previousMessagesQueries = snapshotMessagesQueries(queryClient, mailboxId);
   const previousThreadQuery = snapshotThreadQuery(queryClient, threadQueryKey);
 
   const optimisticTouchedQueryKeys = updateMessagesInCachedMailboxQueries(
     queryClient,
-    userId,
+    mailboxId,
     (message) => message.threadId === threadId,
     optimisticUpdater,
   );
@@ -1071,7 +1100,7 @@ const updateThreadMutation = async (
 
     const resolvedTouchedQueryKeys = updateMessagesInCachedMailboxQueries(
       queryClient,
-      userId,
+      mailboxId,
       (message) => updatesById.has(message.id),
       (message) => {
         const updatedMessage = updatesById.get(message.id);
@@ -1112,7 +1141,7 @@ const updateThreadMutation = async (
 
 export const markThreadAsReadInMailbox = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery: string | null | undefined,
   threadId: string,
@@ -1120,12 +1149,12 @@ export const markThreadAsReadInMailbox = async (
 ) => {
   await updateThreadMutation(
     queryClient,
-    userId,
+    mailboxId,
     mailbox,
     searchQuery,
     threadId,
     async (mutationSignal) =>
-      await trpc.gmail.markThreadAsRead.mutate({ threadId }, { signal: mutationSignal }),
+      await trpc.mail.markThreadAsRead.mutate({ mailboxId, threadId }, { signal: mutationSignal }),
     markMessageReadLocally,
     signal,
   );
@@ -1133,7 +1162,7 @@ export const markThreadAsReadInMailbox = async (
 
 export const markThreadAsUnreadInMailbox = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery: string | null | undefined,
   threadId: string,
@@ -1141,12 +1170,15 @@ export const markThreadAsUnreadInMailbox = async (
 ) => {
   await updateThreadMutation(
     queryClient,
-    userId,
+    mailboxId,
     mailbox,
     searchQuery,
     threadId,
     async (mutationSignal) =>
-      await trpc.gmail.markThreadAsUnread.mutate({ threadId }, { signal: mutationSignal }),
+      await trpc.mail.markThreadAsUnread.mutate(
+        { mailboxId, threadId },
+        { signal: mutationSignal },
+      ),
     markMessageUnreadLocally,
     signal,
   );
@@ -1154,15 +1186,16 @@ export const markThreadAsUnreadInMailbox = async (
 
 export const updateThreadLabelsInMailbox = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   _mailbox: MailboxCategory,
   _searchQuery: string | null | undefined,
   threadId: string,
   changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   signal?: AbortSignal,
 ) => {
-  const updatedThread = await trpc.gmail.updateThreadLabels.mutate(
+  const updatedThread = await trpc.mail.updateThreadLabels.mutate(
     {
+      mailboxId,
       threadId,
       addLabelIds: changes.addLabelIds,
       removeLabelIds: changes.removeLabelIds,
@@ -1170,28 +1203,29 @@ export const updateThreadLabelsInMailbox = async (
     { signal },
   );
 
-  await applyResolvedThreadMetadataToCaches(queryClient, userId, updatedThread);
+  await applyResolvedThreadMetadataToCaches(queryClient, mailboxId, updatedThread);
 };
 
 export const updateMessageLabelsInMailbox = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery: string | null | undefined,
   messageId: string,
   changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   signal?: AbortSignal,
 ) => {
-  const messagesQueryKey = getMessagesQueryKey(userId, mailbox, searchQuery);
+  const messagesQueryKey = getMessagesQueryKey(mailboxId, mailbox, searchQuery);
   const messageToUpdate =
     findMessageInQueryData(
       queryClient.getQueryData<MessagesQueryData>(messagesQueryKey),
       messageId,
-    ) ?? findMessageInCachedMailboxQueries(queryClient, userId, messageId);
+    ) ?? findMessageInCachedMailboxQueries(queryClient, mailboxId, messageId);
 
   if (!messageToUpdate) {
-    await trpc.gmail.updateMessageLabels.mutate(
+    await trpc.mail.updateMessageLabels.mutate(
       {
+        mailboxId,
         messageId,
         addLabelIds: changes.addLabelIds,
         removeLabelIds: changes.removeLabelIds,
@@ -1201,9 +1235,9 @@ export const updateMessageLabelsInMailbox = async (
     return;
   }
 
-  const previousMessagesQueries = snapshotMessagesQueries(queryClient, userId);
+  const previousMessagesQueries = snapshotMessagesQueries(queryClient, mailboxId);
   const threadId = messageToUpdate?.threadId;
-  const threadQueryKey = threadId ? getThreadQueryKey(userId, threadId) : null;
+  const threadQueryKey = threadId ? getThreadQueryKey(mailboxId, threadId) : null;
   const previousThreadQuery = threadQueryKey
     ? snapshotThreadQuery(queryClient, threadQueryKey)
     : null;
@@ -1211,7 +1245,7 @@ export const updateMessageLabelsInMailbox = async (
 
   const optimisticTouchedQueryKeys = applyMessageToCachedMailboxQueries(
     queryClient,
-    userId,
+    mailboxId,
     optimisticMessage,
   );
   if (threadQueryKey) {
@@ -1231,8 +1265,9 @@ export const updateMessageLabelsInMailbox = async (
   );
 
   try {
-    const updatedMessage = await trpc.gmail.updateMessageLabels.mutate(
+    const updatedMessage = await trpc.mail.updateMessageLabels.mutate(
       {
+        mailboxId,
         messageId,
         addLabelIds: changes.addLabelIds,
         removeLabelIds: changes.removeLabelIds,
@@ -1246,10 +1281,10 @@ export const updateMessageLabelsInMailbox = async (
 
     const resolvedTouchedQueryKeys = applyMessageToCachedMailboxQueries(
       queryClient,
-      userId,
+      mailboxId,
       resolvedMessage,
     );
-    prefetchNewMailboxQueries(queryClient, userId, messageToUpdate, resolvedMessage);
+    prefetchNewMailboxQueries(queryClient, mailboxId, messageToUpdate, resolvedMessage);
 
     if (threadQueryKey) {
       queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
@@ -1286,7 +1321,7 @@ export const updateMessageLabelsInMailbox = async (
 
 export const markMessageAsSpamInMailbox = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery: string | null | undefined,
   messageId: string,
@@ -1294,7 +1329,7 @@ export const markMessageAsSpamInMailbox = async (
 ) => {
   await updateMessageLabelsInMailbox(
     queryClient,
-    userId,
+    mailboxId,
     mailbox,
     searchQuery,
     messageId,
@@ -1308,7 +1343,7 @@ export const markMessageAsSpamInMailbox = async (
 
 export const markThreadAsSpamInMailbox = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery: string | null | undefined,
   threadId: string,
@@ -1316,7 +1351,7 @@ export const markThreadAsSpamInMailbox = async (
 ) => {
   await updateThreadLabelsInMailbox(
     queryClient,
-    userId,
+    mailboxId,
     mailbox,
     searchQuery,
     threadId,
@@ -1330,7 +1365,7 @@ export const markThreadAsSpamInMailbox = async (
 
 export const unmarkMessageAsSpamInMailbox = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery: string | null | undefined,
   messageId: string,
@@ -1338,7 +1373,7 @@ export const unmarkMessageAsSpamInMailbox = async (
 ) => {
   await updateMessageLabelsInMailbox(
     queryClient,
-    userId,
+    mailboxId,
     mailbox,
     searchQuery,
     messageId,
@@ -1352,7 +1387,7 @@ export const unmarkMessageAsSpamInMailbox = async (
 
 export const unmarkThreadAsSpamInMailbox = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery: string | null | undefined,
   threadId: string,
@@ -1360,7 +1395,7 @@ export const unmarkThreadAsSpamInMailbox = async (
 ) => {
   await updateThreadLabelsInMailbox(
     queryClient,
-    userId,
+    mailboxId,
     mailbox,
     searchQuery,
     threadId,
@@ -1374,27 +1409,27 @@ export const unmarkThreadAsSpamInMailbox = async (
 
 export const moveMessageToTrashInMailbox = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery: string | null | undefined,
   messageId: string,
   signal?: AbortSignal,
 ) => {
-  const messagesQueryKey = getMessagesQueryKey(userId, mailbox, searchQuery);
+  const messagesQueryKey = getMessagesQueryKey(mailboxId, mailbox, searchQuery);
   const messageToUpdate =
     findMessageInQueryData(
       queryClient.getQueryData<MessagesQueryData>(messagesQueryKey),
       messageId,
-    ) ?? findMessageInCachedMailboxQueries(queryClient, userId, messageId);
+    ) ?? findMessageInCachedMailboxQueries(queryClient, mailboxId, messageId);
 
   if (!messageToUpdate) {
-    await trpc.gmail.moveMessageToTrash.mutate({ messageId }, { signal });
+    await trpc.mail.moveMessageToTrash.mutate({ mailboxId, messageId }, { signal });
     return;
   }
 
-  const previousMessagesQueries = snapshotMessagesQueries(queryClient, userId);
+  const previousMessagesQueries = snapshotMessagesQueries(queryClient, mailboxId);
   const threadId = messageToUpdate?.threadId;
-  const threadQueryKey = threadId ? getThreadQueryKey(userId, threadId) : null;
+  const threadQueryKey = threadId ? getThreadQueryKey(mailboxId, threadId) : null;
   const previousThreadQuery = threadQueryKey
     ? snapshotThreadQuery(queryClient, threadQueryKey)
     : null;
@@ -1402,7 +1437,7 @@ export const moveMessageToTrashInMailbox = async (
 
   const optimisticTouchedQueryKeys = applyMessageToCachedMailboxQueries(
     queryClient,
-    userId,
+    mailboxId,
     optimisticMessage,
   );
 
@@ -1423,7 +1458,10 @@ export const moveMessageToTrashInMailbox = async (
   );
 
   try {
-    const updatedMessage = await trpc.gmail.moveMessageToTrash.mutate({ messageId }, { signal });
+    const updatedMessage = await trpc.mail.moveMessageToTrash.mutate(
+      { mailboxId, messageId },
+      { signal },
+    );
     const resolvedMessage = applyMessageMetadata(optimisticMessage, {
       labelIds: updatedMessage.labelIds,
       isUnread: updatedMessage.isUnread,
@@ -1431,7 +1469,7 @@ export const moveMessageToTrashInMailbox = async (
 
     const resolvedTouchedQueryKeys = applyMessageToCachedMailboxQueries(
       queryClient,
-      userId,
+      mailboxId,
       resolvedMessage,
     );
 
@@ -1468,48 +1506,164 @@ export const moveMessageToTrashInMailbox = async (
   }
 };
 
-export const moveThreadToTrashInMailbox = async (
+export const untrashMessageInMailbox = async (
   queryClient: QueryClient,
-  userId: string,
-  _mailbox: MailboxCategory,
-  _searchQuery: string | null | undefined,
-  threadId: string,
-  signal?: AbortSignal,
-) => {
-  const updatedThread = await trpc.gmail.moveThreadToTrash.mutate({ threadId }, { signal });
-  await applyResolvedThreadMetadataToCaches(queryClient, userId, updatedThread);
-};
-
-export const deleteMessagePermanentlyInMailbox = async (
-  queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery: string | null | undefined,
   messageId: string,
   signal?: AbortSignal,
 ) => {
-  const messagesQueryKey = getMessagesQueryKey(userId, mailbox, searchQuery);
+  const messagesQueryKey = getMessagesQueryKey(mailboxId, mailbox, searchQuery);
   const messageToUpdate =
     findMessageInQueryData(
       queryClient.getQueryData<MessagesQueryData>(messagesQueryKey),
       messageId,
-    ) ?? findMessageInCachedMailboxQueries(queryClient, userId, messageId);
+    ) ?? findMessageInCachedMailboxQueries(queryClient, mailboxId, messageId);
 
   if (!messageToUpdate) {
-    await trpc.gmail.deleteMessagePermanently.mutate({ messageId }, { signal });
+    await trpc.mail.updateMessageLabels.mutate(
+      {
+        mailboxId,
+        messageId,
+        addLabelIds: [...REMOVE_FROM_TRASH_LABEL_CHANGES.addLabelIds],
+        removeLabelIds: [...REMOVE_FROM_TRASH_LABEL_CHANGES.removeLabelIds],
+      },
+      { signal },
+    );
     return;
   }
 
-  const previousMessagesQueries = snapshotMessagesQueries(queryClient, userId);
+  const previousMessagesQueries = snapshotMessagesQueries(queryClient, mailboxId);
+  const threadId = messageToUpdate.threadId;
+  const threadQueryKey = threadId ? getThreadQueryKey(mailboxId, threadId) : null;
+  const previousThreadQuery = threadQueryKey
+    ? snapshotThreadQuery(queryClient, threadQueryKey)
+    : null;
+  const optimisticMessage = removeMessageFromTrashLocally(messageToUpdate);
+
+  const optimisticTouchedQueryKeys = applyMessageToCachedMailboxQueries(
+    queryClient,
+    mailboxId,
+    optimisticMessage,
+  );
+
+  if (threadQueryKey) {
+    queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
+      updateMessageInThreadData(currentData, messageId, (message) =>
+        applyMessageMetadata(message, {
+          labelIds: optimisticMessage.labelIds,
+          isUnread: optimisticMessage.isUnread ?? false,
+        }),
+      ),
+    );
+  }
+
+  await persistQueryKeys(
+    queryClient,
+    threadQueryKey ? [...optimisticTouchedQueryKeys, threadQueryKey] : optimisticTouchedQueryKeys,
+  );
+
+  try {
+    const updatedMessage = await trpc.mail.updateMessageLabels.mutate(
+      {
+        mailboxId,
+        messageId,
+        addLabelIds: [...REMOVE_FROM_TRASH_LABEL_CHANGES.addLabelIds],
+        removeLabelIds: [...REMOVE_FROM_TRASH_LABEL_CHANGES.removeLabelIds],
+      },
+      { signal },
+    );
+    const resolvedMessage = applyMessageMetadata(optimisticMessage, {
+      labelIds: updatedMessage.labelIds,
+      isUnread: updatedMessage.isUnread,
+    });
+
+    const resolvedTouchedQueryKeys = applyMessageToCachedMailboxQueries(
+      queryClient,
+      mailboxId,
+      resolvedMessage,
+    );
+    prefetchNewMailboxQueries(queryClient, mailboxId, messageToUpdate, resolvedMessage);
+
+    if (threadQueryKey) {
+      queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
+        updateMessageInThreadData(currentData, messageId, (message) =>
+          applyMessageMetadata(message, {
+            labelIds: updatedMessage.labelIds,
+            isUnread: updatedMessage.isUnread,
+          }),
+        ),
+      );
+    }
+
+    await persistQueryKeys(
+      queryClient,
+      threadQueryKey ? [...resolvedTouchedQueryKeys, threadQueryKey] : resolvedTouchedQueryKeys,
+    );
+  } catch (error) {
+    restoreMessagesQueries(queryClient, previousMessagesQueries);
+    if (previousThreadQuery) {
+      queryClient.setQueryData(previousThreadQuery.queryKey, previousThreadQuery.data);
+    }
+    await persistQueryKeys(
+      queryClient,
+      previousThreadQuery
+        ? [
+            ...previousMessagesQueries.map((snapshot) => snapshot.queryKey),
+            previousThreadQuery.queryKey,
+          ]
+        : previousMessagesQueries.map((snapshot) => snapshot.queryKey),
+    );
+    throw error;
+  }
+};
+
+export const moveThreadToTrashInMailbox = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  _mailbox: MailboxCategory,
+  _searchQuery: string | null | undefined,
+  threadId: string,
+  signal?: AbortSignal,
+) => {
+  const updatedThread = await trpc.mail.moveThreadToTrash.mutate(
+    { mailboxId, threadId },
+    { signal },
+  );
+  await applyResolvedThreadMetadataToCaches(queryClient, mailboxId, updatedThread);
+};
+
+export const deleteMessagePermanentlyInMailbox = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  mailbox: MailboxCategory,
+  searchQuery: string | null | undefined,
+  messageId: string,
+  signal?: AbortSignal,
+) => {
+  const messagesQueryKey = getMessagesQueryKey(mailboxId, mailbox, searchQuery);
+  const messageToUpdate =
+    findMessageInQueryData(
+      queryClient.getQueryData<MessagesQueryData>(messagesQueryKey),
+      messageId,
+    ) ?? findMessageInCachedMailboxQueries(queryClient, mailboxId, messageId);
+
+  if (!messageToUpdate) {
+    await trpc.mail.deleteMessagePermanently.mutate({ mailboxId, messageId }, { signal });
+    return;
+  }
+
+  const previousMessagesQueries = snapshotMessagesQueries(queryClient, mailboxId);
   const threadId = messageToUpdate?.threadId;
-  const threadQueryKey = threadId ? getThreadQueryKey(userId, threadId) : null;
+  const threadQueryKey = threadId ? getThreadQueryKey(mailboxId, threadId) : null;
   const previousThreadQuery = threadQueryKey
     ? snapshotThreadQuery(queryClient, threadQueryKey)
     : null;
 
   const optimisticTouchedQueryKeys = removeMessageFromCachedMailboxQueries(
     queryClient,
-    userId,
+    mailboxId,
     messageId,
   );
 
@@ -1525,7 +1679,7 @@ export const deleteMessagePermanentlyInMailbox = async (
   );
 
   try {
-    await trpc.gmail.deleteMessagePermanently.mutate({ messageId }, { signal });
+    await trpc.mail.deleteMessagePermanently.mutate({ mailboxId, messageId }, { signal });
   } catch (error) {
     restoreMessagesQueries(queryClient, previousMessagesQueries);
     if (previousThreadQuery) {
@@ -1546,18 +1700,18 @@ export const deleteMessagePermanentlyInMailbox = async (
 
 export const deleteThreadPermanentlyInMailbox = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   _mailbox: MailboxCategory,
   _searchQuery: string | null | undefined,
   threadId: string,
   signal?: AbortSignal,
 ) => {
-  await trpc.gmail.deleteThreadPermanently.mutate({ threadId }, { signal });
+  await trpc.mail.deleteThreadPermanently.mutate({ mailboxId, threadId }, { signal });
 
-  const threadQueryKey = getThreadQueryKey(userId, threadId);
+  const threadQueryKey = getThreadQueryKey(mailboxId, threadId);
   const touchedQueryKeys = removeMessagesFromCachedMailboxQueries(
     queryClient,
-    userId,
+    mailboxId,
     (message) => message.threadId === threadId,
   );
   queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
@@ -1569,35 +1723,35 @@ export const deleteThreadPermanentlyInMailbox = async (
 
 export const deleteDraftInMailbox = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery: string | null | undefined,
   messageId: string,
   draftId: string,
   signal?: AbortSignal,
 ) => {
-  const messagesQueryKey = getMessagesQueryKey(userId, mailbox, searchQuery);
+  const messagesQueryKey = getMessagesQueryKey(mailboxId, mailbox, searchQuery);
   const messageToUpdate =
     findMessageInQueryData(
       queryClient.getQueryData<MessagesQueryData>(messagesQueryKey),
       messageId,
-    ) ?? findMessageInCachedMailboxQueries(queryClient, userId, messageId);
+    ) ?? findMessageInCachedMailboxQueries(queryClient, mailboxId, messageId);
 
   if (!messageToUpdate) {
-    await trpc.gmail.deleteDraft.mutate({ draftId }, { signal });
+    await trpc.mail.deleteDraft.mutate({ mailboxId, draftId }, { signal });
     return;
   }
 
-  const previousMessagesQueries = snapshotMessagesQueries(queryClient, userId);
+  const previousMessagesQueries = snapshotMessagesQueries(queryClient, mailboxId);
   const threadQueryKey = messageToUpdate.threadId
-    ? getThreadQueryKey(userId, messageToUpdate.threadId)
+    ? getThreadQueryKey(mailboxId, messageToUpdate.threadId)
     : null;
   const previousThreadQuery = threadQueryKey
     ? snapshotThreadQuery(queryClient, threadQueryKey)
     : null;
   const optimisticTouchedQueryKeys = removeMessageFromCachedMailboxQueries(
     queryClient,
-    userId,
+    mailboxId,
     messageId,
   );
 
@@ -1613,7 +1767,7 @@ export const deleteDraftInMailbox = async (
   );
 
   try {
-    await trpc.gmail.deleteDraft.mutate({ draftId }, { signal });
+    await trpc.mail.deleteDraft.mutate({ mailboxId, draftId }, { signal });
   } catch (error) {
     restoreMessagesQueries(queryClient, previousMessagesQueries);
     if (previousThreadQuery) {
@@ -1633,15 +1787,21 @@ export const deleteDraftInMailbox = async (
 };
 
 export const messagesQueryOptions = (
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery?: string | null,
   enabled = true,
 ) =>
   infiniteQueryOptions({
-    queryKey: getMessagesQueryKey(userId, mailbox, searchQuery),
+    queryKey: getMessagesQueryKey(mailboxId, mailbox, searchQuery),
     queryFn: (ctx: { pageParam: unknown; signal: AbortSignal }) => {
-      return fetchMessagesPage(mailbox, parsePageToken(ctx.pageParam), searchQuery, ctx.signal);
+      return fetchMessagesPage(
+        mailboxId,
+        mailbox,
+        parsePageToken(ctx.pageParam),
+        searchQuery,
+        ctx.signal,
+      );
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage: ListMessagesPageResult) => lastPage.nextPageToken ?? undefined,
@@ -1654,18 +1814,19 @@ export const messagesQueryOptions = (
 
 export const liveSyncQueryOptions = (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery?: string | null,
   enabled = true,
 ) =>
   queryOptions({
-    queryKey: getLiveSyncQueryKey(userId, mailbox, searchQuery),
-    queryFn: ({ signal }) => syncMessages(queryClient, userId, mailbox, searchQuery, signal),
+    queryKey: getLiveSyncQueryKey(mailboxId, mailbox, searchQuery),
+    queryFn: ({ signal }) => syncMessages(queryClient, mailboxId, mailbox, searchQuery, signal),
     enabled,
     initialData: () =>
-      queryClient.getQueryData<MessagesQueryData>(getMessagesQueryKey(userId, mailbox, searchQuery))
-        ?.pages[0],
+      queryClient.getQueryData<MessagesQueryData>(
+        getMessagesQueryKey(mailboxId, mailbox, searchQuery),
+      )?.pages[0],
     persister: undefined,
     staleTime: 0,
     refetchOnMount: "always",

@@ -14,6 +14,7 @@ type ThreadAttachment = MessageAttachment & {
 
 type MessageAttachmentsProps = {
   attachments: ThreadAttachment[];
+  mailboxId: string;
   className?: string;
 };
 
@@ -25,7 +26,11 @@ const formatAttachmentSize = (size: number) => {
   return `${megabytes >= 10 ? Math.round(megabytes) : megabytes.toFixed(1)} MB`;
 };
 
-export const MessageAttachments = ({ attachments, className }: MessageAttachmentsProps) => {
+export const MessageAttachments = ({
+  attachments,
+  className,
+  mailboxId,
+}: MessageAttachmentsProps) => {
   const [activeAttachmentKey, setActiveAttachmentKey] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -38,6 +43,7 @@ export const MessageAttachments = ({ attachments, className }: MessageAttachment
 
     try {
       await downloadAttachmentFromServer(
+        mailboxId,
         attachment.messageId,
         attachment.attachmentId,
         attachment.fileName,

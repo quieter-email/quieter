@@ -2,6 +2,7 @@
 
 import {
   ArrowLeft01Icon,
+  Mail01Icon,
   Settings01Icon,
   UserGroupIcon,
   UserIcon,
@@ -46,6 +47,16 @@ export const SettingsSidebar = ({ activeTab, onBack, onSelectTab }: SettingsSide
       >
         <HugeiconsIcon className="size-4" icon={UserIcon} />
         Account
+      </Button>
+
+      <Button
+        className="flex w-fit items-center gap-2"
+        onClick={() => onSelectTab("mailboxes")}
+        size="sm"
+        variant={activeTab === "mailboxes" ? "default" : "ghost"}
+      >
+        <HugeiconsIcon className="size-4" icon={Mail01Icon} />
+        Mailboxes
       </Button>
 
       <Button

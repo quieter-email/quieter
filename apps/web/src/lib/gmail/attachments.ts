@@ -3,13 +3,17 @@ import { trpc } from "~/lib/trpc";
 const now = () => Date.now();
 
 export const loadAttachmentFromServer = async (
+  mailboxId: string,
   messageId: string,
   attachmentId: string,
   fileName: string,
   mimeType: string,
   signal?: AbortSignal,
 ) => {
-  const attachment = await trpc.gmail.getAttachment.query({ messageId, attachmentId }, { signal });
+  const attachment = await trpc.mail.getAttachment.query(
+    { mailboxId, messageId, attachmentId },
+    { signal },
+  );
   const bytes = Uint8Array.from(attachment.bytes);
 
   return new File([bytes], fileName, {
@@ -19,13 +23,21 @@ export const loadAttachmentFromServer = async (
 };
 
 export const downloadAttachmentFromServer = async (
+  mailboxId: string,
   messageId: string,
   attachmentId: string,
   fileName: string,
   mimeType: string,
   signal?: AbortSignal,
 ) => {
-  const file = await loadAttachmentFromServer(messageId, attachmentId, fileName, mimeType, signal);
+  const file = await loadAttachmentFromServer(
+    mailboxId,
+    messageId,
+    attachmentId,
+    fileName,
+    mimeType,
+    signal,
+  );
   const objectUrl = URL.createObjectURL(file);
   const anchor = document.createElement("a");
 

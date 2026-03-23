@@ -19,10 +19,14 @@ export const organization = pgTable(
     slug: text("slug").notNull(),
     logo: text("logo"),
     metadata: text("metadata"),
+    personalOwnerUserId: text("personalOwnerUserId"),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt"),
   },
-  (table) => [unique("organization_slug_unique").on(table.slug)],
+  (table) => [
+    unique("organization_slug_unique").on(table.slug),
+    unique("organization_personal_owner_user_id_unique").on(table.personalOwnerUserId),
+  ],
 );
 
 export const session = pgTable("session", {
@@ -33,9 +37,7 @@ export const session = pgTable("session", {
   updatedAt: timestamp("updatedAt").notNull(),
   ipAddress: text("ipAddress"),
   userAgent: text("userAgent"),
-  activeOrganizationId: text("activeOrganizationId").references(() => organization.id, {
-    onDelete: "set null",
-  }),
+  activeOrganizationId: text("activeOrganizationId").references(() => organization.id),
   userId: text("userId")
     .notNull()
     .references(() => user.id),
@@ -102,10 +104,10 @@ export const member = pgTable(
     id: text("id").primaryKey(),
     organizationId: text("organizationId")
       .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
+      .references(() => organization.id),
     userId: text("userId")
       .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+      .references(() => user.id),
     role: text("role").notNull(),
     createdAt: timestamp("createdAt").notNull(),
   },
@@ -122,19 +124,50 @@ export const invitation = pgTable(
     id: text("id").primaryKey(),
     organizationId: text("organizationId")
       .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
+      .references(() => organization.id),
     email: text("email").notNull(),
     role: text("role").notNull(),
     status: text("status").notNull(),
     expiresAt: timestamp("expiresAt").notNull(),
     inviterId: text("inviterId")
       .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+      .references(() => user.id),
     createdAt: timestamp("createdAt").notNull(),
   },
   (table) => [
     index("invitation_organization_id_idx").on(table.organizationId),
     index("invitation_email_idx").on(table.email),
+  ],
+);
+
+export const mailbox = pgTable(
+  "mailbox",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id),
+    provider: text("provider").notNull(),
+    emailAddress: text("emailAddress").notNull(),
+    displayName: text("displayName"),
+    providerAccountId: text("providerAccountId").notNull(),
+    connectedUserId: text("connectedUserId")
+      .notNull()
+      .references(() => user.id),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    index("mailbox_organization_id_idx").on(table.organizationId),
+    index("mailbox_connected_user_id_idx").on(table.connectedUserId),
+    unique("mailbox_provider_provider_account_id_unique").on(
+      table.provider,
+      table.providerAccountId,
+    ),
+    unique("mailbox_organization_id_email_address_unique").on(
+      table.organizationId,
+      table.emailAddress,
+    ),
   ],
 );
 
@@ -147,12 +180,14 @@ export const tables = {
   passkey,
   member,
   invitation,
+  mailbox,
 };
 
 export const authRelations = defineRelations(tables, (r) => ({
   user: {
     accounts: r.many.account({ from: r.user.id, to: r.account.userId }),
     invitations: r.many.invitation({ from: r.user.id, to: r.invitation.inviterId }),
+    mailboxes: r.many.mailbox({ from: r.user.id, to: r.mailbox.connectedUserId }),
     memberships: r.many.member({ from: r.user.id, to: r.member.userId }),
     sessions: r.many.session({ from: r.user.id, to: r.session.userId }),
     passkeys: r.many.passkey({ from: r.user.id, to: r.passkey.userId }),
@@ -162,6 +197,7 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.organization.id,
       to: r.invitation.organizationId,
     }),
+    mailboxes: r.many.mailbox({ from: r.organization.id, to: r.mailbox.organizationId }),
     members: r.many.member({ from: r.organization.id, to: r.member.organizationId }),
   },
   session: {
@@ -210,6 +246,18 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
     organization: r.one.organization({
       from: r.invitation.organizationId,
+      to: r.organization.id,
+      optional: false,
+    }),
+  },
+  mailbox: {
+    connectedUser: r.one.user({
+      from: r.mailbox.connectedUserId,
+      to: r.user.id,
+      optional: false,
+    }),
+    organization: r.one.organization({
+      from: r.mailbox.organizationId,
       to: r.organization.id,
       optional: false,
     }),

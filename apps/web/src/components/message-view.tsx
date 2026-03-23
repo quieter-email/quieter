@@ -33,7 +33,7 @@ import { SenderAvatar } from "./sender-avatar";
 type MessageViewProps = {
   activeMailbox: MailboxCategory;
   currentUserEmail?: string | null;
-  userId: string;
+  mailboxId: string;
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onMarkThreadAsRead?: (threadId: string) => void | Promise<void>;
@@ -46,6 +46,7 @@ type MessageViewProps = {
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => void | Promise<void>;
   onMoveToTrash?: (messageId: string) => void | Promise<void>;
+  onUntrash?: (messageId: string) => void | Promise<void>;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
   onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
   onDeletePermanently?: (messageId: string) => void | Promise<void>;
@@ -199,17 +200,17 @@ const MessageComposeActions = ({
 );
 
 const MessageInspectorPanel = ({
+  mailboxId,
   message,
   open,
-  userId,
   onOpenChange,
 }: {
+  mailboxId: string;
   message: MessageListItem;
   open: boolean;
-  userId: string;
   onOpenChange: (open: boolean) => void;
 }) => {
-  const inspectorQuery = useQuery(getMessageInspectorOptions(userId, message.id, open));
+  const inspectorQuery = useQuery(getMessageInspectorOptions(mailboxId, message.id, open));
   const inspector = inspectorQuery.data;
   const payloadText = inspector?.payload ? JSON.stringify(inspector.payload, null, 2) : "";
 
@@ -247,7 +248,7 @@ const MessageInspectorPanel = ({
                   .map((row) => (
                     <p className="text-sm text-foreground-light" key={row.label}>
                       <span className="font-semibold text-foreground">{row.label}: </span>
-                      <span className="break-words">{row.value}</span>
+                      <span className="wrap-break-word">{row.value}</span>
                     </p>
                   ))}
               </section>
@@ -257,7 +258,7 @@ const MessageInspectorPanel = ({
                 {inspector.headers.map((header, index) => (
                   <p className="text-sm text-foreground-light" key={`${header.name}-${index}`}>
                     <span className="font-semibold text-foreground">{header.name}: </span>
-                    <span className="break-words">{header.value}</span>
+                    <span className="wrap-break-word">{header.value}</span>
                   </p>
                 ))}
               </section>
@@ -303,13 +304,13 @@ const MessageInspectorPanel = ({
 const MessageContentSection = ({
   actions,
   compact,
+  mailboxId,
   message,
-  userId,
 }: {
   actions?: ReactNode;
   compact?: boolean;
+  mailboxId: string;
   message: MessageListItem;
-  userId: string;
 }) => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
@@ -336,10 +337,10 @@ const MessageContentSection = ({
       </div>
 
       <MessageInspectorPanel
+        mailboxId={mailboxId}
         message={message}
         onOpenChange={setDetailsDialogOpen}
         open={detailsDialogOpen}
-        userId={userId}
       />
     </div>
   );
@@ -349,14 +350,14 @@ const ThreadMessageBody = ({
   actions,
   compact,
   expanded,
+  mailboxId,
   message,
-  userId,
 }: {
   actions?: ReactNode;
   expanded: boolean;
+  mailboxId: string;
   message: MessageListItem;
   compact?: boolean;
-  userId: string;
 }) => (
   <div
     aria-hidden={!expanded}
@@ -380,8 +381,8 @@ const ThreadMessageBody = ({
         <MessageContentSection
           actions={actions}
           compact={compact}
+          mailboxId={mailboxId}
           message={message}
-          userId={userId}
         />
       </div>
     </div>
@@ -390,14 +391,14 @@ const ThreadMessageBody = ({
 
 const ThreadMessageList = ({
   currentUserEmail,
+  mailboxId,
   messages,
   onComposeDraftRequested,
-  userId,
 }: {
   currentUserEmail?: string | null;
+  mailboxId: string;
   messages: MessageListItem[];
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
-  userId: string;
 }) => {
   const [expandedMessageId, setExpandedMessageId] = useState<string | null>(
     messages[0]?.id ?? null,
@@ -480,8 +481,8 @@ const ThreadMessageList = ({
                 }
                 compact
                 expanded={isExpanded}
+                mailboxId={mailboxId}
                 message={threadMessage}
-                userId={userId}
               />
             </div>
           </section>
@@ -493,6 +494,7 @@ const ThreadMessageList = ({
 
 export const MessageView = ({
   activeMailbox,
+  mailboxId,
   currentUserEmail,
   isActionPending,
   message,
@@ -504,13 +506,13 @@ export const MessageView = ({
   onMarkThreadAsRead,
   onMarkThreadAsUnread,
   onMoveToTrash,
+  onUntrash,
   onUnsubscribe,
   onUnmarkAsSpam,
   onUpdateLabels,
-  userId,
 }: MessageViewProps) => {
   const threadQuery = useSuspenseQuery(
-    getThreadWithDetailsOptions(userId, activeMailbox, message.threadId),
+    getThreadWithDetailsOptions(mailboxId, activeMailbox, message.threadId),
   );
 
   const messages = threadQuery.data?.messages?.length
@@ -581,8 +583,8 @@ export const MessageView = ({
             isPending={isActionPending}
             isUnread={threadIsUnread}
             mailbox={activeMailbox}
+            mailboxId={mailboxId}
             message={message}
-            userId={userId}
             onDeletePermanently={onDeletePermanently}
             onMarkAsRead={(messageId) => {
               void (onMarkThreadAsRead?.(message.threadId) ?? onMarkAsRead?.(messageId));
@@ -592,6 +594,7 @@ export const MessageView = ({
               void (onMarkThreadAsUnread?.(message.threadId) ?? onMarkAsUnread?.(messageId));
             }}
             onMoveToTrash={onMoveToTrash}
+            onUntrash={onUntrash}
             onUnsubscribe={onUnsubscribe}
             onUnmarkAsSpam={onUnmarkAsSpam}
             onUpdateLabels={onUpdateLabels}
@@ -604,7 +607,11 @@ export const MessageView = ({
           </p>
         ) : null}
 
-        <MessageAttachments attachments={threadAttachments} className="mt-4" />
+        <MessageAttachments
+          attachments={threadAttachments}
+          className="mt-4"
+          mailboxId={mailboxId}
+        />
 
         {!isSingleMessageThread && threadActionMessage ? (
           <MessageComposeActions
@@ -621,9 +628,9 @@ export const MessageView = ({
         <ThreadMessageList
           currentUserEmail={currentUserEmail}
           key={message.threadId}
+          mailboxId={mailboxId}
           messages={messages}
           onComposeDraftRequested={onComposeDraftRequested}
-          userId={userId}
         />
       ) : (
         messages.map((threadMessage) => (
@@ -648,8 +655,8 @@ export const MessageView = ({
                   />
                 }
                 compact
+                mailboxId={mailboxId}
                 message={threadMessage}
-                userId={userId}
               />
             </div>
           </section>

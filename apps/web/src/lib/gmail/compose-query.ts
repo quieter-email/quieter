@@ -6,22 +6,25 @@ import {
   type ComposeSessionState,
 } from "./compose";
 
-export const getComposeSessionQueryKey = (userId: string) => ["compose-session", userId] as const;
+export const getComposeSessionQueryKey = (mailboxId: string) =>
+  ["compose-session", mailboxId] as const;
 
 export const loadComposeSession = (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
 ): ComposeSessionState => {
-  const existing = queryClient.getQueryData<ComposeSessionState>(getComposeSessionQueryKey(userId));
+  const existing = queryClient.getQueryData<ComposeSessionState>(
+    getComposeSessionQueryKey(mailboxId),
+  );
   return existing ? cloneComposeSessionState(existing) : createInitialComposeSessionState();
 };
 
 export const persistComposeSession = async (
   queryClient: QueryClient,
-  userId: string,
+  mailboxId: string,
   session: ComposeSessionState,
 ) => {
-  const queryKey = getComposeSessionQueryKey(userId);
+  const queryKey = getComposeSessionQueryKey(mailboxId);
   queryClient.setQueryData(queryKey, cloneComposeSessionState(session));
   await persistQueryByKey(queryClient, queryKey);
 };

@@ -38,7 +38,7 @@ export type ComposeDialogHandle = {
 };
 
 type ComposeDialogProps = {
-  userId: string | null;
+  mailboxId: string | null;
 };
 
 type ComposeFormValues = z.infer<typeof composeDraftFormValuesSchema>;
@@ -110,7 +110,7 @@ const canSaveComposeFormValues = (values: ComposeFormValues) =>
   composeDraftFormValuesSchema.safeParse(values).success;
 
 export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>(
-  function ComposeDialog({ userId }, ref) {
+  function ComposeDialog({ mailboxId }, ref) {
     const queryClient = useQueryClient();
     const prefersReducedMotion = useReducedMotion();
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -122,7 +122,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
     );
 
     const composeSessionRef = useRef(composeSession);
-    const loadedUserIdRef = useRef("");
+    const loadedMailboxIdRef = useRef("");
     const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const savePromiseRef = useRef<Promise<void> | null>(null);
     const saveQueuedRef = useRef(false);
@@ -195,11 +195,11 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
     };
 
     const persistSession = async (session = composeSessionRef.current) => {
-      if (!userId) {
+      if (!mailboxId) {
         return;
       }
 
-      await persistComposeSession(queryClient, userId, session);
+      await persistComposeSession(queryClient, mailboxId, session);
     };
 
     const buildDraftFromForm = (values: ComposeFormValues): ComposeDraftState => {
@@ -243,7 +243,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
         return composeSessionRef.current.activeDraft;
       }
 
-      if (!userId) {
+      if (!mailboxId) {
         throw new Error("Sign in before composing.");
       }
 
@@ -259,7 +259,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
 
       savePromiseRef.current = (async () => {
         try {
-          const savedDraft = await saveComposeDraft(draftSnapshot);
+          const savedDraft = await saveComposeDraft(mailboxId, draftSnapshot);
           replaceDraftByLocalId(draftSnapshot.localId, savedDraft);
         } catch (error) {
           replaceDraftByLocalId(draftSnapshot.localId, {
@@ -289,7 +289,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
     const scheduleAutosave = () => {
       clearTimeout(autosaveTimerRef.current);
 
-      if (isBusy || !userId) {
+      if (isBusy || !mailboxId) {
         return;
       }
 
@@ -309,7 +309,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
     };
 
     const openComposeDraft = (nextDraft: ComposeDraftState | null) => {
-      if (!userId) {
+      if (!mailboxId) {
         return;
       }
 
@@ -345,7 +345,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
         }
         setComposeSession(savingSession);
 
-        void saveComposeDraft(currentDraft)
+        void saveComposeDraft(mailboxId, currentDraft)
           .then((savedDraft) => replaceDraftByLocalId(localId, savedDraft))
           .catch((error) => {
             replaceDraftByLocalId(localId, {
@@ -358,7 +358,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
     };
 
     const continueLastDraft = async () => {
-      if (!userId || !lastDraft) {
+      if (!mailboxId || !lastDraft) {
         return;
       }
 
@@ -371,7 +371,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
         const currentDraft = buildDraftFromForm(currentValues);
         if (hasComposeDraftContent(currentDraft) && canSaveComposeFormValues(currentValues)) {
           const localId = currentDraft.localId;
-          void saveComposeDraft(currentDraft)
+          void saveComposeDraft(mailboxId, currentDraft)
             .then((savedDraft) => replaceDraftByLocalId(localId, savedDraft))
             .catch((error) => {
               replaceDraftByLocalId(localId, {
@@ -382,7 +382,10 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
             });
         }
 
-        const hydratedDraft = await hydrateComposeDraftRuntime(cloneComposeDraft(lastDraft));
+        const hydratedDraft = await hydrateComposeDraftRuntime(
+          mailboxId,
+          cloneComposeDraft(lastDraft),
+        );
         const nextSession = cloneComposeSessionState(composeSessionRef.current);
         nextSession.activeDraft = hydratedDraft;
         nextSession.lastDraft = hasComposeDraftContent(currentDraft)
@@ -399,6 +402,10 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
     };
 
     const openRequestedDraft = async (nextDraft: ComposeDraftState | null) => {
+      if (!mailboxId) {
+        return;
+      }
+
       if (!nextDraft?.draftId) {
         openComposeDraft(nextDraft);
         return;
@@ -407,7 +414,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
       setTransitionBusy(true);
 
       try {
-        openComposeDraft(await hydrateComposeDraftRuntime(cloneComposeDraft(nextDraft)));
+        openComposeDraft(await hydrateComposeDraftRuntime(mailboxId, cloneComposeDraft(nextDraft)));
       } catch (error) {
         openComposeDraft({
           ...cloneComposeDraft(nextDraft),
@@ -420,7 +427,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
     };
 
     const submitComposeForm = async (values: ComposeFormValues) => {
-      if (!userId) {
+      if (!mailboxId) {
         return;
       }
 
@@ -432,7 +439,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
 
       try {
         const savedDraft = await flushActiveSave();
-        await sendComposeDraft(savedDraft);
+        await sendComposeDraft(mailboxId, savedDraft);
         clearComposeDraftRuntimeFiles(savedDraft);
 
         const clearedSession = cloneComposeSessionState(composeSessionRef.current);
@@ -444,8 +451,8 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
         setDialogOpen(false);
         await persistSession(clearedSession);
         await Promise.all([
-          refreshCachedMailboxQueries(queryClient, userId, "drafts"),
-          refreshCachedMailboxQueries(queryClient, userId, "sent"),
+          refreshCachedMailboxQueries(queryClient, mailboxId, "drafts"),
+          refreshCachedMailboxQueries(queryClient, mailboxId, "sent"),
         ]);
       } catch (error) {
         setActiveDraftErrorMessage(getErrorMessage(error, "Could not send message."));
@@ -455,6 +462,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
     const discardActiveDraft = async () => {
       if (
         transitionBusy ||
+        !mailboxId ||
         activeDraft.saveStatus === "sending" ||
         activeDraft.saveStatus === "saving"
       ) {
@@ -468,7 +476,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
       setComposeSession(nextSession);
 
       try {
-        await deleteComposeDraft(draft);
+        await deleteComposeDraft(mailboxId, draft);
         clearComposeDraftRuntimeFiles(draft);
 
         const clearedSession = cloneComposeSessionState(composeSessionRef.current);
@@ -482,8 +490,8 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
         setShowBcc(false);
         setDialogOpen(false);
         await persistSession(clearedSession);
-        if (userId) {
-          await refreshCachedMailboxQueries(queryClient, userId, "drafts");
+        if (mailboxId) {
+          await refreshCachedMailboxQueries(queryClient, mailboxId, "drafts");
         }
       } catch (error) {
         setActiveDraftErrorMessage(
@@ -506,11 +514,11 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
       try {
         const draft = buildDraftFromForm(getCurrentFormValues());
 
-        if (hasComposeDraftContent(draft) && userId) {
+        if (hasComposeDraftContent(draft) && mailboxId) {
           await flushActiveSave();
           await Promise.all([
             persistSession(),
-            refreshCachedMailboxQueries(queryClient, userId, "drafts"),
+            refreshCachedMailboxQueries(queryClient, mailboxId, "drafts"),
           ]);
         } else {
           await persistSession();
@@ -569,15 +577,15 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
     }));
 
     useEffect(() => {
-      if (!userId || loadedUserIdRef.current === userId) {
+      if (!mailboxId || loadedMailboxIdRef.current === mailboxId) {
         return;
       }
 
-      loadedUserIdRef.current = userId;
-      const loadedSession = loadComposeSession(queryClient, userId);
+      loadedMailboxIdRef.current = mailboxId;
+      const loadedSession = loadComposeSession(queryClient, mailboxId);
       setComposeSession(loadedSession);
       syncComposeDraftIntoForm(loadedSession.activeDraft);
-    }, [queryClient, userId]);
+    }, [mailboxId, queryClient]);
 
     useEffect(() => {
       return () => {
@@ -846,7 +854,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
               <form.Field name="bodyHtml">
                 {(field) => (
                   <ComposeEditor
-                    disabled={isBusy || !userId}
+                    disabled={isBusy || !mailboxId}
                     html={field.state.value}
                     onBlur={() => field.handleBlur()}
                     onChange={({ html, text }) => {
@@ -892,7 +900,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
                 ) : null}
 
                 <Button
-                  disabled={isBusy || !userId}
+                  disabled={isBusy || !mailboxId}
                   size="sm"
                   type="submit"
                   variant={isBusy ? "outline" : "default"}

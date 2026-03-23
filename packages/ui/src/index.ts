@@ -72,6 +72,9 @@ export {
   DropdownMenuItem,
   DropdownMenuPortal,
   DropdownMenuSeparator,
+  DropdownMenuSubmenu,
+  DropdownMenuSubmenuContent,
+  DropdownMenuSubmenuTrigger,
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 export {

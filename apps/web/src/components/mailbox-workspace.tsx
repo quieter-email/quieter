@@ -12,6 +12,7 @@ import { useQueryStates } from "nuqs";
 import { type Dispatch, useEffect, useLayoutEffect, useReducer, useRef } from "react";
 import type { ComposeDraftState } from "~/lib/gmail/compose";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
+import { authClient } from "~/lib/auth";
 import { buildComposeDraftFromSavedDraftMessage } from "~/lib/gmail/compose-actions";
 import {
   type ListMessagesPageResult,
@@ -36,11 +37,13 @@ import {
   moveMessageToTrashInMailbox,
   refreshLoadedMessagesPages,
   syncMessages,
+  untrashMessageInMailbox,
   unmarkThreadAsSpamInMailbox,
   unmarkMessageAsSpamInMailbox,
   updateMessageLabelsInMailbox,
 } from "~/lib/gmail/inbox-query";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
+import { mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { mailboxSearchParams } from "~/lib/search-params";
 import { useTRPC } from "~/lib/trpc";
 import { type ComposeDialogHandle, ComposeDialog } from "./compose-dialog";
@@ -59,6 +62,12 @@ type MailboxWorkspaceProps = {
 type LabelChangeSet = {
   addLabelIds?: string[];
   removeLabelIds?: string[];
+};
+
+type ConnectedMailbox = {
+  id: string;
+  emailAddress: string;
+  displayName: string | null;
 };
 
 type MailboxWorkspaceState = {
@@ -101,6 +110,8 @@ type MailboxWorkspaceAction =
 type MailboxWorkspaceViewProps = {
   activeMailbox: MailboxCategory;
   activeMessageId: string | null;
+  activeOrganizationName: string | null;
+  hasMailbox: boolean;
   onBulkDeleteDrafts: (threads: ThreadListEntry[]) => void;
   onBulkDeletePermanently: (threads: ThreadListEntry[]) => void;
   onBulkMarkAsRead: (threads: ThreadListEntry[]) => void;
@@ -133,12 +144,16 @@ type MailboxWorkspaceViewProps = {
   onRefresh: () => void;
   onSearch: (query: string) => void;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
+  onSelectMailboxId: (mailboxId: string) => void;
+  onUntrash: (messageId: string) => void;
   onUnsubscribe: (messageId: string) => void;
   onUnmarkAsSpam: (messageId: string) => void;
   onUpdateLabels: (messageId: string, changes: LabelChangeSet) => void;
+  selectedMailboxId: string | null;
+  mailboxes: ConnectedMailbox[];
   searchQuery: string;
   selectedMessage: MessageListItem | null;
-  userId: string;
+  mailboxId: string | null;
   user: MailboxWorkspaceProps["user"];
 };
 
@@ -151,7 +166,7 @@ type MailboxActionHandlerArgs = {
   queryClient: QueryClient;
   refreshSearchResultsIfNeeded: () => Promise<void>;
   unsubscribeFromMessageMutation: (messageId: string) => Promise<void>;
-  userId: string;
+  mailboxId: string;
 };
 
 const initialMailboxWorkspaceState: MailboxWorkspaceState = {
@@ -242,7 +257,7 @@ const createMailboxActionHandlers = ({
   queryClient,
   refreshSearchResultsIfNeeded,
   unsubscribeFromMessageMutation,
-  userId,
+  mailboxId,
 }: MailboxActionHandlerArgs) => {
   const isMessageActionPending = (messageId: string | null | undefined) =>
     messageId ? pendingMessageActionIds.has(messageId) : false;
@@ -395,7 +410,7 @@ const createMailboxActionHandlers = ({
     await runMessageAction(messageId, async () => {
       await markMessageAsReadInMailbox(
         queryClient,
-        userId,
+        mailboxId,
         activeMailbox,
         activeSearchQuery,
         messageId,
@@ -407,7 +422,7 @@ const createMailboxActionHandlers = ({
     await runMessageAction(messageId, async () => {
       await markMessageAsUnreadInMailbox(
         queryClient,
-        userId,
+        mailboxId,
         activeMailbox,
         activeSearchQuery,
         messageId,
@@ -419,7 +434,7 @@ const createMailboxActionHandlers = ({
     await runMessageAction(messageId, async () => {
       await markMessageAsSpamInMailbox(
         queryClient,
-        userId,
+        mailboxId,
         activeMailbox,
         activeSearchQuery,
         messageId,
@@ -431,7 +446,7 @@ const createMailboxActionHandlers = ({
     await runThreadAction(threadId, async () => {
       await markThreadAsReadInMailbox(
         queryClient,
-        userId,
+        mailboxId,
         activeMailbox,
         activeSearchQuery,
         threadId,
@@ -443,7 +458,7 @@ const createMailboxActionHandlers = ({
     await runThreadAction(threadId, async () => {
       await markThreadAsUnreadInMailbox(
         queryClient,
-        userId,
+        mailboxId,
         activeMailbox,
         activeSearchQuery,
         threadId,
@@ -455,7 +470,7 @@ const createMailboxActionHandlers = ({
     await runMessageAction(messageId, async () => {
       await updateMessageLabelsInMailbox(
         queryClient,
-        userId,
+        mailboxId,
         activeMailbox,
         activeSearchQuery,
         messageId,
@@ -468,7 +483,19 @@ const createMailboxActionHandlers = ({
     await runMessageAction(messageId, async () => {
       await moveMessageToTrashInMailbox(
         queryClient,
-        userId,
+        mailboxId,
+        activeMailbox,
+        activeSearchQuery,
+        messageId,
+      );
+    });
+  };
+
+  const untrashMessage = async (messageId: string) => {
+    await runMessageAction(messageId, async () => {
+      await untrashMessageInMailbox(
+        queryClient,
+        mailboxId,
         activeMailbox,
         activeSearchQuery,
         messageId,
@@ -486,7 +513,7 @@ const createMailboxActionHandlers = ({
     await runMessageAction(messageId, async () => {
       await unmarkMessageAsSpamInMailbox(
         queryClient,
-        userId,
+        mailboxId,
         activeMailbox,
         activeSearchQuery,
         messageId,
@@ -500,7 +527,7 @@ const createMailboxActionHandlers = ({
     await runMessageAction(message.id, async () => {
       await deleteDraftInMailbox(
         queryClient,
-        userId,
+        mailboxId,
         activeMailbox,
         activeSearchQuery,
         message.id,
@@ -513,7 +540,7 @@ const createMailboxActionHandlers = ({
     await runMessageAction(messageId, async () => {
       await deleteMessagePermanentlyInMailbox(
         queryClient,
-        userId,
+        mailboxId,
         activeMailbox,
         activeSearchQuery,
         messageId,
@@ -534,7 +561,7 @@ const createMailboxActionHandlers = ({
       if (!draftId) return;
       await deleteDraftInMailbox(
         queryClient,
-        userId,
+        mailboxId,
         activeMailbox,
         activeSearchQuery,
         messageId,
@@ -549,7 +576,7 @@ const createMailboxActionHandlers = ({
       async (threadId) => {
         await markThreadAsReadInMailbox(
           queryClient,
-          userId,
+          mailboxId,
           activeMailbox,
           activeSearchQuery,
           threadId,
@@ -564,7 +591,7 @@ const createMailboxActionHandlers = ({
       async (threadId) => {
         await markThreadAsUnreadInMailbox(
           queryClient,
-          userId,
+          mailboxId,
           activeMailbox,
           activeSearchQuery,
           threadId,
@@ -579,7 +606,7 @@ const createMailboxActionHandlers = ({
       async (threadId) => {
         await markThreadAsSpamInMailbox(
           queryClient,
-          userId,
+          mailboxId,
           activeMailbox,
           activeSearchQuery,
           threadId,
@@ -594,7 +621,7 @@ const createMailboxActionHandlers = ({
       async (threadId) => {
         await unmarkThreadAsSpamInMailbox(
           queryClient,
-          userId,
+          mailboxId,
           activeMailbox,
           activeSearchQuery,
           threadId,
@@ -609,7 +636,7 @@ const createMailboxActionHandlers = ({
       async (threadId) => {
         await moveThreadToTrashInMailbox(
           queryClient,
-          userId,
+          mailboxId,
           activeMailbox,
           activeSearchQuery,
           threadId,
@@ -624,7 +651,7 @@ const createMailboxActionHandlers = ({
       async (threadId) => {
         await deleteThreadPermanentlyInMailbox(
           queryClient,
-          userId,
+          mailboxId,
           activeMailbox,
           activeSearchQuery,
           threadId,
@@ -650,6 +677,7 @@ const createMailboxActionHandlers = ({
     markThreadAsUnread,
     moveThreadsToTrash,
     moveMessageToTrash,
+    untrashMessage,
     unsubscribeFromMessage,
     unmarkThreadsAsSpam,
     unmarkMessageAsSpam,
@@ -661,6 +689,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const trpc = useTRPC();
+  const activeOrganizationState = authClient.useActiveOrganization();
   const composeDialogRef = useRef<ComposeDialogHandle | null>(null);
   const [workspaceState, dispatch] = useReducer(
     mailboxWorkspaceReducer,
@@ -668,37 +697,73 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
   );
   const { isManualRefreshing, isWindowActive, pendingMessageActionIds, pendingThreadActionIds } =
     workspaceState;
-  const [{ mailbox: activeMailbox, messageId: activeMessageId, query }, setMailboxQuery] =
-    useQueryStates(mailboxSearchParams, {
-      history: "replace",
-      scroll: false,
-    });
+  const [
+    { mailbox: activeMailbox, mailboxId, messageId: activeMessageId, query },
+    setMailboxQuery,
+  ] = useQueryStates(mailboxSearchParams, {
+    history: "replace",
+    scroll: false,
+  });
   const activeSearchQuery = query.trim();
-  const userId = user.id ?? "";
+  const activeOrganizationId = activeOrganizationState.data?.id ?? null;
+  const activeOrganizationName = activeOrganizationState.data?.name ?? null;
+  const mailboxesQuery = useQuery(mailboxesQueryOptions(activeOrganizationId));
+  const mailboxes = (mailboxesQuery.data?.mailboxes ?? []).map((mailbox) => ({
+    displayName: mailbox.displayName,
+    emailAddress: mailbox.emailAddress,
+    id: mailbox.id,
+  }));
+  const selectedMailbox =
+    mailboxes.find((mailbox) => mailbox.id === mailboxId) ?? mailboxes[0] ?? null;
+  const selectedMailboxId = selectedMailbox?.id ?? null;
 
-  const unsubscribeMutationOptions = trpc.gmail.unsubscribeFromMessage.mutationOptions();
+  const unsubscribeMutationOptions = trpc.mail.unsubscribeFromMessage.mutationOptions();
   const unsubscribeMutation = useMutation(unsubscribeMutationOptions);
 
   const messagesQuery = useInfiniteQuery(
-    messagesQueryOptions(userId, activeMailbox, activeSearchQuery),
+    messagesQueryOptions(
+      selectedMailboxId ?? "",
+      activeMailbox,
+      activeSearchQuery,
+      Boolean(selectedMailboxId),
+    ),
   );
   const hasLoadedMessages = Boolean(messagesQuery.data?.pages.length);
   const isLiveSyncEnabled =
     pathname === "/" &&
+    Boolean(selectedMailboxId) &&
     activeMailbox !== "drafts" &&
     activeSearchQuery.length === 0 &&
     isWindowActive &&
     hasLoadedMessages &&
     !isManualRefreshing;
   const syncQuery = useQuery(
-    liveSyncQueryOptions(queryClient, userId, activeMailbox, activeSearchQuery, isLiveSyncEnabled),
+    liveSyncQueryOptions(
+      queryClient,
+      selectedMailboxId ?? "",
+      activeMailbox,
+      activeSearchQuery,
+      isLiveSyncEnabled,
+    ),
   );
 
   const flattenedMessages = messagesQuery.data?.pages.flatMap((page) => page.messages) ?? [];
 
   const refreshMessages = async () => {
-    const liveSyncQueryKey = getLiveSyncQueryKey(userId, activeMailbox, activeSearchQuery);
-    const messagesQueryKey = getMessagesQueryKey(userId, activeMailbox, activeSearchQuery);
+    if (!selectedMailboxId) {
+      return;
+    }
+
+    const liveSyncQueryKey = getLiveSyncQueryKey(
+      selectedMailboxId,
+      activeMailbox,
+      activeSearchQuery,
+    );
+    const messagesQueryKey = getMessagesQueryKey(
+      selectedMailboxId,
+      activeMailbox,
+      activeSearchQuery,
+    );
 
     await queryClient.cancelQueries({ queryKey: liveSyncQueryKey });
     await queryClient.cancelQueries({ queryKey: messagesQueryKey });
@@ -708,7 +773,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       value: true,
     });
     try {
-      await syncMessages(queryClient, userId, activeMailbox, activeSearchQuery);
+      await syncMessages(queryClient, selectedMailboxId, activeMailbox, activeSearchQuery);
     } finally {
       dispatch({
         type: "manual-refresh/set",
@@ -718,8 +783,13 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
   };
 
   const refreshSearchResultsIfNeeded = async () => {
-    if (activeSearchQuery.length === 0) return;
-    await refreshLoadedMessagesPages(queryClient, userId, activeMailbox, activeSearchQuery);
+    if (!selectedMailboxId || activeSearchQuery.length === 0) return;
+    await refreshLoadedMessagesPages(
+      queryClient,
+      selectedMailboxId,
+      activeMailbox,
+      activeSearchQuery,
+    );
   };
 
   let selectedMessage: MessageListItem | null = null;
@@ -753,7 +823,20 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
   }, []);
 
   useLayoutEffect(() => {
+    const normalizedMailboxId = mailboxId?.trim() || null;
+    if (normalizedMailboxId === selectedMailboxId) {
+      return;
+    }
+
+    void setMailboxQuery({
+      mailboxId: selectedMailboxId,
+      messageId: null,
+    });
+  }, [mailboxId, selectedMailboxId, setMailboxQuery]);
+
+  useLayoutEffect(() => {
     if (
+      !selectedMailboxId ||
       !activeMessageId ||
       messagesQuery.isPending ||
       !messagesQuery.data?.pages.length ||
@@ -788,6 +871,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     markThreadAsUnread,
     moveThreadsToTrash,
     moveMessageToTrash,
+    untrashMessage,
     unsubscribeFromMessage,
     unmarkThreadsAsSpam,
     unmarkMessageAsSpam,
@@ -801,9 +885,13 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     queryClient,
     refreshSearchResultsIfNeeded,
     unsubscribeFromMessageMutation: async (messageId) => {
-      await unsubscribeMutation.mutateAsync({ messageId });
+      if (!selectedMailboxId) {
+        return;
+      }
+
+      await unsubscribeMutation.mutateAsync({ mailboxId: selectedMailboxId, messageId });
     },
-    userId,
+    mailboxId: selectedMailboxId ?? "",
   });
 
   const openDraft = (message: MessageListItem) => {
@@ -824,13 +912,23 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       return;
     }
 
-    if (activeMessageId === messageId) return;
     const threadId = flattenedMessages.find((message) => message.id === messageId)?.threadId;
+    const activeThreadId = activeMessageId
+      ? flattenedMessages.find((message) => message.id === activeMessageId)?.threadId
+      : null;
+    const isActiveThread = Boolean(threadId) && activeThreadId === threadId;
+
+    if ((activeMessageId === messageId || isActiveThread) && activeMessageId) {
+      void setMailboxQuery({ messageId: null });
+      return;
+    }
 
     void setMailboxQuery({ messageId });
 
-    if (threadId) {
-      void queryClient.prefetchQuery(getThreadWithDetailsOptions(userId, activeMailbox, threadId));
+    if (threadId && selectedMailboxId) {
+      void queryClient.prefetchQuery(
+        getThreadWithDetailsOptions(selectedMailboxId, activeMailbox, threadId),
+      );
     }
   };
 
@@ -873,20 +971,24 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     (messagesQuery.isRefetching && !messagesQuery.isFetchingNextPage);
 
   return {
-    composeDialogKey: user.id ?? "signed-out",
+    composeDialogKey: selectedMailboxId ?? activeOrganizationId ?? user.id ?? "signed-out",
     composeDialogRef,
-    composeDialogUserId: user.id ?? null,
+    composeDialogMailboxId: selectedMailboxId,
     viewProps: {
       activeMailbox,
       activeMessageId,
+      activeOrganizationName,
       error: messagesQuery.error ?? null,
       hasNextPage: Boolean(messagesQuery.hasNextPage),
+      hasMailbox: Boolean(selectedMailboxId),
       isFetchingNextPage: messagesQuery.isFetchingNextPage,
       isMessageActionPending,
       isMessagesError: messagesQuery.isError,
       isMessagesPending: messagesQuery.isPending,
       isRefreshing,
       isThreadActionPending,
+      mailboxId: selectedMailboxId,
+      mailboxes,
       messages: messagesQuery.data?.pages ?? [],
       onActivateMessage: activateMessage,
       onBulkDeleteDrafts: (threads) => {
@@ -947,6 +1049,16 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       },
       onSearch: applySearch,
       onSelectMailbox: selectMailbox,
+      onSelectMailboxId: (nextMailboxId) => {
+        if (nextMailboxId === selectedMailboxId) {
+          return;
+        }
+
+        void setMailboxQuery({ mailboxId: nextMailboxId, messageId: null });
+      },
+      onUntrash: (messageId) => {
+        void untrashMessage(messageId);
+      },
       onUnmarkAsSpam: (messageId) => {
         void unmarkMessageAsSpam(messageId);
       },
@@ -958,20 +1070,24 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       },
       searchQuery: activeSearchQuery,
       selectedMessage,
+      selectedMailboxId,
       user,
-      userId,
     } satisfies MailboxWorkspaceViewProps,
   };
 };
 
 export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
-  const { composeDialogKey, composeDialogRef, composeDialogUserId, viewProps } =
+  const { composeDialogKey, composeDialogMailboxId, composeDialogRef, viewProps } =
     useMailboxWorkspaceModel(user);
 
   return (
     <>
       <MailboxWorkspaceView {...viewProps} />
-      <ComposeDialog key={composeDialogKey} ref={composeDialogRef} userId={composeDialogUserId} />
+      <ComposeDialog
+        key={composeDialogKey}
+        mailboxId={composeDialogMailboxId}
+        ref={composeDialogRef}
+      />
       <LogoDevFooter />
     </>
   );
@@ -980,6 +1096,8 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
 const MailboxWorkspaceView = ({
   activeMailbox,
   activeMessageId,
+  activeOrganizationName,
+  hasMailbox,
   onBulkDeleteDrafts,
   onBulkDeletePermanently,
   onBulkMarkAsRead,
@@ -1012,13 +1130,16 @@ const MailboxWorkspaceView = ({
   onRefresh,
   onSearch,
   onSelectMailbox,
+  onSelectMailboxId,
+  onUntrash,
   onUnsubscribe,
   onUnmarkAsSpam,
   onUpdateLabels,
+  mailboxId,
+  mailboxes,
   searchQuery,
   selectedMessage,
-  userId,
-  user,
+  selectedMailboxId,
 }: MailboxWorkspaceViewProps) => {
   return (
     <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-background text-foreground">
@@ -1026,75 +1147,99 @@ const MailboxWorkspaceView = ({
         <div className="pointer-events-none absolute inset-0" />
 
         <MailSidebar
+          activeOrganizationName={activeOrganizationName}
+          mailboxes={mailboxes}
           onComposeNewMail={onComposeNewMail}
           onSelectMailbox={onSelectMailbox}
+          onSelectMailboxId={onSelectMailboxId}
           selectedMailbox={activeMailbox}
-          user={user}
+          selectedMailboxId={selectedMailboxId}
         />
 
         <div className="relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
-          <section className="flex min-h-0 min-w-0 flex-col border-r border-border bg-background-light">
-            <MessageList
-              activeMailbox={activeMailbox}
-              activeMessageId={activeMessageId}
-              isThreadActionPending={isThreadActionPending}
-              onBulkDeleteDrafts={onBulkDeleteDrafts}
-              onBulkDeletePermanently={onBulkDeletePermanently}
-              onBulkMarkAsRead={onBulkMarkAsRead}
-              onBulkMarkAsSpam={onBulkMarkAsSpam}
-              onBulkMarkAsUnread={onBulkMarkAsUnread}
-              onBulkMoveToTrash={onBulkMoveToTrash}
-              onBulkUnmarkAsSpam={onBulkUnmarkAsSpam}
-              error={error}
-              hasNextPage={hasNextPage}
-              isError={isMessagesError}
-              isFetchingNextPage={isFetchingNextPage}
-              onDeleteDraft={onDeleteDraft}
-              isMessageActionPending={isMessageActionPending}
-              isPending={isMessagesPending}
-              isRefreshing={isRefreshing}
-              messages={messages}
-              onActivateMessage={onActivateMessage}
-              onDeletePermanently={onDeletePermanently}
-              onLoadMore={onLoadMore}
-              onMarkAsRead={onMarkAsRead}
-              onMarkAsSpam={onMarkAsSpam}
-              onMarkAsUnread={onMarkAsUnread}
-              onMoveToTrash={onMoveToTrash}
-              onOpenDraft={onOpenDraft}
-              onRefresh={onRefresh}
-              onSearch={onSearch}
-              onUnsubscribe={onUnsubscribe}
-              onUnmarkAsSpam={onUnmarkAsSpam}
-              onUpdateLabels={onUpdateLabels}
-              searchQuery={searchQuery}
-              userId={userId}
-            />
-          </section>
+          {hasMailbox && mailboxId ? (
+            <>
+              <section className="flex min-h-0 min-w-0 flex-col border-r border-border bg-background-light">
+                <MessageList
+                  activeMailbox={activeMailbox}
+                  activeMessageId={activeMessageId}
+                  isThreadActionPending={isThreadActionPending}
+                  mailboxId={mailboxId}
+                  onBulkDeleteDrafts={onBulkDeleteDrafts}
+                  onBulkDeletePermanently={onBulkDeletePermanently}
+                  onBulkMarkAsRead={onBulkMarkAsRead}
+                  onBulkMarkAsSpam={onBulkMarkAsSpam}
+                  onBulkMarkAsUnread={onBulkMarkAsUnread}
+                  onBulkMoveToTrash={onBulkMoveToTrash}
+                  onBulkUnmarkAsSpam={onBulkUnmarkAsSpam}
+                  error={error}
+                  hasNextPage={hasNextPage}
+                  isError={isMessagesError}
+                  isFetchingNextPage={isFetchingNextPage}
+                  onDeleteDraft={onDeleteDraft}
+                  isMessageActionPending={isMessageActionPending}
+                  isPending={isMessagesPending}
+                  isRefreshing={isRefreshing}
+                  messages={messages}
+                  onActivateMessage={onActivateMessage}
+                  onDeletePermanently={onDeletePermanently}
+                  onLoadMore={onLoadMore}
+                  onMarkAsRead={onMarkAsRead}
+                  onMarkAsSpam={onMarkAsSpam}
+                  onMarkAsUnread={onMarkAsUnread}
+                  onMoveToTrash={onMoveToTrash}
+                  onOpenDraft={onOpenDraft}
+                  onRefresh={onRefresh}
+                  onSearch={onSearch}
+                  onUntrash={onUntrash}
+                  onUnsubscribe={onUnsubscribe}
+                  onUnmarkAsSpam={onUnmarkAsSpam}
+                  onUpdateLabels={onUpdateLabels}
+                  searchQuery={searchQuery}
+                />
+              </section>
 
-          <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-background">
-            <MessageDetail
-              activeMailbox={activeMailbox}
-              currentUserEmail={user.email ?? null}
-              isActionPending={
-                isMessageActionPending(selectedMessage?.id) ||
-                isThreadActionPending(selectedMessage?.threadId)
-              }
-              onComposeDraftRequested={onComposeDraftRequested}
-              onDeletePermanently={onDeletePermanently}
-              onMarkAsRead={onMarkAsRead}
-              onMarkAsSpam={onMarkAsSpam}
-              onMarkAsUnread={onMarkAsUnread}
-              onMarkThreadAsRead={onMarkThreadAsRead}
-              onMarkThreadAsUnread={onMarkThreadAsUnread}
-              onMoveToTrash={onMoveToTrash}
-              onUnsubscribe={onUnsubscribe}
-              onUnmarkAsSpam={onUnmarkAsSpam}
-              onUpdateLabels={onUpdateLabels}
-              selectedMessage={selectedMessage}
-              userId={userId}
-            />
-          </div>
+              <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-background">
+                <MessageDetail
+                  activeMailbox={activeMailbox}
+                  currentUserEmail={
+                    mailboxes.find((mailbox) => mailbox.id === mailboxId)?.emailAddress ?? null
+                  }
+                  isActionPending={
+                    isMessageActionPending(selectedMessage?.id) ||
+                    isThreadActionPending(selectedMessage?.threadId)
+                  }
+                  mailboxId={mailboxId}
+                  onComposeDraftRequested={onComposeDraftRequested}
+                  onDeletePermanently={onDeletePermanently}
+                  onMarkAsRead={onMarkAsRead}
+                  onMarkAsSpam={onMarkAsSpam}
+                  onMarkAsUnread={onMarkAsUnread}
+                  onMarkThreadAsRead={onMarkThreadAsRead}
+                  onMarkThreadAsUnread={onMarkThreadAsUnread}
+                  onMoveToTrash={onMoveToTrash}
+                  onUntrash={onUntrash}
+                  onUnsubscribe={onUnsubscribe}
+                  onUnmarkAsSpam={onUnmarkAsSpam}
+                  onUpdateLabels={onUpdateLabels}
+                  selectedMessage={selectedMessage}
+                />
+              </div>
+            </>
+          ) : (
+            <section className="flex min-h-0 flex-1 items-center justify-center bg-background-light px-8">
+              <div className="max-w-md space-y-3 text-center">
+                <h1 className="text-lg font-semibold tracking-tight text-foreground">
+                  No mailboxes in this organization
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  {activeOrganizationName
+                    ? `${activeOrganizationName} does not have a connected mailbox yet.`
+                    : "This organization does not have a connected mailbox yet."}
+                </p>
+              </div>
+            </section>
+          )}
         </div>
       </div>
     </main>

@@ -3,6 +3,7 @@ export {
   account,
   authRelations,
   invitation,
+  mailbox,
   member,
   organization,
   passkey,

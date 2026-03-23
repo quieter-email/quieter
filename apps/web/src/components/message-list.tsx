@@ -42,7 +42,7 @@ import { MessageRow } from "./message-row";
 type MessageListProps = {
   activeMailbox: MailboxCategory;
   activeMessageId?: string | null;
-  userId: string;
+  mailboxId: string;
   onBulkDeleteDrafts: (threads: ThreadListEntry[]) => void | Promise<void>;
   onBulkDeletePermanently: (threads: ThreadListEntry[]) => void | Promise<void>;
   onBulkMarkAsRead: (threads: ThreadListEntry[]) => void | Promise<void>;
@@ -70,6 +70,7 @@ type MessageListProps = {
   onOpenDraft: (message: MessageListItem) => void | Promise<void>;
   onRefresh: () => void | Promise<void>;
   onSearch: (query: string) => void;
+  onUntrash: (messageId: string) => void | Promise<void>;
   onUnsubscribe: (messageId: string) => void | Promise<void>;
   onUnmarkAsSpam: (messageId: string) => void | Promise<void>;
   onUpdateLabels: (
@@ -106,7 +107,7 @@ type MessageListScrollPaneProps = Omit<
   scrollRef: RefObject<HTMLDivElement | null>;
   selectedThreadIds: ReadonlySet<string>;
   threadedMessages: ThreadListEntry[];
-  userId: string;
+  mailboxId: string;
 };
 
 const buildDraftListEntry = (message: MessageListItem): ThreadListEntry => ({
@@ -248,13 +249,14 @@ const MessageListScrollPane = ({
   onOpenDraft,
   onThreadPress,
   onThreadSelectionPress,
+  onUntrash,
   onUnsubscribe,
   onUnmarkAsSpam,
   onUpdateLabels,
   selectedThreadIds,
   searchQuery,
   threadedMessages,
-  userId,
+  mailboxId,
 }: MessageListScrollPaneProps) => {
   const hasViewportAutoPrefetchedRef = useRef(false);
   const flattenedMessages = useMemo(() => messages.flatMap((page) => page.messages), [messages]);
@@ -356,6 +358,7 @@ const MessageListScrollPane = ({
                 onOpenDraft={onOpenDraft}
                 onPress={onThreadPress}
                 onSelectionPress={onThreadSelectionPress}
+                onUntrash={onUntrash}
                 onUnsubscribe={onUnsubscribe}
                 onUnmarkAsSpam={onUnmarkAsSpam}
                 onUpdateLabels={onUpdateLabels}
@@ -363,7 +366,7 @@ const MessageListScrollPane = ({
                   transform: `translateY(${virtualItem.start}px)`,
                 }}
                 thread={thread}
-                userId={userId}
+                mailboxId={mailboxId}
               />
             ) : null;
           })}
@@ -716,7 +719,7 @@ const useMessageListSelection = ({
 export const MessageList = ({
   activeMailbox,
   activeMessageId,
-  userId,
+  mailboxId,
   onBulkDeleteDrafts,
   onBulkDeletePermanently,
   onBulkMarkAsRead,
@@ -745,6 +748,7 @@ export const MessageList = ({
   onOpenDraft,
   onRefresh,
   onUpdateLabels,
+  onUntrash,
   onUnsubscribe,
   onUnmarkAsSpam,
   searchQuery,
@@ -907,11 +911,11 @@ export const MessageList = ({
       ) : (
         <MessageListSearch
           isRefreshing={isRefreshing}
+          mailboxId={mailboxId}
           onRefresh={onRefresh}
           onScrollToTop={scrollListToTop}
           onSearch={onSearch}
           searchQuery={searchQuery}
-          userId={userId}
         />
       )}
 
@@ -943,13 +947,14 @@ export const MessageList = ({
         onSearch={onSearch}
         onThreadPress={handleThreadPress}
         onThreadSelectionPress={handleThreadSelectionPress}
+        onUntrash={onUntrash}
         onUnsubscribe={onUnsubscribe}
         onUnmarkAsSpam={onUnmarkAsSpam}
         onUpdateLabels={onUpdateLabels}
         selectedThreadIds={selectedThreadIds}
         searchQuery={searchQuery}
         threadedMessages={threadedMessages}
-        userId={userId}
+        mailboxId={mailboxId}
       />
     </div>
   );

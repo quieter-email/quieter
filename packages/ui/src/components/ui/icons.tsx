@@ -34,6 +34,18 @@ export const ChevronDownIcon = (props: SvgIconProps) => (
   </SvgIcon>
 );
 
+export const ChevronRightIcon = (props: SvgIconProps) => (
+  <SvgIcon {...props}>
+    <path
+      d="m6 4 4 4-4 4"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.5"
+    />
+  </SvgIcon>
+);
+
 export const ChevronUpIcon = (props: SvgIconProps) => (
   <SvgIcon {...props}>
     <path

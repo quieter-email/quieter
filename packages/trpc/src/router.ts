@@ -1,7 +1,7 @@
-import { auth } from "@quietr/auth";
+import { auth, ensureUserOrganizationState } from "@quietr/auth";
 import { getAuthEmailPreview } from "@quietr/auth/email-placeholder";
 import { getAuthUserStatus } from "@quietr/auth/user-status";
-import { TRPCError, initTRPC } from "@trpc/server";
+import { initTRPC, TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { TrpcContext } from "./context";
 import {
@@ -22,12 +22,12 @@ import {
   extractListUnsubscribeMailto,
   getDraft,
   getGmailMessageMetadata,
+  getMailboxSyncDelta,
   getMessageAttachment,
   getMessageInspector,
-  getMailboxSyncDelta,
   getThreadWithDetails,
-  listLabels,
   listDraftsWithDetails,
+  listLabels,
   listMessagesWithDetails,
   markMessageAsRead,
   markMessageAsUnread,
@@ -37,11 +37,18 @@ import {
   moveThreadToTrash,
   sendDraft,
   sendRawMessage,
+  untrashMessage,
   updateDraft,
   updateMessageLabels,
   updateThreadLabels,
   type MailboxCategory,
 } from "./gmail-service";
+import {
+  disconnectPersonalGmailMailbox,
+  getAuthorizedGmailMailbox,
+  listMailboxesForOrganization,
+  syncPersonalGmailMailboxes,
+} from "./mailbox-service";
 
 const t = initTRPC.context<TrpcContext>().create();
 const publicProcedure = t.procedure;
@@ -59,6 +66,8 @@ const historySyncMailboxCategorySchema = z.enum(["inbox", "spam", "sent", "trash
 const authEmailInputSchema = z.object({
   email: z.string().trim().email(),
 });
+
+const mailboxIdSchema = z.string().trim().min(1);
 
 type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
 
@@ -320,40 +329,38 @@ const parseDraftMessage = (draft: Awaited<ReturnType<typeof getDraft>>) => {
   };
 };
 
-const getGoogleAccessToken = async (ctx: TrpcContext) => {
-  const response = await auth.api.getAccessToken({
-    body: {
-      providerId: "google",
-    },
-    headers: ctx.req.headers,
-  });
-
-  const accessToken = response?.accessToken;
-  if (!accessToken) {
-    throw new TRPCError({
-      code: "UNAUTHORIZED",
-      message: "Google account is not linked or Gmail access has not been granted.",
-    });
-  }
-
-  return accessToken;
-};
-
 const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
   const session = await auth.api.getSession({ headers: ctx.req.headers });
-  const userId = session?.user?.id;
 
-  if (!userId) {
+  if (!session?.user || !session.session) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
+
+  const organizationState = await ensureUserOrganizationState(session.user, {
+    activeOrganizationId: session.session.activeOrganizationId ?? null,
+    sessionToken: session.session.token,
+  });
 
   return next({
     ctx: {
       ...ctx,
-      userId,
+      activeOrganizationId: organizationState.activeOrganizationId,
+      userId: session.user.id,
     },
   });
 });
+
+const getAuthorizedGmailAccess = async (ctx: {
+  activeOrganizationId: string;
+  mailboxId: string;
+  req: Request;
+}) => {
+  return await getAuthorizedGmailMailbox({
+    activeOrganizationId: ctx.activeOrganizationId,
+    headers: ctx.req.headers,
+    mailboxId: ctx.mailboxId,
+  });
+};
 
 export const appRouter = t.router({
   auth: t.router({
@@ -364,10 +371,39 @@ export const appRouter = t.router({
       return await getAuthUserStatus(input.email);
     }),
   }),
-  gmail: t.router({
+  mail: t.router({
+    listMailboxesForActiveOrganization: protectedProcedure.query(async ({ ctx }) => {
+      return await listMailboxesForOrganization({
+        activeOrganizationId: ctx.activeOrganizationId,
+        headers: ctx.req.headers,
+        userId: ctx.userId,
+      });
+    }),
+    syncPersonalMailboxes: protectedProcedure.mutation(async ({ ctx }) => {
+      return await syncPersonalGmailMailboxes({
+        activeOrganizationId: ctx.activeOrganizationId,
+        headers: ctx.req.headers,
+        userId: ctx.userId,
+      });
+    }),
+    disconnectMailbox: protectedProcedure
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        return await disconnectPersonalGmailMailbox({
+          activeOrganizationId: ctx.activeOrganizationId,
+          headers: ctx.req.headers,
+          mailboxId: input.mailboxId,
+          userId: ctx.userId,
+        });
+      }),
     listMessages: protectedProcedure
       .input(
         z.object({
+          mailboxId: mailboxIdSchema,
           category: mailboxCategorySchema,
           pageToken: z.string().optional(),
           maxResults: z.number().int().positive().max(100).optional(),
@@ -375,86 +411,172 @@ export const appRouter = t.router({
         }),
       )
       .query(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
-        const result =
-          input.category === "drafts"
-            ? await listDraftsWithDetails(accessToken, {
-                pageToken: input.pageToken,
-                maxResults: input.maxResults,
-                query: input.query?.trim() || undefined,
-              })
-            : await listMessagesWithDetails(accessToken, {
-                mailbox: input.category,
-                pageToken: input.pageToken,
-                maxResults: input.maxResults,
-                query: input.query?.trim() || undefined,
-              });
-        return result;
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
+
+        return input.category === "drafts"
+          ? await listDraftsWithDetails(accessToken, {
+              pageToken: input.pageToken,
+              maxResults: input.maxResults,
+              query: input.query?.trim() || undefined,
+            })
+          : await listMessagesWithDetails(accessToken, {
+              mailbox: input.category,
+              pageToken: input.pageToken,
+              maxResults: input.maxResults,
+              query: input.query?.trim() || undefined,
+            });
       }),
     getMailboxSyncDelta: protectedProcedure
       .input(
         z.object({
+          mailboxId: mailboxIdSchema,
           category: historySyncMailboxCategorySchema,
           startHistoryId: z.string().min(1),
         }),
       )
       .query(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
+
         return await getMailboxSyncDelta(accessToken, {
           mailbox: input.category,
           startHistoryId: input.startHistoryId,
         });
       }),
     getThread: protectedProcedure
-      .input(z.object({ threadId: z.string() }))
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          threadId: z.string(),
+        }),
+      )
       .query(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
+
         return await getThreadWithDetails(accessToken, input.threadId);
       }),
     getMessageInspector: protectedProcedure
-      .input(z.object({ messageId: z.string() }))
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          messageId: z.string(),
+        }),
+      )
       .query(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
+
         return await getMessageInspector(accessToken, input.messageId);
       }),
-    listLabels: protectedProcedure.query(async ({ ctx }) => {
-      const accessToken = await getGoogleAccessToken(ctx);
-      return await listLabels(accessToken);
-    }),
+    listLabels: protectedProcedure
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+        }),
+      )
+      .query(async ({ ctx, input }) => {
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
+
+        return await listLabels(accessToken);
+      }),
     markMessageAsRead: protectedProcedure
-      .input(z.object({ messageId: z.string() }))
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          messageId: z.string(),
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
+
         return await markMessageAsRead(accessToken, input.messageId);
       }),
     markMessageAsUnread: protectedProcedure
-      .input(z.object({ messageId: z.string() }))
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          messageId: z.string(),
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
+
         return await markMessageAsUnread(accessToken, input.messageId);
       }),
     markThreadAsRead: protectedProcedure
-      .input(z.object({ threadId: z.string() }))
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          threadId: z.string(),
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
+
         return await markThreadAsRead(accessToken, input.threadId);
       }),
     markThreadAsUnread: protectedProcedure
-      .input(z.object({ threadId: z.string() }))
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          threadId: z.string(),
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
+
         return await markThreadAsUnread(accessToken, input.threadId);
       }),
     updateThreadLabels: protectedProcedure
       .input(
         z.object({
+          mailboxId: mailboxIdSchema,
           threadId: z.string(),
           addLabelIds: z.array(z.string()).optional(),
           removeLabelIds: z.array(z.string()).optional(),
         }),
       )
       .mutation(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
+
         return await updateThreadLabels(accessToken, input.threadId, {
           addLabelIds: input.addLabelIds,
           removeLabelIds: input.removeLabelIds,
@@ -463,53 +585,133 @@ export const appRouter = t.router({
     updateMessageLabels: protectedProcedure
       .input(
         z.object({
+          mailboxId: mailboxIdSchema,
           messageId: z.string(),
           addLabelIds: z.array(z.string()).optional(),
           removeLabelIds: z.array(z.string()).optional(),
         }),
       )
       .mutation(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
+
         return await updateMessageLabels(accessToken, input.messageId, {
           addLabelIds: input.addLabelIds,
           removeLabelIds: input.removeLabelIds,
         });
       }),
     moveMessageToTrash: protectedProcedure
-      .input(z.object({ messageId: z.string() }))
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          messageId: z.string(),
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
+
         return await moveMessageToTrash(accessToken, input.messageId);
       }),
-    moveThreadToTrash: protectedProcedure
-      .input(z.object({ threadId: z.string() }))
+    untrashMessage: protectedProcedure
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          messageId: z.string(),
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
+
+        return await untrashMessage(accessToken, input.messageId);
+      }),
+    moveThreadToTrash: protectedProcedure
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          threadId: z.string(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
+
         return await moveThreadToTrash(accessToken, input.threadId);
       }),
     deleteMessagePermanently: protectedProcedure
-      .input(z.object({ messageId: z.string() }))
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          messageId: z.string(),
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
+
         return await deleteMessagePermanently(accessToken, input.messageId);
       }),
     deleteThreadPermanently: protectedProcedure
-      .input(z.object({ threadId: z.string() }))
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          threadId: z.string(),
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
+
         return await deleteThreadPermanently(accessToken, input.threadId);
       }),
     loadDraft: protectedProcedure
-      .input(z.object({ draftId: z.string() }))
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          draftId: z.string(),
+        }),
+      )
       .query(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
         const draft = await getDraft(accessToken, input.draftId);
         return parseDraftMessage(draft);
       }),
     saveDraft: protectedProcedure
-      .input(z.object({ draft: composeDraftInputSchema }))
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          draft: composeDraftInputSchema,
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
         const raw = arrayBufferToBase64Url(new TextEncoder().encode(buildMimeMessage(input.draft)));
         const response = input.draft.draftId
           ? await updateDraft(
@@ -531,9 +733,18 @@ export const appRouter = t.router({
         };
       }),
     sendDraft: protectedProcedure
-      .input(z.object({ draft: composeSendDraftInputSchema }))
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          draft: composeSendDraftInputSchema,
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
 
         let draftId = input.draft.draftId ?? null;
         if (!draftId) {
@@ -558,16 +769,34 @@ export const appRouter = t.router({
         return await sendDraft(accessToken, draftId);
       }),
     deleteDraft: protectedProcedure
-      .input(z.object({ draftId: z.string() }))
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          draftId: z.string(),
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
         await deleteDraft(accessToken, input.draftId);
         return { deleted: true };
       }),
     unsubscribeFromMessage: protectedProcedure
-      .input(z.object({ messageId: z.string() }))
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          messageId: z.string(),
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
         const message = await getGmailMessageMetadata(accessToken, input.messageId);
         const unsubscribeMailto = extractListUnsubscribeMailto(
           message.payload?.headers?.find(
@@ -595,12 +824,17 @@ export const appRouter = t.router({
     getAttachment: protectedProcedure
       .input(
         z.object({
+          mailboxId: mailboxIdSchema,
           messageId: z.string(),
           attachmentId: z.string(),
         }),
       )
       .query(async ({ ctx, input }) => {
-        const accessToken = await getGoogleAccessToken(ctx);
+        const { accessToken } = await getAuthorizedGmailAccess({
+          activeOrganizationId: ctx.activeOrganizationId,
+          mailboxId: input.mailboxId,
+          req: ctx.req,
+        });
         const attachment = await getMessageAttachment(
           accessToken,
           input.messageId,

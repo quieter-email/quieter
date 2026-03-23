@@ -1364,6 +1364,27 @@ export const moveMessageToTrash = async (
   return toMessageMetadataUpdate(updated);
 };
 
+export const untrashMessage = async (
+  accessToken: string,
+  messageId: string,
+  signal?: AbortSignal,
+) => {
+  const updated = await requestGmail(
+    accessToken,
+    `/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/untrash`,
+    gmailMessageMutationSchema,
+    {
+      method: "POST",
+      query: {
+        fields: "id,labelIds,historyId",
+      },
+      signal,
+    },
+  );
+
+  return toMessageMetadataUpdate(updated);
+};
+
 export const deleteMessagePermanently = async (
   accessToken: string,
   messageId: string,

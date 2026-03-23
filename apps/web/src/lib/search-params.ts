@@ -1,11 +1,12 @@
 import { createLoader, createSerializer, parseAsString, parseAsStringLiteral } from "nuqs/server";
 
 const mailboxCategories = ["inbox", "spam", "sent", "trash", "drafts"] as const;
-const settingsTabs = ["general", "account", "organization"] as const;
+const settingsTabs = ["general", "account", "organization", "mailboxes"] as const;
 
 export type SettingsTab = (typeof settingsTabs)[number];
 
 export const mailboxSearchParams = {
+  mailboxId: parseAsString,
   mailbox: parseAsStringLiteral(mailboxCategories).withDefault("inbox"),
   messageId: parseAsString,
   query: parseAsString.withDefault(""),

@@ -5,5 +5,22 @@ import { magicLinkClient, organizationClient } from "better-auth/client/plugins"
 import { createAuthClient } from "better-auth/react";
 
 export const authClient = createAuthClient({
-  plugins: [passkeyClient(), organizationClient(), magicLinkClient()],
+  plugins: [
+    passkeyClient(),
+    organizationClient({
+      schema: {
+        organization: {
+          additionalFields: {
+            personalOwnerUserId: {
+              input: false,
+              required: false,
+              returned: true,
+              type: "string",
+            },
+          },
+        },
+      },
+    }),
+    magicLinkClient(),
+  ],
 });

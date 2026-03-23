@@ -11,7 +11,7 @@ import { MessageView } from "./message-view";
 type MessageDetailProps = {
   activeMailbox: MailboxCategory;
   currentUserEmail?: string | null;
-  userId: string;
+  mailboxId: string;
   selectedMessage: MessageListItem | null;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onMarkThreadAsRead?: (threadId: string) => void | Promise<void>;
@@ -24,6 +24,7 @@ type MessageDetailProps = {
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => void | Promise<void>;
   onMoveToTrash?: (messageId: string) => void | Promise<void>;
+  onUntrash?: (messageId: string) => void | Promise<void>;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
   onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
   onDeletePermanently?: (messageId: string) => void | Promise<void>;
@@ -42,11 +43,12 @@ export const MessageDetail = ({
   onMarkThreadAsRead,
   onMarkThreadAsUnread,
   onMoveToTrash,
+  onUntrash,
   onUnsubscribe,
   onUnmarkAsSpam,
   onUpdateLabels,
   selectedMessage,
-  userId,
+  mailboxId,
 }: MessageDetailProps) => {
   const emptyState =
     activeMailbox === "drafts" ? (
@@ -79,8 +81,8 @@ export const MessageDetail = ({
               activeMailbox={activeMailbox}
               currentUserEmail={currentUserEmail}
               isActionPending={isActionPending}
+              mailboxId={mailboxId}
               message={selectedMessage}
-              userId={userId}
               onComposeDraftRequested={onComposeDraftRequested}
               onDeletePermanently={onDeletePermanently}
               onMarkAsRead={onMarkAsRead}
@@ -89,6 +91,7 @@ export const MessageDetail = ({
               onMarkThreadAsRead={onMarkThreadAsRead}
               onMarkThreadAsUnread={onMarkThreadAsUnread}
               onMoveToTrash={onMoveToTrash}
+              onUntrash={onUntrash}
               onUnsubscribe={onUnsubscribe}
               onUnmarkAsSpam={onUnmarkAsSpam}
               onUpdateLabels={onUpdateLabels}

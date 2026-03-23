@@ -1,0 +1,417 @@
+import { auth } from "@quietr/auth";
+import { hasRequiredGoogleScopes } from "@quietr/auth/google-scopes";
+import { db, mailbox, organization } from "@quietr/database";
+import { TRPCError } from "@trpc/server";
+import { and, asc, eq, inArray } from "drizzle-orm";
+import { getGmailProfile } from "./gmail-service";
+
+export const MAILBOX_PROVIDER_GMAIL = "gmail" as const;
+
+export type GoogleScopeRepairTarget = {
+  displayName: string | null;
+  emailAddress: string;
+  isStillMissingScopes: true;
+  mailboxId: string;
+  providerAccountId: string;
+};
+
+export const getActiveOrganization = async (organizationId: string) => {
+  const [activeOrganization] = await db
+    .select({
+      id: organization.id,
+      name: organization.name,
+      personalOwnerUserId: organization.personalOwnerUserId,
+      slug: organization.slug,
+    })
+    .from(organization)
+    .where(eq(organization.id, organizationId))
+    .limit(1);
+
+  if (!activeOrganization) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "The active organization could not be found.",
+    });
+  }
+
+  return activeOrganization;
+};
+
+const listOrganizationMailboxes = async (organizationId: string) => {
+  return await db
+    .select({
+      id: mailbox.id,
+      organizationId: mailbox.organizationId,
+      provider: mailbox.provider,
+      emailAddress: mailbox.emailAddress,
+      displayName: mailbox.displayName,
+      providerAccountId: mailbox.providerAccountId,
+      connectedUserId: mailbox.connectedUserId,
+      createdAt: mailbox.createdAt,
+      updatedAt: mailbox.updatedAt,
+    })
+    .from(mailbox)
+    .where(eq(mailbox.organizationId, organizationId))
+    .orderBy(asc(mailbox.emailAddress));
+};
+
+const resolveGoogleScopeRepairTarget = async (input: {
+  headers: Headers;
+  mailboxes: Awaited<ReturnType<typeof listOrganizationMailboxes>>;
+  preferredMailboxId?: string | null;
+  targetAccountId?: string | null;
+  userId: string;
+}): Promise<GoogleScopeRepairTarget | null> => {
+  const linkedAccounts = await auth.api.listUserAccounts({
+    headers: input.headers,
+  });
+  const missingScopeAccountIds = new Set(
+    linkedAccounts
+      .filter((account) => {
+        return account.providerId === "google" && !hasRequiredGoogleScopes(account.scopes);
+      })
+      .map((account) => account.accountId),
+  );
+  const candidates = input.mailboxes
+    .filter((mailboxRecord) => {
+      return (
+        mailboxRecord.provider === MAILBOX_PROVIDER_GMAIL &&
+        mailboxRecord.connectedUserId === input.userId &&
+        missingScopeAccountIds.has(mailboxRecord.providerAccountId)
+      );
+    })
+    .map((mailboxRecord) => ({
+      displayName: mailboxRecord.displayName,
+      emailAddress: mailboxRecord.emailAddress,
+      isStillMissingScopes: true as const,
+      mailboxId: mailboxRecord.id,
+      providerAccountId: mailboxRecord.providerAccountId,
+    }))
+    .sort((left, right) => left.emailAddress.localeCompare(right.emailAddress));
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  if (input.targetAccountId) {
+    const matchingTarget = candidates.find((candidate) => {
+      return candidate.providerAccountId === input.targetAccountId;
+    });
+
+    if (matchingTarget) {
+      return matchingTarget;
+    }
+  }
+
+  if (input.preferredMailboxId) {
+    const matchingMailbox = candidates.find((candidate) => {
+      return candidate.mailboxId === input.preferredMailboxId;
+    });
+
+    if (matchingMailbox) {
+      return matchingMailbox;
+    }
+  }
+
+  return candidates[0] ?? null;
+};
+
+const getGoogleAccessTokenForLinkedAccount = async (
+  headers: Headers,
+  userId: string,
+  providerAccountId: string,
+) => {
+  const response = await auth.api.getAccessToken({
+    body: {
+      providerId: "google",
+      accountId: providerAccountId,
+      userId,
+    },
+    headers,
+  });
+
+  return response?.accessToken ?? null;
+};
+
+const upsertMailboxRecord = async (input: {
+  connectedUserId: string;
+  displayName: string | null;
+  emailAddress: string;
+  organizationId: string;
+  providerAccountId: string;
+}) => {
+  const now = new Date();
+
+  await db
+    .insert(mailbox)
+    .values({
+      id: crypto.randomUUID(),
+      organizationId: input.organizationId,
+      provider: MAILBOX_PROVIDER_GMAIL,
+      emailAddress: input.emailAddress,
+      displayName: input.displayName,
+      providerAccountId: input.providerAccountId,
+      connectedUserId: input.connectedUserId,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [mailbox.provider, mailbox.providerAccountId],
+      set: {
+        organizationId: input.organizationId,
+        emailAddress: input.emailAddress,
+        displayName: input.displayName,
+        connectedUserId: input.connectedUserId,
+        updatedAt: now,
+      },
+    });
+};
+
+const deleteStalePersonalMailboxes = async (input: {
+  organizationId: string;
+  providerAccountIds: string[];
+  userId: string;
+}) => {
+  const staleMailboxes = await db
+    .select({
+      id: mailbox.id,
+      providerAccountId: mailbox.providerAccountId,
+    })
+    .from(mailbox)
+    .where(
+      and(
+        eq(mailbox.organizationId, input.organizationId),
+        eq(mailbox.connectedUserId, input.userId),
+        eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL),
+      ),
+    );
+
+  const staleMailboxIds = staleMailboxes
+    .filter((linkedMailbox) => !input.providerAccountIds.includes(linkedMailbox.providerAccountId))
+    .map((linkedMailbox) => linkedMailbox.id);
+
+  if (staleMailboxIds.length === 0) {
+    return;
+  }
+
+  await db.delete(mailbox).where(inArray(mailbox.id, staleMailboxIds));
+};
+
+export const syncPersonalGmailMailboxes = async (input: {
+  activeOrganizationId: string;
+  headers: Headers;
+  userId: string;
+}) => {
+  const activeOrganization = await getActiveOrganization(input.activeOrganizationId);
+
+  if (activeOrganization.personalOwnerUserId !== input.userId) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Connected Gmail mailboxes can only be managed in your personal organization.",
+    });
+  }
+
+  const linkedAccounts = await auth.api.listUserAccounts({
+    headers: input.headers,
+  });
+  const googleAccounts = linkedAccounts.filter((account) => account.providerId === "google");
+
+  const syncedAccounts = await Promise.all(
+    googleAccounts.map(async (account) => {
+      const accessToken = await getGoogleAccessTokenForLinkedAccount(
+        input.headers,
+        input.userId,
+        account.accountId,
+      );
+
+      if (!accessToken) {
+        return null;
+      }
+
+      const profile = await getGmailProfile(accessToken);
+      const emailAddress = profile.emailAddress.trim().toLowerCase();
+
+      if (!emailAddress) {
+        return null;
+      }
+
+      await upsertMailboxRecord({
+        connectedUserId: input.userId,
+        displayName: profile.emailAddress,
+        emailAddress,
+        organizationId: activeOrganization.id,
+        providerAccountId: account.accountId,
+      });
+
+      return account.accountId;
+    }),
+  );
+
+  const syncedProviderAccountIds = syncedAccounts.filter(
+    (providerAccountId): providerAccountId is string => Boolean(providerAccountId),
+  );
+
+  await deleteStalePersonalMailboxes({
+    organizationId: activeOrganization.id,
+    providerAccountIds: syncedProviderAccountIds,
+    userId: input.userId,
+  });
+
+  return {
+    mailboxes: await listOrganizationMailboxes(activeOrganization.id),
+    organization: activeOrganization,
+  };
+};
+
+export const getGoogleScopeRepairTarget = async (input: {
+  activeOrganizationId: string;
+  headers: Headers;
+  preferredMailboxId?: string | null;
+  targetAccountId?: string | null;
+  userId: string;
+}) => {
+  const activeOrganization = await getActiveOrganization(input.activeOrganizationId);
+  const organizationMailboxes = await listOrganizationMailboxes(activeOrganization.id);
+
+  return await resolveGoogleScopeRepairTarget({
+    headers: input.headers,
+    mailboxes: organizationMailboxes,
+    preferredMailboxId: input.preferredMailboxId,
+    targetAccountId: input.targetAccountId,
+    userId: input.userId,
+  });
+};
+
+export const listMailboxesForOrganization = async (input: {
+  activeOrganizationId: string;
+  headers: Headers;
+  userId: string;
+}) => {
+  const activeOrganization = await getActiveOrganization(input.activeOrganizationId);
+
+  if (activeOrganization.personalOwnerUserId === input.userId) {
+    const syncedState = await syncPersonalGmailMailboxes(input);
+
+    return {
+      ...syncedState,
+      googleScopeRepairTarget: await resolveGoogleScopeRepairTarget({
+        headers: input.headers,
+        mailboxes: syncedState.mailboxes,
+        userId: input.userId,
+      }),
+    };
+  }
+
+  return {
+    mailboxes: await listOrganizationMailboxes(activeOrganization.id),
+    googleScopeRepairTarget: null,
+    organization: activeOrganization,
+  };
+};
+
+export const getAuthorizedMailbox = async (input: {
+  activeOrganizationId: string;
+  mailboxId: string;
+}) => {
+  const [selectedMailbox] = await db
+    .select({
+      id: mailbox.id,
+      organizationId: mailbox.organizationId,
+      provider: mailbox.provider,
+      emailAddress: mailbox.emailAddress,
+      displayName: mailbox.displayName,
+      providerAccountId: mailbox.providerAccountId,
+      connectedUserId: mailbox.connectedUserId,
+    })
+    .from(mailbox)
+    .where(eq(mailbox.id, input.mailboxId))
+    .limit(1);
+
+  if (!selectedMailbox || selectedMailbox.organizationId !== input.activeOrganizationId) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Mailbox not found in the active organization.",
+    });
+  }
+
+  return selectedMailbox;
+};
+
+export const getAuthorizedGmailMailbox = async (input: {
+  activeOrganizationId: string;
+  headers: Headers;
+  mailboxId: string;
+}) => {
+  const selectedMailbox = await getAuthorizedMailbox({
+    activeOrganizationId: input.activeOrganizationId,
+    mailboxId: input.mailboxId,
+  });
+
+  if (selectedMailbox.provider !== MAILBOX_PROVIDER_GMAIL) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "This mailbox provider is not supported yet.",
+    });
+  }
+
+  const accessToken = await getGoogleAccessTokenForLinkedAccount(
+    input.headers,
+    selectedMailbox.connectedUserId,
+    selectedMailbox.providerAccountId,
+  );
+
+  if (!accessToken) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Google account is not linked or Gmail access has not been granted.",
+    });
+  }
+
+  return {
+    accessToken,
+    mailbox: selectedMailbox,
+  };
+};
+
+export const disconnectPersonalGmailMailbox = async (input: {
+  activeOrganizationId: string;
+  headers: Headers;
+  mailboxId: string;
+  userId: string;
+}) => {
+  const activeOrganization = await getActiveOrganization(input.activeOrganizationId);
+
+  if (activeOrganization.personalOwnerUserId !== input.userId) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Only your personal organization can disconnect Gmail mailboxes.",
+    });
+  }
+
+  const selectedMailbox = await getAuthorizedMailbox({
+    activeOrganizationId: input.activeOrganizationId,
+    mailboxId: input.mailboxId,
+  });
+
+  if (selectedMailbox.provider !== MAILBOX_PROVIDER_GMAIL) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "This mailbox provider is not supported yet.",
+    });
+  }
+
+  await auth.api.unlinkAccount({
+    body: {
+      providerId: "google",
+      accountId: selectedMailbox.providerAccountId,
+    },
+    headers: input.headers,
+  });
+
+  await db.delete(mailbox).where(eq(mailbox.id, selectedMailbox.id));
+
+  return {
+    disconnected: true,
+    mailboxId: selectedMailbox.id,
+  };
+};

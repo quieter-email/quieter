@@ -1436,26 +1436,14 @@ const PendingInvitationsSection = () => {
   };
 
   if (userInvitationsQuery.isPending) {
-    return (
-      <div className="space-y-3">
-        <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
-          Invitations
-        </p>
-        <p className="text-sm text-muted-foreground">Loading invitations...</p>
-      </div>
-    );
+    return <p className="text-sm text-muted-foreground">Loading invitations...</p>;
   }
 
   if (userInvitationsQuery.error) {
     return (
-      <div className="space-y-3">
-        <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
-          Invitations
-        </p>
-        <p className="text-sm text-destructive">
-          {getErrorMessage(userInvitationsQuery.error, "Could not load invitations.")}
-        </p>
-      </div>
+      <p className="text-sm text-destructive">
+        {getErrorMessage(userInvitationsQuery.error, "Could not load invitations.")}
+      </p>
     );
   }
 
@@ -1464,39 +1452,15 @@ const PendingInvitationsSection = () => {
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
-          Invitations
-        </p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Review pending invitations before switching or creating another organization.
-        </p>
-      </div>
+    <div>
+      {invitations.map((invitation) => {
+        const isPendingAction =
+          pendingInvitationId === invitation.id &&
+          (acceptInvitationMutation.isPending || rejectInvitationMutation.isPending);
 
-      <div className="divide-y divide-border/70 rounded-xl border border-border/70">
-        {invitations.map((invitation) => {
-          const isPendingAction =
-            pendingInvitationId === invitation.id &&
-            (acceptInvitationMutation.isPending || rejectInvitationMutation.isPending);
-
-          return (
-            <div
-              className="flex flex-col gap-4 px-4 py-4 md:flex-row md:items-center md:justify-between"
-              key={invitation.id}
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {invitation.organizationName}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {formatRoleLabel(invitation.role)} role
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Expires {formatDate(invitation.expiresAt)}
-                </p>
-              </div>
-
+        return (
+          <SettingsRow
+            action={
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   disabled={isPendingAction}
@@ -1529,11 +1493,13 @@ const PendingInvitationsSection = () => {
                   Decline
                 </Button>
               </div>
-            </div>
-          );
-        })}
-      </div>
-
+            }
+            key={invitation.id}
+            label={invitation.organizationName}
+            value={`${formatRoleLabel(invitation.role)} role / expires ${formatDate(invitation.expiresAt)}`}
+          />
+        );
+      })}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </div>
   );
@@ -1578,72 +1544,50 @@ const OrganizationList = ({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
-            Your organizations
-          </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Switch the active organization directly. Newly accepted invitations and newly created
-            organizations use Better Auth's built-in active-organization flow.
-          </p>
-        </div>
+    <div>
+      {organizations.map((organization) => {
+        const isActive = organization.id === activeOrganizationId;
+        const isPending =
+          pendingOrganizationId === organization.id && setActiveOrganizationMutation.isPending;
 
-        <CreateOrganizationDialog />
-      </div>
-
-      <div className="divide-y divide-border/70 rounded-xl border border-border/70">
-        {organizations.map((organization) => {
-          const isActive = organization.id === activeOrganizationId;
-          const isPending =
-            pendingOrganizationId === organization.id && setActiveOrganizationMutation.isPending;
-
-          return (
-            <div
-              className="flex flex-col gap-4 px-4 py-4 md:flex-row md:items-center md:justify-between"
-              key={organization.id}
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">{organization.name}</p>
-                <p className="mt-1 truncate text-sm text-muted-foreground">{organization.slug}</p>
-                {isActive && activeRole ? (
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {formatRoleLabel(activeRole)} role
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                {isActive ? (
-                  <span className="inline-flex h-8 items-center rounded-md border border-border/70 px-3 text-xs font-medium text-foreground">
-                    Active
-                  </span>
-                ) : (
-                  <Button
-                    disabled={isPending}
-                    onClick={() => void handleSetActiveOrganization(organization.id)}
-                    size="sm"
-                    variant="outline"
-                  >
-                    {isPending ? (
-                      <HugeiconsIcon
-                        aria-hidden
-                        className="size-4 animate-spin"
-                        icon={Loading03Icon}
-                      />
-                    ) : (
-                      <HugeiconsIcon aria-hidden className="size-4" icon={UserGroupIcon} />
-                    )}
-                    Set active
-                  </Button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
+        return (
+          <SettingsRow
+            action={
+              isActive ? (
+                <span className="inline-flex h-8 items-center rounded-md border border-border/70 px-3 text-xs font-medium text-foreground">
+                  Active
+                </span>
+              ) : (
+                <Button
+                  disabled={isPending}
+                  onClick={() => void handleSetActiveOrganization(organization.id)}
+                  size="sm"
+                  variant="outline"
+                >
+                  {isPending ? (
+                    <HugeiconsIcon
+                      aria-hidden
+                      className="size-4 animate-spin"
+                      icon={Loading03Icon}
+                    />
+                  ) : (
+                    <HugeiconsIcon aria-hidden className="size-4" icon={UserGroupIcon} />
+                  )}
+                  Set active
+                </Button>
+              )
+            }
+            key={organization.id}
+            label={organization.name}
+            value={[
+              organization.slug,
+              isActive && activeRole ? `${formatRoleLabel(activeRole)} role` : null,
+            ]
+              .filter(Boolean)
+              .join(" / ")}
+          />
+        );
+      })}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </div>
   );
@@ -1702,33 +1646,18 @@ export const OrganizationSettingsPanel = () => {
         .filter(Boolean)
         .join(", ")
     : null;
-  const subtitle = activeOrganization
-    ? [activeOrganization.slug, activeRole ? formatRoleLabel(activeRole) : null, peopleSummary]
-        .filter(Boolean)
-        .join(" / ")
-    : organizationsState.isPending
-      ? "Loading..."
-      : organizations.length > 0
-        ? "Choose an active organization to manage members and settings."
-        : "Create or accept an organization to get started.";
 
   return (
     <TooltipProvider>
-      <div className="space-y-10">
-        <div>
-          <h1 className="text-2xl font-medium tracking-tight text-foreground">Organizations</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>
+      <div className="space-y-6">
+        <div className="flex justify-end">
+          <CreateOrganizationDialog />
         </div>
 
         <PendingInvitationsSection />
 
         {organizationsState.isPending ? (
-          <div className="space-y-3">
-            <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
-              Your organizations
-            </p>
-            <p className="text-sm text-muted-foreground">Loading organizations...</p>
-          </div>
+          <p className="text-sm text-muted-foreground">Loading organizations...</p>
         ) : organizations.length > 0 ? (
           <OrganizationList
             activeOrganizationId={activeOrganization?.id ?? null}
@@ -1736,110 +1665,82 @@ export const OrganizationSettingsPanel = () => {
             organizations={organizations}
           />
         ) : (
-          <div className="space-y-4 rounded-xl border border-dashed border-border/70 p-5">
-            <div>
-              <p className="text-sm font-medium text-foreground">No organizations yet</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Better Auth now owns organization membership and active-organization state directly.
-                Create one here or accept an invitation to start managing it.
-              </p>
-            </div>
-
-            <div>
-              <CreateOrganizationDialog />
-            </div>
-          </div>
+          <p className="text-sm text-muted-foreground">No organizations yet.</p>
         )}
 
         {activeOrganization ? (
           <div>
-            <div className="pb-8">
-              <h2 className="text-xl font-medium tracking-tight text-foreground">
-                {activeOrganization.name}
-              </h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {[activeOrganization.slug, peopleSummary].filter(Boolean).join(" / ")}
-              </p>
-            </div>
-
-            <div>
-              <SettingsRow
-                action={
-                  updateOrganizationReason ? (
-                    <MutedActionButton
-                      icon={<HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />}
-                      label="Edit"
-                      reason={updateOrganizationReason}
-                    />
-                  ) : (
-                    <EditOrganizationDialog activeOrganization={activeOrganization} />
-                  )
-                }
-                label="Details"
-                value={activeOrganization.name}
-              />
-
-              <SettingsRow
-                action={
-                  <ManagePeopleDialog
-                    activeMember={activeMember}
-                    activeOrganization={activeOrganization}
-                    canCancelInvitations={canCancelInvitations}
-                    canInviteMembers={canInviteMembers}
-                    canRemoveMembers={canRemoveMembers}
-                    canUpdateMemberRole={canUpdateMemberRole}
+            <SettingsRow
+              action={
+                updateOrganizationReason ? (
+                  <MutedActionButton
+                    icon={<HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />}
+                    label="Edit"
+                    reason={updateOrganizationReason}
                   />
-                }
-                label="People"
-                value={peopleSummary ?? formatCount(activeOrganization.members.length, "member")}
-              />
+                ) : (
+                  <EditOrganizationDialog activeOrganization={activeOrganization} />
+                )
+              }
+              label="Organization"
+              value={[activeOrganization.name, activeOrganization.slug].filter(Boolean).join(" / ")}
+            />
 
-              <SettingsRow
-                action={
-                  leaveOrganizationReason ? (
-                    <MutedActionButton
-                      icon={<HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />}
-                      label="Leave"
-                      reason={leaveOrganizationReason}
-                    />
-                  ) : (
-                    <LeaveOrganizationDialog
-                      activeOrganization={activeOrganization}
-                      nextOrganizationId={nextOrganizationId}
-                    />
-                  )
-                }
-                label="Leave organization"
-                value={activeRole ? formatRoleLabel(activeRole) : "Current organization"}
-              />
+            <SettingsRow
+              action={
+                <ManagePeopleDialog
+                  activeMember={activeMember}
+                  activeOrganization={activeOrganization}
+                  canCancelInvitations={canCancelInvitations}
+                  canInviteMembers={canInviteMembers}
+                  canRemoveMembers={canRemoveMembers}
+                  canUpdateMemberRole={canUpdateMemberRole}
+                />
+              }
+              label="People"
+              value={peopleSummary ?? formatCount(activeOrganization.members.length, "member")}
+            />
 
-              <SettingsRow
-                action={
-                  deleteOrganizationReason ? (
-                    <MutedActionButton
-                      icon={<HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />}
-                      label="Delete"
-                      reason={deleteOrganizationReason}
-                    />
-                  ) : (
-                    <DeleteOrganizationDialog
-                      activeOrganization={activeOrganization}
-                      nextOrganizationId={nextOrganizationId}
-                    />
-                  )
-                }
-                label="Delete organization"
-                value="Permanent"
-              />
-            </div>
+            <SettingsRow
+              action={
+                leaveOrganizationReason ? (
+                  <MutedActionButton
+                    icon={<HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />}
+                    label="Leave"
+                    reason={leaveOrganizationReason}
+                  />
+                ) : (
+                  <LeaveOrganizationDialog
+                    activeOrganization={activeOrganization}
+                    nextOrganizationId={nextOrganizationId}
+                  />
+                )
+              }
+              label="Membership"
+              value={activeRole ? formatRoleLabel(activeRole) : "Current organization"}
+            />
+
+            <SettingsRow
+              action={
+                deleteOrganizationReason ? (
+                  <MutedActionButton
+                    icon={<HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />}
+                    label="Delete"
+                    reason={deleteOrganizationReason}
+                  />
+                ) : (
+                  <DeleteOrganizationDialog
+                    activeOrganization={activeOrganization}
+                    nextOrganizationId={nextOrganizationId}
+                  />
+                )
+              }
+              label="Delete organization"
+              value="Permanent"
+            />
           </div>
         ) : organizations.length > 0 ? (
-          <div className="rounded-xl border border-dashed border-border/70 p-5">
-            <p className="text-sm font-medium text-foreground">No active organization selected</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Pick one above to edit its details, members, and invitations.
-            </p>
-          </div>
+          <p className="text-sm text-muted-foreground">Pick an organization above.</p>
         ) : null}
       </div>
     </TooltipProvider>
