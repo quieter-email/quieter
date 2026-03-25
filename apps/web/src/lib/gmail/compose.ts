@@ -27,7 +27,6 @@ export type ComposeAttachment = {
   mimeType: string;
   size: number;
   gmailAttachmentId?: string;
-  bytes?: number[];
   isInline: boolean;
 };
 
@@ -107,7 +106,7 @@ export const createInitialComposeSessionState = (): ComposeSessionState => ({
 });
 
 const cloneAttachment = <T extends ComposeAttachment | ComposeInlineImage>(attachment: T): T =>
-  ({ ...attachment, bytes: attachment.bytes ? [...attachment.bytes] : undefined }) as T;
+  ({ ...attachment }) as T;
 
 export const cloneComposeDraft = (draft: ComposeDraftState): ComposeDraftState => ({
   ...draft,
@@ -212,13 +211,7 @@ export const hasComposeDraftContent = (draft: ComposeDraftState): boolean => {
   );
 };
 
-const fileToBytes = async (file: File): Promise<number[]> =>
-  Array.from(new Uint8Array(await file.arrayBuffer()));
-
-const hydrateBytesFromRuntime = async <T extends ComposeAttachment | ComposeInlineImage>(
-  asset: T,
-): Promise<T> => {
-  if (asset.bytes?.length) return asset;
+const attachRuntimeFile = <T extends ComposeAttachment | ComposeInlineImage>(asset: T) => {
   const runtimeFile = getComposeRuntimeFile(asset.id);
   if (!runtimeFile) {
     throw new Error(`Missing file payload for ${asset.name}.`);
@@ -226,14 +219,14 @@ const hydrateBytesFromRuntime = async <T extends ComposeAttachment | ComposeInli
 
   return {
     ...asset,
-    bytes: await fileToBytes(runtimeFile),
-  } as T;
+    file: runtimeFile,
+  };
 };
 
-const createInlineImageFromFile = async (
+const createInlineImageFromFile = (
   file: File,
   options?: { contentId?: string; gmailAttachmentId?: string; id?: string },
-): Promise<ComposeInlineImage> => {
+): ComposeInlineImage => {
   const id = options?.id ?? createLocalId();
   rememberRuntimeFile(id, file);
   return {
@@ -243,15 +236,14 @@ const createInlineImageFromFile = async (
     size: file.size,
     contentId: options?.contentId ?? `${CONTENT_ID_PREFIX}-${id}`,
     gmailAttachmentId: options?.gmailAttachmentId,
-    bytes: await fileToBytes(file),
     isInline: true,
   };
 };
 
-const createAttachmentFromFile = async (
+const createAttachmentFromFile = (
   file: File,
   options?: { gmailAttachmentId?: string; id?: string },
-): Promise<ComposeAttachment> => {
+): ComposeAttachment => {
   const id = options?.id ?? createLocalId();
   rememberRuntimeFile(id, file);
   return {
@@ -260,16 +252,15 @@ const createAttachmentFromFile = async (
     mimeType: file.type || "application/octet-stream",
     size: file.size,
     gmailAttachmentId: options?.gmailAttachmentId,
-    bytes: await fileToBytes(file),
     isInline: false,
   };
 };
 
 export const createComposeAttachmentsFromFiles = async (files: FileList | File[]) =>
-  await Promise.all(Array.from(files, async (file) => await createAttachmentFromFile(file)));
+  Array.from(files, (file) => createAttachmentFromFile(file));
 
 export const createComposeInlineImagesFromFiles = async (files: FileList | File[]) =>
-  await Promise.all(Array.from(files, async (file) => await createInlineImageFromFile(file)));
+  Array.from(files, (file) => createInlineImageFromFile(file));
 
 const assertAttachmentBudget = (draft: ComposeDraftState) => {
   const totalSize =
@@ -279,28 +270,6 @@ const assertAttachmentBudget = (draft: ComposeDraftState) => {
   if (totalSize > MAX_TOTAL_ATTACHMENT_BYTES) {
     throw new Error("Attachments exceed the 24MB compose limit.");
   }
-};
-
-const decodeBase64UrlToBytes = (value: string): Uint8Array => {
-  const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
-  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-
-  return bytes;
-};
-
-const encodeBase64UrlFromBytes = (bytes: Uint8Array): string => {
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
 };
 
 const parseDraftResponse = (response: {
@@ -383,7 +352,7 @@ const hydrateDraftAttachment = async (
     signal,
   );
 
-  return await createAttachmentFromFile(file, {
+  return createAttachmentFromFile(file, {
     gmailAttachmentId: attachment.attachmentId,
   });
 };
@@ -403,7 +372,7 @@ const hydrateDraftInlineImage = async (
     signal,
   );
 
-  return await createInlineImageFromFile(file, {
+  return createInlineImageFromFile(file, {
     contentId: inlineImage.contentId,
     gmailAttachmentId: inlineImage.attachmentId,
   });
@@ -473,14 +442,10 @@ export const syncInlineImagesWithHtml = (
 
 const serializeDraft = async (draft: ComposeDraftState) => {
   assertAttachmentBudget(draft);
-  const inlineImages = await Promise.all(
-    draft.inlineImages.map(async (image) => await hydrateBytesFromRuntime(image)),
-  );
-  const attachments = await Promise.all(
-    draft.attachments
-      .filter((attachment) => !attachment.isInline)
-      .map(async (attachment) => await hydrateBytesFromRuntime(attachment)),
-  );
+  const inlineImages = draft.inlineImages.map((image) => attachRuntimeFile(image));
+  const attachments = draft.attachments
+    .filter((attachment) => !attachment.isInline)
+    .map((attachment) => attachRuntimeFile(attachment));
 
   return {
     ...draft,
@@ -576,5 +541,3 @@ export const swapComposeDrafts = (session: ComposeSessionState): ComposeSessionS
     lastDraft: cloneComposeDraft(session.activeDraft),
   };
 };
-
-export { decodeBase64UrlToBytes, encodeBase64UrlFromBytes };

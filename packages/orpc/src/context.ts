@@ -1,13 +1,27 @@
+import type {
+  RequestHeadersPluginContext,
+  ResponseHeadersPluginContext,
+} from "@orpc/server/plugins";
 import { assertDatabaseConfigured, db } from "@quietr/database";
 
-export function createOrpcContext(options: { req: Request }) {
+export type OrpcContext = {
+  db: typeof db;
+  headers: Headers;
+} & RequestHeadersPluginContext &
+  ResponseHeadersPluginContext;
+
+export function createOrpcContext(
+  options: {
+    req?: Request;
+    headers?: HeadersInit;
+  } = {},
+): OrpcContext {
   assertDatabaseConfigured();
 
   return {
     db,
-    req: options.req,
-    url: new URL(options.req.url),
+    headers: new Headers(options.req?.headers ?? options.headers),
   };
 }
 
-export type OrpcContext = ReturnType<typeof createOrpcContext>;
+export const getRequestHeaders = (context: OrpcContext) => context.reqHeaders ?? context.headers;

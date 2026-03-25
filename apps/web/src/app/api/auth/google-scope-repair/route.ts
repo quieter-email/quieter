@@ -1,6 +1,6 @@
 import { auth, getSessionWithOrganization } from "@quietr/auth";
 import { REQUIRED_GOOGLE_SCOPES } from "@quietr/auth/google-scopes";
-import { getGoogleScopeRepairTarget } from "@quietr/orpc/mailbox-service";
+import { createOrpcServerClient } from "@quietr/orpc/server-client";
 import { NextResponse } from "next/server";
 import {
   getGoogleScopeRepairPageHref,
@@ -35,11 +35,12 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/home", requestUrl));
   }
 
-  const repairTarget = await getGoogleScopeRepairTarget({
-    activeOrganizationId: session.session.activeOrganizationId,
+  const client = createOrpcServerClient({
     headers: authHeaders,
+  });
+  const repairTarget = await client.mail.getGoogleScopeRepairTarget({
+    preferredMailboxId: null,
     targetAccountId,
-    userId: session.user.id,
   });
 
   if (!repairTarget) {

@@ -1,8 +1,6 @@
+import type { RouterOutputs } from "@quietr/orpc";
 import { auth, getSessionWithOrganization } from "@quietr/auth";
-import {
-  getGoogleScopeRepairTarget as findGoogleScopeRepairTargetForOrganization,
-  type GoogleScopeRepairTarget,
-} from "@quietr/orpc/mailbox-service";
+import { createOrpcServerClient } from "@quietr/orpc/server-client";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
@@ -30,7 +28,7 @@ export const redirectIfAuthenticated = cache(async (href = "/") => {
 export const getGoogleScopeRepairTarget = async (input?: {
   preferredMailboxId?: string | null;
   targetAccountId?: string | null;
-}): Promise<GoogleScopeRepairTarget | null> => {
+}): Promise<RouterOutputs["mail"]["getGoogleScopeRepairTarget"]> => {
   const authHeaders = await createAuthHeaders();
   const session = await getSessionWithOrganization(authHeaders);
 
@@ -38,11 +36,12 @@ export const getGoogleScopeRepairTarget = async (input?: {
     return null;
   }
 
-  return await findGoogleScopeRepairTargetForOrganization({
-    activeOrganizationId: session.session.activeOrganizationId,
+  const client = createOrpcServerClient({
     headers: authHeaders,
-    preferredMailboxId: input?.preferredMailboxId,
-    targetAccountId: input?.targetAccountId,
-    userId: session.user.id,
+  });
+
+  return await client.mail.getGoogleScopeRepairTarget({
+    preferredMailboxId: input?.preferredMailboxId ?? null,
+    targetAccountId: input?.targetAccountId ?? null,
   });
 };

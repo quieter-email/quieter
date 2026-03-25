@@ -272,6 +272,10 @@ export type GmailProfile = z.infer<typeof gmailProfileSchema>;
 export type GmailMessage = z.infer<typeof gmailMessageSchema>;
 export type GmailDraft = z.infer<typeof gmailDraftSchema>;
 export type GmailAttachment = z.infer<typeof gmailAttachmentSchema>;
+export type GmailServiceError = Error & {
+  status: number;
+  retryAfterMs?: number;
+};
 export type MailboxSyncDelta = {
   historyId?: string;
   hasChanges: boolean;
@@ -354,13 +358,14 @@ const createGoogleApiError = async (response: Response) => {
   return error;
 };
 
-const isErrorWithStatus = (
-  error: unknown,
-): error is Error & { status: number; retryAfterMs?: number } =>
+const isErrorWithStatus = (error: unknown): error is GmailServiceError =>
   typeof error === "object" &&
   error !== null &&
   "status" in error &&
   typeof (error as { status?: unknown }).status === "number";
+
+export const isGmailServiceError = (error: unknown): error is GmailServiceError =>
+  isErrorWithStatus(error);
 
 const sleep = async (durationMs: number) => {
   await new Promise((resolve) => setTimeout(resolve, durationMs));

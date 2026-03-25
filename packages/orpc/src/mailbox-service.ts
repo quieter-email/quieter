@@ -15,6 +15,16 @@ export type GoogleScopeRepairTarget = {
   providerAccountId: string;
 };
 
+const throwPersonalOrganizationRequired = (activeOrganizationId: string) => {
+  throw new ORPCError("PERSONAL_ORGANIZATION_REQUIRED", {
+    data: {
+      activeOrganizationId,
+    },
+    message: "Connected Gmail mailboxes can only be managed in your personal organization.",
+    status: 409,
+  });
+};
+
 export const getActiveOrganization = async (organizationId: string) => {
   const [activeOrganization] = await db
     .select({
@@ -204,9 +214,7 @@ export const syncPersonalGmailMailboxes = async (input: {
   const activeOrganization = await getActiveOrganization(input.activeOrganizationId);
 
   if (activeOrganization.personalOwnerUserId !== input.userId) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "Connected Gmail mailboxes can only be managed in your personal organization.",
-    });
+    throwPersonalOrganizationRequired(activeOrganization.id);
   }
 
   const linkedAccounts = await auth.api.listUserAccounts({
@@ -269,7 +277,10 @@ export const getGoogleScopeRepairTarget = async (input: {
   userId: string;
 }) => {
   const activeOrganization = await getActiveOrganization(input.activeOrganizationId);
-  const organizationMailboxes = await listOrganizationMailboxes(activeOrganization.id);
+  const organizationMailboxes =
+    activeOrganization.personalOwnerUserId === input.userId
+      ? (await syncPersonalGmailMailboxes(input)).mailboxes
+      : await listOrganizationMailboxes(activeOrganization.id);
 
   return await resolveGoogleScopeRepairTarget({
     headers: input.headers,
@@ -286,23 +297,15 @@ export const listMailboxesForOrganization = async (input: {
   userId: string;
 }) => {
   const activeOrganization = await getActiveOrganization(input.activeOrganizationId);
-
-  if (activeOrganization.personalOwnerUserId === input.userId) {
-    const syncedState = await syncPersonalGmailMailboxes(input);
-
-    return {
-      ...syncedState,
-      googleScopeRepairTarget: await resolveGoogleScopeRepairTarget({
-        headers: input.headers,
-        mailboxes: syncedState.mailboxes,
-        userId: input.userId,
-      }),
-    };
-  }
+  const mailboxes = await listOrganizationMailboxes(activeOrganization.id);
 
   return {
-    mailboxes: await listOrganizationMailboxes(activeOrganization.id),
-    googleScopeRepairTarget: null,
+    mailboxes,
+    googleScopeRepairTarget: await resolveGoogleScopeRepairTarget({
+      headers: input.headers,
+      mailboxes,
+      userId: input.userId,
+    }),
     organization: activeOrganization,
   };
 };
@@ -350,6 +353,27 @@ export const getAuthorizedGmailMailbox = async (input: {
     });
   }
 
+  const linkedAccounts = await auth.api.listUserAccounts({
+    headers: input.headers,
+  });
+  const linkedGoogleAccount = linkedAccounts.find((account) => {
+    return (
+      account.providerId === "google" && account.accountId === selectedMailbox.providerAccountId
+    );
+  });
+
+  if (linkedGoogleAccount && !hasRequiredGoogleScopes(linkedGoogleAccount.scopes)) {
+    throw new ORPCError("MAILBOX_SCOPE_REPAIR_REQUIRED", {
+      data: {
+        emailAddress: selectedMailbox.emailAddress,
+        mailboxId: selectedMailbox.id,
+        providerAccountId: selectedMailbox.providerAccountId,
+      },
+      message: "Google permissions need to be repaired for this mailbox.",
+      status: 409,
+    });
+  }
+
   const accessToken = await getGoogleAccessTokenForLinkedAccount(
     input.headers,
     selectedMailbox.connectedUserId,
@@ -377,9 +401,7 @@ export const disconnectPersonalGmailMailbox = async (input: {
   const activeOrganization = await getActiveOrganization(input.activeOrganizationId);
 
   if (activeOrganization.personalOwnerUserId !== input.userId) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "Only your personal organization can disconnect Gmail mailboxes.",
-    });
+    throwPersonalOrganizationRequired(activeOrganization.id);
   }
 
   const selectedMailbox = await getAuthorizedMailbox({

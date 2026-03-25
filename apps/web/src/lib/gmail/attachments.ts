@@ -1,7 +1,5 @@
 import { rpc } from "~/lib/orpc";
 
-const now = () => Date.now();
-
 export const loadAttachmentFromServer = async (
   mailboxId: string,
   messageId: string,
@@ -11,15 +9,10 @@ export const loadAttachmentFromServer = async (
   signal?: AbortSignal,
 ) => {
   const attachment = await rpc.mail.getAttachment(
-    { mailboxId, messageId, attachmentId },
+    { attachmentId, fileName, mailboxId, messageId, mimeType },
     { signal },
   );
-  const bytes = Uint8Array.from(attachment.bytes);
-
-  return new File([bytes], fileName, {
-    type: mimeType,
-    lastModified: now(),
-  });
+  return attachment.file;
 };
 
 export const downloadAttachmentFromServer = async (

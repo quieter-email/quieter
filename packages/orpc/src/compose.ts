@@ -174,7 +174,8 @@ const composeAttachmentSchema = z.object({
   isInline: z.boolean(),
   contentId: z.string().nullable().optional(),
   fileName: z.string().optional(),
-  bytes: z.array(z.number().int().min(0).max(255)).optional(),
+  file: z.file().optional(),
+  gmailAttachmentId: z.string().optional(),
 });
 
 const composeInlineImageSchema = z.object({
@@ -183,7 +184,8 @@ const composeInlineImageSchema = z.object({
   mimeType: z.string(),
   size: z.number(),
   contentId: z.string(),
-  bytes: z.array(z.number().int().min(0).max(255)).optional(),
+  file: z.file().optional(),
+  gmailAttachmentId: z.string().optional(),
   isInline: z.boolean().optional(),
 });
 
