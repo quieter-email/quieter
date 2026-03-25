@@ -2,7 +2,7 @@ import { auth, getSessionWithOrganization } from "@quietr/auth";
 import {
   getGoogleScopeRepairTarget as findGoogleScopeRepairTargetForOrganization,
   type GoogleScopeRepairTarget,
-} from "@quietr/trpc/mailbox-service";
+} from "@quietr/orpc/mailbox-service";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";

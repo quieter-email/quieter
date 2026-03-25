@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import { trpc } from "~/lib/trpc";
+import { rpc } from "~/lib/orpc";
 
 export const getMailboxesQueryKey = (activeOrganizationId: string | null | undefined) =>
   ["mailboxes", activeOrganizationId ?? "none"] as const;
@@ -10,8 +10,7 @@ export const mailboxesQueryOptions = (
 ) =>
   queryOptions({
     queryKey: getMailboxesQueryKey(activeOrganizationId),
-    queryFn: ({ signal }) =>
-      trpc.mail.listMailboxesForActiveOrganization.query(undefined, { signal }),
+    queryFn: ({ signal }) => rpc.mail.listMailboxesForActiveOrganization(undefined, { signal }),
     enabled: enabled && Boolean(activeOrganizationId),
     staleTime: 0,
     refetchOnMount: "always",

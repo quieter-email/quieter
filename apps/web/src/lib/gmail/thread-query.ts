@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import { trpc } from "~/lib/trpc";
+import { rpc } from "~/lib/orpc";
 import { GMAIL_QUERY_STALE_TIME_MS, type MailboxCategory } from "./gmail";
 
 const THREAD_QUERY_VERSION = 3;
@@ -15,7 +15,7 @@ export const getThreadWithDetailsOptions = (
 ) =>
   queryOptions({
     queryKey: getThreadQueryKey(mailboxId, threadId),
-    queryFn: ({ signal }) => trpc.mail.getThread.query({ mailboxId, threadId }, { signal }),
+    queryFn: ({ signal }) => rpc.mail.getThread({ mailboxId, threadId }, { signal }),
     enabled,
     staleTime: GMAIL_QUERY_STALE_TIME_MS,
     refetchOnWindowFocus: false,

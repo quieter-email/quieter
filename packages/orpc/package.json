@@ -1,5 +1,5 @@
 {
-  "name": "@quietr/trpc",
+  "name": "@quietr/orpc",
   "private": true,
   "type": "module",
   "exports": {
@@ -20,10 +20,10 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@orpc/client": "catalog:",
+    "@orpc/server": "catalog:",
     "@quietr/auth": "workspace:*",
     "@quietr/database": "workspace:*",
-    "@trpc/client": "catalog:",
-    "@trpc/server": "catalog:",
     "drizzle-orm": "catalog:",
     "zod": "catalog:"
   },

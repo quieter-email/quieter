@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
+import { rpc } from "~/lib/orpc";
 import { persistQueryByKey } from "~/lib/query-persister";
-import { trpc } from "~/lib/trpc";
 import {
   addUnreadLabel,
   applyLabelIdChanges,
@@ -714,7 +714,7 @@ const fetchMessagesPage = async (
   searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
-  return await trpc.mail.listMessages.query(
+  return await rpc.mail.listMessages(
     {
       mailboxId,
       category: mailbox,
@@ -889,7 +889,7 @@ export const syncMessages = async (
     return await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, searchQuery, signal);
   }
 
-  const syncDelta = await trpc.mail.getMailboxSyncDelta.query(
+  const syncDelta = await rpc.mail.getMailboxSyncDelta(
     {
       mailboxId,
       category: mailbox,
@@ -1035,10 +1035,7 @@ export const markMessageAsReadInMailbox = async (
     searchQuery,
     messageId,
     async (mutationSignal) =>
-      await trpc.mail.markMessageAsRead.mutate(
-        { mailboxId, messageId },
-        { signal: mutationSignal },
-      ),
+      await rpc.mail.markMessageAsRead({ mailboxId, messageId }, { signal: mutationSignal }),
     markMessageReadLocally,
     signal,
   );
@@ -1059,10 +1056,7 @@ export const markMessageAsUnreadInMailbox = async (
     searchQuery,
     messageId,
     async (mutationSignal) =>
-      await trpc.mail.markMessageAsUnread.mutate(
-        { mailboxId, messageId },
-        { signal: mutationSignal },
-      ),
+      await rpc.mail.markMessageAsUnread({ mailboxId, messageId }, { signal: mutationSignal }),
     markMessageUnreadLocally,
     signal,
   );
@@ -1154,7 +1148,7 @@ export const markThreadAsReadInMailbox = async (
     searchQuery,
     threadId,
     async (mutationSignal) =>
-      await trpc.mail.markThreadAsRead.mutate({ mailboxId, threadId }, { signal: mutationSignal }),
+      await rpc.mail.markThreadAsRead({ mailboxId, threadId }, { signal: mutationSignal }),
     markMessageReadLocally,
     signal,
   );
@@ -1175,10 +1169,7 @@ export const markThreadAsUnreadInMailbox = async (
     searchQuery,
     threadId,
     async (mutationSignal) =>
-      await trpc.mail.markThreadAsUnread.mutate(
-        { mailboxId, threadId },
-        { signal: mutationSignal },
-      ),
+      await rpc.mail.markThreadAsUnread({ mailboxId, threadId }, { signal: mutationSignal }),
     markMessageUnreadLocally,
     signal,
   );
@@ -1193,7 +1184,7 @@ export const updateThreadLabelsInMailbox = async (
   changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   signal?: AbortSignal,
 ) => {
-  const updatedThread = await trpc.mail.updateThreadLabels.mutate(
+  const updatedThread = await rpc.mail.updateThreadLabels(
     {
       mailboxId,
       threadId,
@@ -1223,7 +1214,7 @@ export const updateMessageLabelsInMailbox = async (
     ) ?? findMessageInCachedMailboxQueries(queryClient, mailboxId, messageId);
 
   if (!messageToUpdate) {
-    await trpc.mail.updateMessageLabels.mutate(
+    await rpc.mail.updateMessageLabels(
       {
         mailboxId,
         messageId,
@@ -1265,7 +1256,7 @@ export const updateMessageLabelsInMailbox = async (
   );
 
   try {
-    const updatedMessage = await trpc.mail.updateMessageLabels.mutate(
+    const updatedMessage = await rpc.mail.updateMessageLabels(
       {
         mailboxId,
         messageId,
@@ -1423,7 +1414,7 @@ export const moveMessageToTrashInMailbox = async (
     ) ?? findMessageInCachedMailboxQueries(queryClient, mailboxId, messageId);
 
   if (!messageToUpdate) {
-    await trpc.mail.moveMessageToTrash.mutate({ mailboxId, messageId }, { signal });
+    await rpc.mail.moveMessageToTrash({ mailboxId, messageId }, { signal });
     return;
   }
 
@@ -1458,10 +1449,7 @@ export const moveMessageToTrashInMailbox = async (
   );
 
   try {
-    const updatedMessage = await trpc.mail.moveMessageToTrash.mutate(
-      { mailboxId, messageId },
-      { signal },
-    );
+    const updatedMessage = await rpc.mail.moveMessageToTrash({ mailboxId, messageId }, { signal });
     const resolvedMessage = applyMessageMetadata(optimisticMessage, {
       labelIds: updatedMessage.labelIds,
       isUnread: updatedMessage.isUnread,
@@ -1522,7 +1510,7 @@ export const untrashMessageInMailbox = async (
     ) ?? findMessageInCachedMailboxQueries(queryClient, mailboxId, messageId);
 
   if (!messageToUpdate) {
-    await trpc.mail.updateMessageLabels.mutate(
+    await rpc.mail.updateMessageLabels(
       {
         mailboxId,
         messageId,
@@ -1565,7 +1553,7 @@ export const untrashMessageInMailbox = async (
   );
 
   try {
-    const updatedMessage = await trpc.mail.updateMessageLabels.mutate(
+    const updatedMessage = await rpc.mail.updateMessageLabels(
       {
         mailboxId,
         messageId,
@@ -1627,10 +1615,7 @@ export const moveThreadToTrashInMailbox = async (
   threadId: string,
   signal?: AbortSignal,
 ) => {
-  const updatedThread = await trpc.mail.moveThreadToTrash.mutate(
-    { mailboxId, threadId },
-    { signal },
-  );
+  const updatedThread = await rpc.mail.moveThreadToTrash({ mailboxId, threadId }, { signal });
   await applyResolvedThreadMetadataToCaches(queryClient, mailboxId, updatedThread);
 };
 
@@ -1650,7 +1635,7 @@ export const deleteMessagePermanentlyInMailbox = async (
     ) ?? findMessageInCachedMailboxQueries(queryClient, mailboxId, messageId);
 
   if (!messageToUpdate) {
-    await trpc.mail.deleteMessagePermanently.mutate({ mailboxId, messageId }, { signal });
+    await rpc.mail.deleteMessagePermanently({ mailboxId, messageId }, { signal });
     return;
   }
 
@@ -1679,7 +1664,7 @@ export const deleteMessagePermanentlyInMailbox = async (
   );
 
   try {
-    await trpc.mail.deleteMessagePermanently.mutate({ mailboxId, messageId }, { signal });
+    await rpc.mail.deleteMessagePermanently({ mailboxId, messageId }, { signal });
   } catch (error) {
     restoreMessagesQueries(queryClient, previousMessagesQueries);
     if (previousThreadQuery) {
@@ -1706,7 +1691,7 @@ export const deleteThreadPermanentlyInMailbox = async (
   threadId: string,
   signal?: AbortSignal,
 ) => {
-  await trpc.mail.deleteThreadPermanently.mutate({ mailboxId, threadId }, { signal });
+  await rpc.mail.deleteThreadPermanently({ mailboxId, threadId }, { signal });
 
   const threadQueryKey = getThreadQueryKey(mailboxId, threadId);
   const touchedQueryKeys = removeMessagesFromCachedMailboxQueries(
@@ -1738,7 +1723,7 @@ export const deleteDraftInMailbox = async (
     ) ?? findMessageInCachedMailboxQueries(queryClient, mailboxId, messageId);
 
   if (!messageToUpdate) {
-    await trpc.mail.deleteDraft.mutate({ mailboxId, draftId }, { signal });
+    await rpc.mail.deleteDraft({ mailboxId, draftId }, { signal });
     return;
   }
 
@@ -1767,7 +1752,7 @@ export const deleteDraftInMailbox = async (
   );
 
   try {
-    await trpc.mail.deleteDraft.mutate({ mailboxId, draftId }, { signal });
+    await rpc.mail.deleteDraft({ mailboxId, draftId }, { signal });
   } catch (error) {
     restoreMessagesQueries(queryClient, previousMessagesQueries);
     if (previousThreadQuery) {

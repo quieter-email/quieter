@@ -1,6 +1,6 @@
 ## Web app
 
-SolidStart + Solid app that consumes shared `@quietr/trpc` package.
+Next.js App Router app that consumes the shared `@quietr/orpc`, `@quietr/auth`, and `@quietr/ui` packages.
 
 ```bash
 bun run dev

@@ -1,6 +1,6 @@
 import { assertDatabaseConfigured, db } from "@quietr/database";
 
-export function createTrpcContext(options: { req: Request }) {
+export function createOrpcContext(options: { req: Request }) {
   assertDatabaseConfigured();
 
   return {
@@ -10,4 +10,4 @@ export function createTrpcContext(options: { req: Request }) {
   };
 }
 
-export type TrpcContext = ReturnType<typeof createTrpcContext>;
+export type OrpcContext = ReturnType<typeof createOrpcContext>;

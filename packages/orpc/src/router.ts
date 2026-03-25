@@ -1,9 +1,9 @@
+import { ORPCError, os } from "@orpc/server";
 import { auth, ensureUserOrganizationState } from "@quietr/auth";
 import { getAuthEmailPreview } from "@quietr/auth/email-placeholder";
 import { getAuthUserStatus } from "@quietr/auth/user-status";
-import { initTRPC, TRPCError } from "@trpc/server";
 import { z } from "zod";
-import type { TrpcContext } from "./context";
+import type { OrpcContext } from "./context";
 import {
   composeDraftInputSchema,
   composeSendDraftInputSchema,
@@ -50,8 +50,8 @@ import {
   syncPersonalGmailMailboxes,
 } from "./mailbox-service";
 
-const t = initTRPC.context<TrpcContext>().create();
-const publicProcedure = t.procedure;
+const base = os.$context<OrpcContext>();
+const publicProcedure = base;
 
 const mailboxCategorySchema = z.enum([
   "inbox",
@@ -257,15 +257,13 @@ const parseListUnsubscribeMailto = (value: string) => {
   try {
     url = new URL(value);
   } catch {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
+    throw new ORPCError("BAD_REQUEST", {
       message: "This message does not expose a valid unsubscribe address.",
     });
   }
 
   if (url.protocol !== "mailto:") {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
+    throw new ORPCError("BAD_REQUEST", {
       message: "This message does not expose a valid unsubscribe address.",
     });
   }
@@ -278,8 +276,7 @@ const parseListUnsubscribeMailto = (value: string) => {
   );
 
   if (recipients.length === 0) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
+    throw new ORPCError("BAD_REQUEST", {
       message: "This message does not expose a valid unsubscribe address.",
     });
   }
@@ -329,11 +326,11 @@ const parseDraftMessage = (draft: Awaited<ReturnType<typeof getDraft>>) => {
   };
 };
 
-const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
-  const session = await auth.api.getSession({ headers: ctx.req.headers });
+const protectedProcedure = base.use(async ({ context, next }) => {
+  const session = await auth.api.getSession({ headers: context.req.headers });
 
   if (!session?.user || !session.session) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
+    throw new ORPCError("UNAUTHORIZED");
   }
 
   const organizationState = await ensureUserOrganizationState(session.user, {
@@ -342,48 +339,48 @@ const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
   });
 
   return next({
-    ctx: {
-      ...ctx,
+    context: {
+      ...context,
       activeOrganizationId: organizationState.activeOrganizationId,
       userId: session.user.id,
     },
   });
 });
 
-const getAuthorizedGmailAccess = async (ctx: {
+const getAuthorizedGmailAccess = async (access: {
   activeOrganizationId: string;
   mailboxId: string;
   req: Request;
 }) => {
   return await getAuthorizedGmailMailbox({
-    activeOrganizationId: ctx.activeOrganizationId,
-    headers: ctx.req.headers,
-    mailboxId: ctx.mailboxId,
+    activeOrganizationId: access.activeOrganizationId,
+    headers: access.req.headers,
+    mailboxId: access.mailboxId,
   });
 };
 
-export const appRouter = t.router({
-  auth: t.router({
-    getEmailPreview: publicProcedure.input(authEmailInputSchema).query(({ input }) => {
+export const appRouter = {
+  auth: {
+    getEmailPreview: publicProcedure.input(authEmailInputSchema).handler(({ input }) => {
       return getAuthEmailPreview(input.email);
     }),
-    getUserStatus: publicProcedure.input(authEmailInputSchema).query(async ({ input }) => {
+    getUserStatus: publicProcedure.input(authEmailInputSchema).handler(async ({ input }) => {
       return await getAuthUserStatus(input.email);
     }),
-  }),
-  mail: t.router({
-    listMailboxesForActiveOrganization: protectedProcedure.query(async ({ ctx }) => {
+  },
+  mail: {
+    listMailboxesForActiveOrganization: protectedProcedure.handler(async ({ context }) => {
       return await listMailboxesForOrganization({
-        activeOrganizationId: ctx.activeOrganizationId,
-        headers: ctx.req.headers,
-        userId: ctx.userId,
+        activeOrganizationId: context.activeOrganizationId,
+        headers: context.req.headers,
+        userId: context.userId,
       });
     }),
-    syncPersonalMailboxes: protectedProcedure.mutation(async ({ ctx }) => {
+    syncPersonalMailboxes: protectedProcedure.handler(async ({ context }) => {
       return await syncPersonalGmailMailboxes({
-        activeOrganizationId: ctx.activeOrganizationId,
-        headers: ctx.req.headers,
-        userId: ctx.userId,
+        activeOrganizationId: context.activeOrganizationId,
+        headers: context.req.headers,
+        userId: context.userId,
       });
     }),
     disconnectMailbox: protectedProcedure
@@ -392,12 +389,12 @@ export const appRouter = t.router({
           mailboxId: mailboxIdSchema,
         }),
       )
-      .mutation(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         return await disconnectPersonalGmailMailbox({
-          activeOrganizationId: ctx.activeOrganizationId,
-          headers: ctx.req.headers,
+          activeOrganizationId: context.activeOrganizationId,
+          headers: context.req.headers,
           mailboxId: input.mailboxId,
-          userId: ctx.userId,
+          userId: context.userId,
         });
       }),
     listMessages: protectedProcedure
@@ -410,11 +407,11 @@ export const appRouter = t.router({
           query: z.string().optional(),
         }),
       )
-      .query(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         return input.category === "drafts"
@@ -438,11 +435,11 @@ export const appRouter = t.router({
           startHistoryId: z.string().min(1),
         }),
       )
-      .query(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         return await getMailboxSyncDelta(accessToken, {
@@ -457,11 +454,11 @@ export const appRouter = t.router({
           threadId: z.string(),
         }),
       )
-      .query(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         return await getThreadWithDetails(accessToken, input.threadId);
@@ -473,11 +470,11 @@ export const appRouter = t.router({
           messageId: z.string(),
         }),
       )
-      .query(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         return await getMessageInspector(accessToken, input.messageId);
@@ -488,11 +485,11 @@ export const appRouter = t.router({
           mailboxId: mailboxIdSchema,
         }),
       )
-      .query(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         return await listLabels(accessToken);
@@ -504,11 +501,11 @@ export const appRouter = t.router({
           messageId: z.string(),
         }),
       )
-      .mutation(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         return await markMessageAsRead(accessToken, input.messageId);
@@ -520,11 +517,11 @@ export const appRouter = t.router({
           messageId: z.string(),
         }),
       )
-      .mutation(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         return await markMessageAsUnread(accessToken, input.messageId);
@@ -536,11 +533,11 @@ export const appRouter = t.router({
           threadId: z.string(),
         }),
       )
-      .mutation(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         return await markThreadAsRead(accessToken, input.threadId);
@@ -552,11 +549,11 @@ export const appRouter = t.router({
           threadId: z.string(),
         }),
       )
-      .mutation(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         return await markThreadAsUnread(accessToken, input.threadId);
@@ -570,11 +567,11 @@ export const appRouter = t.router({
           removeLabelIds: z.array(z.string()).optional(),
         }),
       )
-      .mutation(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         return await updateThreadLabels(accessToken, input.threadId, {
@@ -591,11 +588,11 @@ export const appRouter = t.router({
           removeLabelIds: z.array(z.string()).optional(),
         }),
       )
-      .mutation(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         return await updateMessageLabels(accessToken, input.messageId, {
@@ -610,11 +607,11 @@ export const appRouter = t.router({
           messageId: z.string(),
         }),
       )
-      .mutation(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         return await moveMessageToTrash(accessToken, input.messageId);
@@ -626,11 +623,11 @@ export const appRouter = t.router({
           messageId: z.string(),
         }),
       )
-      .mutation(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         return await untrashMessage(accessToken, input.messageId);
@@ -642,11 +639,11 @@ export const appRouter = t.router({
           threadId: z.string(),
         }),
       )
-      .mutation(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         return await moveThreadToTrash(accessToken, input.threadId);
@@ -658,11 +655,11 @@ export const appRouter = t.router({
           messageId: z.string(),
         }),
       )
-      .mutation(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         return await deleteMessagePermanently(accessToken, input.messageId);
@@ -674,11 +671,11 @@ export const appRouter = t.router({
           threadId: z.string(),
         }),
       )
-      .mutation(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         return await deleteThreadPermanently(accessToken, input.threadId);
@@ -690,11 +687,11 @@ export const appRouter = t.router({
           draftId: z.string(),
         }),
       )
-      .query(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
         const draft = await getDraft(accessToken, input.draftId);
         return parseDraftMessage(draft);
@@ -706,11 +703,11 @@ export const appRouter = t.router({
           draft: composeDraftInputSchema,
         }),
       )
-      .mutation(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
         const raw = arrayBufferToBase64Url(new TextEncoder().encode(buildMimeMessage(input.draft)));
         const response = input.draft.draftId
@@ -739,11 +736,11 @@ export const appRouter = t.router({
           draft: composeSendDraftInputSchema,
         }),
       )
-      .mutation(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
 
         let draftId = input.draft.draftId ?? null;
@@ -760,8 +757,7 @@ export const appRouter = t.router({
         }
 
         if (!draftId) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
+          throw new ORPCError("INTERNAL_SERVER_ERROR", {
             message: "Draft could not be saved before send.",
           });
         }
@@ -775,11 +771,11 @@ export const appRouter = t.router({
           draftId: z.string(),
         }),
       )
-      .mutation(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
         await deleteDraft(accessToken, input.draftId);
         return { deleted: true };
@@ -791,11 +787,11 @@ export const appRouter = t.router({
           messageId: z.string(),
         }),
       )
-      .mutation(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
         const message = await getGmailMessageMetadata(accessToken, input.messageId);
         const unsubscribeMailto = extractListUnsubscribeMailto(
@@ -805,8 +801,7 @@ export const appRouter = t.router({
         );
 
         if (!unsubscribeMailto) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
+          throw new ORPCError("BAD_REQUEST", {
             message: "This message does not expose a valid unsubscribe address.",
           });
         }
@@ -829,11 +824,11 @@ export const appRouter = t.router({
           attachmentId: z.string(),
         }),
       )
-      .query(async ({ ctx, input }) => {
+      .handler(async ({ context, input }) => {
         const { accessToken } = await getAuthorizedGmailAccess({
-          activeOrganizationId: ctx.activeOrganizationId,
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
-          req: ctx.req,
+          req: context.req,
         });
         const attachment = await getMessageAttachment(
           accessToken,
@@ -856,7 +851,7 @@ export const appRouter = t.router({
           bytes,
         };
       }),
-  }),
-});
+  },
+};
 
 export type AppRouter = typeof appRouter;

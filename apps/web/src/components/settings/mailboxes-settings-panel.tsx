@@ -11,7 +11,7 @@ import { authClient } from "~/lib/auth";
 import { getErrorMessage } from "~/lib/errors";
 import { getGoogleScopeRepairPageHref } from "~/lib/google-scope-repair";
 import { mailboxesQueryOptions } from "~/lib/mailboxes-query";
-import { useTRPC } from "~/lib/trpc";
+import { orpc } from "~/lib/orpc";
 
 const PENDING_GMAIL_LINK_STORAGE_KEY = "quietr:pending-gmail-link";
 
@@ -63,7 +63,6 @@ const writePendingGmailLink = (value: PendingGmailLinkState | null) => {
 };
 
 export const MailboxesSettingsPanel = () => {
-  const trpc = useTRPC();
   const queryClient = useQueryClient();
   const sessionState = authClient.useSession();
   const activeOrganizationState = authClient.useActiveOrganization();
@@ -91,7 +90,7 @@ export const MailboxesSettingsPanel = () => {
       })
     : null;
   const disconnectMailboxMutation = useMutation({
-    ...trpc.mail.disconnectMailbox.mutationOptions(),
+    ...orpc.mail.disconnectMailbox.mutationOptions(),
     mutationKey: ["mail", "disconnect-mailbox"],
     onSuccess: async () => {
       if (!activeOrganizationId) {

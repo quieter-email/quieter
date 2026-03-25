@@ -1,7 +1,7 @@
+import { ORPCError } from "@orpc/server";
 import { auth } from "@quietr/auth";
 import { hasRequiredGoogleScopes } from "@quietr/auth/google-scopes";
 import { db, mailbox, organization } from "@quietr/database";
-import { TRPCError } from "@trpc/server";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { getGmailProfile } from "./gmail-service";
 
@@ -28,8 +28,7 @@ export const getActiveOrganization = async (organizationId: string) => {
     .limit(1);
 
   if (!activeOrganization) {
-    throw new TRPCError({
-      code: "NOT_FOUND",
+    throw new ORPCError("NOT_FOUND", {
       message: "The active organization could not be found.",
     });
   }
@@ -205,8 +204,7 @@ export const syncPersonalGmailMailboxes = async (input: {
   const activeOrganization = await getActiveOrganization(input.activeOrganizationId);
 
   if (activeOrganization.personalOwnerUserId !== input.userId) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
+    throw new ORPCError("BAD_REQUEST", {
       message: "Connected Gmail mailboxes can only be managed in your personal organization.",
     });
   }
@@ -328,8 +326,7 @@ export const getAuthorizedMailbox = async (input: {
     .limit(1);
 
   if (!selectedMailbox || selectedMailbox.organizationId !== input.activeOrganizationId) {
-    throw new TRPCError({
-      code: "NOT_FOUND",
+    throw new ORPCError("NOT_FOUND", {
       message: "Mailbox not found in the active organization.",
     });
   }
@@ -348,8 +345,7 @@ export const getAuthorizedGmailMailbox = async (input: {
   });
 
   if (selectedMailbox.provider !== MAILBOX_PROVIDER_GMAIL) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
+    throw new ORPCError("BAD_REQUEST", {
       message: "This mailbox provider is not supported yet.",
     });
   }
@@ -361,8 +357,7 @@ export const getAuthorizedGmailMailbox = async (input: {
   );
 
   if (!accessToken) {
-    throw new TRPCError({
-      code: "UNAUTHORIZED",
+    throw new ORPCError("UNAUTHORIZED", {
       message: "Google account is not linked or Gmail access has not been granted.",
     });
   }
@@ -382,8 +377,7 @@ export const disconnectPersonalGmailMailbox = async (input: {
   const activeOrganization = await getActiveOrganization(input.activeOrganizationId);
 
   if (activeOrganization.personalOwnerUserId !== input.userId) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
+    throw new ORPCError("BAD_REQUEST", {
       message: "Only your personal organization can disconnect Gmail mailboxes.",
     });
   }
@@ -394,8 +388,7 @@ export const disconnectPersonalGmailMailbox = async (input: {
   });
 
   if (selectedMailbox.provider !== MAILBOX_PROVIDER_GMAIL) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
+    throw new ORPCError("BAD_REQUEST", {
       message: "This mailbox provider is not supported yet.",
     });
   }

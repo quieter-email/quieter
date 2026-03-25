@@ -1,6 +1,6 @@
 import { auth, getSessionWithOrganization } from "@quietr/auth";
 import { REQUIRED_GOOGLE_SCOPES } from "@quietr/auth/google-scopes";
-import { getGoogleScopeRepairTarget } from "@quietr/trpc/mailbox-service";
+import { getGoogleScopeRepairTarget } from "@quietr/orpc/mailbox-service";
 import { NextResponse } from "next/server";
 import {
   getGoogleScopeRepairPageHref,

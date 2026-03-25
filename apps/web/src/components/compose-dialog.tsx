@@ -2,7 +2,7 @@
 
 import { AlertCircleIcon, Loading03Icon, MailSend02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { composeDraftFormValuesSchema, composeSendFormValuesSchema } from "@quietr/trpc/compose";
+import { composeDraftFormValuesSchema, composeSendFormValuesSchema } from "@quietr/orpc/compose";
 import { Button, Dialog, DialogContent, cn } from "@quietr/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";

@@ -1,4 +1,4 @@
-import { trpc } from "~/lib/trpc";
+import { rpc } from "~/lib/orpc";
 
 const now = () => Date.now();
 
@@ -10,7 +10,7 @@ export const loadAttachmentFromServer = async (
   mimeType: string,
   signal?: AbortSignal,
 ) => {
-  const attachment = await trpc.mail.getAttachment.query(
+  const attachment = await rpc.mail.getAttachment(
     { mailboxId, messageId, attachmentId },
     { signal },
   );

@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
 import { getErrorMessage, getFieldErrorMessage } from "~/lib/errors";
-import { useTRPC } from "~/lib/trpc";
+import { orpc } from "~/lib/orpc";
 
 type AuthMode = "login" | "signup";
 
@@ -81,7 +81,6 @@ const getLatestAuthAction = (
 export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const trpc = useTRPC();
   const authError = getAuthErrorLabel(authErrorCode);
 
   const isSignup = mode === "signup";
@@ -124,12 +123,10 @@ export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
       const normalizedEmail = email.trim().toLowerCase();
       const normalizedName = name.trim();
       const status = await queryClient.fetchQuery(
-        trpc.auth.getUserStatus.queryOptions(
-          { email: normalizedEmail },
-          {
-            staleTime: 0,
-          },
-        ),
+        orpc.auth.getUserStatus.queryOptions({
+          input: { email: normalizedEmail },
+          staleTime: 0,
+        }),
       );
 
       if (isSignup && status.exists) {
@@ -153,12 +150,10 @@ export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
       }
 
       return await queryClient.fetchQuery(
-        trpc.auth.getEmailPreview.queryOptions(
-          { email: normalizedEmail },
-          {
-            staleTime: 0,
-          },
-        ),
+        orpc.auth.getEmailPreview.queryOptions({
+          input: { email: normalizedEmail },
+          staleTime: 0,
+        }),
       );
     },
     mutationKey: ["auth", mode, "magic-link"],

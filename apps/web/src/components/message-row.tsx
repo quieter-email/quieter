@@ -1,6 +1,6 @@
 "use client";
 
-import { splitMailAddressList } from "@quietr/trpc/compose";
+import { splitMailAddressList } from "@quietr/orpc/compose";
 import { cn } from "@quietr/ui";
 import { useQuery } from "@tanstack/react-query";
 import { memo, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";

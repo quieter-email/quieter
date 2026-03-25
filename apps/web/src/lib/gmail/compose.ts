@@ -1,5 +1,5 @@
-import { findInvalidMailAddresses } from "@quietr/trpc/compose";
-import { trpc } from "~/lib/trpc";
+import { findInvalidMailAddresses } from "@quietr/orpc/compose";
+import { rpc } from "~/lib/orpc";
 import { loadAttachmentFromServer } from "./attachments";
 export { loadAttachmentFromServer } from "./attachments";
 
@@ -416,10 +416,7 @@ export const hydrateComposeDraftRuntime = async (
 ): Promise<ComposeDraftState> => {
   if (!draft.draftId) return draft;
 
-  const response = await trpc.mail.loadDraft.query(
-    { mailboxId, draftId: draft.draftId },
-    { signal },
-  );
+  const response = await rpc.mail.loadDraft({ mailboxId, draftId: draft.draftId }, { signal });
   const attachments =
     response.messageId && response.attachments.length > 0
       ? await Promise.all(
@@ -497,7 +494,7 @@ export const saveComposeDraft = async (
   draft: ComposeDraftState,
   signal?: AbortSignal,
 ): Promise<ComposeDraftState> => {
-  const response = await trpc.mail.saveDraft.mutate(
+  const response = await rpc.mail.saveDraft(
     { mailboxId, draft: await serializeDraft(draft) },
     { signal },
   );
@@ -518,10 +515,7 @@ export const sendComposeDraft = async (
   draft: ComposeDraftState,
   signal?: AbortSignal,
 ) => {
-  return await trpc.mail.sendDraft.mutate(
-    { mailboxId, draft: await serializeDraft(draft) },
-    { signal },
-  );
+  return await rpc.mail.sendDraft({ mailboxId, draft: await serializeDraft(draft) }, { signal });
 };
 
 export const deleteComposeDraft = async (
@@ -530,7 +524,7 @@ export const deleteComposeDraft = async (
   signal?: AbortSignal,
 ) => {
   if (!draft.draftId) return;
-  await trpc.mail.deleteDraft.mutate({ mailboxId, draftId: draft.draftId }, { signal });
+  await rpc.mail.deleteDraft({ mailboxId, draftId: draft.draftId }, { signal });
 };
 
 export const attachInlineImagesToHtml = (

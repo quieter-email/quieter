@@ -1,4 +1,4 @@
-import { getMailAddressKey, splitMailAddressList } from "@quietr/trpc/compose";
+import { getMailAddressKey, splitMailAddressList } from "@quietr/orpc/compose";
 import type { MessageListItem } from "./gmail";
 import {
   createEmptyComposeDraft,

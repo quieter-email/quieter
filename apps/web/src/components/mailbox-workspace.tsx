@@ -44,8 +44,8 @@ import {
 } from "~/lib/gmail/inbox-query";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
 import { mailboxesQueryOptions } from "~/lib/mailboxes-query";
+import { orpc } from "~/lib/orpc";
 import { mailboxSearchParams } from "~/lib/search-params";
-import { useTRPC } from "~/lib/trpc";
 import { type ComposeDialogHandle, ComposeDialog } from "./compose-dialog";
 import { MailSidebar } from "./mail-sidebar";
 import { MessageDetail } from "./message-detail";
@@ -688,7 +688,6 @@ const createMailboxActionHandlers = ({
 const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
   const pathname = usePathname();
   const queryClient = useQueryClient();
-  const trpc = useTRPC();
   const activeOrganizationState = authClient.useActiveOrganization();
   const composeDialogRef = useRef<ComposeDialogHandle | null>(null);
   const [workspaceState, dispatch] = useReducer(
@@ -717,7 +716,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     mailboxes.find((mailbox) => mailbox.id === mailboxId) ?? mailboxes[0] ?? null;
   const selectedMailboxId = selectedMailbox?.id ?? null;
 
-  const unsubscribeMutationOptions = trpc.mail.unsubscribeFromMessage.mutationOptions();
+  const unsubscribeMutationOptions = orpc.mail.unsubscribeFromMessage.mutationOptions();
   const unsubscribeMutation = useMutation(unsubscribeMutationOptions);
 
   const messagesQuery = useInfiniteQuery(

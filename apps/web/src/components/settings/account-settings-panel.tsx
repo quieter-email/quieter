@@ -29,8 +29,8 @@ import { useState } from "react";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
 import { getErrorMessage, getFieldErrorMessage, unwrapResultError } from "~/lib/errors";
+import { orpc } from "~/lib/orpc";
 import { clearPersistedQueryCache } from "~/lib/query-persister";
-import { useTRPC } from "~/lib/trpc";
 
 type SettingsUser = {
   email: string;
@@ -193,16 +193,13 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
   const [preview, setPreview] = useState<PlaceholderPreview | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const trpc = useTRPC();
   const changeEmailMutationOptions = mutationOptions({
     mutationFn: async (input: { callbackURL: string; newEmail: string }) => {
       const status = await queryClient.fetchQuery(
-        trpc.auth.getUserStatus.queryOptions(
-          { email: input.newEmail },
-          {
-            staleTime: 0,
-          },
-        ),
+        orpc.auth.getUserStatus.queryOptions({
+          input: { email: input.newEmail },
+          staleTime: 0,
+        }),
       );
 
       if (status.exists) {
@@ -212,12 +209,10 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
       unwrapResultError(await authClient.changeEmail(input), "Could not start email change.");
 
       return await queryClient.fetchQuery(
-        trpc.auth.getEmailPreview.queryOptions(
-          { email: input.newEmail },
-          {
-            staleTime: 0,
-          },
-        ),
+        orpc.auth.getEmailPreview.queryOptions({
+          input: { email: input.newEmail },
+          staleTime: 0,
+        }),
       );
     },
   });

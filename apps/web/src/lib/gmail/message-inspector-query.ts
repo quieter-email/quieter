@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import { trpc } from "~/lib/trpc";
+import { rpc } from "~/lib/orpc";
 import { GMAIL_QUERY_STALE_TIME_MS } from "./gmail";
 
 const MESSAGE_INSPECTOR_QUERY_VERSION = 2;
@@ -10,8 +10,7 @@ export const getMessageInspectorQueryKey = (mailboxId: string, messageId: string
 export const getMessageInspectorOptions = (mailboxId: string, messageId: string, enabled = true) =>
   queryOptions({
     queryKey: getMessageInspectorQueryKey(mailboxId, messageId),
-    queryFn: ({ signal }) =>
-      trpc.mail.getMessageInspector.query({ mailboxId, messageId }, { signal }),
+    queryFn: ({ signal }) => rpc.mail.getMessageInspector({ mailboxId, messageId }, { signal }),
     enabled,
     staleTime: GMAIL_QUERY_STALE_TIME_MS,
     refetchOnWindowFocus: false,

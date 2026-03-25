@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
   },
   outputFileTracingRoot: workspaceRoot,
   reactStrictMode: true,
-  transpilePackages: ["@quietr/auth", "@quietr/database", "@quietr/trpc", "@quietr/ui"],
+  transpilePackages: ["@quietr/auth", "@quietr/database", "@quietr/orpc", "@quietr/ui"],
   env: {
     NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY:
       process.env.NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY ??
