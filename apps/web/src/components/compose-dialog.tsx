@@ -609,7 +609,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
 
     return (
       <Dialog onOpenChange={handleDialogOpenChange} open={dialogOpen}>
-        <DialogContent className="max-h-[85vh] w-[min(92vw,46rem)] overflow-hidden bg-background-light p-0 transition-opacity duration-100 data-[ending-style]:scale-100 data-[starting-style]:scale-100">
+        <DialogContent className="max-h-[85vh] w-[min(92vw,46rem)] overflow-hidden bg-background-light p-0 transition-opacity duration-100 data-ending-style:scale-100 data-starting-style:scale-100">
           <form
             action={async () => {
               await form.handleSubmit();
