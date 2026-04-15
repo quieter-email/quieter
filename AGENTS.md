@@ -70,13 +70,13 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
   - `src/email-placeholder.ts`: In-memory placeholder store for magic-link and verification URLs.
   - `src/google-scopes.ts`: Required Google OAuth scopes.
 - `packages/database/`: Shared database package.
-  - `src/schema.ts`: Drizzle schema definitions for auth, organizations, invitations, memberships, passkeys, mailbox records, mail domains, and captured mail metadata.
+  - `src/schema.ts`: Drizzle schema definitions for auth, organizations, invitations, memberships (including per-user default mailbox preference), passkeys, mailbox records, mail domains, and captured mail metadata.
   - `src/client.ts`: Neon and Drizzle client setup.
   - `drizzle.config.ts`: Drizzle Kit configuration.
 - `packages/orpc/`: Shared API contract + server/client helpers.
   - `src/compose.ts`: Shared compose schemas plus robust mail-address parsing used by both the web app and Gmail draft mutations.
   - `src/context.ts`: oRPC context creation.
-  - `src/router.ts`: App router with auth lookup procedures plus mailbox-scoped mail operations, domain configuration, captured-message inspection, list/search procedures, Drafts listing/loading, mailbox history sync procedures, mailto-based unsubscribe sending, and thread-level mailbox mutations used by bulk selection.
+  - `src/router.ts`: App router with auth lookup procedures plus mailbox-scoped mail operations, domain configuration, captured-message inspection, list/search procedures, Drafts listing/loading, mailbox history sync procedures, mailto-based unsubscribe sending, default-mailbox preference, and thread-level mailbox mutations used by bulk selection.
   - `src/mailbox-service.ts`: Mailbox ownership, personal Gmail sync, authorization, and disconnect helpers.
   - `src/mail-service.ts`: Mail-domain configuration, recipient-domain matching, sender-domain resolution, and inbound-message persistence helpers.
   - `src/mail-aws-service.ts`: SES domain registration, DNS record generation, receipt-rule automation, domain-status reads, and managed send helpers.
@@ -99,6 +99,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 
 - Quietr is a Gmail client with first-class mailbox records.
 - The signed-in user authenticates as themselves, but Gmail access is resolved through the selected mailbox in the active organization.
+- Each member can pin one mailbox as their default per organization (stored as `defaultMailboxId` on the `member` table). The default mailbox sorts first in the switcher and is auto-selected when no `mailboxId` search param is present or the param is invalid.
 - Organizations are managed directly through Better Auth's organization plugin. Every user gets a non-deletable personal organization, and connected Gmail mailboxes live there as first-class mailbox records.
 - Normal organizations currently support account/settings structure and membership only. They can exist with zero mailboxes in the current implementation.
 - Google sign-in now requests `https://mail.google.com/` plus profile/email scopes so permanent delete is allowed, and the inbox route blocks on a dedicated repair page that names the exact broken mailbox and keeps targeting that mailbox until the missing scope is granted.

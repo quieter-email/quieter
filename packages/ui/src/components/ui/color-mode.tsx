@@ -49,9 +49,20 @@ export const useColorMode = () => {
     setTheme(value);
   };
 
+  const cycleColorMode = () => {
+    if (configColorMode === "light") {
+      setTheme("dark");
+    } else if (configColorMode === "dark") {
+      setTheme("system");
+    } else {
+      setTheme("light");
+    }
+  };
+
   return {
     colorMode,
     configColorMode,
+    cycleColorMode,
     isMounted,
     setColorMode,
   };

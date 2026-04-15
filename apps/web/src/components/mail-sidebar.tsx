@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ComputerIcon,
   Edit01Icon,
   Menu04Icon,
   Moon01Icon,
@@ -31,6 +32,7 @@ import { SidebarMailboxNav } from "./sidebar/sidebar-mailbox-nav";
 
 type MailSidebarProps = {
   activeOrganizationName: string | null;
+  defaultMailboxId: string | null;
   mailboxes: Array<{
     id: string;
     emailAddress: string;
@@ -40,25 +42,27 @@ type MailSidebarProps = {
   selectedMailbox: MailboxCategory;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
   onSelectMailboxId: (mailboxId: string) => void;
+  onSetDefaultMailbox: (mailboxId: string | null) => void;
   onComposeNewMail: () => void;
 };
 
 export const MailSidebar = ({
   activeOrganizationName,
+  defaultMailboxId,
   mailboxes,
   onComposeNewMail,
   onSelectMailbox,
   onSelectMailboxId,
+  onSetDefaultMailbox,
   selectedMailboxId,
   selectedMailbox,
 }: MailSidebarProps) => {
   const pathname = usePathname();
   const router = useRouter();
   const [{ mailbox, messageId, query }] = useQueryStates(mailboxSearchParams);
-  const { colorMode, isMounted, setColorMode } = useColorMode();
+  const { configColorMode, cycleColorMode, isMounted } = useColorMode();
   const currentLocation = serializeMailboxSearchParams(pathname, { mailbox, messageId, query });
   const settingsHref = serializeSettingsSearchParams("/settings", { from: currentLocation });
-  const isDarkMode = isMounted && colorMode === "dark";
 
   return (
     <aside
@@ -69,8 +73,10 @@ export const MailSidebar = ({
         <div className="flex min-w-0 items-start justify-between gap-3 pl-2">
           <MailboxSwitcherDropdown
             activeOrganizationName={activeOrganizationName}
+            defaultMailboxId={defaultMailboxId}
             mailboxes={mailboxes}
             onSelectMailboxId={onSelectMailboxId}
+            onSetDefaultMailbox={onSetDefaultMailbox}
             selectedMailboxId={selectedMailboxId}
           />
 
@@ -97,24 +103,26 @@ export const MailSidebar = ({
 
               <DropdownMenuSeparator />
 
-              <DropdownMenuItem
-                closeOnSelect={false}
-                onSelect={() => setColorMode(isDarkMode ? "light" : "dark")}
-              >
+              <DropdownMenuItem closeOnSelect={false} onSelect={() => cycleColorMode()}>
                 {!isMounted ? (
                   <>
                     <HugeiconsIcon aria-hidden className="size-4 shrink-0" icon={Moon01Icon} />
                     Theme
                   </>
-                ) : isDarkMode ? (
-                  <>
-                    <HugeiconsIcon aria-hidden className="size-4 shrink-0" icon={Sun01Icon} />
-                    Light mode
-                  </>
-                ) : (
+                ) : configColorMode === "light" ? (
                   <>
                     <HugeiconsIcon aria-hidden className="size-4 shrink-0" icon={Moon01Icon} />
                     Dark mode
+                  </>
+                ) : configColorMode === "dark" ? (
+                  <>
+                    <HugeiconsIcon aria-hidden className="size-4 shrink-0" icon={ComputerIcon} />
+                    System
+                  </>
+                ) : (
+                  <>
+                    <HugeiconsIcon aria-hidden className="size-4 shrink-0" icon={Sun01Icon} />
+                    Light mode
                   </>
                 )}
               </DropdownMenuItem>

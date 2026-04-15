@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "img.logo.dev", pathname: "/**" },
     ],
   },
+  reactCompiler: true,
   outputFileTracingRoot: workspaceRoot,
   reactStrictMode: true,
   transpilePackages: ["@quietr/auth", "@quietr/database", "@quietr/orpc", "@quietr/ui"],

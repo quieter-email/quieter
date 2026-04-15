@@ -24,15 +24,7 @@ import {
 } from "@quietr/ui";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import {
-  type RefObject,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ListMessagesPageResult, MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
 import { getErrorMessage } from "~/lib/errors";
 import { buildThreadListEntries, type ThreadListEntry } from "~/lib/gmail/thread-list";
@@ -259,14 +251,10 @@ const MessageListScrollPane = ({
   mailboxId,
 }: MessageListScrollPaneProps) => {
   const hasViewportAutoPrefetchedRef = useRef(false);
-  const flattenedMessages = useMemo(() => messages.flatMap((page) => page.messages), [messages]);
-  const threadedMessageIds = useMemo(
-    () => threadedMessages.map((thread) => thread.threadId),
-    [threadedMessages],
-  );
-  const messageThreadIds = useMemo(
-    () => new Map(flattenedMessages.map((message) => [message.id, message.threadId] as const)),
-    [flattenedMessages],
+  const flattenedMessages = messages.flatMap((page) => page.messages);
+  const threadedMessageIds = threadedMessages.map((thread) => thread.threadId);
+  const messageThreadIds = new Map(
+    flattenedMessages.map((message) => [message.id, message.threadId] as const),
   );
   const activeThreadId = activeMessageId ? (messageThreadIds.get(activeMessageId) ?? null) : null;
 
@@ -418,25 +406,14 @@ const useMessageListSelection = ({
   const isProgrammaticScrollToTopRef = useRef(false);
   const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(new Set());
   const [selectionAnchorThreadId, setSelectionAnchorThreadId] = useState<string | null>(null);
-  const loadedThreadIds = useMemo(
-    () => threadedMessages.map((thread) => thread.threadId),
-    [threadedMessages],
+  const loadedThreadIds = threadedMessages.map((thread) => thread.threadId);
+  const threadById = new Map(threadedMessages.map((thread) => [thread.threadId, thread] as const));
+  const loadedThreadIndexById = new Map(
+    loadedThreadIds.map((threadId, index) => [threadId, index] as const),
   );
-  const threadById = useMemo(
-    () => new Map(threadedMessages.map((thread) => [thread.threadId, thread] as const)),
-    [threadedMessages],
-  );
-  const loadedThreadIndexById = useMemo(
-    () => new Map(loadedThreadIds.map((threadId, index) => [threadId, index] as const)),
-    [loadedThreadIds],
-  );
-  const selectedThreads = useMemo(
-    () =>
-      Array.from(selectedThreadIds)
-        .map((threadId) => threadById.get(threadId))
-        .filter((thread): thread is ThreadListEntry => Boolean(thread)),
-    [selectedThreadIds, threadById],
-  );
+  const selectedThreads = Array.from(selectedThreadIds)
+    .map((threadId) => threadById.get(threadId))
+    .filter((thread): thread is ThreadListEntry => Boolean(thread));
   const selectedCount = selectedThreadIds.size;
   const totalCount = threadedMessages.length;
   const isSelectionMode = selectedCount > 0;
@@ -517,17 +494,17 @@ const useMessageListSelection = ({
     );
   }, [loadedThreadIds]);
 
-  const clearSelection = useCallback(() => {
+  const clearSelection = () => {
     setSelectedThreadIds(new Set());
     setSelectionAnchorThreadId(null);
-  }, []);
+  };
 
-  const selectSingleThread = useCallback((threadId: string) => {
+  const selectSingleThread = (threadId: string) => {
     setSelectedThreadIds(new Set([threadId]));
     setSelectionAnchorThreadId(threadId);
-  }, []);
+  };
 
-  const toggleThreadSelection = useCallback((threadId: string) => {
+  const toggleThreadSelection = (threadId: string) => {
     setSelectedThreadIds((current) => {
       const next = new Set(current);
       if (next.has(threadId)) {
@@ -538,140 +515,119 @@ const useMessageListSelection = ({
       return next;
     });
     setSelectionAnchorThreadId(threadId);
-  }, []);
+  };
 
-  const startAdditiveSelection = useCallback(
-    (threadId: string) => {
-      setSelectedThreadIds(() => {
-        const next = new Set<string>();
+  const startAdditiveSelection = (threadId: string) => {
+    setSelectedThreadIds(() => {
+      const next = new Set<string>();
 
-        if (activeThreadId && loadedThreadIndexById.has(activeThreadId)) {
-          next.add(activeThreadId);
-        }
+      if (activeThreadId && loadedThreadIndexById.has(activeThreadId)) {
+        next.add(activeThreadId);
+      }
 
-        next.add(threadId);
-        return next;
-      });
-      setSelectionAnchorThreadId(threadId);
-    },
-    [activeThreadId, loadedThreadIndexById],
-  );
+      next.add(threadId);
+      return next;
+    });
+    setSelectionAnchorThreadId(threadId);
+  };
 
-  const selectThreadRange = useCallback(
-    (threadId: string, additive: boolean) => {
-      const targetIndex = loadedThreadIndexById.get(threadId);
-      const fallbackAnchorThreadId =
-        selectionAnchorThreadId ??
-        (activeThreadId && loadedThreadIndexById.has(activeThreadId) ? activeThreadId : null);
-      const anchorIndex = fallbackAnchorThreadId
-        ? loadedThreadIndexById.get(fallbackAnchorThreadId)
-        : undefined;
+  const selectThreadRange = (threadId: string, additive: boolean) => {
+    const targetIndex = loadedThreadIndexById.get(threadId);
+    const fallbackAnchorThreadId =
+      selectionAnchorThreadId ??
+      (activeThreadId && loadedThreadIndexById.has(activeThreadId) ? activeThreadId : null);
+    const anchorIndex = fallbackAnchorThreadId
+      ? loadedThreadIndexById.get(fallbackAnchorThreadId)
+      : undefined;
 
-      if (targetIndex == null) return;
+    if (targetIndex == null) return;
 
-      setSelectedThreadIds((current) => {
-        if (anchorIndex == null) {
-          if (additive) {
-            const next = new Set(current);
+    setSelectedThreadIds((current) => {
+      if (anchorIndex == null) {
+        if (additive) {
+          const next = new Set(current);
 
-            if (activeThreadId && loadedThreadIndexById.has(activeThreadId)) {
-              next.add(activeThreadId);
-            }
-
-            next.add(threadId);
-            return next;
+          if (activeThreadId && loadedThreadIndexById.has(activeThreadId)) {
+            next.add(activeThreadId);
           }
 
-          return new Set([threadId]);
+          next.add(threadId);
+          return next;
         }
 
-        const next = additive ? new Set(current) : new Set<string>();
-        const startIndex = Math.min(anchorIndex, targetIndex);
-        const endIndex = Math.max(anchorIndex, targetIndex);
+        return new Set([threadId]);
+      }
 
-        for (let index = startIndex; index <= endIndex; index += 1) {
-          const rangeThreadId = loadedThreadIds[index];
-          if (rangeThreadId) {
-            next.add(rangeThreadId);
-          }
+      const next = additive ? new Set(current) : new Set<string>();
+      const startIndex = Math.min(anchorIndex, targetIndex);
+      const endIndex = Math.max(anchorIndex, targetIndex);
+
+      for (let index = startIndex; index <= endIndex; index += 1) {
+        const rangeThreadId = loadedThreadIds[index];
+        if (rangeThreadId) {
+          next.add(rangeThreadId);
         }
-
-        return next;
-      });
-      setSelectionAnchorThreadId(threadId);
-    },
-    [activeThreadId, loadedThreadIds, loadedThreadIndexById, selectionAnchorThreadId],
-  );
-
-  const toggleAllLoadedThreads = useCallback(
-    (selected: boolean) => {
-      setSelectedThreadIds(selected ? new Set(loadedThreadIds) : new Set());
-      setSelectionAnchorThreadId(selected ? (loadedThreadIds[0] ?? null) : null);
-    },
-    [loadedThreadIds],
-  );
-
-  const handleThreadSelectionPress = useCallback(
-    (thread: ThreadListEntry, gesture: { additive: boolean; range: boolean }) => {
-      if (gesture.range) {
-        selectThreadRange(thread.threadId, gesture.additive);
-        return;
       }
 
-      if (!isSelectionMode && gesture.additive) {
-        startAdditiveSelection(thread.threadId);
-        return;
-      }
+      return next;
+    });
+    setSelectionAnchorThreadId(threadId);
+  };
 
-      if (!isSelectionMode && !gesture.additive) {
-        selectSingleThread(thread.threadId);
-        return;
-      }
+  const toggleAllLoadedThreads = (selected: boolean) => {
+    setSelectedThreadIds(selected ? new Set(loadedThreadIds) : new Set());
+    setSelectionAnchorThreadId(selected ? (loadedThreadIds[0] ?? null) : null);
+  };
 
+  const handleThreadSelectionPress = (
+    thread: ThreadListEntry,
+    gesture: { additive: boolean; range: boolean },
+  ) => {
+    if (gesture.range) {
+      selectThreadRange(thread.threadId, gesture.additive);
+      return;
+    }
+
+    if (!isSelectionMode && gesture.additive) {
+      startAdditiveSelection(thread.threadId);
+      return;
+    }
+
+    if (!isSelectionMode && !gesture.additive) {
+      selectSingleThread(thread.threadId);
+      return;
+    }
+
+    toggleThreadSelection(thread.threadId);
+  };
+
+  const handleThreadPress = (
+    thread: ThreadListEntry,
+    gesture: { additive: boolean; range: boolean },
+  ) => {
+    if (gesture.range) {
+      selectThreadRange(thread.threadId, gesture.additive);
+      return;
+    }
+
+    if (!isSelectionMode && gesture.additive) {
+      startAdditiveSelection(thread.threadId);
+      return;
+    }
+
+    if (isSelectionMode && !gesture.additive) {
       toggleThreadSelection(thread.threadId);
-    },
-    [
-      isSelectionMode,
-      selectSingleThread,
-      selectThreadRange,
-      startAdditiveSelection,
-      toggleThreadSelection,
-    ],
-  );
+      return;
+    }
 
-  const handleThreadPress = useCallback(
-    (thread: ThreadListEntry, gesture: { additive: boolean; range: boolean }) => {
-      if (gesture.range) {
-        selectThreadRange(thread.threadId, gesture.additive);
-        return;
-      }
+    if (gesture.additive) {
+      toggleThreadSelection(thread.threadId);
+      return;
+    }
 
-      if (!isSelectionMode && gesture.additive) {
-        startAdditiveSelection(thread.threadId);
-        return;
-      }
-
-      if (isSelectionMode && !gesture.additive) {
-        toggleThreadSelection(thread.threadId);
-        return;
-      }
-
-      if (gesture.additive) {
-        toggleThreadSelection(thread.threadId);
-        return;
-      }
-
-      setSelectionAnchorThreadId(thread.threadId);
-      onActivateMessage(thread.anchorMessage.id);
-    },
-    [
-      isSelectionMode,
-      onActivateMessage,
-      selectThreadRange,
-      startAdditiveSelection,
-      toggleThreadSelection,
-    ],
-  );
+    setSelectionAnchorThreadId(thread.threadId);
+    onActivateMessage(thread.anchorMessage.id);
+  };
 
   useHotkey(
     "Mod+A",
@@ -753,22 +709,15 @@ export const MessageList = ({
   onUnmarkAsSpam,
   searchQuery,
 }: MessageListProps) => {
-  const flattenedMessages = useMemo(() => messages.flatMap((page) => page.messages), [messages]);
-  const threadedMessages = useMemo(
-    () =>
-      activeMailbox === "drafts"
-        ? flattenedMessages.map((message) => buildDraftListEntry(message))
-        : buildThreadListEntries(flattenedMessages),
-    [activeMailbox, flattenedMessages],
-  );
-  const messageThreadIds = useMemo(
-    () =>
-      new Map(
-        flattenedMessages.map((message) => {
-          return [message.id, message.threadId] as const;
-        }),
-      ),
-    [flattenedMessages],
+  const flattenedMessages = messages.flatMap((page) => page.messages);
+  const threadedMessages =
+    activeMailbox === "drafts"
+      ? flattenedMessages.map((message) => buildDraftListEntry(message))
+      : buildThreadListEntries(flattenedMessages);
+  const messageThreadIds = new Map(
+    flattenedMessages.map((message) => {
+      return [message.id, message.threadId] as const;
+    }),
   );
   const activeThreadId =
     activeMailbox === "drafts" || !activeMessageId

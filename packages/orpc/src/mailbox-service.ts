@@ -1,7 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { auth } from "@quietr/auth";
 import { hasRequiredGoogleScopes } from "@quietr/auth/google-scopes";
-import { db, mailbox, organization } from "@quietr/database";
+import { db, mailbox, member, organization } from "@quietr/database";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { getGmailProfile } from "./gmail-service";
 
@@ -297,15 +297,29 @@ export const getGoogleScopeRepairTarget = async (input: {
   });
 };
 
+const getMemberDefaultMailboxId = async (organizationId: string, userId: string) => {
+  const [row] = await db
+    .select({ defaultMailboxId: member.defaultMailboxId })
+    .from(member)
+    .where(and(eq(member.organizationId, organizationId), eq(member.userId, userId)))
+    .limit(1);
+
+  return row?.defaultMailboxId ?? null;
+};
+
 export const listMailboxesForOrganization = async (input: {
   activeOrganizationId: string;
   headers: Headers;
   userId: string;
 }) => {
   const activeOrganization = await getActiveOrganization(input.activeOrganizationId);
-  const mailboxes = await listOrganizationMailboxes(activeOrganization.id);
+  const [mailboxes, defaultMailboxId] = await Promise.all([
+    listOrganizationMailboxes(activeOrganization.id),
+    getMemberDefaultMailboxId(activeOrganization.id, input.userId),
+  ]);
 
   return {
+    defaultMailboxId,
     mailboxes,
     googleScopeRepairTarget: await resolveGoogleScopeRepairTarget({
       headers: input.headers,
@@ -396,6 +410,28 @@ export const getAuthorizedGmailMailbox = async (input: {
     accessToken,
     mailbox: selectedMailbox,
   };
+};
+
+export const setDefaultMailbox = async (input: {
+  activeOrganizationId: string;
+  mailboxId: string | null;
+  userId: string;
+}) => {
+  if (input.mailboxId) {
+    await getAuthorizedMailbox({
+      activeOrganizationId: input.activeOrganizationId,
+      mailboxId: input.mailboxId,
+    });
+  }
+
+  await db
+    .update(member)
+    .set({ defaultMailboxId: input.mailboxId })
+    .where(
+      and(eq(member.organizationId, input.activeOrganizationId), eq(member.userId, input.userId)),
+    );
+
+  return { defaultMailboxId: input.mailboxId };
 };
 
 export const disconnectPersonalGmailMailbox = async (input: {

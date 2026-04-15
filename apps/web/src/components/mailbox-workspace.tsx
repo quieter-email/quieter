@@ -144,7 +144,9 @@ type MailboxWorkspaceViewProps = {
   onRefresh: () => void;
   onSearch: (query: string) => void;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
+  defaultMailboxId: string | null;
   onSelectMailboxId: (mailboxId: string) => void;
+  onSetDefaultMailbox: (mailboxId: string | null) => void;
   onUntrash: (messageId: string) => void;
   onUnsubscribe: (messageId: string) => void;
   onUnmarkAsSpam: (messageId: string) => void;
@@ -707,17 +709,34 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
   const activeOrganizationId = activeOrganizationState.data?.id ?? null;
   const activeOrganizationName = activeOrganizationState.data?.name ?? null;
   const mailboxesQuery = useQuery(mailboxesQueryOptions(activeOrganizationId));
-  const mailboxes = (mailboxesQuery.data?.mailboxes ?? []).map((mailbox) => ({
-    displayName: mailbox.displayName,
-    emailAddress: mailbox.emailAddress,
-    id: mailbox.id,
-  }));
+  const defaultMailboxId = mailboxesQuery.data?.defaultMailboxId ?? null;
+  const mailboxes = (mailboxesQuery.data?.mailboxes ?? [])
+    .map((mailbox) => ({
+      displayName: mailbox.displayName,
+      emailAddress: mailbox.emailAddress,
+      id: mailbox.id,
+    }))
+    .sort((a, b) => {
+      if (a.id === defaultMailboxId) return -1;
+      if (b.id === defaultMailboxId) return 1;
+      return 0;
+    });
   const selectedMailbox =
-    mailboxes.find((mailbox) => mailbox.id === mailboxId) ?? mailboxes[0] ?? null;
+    mailboxes.find((mailbox) => mailbox.id === mailboxId) ??
+    mailboxes.find((mailbox) => mailbox.id === defaultMailboxId) ??
+    mailboxes[0] ??
+    null;
   const selectedMailboxId = selectedMailbox?.id ?? null;
 
   const unsubscribeMutationOptions = orpc.mail.unsubscribeFromMessage.mutationOptions();
   const unsubscribeMutation = useMutation(unsubscribeMutationOptions);
+  const setDefaultMailboxMutation = useMutation({
+    ...orpc.mail.setDefaultMailbox.mutationOptions(),
+    onSuccess: async () => {
+      if (!activeOrganizationId) return;
+      await queryClient.invalidateQueries({ queryKey: ["mailboxes", activeOrganizationId] });
+    },
+  });
 
   const messagesQuery = useInfiniteQuery(
     messagesQueryOptions(
@@ -912,15 +931,6 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     }
 
     const threadId = flattenedMessages.find((message) => message.id === messageId)?.threadId;
-    const activeThreadId = activeMessageId
-      ? flattenedMessages.find((message) => message.id === activeMessageId)?.threadId
-      : null;
-    const isActiveThread = Boolean(threadId) && activeThreadId === threadId;
-
-    if ((activeMessageId === messageId || isActiveThread) && activeMessageId) {
-      void setMailboxQuery({ messageId: null });
-      return;
-    }
 
     void setMailboxQuery({ messageId });
 
@@ -977,6 +987,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       activeMailbox,
       activeMessageId,
       activeOrganizationName,
+      defaultMailboxId,
       error: messagesQuery.error ?? null,
       hasNextPage: Boolean(messagesQuery.hasNextPage),
       hasMailbox: Boolean(selectedMailboxId),
@@ -1055,6 +1066,9 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
 
         void setMailboxQuery({ mailboxId: nextMailboxId, messageId: null });
       },
+      onSetDefaultMailbox: (nextMailboxId) => {
+        void setDefaultMailboxMutation.mutateAsync({ mailboxId: nextMailboxId });
+      },
       onUntrash: (messageId) => {
         void untrashMessage(messageId);
       },
@@ -1096,6 +1110,7 @@ const MailboxWorkspaceView = ({
   activeMailbox,
   activeMessageId,
   activeOrganizationName,
+  defaultMailboxId,
   hasMailbox,
   onBulkDeleteDrafts,
   onBulkDeletePermanently,
@@ -1130,6 +1145,7 @@ const MailboxWorkspaceView = ({
   onSearch,
   onSelectMailbox,
   onSelectMailboxId,
+  onSetDefaultMailbox,
   onUntrash,
   onUnsubscribe,
   onUnmarkAsSpam,
@@ -1147,10 +1163,12 @@ const MailboxWorkspaceView = ({
 
         <MailSidebar
           activeOrganizationName={activeOrganizationName}
+          defaultMailboxId={defaultMailboxId}
           mailboxes={mailboxes}
           onComposeNewMail={onComposeNewMail}
           onSelectMailbox={onSelectMailbox}
           onSelectMailboxId={onSelectMailboxId}
+          onSetDefaultMailbox={onSetDefaultMailbox}
           selectedMailbox={activeMailbox}
           selectedMailboxId={selectedMailboxId}
         />

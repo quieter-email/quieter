@@ -109,6 +109,9 @@ export const member = pgTable(
       .notNull()
       .references(() => user.id),
     role: text("role").notNull(),
+    defaultMailboxId: text("defaultMailboxId").references(() => mailbox.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("createdAt").notNull(),
   },
   (table) => [
@@ -286,6 +289,11 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
   },
   member: {
+    defaultMailbox: r.one.mailbox({
+      from: r.member.defaultMailboxId,
+      to: r.mailbox.id,
+      optional: true,
+    }),
     organization: r.one.organization({
       from: r.member.organizationId,
       to: r.organization.id,

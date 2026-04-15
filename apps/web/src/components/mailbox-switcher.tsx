@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Loading03Icon, UserGroupIcon } from "@hugeicons/core-free-icons";
+import { Loading03Icon, PinIcon, PinOffIcon, UserGroupIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   DropdownMenu,
@@ -49,8 +49,10 @@ type OrganizationSwitcherSelectProps = {
 
 type MailboxSwitcherDropdownProps = {
   activeOrganizationName: string | null;
+  defaultMailboxId: string | null;
   mailboxes: MailboxSwitcherMailbox[];
   onSelectMailboxId: (mailboxId: string) => void;
+  onSetDefaultMailbox: (mailboxId: string | null) => void;
   selectedMailboxId: string | null;
 };
 
@@ -58,12 +60,8 @@ const getMailboxTitle = (mailbox: MailboxSwitcherMailbox) => mailbox.emailAddres
 
 const getMailboxSubtitle = () => null;
 
-const MailboxSummary = ({ action, className, isActive = false, mailbox }: MailboxSummaryProps) => (
-  <div
-    className={cn("flex min-w-0 items-center justify-between gap-3 rounded-md", className, {
-      "bg-muted/70": isActive,
-    })}
-  >
+const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => (
+  <div className={cn("flex min-w-0 items-center justify-between gap-3 rounded-md", className)}>
     <div className="min-w-0">
       <p className="truncate text-sm text-foreground">{getMailboxTitle(mailbox)}</p>
       {getMailboxSubtitle() ? (
@@ -208,8 +206,10 @@ export const OrganizationSwitcherSelect = ({
 
 export const MailboxSwitcherDropdown = ({
   activeOrganizationName,
+  defaultMailboxId,
   mailboxes,
   onSelectMailboxId,
+  onSetDefaultMailbox,
   selectedMailboxId,
 }: MailboxSwitcherDropdownProps) => {
   const selectedMailbox =
@@ -240,14 +240,41 @@ export const MailboxSwitcherDropdown = ({
           {mailboxes.length > 0 ? (
             mailboxes.map((mailbox) => {
               const isActive = mailbox.id === selectedMailboxId;
+              const isDefault = mailbox.id === defaultMailboxId;
 
               return (
                 <DropdownMenuItem
-                  className="h-auto px-1 py-1"
+                  className={cn("group/item h-auto", {
+                    "bg-muted/70": isActive,
+                  })}
                   key={mailbox.id}
                   onSelect={() => onSelectMailboxId(mailbox.id)}
                 >
                   <MailboxSummary
+                    action={
+                      <button
+                        aria-label={isDefault ? "Unset default mailbox" : "Set as default mailbox"}
+                        className={cn(
+                          "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
+                          {
+                            "text-foreground": isDefault,
+                            "text-muted-foreground/50 opacity-0 group-hover/item:opacity-100 hover:text-foreground":
+                              !isDefault,
+                          },
+                        )}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onSetDefaultMailbox(isDefault ? null : mailbox.id);
+                        }}
+                        type="button"
+                      >
+                        <HugeiconsIcon
+                          aria-hidden
+                          className="size-3.5"
+                          icon={isDefault ? PinIcon : PinOffIcon}
+                        />
+                      </button>
+                    }
                     className="w-full px-2 py-1.5"
                     isActive={isActive}
                     mailbox={mailbox}

@@ -1,8 +1,14 @@
 "use client";
 
-import { Delete02Icon, Loading03Icon, Mail01Icon } from "@hugeicons/core-free-icons";
+import {
+  Delete02Icon,
+  Loading03Icon,
+  Mail01Icon,
+  PinIcon,
+  PinOffIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, toast } from "@quietr/ui";
+import { Button, cn, toast } from "@quietr/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -89,9 +95,23 @@ export const MailboxesSettingsPanel = () => {
         targetAccountId: googleScopeRepairTarget.providerAccountId,
       })
     : null;
+  const defaultMailboxId = mailboxesQuery.data?.defaultMailboxId ?? null;
   const disconnectMailboxMutation = useMutation({
     ...orpc.mail.disconnectMailbox.mutationOptions(),
     mutationKey: ["mail", "disconnect-mailbox"],
+    onSuccess: async () => {
+      if (!activeOrganizationId) {
+        return;
+      }
+
+      await queryClient.invalidateQueries({
+        queryKey: ["mailboxes", activeOrganizationId],
+      });
+    },
+  });
+  const setDefaultMailboxMutation = useMutation({
+    ...orpc.mail.setDefaultMailbox.mutationOptions(),
+    mutationKey: ["mail", "set-default-mailbox"],
     onSuccess: async () => {
       if (!activeOrganizationId) {
         return;
@@ -246,15 +266,23 @@ export const MailboxesSettingsPanel = () => {
         <div className="divide-y divide-border/70">
           {mailboxes.map((mailbox) => {
             const isDisconnecting = disconnectMailboxMutation.variables?.mailboxId === mailbox.id;
+            const isDefault = mailbox.id === defaultMailboxId;
 
             return (
               <MailboxSettingsRow
                 action={
-                  isPersonalOrganization ? (
+                  <div className="flex items-center gap-1">
                     <Button
-                      disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
+                      aria-label={isDefault ? "Unset default mailbox" : "Set as default mailbox"}
+                      className={cn({
+                        "text-foreground": isDefault,
+                        "text-muted-foreground": !isDefault,
+                      })}
+                      disabled={setDefaultMailboxMutation.isPending}
                       onClick={() => {
-                        void disconnectMailboxMutation.mutateAsync({ mailboxId: mailbox.id });
+                        void setDefaultMailboxMutation.mutateAsync({
+                          mailboxId: isDefault ? null : mailbox.id,
+                        });
                       }}
                       size="sm"
                       type="button"
@@ -262,12 +290,31 @@ export const MailboxesSettingsPanel = () => {
                     >
                       <HugeiconsIcon
                         aria-hidden
-                        className={isDisconnecting ? "size-4 animate-spin" : "size-4"}
-                        icon={isDisconnecting ? Loading03Icon : Delete02Icon}
+                        className="size-4"
+                        icon={isDefault ? PinIcon : PinOffIcon}
                       />
-                      Remove
+                      {isDefault ? "Default" : "Set default"}
                     </Button>
-                  ) : null
+
+                    {isPersonalOrganization ? (
+                      <Button
+                        disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
+                        onClick={() => {
+                          void disconnectMailboxMutation.mutateAsync({ mailboxId: mailbox.id });
+                        }}
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <HugeiconsIcon
+                          aria-hidden
+                          className={cn("size-4", { "animate-spin": isDisconnecting })}
+                          icon={isDisconnecting ? Loading03Icon : Delete02Icon}
+                        />
+                        Remove
+                      </Button>
+                    ) : null}
+                  </div>
                 }
                 key={mailbox.id}
                 mailbox={mailbox}

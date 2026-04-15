@@ -51,6 +51,7 @@ import {
   getAuthorizedGmailMailbox,
   getGoogleScopeRepairTarget,
   listMailboxesForOrganization,
+  setDefaultMailbox,
   syncPersonalGmailMailboxes,
 } from "./mailbox-service";
 
@@ -599,6 +600,19 @@ export const appRouter = {
         return await disconnectPersonalGmailMailbox({
           activeOrganizationId: context.activeOrganizationId,
           headers: getRequestHeaders(context),
+          mailboxId: input.mailboxId,
+          userId: context.userId,
+        });
+      }),
+    setDefaultMailbox: protectedProcedure
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema.nullable(),
+        }),
+      )
+      .handler(async ({ context, input }) => {
+        return await setDefaultMailbox({
+          activeOrganizationId: context.activeOrganizationId,
           mailboxId: input.mailboxId,
           userId: context.userId,
         });

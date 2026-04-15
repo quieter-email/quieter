@@ -1,29 +1,33 @@
 "use client";
 
-import { Moon01Icon, Sun01Icon } from "@hugeicons/core-free-icons";
+import { ComputerIcon, Moon01Icon, Sun01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, useColorMode } from "@quietr/ui";
 
 export const GeneralSettingsPanel = () => {
-  const { colorMode, isMounted, setColorMode } = useColorMode();
-  const isDarkMode = isMounted && colorMode === "dark";
+  const { configColorMode, cycleColorMode, isMounted } = useColorMode();
 
   return (
-    <Button onClick={() => setColorMode(isDarkMode ? "light" : "dark")} size="sm" variant="default">
+    <Button onClick={() => cycleColorMode()} size="sm" variant="default">
       {!isMounted ? (
         <>
           <HugeiconsIcon aria-hidden className="size-4 shrink-0" icon={Moon01Icon} />
           Theme
         </>
-      ) : isDarkMode ? (
-        <>
-          <HugeiconsIcon aria-hidden className="size-4 shrink-0" icon={Sun01Icon} />
-          Light mode
-        </>
-      ) : (
+      ) : configColorMode === "light" ? (
         <>
           <HugeiconsIcon aria-hidden className="size-4 shrink-0" icon={Moon01Icon} />
           Dark mode
+        </>
+      ) : configColorMode === "dark" ? (
+        <>
+          <HugeiconsIcon aria-hidden className="size-4 shrink-0" icon={ComputerIcon} />
+          System
+        </>
+      ) : (
+        <>
+          <HugeiconsIcon aria-hidden className="size-4 shrink-0" icon={Sun01Icon} />
+          Light mode
         </>
       )}
     </Button>

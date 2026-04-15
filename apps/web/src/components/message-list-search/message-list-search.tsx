@@ -5,7 +5,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, Field, IconButtonTooltip, Input } from "@quietr/ui";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
 import { SpinWhileActive } from "../spin-while-active";
 import { MessageListSearchDropdown } from "./message-list-search-dropdown";
@@ -73,79 +73,66 @@ export const MessageListSearch = ({
   const [openSection, setOpenSection] = useState<SearchDropdownSectionId | null>(null);
 
   const labelsQuery = useQuery(labelsQueryOptions(mailboxId, isDropdownOpen));
-  const committedSearchState = useMemo(
-    () => parseStructuredSearchQuery(searchQuery),
-    [searchQuery],
-  );
+  const committedSearchState = parseStructuredSearchQuery(searchQuery);
   const currentSearchState =
     draftSearchState?.baseQuery === searchQuery ? draftSearchState.value : committedSearchState;
-  const userLabels = useMemo(() => getUserLabels(labelsQuery.data ?? []), [labelsQuery.data]);
+  const userLabels = getUserLabels(labelsQuery.data ?? []);
 
-  const openDropdown = useCallback(() => {
+  const openDropdown = () => {
     setAnimateDropdown(openWithAnimationRef.current);
     openWithAnimationRef.current = false;
     setIsDropdownOpen(true);
-  }, []);
+  };
 
-  const closeDropdown = useCallback(() => {
+  const closeDropdown = () => {
     setIsDropdownOpen(false);
     setAnimateDropdown(false);
     openWithAnimationRef.current = false;
     setOpenSection(null);
-  }, []);
+  };
 
-  const commitSearchState = useCallback(
-    (nextState: StructuredSearchState, closeAfterCommit = false) => {
-      setDraftSearchState({
-        baseQuery: searchQuery,
-        value: nextState,
-      });
-      void onScrollToTop();
-      onSearch(serializeStructuredSearchQuery(nextState));
-      if (closeAfterCommit) closeDropdown();
-    },
-    [closeDropdown, onScrollToTop, onSearch, searchQuery],
-  );
+  const commitSearchState = (nextState: StructuredSearchState, closeAfterCommit = false) => {
+    setDraftSearchState({
+      baseQuery: searchQuery,
+      value: nextState,
+    });
+    void onScrollToTop();
+    onSearch(serializeStructuredSearchQuery(nextState));
+    if (closeAfterCommit) closeDropdown();
+  };
 
-  const updateSearchState = useCallback(
-    (
-      updater: StructuredSearchState | ((current: StructuredSearchState) => StructuredSearchState),
-      closeAfterCommit = false,
-    ) => {
-      const nextState = typeof updater === "function" ? updater(currentSearchState) : updater;
-      commitSearchState(nextState, closeAfterCommit);
-    },
-    [commitSearchState, currentSearchState],
-  );
+  const updateSearchState = (
+    updater: StructuredSearchState | ((current: StructuredSearchState) => StructuredSearchState),
+    closeAfterCommit = false,
+  ) => {
+    const nextState = typeof updater === "function" ? updater(currentSearchState) : updater;
+    commitSearchState(nextState, closeAfterCommit);
+  };
 
-  const selectedSearchChips = useMemo(
-    () => [
-      ...(currentSearchState.categoryFilter
-        ? [
-            {
-              key: `category:${currentSearchState.categoryFilter}`,
-              label: SEARCH_CATEGORY_FILTER_OPTIONS_BY_ID[currentSearchState.categoryFilter].label,
-              onRemove: () =>
-                updateSearchState((current) => ({ ...current, categoryFilter: null })),
-            },
-          ]
-        : []),
-      ...currentSearchState.userLabels.map((userLabel) => ({
-        key: `label:${normalizeLabelSelectionKey(userLabel)}`,
-        label:
-          userLabels.find(
-            (label) =>
-              normalizeLabelSelectionKey(label.name) === normalizeLabelSelectionKey(userLabel),
-          )?.name ?? userLabel,
-        onRemove: () =>
-          updateSearchState((current) => ({
-            ...current,
-            userLabels: removeUserLabelSelection(current.userLabels, userLabel),
-          })),
-      })),
-    ],
-    [currentSearchState, updateSearchState, userLabels],
-  );
+  const selectedSearchChips = [
+    ...(currentSearchState.categoryFilter
+      ? [
+          {
+            key: `category:${currentSearchState.categoryFilter}`,
+            label: SEARCH_CATEGORY_FILTER_OPTIONS_BY_ID[currentSearchState.categoryFilter].label,
+            onRemove: () => updateSearchState((current) => ({ ...current, categoryFilter: null })),
+          },
+        ]
+      : []),
+    ...currentSearchState.userLabels.map((userLabel) => ({
+      key: `label:${normalizeLabelSelectionKey(userLabel)}`,
+      label:
+        userLabels.find(
+          (label) =>
+            normalizeLabelSelectionKey(label.name) === normalizeLabelSelectionKey(userLabel),
+        )?.name ?? userLabel,
+      onRemove: () =>
+        updateSearchState((current) => ({
+          ...current,
+          userLabels: removeUserLabelSelection(current.userLabels, userLabel),
+        })),
+    })),
+  ];
 
   useEffect(() => {
     if (!isDropdownOpen) return;
