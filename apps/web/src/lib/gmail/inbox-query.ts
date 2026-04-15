@@ -1,4 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { ORPCError } from "@orpc/client";
+import { rateLimitedErrorDataSchema } from "@quietr/orpc/errors";
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
 import { persistQueryByKey } from "~/lib/query-persister";
@@ -21,6 +23,30 @@ import { getThreadQueryKey } from "./thread-query";
 const normalizeSearchQuery = (searchQuery: string | null | undefined) => {
   const normalized = searchQuery?.trim();
   return normalized && normalized.length > 0 ? normalized : undefined;
+};
+
+const getRateLimitedRetryAfterMs = (error: unknown) => {
+  if (!(error instanceof ORPCError) || error.code !== "RATE_LIMITED") {
+    return undefined;
+  }
+
+  const parsedErrorData = rateLimitedErrorDataSchema.safeParse(error.data);
+  if (!parsedErrorData.success) {
+    return undefined;
+  }
+
+  return parsedErrorData.data.retryAfter * 1000;
+};
+
+const getRateLimitCooldownRemainingMs = (query: {
+  state: { error: unknown; errorUpdatedAt: number };
+}) => {
+  const retryAfterMs = getRateLimitedRetryAfterMs(query.state.error);
+  if (retryAfterMs == null) {
+    return undefined;
+  }
+
+  return Math.max(0, query.state.errorUpdatedAt + retryAfterMs - Date.now());
 };
 
 export const getMessagesQueryKey = (
@@ -1792,6 +1818,7 @@ export const messagesQueryOptions = (
     getNextPageParam: (lastPage: ListMessagesPageResult) => lastPage.nextPageToken ?? undefined,
     staleTime: GMAIL_QUERY_STALE_TIME_MS,
     enabled,
+    retry: (failureCount, error) => getRateLimitedRetryAfterMs(error) == null && failureCount < 3,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -1813,10 +1840,18 @@ export const liveSyncQueryOptions = (
         getMessagesQueryKey(mailboxId, mailbox, searchQuery),
       )?.pages[0],
     persister: undefined,
+    retry: (failureCount, error) => getRateLimitedRetryAfterMs(error) == null && failureCount < 3,
     staleTime: 0,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: "always",
-    refetchOnReconnect: "always",
-    refetchInterval: GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
+    refetchOnMount: (query) =>
+      (getRateLimitCooldownRemainingMs(query) ?? 0) > 0 ? false : "always",
+    refetchOnWindowFocus: (query) =>
+      (getRateLimitCooldownRemainingMs(query) ?? 0) > 0 ? false : "always",
+    refetchOnReconnect: (query) =>
+      (getRateLimitCooldownRemainingMs(query) ?? 0) > 0 ? false : "always",
+    refetchInterval: (query) =>
+      Math.max(
+        GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
+        getRateLimitCooldownRemainingMs(query) ?? 0,
+      ),
     refetchIntervalInBackground: false,
   });

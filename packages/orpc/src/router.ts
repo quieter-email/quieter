@@ -27,7 +27,7 @@ import {
   getMessageAttachment,
   getMessageInspector,
   getThreadWithDetails,
-  isGmailServiceError,
+  isGmailRateLimitedError,
   listDraftsWithDetails,
   listLabels,
   listMessagesWithDetails,
@@ -389,7 +389,7 @@ const toRetryAfterSeconds = (retryAfterMs?: number) =>
   Math.max(1, Math.ceil((retryAfterMs ?? 1000) / 1000));
 
 const rethrowKnownRateLimit = (context: OrpcContext, error: unknown): never => {
-  if (!isGmailServiceError(error) || (error.status !== 429 && error.status !== 503)) {
+  if (!isGmailRateLimitedError(error)) {
     throw error;
   }
 

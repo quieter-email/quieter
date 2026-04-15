@@ -273,6 +273,8 @@ export type GmailMessage = z.infer<typeof gmailMessageSchema>;
 export type GmailDraft = z.infer<typeof gmailDraftSchema>;
 export type GmailAttachment = z.infer<typeof gmailAttachmentSchema>;
 export type GmailServiceError = Error & {
+  googleReason?: string;
+  googleStatus?: string;
   status: number;
   retryAfterMs?: number;
 };
@@ -289,6 +291,15 @@ export { decodeMimeHeaderValue, extractMessageContent };
 const GMAIL_BATCH_MESSAGE_CHUNK_SIZE = 25;
 const GMAIL_METADATA_RETRY_LIMIT = 2;
 const GMAIL_METADATA_RETRY_BASE_DELAY_MS = 250;
+const GMAIL_SERVICE_UNAVAILABLE_RETRY_AFTER_MS = 1000 * 5;
+const GMAIL_RATE_LIMIT_REASONS = new Set([
+  "dailylimitexceeded",
+  "quotaexceeded",
+  "ratelimitexceeded",
+  "resourceexhausted",
+  "userratelimitexceeded",
+]);
+const GMAIL_RATE_LIMIT_RETRY_AFTER_MS = 1000 * 60;
 const GMAIL_MESSAGE_METADATA_HEADERS = [
   "Subject",
   "From",
@@ -320,6 +331,37 @@ const normalizeLabelIds = (labelIds: string[] | undefined): string[] | undefined
 const hasUnreadLabel = (labelIds: string[] | undefined): boolean =>
   Boolean(labelIds?.includes(GMAIL_UNREAD_LABEL));
 
+const isKnownGmailRateLimit = (details: {
+  googleReason?: string;
+  googleStatus?: string;
+  message?: string;
+  status: number;
+}) => {
+  if (details.status === 429 || details.status === 503) {
+    return true;
+  }
+
+  if (details.status !== 403) {
+    return false;
+  }
+
+  if (details.googleReason && GMAIL_RATE_LIMIT_REASONS.has(details.googleReason)) {
+    return true;
+  }
+
+  if (details.googleStatus === "RESOURCE_EXHAUSTED") {
+    return true;
+  }
+
+  const normalizedMessage = details.message?.trim().toLowerCase();
+  return Boolean(
+    normalizedMessage &&
+    (normalizedMessage.includes("quota exceeded") ||
+      normalizedMessage.includes("rate limit exceeded") ||
+      normalizedMessage.includes("resource exhausted")),
+  );
+};
+
 const createGoogleApiError = async (response: Response) => {
   const body = await response.text().catch(() => "");
   const parsedBody = (() => {
@@ -334,6 +376,7 @@ const createGoogleApiError = async (response: Response) => {
     }
   })();
   const googleMessage = parsedBody?.error.message?.trim();
+  const googleStatus = parsedBody?.error.status?.trim().toUpperCase();
   const googleReason = parsedBody?.error.errors?.[0]?.reason?.trim().toLowerCase();
   const message =
     googleReason === "invalidargument" && googleMessage === "Invalid To header"
@@ -344,9 +387,13 @@ const createGoogleApiError = async (response: Response) => {
           ? "Check the Bcc field. One or more recipient addresses are invalid."
           : googleMessage || body || `Google API request failed with status ${response.status}.`;
   const error = new Error(message) as Error & {
+    googleReason?: string;
+    googleStatus?: string;
     status: number;
     retryAfterMs?: number;
   };
+  error.googleReason = googleReason;
+  error.googleStatus = googleStatus;
   error.status = response.status;
   const retryAfterHeader = response.headers.get("retry-after");
   if (retryAfterHeader) {
@@ -354,6 +401,20 @@ const createGoogleApiError = async (response: Response) => {
     if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
       error.retryAfterMs = retryAfterSeconds * 1000;
     }
+  }
+  if (
+    error.retryAfterMs == null &&
+    isKnownGmailRateLimit({
+      googleReason,
+      googleStatus,
+      message,
+      status: response.status,
+    })
+  ) {
+    error.retryAfterMs =
+      response.status === 503
+        ? GMAIL_SERVICE_UNAVAILABLE_RETRY_AFTER_MS
+        : GMAIL_RATE_LIMIT_RETRY_AFTER_MS;
   }
   return error;
 };
@@ -366,6 +427,21 @@ const isErrorWithStatus = (error: unknown): error is GmailServiceError =>
 
 export const isGmailServiceError = (error: unknown): error is GmailServiceError =>
   isErrorWithStatus(error);
+
+export const isGmailRateLimitedError = (error: unknown): error is GmailServiceError =>
+  isErrorWithStatus(error) &&
+  isKnownGmailRateLimit({
+    googleReason:
+      "googleReason" in error && typeof error.googleReason === "string"
+        ? error.googleReason
+        : undefined,
+    googleStatus:
+      "googleStatus" in error && typeof error.googleStatus === "string"
+        ? error.googleStatus
+        : undefined,
+    message: typeof error.message === "string" ? error.message : undefined,
+    status: error.status,
+  });
 
 const sleep = async (durationMs: number) => {
   await new Promise((resolve) => setTimeout(resolve, durationMs));
