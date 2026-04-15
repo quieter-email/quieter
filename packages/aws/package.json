@@ -1,0 +1,38 @@
+{
+  "name": "@quietr/aws",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./function-url": "./src/function-url.ts",
+    "./inbound": "./src/inbound.ts",
+    "./outbound": "./src/outbound.ts",
+    "./receipt": "./src/receipt.ts"
+  },
+  "scripts": {
+    "fmt": "oxfmt --config ../../oxfmt.json .",
+    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
+    "lint": "oxlint --config ../../oxlint.json .",
+    "lint:fix": "oxlint --fix --config ../../oxlint.json .",
+    "sst:deploy": "bunx --env-file=../../.env.local sst deploy --config ../../sst.config.ts --stage mail-dev",
+    "sst:deploy:production": "bunx --env-file=../../.env.local sst deploy --config ../../sst.config.ts --stage production",
+    "sst:dev": "bunx --env-file=../../.env.local sst dev --config ../../sst.config.ts --stage mail-dev",
+    "sst:diff": "bunx --env-file=../../.env.local sst diff --config ../../sst.config.ts --stage mail-dev",
+    "sst:remove": "bunx --env-file=../../.env.local sst remove --config ../../sst.config.ts --stage mail-dev",
+    "sst:remove:production": "bunx --env-file=../../.env.local sst remove --config ../../sst.config.ts --stage production",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "catalog:",
+    "@aws-sdk/client-sesv2": "catalog:",
+    "@quietr/database": "workspace:*",
+    "@quietr/orpc": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@quietr/config": "workspace:*",
+    "@typescript/native-preview": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:"
+  }
+}

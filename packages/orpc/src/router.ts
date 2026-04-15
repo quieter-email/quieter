@@ -45,6 +45,7 @@ import {
   updateThreadLabels,
   type MailboxCategory,
 } from "./gmail-service";
+import { listMailMessagesForOrganization, normalizeMailDomain } from "./mail-service";
 import {
   disconnectPersonalGmailMailbox,
   getAuthorizedGmailMailbox,
@@ -415,6 +416,10 @@ const callWithRateLimitHandling = async <TValue>(
   }
 };
 
+const loadMailAwsService = async () => {
+  return await import("./mail-aws-service");
+};
+
 export const appRouter = {
   auth: {
     getEmailPreview: publicProcedure
@@ -431,6 +436,122 @@ export const appRouter = {
       }),
   },
   mail: {
+    listDomains: protectedProcedure.route({ method: "GET" }).handler(async ({ context }) => {
+      const { listMailDomainSetupsForOrganization } = await loadMailAwsService();
+      return await listMailDomainSetupsForOrganization(context.activeOrganizationId);
+    }),
+    getDomainSetup: protectedProcedure
+      .route({ method: "GET" })
+      .input(
+        z.object({
+          domainId: z.string().trim().min(1),
+        }),
+      )
+      .handler(async ({ context, input }) => {
+        const { getMailDomainSetup } = await loadMailAwsService();
+        return await getMailDomainSetup(input.domainId, context.activeOrganizationId);
+      }),
+    registerDomain: protectedProcedure
+      .input(
+        z.object({
+          domain: z
+            .string()
+            .trim()
+            .min(1)
+            .transform((domain) => normalizeMailDomain(domain)),
+          inboundKeyPrefix: z.string().trim().min(1).optional(),
+          isActive: z.boolean().optional(),
+          s3Bucket: z.string().trim().min(1).optional(),
+        }),
+      )
+      .handler(async ({ context, input }) => {
+        const { registerMailDomain } = await loadMailAwsService();
+        return await registerMailDomain({
+          domain: input.domain,
+          inboundKeyPrefix: input.inboundKeyPrefix,
+          isActive: input.isActive,
+          organizationId: context.activeOrganizationId,
+          s3Bucket: input.s3Bucket,
+        });
+      }),
+    refreshDomain: protectedProcedure
+      .input(
+        z.object({
+          domainId: z.string().trim().min(1),
+        }),
+      )
+      .handler(async ({ context, input }) => {
+        const { getMailDomainSetup } = await loadMailAwsService();
+        const setup = await getMailDomainSetup(input.domainId, context.activeOrganizationId);
+
+        if (!setup) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Mail domain not found.",
+          });
+        }
+
+        return setup;
+      }),
+    sendManaged: protectedProcedure
+      .input(
+        z
+          .object({
+            bcc: z.array(z.string().trim().email()).optional(),
+            cc: z.array(z.string().trim().email()).optional(),
+            from: z.string().trim().email(),
+            html: z.string().min(1).optional(),
+            replyTo: z.array(z.string().trim().email()).optional(),
+            subject: z.string().trim().min(1),
+            text: z.string().min(1).optional(),
+            to: z.array(z.string().trim().email()).min(1),
+          })
+          .refine((input) => Boolean(input.html || input.text), {
+            message: "Either text or html is required.",
+            path: ["text"],
+          }),
+      )
+      .handler(async ({ input }) => {
+        const { sendManagedMail } = await loadMailAwsService();
+        return await sendManagedMail(input);
+      }),
+    upsertDomain: protectedProcedure
+      .input(
+        z.object({
+          domain: z
+            .string()
+            .trim()
+            .min(1)
+            .transform((domain) => normalizeMailDomain(domain)),
+          inboundKeyPrefix: z.string().trim().min(1).optional(),
+          isActive: z.boolean().optional(),
+          s3Bucket: z.string().trim().min(1).optional(),
+        }),
+      )
+      .handler(async ({ context, input }) => {
+        const { registerMailDomain } = await loadMailAwsService();
+        return await registerMailDomain({
+          domain: input.domain,
+          inboundKeyPrefix: input.inboundKeyPrefix,
+          isActive: input.isActive,
+          organizationId: context.activeOrganizationId,
+          s3Bucket: input.s3Bucket,
+        });
+      }),
+    listStoredMessages: protectedProcedure
+      .route({ method: "GET" })
+      .input(
+        z
+          .object({
+            limit: z.coerce.number().int().min(1).max(100).optional(),
+          })
+          .optional(),
+      )
+      .handler(async ({ context, input }) => {
+        return await listMailMessagesForOrganization({
+          limit: input?.limit,
+          organizationId: context.activeOrganizationId,
+        });
+      }),
     getGoogleScopeRepairTarget: protectedProcedure
       .route({ method: "GET" })
       .input(

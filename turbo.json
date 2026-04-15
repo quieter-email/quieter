@@ -1,5 +1,5 @@
 {
-  "$schema": "https://turborepo.dev/schema.json",
+  "$schema": "https://v2-9-4.turborepo.dev/schema.json",
   "ui": "tui",
   "envMode": "strict",
   "globalDependencies": [".env*"],
@@ -57,6 +57,106 @@
       "cache": false,
       "outputs": []
     },
+    "sst:deploy": {
+      "env": [
+        "DATABASE_URL",
+        "MAIL_S3_PREFIX",
+        "EMAIL_S3_PREFIX",
+        "MANAGED_MAIL_S3_PREFIX",
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+        "AWS_PROFILE",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_ROLE_ARN",
+        "AWS_WEB_IDENTITY_TOKEN_FILE",
+        "AWS_SHARED_CREDENTIALS_FILE",
+        "AWS_CONFIG_FILE"
+      ],
+      "cache": false,
+      "outputs": []
+    },
+    "sst:deploy:production": {
+      "env": [
+        "DATABASE_URL",
+        "MAIL_S3_PREFIX",
+        "EMAIL_S3_PREFIX",
+        "MANAGED_MAIL_S3_PREFIX",
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+        "AWS_PROFILE",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_ROLE_ARN",
+        "AWS_WEB_IDENTITY_TOKEN_FILE",
+        "AWS_SHARED_CREDENTIALS_FILE",
+        "AWS_CONFIG_FILE"
+      ],
+      "cache": false,
+      "outputs": []
+    },
+    "sst:diff": {
+      "env": [
+        "DATABASE_URL",
+        "MAIL_S3_PREFIX",
+        "EMAIL_S3_PREFIX",
+        "MANAGED_MAIL_S3_PREFIX",
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+        "AWS_PROFILE",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_ROLE_ARN",
+        "AWS_WEB_IDENTITY_TOKEN_FILE",
+        "AWS_SHARED_CREDENTIALS_FILE",
+        "AWS_CONFIG_FILE"
+      ],
+      "cache": false,
+      "outputs": []
+    },
+    "sst:remove": {
+      "env": [
+        "DATABASE_URL",
+        "MAIL_S3_PREFIX",
+        "EMAIL_S3_PREFIX",
+        "MANAGED_MAIL_S3_PREFIX",
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+        "AWS_PROFILE",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_ROLE_ARN",
+        "AWS_WEB_IDENTITY_TOKEN_FILE",
+        "AWS_SHARED_CREDENTIALS_FILE",
+        "AWS_CONFIG_FILE"
+      ],
+      "cache": false,
+      "outputs": []
+    },
+    "sst:remove:production": {
+      "env": [
+        "DATABASE_URL",
+        "MAIL_S3_PREFIX",
+        "EMAIL_S3_PREFIX",
+        "MANAGED_MAIL_S3_PREFIX",
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+        "AWS_PROFILE",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_ROLE_ARN",
+        "AWS_WEB_IDENTITY_TOKEN_FILE",
+        "AWS_SHARED_CREDENTIALS_FILE",
+        "AWS_CONFIG_FILE"
+      ],
+      "cache": false,
+      "outputs": []
+    },
     "dev": {
       "env": [
         "BETTER_AUTH_SECRET",
@@ -65,6 +165,26 @@
         "DATABASE_URL",
         "VITE_LOGO_DEV_PUBLISHABLE_KEY",
         "NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY"
+      ],
+      "cache": false,
+      "persistent": true
+    },
+    "sst:dev": {
+      "env": [
+        "DATABASE_URL",
+        "MAIL_S3_PREFIX",
+        "EMAIL_S3_PREFIX",
+        "MANAGED_MAIL_S3_PREFIX",
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+        "AWS_PROFILE",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_ROLE_ARN",
+        "AWS_WEB_IDENTITY_TOKEN_FILE",
+        "AWS_SHARED_CREDENTIALS_FILE",
+        "AWS_CONFIG_FILE"
       ],
       "cache": false,
       "persistent": true

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Providers } from "~/components/providers";
+import "../lib/orpc.server";
 import "~/styles.css";
 
 const faviconHref =

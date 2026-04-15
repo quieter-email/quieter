@@ -6,6 +6,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 
 - Runtime and package manager: [Bun](https://bun.sh/)
 - Monorepo orchestration: [Turborepo](https://turbo.build/repo)
+- Infrastructure and deployment: [SST](https://sst.dev/)
 - Frontend app: [Next.js](https://nextjs.org/) App Router + [React](https://react.dev/)
 - Forms: [TanStack Form](https://tanstack.com/form/latest)
 - Keyboard shortcuts: [TanStack Hotkeys](https://tanstack.com/hotkeys/latest)
@@ -25,6 +26,8 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 
 ## Project Structure
 
+- `sst.config.ts`: SST config that provisions only the mail S3 bucket, the SES receipt SNS topic, the SES receipt IAM role, the mail ingest/send secret placeholders, the receipt processor, and the standalone mail ingress/outbound function URLs.
+
 - `apps/web/`: Next.js App Router application.
   - `src/app/layout.tsx`: Root HTML shell and client providers.
   - `src/app/page.tsx`: Authenticated inbox route that server-loads the session, redirects to the blocking Google scope-repair page for the exact broken mailbox when needed, and then hydrates the client workspace.
@@ -37,7 +40,8 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
   - `src/app/api/orpc/[[...rest]]/route.ts`: HTTP endpoint for oRPC requests (`/api/orpc`) via `RPCHandler`, including auth email preview and user-status helpers for login/signup.
   - `src/app/api/auth/[...all]/route.ts`: Better Auth route handler.
   - `src/app/api/auth/google-scope-repair/route.ts`: Server-side Google OAuth scope repair endpoint that starts targeted Better Auth relinking, hints the affected Google account, and preserves OAuth state cookies.
-  - `src/lib/orpc.ts`: Shared raw oRPC client plus TanStack Query oRPC utilities for the app.
+  - `src/lib/orpc.ts`: Shared raw oRPC client plus TanStack Query oRPC utilities for the app, following oRPC's SSR pattern by reusing `globalThis.$client` on the server and the browser RPC link in the client.
+  - `src/lib/orpc.server.ts`: `server-only` oRPC bootstrap that registers the server-side client on `globalThis.$client`.
   - `src/lib/server-auth.ts`: Cached server-side session helpers, redirects, and blocking Google-scope repair target helpers.
   - `src/lib/google-scope-repair.ts`: Shared app-side helpers for canonical Google scope-repair URLs and safe return paths.
   - `src/lib/query-client.ts`: Shared React Query client factory.
@@ -56,7 +60,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
   - `src/components/mailbox-workspace.tsx`: Interactive inbox shell, search-param state, active-organization mailbox selection, Gmail search queries, message panes, compose modal, and bulk mailbox action handlers.
   - `src/components/auth-screen.tsx`: Client auth UI for separate login/signup routes using TanStack Form, TanStack Query mutations, and oRPC auth lookups.
   - `src/components/settings-screen.tsx`: Client settings shell that wires tab state, session data, and the settings panels.
-  - `src/components/settings/*.tsx`: Modular settings sidebar, panels, account dialogs, and the mailbox-management panel.
+  - `src/components/settings/*.tsx`: Modular settings sidebar, panels, account dialogs, the mailbox-management panel, and the organization mail setup/test panel.
   - `src/components/compose-dialog.tsx`: `New Mail` modal with autosave and continue-last-draft affordance.
   - `src/components/compose-editor.tsx`: Tiptap editor shell and toolbar used by compose.
   - `src/components/mail-sidebar.tsx`: Sidebar showing the current user profile, connected mailbox switcher, and mailbox-folder navigation across Inbox, Drafts, Spam, Sent, and Trash.
@@ -66,18 +70,26 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
   - `src/email-placeholder.ts`: In-memory placeholder store for magic-link and verification URLs.
   - `src/google-scopes.ts`: Required Google OAuth scopes.
 - `packages/database/`: Shared database package.
-  - `src/schema.ts`: Drizzle schema definitions for auth, organizations, invitations, memberships, passkeys, and mailbox records.
+  - `src/schema.ts`: Drizzle schema definitions for auth, organizations, invitations, memberships, passkeys, mailbox records, mail domains, and captured mail metadata.
   - `src/client.ts`: Neon and Drizzle client setup.
   - `drizzle.config.ts`: Drizzle Kit configuration.
 - `packages/orpc/`: Shared API contract + server/client helpers.
   - `src/compose.ts`: Shared compose schemas plus robust mail-address parsing used by both the web app and Gmail draft mutations.
   - `src/context.ts`: oRPC context creation.
-  - `src/router.ts`: App router with auth lookup procedures plus mailbox-scoped mail operations, list/search procedures, Drafts listing/loading, mailbox history sync procedures, mailto-based unsubscribe sending, and thread-level mailbox mutations used by bulk selection.
+  - `src/router.ts`: App router with auth lookup procedures plus mailbox-scoped mail operations, domain configuration, captured-message inspection, list/search procedures, Drafts listing/loading, mailbox history sync procedures, mailto-based unsubscribe sending, and thread-level mailbox mutations used by bulk selection.
   - `src/mailbox-service.ts`: Mailbox ownership, personal Gmail sync, authorization, and disconnect helpers.
+  - `src/mail-service.ts`: Mail-domain configuration, recipient-domain matching, sender-domain resolution, and inbound-message persistence helpers.
+  - `src/mail-aws-service.ts`: SES domain registration, DNS record generation, receipt-rule automation, domain-status reads, and managed send helpers.
   - `src/gmail-service.ts`: Shared Gmail response typing plus batched Gmail API helpers used by oRPC, including raw Gmail `q` filtering, Gmail Drafts API helpers, `List-Unsubscribe` mailto parsing, and thread-level Gmail mutations.
   - `src/server.ts`: `RPCHandler` integration.
   - `src/client.ts`: Typed client factory.
   - `src/types.ts`: `RouterInputs` and `RouterOutputs` utility types.
+- `packages/aws/`: Standalone AWS handler package used by SST for mail ingestion and SES sending.
+  - `src/function-url.ts`: Shared Lambda function URL helpers for bearer auth, JSON parsing, and JSON responses.
+  - `src/inbound.ts`: AWS function URL handler that accepts normalized inbound payloads, matches configured recipient domains, stores raw MIME in S3, and writes minimal envelope metadata to Postgres.
+  - `src/outbound.ts`: AWS function URL handler that sends outbound mail through SES for configured active sender domains.
+  - `src/receipt.ts`: SNS-driven SES receipt processor that indexes SES-stored S3 messages into Postgres.
+  - `package.json`: Package-scoped SST scripts for the `mail-dev` stage and production deploy/remove flows.
 - `packages/ui/`: Shared UI package with the Tailwind theme, next-themes wrapper, styled component wrappers built on Base UI, Vaul, and Sonner, plus the shared icon-button tooltip wrapper for icon-only controls.
 - `packages/config/`: Shared TypeScript config package.
 
@@ -94,7 +106,8 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - Passkeys are optional secondary sign-in credentials that can be added from settings after the user signs in with Google or magic link.
 - Outbound auth email delivery is not configured right now, so magic links and email verification flows use local placeholder previews instead of real email sends.
 - Inbox list views support row selection with mailbox-aware bulk actions for loaded conversations and drafts, including avatar-slot selection, Shift range selection, Ctrl/Cmd toggles, and `Mod+A` / `Escape` list hotkeys.
-- Shared or managed organization mailboxes are not implemented yet. The only supported provider in v1 is personal Gmail connected through linked Google accounts.
+- Personal Gmail connected through linked Google accounts remains the primary mailbox provider.
+- Mail now has a minimal but real hosted flow: a protected API can register SES domains and return the required DNS records, SES can send outbound mail for configured active domains, SES receipt rules store inbound mail in S3, and an SNS-driven processor indexes the stored inbound messages into Postgres.
 
 ### Monorepo boundaries
 
@@ -119,9 +132,14 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 
 ### API and data flow
 
-- App calls `@quietr/orpc` from `apps/web/src/lib/orpc.ts` through the shared raw client and TanStack Query oRPC utilities.
+- App calls `@quietr/orpc` from `apps/web/src/lib/orpc.ts` through the shared raw client and TanStack Query oRPC utilities, with `apps/web/src/lib/orpc.server.ts` bootstrapping the server-side client for App Router SSR.
 - Requests are handled in `apps/web/src/app/api/orpc/[[...rest]]/route.ts` using `@quietr/orpc/server`.
 - Router procedures cover auth email-status/preview lookups plus mailbox listing/sync and mailbox-scoped Gmail list/thread/history-sync/label/draft/attachment/message actions, including Drafts listing/loading and Spam/Not Spam flows.
+- Mail domains can be configured dynamically through oRPC. The protected control plane creates or refreshes SES identities, configures custom MAIL FROM, creates SES receipt rules, and returns the exact DNS records required for the domain.
+- SES receipt rules store inbound raw mail in S3 and publish receipt metadata to SNS.
+- The SST receipt processor consumes the SNS notifications, matches recipients against active domains, and persists a small metadata row for inspection.
+- The SST mail ingress function still accepts normalized inbound payloads from non-SES adapters when needed.
+- The SST mail outbound function accepts normalized send payloads, requires a configured active sender domain, and sends through SES.
 - Mailbox list queries can forward raw Gmail advanced-search syntax through the Gmail API `q` parameter while still applying the selected mailbox label, including Drafts and Spam.
 - Browser-side TanStack Query persistence is the primary Gmail cache and is restored before inbox queries mount.
 - Mailbox-scoped Gmail read models must include `mailboxId` in their query keys so persisted browser caches stay isolated per connected inbox.
@@ -156,9 +174,20 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - Each workspace package has its own scripts and dev dependencies for `oxlint`, `oxfmt`, and `tsgo`.
 - Shared TypeScript config is in `packages/config`, while Oxlint/Oxfmt config is at repo root.
 - Root `package.json` keeps Bun versions in `workspaces.catalog` and mirrors the React/Next entries in a top-level `catalog` field for external tooling compatibility.
+- Root `package.json` delegates mail SST commands to package-scoped scripts in `@quietr/aws` through Turbo; the web app is not started or deployed through SST.
+- Root `sst.config.ts` provisions the mail bucket, SES receipt topic, SES receipt IAM role, receipt processor, and the standalone mail ingress/outbound functions through SST. It links the bucket to the functions for AWS permissions and injects the bucket name plus the ingest/send tokens into the deployed functions.
 - `NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY` is used for sender avatars in the inbox UI.
 - `VITE_LOGO_DEV_PUBLISHABLE_KEY` remains a backward-compatible fallback mapped through `apps/web/next.config.ts`.
 - Outbound auth email delivery is not configured in this repo right now, so magic links and email verification flows rely on placeholder previews during local development.
+- `MAIL_INGEST_TOKEN` authenticates the SST mail ingress function.
+- `MAIL_SEND_TOKEN` authenticates the SST mail outbound function.
+- `MAIL_S3_BUCKET` is the default bucket for mail domains when no explicit bucket override is provided.
+- `MAIL_S3_PREFIX` optionally sets the default object-key prefix and defaults to `mail/inbound`.
+- `MAIL_RECEIPT_TOPIC_ARN` optionally overrides the SES receipt SNS topic used by the protected registration API; in local dev the API falls back to `.sst/outputs.json`.
+- `MAIL_RECEIPT_ROLE_ARN` optionally overrides the SES receipt IAM role used by the protected registration API; in local dev the API falls back to `.sst/outputs.json`.
+- `MAIL_RECEIPT_RULE_SET_NAME` optionally overrides the SES receipt rule set name and defaults to `quietr-mail`.
+- `MAIL_STACK_OUTPUTS_FILE` optionally overrides where the protected registration API reads `.sst/outputs.json`.
+- `AWS_REGION` or `AWS_DEFAULT_REGION` is required for the mail S3 uploader.
 
 ### Generated files
 
@@ -170,6 +199,16 @@ Root commands:
 
 - `bun install`
 - `bun run dev`
+- `bun run mail:dev`
+- `bun run mail:diff`
+- `bun run mail:deploy`
+- `bun run mail:deploy:production`
+- `bun run mail:remove`
+- `bun run mail:remove:production`
+- `bun run sst:dev`
+- `bun run sst:diff`
+- `bun run sst:deploy`
+- `bun run sst:remove`
 - `bun run lint`
 - `bun run lint:fix`
 - `bun run fmt`

@@ -221,45 +221,51 @@ export const syncPersonalGmailMailboxes = async (input: {
     headers: input.headers,
   });
   const googleAccounts = linkedAccounts.filter((account) => account.providerId === "google");
+  const linkedGoogleAccountIds = googleAccounts.map((account) => account.accountId);
 
-  const syncedAccounts = await Promise.all(
+  await Promise.all(
     googleAccounts.map(async (account) => {
-      const accessToken = await getGoogleAccessTokenForLinkedAccount(
-        input.headers,
-        input.userId,
-        account.accountId,
-      );
+      try {
+        const accessToken = await getGoogleAccessTokenForLinkedAccount(
+          input.headers,
+          input.userId,
+          account.accountId,
+        );
 
-      if (!accessToken) {
+        if (!accessToken) {
+          return null;
+        }
+
+        const profile = await getGmailProfile(accessToken);
+        const emailAddress = profile.emailAddress.trim().toLowerCase();
+
+        if (!emailAddress) {
+          return null;
+        }
+
+        await upsertMailboxRecord({
+          connectedUserId: input.userId,
+          displayName: profile.emailAddress,
+          emailAddress,
+          organizationId: activeOrganization.id,
+          providerAccountId: account.accountId,
+        });
+
+        return account.accountId;
+      } catch (error) {
+        console.warn(
+          `[quietr mailbox sync] skipping Google account ${account.accountId} during mailbox sync: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`,
+        );
         return null;
       }
-
-      const profile = await getGmailProfile(accessToken);
-      const emailAddress = profile.emailAddress.trim().toLowerCase();
-
-      if (!emailAddress) {
-        return null;
-      }
-
-      await upsertMailboxRecord({
-        connectedUserId: input.userId,
-        displayName: profile.emailAddress,
-        emailAddress,
-        organizationId: activeOrganization.id,
-        providerAccountId: account.accountId,
-      });
-
-      return account.accountId;
     }),
-  );
-
-  const syncedProviderAccountIds = syncedAccounts.filter(
-    (providerAccountId): providerAccountId is string => Boolean(providerAccountId),
   );
 
   await deleteStalePersonalMailboxes({
     organizationId: activeOrganization.id,
-    providerAccountIds: syncedProviderAccountIds,
+    providerAccountIds: linkedGoogleAccountIds,
     userId: input.userId,
   });
 

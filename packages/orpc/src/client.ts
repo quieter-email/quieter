@@ -1,14 +1,36 @@
+import type { RouterClient } from "@orpc/server";
 import { createORPCClient, ORPCError } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import { ClientRetryPlugin, type ClientRetryPluginContext } from "@orpc/client/plugins";
-import { inferRPCMethodFromRouter, type RouterClient } from "@orpc/server";
-import { appRouter, type AppRouter } from "./router";
+import type { AppRouter } from "./router";
 
 type HeaderMap = Record<string, string>;
 type OrpcClientContext = ClientRetryPluginContext;
 
 export type AppRouterClient = RouterClient<AppRouter, OrpcClientContext>;
-const inferMethod = inferRPCMethodFromRouter(appRouter);
+const GET_METHOD_PATHS = new Set([
+  "auth.getEmailPreview",
+  "auth.getUserStatus",
+  "mail.getAttachment",
+  "mail.getDomainSetup",
+  "mail.getGoogleScopeRepairTarget",
+  "mail.getMailboxSyncDelta",
+  "mail.getMessageInspector",
+  "mail.getThread",
+  "mail.listDomains",
+  "mail.listLabels",
+  "mail.listMailboxesForActiveOrganization",
+  "mail.listMessages",
+  "mail.listStoredMessages",
+  "mail.loadDraft",
+]);
+
+const toProcedurePath = (path: readonly string[] | string): string =>
+  typeof path === "string" ? path : path.join(".");
+
+const inferMethod = async (_input: unknown, path: readonly string[] | string) => {
+  return GET_METHOD_PATHS.has(toProcedurePath(path)) ? "GET" : "POST";
+};
 
 const isConservativeRetryableError = (error: unknown) => {
   if (error instanceof ORPCError) {
@@ -25,7 +47,7 @@ export function createOrpcClient(options?: {
   const headers = options?.headers;
   const link = new RPCLink<OrpcClientContext>({
     url: options?.url ?? "/api/orpc",
-    method: inferRPCMethodFromRouter(appRouter),
+    method: inferMethod,
     headers:
       headers == null
         ? undefined

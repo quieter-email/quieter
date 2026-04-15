@@ -12,6 +12,12 @@ import {
   DropdownMenuSubmenuContent,
   DropdownMenuSubmenuTrigger,
   DropdownMenuTrigger,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectList,
+  SelectTrigger,
+  SelectValue,
   cn,
   toast,
 } from "@quietr/ui";
@@ -109,9 +115,7 @@ const useOrganizationSwitcher = () => {
   };
 };
 
-export const OrganizationSwitcherSelect = ({
-  onOrganizationChange,
-}: OrganizationSwitcherSelectProps) => {
+const OrganizationSwitcherSubmenu = ({ onOrganizationChange }: OrganizationSwitcherSelectProps) => {
   const { activeOrganizationId, isPending, organizations, setActiveOrganization } =
     useOrganizationSwitcher();
   const activeOrganizationName =
@@ -154,6 +158,54 @@ export const OrganizationSwitcherSelect = ({
   );
 };
 
+export const OrganizationSwitcherSelect = ({
+  onOrganizationChange,
+}: OrganizationSwitcherSelectProps) => {
+  const { activeOrganizationId, isPending, organizations, setActiveOrganization } =
+    useOrganizationSwitcher();
+  const organizationSelectItems = organizations.map((organization) => ({
+    label: organization.name,
+    value: organization.id,
+  }));
+
+  return (
+    <Select
+      items={organizationSelectItems}
+      modal={false}
+      onValueChange={(value) => {
+        if (!value) {
+          return;
+        }
+
+        onOrganizationChange?.();
+        void setActiveOrganization(value);
+      }}
+      value={activeOrganizationId ?? undefined}
+    >
+      <SelectTrigger aria-label="Switch organization" className="h-8">
+        <HugeiconsIcon
+          aria-hidden
+          className={cn("size-4 shrink-0", {
+            "animate-spin": isPending,
+          })}
+          icon={isPending ? Loading03Icon : UserGroupIcon}
+        />
+        <SelectValue placeholder="organization" />
+      </SelectTrigger>
+
+      <SelectContent positionerClassName="z-[60]">
+        <SelectList>
+          {organizations.map((organization) => (
+            <SelectItem key={organization.id} value={organization.id}>
+              {organization.name}
+            </SelectItem>
+          ))}
+        </SelectList>
+      </SelectContent>
+    </Select>
+  );
+};
+
 export const MailboxSwitcherDropdown = ({
   activeOrganizationName,
   mailboxes,
@@ -180,7 +232,7 @@ export const MailboxSwitcherDropdown = ({
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="start" className="w-80 p-2" side="right" sideOffset={10}>
-        <OrganizationSwitcherSelect />
+        <OrganizationSwitcherSubmenu />
 
         <DropdownMenuSeparator className="my-2" />
 

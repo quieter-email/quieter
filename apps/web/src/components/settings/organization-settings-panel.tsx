@@ -45,6 +45,7 @@ import { useState } from "react";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
 import { getErrorMessage, getFieldErrorMessage, unwrapResultError } from "~/lib/errors";
+import { MailSettingsPanel } from "./mail-settings-panel";
 
 type ActiveOrganization = NonNullable<ReturnType<typeof authClient.useActiveOrganization>["data"]>;
 type ActiveMember = NonNullable<ReturnType<typeof authClient.useActiveMember>["data"]>;
@@ -1738,6 +1739,8 @@ export const OrganizationSettingsPanel = () => {
               label="Delete organization"
               value="Permanent"
             />
+
+            <MailSettingsPanel />
           </div>
         ) : organizations.length > 0 ? (
           <p className="text-sm text-muted-foreground">Pick an organization above.</p>
