@@ -17,7 +17,7 @@ export const Toaster = ({ className, toastOptions, ...props }: ToasterProps) => 
       expand
       offset={16}
       position="bottom-right"
-      richColors={false}
+      richColors
       theme={colorMode}
       toastOptions={{
         ...toastOptions,
@@ -25,11 +25,11 @@ export const Toaster = ({ className, toastOptions, ...props }: ToasterProps) => 
         unstyled: true,
         classNames: {
           actionButton:
-            "inline-flex h-8 shrink-0 select-none items-center justify-center gap-2 whitespace-nowrap rounded-md border border-input bg-background px-3.5 text-[13px] font-medium leading-none text-foreground shadow-sm outline-none transition-colors duration-150 ease-out hover:bg-muted/60 active:bg-muted/80 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0 disabled:pointer-events-none disabled:opacity-50",
+            "squircle inline-flex h-8 shrink-0 select-none items-center justify-center gap-2 whitespace-nowrap rounded-md border border-input bg-background px-3.5 text-[13px] font-medium leading-none text-foreground shadow-sm outline-none transition-colors duration-150 ease-out hover:bg-muted/60 active:bg-muted/80 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0 disabled:pointer-events-none disabled:opacity-50",
           cancelButton:
-            "inline-flex h-8 shrink-0 select-none items-center justify-center gap-2 whitespace-nowrap rounded-md bg-transparent px-3.5 text-[13px] font-medium leading-none text-foreground-light outline-none transition-colors duration-150 ease-out hover:bg-muted/60 hover:text-foreground active:bg-muted/80 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0 disabled:pointer-events-none disabled:opacity-50",
+            "squircle inline-flex h-8 shrink-0 select-none items-center justify-center gap-2 whitespace-nowrap rounded-md bg-transparent px-3.5 text-[13px] font-medium leading-none text-foreground outline-none transition-colors duration-150 ease-out hover:bg-muted/60 hover:text-foreground active:bg-muted/80 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0 disabled:pointer-events-none disabled:opacity-50",
           closeButton:
-            "absolute top-3 right-3 flex size-7 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground",
+            "squircle absolute top-3 right-3 flex size-7 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground",
           content: "grid gap-1.5 pr-8",
           default: "border-border/80",
           description: "text-sm text-muted-foreground",

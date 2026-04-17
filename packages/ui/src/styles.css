@@ -4,40 +4,41 @@
 
 @custom-variant dark (&:where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *));
 
+/* The styles are darkmode-first, meaning in lightmode, background-dark is actually the lightest color and background-light is actually the darkest color. */
+
 :root {
-  --background: oklch(0.968 0.002 260);
-  --foreground: oklch(0.145 0.004 260);
-  --background-light: oklch(1 0 0);
-  --background-dark: oklch(0.94 0.002 260);
-  --background-contrast: oklch(0.915 0.003 260);
-  --foreground-light: oklch(0.44 0.004 260);
-  --foreground-dark: oklch(0.09 0.004 260);
+  --background: oklch(0.975 0 0);
+  --foreground: oklch(0.15 0 0);
+  --background-light: oklch(0.97 0 0);
+  --background-dark: oklch(0.98 0 0);
+  --foreground-light: oklch(0 0 0);
+  --foreground-dark: oklch(0.5 0 0);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0.004 260);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0.004 260);
-  --primary: oklch(0.37 0.004 260);
-  --primary-foreground: oklch(0.985 0.002 260);
-  --secondary: oklch(0.885 0.003 260);
-  --secondary-foreground: oklch(0.205 0.004 260);
-  --muted: oklch(0.902 0.002 260);
-  --muted-foreground: oklch(0.556 0.004 260);
-  --accent: oklch(0.952 0.002 260);
-  --accent-foreground: oklch(0.205 0.004 260);
-  --destructive: oklch(0.577 0.245 27.33);
-  --destructive-foreground: oklch(0.985 0.002 260);
-  --success: oklch(0.517 0.174 149.57);
-  --success-foreground: oklch(0.985 0.002 260);
-  --warning: oklch(0.769 0.189 70.08);
-  --warning-foreground: oklch(0.205 0.004 260);
-  --border: oklch(0.922 0.003 260);
-  --input: oklch(0.922 0.003 260);
-  --ring: oklch(0.708 0.004 260);
-  --chart-1: oklch(0.32 0.006 260);
-  --chart-2: oklch(0.42 0.006 260);
-  --chart-3: oklch(0.52 0.006 260);
-  --chart-4: oklch(0.62 0.006 260);
-  --chart-5: oklch(0.72 0.006 260);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(0.975 0 0);
+  --popover-foreground: oklch(0.15 0 0);
+  --primary: oklch(0.37 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.875 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.925 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.952 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0 0);
+  --destructive-foreground: oklch(0.985 0 0);
+  --success: oklch(0.517 0 0);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.769 0 0);
+  --warning-foreground: oklch(0.205 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.32 0 0);
+  --chart-2: oklch(0.42 0 0);
+  --chart-3: oklch(0.52 0 0);
+  --chart-4: oklch(0.62 0 0);
+  --chart-5: oklch(0.72 0 0);
   --font-sans:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-serif: "Times New Roman", Georgia, ui-serif, serif;
@@ -68,23 +69,22 @@
 .dark,
 :root[data-theme="dark"],
 :root[data-kb-theme="dark"] {
-  --background: oklch(0.141 0 0);
-  --background-light: oklch(0.152 0 0);
-  --background-dark: oklch(0.12 0 0);
-  --background-contrast: oklch(0.22 0 0);
-  --foreground: oklch(0.985 0 0);
-  --foreground-light: oklch(0.72 0 0);
-  --foreground-dark: oklch(0.985 0 0);
+  --background: oklch(0.15 0 0);
+  --background-light: oklch(0.175 0 0);
+  --background-dark: oklch(0 0 0);
+  --foreground: oklch(0.9 0 0);
+  --foreground-light: oklch(1 0 0);
+  --foreground-dark: oklch(0.7 0 0);
   --card: oklch(0.18 0 0);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.2 0 0);
-  --popover-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.15 0 0);
+  --popover-foreground: oklch(0.9 0 0);
   --primary: oklch(0.95 0 0);
   --primary-foreground: oklch(0.141 0 0);
-  --secondary: oklch(0.24 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.275 0 0);
+  --secondary-foreground: oklch(1 0 0);
   --muted: oklch(0.22 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  --muted-foreground: oklch(0.656 0 0);
   --accent: oklch(0.22 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.577 0.245 27.33);
@@ -118,7 +118,6 @@
   --color-foreground: var(--foreground);
   --color-background-light: var(--background-light);
   --color-background-dark: var(--background-dark);
-  --color-background-contrast: var(--background-contrast);
   --color-foreground-light: var(--foreground-light);
   --color-foreground-dark: var(--foreground-dark);
   --color-card: var(--card);
@@ -179,5 +178,48 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+  }
+}
+
+/*
+ * Progressive-enhancement squircle corners.
+ *
+ * The `.squircle` class is a no-op in browsers that do not support the
+ * experimental `corner-shape` property (https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Values/corner-shape-value),
+ * so elements keep their normal `rounded-*` border-radius as a fallback.
+ *
+ * When supported, we switch the corner curve to a superellipse(2) squircle
+ * and scale the radius up. A squircle with the same radius as a plain round
+ * corner reads visually flatter / less rounded, so the multipliers below are
+ * tuned so the squircle variant lands close to the rounded fallback's
+ * apparent roundness.
+ */
+@layer utilities {
+  @supports (corner-shape: squircle) {
+    .squircle {
+      corner-shape: squircle;
+    }
+
+    .squircle.rounded-xs {
+      border-radius: calc(var(--radius-xs) * 1.7);
+    }
+    .squircle.rounded-sm {
+      border-radius: calc(var(--radius-sm) * 1.6);
+    }
+    .squircle.rounded-md {
+      border-radius: calc(var(--radius-md) * 1.55);
+    }
+    .squircle.rounded-lg {
+      border-radius: calc(var(--radius-lg) * 1.5);
+    }
+    .squircle.rounded-xl {
+      border-radius: calc(var(--radius-xl) * 1.45);
+    }
+    .squircle.rounded-2xl {
+      border-radius: calc(var(--radius-2xl) * 1.4);
+    }
+    .squircle.rounded-3xl {
+      border-radius: calc(var(--radius-3xl) * 1.35);
+    }
   }
 }

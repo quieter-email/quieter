@@ -292,7 +292,7 @@ const MessageRowContent = ({
               <p
                 className={cn("w-full min-w-0 truncate text-left text-sm", {
                   "font-medium text-foreground": unread,
-                  "text-foreground-light": !unread,
+                  "text-muted-foreground": !unread,
                 })}
               >
                 {isDraftMailbox ? (

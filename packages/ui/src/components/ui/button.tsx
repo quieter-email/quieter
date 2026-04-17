@@ -18,13 +18,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     <ButtonPrimitive
       ref={ref}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm leading-none font-medium whitespace-nowrap outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "squircle inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm leading-none font-medium whitespace-nowrap outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         {
           "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/85":
             variant === "default",
           "border border-input bg-background text-foreground shadow-sm hover:bg-muted/60 active:bg-muted/80":
             variant === "outline",
-          "bg-transparent text-foreground-light hover:bg-muted/60 hover:text-foreground active:bg-muted/80":
+          "bg-transparent text-foreground-dark hover:bg-secondary/50 hover:text-foreground active:bg-secondary active:text-foreground-light":
             variant === "ghost",
           "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:bg-destructive/85":
             variant === "destructive",

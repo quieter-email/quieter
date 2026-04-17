@@ -28,6 +28,7 @@ import {
   getMessageInspector,
   getThreadWithDetails,
   isGmailRateLimitedError,
+  isGmailServiceError,
   listDraftsWithDetails,
   listLabels,
   listMessagesWithDetails,
@@ -51,6 +52,7 @@ import {
   getAuthorizedGmailMailbox,
   getGoogleScopeRepairTarget,
   listMailboxesForOrganization,
+  refreshAuthorizedGmailAccessToken,
   setDefaultMailbox,
   syncPersonalGmailMailboxes,
 } from "./mailbox-service";
@@ -377,14 +379,6 @@ const protectedProcedure = base.use(async ({ context, errors, next }) => {
   });
 });
 
-const getAuthorizedGmailAccess = async (context: ProtectedContext, mailboxId: string) => {
-  return await getAuthorizedGmailMailbox({
-    activeOrganizationId: context.activeOrganizationId,
-    headers: getRequestHeaders(context),
-    mailboxId,
-  });
-};
-
 const toRetryAfterSeconds = (retryAfterMs?: number) =>
   Math.max(1, Math.ceil((retryAfterMs ?? 1000) / 1000));
 
@@ -414,6 +408,46 @@ const callWithRateLimitHandling = async <TValue>(
     return await callback();
   } catch (error) {
     return rethrowKnownRateLimit(context, error);
+  }
+};
+
+const isGmailAuthError = (error: unknown) =>
+  isGmailServiceError(error) &&
+  error.status === 401 &&
+  ((typeof error.googleReason === "string" && error.googleReason.toLowerCase() === "autherror") ||
+    (typeof error.googleStatus === "string" &&
+      error.googleStatus.toUpperCase() === "UNAUTHENTICATED"));
+
+const callGmail = async <TValue>(
+  context: ProtectedContext,
+  mailboxId: string,
+  runner: (accessToken: string) => Promise<TValue>,
+): Promise<TValue> => {
+  const headers = getRequestHeaders(context);
+  const { accessToken, mailbox } = await getAuthorizedGmailMailbox({
+    activeOrganizationId: context.activeOrganizationId,
+    headers,
+    mailboxId,
+  });
+
+  try {
+    return await runner(accessToken);
+  } catch (error) {
+    if (!isGmailAuthError(error)) {
+      return rethrowKnownRateLimit(context, error);
+    }
+
+    const refreshedAccessToken = await refreshAuthorizedGmailAccessToken({
+      headers,
+      providerAccountId: mailbox.providerAccountId,
+      userId: mailbox.connectedUserId,
+    });
+
+    try {
+      return await runner(refreshedAccessToken);
+    } catch (retryError) {
+      return rethrowKnownRateLimit(context, retryError);
+    }
   }
 };
 
@@ -629,9 +663,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
-
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           return input.category === "drafts"
             ? await listDraftsWithDetails(accessToken, {
                 pageToken: input.pageToken,
@@ -656,9 +688,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
-
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await getMailboxSyncDelta(accessToken, {
             mailbox: input.category,
             startHistoryId: input.startHistoryId,
@@ -674,8 +704,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await getThreadWithDetails(accessToken, input.threadId);
         });
       }),
@@ -688,8 +717,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await getMessageInspector(accessToken, input.messageId);
         });
       }),
@@ -701,8 +729,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await listLabels(accessToken);
         });
       }),
@@ -714,8 +741,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await markMessageAsRead(accessToken, input.messageId);
         });
       }),
@@ -727,8 +753,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await markMessageAsUnread(accessToken, input.messageId);
         });
       }),
@@ -740,8 +765,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await markThreadAsRead(accessToken, input.threadId);
         });
       }),
@@ -753,8 +777,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await markThreadAsUnread(accessToken, input.threadId);
         });
       }),
@@ -768,9 +791,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
-
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await updateThreadLabels(accessToken, input.threadId, {
             addLabelIds: input.addLabelIds,
             removeLabelIds: input.removeLabelIds,
@@ -787,9 +808,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
-
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await updateMessageLabels(accessToken, input.messageId, {
             addLabelIds: input.addLabelIds,
             removeLabelIds: input.removeLabelIds,
@@ -804,8 +823,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await moveMessageToTrash(accessToken, input.messageId);
         });
       }),
@@ -817,8 +835,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await untrashMessage(accessToken, input.messageId);
         });
       }),
@@ -830,8 +847,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await moveThreadToTrash(accessToken, input.threadId);
         });
       }),
@@ -843,8 +859,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await deleteMessagePermanently(accessToken, input.messageId);
         });
       }),
@@ -856,8 +871,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await deleteThreadPermanently(accessToken, input.threadId);
         });
       }),
@@ -870,8 +884,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           const draft = await getDraft(accessToken, input.draftId);
           return parseDraftMessage(draft);
         });
@@ -884,8 +897,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           const raw = arrayBufferToBase64Url(
             new TextEncoder().encode(await buildMimeMessage(input.draft)),
           );
@@ -917,9 +929,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
-
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           let draftId = input.draft.draftId ?? null;
           if (!draftId) {
             const raw = arrayBufferToBase64Url(
@@ -950,8 +960,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           await deleteDraft(accessToken, input.draftId);
           return { deleted: true };
         });
@@ -964,8 +973,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           const message = await getGmailMessageMetadata(accessToken, input.messageId);
           const unsubscribeMailto = extractListUnsubscribeMailto(
             message.payload?.headers?.find(
@@ -1002,8 +1010,7 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callWithRateLimitHandling(context, async () => {
-          const { accessToken } = await getAuthorizedGmailAccess(context, input.mailboxId);
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
           const attachment = await getMessageAttachment(
             accessToken,
             input.messageId,

@@ -88,7 +88,7 @@ export const DropdownMenuItem = ({
 }: DropdownMenuItemProps) => (
   <MenuPrimitive.Item
     className={cn(
-      "relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-sm text-foreground outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted/60",
+      "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-sm text-foreground outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted/60",
       className,
     )}
     closeOnClick={closeOnSelect}
@@ -104,7 +104,7 @@ export const DropdownMenuSubmenuTrigger = ({
 }: ComponentPropsWithoutRef<typeof MenuPrimitive.SubmenuTrigger>) => (
   <MenuPrimitive.SubmenuTrigger
     className={cn(
-      "relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-sm text-foreground outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted/60",
+      "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-sm text-foreground outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted/60",
       className,
     )}
     {...props}

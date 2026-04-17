@@ -10,7 +10,7 @@ export const Toolbar = ({
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Root>) => (
   <ToolbarPrimitive.Root
     className={cn(
-      "inline-flex min-h-10 items-center gap-1 rounded-lg border border-border bg-background-light p-1 shadow-sm",
+      "squircle inline-flex min-h-10 items-center gap-1 rounded-lg border border-border bg-background-light p-1 shadow-sm",
       className,
     )}
     {...props}
@@ -30,7 +30,7 @@ export const ToolbarButton = ({
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Button>) => (
   <ToolbarPrimitive.Button
     className={cn(
-      "inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-[13px] leading-none font-medium whitespace-nowrap text-foreground-light transition-colors duration-150 ease-out outline-none select-none hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:bg-muted/80 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+      "squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-[13px] leading-none font-medium whitespace-nowrap text-foreground transition-colors duration-150 ease-out outline-none select-none hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:bg-muted/80 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
       className,
     )}
     {...props}
@@ -43,7 +43,7 @@ export const ToolbarLink = ({
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Link>) => (
   <ToolbarPrimitive.Link
     className={cn(
-      "inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-[13px] leading-none font-medium whitespace-nowrap text-foreground-light transition-colors duration-150 ease-out outline-none select-none hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:bg-muted/80 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+      "squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-[13px] leading-none font-medium whitespace-nowrap text-foreground transition-colors duration-150 ease-out outline-none select-none hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:bg-muted/80 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
       className,
     )}
     {...props}
@@ -56,7 +56,7 @@ export const ToolbarInput = ({
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Input>) => (
   <ToolbarPrimitive.Input
     className={cn(
-      "h-8 w-full min-w-32 rounded-md border border-input bg-background px-3 text-[13px] text-foreground shadow-sm transition-colors duration-150 ease-out outline-none placeholder:text-muted-foreground read-only:cursor-default read-only:bg-muted/30 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:ring-destructive/20",
+      "squircle h-8 w-full min-w-32 rounded-md border border-input bg-background px-3 text-[13px] text-foreground shadow-sm transition-colors duration-150 ease-out outline-none placeholder:text-muted-foreground read-only:cursor-default read-only:bg-muted/30 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:ring-destructive/20",
       className,
     )}
     {...props}

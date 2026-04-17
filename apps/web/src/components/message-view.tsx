@@ -1,8 +1,16 @@
 "use client";
 
-import { ArrowDown01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
+import {
+  ArrowDown01Icon,
+  ArrowRightDoubleIcon,
+  Loading03Icon,
+  MailReply02Icon,
+  MailReplyAll02Icon,
+  ZoomInAreaIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  Button,
   Dialog,
   DialogBody,
   DialogCloseButton,
@@ -11,6 +19,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  IconButtonTooltip,
   cn,
 } from "@quietr/ui";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
@@ -18,7 +27,6 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ComposeDraftState } from "~/lib/gmail/compose";
 import {
   buildComposeDraftFromMessageAction,
-  getPreferredThreadActionMessage,
   hasDistinctReplyAllRecipients,
 } from "~/lib/gmail/compose-actions";
 import { isMessageUnread, type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
@@ -56,7 +64,9 @@ type MessageViewProps = {
 type MessageHeaderContentProps = {
   message: MessageListItem;
   className?: string;
+  headerActions?: ReactNode;
   isExpanded?: boolean;
+  onToggleExpanded?: () => void;
   previewMode?: "none" | "collapsed";
   senderNameClassName?: string;
   trailing?: ReactNode;
@@ -67,18 +77,12 @@ const formatEnvelopeValue = (value?: string) => {
   return trimmed ? trimmed : null;
 };
 
-const replyActionButtonClassName =
-  "inline-flex h-8 items-center rounded-md border border-border/70 bg-background/70 px-3 text-xs font-medium text-foreground-light transition-colors outline-none hover:border-border hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30";
-
-const inspectorToggleButtonClassName =
-  "inline-flex h-7 items-center rounded-md border border-border/70 bg-background/70 px-2.5 text-[11px] font-medium text-foreground-light transition-colors outline-none hover:border-border hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30";
-
-const detailsSectionTitleClassName = "text-sm font-semibold text-foreground";
-
 const MessageHeaderContent = ({
   className,
+  headerActions,
   isExpanded,
   message,
+  onToggleExpanded,
   previewMode,
   senderNameClassName,
   trailing,
@@ -95,6 +99,41 @@ const MessageHeaderContent = ({
   ].filter((row) => Boolean(row.value));
   const showParticipants =
     participantRows.length > 0 && (previewMode !== "collapsed" || Boolean(isExpanded));
+  const content = (
+    <div className="min-w-0 flex-1">
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+        {isMessageUnread(message) ? (
+          <span aria-hidden className="size-2 rounded-full bg-foreground/75" />
+        ) : null}
+
+        <span
+          className={cn("truncate text-sm text-foreground sm:text-[15px]", senderNameClassName, {
+            "font-semibold text-foreground": Boolean(isExpanded) || isMessageUnread(message),
+            "font-medium": !isExpanded && !isMessageUnread(message),
+          })}
+        >
+          {senderName}
+        </span>
+
+        {senderEmail ? (
+          <span className="truncate text-xs text-muted-foreground sm:text-sm">{senderEmail}</span>
+        ) : null}
+      </div>
+
+      {preview ? <p className="mt-1 truncate text-sm text-foreground">{preview}</p> : null}
+
+      {showParticipants ? (
+        <div className="mt-1.5 space-y-1">
+          {participantRows.map((row) => (
+            <div className="flex min-w-0 items-baseline gap-2 text-xs sm:text-sm" key={row.label}>
+              <span className="shrink-0 text-muted-foreground">{row.label}</span>
+              <span className="min-w-0 truncate text-foreground">{row.value}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 
   return (
     <div
@@ -114,56 +153,25 @@ const MessageHeaderContent = ({
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-              {isMessageUnread(message) ? (
-                <span aria-hidden className="size-2 rounded-full bg-foreground/75" />
-              ) : null}
+        <div className="flex min-w-0 items-stretch justify-between gap-3">
+          {onToggleExpanded ? (
+            <button
+              className="min-w-0 flex-1 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              onClick={onToggleExpanded}
+              type="button"
+            >
+              {content}
+            </button>
+          ) : (
+            content
+          )}
 
-              <span
-                className={cn(
-                  "truncate text-sm text-foreground sm:text-[15px]",
-                  senderNameClassName,
-                  {
-                    "font-semibold text-foreground-dark":
-                      Boolean(isExpanded) || isMessageUnread(message),
-                    "font-medium": !isExpanded && !isMessageUnread(message),
-                  },
-                )}
-              >
-                {senderName}
-              </span>
-
-              {senderEmail ? (
-                <span className="truncate text-xs text-muted-foreground sm:text-sm">
-                  {senderEmail}
-                </span>
-              ) : null}
+          <div className="ml-2 flex shrink-0 flex-col items-end justify-between gap-1.5 pl-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground sm:text-sm">{date}</span>
+              {trailing}
             </div>
-
-            {preview ? (
-              <p className="mt-1 truncate text-sm text-foreground-light">{preview}</p>
-            ) : null}
-
-            {showParticipants ? (
-              <div className="mt-1.5 space-y-1">
-                {participantRows.map((row) => (
-                  <div
-                    className="flex min-w-0 items-baseline gap-2 text-xs sm:text-sm"
-                    key={row.label}
-                  >
-                    <span className="shrink-0 text-muted-foreground">{row.label}</span>
-                    <span className="min-w-0 truncate text-foreground-light">{row.value}</span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="ml-2 flex shrink-0 items-center gap-3 pl-2">
-            <span className="text-xs text-muted-foreground sm:text-sm">{date}</span>
-            {trailing}
+            {headerActions}
           </div>
         </div>
       </div>
@@ -171,31 +179,47 @@ const MessageHeaderContent = ({
   );
 };
 
-const MessageComposeActions = ({
+const MessageHeaderActions = ({
   className,
+  onDetails,
   onForward,
   onReply,
   onReplyAll,
   showReplyAll = true,
 }: {
   className?: string;
+  onDetails: () => void;
   onForward: () => void;
   onReply: () => void;
   onReplyAll: () => void;
   showReplyAll?: boolean;
 }) => (
-  <div className={cn("flex flex-wrap items-center gap-2", className)}>
-    <button className={replyActionButtonClassName} onClick={onReply} type="button">
+  <div className={cn("flex items-center justify-end gap-1.5", className)}>
+    <Button className="leading-tight" onClick={onReply} size="sm" variant="outline">
+      <HugeiconsIcon aria-hidden icon={MailReply02Icon} />
       Reply
-    </button>
+    </Button>
     {showReplyAll ? (
-      <button className={replyActionButtonClassName} onClick={onReplyAll} type="button">
+      <Button className="leading-tight" onClick={onReplyAll} size="sm" variant="outline">
+        <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
         Reply all
-      </button>
+      </Button>
     ) : null}
-    <button className={replyActionButtonClassName} onClick={onForward} type="button">
+    <Button className="leading-tight" onClick={onForward} size="sm" variant="outline">
+      <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
       Forward
-    </button>
+    </Button>
+    <IconButtonTooltip label="Details">
+      <Button
+        aria-label="Details"
+        className="ml-0.5 text-muted-foreground hover:text-foreground"
+        onClick={onDetails}
+        size="icon-sm"
+        variant="ghost"
+      >
+        <HugeiconsIcon aria-hidden icon={ZoomInAreaIcon} />
+      </Button>
+    </IconButtonTooltip>
   </div>
 );
 
@@ -219,7 +243,7 @@ const MessageInspectorPanel = ({
       <DialogContent className="w-[min(92vw,56rem)]">
         <DialogHeader>
           <DialogTitle className="text-base font-bold">Full details</DialogTitle>
-          <DialogDescription className="text-foreground-light">
+          <DialogDescription className="text-foreground">
             Headers, message source, and Gmail payload for this message.
           </DialogDescription>
         </DialogHeader>
@@ -237,7 +261,7 @@ const MessageInspectorPanel = ({
           ) : inspector ? (
             <>
               <section className="space-y-2">
-                <h3 className={detailsSectionTitleClassName}>Summary</h3>
+                <h3 className="text-sm font-semibold text-foreground">Summary</h3>
                 {[
                   { label: "Message ID", value: inspector.messageHeaderId },
                   { label: "Subject", value: inspector.subject },
@@ -246,7 +270,7 @@ const MessageInspectorPanel = ({
                 ]
                   .filter((row) => Boolean(row.value?.trim()))
                   .map((row) => (
-                    <p className="text-sm text-foreground-light" key={row.label}>
+                    <p className="text-sm text-foreground" key={row.label}>
                       <span className="font-semibold text-foreground">{row.label}: </span>
                       <span className="wrap-break-word">{row.value}</span>
                     </p>
@@ -254,9 +278,12 @@ const MessageInspectorPanel = ({
               </section>
 
               <section className="space-y-2">
-                <h3 className={detailsSectionTitleClassName}>Headers</h3>
-                {inspector.headers.map((header, index) => (
-                  <p className="text-sm text-foreground-light" key={`${header.name}-${index}`}>
+                <h3 className="text-sm font-semibold text-foreground">Headers</h3>
+                {inspector.headers.map((header) => (
+                  <p
+                    className="text-sm text-foreground"
+                    key={`${inspector.messageHeaderId}-${header.name}-${header.value}`}
+                  >
                     <span className="font-semibold text-foreground">{header.name}: </span>
                     <span className="wrap-break-word">{header.value}</span>
                   </p>
@@ -265,8 +292,8 @@ const MessageInspectorPanel = ({
 
               {inspector.rawText ? (
                 <section className="space-y-2">
-                  <h3 className={detailsSectionTitleClassName}>Decoded source</h3>
-                  <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground-light">
+                  <h3 className="text-sm font-semibold text-foreground">Decoded source</h3>
+                  <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground">
                     {inspector.rawText}
                   </pre>
                 </section>
@@ -274,8 +301,8 @@ const MessageInspectorPanel = ({
 
               {inspector.raw ? (
                 <section className="space-y-2">
-                  <h3 className={detailsSectionTitleClassName}>Raw Gmail payload</h3>
-                  <pre className="overflow-x-auto text-sm break-all whitespace-pre-wrap text-foreground-light">
+                  <h3 className="text-sm font-semibold text-foreground">Raw Gmail payload</h3>
+                  <pre className="overflow-x-auto text-sm break-all whitespace-pre-wrap text-foreground">
                     {inspector.raw}
                   </pre>
                 </section>
@@ -283,8 +310,8 @@ const MessageInspectorPanel = ({
 
               {payloadText ? (
                 <section className="space-y-2">
-                  <h3 className={detailsSectionTitleClassName}>Structured payload</h3>
-                  <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground-light">
+                  <h3 className="text-sm font-semibold text-foreground">Structured payload</h3>
+                  <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground">
                     {payloadText}
                   </pre>
                 </section>
@@ -302,60 +329,28 @@ const MessageInspectorPanel = ({
 };
 
 const MessageContentSection = ({
-  actions,
   compact,
-  mailboxId,
   message,
 }: {
-  actions?: ReactNode;
   compact?: boolean;
-  mailboxId: string;
   message: MessageListItem;
-}) => {
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-
-  return (
-    <div className="border-t border-border/60 pt-4 sm:pt-5">
-      <MessageBody
-        compact={compact}
-        html={message.bodyHtml}
-        snippet={message.snippet}
-        text={message.bodyText}
-      />
-
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
-        {actions}
-        <button
-          className={inspectorToggleButtonClassName}
-          onClick={() => {
-            setDetailsDialogOpen(true);
-          }}
-          type="button"
-        >
-          Details
-        </button>
-      </div>
-
-      <MessageInspectorPanel
-        mailboxId={mailboxId}
-        message={message}
-        onOpenChange={setDetailsDialogOpen}
-        open={detailsDialogOpen}
-      />
-    </div>
-  );
-};
+}) => (
+  <div className="border-t border-border/60 pt-4 sm:pt-5">
+    <MessageBody
+      compact={compact}
+      html={message.bodyHtml}
+      snippet={message.snippet}
+      text={message.bodyText}
+    />
+  </div>
+);
 
 const ThreadMessageBody = ({
-  actions,
   compact,
   expanded,
-  mailboxId,
   message,
 }: {
-  actions?: ReactNode;
   expanded: boolean;
-  mailboxId: string;
   message: MessageListItem;
   compact?: boolean;
 }) => (
@@ -378,16 +373,187 @@ const ThreadMessageBody = ({
           },
         )}
       >
-        <MessageContentSection
-          actions={actions}
-          compact={compact}
-          mailboxId={mailboxId}
-          message={message}
-        />
+        <MessageContentSection compact={compact} message={message} />
       </div>
     </div>
   </div>
 );
+
+const MessageExpandButton = ({
+  expanded,
+  messageId,
+  onToggleExpanded,
+}: {
+  expanded: boolean;
+  messageId: string;
+  onToggleExpanded: () => void;
+}) => (
+  <IconButtonTooltip label={expanded ? "Collapse message" : "Expand message"}>
+    <Button
+      aria-controls={`message-body-${messageId}`}
+      aria-expanded={expanded}
+      aria-label={expanded ? "Collapse message" : "Expand message"}
+      className={cn("text-muted-foreground hover:text-foreground", {
+        "text-foreground/80": expanded,
+      })}
+      onClick={onToggleExpanded}
+      size="icon-sm"
+      variant="ghost"
+    >
+      <HugeiconsIcon
+        aria-hidden
+        className={cn("transition-transform duration-200", {
+          "rotate-180": expanded,
+        })}
+        icon={ArrowDown01Icon}
+      />
+    </Button>
+  </IconButtonTooltip>
+);
+
+const ThreadMessageCard = ({
+  currentUserEmail,
+  expanded,
+  mailboxId,
+  message,
+  onComposeDraftRequested,
+  onToggleExpanded,
+}: {
+  currentUserEmail?: string | null;
+  expanded: boolean;
+  mailboxId: string;
+  message: MessageListItem;
+  onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+  onToggleExpanded: () => void;
+}) => {
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+
+  const openComposeAction = (action: "reply" | "reply-all" | "forward") => {
+    if (!onComposeDraftRequested) {
+      return;
+    }
+
+    onComposeDraftRequested(
+      buildComposeDraftFromMessageAction({
+        action,
+        currentUserEmail,
+        message,
+      }),
+    );
+  };
+
+  return (
+    <section
+      className={cn(
+        "overflow-hidden rounded-xl border border-border transition-colors duration-200",
+        {
+          "bg-background-light": expanded,
+          "bg-muted/40": isMessageUnread(message) && !expanded,
+          "bg-background hover:bg-muted/30": !expanded && !isMessageUnread(message),
+        },
+      )}
+    >
+      <MessageHeaderContent
+        className="px-4 py-4 sm:px-5 sm:py-4"
+        headerActions={
+          expanded ? (
+            <MessageHeaderActions
+              onDetails={() => {
+                setDetailsDialogOpen(true);
+              }}
+              onForward={() => openComposeAction("forward")}
+              onReply={() => openComposeAction("reply")}
+              onReplyAll={() => openComposeAction("reply-all")}
+              showReplyAll={hasDistinctReplyAllRecipients(message, currentUserEmail)}
+            />
+          ) : null
+        }
+        isExpanded={expanded}
+        message={message}
+        onToggleExpanded={onToggleExpanded}
+        previewMode="collapsed"
+        trailing={
+          <MessageExpandButton
+            expanded={expanded}
+            messageId={message.id}
+            onToggleExpanded={onToggleExpanded}
+          />
+        }
+      />
+
+      <div id={`message-body-${message.id}`}>
+        <ThreadMessageBody compact expanded={expanded} message={message} />
+      </div>
+
+      <MessageInspectorPanel
+        mailboxId={mailboxId}
+        message={message}
+        onOpenChange={setDetailsDialogOpen}
+        open={detailsDialogOpen}
+      />
+    </section>
+  );
+};
+
+const SingleMessageCard = ({
+  currentUserEmail,
+  mailboxId,
+  message,
+  onComposeDraftRequested,
+}: {
+  currentUserEmail?: string | null;
+  mailboxId: string;
+  message: MessageListItem;
+  onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+}) => {
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+
+  const openComposeAction = (action: "reply" | "reply-all" | "forward") => {
+    if (!onComposeDraftRequested) {
+      return;
+    }
+
+    onComposeDraftRequested(
+      buildComposeDraftFromMessageAction({
+        action,
+        currentUserEmail,
+        message,
+      }),
+    );
+  };
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-border bg-background-light">
+      <MessageHeaderContent
+        className="px-4 py-4 sm:px-5 sm:py-5"
+        headerActions={
+          <MessageHeaderActions
+            onDetails={() => {
+              setDetailsDialogOpen(true);
+            }}
+            onForward={() => openComposeAction("forward")}
+            onReply={() => openComposeAction("reply")}
+            onReplyAll={() => openComposeAction("reply-all")}
+            showReplyAll={hasDistinctReplyAllRecipients(message, currentUserEmail)}
+          />
+        }
+        message={message}
+        senderNameClassName="text-base"
+      />
+
+      <div className="px-4 pb-4 sm:px-5 sm:pb-5">
+        <MessageContentSection compact message={message} />
+      </div>
+
+      <MessageInspectorPanel
+        mailboxId={mailboxId}
+        message={message}
+        onOpenChange={setDetailsDialogOpen}
+        open={detailsDialogOpen}
+      />
+    </section>
+  );
+};
 
 const ThreadMessageList = ({
   currentUserEmail,
@@ -404,88 +570,25 @@ const ThreadMessageList = ({
     messages[0]?.id ?? null,
   );
 
-  const openComposeAction = (
-    action: "reply" | "reply-all" | "forward",
-    sourceMessage: MessageListItem | null,
-  ) => {
-    if (!sourceMessage || !onComposeDraftRequested) {
-      return;
-    }
-
-    onComposeDraftRequested(
-      buildComposeDraftFromMessageAction({
-        action,
-        currentUserEmail,
-        message: sourceMessage,
-      }),
-    );
-  };
-
   return (
     <div className="flex flex-col gap-3">
       {messages.map((threadMessage) => {
         const isExpanded = expandedMessageId === threadMessage.id;
 
         return (
-          <section
-            className={cn(
-              "overflow-hidden rounded-xl border border-border transition-colors duration-200",
-              {
-                "bg-background-light": isExpanded,
-                "bg-muted/40": isMessageUnread(threadMessage) && !isExpanded,
-                "bg-background hover:bg-muted/30": !isExpanded && !isMessageUnread(threadMessage),
-              },
-            )}
+          <ThreadMessageCard
+            currentUserEmail={currentUserEmail}
+            expanded={isExpanded}
             key={threadMessage.id}
-          >
-            <button
-              aria-controls={`message-body-${threadMessage.id}`}
-              aria-expanded={isExpanded}
-              className="w-full text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-              onClick={() => {
-                setExpandedMessageId((current) =>
-                  current === threadMessage.id ? null : threadMessage.id,
-                );
-              }}
-              type="button"
-            >
-              <MessageHeaderContent
-                className="px-4 py-4 sm:px-5 sm:py-4"
-                isExpanded={isExpanded}
-                message={threadMessage}
-                previewMode="collapsed"
-                trailing={
-                  <HugeiconsIcon
-                    aria-hidden="true"
-                    className={cn(
-                      "size-4 text-muted-foreground transition-transform duration-200",
-                      {
-                        "rotate-180 text-foreground/80": isExpanded,
-                      },
-                    )}
-                    icon={ArrowDown01Icon}
-                  />
-                }
-              />
-            </button>
-
-            <div id={`message-body-${threadMessage.id}`}>
-              <ThreadMessageBody
-                actions={
-                  <MessageComposeActions
-                    onForward={() => openComposeAction("forward", threadMessage)}
-                    onReply={() => openComposeAction("reply", threadMessage)}
-                    onReplyAll={() => openComposeAction("reply-all", threadMessage)}
-                    showReplyAll={hasDistinctReplyAllRecipients(threadMessage, currentUserEmail)}
-                  />
-                }
-                compact
-                expanded={isExpanded}
-                mailboxId={mailboxId}
-                message={threadMessage}
-              />
-            </div>
-          </section>
+            mailboxId={mailboxId}
+            message={threadMessage}
+            onComposeDraftRequested={onComposeDraftRequested}
+            onToggleExpanded={() => {
+              setExpandedMessageId((current) =>
+                current === threadMessage.id ? null : threadMessage.id,
+              );
+            }}
+          />
         );
       })}
     </div>
@@ -527,28 +630,7 @@ export const MessageView = ({
       messageId: threadMessage.id,
     })),
   );
-  const threadActionMessage = getPreferredThreadActionMessage(messages, currentUserEmail);
-  const showThreadReplyAll = threadActionMessage
-    ? hasDistinctReplyAllRecipients(threadActionMessage, currentUserEmail)
-    : false;
   const autoMarkedThreadIdsRef = useRef<Set<string>>(new Set());
-
-  const openComposeAction = (
-    action: "reply" | "reply-all" | "forward",
-    sourceMessage: MessageListItem | null,
-  ) => {
-    if (!sourceMessage || !onComposeDraftRequested) {
-      return;
-    }
-
-    onComposeDraftRequested(
-      buildComposeDraftFromMessageAction({
-        action,
-        currentUserEmail,
-        message: sourceMessage,
-      }),
-    );
-  };
 
   useEffect(() => {
     if (!threadIsUnread) {
@@ -575,7 +657,7 @@ export const MessageView = ({
     <article className="mx-auto w-full max-w-5xl space-y-4">
       <header className="rounded-xl border border-border bg-background-light px-5 py-5 sm:px-6 sm:py-6">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-8">
-          <h1 className="min-w-0 text-lg leading-tight font-medium tracking-tight wrap-break-word text-foreground-dark sm:text-xl">
+          <h1 className="min-w-0 text-lg leading-tight font-medium tracking-tight wrap-break-word text-foreground sm:text-xl">
             {subject}
           </h1>
 
@@ -612,16 +694,6 @@ export const MessageView = ({
           className="mt-4"
           mailboxId={mailboxId}
         />
-
-        {!isSingleMessageThread && threadActionMessage ? (
-          <MessageComposeActions
-            className="mt-4 border-t border-border/60 pt-4"
-            onForward={() => openComposeAction("forward", threadActionMessage)}
-            onReply={() => openComposeAction("reply", threadActionMessage)}
-            onReplyAll={() => openComposeAction("reply-all", threadActionMessage)}
-            showReplyAll={showThreadReplyAll}
-          />
-        ) : null}
       </header>
 
       {!isSingleMessageThread ? (
@@ -634,32 +706,13 @@ export const MessageView = ({
         />
       ) : (
         messages.map((threadMessage) => (
-          <section
-            className="overflow-hidden rounded-xl border border-border bg-background-light"
+          <SingleMessageCard
+            currentUserEmail={currentUserEmail}
             key={threadMessage.id}
-          >
-            <MessageHeaderContent
-              className="px-4 py-4 sm:px-5 sm:py-5"
-              message={threadMessage}
-              senderNameClassName="text-base"
-            />
-
-            <div className="px-4 pb-4 sm:px-5 sm:pb-5">
-              <MessageContentSection
-                actions={
-                  <MessageComposeActions
-                    onForward={() => openComposeAction("forward", threadMessage)}
-                    onReply={() => openComposeAction("reply", threadMessage)}
-                    onReplyAll={() => openComposeAction("reply-all", threadMessage)}
-                    showReplyAll={hasDistinctReplyAllRecipients(threadMessage, currentUserEmail)}
-                  />
-                }
-                compact
-                mailboxId={mailboxId}
-                message={threadMessage}
-              />
-            </div>
-          </section>
+            mailboxId={mailboxId}
+            message={threadMessage}
+            onComposeDraftRequested={onComposeDraftRequested}
+          />
         ))
       )}
     </article>

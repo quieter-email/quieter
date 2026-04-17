@@ -9,6 +9,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - Infrastructure and deployment: [SST](https://sst.dev/)
 - Frontend app: [Next.js](https://nextjs.org/) App Router + [React](https://react.dev/)
 - Forms: [TanStack Form](https://tanstack.com/form/latest)
+- Client workflow state: [TanStack Store](https://tanstack.com/store/latest/docs/overview)
 - Keyboard shortcuts: [TanStack Hotkeys](https://tanstack.com/hotkeys/latest)
 - Routing: `src/app/**` App Router segments with `page.tsx`, `layout.tsx`, and `route.ts`
 - URL query state: [nuqs](https://nuqs.dev/)
@@ -49,8 +50,10 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
   - `src/lib/search-params.ts`: Shared nuqs parsers/loaders/serializers for app URL state, including mailbox selection, mailbox search queries, and the Drafts and Spam mailboxes.
   - `src/lib/auth.ts`: Better Auth React client wrapper.
   - `src/lib/errors.ts`: Shared client-side helpers for turning auth, oRPC, provider, and JSON-shaped failures into user-facing messages.
-  - `src/lib/gmail/compose.ts`: Mailbox-scoped Gmail draft hydration helpers, attachment runtime store, and compose state types.
+  - `src/lib/gmail/compose.ts`: Mailbox-scoped Gmail draft hydration helpers, attachment runtime store, and compose draft/session types.
+  - `src/lib/gmail/compose-store.ts`: Mailbox-scoped TanStack Store model for the compose dialog workflow, including UI state and draft/form synchronization.
   - `src/lib/gmail/compose-query.ts`: Persisted compose session query keys keyed by mailbox id.
+  - `src/lib/gmail/mailbox-workspace-store.ts`: TanStack Store helpers for inbox-shell manual refresh, window activity, and pending mailbox action state.
   - `src/lib/gmail/attachments.ts`: On-demand Gmail attachment download helpers for mail detail surfaces.
   - `src/lib/gmail/inbox-query.ts`: Mailbox-scoped inbox query keys, Gmail-search-aware loading, history-based sync helpers for unfiltered views, optimistic message actions, mailto-based unsubscribe actions, and thread-aware mailbox action helpers used by bulk selection.
   - `src/lib/gmail/thread-query.ts`: Thread query helpers.
@@ -119,9 +122,10 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - `packages/auth` owns Better Auth configuration.
 - Icon-only interactive controls should use the shared tooltip wrapper from `@quietr/ui`, keep a concise `aria-label`, and stay visually compact.
 
-### TanStack Query and mutationOptions
+### TanStack Query, Store, and mutationOptions
 
-- Use TanStack Query first for app-owned async UI state in React code.
+- Use TanStack Query first for app-owned async/server state in React code.
+- Use TanStack Store for complex client-only workflow state that benefits from imperative current-state reads or coordinated updates across async handlers.
 - Use named `queryOptions(...)` and `mutationOptions(...)` when:
   - A query or mutation config is needed in more than one place.
   - You want a single source of truth for query keys, mutation keys, or cache behavior.
@@ -154,7 +158,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - Message-list viewport prefetch is intentionally capped to one extra page on mount so tall windows do not chain-load many pages before the user scrolls.
 - Filtered search views and the Drafts mailbox are refreshed manually instead of participating in history-based live sync.
 - Thread bodies and non-inline attachment metadata are still fetched on demand from Gmail.
-- Compose state is a browser-local persisted session keyed by mailbox id; draft content and attachments are synced to Gmail drafts via oRPC procedures, and reopening saved drafts hydrates Gmail-backed attachment files back into compose state.
+- Compose workflow state is owned by a mailbox-scoped TanStack Store, while the browser-local persisted compose session remains keyed by mailbox id in TanStack Query; draft content and attachments are synced to Gmail drafts via oRPC procedures, and reopening saved drafts hydrates Gmail-backed attachment files back into compose state.
 
 ### Routing + SSR behavior
 

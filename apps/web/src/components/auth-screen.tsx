@@ -215,7 +215,7 @@ export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
   return (
     <div className="grid min-h-dvh w-full place-items-center bg-background px-6 py-10">
       <div className="w-full max-w-md rounded-2xl border border-border bg-background-light p-8 shadow-sm">
-        <h1 className="text-3xl font-medium tracking-tight text-foreground-dark">{pageTitle}</h1>
+        <h1 className="text-3xl font-medium tracking-tight text-foreground">{pageTitle}</h1>
 
         <form
           action={async () => {

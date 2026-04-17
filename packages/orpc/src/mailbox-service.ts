@@ -142,6 +142,42 @@ const getGoogleAccessTokenForLinkedAccount = async (
   return response?.accessToken ?? null;
 };
 
+export const refreshAuthorizedGmailAccessToken = async (input: {
+  headers: Headers;
+  providerAccountId: string;
+  userId: string;
+}) => {
+  try {
+    const response = await auth.api.refreshToken({
+      body: {
+        providerId: "google",
+        accountId: input.providerAccountId,
+        userId: input.userId,
+      },
+      headers: input.headers,
+    });
+
+    if (!response?.accessToken) {
+      throw new ORPCError("UNAUTHORIZED", {
+        message: "Google access could not be refreshed for this mailbox.",
+      });
+    }
+
+    return response.accessToken;
+  } catch (error) {
+    if (error instanceof ORPCError) {
+      throw error;
+    }
+
+    throw new ORPCError("UNAUTHORIZED", {
+      message:
+        error instanceof Error && error.message
+          ? error.message
+          : "Google access could not be refreshed for this mailbox.",
+    });
+  }
+};
+
 const upsertMailboxRecord = async (input: {
   connectedUserId: string;
   displayName: string | null;

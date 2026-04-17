@@ -27,8 +27,8 @@ import {
   serializeMailboxSearchParams,
   serializeSettingsSearchParams,
 } from "~/lib/search-params";
-import { MailboxSwitcherDropdown } from "./mailbox-switcher";
-import { SidebarMailboxNav } from "./sidebar/sidebar-mailbox-nav";
+import { MailboxSwitcherDropdown } from "../mailbox-switcher";
+import { SidebarMailboxNav } from "../sidebar/sidebar-mailbox-nav";
 
 type MailSidebarProps = {
   activeOrganizationName: string | null;
@@ -66,10 +66,10 @@ export const MailSidebar = ({
 
   return (
     <aside
-      className="relative hidden h-full shrink-0 border-r border-border bg-background text-foreground lg:flex lg:flex-col"
+      className="relative hidden h-full shrink-0 border-r border-border bg-background-dark text-foreground lg:flex lg:flex-col"
       style={{ width: "248px" }}
     >
-      <div className="flex min-h-0 flex-1 flex-col px-4 py-6">
+      <div className="flex min-h-0 flex-1 flex-col px-3 py-6">
         <div className="flex min-w-0 items-start justify-between gap-3 pl-2">
           <MailboxSwitcherDropdown
             activeOrganizationName={activeOrganizationName}
@@ -132,7 +132,7 @@ export const MailSidebar = ({
 
         <div className="mt-6 p-1">
           <Button
-            className="h-10 w-full justify-start rounded-md px-4"
+            className="w-full justify-start rounded-md px-4"
             disabled={!selectedMailboxId}
             onClick={onComposeNewMail}
             type="button"

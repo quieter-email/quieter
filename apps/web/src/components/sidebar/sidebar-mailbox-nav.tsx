@@ -39,10 +39,8 @@ export const SidebarMailboxNav = ({ onSelectMailbox, selectedMailbox }: SidebarM
           className={cn(
             "group relative h-9 w-full justify-start gap-3 rounded-md px-3 text-left text-sm font-medium",
             {
-              "bg-secondary text-foreground shadow-sm hover:bg-secondary active:bg-secondary":
+              "bg-secondary text-secondary-foreground hover:bg-secondary active:bg-secondary":
                 isActive,
-              "text-foreground-light hover:bg-secondary/50 hover:text-foreground active:bg-secondary/80":
-                !isActive,
             },
           )}
           key={item.id}
@@ -52,9 +50,10 @@ export const SidebarMailboxNav = ({ onSelectMailbox, selectedMailbox }: SidebarM
           variant="ghost"
         >
           <HugeiconsIcon
+            strokeWidth={isActive ? 2.5 : 1.5}
             className={cn("size-4 shrink-0", {
-              "stroke-[2.2] text-foreground": isActive,
-              "stroke-[1.9] text-foreground-light": !isActive,
+              "text-foreground": isActive,
+              "text-foreground-light": !isActive,
             })}
             icon={item.icon}
           />

@@ -9,6 +9,7 @@
 - Infrastructure and deployment: SST
 - App framework: Next.js App Router + React
 - Forms: TanStack Form
+- Client workflow state: TanStack Store
 - Keyboard shortcuts: TanStack Hotkeys
 - URL query state: nuqs
 - Theme management: next-themes
@@ -49,8 +50,10 @@
   - `src/lib/search-params.ts`: shared nuqs parsers/loaders/serializers for mailbox selection, mailbox folders, message, and search URL state, including the Drafts and Spam mailboxes
   - `src/lib/auth.ts`: Better Auth React client wrapper
   - `src/lib/errors.ts`: shared client-side helpers for turning provider, auth, oRPC, and JSON-shaped failures into user-facing messages
-  - `src/lib/gmail/compose.ts`: compose state, Gmail draft hydration, attachment runtime handling, and send/delete helpers through oRPC
+  - `src/lib/gmail/compose.ts`: compose draft/session types, Gmail draft hydration, attachment runtime handling, and send/delete helpers through oRPC
+  - `src/lib/gmail/compose-store.ts`: mailbox-scoped TanStack Store model for compose dialog workflow state and draft/form synchronization
   - `src/lib/gmail/compose-query.ts`: persisted compose session query keys scoped by `mailboxId`
+  - `src/lib/gmail/mailbox-workspace-store.ts`: TanStack Store helpers for inbox-shell manual refresh, window activity, and pending mailbox action state
   - `src/lib/gmail/attachments.ts`: on-demand Gmail attachment download helpers used by mail detail surfaces
   - `src/lib/gmail/inbox-query.ts`: mailbox-scoped inbox query keys, Gmail-search-aware list loading, history-based live sync for unfiltered views, optimistic single-message actions, mailto-based unsubscribe actions, and thread-aware mailbox action helpers used by bulk selection
   - `src/lib/gmail/thread-query.ts`: thread query options
@@ -121,7 +124,8 @@
 
 ## TanStack conventions
 
-- Use TanStack Query first for app-owned async UI state in React code, with named `queryOptions(...)` and `mutationOptions(...)` instead of inline config objects.
+- Use TanStack Query first for app-owned async/server state in React code, with named `queryOptions(...)` and `mutationOptions(...)` instead of inline config objects.
+- Use TanStack Store for complex client-only workflow state that needs imperative reads or coordinated updates across async handlers, such as the compose dialog and mailbox action pending state.
 - Keep Better Auth's native reactive hooks as the source of truth for auth-owned state such as `useSession`, `useActiveOrganization`, `useListOrganizations`, and `useListPasskeys`.
 - In non-hook code, prefer query-client reads when shared caching matters, but call the underlying client directly for one-off writes when TanStack would only add indirection.
 - Mailbox-scoped mail data must include `mailboxId` in its query keys so persisted browser caches do not bleed across connected inboxes.
@@ -149,7 +153,7 @@
 - Mailbox, thread, and label query keys are mailbox-scoped so restored browser caches stay isolated per connected inbox.
 - Gmail REST calls are centralized server-side in `packages/orpc/src/gmail-service.ts`, with access tokens resolved from the selected mailbox's linked Google account through Better Auth.
 - Bulk mailbox actions operate on the loaded row set in the current mailbox and use thread-level Gmail mutations for conversation views.
-- Compose state is persisted locally per mailbox while draft content and attachments are synced to Gmail drafts through oRPC-backed Gmail draft APIs.
+- Compose workflow state is owned by a mailbox-scoped TanStack Store, while the persisted compose session still lives in TanStack Query browser storage and draft content/attachments continue syncing through oRPC-backed Gmail draft APIs.
 - Opening a saved draft hydrates the Gmail draft payload and attachment files back into the compose dialog so Drafts behaves like a resumable mailbox, not just a local draft shortcut.
 - `New Mail` always opens a fresh blank draft; previous unsent work remains resumable through the compose dialog's `Continue last draft` affordance.
 

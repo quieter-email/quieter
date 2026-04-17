@@ -7,9 +7,10 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useStore } from "@tanstack/react-store";
 import { usePathname } from "next/navigation";
 import { useQueryStates } from "nuqs";
-import { type Dispatch, useEffect, useLayoutEffect, useReducer, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ComposeDraftState } from "~/lib/gmail/compose";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import { authClient } from "~/lib/auth";
@@ -42,14 +43,26 @@ import {
   unmarkMessageAsSpamInMailbox,
   updateMessageLabelsInMailbox,
 } from "~/lib/gmail/inbox-query";
+import {
+  createMailboxWorkspaceStore,
+  isMessageActionPending as isMessageActionPendingInStore,
+  isThreadActionPending as isThreadActionPendingInStore,
+  setMailboxWorkspaceManualRefreshing,
+  setMailboxWorkspaceMessagePending,
+  setMailboxWorkspaceMessagesPending,
+  setMailboxWorkspaceThreadPending,
+  setMailboxWorkspaceThreadsPending,
+  setMailboxWorkspaceWindowActive,
+  type MailboxWorkspaceStore,
+} from "~/lib/gmail/mailbox-workspace-store";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
 import { mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 import { mailboxSearchParams } from "~/lib/search-params";
 import { type ComposeDialogHandle, ComposeDialog } from "./compose-dialog";
-import { MailSidebar } from "./mail-sidebar";
 import { MessageDetail } from "./message-detail";
 import { MessageList } from "./message-list";
+import { MailSidebar } from "./sidebar/mail-sidebar";
 
 type MailboxWorkspaceProps = {
   user: {
@@ -69,43 +82,6 @@ type ConnectedMailbox = {
   emailAddress: string;
   displayName: string | null;
 };
-
-type MailboxWorkspaceState = {
-  isManualRefreshing: boolean;
-  isWindowActive: boolean;
-  pendingMessageActionIds: ReadonlySet<string>;
-  pendingThreadActionIds: ReadonlySet<string>;
-};
-
-type MailboxWorkspaceAction =
-  | {
-      type: "manual-refresh/set";
-      value: boolean;
-    }
-  | {
-      type: "window-active/set";
-      value: boolean;
-    }
-  | {
-      type: "message-pending/set";
-      messageId: string;
-      pending: boolean;
-    }
-  | {
-      type: "message-pending-many/set";
-      messageIds: string[];
-      pending: boolean;
-    }
-  | {
-      type: "thread-pending/set";
-      pending: boolean;
-      threadId: string;
-    }
-  | {
-      type: "thread-pending-many/set";
-      pending: boolean;
-      threadIds: string[];
-    };
 
 type MailboxWorkspaceViewProps = {
   activeMailbox: MailboxCategory;
@@ -162,146 +138,45 @@ type MailboxWorkspaceViewProps = {
 type MailboxActionHandlerArgs = {
   activeMailbox: MailboxCategory;
   activeSearchQuery: string;
-  dispatch: Dispatch<MailboxWorkspaceAction>;
-  pendingMessageActionIds: ReadonlySet<string>;
-  pendingThreadActionIds: ReadonlySet<string>;
+  workspaceStore: MailboxWorkspaceStore;
   queryClient: QueryClient;
   refreshSearchResultsIfNeeded: () => Promise<void>;
   unsubscribeFromMessageMutation: (messageId: string) => Promise<void>;
   mailboxId: string;
 };
 
-const initialMailboxWorkspaceState: MailboxWorkspaceState = {
-  isManualRefreshing: false,
-  isWindowActive: false,
-  pendingMessageActionIds: new Set(),
-  pendingThreadActionIds: new Set(),
-};
-
-const updatePendingIds = (
-  current: ReadonlySet<string>,
-  ids: readonly string[],
-  pending: boolean,
-): ReadonlySet<string> => {
-  const next = new Set(current);
-
-  for (const id of ids) {
-    if (pending) {
-      next.add(id);
-    } else {
-      next.delete(id);
-    }
-  }
-
-  return next;
-};
-
-const mailboxWorkspaceReducer = (
-  state: MailboxWorkspaceState,
-  action: MailboxWorkspaceAction,
-): MailboxWorkspaceState => {
-  switch (action.type) {
-    case "manual-refresh/set":
-      return {
-        ...state,
-        isManualRefreshing: action.value,
-      };
-    case "window-active/set":
-      return {
-        ...state,
-        isWindowActive: action.value,
-      };
-    case "message-pending/set":
-      return {
-        ...state,
-        pendingMessageActionIds: updatePendingIds(
-          state.pendingMessageActionIds,
-          [action.messageId],
-          action.pending,
-        ),
-      };
-    case "message-pending-many/set":
-      return {
-        ...state,
-        pendingMessageActionIds: updatePendingIds(
-          state.pendingMessageActionIds,
-          action.messageIds,
-          action.pending,
-        ),
-      };
-    case "thread-pending/set":
-      return {
-        ...state,
-        pendingThreadActionIds: updatePendingIds(
-          state.pendingThreadActionIds,
-          [action.threadId],
-          action.pending,
-        ),
-      };
-    case "thread-pending-many/set":
-      return {
-        ...state,
-        pendingThreadActionIds: updatePendingIds(
-          state.pendingThreadActionIds,
-          action.threadIds,
-          action.pending,
-        ),
-      };
-  }
-};
-
 const createMailboxActionHandlers = ({
   activeMailbox,
   activeSearchQuery,
-  dispatch,
-  pendingMessageActionIds,
-  pendingThreadActionIds,
+  workspaceStore,
   queryClient,
   refreshSearchResultsIfNeeded,
   unsubscribeFromMessageMutation,
   mailboxId,
 }: MailboxActionHandlerArgs) => {
   const isMessageActionPending = (messageId: string | null | undefined) =>
-    messageId ? pendingMessageActionIds.has(messageId) : false;
+    isMessageActionPendingInStore(workspaceStore, messageId);
 
   const isThreadActionPending = (threadId: string | null | undefined) =>
-    threadId ? pendingThreadActionIds.has(threadId) : false;
+    isThreadActionPendingInStore(workspaceStore, threadId);
 
   const getUniqueIds = (ids: readonly string[]) =>
     Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
 
   const setMessageActionPending = (messageId: string, pending: boolean) => {
-    dispatch({
-      type: "message-pending/set",
-      messageId,
-      pending,
-    });
+    setMailboxWorkspaceMessagePending(workspaceStore, messageId, pending);
   };
 
   const setThreadActionPending = (threadId: string, pending: boolean) => {
-    dispatch({
-      type: "thread-pending/set",
-      pending,
-      threadId,
-    });
+    setMailboxWorkspaceThreadPending(workspaceStore, threadId, pending);
   };
 
   const setMessageActionsPending = (messageIds: string[], pending: boolean) => {
-    if (messageIds.length === 0) return;
-    dispatch({
-      type: "message-pending-many/set",
-      messageIds,
-      pending,
-    });
+    setMailboxWorkspaceMessagesPending(workspaceStore, messageIds, pending);
   };
 
   const setThreadActionsPending = (threadIds: string[], pending: boolean) => {
-    if (threadIds.length === 0) return;
-    dispatch({
-      type: "thread-pending-many/set",
-      pending,
-      threadIds,
-    });
+    setMailboxWorkspaceThreadsPending(workspaceStore, threadIds, pending);
   };
 
   const runMessageAction = async (messageId: string, action: () => Promise<void>) => {
@@ -692,12 +567,9 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
   const queryClient = useQueryClient();
   const activeOrganizationState = authClient.useActiveOrganization();
   const composeDialogRef = useRef<ComposeDialogHandle | null>(null);
-  const [workspaceState, dispatch] = useReducer(
-    mailboxWorkspaceReducer,
-    initialMailboxWorkspaceState,
-  );
-  const { isManualRefreshing, isWindowActive, pendingMessageActionIds, pendingThreadActionIds } =
-    workspaceState;
+  const [workspaceStore] = useState(createMailboxWorkspaceStore);
+  const isManualRefreshing = useStore(workspaceStore, (state) => state.isManualRefreshing);
+  const isWindowActive = useStore(workspaceStore, (state) => state.isWindowActive);
   const [
     { mailbox: activeMailbox, mailboxId, messageId: activeMessageId, query },
     setMailboxQuery,
@@ -786,17 +658,11 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     await queryClient.cancelQueries({ queryKey: liveSyncQueryKey });
     await queryClient.cancelQueries({ queryKey: messagesQueryKey });
 
-    dispatch({
-      type: "manual-refresh/set",
-      value: true,
-    });
+    setMailboxWorkspaceManualRefreshing(workspaceStore, true);
     try {
       await syncMessages(queryClient, selectedMailboxId, activeMailbox, activeSearchQuery);
     } finally {
-      dispatch({
-        type: "manual-refresh/set",
-        value: false,
-      });
+      setMailboxWorkspaceManualRefreshing(workspaceStore, false);
     }
   };
 
@@ -822,10 +688,10 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
 
   useEffect(() => {
     const updateWindowActivity = () => {
-      dispatch({
-        type: "window-active/set",
-        value: document.visibilityState === "visible" && document.hasFocus(),
-      });
+      setMailboxWorkspaceWindowActive(
+        workspaceStore,
+        document.visibilityState === "visible" && document.hasFocus(),
+      );
     };
 
     updateWindowActivity();
@@ -838,7 +704,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       window.removeEventListener("blur", updateWindowActivity);
       document.removeEventListener("visibilitychange", updateWindowActivity);
     };
-  }, []);
+  }, [workspaceStore]);
 
   useLayoutEffect(() => {
     const normalizedMailboxId = mailboxId?.trim() || null;
@@ -897,9 +763,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
   } = createMailboxActionHandlers({
     activeMailbox,
     activeSearchQuery,
-    dispatch,
-    pendingMessageActionIds,
-    pendingThreadActionIds,
+    workspaceStore,
     queryClient,
     refreshSearchResultsIfNeeded,
     unsubscribeFromMessageMutation: async (messageId) => {
@@ -1244,7 +1108,7 @@ const MailboxWorkspaceView = ({
               </div>
             </>
           ) : (
-            <section className="flex min-h-0 flex-1 items-center justify-center bg-background-light px-8">
+            <section className="flex min-h-0 flex-1 items-center justify-center border-r border-border bg-background-light px-8">
               <div className="max-w-md space-y-3 text-center">
                 <h1 className="text-lg font-semibold tracking-tight text-foreground">
                   No mailboxes in this organization
