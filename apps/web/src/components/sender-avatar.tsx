@@ -1,7 +1,6 @@
 "use client";
 
 import { cn, useColorMode } from "@quietr/ui";
-import Image from "next/image";
 import { useState } from "react";
 
 type SenderAvatarProps = {
@@ -47,13 +46,12 @@ export const SenderAvatar = ({
       {showFallback ? <span className={labelClassName}>{fallbackLabel}</span> : null}
 
       {canRenderAvatar && activeAvatarUrl ? (
-        <Image
+        <img
           alt=""
           aria-hidden="true"
           className={cn("absolute inset-0 size-full object-cover", {
             "opacity-0": showFallback,
           })}
-          fill
           key={activeAvatarUrl}
           onError={() => {
             updateAvatarStatus(activeAvatarUrl, "error");
@@ -61,7 +59,6 @@ export const SenderAvatar = ({
           onLoad={() => {
             updateAvatarStatus(activeAvatarUrl, "loaded");
           }}
-          sizes="40px"
           src={activeAvatarUrl}
         />
       ) : null}

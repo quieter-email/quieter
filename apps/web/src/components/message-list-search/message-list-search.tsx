@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowUp01Icon, Refresh01Icon, Search01Icon } from "@hugeicons/core-free-icons";
+import { Refresh01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, Field, IconButtonTooltip, Input } from "@quietr/ui";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
+import { ArrowInteractionButton } from "../arrow-interaction-button";
 import { SpinWhileActive } from "../spin-while-active";
 import { MessageListSearchDropdown } from "./message-list-search-dropdown";
 import {
@@ -252,15 +253,13 @@ export const MessageListSearch = ({
             </Field>
 
             <IconButtonTooltip label="Scroll to top">
-              <Button
+              <ArrowInteractionButton
                 aria-label="Scroll to top"
                 onClick={() => void onScrollToTop()}
                 size="icon-sm"
                 type="button"
                 variant="outline"
-              >
-                <HugeiconsIcon icon={ArrowUp01Icon} />
-              </Button>
+              />
             </IconButtonTooltip>
           </div>
 

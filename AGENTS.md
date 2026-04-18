@@ -7,12 +7,13 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - Runtime and package manager: [Bun](https://bun.sh/)
 - Monorepo orchestration: [Turborepo](https://turbo.build/repo)
 - Infrastructure and deployment: [SST](https://sst.dev/)
-- Frontend app: [Next.js](https://nextjs.org/) App Router + [React](https://react.dev/)
+- Frontend app: [TanStack Start](https://tanstack.com/start) + [TanStack Router](https://tanstack.com/router) + [React](https://react.dev/)
+- App runtime/build: [Vite](https://vite.dev/) + [Nitro](https://nitro.build/)
 - Forms: [TanStack Form](https://tanstack.com/form/latest)
 - Client workflow state: [TanStack Store](https://tanstack.com/store/latest/docs/overview)
 - Keyboard shortcuts: [TanStack Hotkeys](https://tanstack.com/hotkeys/latest)
-- Routing: `src/app/**` App Router segments with `page.tsx`, `layout.tsx`, and `route.ts`
-- URL query state: [nuqs](https://nuqs.dev/)
+- Routing: `src/routes/**` TanStack Router file routes and TanStack Start server handlers
+- URL query state: TanStack Router validated search params
 - Theme management: [next-themes](https://github.com/pacocoursey/next-themes)
 - API layer: [oRPC](https://orpc.dev/docs/getting-started) + [`@orpc/tanstack-query`](https://orpc.dev/docs/integrations/tanstack-query)
 - Database: [Drizzle ORM beta](https://orm.drizzle.team/) + Postgres (Neon HTTP)
@@ -29,25 +30,29 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 
 - `sst.config.ts`: SST config that provisions only the mail S3 bucket, the SES receipt SNS topic, the SES receipt IAM role, the mail ingest/send secret placeholders, the receipt processor, and the standalone mail ingress/outbound function URLs.
 
-- `apps/web/`: Next.js App Router application.
-  - `src/app/layout.tsx`: Root HTML shell and client providers.
-  - `src/app/page.tsx`: Authenticated inbox route that server-loads the session, redirects to the blocking Google scope-repair page for the exact broken mailbox when needed, and then hydrates the client workspace.
-  - `src/app/google-scope-repair/page.tsx`: Blocking Google scope-repair page that names the affected mailbox and routes the user back through targeted relinking.
-  - `src/app/auth/page.tsx`: Legacy auth route that redirects to `/login`.
-  - `src/app/home/page.tsx`: Public landing route that redirects authenticated users away.
-  - `src/app/login/page.tsx`: Public login route for magic-link, Google, and passkey sign-in.
-  - `src/app/signup/page.tsx`: Public signup route for magic-link registration plus Google and passkey entry points.
-  - `src/app/settings/page.tsx`: Authenticated settings route with server-side guard.
-  - `src/app/api/orpc/[[...rest]]/route.ts`: HTTP endpoint for oRPC requests (`/api/orpc`) via `RPCHandler`, including auth email preview and user-status helpers for login/signup.
-  - `src/app/api/auth/[...all]/route.ts`: Better Auth route handler.
-  - `src/app/api/auth/google-scope-repair/route.ts`: Server-side Google OAuth scope repair endpoint that starts targeted Better Auth relinking, hints the affected Google account, and preserves OAuth state cookies.
-  - `src/lib/orpc.ts`: Shared raw oRPC client plus TanStack Query oRPC utilities for the app, following oRPC's SSR pattern by reusing `globalThis.$client` on the server and the browser RPC link in the client.
-  - `src/lib/orpc.server.ts`: `server-only` oRPC bootstrap that registers the server-side client on `globalThis.$client`.
-  - `src/lib/server-auth.ts`: Cached server-side session helpers, redirects, and blocking Google-scope repair target helpers.
+- `apps/web/`: TanStack Start application.
+  - `vite.config.ts`: Vite config that wires TanStack Start, React, Tailwind CSS v4, and Nitro.
+  - `src/router.tsx`: TanStack Router bootstrap with `routeTree.gen.ts` and scroll restoration.
+  - `src/routeTree.gen.ts`: Generated TanStack Router route tree; do not hand-edit.
+  - `src/routes/__root.tsx`: Root HTML shell, stylesheet/meta registration, providers, and app-level error/not-found UI.
+  - `src/routes/index.tsx`: Authenticated inbox route that server-loads only auth/scope-repair state, redirects to the blocking Google scope-repair page for the exact broken mailbox when needed, and then hydrates the client workspace.
+  - `src/routes/google-scope-repair.tsx`: Blocking Google scope-repair page that names the affected mailbox and routes the user back through targeted relinking.
+  - `src/routes/auth.tsx`: Legacy auth route that redirects to `/login`.
+  - `src/routes/home.tsx`: Public landing route that redirects authenticated users away.
+  - `src/routes/login.tsx`: Public login route for magic-link, Google, and passkey sign-in.
+  - `src/routes/signup.tsx`: Public signup route for magic-link registration plus Google and passkey entry points.
+  - `src/routes/settings.tsx`: Authenticated settings route with server-side guard.
+  - `src/routes/api/orpc.ts` and `src/routes/api/orpc.$.ts`: HTTP endpoints for oRPC requests (`/api/orpc`) via TanStack Start server handlers that call `RPCHandler.handle(...)` directly, including auth email preview and user-status helpers for login/signup.
+  - `src/routes/api/auth.$.ts`: Better Auth route handler.
+  - `src/routes/api/auth.google-scope-repair.ts`: Server-side Google OAuth scope repair endpoint that starts targeted Better Auth relinking, hints the affected Google account, and preserves OAuth state cookies.
+  - `src/lib/orpc.ts`: Shared isomorphic oRPC client plus TanStack Query oRPC utilities, using a router-backed server-side client during SSR and the fetch RPC client in the browser.
+  - `src/lib/auth.server.ts`: Request-scoped server helpers for session lookup and blocking Google-scope repair target resolution.
+  - `src/lib/auth.functions.ts`: TanStack Start server functions used by route loaders for auth and repair checks.
+  - `src/lib/route-apis.ts`: Typed TanStack Router route APIs used by shared client components.
   - `src/lib/google-scope-repair.ts`: Shared app-side helpers for canonical Google scope-repair URLs and safe return paths.
   - `src/lib/query-client.ts`: Shared React Query client factory.
   - `src/lib/query-persister.ts`: Shared TanStack query persister helpers for eager browser-cache restore, manual cache writes, and persister-backed cache removal.
-  - `src/lib/search-params.ts`: Shared nuqs parsers/loaders/serializers for app URL state, including mailbox selection, mailbox search queries, and the Drafts and Spam mailboxes.
+  - `src/lib/search-params.ts`: Shared TanStack Router search validation, normalization, and serialization for app URL state, including mailbox selection, mailbox search queries, and the Drafts and Spam mailboxes.
   - `src/lib/auth.ts`: Better Auth React client wrapper.
   - `src/lib/errors.ts`: Shared client-side helpers for turning auth, oRPC, provider, and JSON-shaped failures into user-facing messages.
   - `src/lib/gmail/compose.ts`: Mailbox-scoped Gmail draft hydration helpers, attachment runtime store, and compose draft/session types.
@@ -60,7 +65,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
   - `src/lib/gmail/labels-query.ts`: Shared `queryOptions(...)` helpers for Gmail label metadata.
   - `src/lib/mailboxes-query.ts`: Shared `queryOptions(...)` helpers for mailbox records in the active organization.
   - `src/components/providers.tsx`: Client-side next-themes and React Query providers.
-  - `src/components/mailbox-workspace.tsx`: Interactive inbox shell, search-param state, active-organization mailbox selection, Gmail search queries, message panes, compose modal, and bulk mailbox action handlers.
+  - `src/components/mailbox-workspace.tsx`: Interactive inbox shell, TanStack Router search state, active-organization mailbox selection, Gmail search queries, message panes, compose modal, and bulk mailbox action handlers.
   - `src/components/auth-screen.tsx`: Client auth UI for separate login/signup routes using TanStack Form, TanStack Query mutations, and oRPC auth lookups.
   - `src/components/settings-screen.tsx`: Client settings shell that wires tab state, session data, and the settings panels.
   - `src/components/settings/*.tsx`: Modular settings sidebar, panels, account dialogs, the mailbox-management panel, and the organization mail setup/test panel.
@@ -68,7 +73,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
   - `src/components/compose-editor.tsx`: Tiptap editor shell and toolbar used by compose.
   - `src/components/mail-sidebar.tsx`: Sidebar showing the current user profile, connected mailbox switcher, and mailbox-folder navigation across Inbox, Drafts, Spam, Sent, and Trash.
 - `packages/auth/`: Better Auth server package.
-  - `src/index.ts`: Better Auth configuration with Google OAuth, passkeys, magic links, linked-account support for multiple Google accounts, personal-organization repair, account deletion, and Next.js cookies. `baseURL` is `BETTER_AUTH_URL` when set, else `https://${VERCEL_URL}` when set, else `http://localhost:3000`.
+  - `src/index.ts`: Better Auth configuration with Google OAuth, passkeys, magic links, linked-account support for multiple Google accounts, personal-organization repair, account deletion, and TanStack Start cookies. `baseURL` is `BETTER_AUTH_URL` when set, else `https://${VERCEL_URL}` when set, else `http://localhost:3000`.
   - `src/organization.ts`: Helpers for guaranteeing a personal organization per user and keeping `activeOrganizationId` valid.
   - `src/email-placeholder.ts`: In-memory placeholder store for magic-link and verification URLs.
   - `src/google-scopes.ts`: Required Google OAuth scopes.
@@ -137,8 +142,10 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 
 ### API and data flow
 
-- App calls `@quietr/orpc` from `apps/web/src/lib/orpc.ts` through the shared raw client and TanStack Query oRPC utilities, with `apps/web/src/lib/orpc.server.ts` bootstrapping the server-side client for App Router SSR.
-- Requests are handled in `apps/web/src/app/api/orpc/[[...rest]]/route.ts` using `@quietr/orpc/server`.
+- App bootstraps TanStack Router from `apps/web/src/router.tsx` using the generated `routeTree.gen.ts`, and the root document/providers live in `apps/web/src/routes/__root.tsx`.
+- Route loaders use TanStack Start server functions from `apps/web/src/lib/auth.functions.ts`, backed by `apps/web/src/lib/auth.server.ts`, for request-scoped session and Google-scope repair checks.
+- App calls `@quietr/orpc` from `apps/web/src/lib/orpc.ts` through a shared isomorphic client and TanStack Query oRPC utilities; the browser uses the fetch RPC client while SSR uses the router-backed server-side client with request headers.
+- Requests are handled in `apps/web/src/routes/api/orpc.ts` and `apps/web/src/routes/api/orpc.$.ts`, where TanStack Start server routes call the shared `RPCHandler` directly with an oRPC context.
 - Router procedures cover auth email-status/preview lookups plus mailbox listing/sync and mailbox-scoped Gmail list/thread/history-sync/label/draft/attachment/message actions, including Drafts listing/loading and Spam/Not Spam flows.
 - Mail domains can be configured dynamically through oRPC. The protected control plane creates or refreshes SES identities, configures custom MAIL FROM, creates SES receipt rules, and returns the exact DNS records required for the domain.
 - SES receipt rules store inbound raw mail in S3 and publish receipt metadata to SNS.
@@ -162,10 +169,11 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 
 ### Routing + SSR behavior
 
-- `apps/web/src/app/layout.tsx` owns root-level providers, global styles, and the app shell.
-- Prefer server components for auth guards and initial data loading. Use `requireSession` and `redirectIfAuthenticated` before handing off to client components.
-- Keep API handlers under `apps/web/src/app/api/**/route.ts`.
-- Use client components for React Query, compose flows, and search-param-driven inbox state.
+- `apps/web/src/routes/__root.tsx` owns root-level providers, global styles, and the app shell.
+- Prefer route loaders and TanStack Start server functions for auth guards, redirect-only checks, and request-scoped data loading before handing off to client components.
+- Keep API handlers under `apps/web/src/routes/api/**`.
+- Use client components for React Query, compose flows, and TanStack Router search-driven inbox state.
+- Validate search through shared schemas in `apps/web/src/lib/search-params.ts`, and keep inbox `loaderDeps` limited to `mailboxId` so query, folder, and message-selection URL changes do not retrigger auth/scope-repair loader work.
 
 ### Database and migrations
 
@@ -178,11 +186,11 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 
 - Each workspace package has its own scripts and dev dependencies for `oxlint`, `oxfmt`, and `tsgo`.
 - Shared TypeScript config is in `packages/config`, while Oxlint/Oxfmt config is at repo root.
-- Root `package.json` keeps Bun versions in `workspaces.catalog` and mirrors the React/Next entries in a top-level `catalog` field for external tooling compatibility.
+- Root `package.json` keeps Bun versions in `workspaces.catalog` and mirrors the core React entries in a top-level `catalog` field for external tooling compatibility.
 - Root `package.json` delegates mail SST commands to package-scoped scripts in `@quietr/aws` through Turbo; the web app is not started or deployed through SST.
 - Root `sst.config.ts` provisions the mail bucket, SES receipt topic, SES receipt IAM role, receipt processor, and the standalone mail ingress/outbound functions through SST. It links the bucket to the functions for AWS permissions and injects the bucket name plus the ingest/send tokens into the deployed functions.
 - `NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY` is used for sender avatars in the inbox UI.
-- `VITE_LOGO_DEV_PUBLISHABLE_KEY` remains a backward-compatible fallback mapped through `apps/web/next.config.ts`.
+- `VITE_LOGO_DEV_PUBLISHABLE_KEY` remains a backward-compatible fallback that the sender-avatar resolver reads directly when `NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY` is unset.
 - Outbound auth email delivery is not configured in this repo right now, so magic links and email verification flows rely on placeholder previews during local development.
 - `MAIL_INGEST_TOKEN` authenticates the SST mail ingress function.
 - `MAIL_SEND_TOKEN` authenticates the SST mail outbound function.
@@ -197,6 +205,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 ### Generated files
 
 - Do not hand-edit generated Drizzle migration snapshots unless intentionally repairing generated output.
+- Do not hand-edit `apps/web/src/routeTree.gen.ts`; regenerate it through the TanStack Start/Vite build.
 
 ## Development Workflow
 

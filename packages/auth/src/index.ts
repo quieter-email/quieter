@@ -3,8 +3,8 @@ import { db, member } from "@quietr/database";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
-import { nextCookies } from "better-auth/next-js";
 import { magicLink, organization } from "better-auth/plugins";
+import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { eq } from "drizzle-orm";
 import { storeAuthEmailPreview } from "./email-placeholder";
 import { REQUIRED_GOOGLE_SCOPES } from "./google-scopes";
@@ -184,7 +184,6 @@ export const auth = betterAuth({
     },
   },
   plugins: [
-    nextCookies(),
     passkey(),
     organization({
       organizationHooks: {
@@ -238,6 +237,7 @@ export const auth = betterAuth({
         console.info(`[quietr auth placeholder] magic link for ${email}: ${url}`);
       },
     }),
+    tanstackStartCookies(),
   ],
 });
 

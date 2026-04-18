@@ -24,7 +24,7 @@ import {
 } from "@quietr/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { mutationOptions, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
@@ -546,7 +546,7 @@ const DeleteAccountDialog = () => {
   const [open, setOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const router = useRouter();
+  const navigate = useNavigate();
   const deleteAccountMutationOptions = mutationOptions({
     mutationFn: async () =>
       unwrapResultError(
@@ -559,7 +559,9 @@ const DeleteAccountDialog = () => {
     onSuccess: async () => {
       queryClient.clear();
       await clearPersistedQueryCache();
-      router.push("/home");
+      await navigate({
+        to: "/home",
+      });
     },
   });
   const deleteAccountMutation = useMutation(deleteAccountMutationOptions);
@@ -679,7 +681,7 @@ const DeleteAccountDialog = () => {
 export const AccountSettingsPanel = ({ initialUser }: AccountSettingsPanelProps) => {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const router = useRouter();
+  const navigate = useNavigate();
   const sessionState = authClient.useSession();
   const passkeysState = authClient.useListPasskeys();
   const sessionUser = sessionState.data?.user;
@@ -694,7 +696,9 @@ export const AccountSettingsPanel = ({ initialUser }: AccountSettingsPanelProps)
     onSuccess: async () => {
       queryClient.clear();
       await clearPersistedQueryCache();
-      router.push("/home");
+      await navigate({
+        to: "/home",
+      });
     },
   });
   const signOutMutation = useMutation(signOutMutationOptions);

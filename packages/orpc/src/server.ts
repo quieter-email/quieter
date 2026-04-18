@@ -1,7 +1,6 @@
 import { onError } from "@orpc/server";
 import { BodyLimitPlugin, CompressionPlugin, RPCHandler } from "@orpc/server/fetch";
 import { RequestHeadersPlugin, ResponseHeadersPlugin } from "@orpc/server/plugins";
-import { createOrpcContext } from "./context";
 import { appRouter } from "./router";
 
 const compressionPlugin =
@@ -11,7 +10,7 @@ const compressionPlugin =
       })
     : null;
 
-const handler = new RPCHandler(appRouter, {
+export const orpcHandler = new RPCHandler(appRouter, {
   interceptors: [
     onError((error) => {
       console.error(error);
@@ -26,14 +25,5 @@ const handler = new RPCHandler(appRouter, {
     }),
   ],
 });
-
-export async function handleOrpcRequest(req: Request, endpoint: `/${string}` = "/api/orpc") {
-  const { response } = await handler.handle(req, {
-    context: createOrpcContext({ req }),
-    prefix: endpoint,
-  });
-
-  return response ?? new Response("Not found", { status: 404 });
-}
 
 export { appRouter };

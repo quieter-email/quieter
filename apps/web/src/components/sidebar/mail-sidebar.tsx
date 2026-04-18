@@ -19,14 +19,10 @@ import {
   IconButtonTooltip,
   useColorMode,
 } from "@quietr/ui";
-import { usePathname, useRouter } from "next/navigation";
-import { useQueryStates } from "nuqs";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
-import {
-  mailboxSearchParams,
-  serializeMailboxSearchParams,
-  serializeSettingsSearchParams,
-} from "~/lib/search-params";
+import { inboxRouteApi } from "~/lib/route-apis";
+import { serializeMailboxSearchParams, toSettingsSearch } from "~/lib/search-params";
 import { MailboxSwitcherDropdown } from "../mailbox-switcher";
 import { SidebarMailboxNav } from "../sidebar/sidebar-mailbox-nav";
 
@@ -57,12 +53,13 @@ export const MailSidebar = ({
   selectedMailboxId,
   selectedMailbox,
 }: MailSidebarProps) => {
-  const pathname = usePathname();
-  const router = useRouter();
-  const [{ mailbox, messageId, query }] = useQueryStates(mailboxSearchParams);
+  const navigate = useNavigate();
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  const { mailbox, messageId, query } = inboxRouteApi.useSearch();
   const { configColorMode, cycleColorMode, isMounted } = useColorMode();
   const currentLocation = serializeMailboxSearchParams(pathname, { mailbox, messageId, query });
-  const settingsHref = serializeSettingsSearchParams("/settings", { from: currentLocation });
 
   return (
     <aside
@@ -94,7 +91,12 @@ export const MailSidebar = ({
               <DropdownMenuItem
                 closeOnSelect={false}
                 onSelect={() => {
-                  router.push(settingsHref);
+                  void navigate({
+                    search: toSettingsSearch({
+                      from: currentLocation,
+                    }),
+                    to: "/settings",
+                  });
                 }}
               >
                 <HugeiconsIcon aria-hidden className="size-4 shrink-0" icon={Settings01Icon} />

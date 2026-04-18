@@ -7,9 +7,8 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useStore } from "@tanstack/react-store";
-import { usePathname } from "next/navigation";
-import { useQueryStates } from "nuqs";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ComposeDraftState } from "~/lib/gmail/compose";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
@@ -58,7 +57,8 @@ import {
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
 import { mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
-import { mailboxSearchParams } from "~/lib/search-params";
+import { inboxRouteApi } from "~/lib/route-apis";
+import { toMailboxSearch } from "~/lib/search-params";
 import { type ComposeDialogHandle, ComposeDialog } from "./compose-dialog";
 import { MessageDetail } from "./message-detail";
 import { MessageList } from "./message-list";
@@ -563,20 +563,21 @@ const createMailboxActionHandlers = ({
 };
 
 const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
-  const pathname = usePathname();
+  const navigate = useNavigate({
+    from: "/",
+  });
   const queryClient = useQueryClient();
   const activeOrganizationState = authClient.useActiveOrganization();
   const composeDialogRef = useRef<ComposeDialogHandle | null>(null);
   const [workspaceStore] = useState(createMailboxWorkspaceStore);
   const isManualRefreshing = useStore(workspaceStore, (state) => state.isManualRefreshing);
   const isWindowActive = useStore(workspaceStore, (state) => state.isWindowActive);
-  const [
-    { mailbox: activeMailbox, mailboxId, messageId: activeMessageId, query },
-    setMailboxQuery,
-  ] = useQueryStates(mailboxSearchParams, {
-    history: "replace",
-    scroll: false,
-  });
+  const {
+    mailbox: activeMailbox,
+    mailboxId,
+    messageId: activeMessageId,
+    query,
+  } = inboxRouteApi.useSearch();
   const activeSearchQuery = query.trim();
   const activeOrganizationId = activeOrganizationState.data?.id ?? null;
   const activeOrganizationName = activeOrganizationState.data?.name ?? null;
@@ -620,7 +621,6 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
   );
   const hasLoadedMessages = Boolean(messagesQuery.data?.pages.length);
   const isLiveSyncEnabled =
-    pathname === "/" &&
     Boolean(selectedMailboxId) &&
     activeMailbox !== "drafts" &&
     activeSearchQuery.length === 0 &&
@@ -686,6 +686,24 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     }
   }
 
+  const setMailboxSearch = (search: {
+    mailbox?: MailboxCategory;
+    mailboxId?: string | null;
+    messageId?: string | null;
+    query?: string | null;
+  }) => {
+    return navigate({
+      replace: true,
+      resetScroll: false,
+      search: (previous) =>
+        toMailboxSearch({
+          ...previous,
+          ...search,
+        }),
+      to: ".",
+    });
+  };
+
   useEffect(() => {
     const updateWindowActivity = () => {
       setMailboxWorkspaceWindowActive(
@@ -707,16 +725,20 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
   }, [workspaceStore]);
 
   useLayoutEffect(() => {
+    if (mailboxesQuery.isPending) {
+      return;
+    }
+
     const normalizedMailboxId = mailboxId?.trim() || null;
     if (normalizedMailboxId === selectedMailboxId) {
       return;
     }
 
-    void setMailboxQuery({
+    void setMailboxSearch({
       mailboxId: selectedMailboxId,
       messageId: null,
     });
-  }, [mailboxId, selectedMailboxId, setMailboxQuery]);
+  }, [mailboxId, mailboxesQuery.isPending, selectedMailboxId]);
 
   useLayoutEffect(() => {
     if (
@@ -729,14 +751,8 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       return;
     }
 
-    void setMailboxQuery({ messageId: null });
-  }, [
-    activeMessageId,
-    messagesQuery.data,
-    messagesQuery.isPending,
-    selectedMessage,
-    setMailboxQuery,
-  ]);
+    void setMailboxSearch({ messageId: null });
+  }, [activeMessageId, messagesQuery.data, messagesQuery.isPending, selectedMessage]);
 
   const {
     deleteDraft,
@@ -781,7 +797,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       return;
     }
 
-    void setMailboxQuery({ messageId: null });
+    void setMailboxSearch({ messageId: null });
     composeDialogRef.current?.openDraft(buildComposeDraftFromSavedDraftMessage(message));
   };
 
@@ -796,7 +812,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
 
     const threadId = flattenedMessages.find((message) => message.id === messageId)?.threadId;
 
-    void setMailboxQuery({ messageId });
+    void setMailboxSearch({ messageId });
 
     if (threadId && selectedMailboxId) {
       void queryClient.prefetchQuery(
@@ -822,12 +838,12 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     const normalizedQuery = nextQuery.trim();
 
     if (normalizedQuery === activeSearchQuery) {
-      void setMailboxQuery({ messageId: null });
+      void setMailboxSearch({ messageId: null });
       void refreshMessages();
       return;
     }
 
-    void setMailboxQuery({
+    void setMailboxSearch({
       messageId: null,
       query: normalizedQuery.length > 0 ? normalizedQuery : null,
     });
@@ -835,7 +851,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
 
   const selectMailbox = (mailbox: MailboxCategory) => {
     if (mailbox === activeMailbox) return;
-    void setMailboxQuery({ mailbox, messageId: null });
+    void setMailboxSearch({ mailbox, messageId: null });
   };
 
   const isRefreshing =
@@ -928,7 +944,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
           return;
         }
 
-        void setMailboxQuery({ mailboxId: nextMailboxId, messageId: null });
+        void setMailboxSearch({ mailboxId: nextMailboxId, messageId: null });
       },
       onSetDefaultMailbox: (nextMailboxId) => {
         void setDefaultMailboxMutation.mutateAsync({ mailboxId: nextMailboxId });

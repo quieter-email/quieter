@@ -4,12 +4,12 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, TextField, TextFieldInput } from "@quietr/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { mutationOptions, useMutation, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
 import { getErrorMessage, getFieldErrorMessage } from "~/lib/errors";
 import { orpc } from "~/lib/orpc";
+import { toAuthSearch, toMailboxSearch } from "~/lib/search-params";
 
 type AuthMode = "login" | "signup";
 
@@ -79,7 +79,7 @@ const getLatestAuthAction = (
 };
 
 export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
-  const router = useRouter();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const authError = getAuthErrorLabel(authErrorCode);
 
@@ -112,7 +112,10 @@ export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
         throw new Error(responseError);
       }
 
-      router.push("/");
+      await navigate({
+        search: toMailboxSearch({}),
+        to: "/",
+      });
     },
     mutationKey: ["auth", mode, "passkey"],
   });
@@ -322,12 +325,12 @@ export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
                 {activePreview ? (
                   <div className="mt-4 rounded-md border border-border px-3 py-3 text-sm">
                     <p className="text-muted-foreground">Placeholder link</p>
-                    <Link
+                    <a
                       className="mt-2 block break-all text-foreground underline"
                       href={activePreview.url}
                     >
                       {activePreview.url}
-                    </Link>
+                    </a>
                   </div>
                 ) : null}
 
@@ -338,7 +341,7 @@ export const AuthScreen = ({ authErrorCode = null, mode }: AuthScreenProps) => {
         </form.Subscribe>
 
         <p className="mt-6 text-sm text-muted-foreground">
-          <Link className="text-foreground underline" href={alternateHref}>
+          <Link className="text-foreground underline" search={toAuthSearch()} to={alternateHref}>
             {alternateLabel}
           </Link>
         </p>

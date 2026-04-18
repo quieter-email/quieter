@@ -3,13 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun --env-file=../../.env.local next build",
-    "dev": "bun --env-file=../../.env.local next dev --port 3000",
+    "build": "bun --env-file=../../.env.local vite build",
+    "dev": "bun --env-file=../../.env.local vite dev --port 3000",
     "fmt": "oxfmt --config ../../oxfmt.json .",
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
     "lint": "oxlint --config ../../oxlint.json .",
     "lint:fix": "oxlint --fix --config ../../oxlint.json .",
-    "start": "bun --env-file=../../.env.local next start --port 3000",
+    "start": "bun --env-file=../../.env.local node .output/server/index.mjs",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
@@ -28,9 +28,12 @@
     "@tanstack/react-form": "catalog:",
     "@tanstack/react-hotkeys": "catalog:",
     "@tanstack/react-query": "catalog:",
+    "@tanstack/react-router": "catalog:",
+    "@tanstack/react-start": "catalog:",
     "@tanstack/react-store": "catalog:",
     "@tanstack/react-virtual": "catalog:",
     "@tanstack/store": "catalog:",
+    "@tanstack/zod-adapter": "catalog:",
     "@tiptap/core": "^3.22.3",
     "@tiptap/extension-file-handler": "^3.22.3",
     "@tiptap/extension-image": "^3.22.3",
@@ -44,8 +47,6 @@
     "drizzle-orm": "catalog:",
     "isomorphic-dompurify": "^3.9.0",
     "motion": "catalog:",
-    "next": "catalog:",
-    "nuqs": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "tailwindcss": "catalog:",
@@ -53,13 +54,16 @@
   },
   "devDependencies": {
     "@quietr/config": "workspace:*",
-    "@tailwindcss/postcss": "catalog:",
+    "@tailwindcss/vite": "catalog:",
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "nitro": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite": "catalog:"
   }
 }

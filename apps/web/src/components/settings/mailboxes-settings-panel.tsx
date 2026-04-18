@@ -10,7 +10,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, cn, toast } from "@quietr/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
+import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { MailboxSettingsRow, OrganizationSwitcherSelect } from "~/components/mailbox-switcher";
 import { authClient } from "~/lib/auth";
@@ -198,7 +198,7 @@ export const MailboxesSettingsPanel = () => {
         {isPersonalOrganization && googleScopeRepairHref ? (
           <Link
             className="inline-flex h-8 items-center justify-center rounded-md border border-primary bg-primary px-3.5 text-[13px] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-            href={googleScopeRepairHref}
+            to={googleScopeRepairHref}
           >
             Reconnect {googleScopeRepairTarget?.emailAddress}
           </Link>

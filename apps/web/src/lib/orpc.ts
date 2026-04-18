@@ -1,22 +1,23 @@
 import type { RouterClient } from "@orpc/server";
 import type { AppRouter } from "@quietr/orpc";
-import { createORPCClient } from "@orpc/client";
-import { RPCLink } from "@orpc/client/fetch";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
+import { createOrpcClient } from "@quietr/orpc";
+import { createOrpcServerClient } from "@quietr/orpc/server-client";
+import { createIsomorphicFn } from "@tanstack/react-start";
+import { getRequestHeaders } from "@tanstack/react-start/server";
 
-declare global {
-  var $client: RouterClient<AppRouter> | undefined;
-}
+const getOrpcClient = createIsomorphicFn()
+  .server(() =>
+    createOrpcServerClient({
+      headers: () => getRequestHeaders(),
+    }),
+  )
+  .client(
+    (): RouterClient<AppRouter> =>
+      createOrpcClient({
+        url: `${window.location.origin}/api/orpc`,
+      }),
+  );
 
-const link = new RPCLink({
-  url: () => {
-    if (typeof window === "undefined") {
-      throw new Error("RPCLink is not allowed on the server side.");
-    }
-
-    return `${window.location.origin}/api/orpc`;
-  },
-});
-
-export const rpc: RouterClient<AppRouter> = globalThis.$client ?? createORPCClient(link);
+export const rpc: RouterClient<AppRouter> = getOrpcClient();
 export const orpc = createTanstackQueryUtils(rpc);

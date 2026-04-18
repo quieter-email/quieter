@@ -1,17 +1,18 @@
 # quietr
 
-`quietr` is a Bun + Turbo monorepo with a Next.js app and shared packages for auth, database, oRPC, and UI.
+`quietr` is a Bun + Turbo monorepo with a TanStack Start app and shared packages for auth, database, oRPC, and UI.
 
 ## Tech stack
 
 - Runtime and package manager: Bun
 - Monorepo orchestration: Turborepo
 - Infrastructure and deployment: SST
-- App framework: Next.js App Router + React
+- App framework: TanStack Start + TanStack Router + React
+- App runtime/build: Vite + Nitro
 - Forms: TanStack Form
 - Client workflow state: TanStack Store
 - Keyboard shortcuts: TanStack Hotkeys
-- URL query state: nuqs
+- URL query state: TanStack Router validated search params
 - Theme management: next-themes
 - API layer: oRPC + `@orpc/tanstack-query`
 - Database layer: Drizzle ORM beta + Postgres (Neon HTTP)
@@ -28,26 +29,29 @@
 
 - `sst.config.ts`: SST config that provisions the mail S3 bucket, the SES receipt SNS topic, the SES receipt IAM role, the mail ingest/send secret placeholders, the receipt processor, and the standalone mail ingress/outbound function URLs
 
-- `apps/web`: Next.js app
-  - `src/app/layout.tsx`: root HTML shell and client providers
-  - `src/app/page.tsx`: authenticated inbox route; server-loads the session, redirects to the blocking Google scope-repair page for the exact broken mailbox when needed, and then hydrates the client workspace
-  - `src/app/google-scope-repair/page.tsx`: blocking Google scope-repair page that names the affected mailbox and routes the user back through targeted relinking
-  - `src/app/auth/page.tsx`: legacy auth route that redirects to `/login`
-  - `src/app/home/page.tsx`: public landing route that redirects authenticated users to the inbox
-  - `src/app/login/page.tsx`: public login route for magic link, Google, and passkey sign-in
-  - `src/app/signup/page.tsx`: public signup route for magic link registration plus Google and passkey entry points
-  - `src/app/settings/page.tsx`: authenticated settings route with server-side session guard
-  - `src/app/api/orpc/[[...rest]]/route.ts`: oRPC HTTP endpoint via `RPCHandler` (`/api/orpc`), including auth email preview and user-status helpers used by login/signup
-  - `src/instrumentation.ts`: imports the server-only oRPC bootstrap so App Router SSR can use the server-side client without falling back to the browser RPC link
-  - `src/app/api/auth/[...all]/route.ts`: Better Auth Next.js route handler
-  - `src/app/api/auth/google-scope-repair/route.ts`: server-side Google OAuth scope repair endpoint that starts targeted Better Auth relinking, hints the affected Google account, and preserves OAuth state cookies
-  - `src/lib/orpc.ts`: shared raw oRPC client plus TanStack Query oRPC utilities for the app; follows oRPC's SSR pattern by reusing `globalThis.$client` on the server and the normal browser RPC link in the client
-  - `src/lib/orpc.server.ts`: `server-only` oRPC bootstrap that registers the server-side client on `globalThis.$client`
-  - `src/lib/server-auth.ts`: cached server-side session helpers, redirects, and blocking Google-scope repair target helpers
+- `apps/web`: TanStack Start app
+  - `vite.config.ts`: Vite config that wires TanStack Start, React, Tailwind CSS v4, and Nitro
+  - `src/router.tsx`: TanStack Router bootstrap with `routeTree.gen.ts` and scroll restoration
+  - `src/routeTree.gen.ts`: generated TanStack Router route tree; do not hand-edit
+  - `src/routes/__root.tsx`: root HTML shell, stylesheet/meta registration, providers, and app-level error/not-found UI
+  - `src/routes/index.tsx`: authenticated inbox route; server-loads only auth/scope-repair state, redirects to the blocking Google scope-repair page for the exact broken mailbox when needed, and then hydrates the client workspace
+  - `src/routes/google-scope-repair.tsx`: blocking Google scope-repair page that names the affected mailbox and routes the user back through targeted relinking
+  - `src/routes/auth.tsx`: legacy auth route that redirects to `/login`
+  - `src/routes/home.tsx`: public landing route that redirects authenticated users to the inbox
+  - `src/routes/login.tsx`: public login route for magic link, Google, and passkey sign-in
+  - `src/routes/signup.tsx`: public signup route for magic link registration plus Google and passkey entry points
+  - `src/routes/settings.tsx`: authenticated settings route with server-side session guard
+  - `src/routes/api/orpc.ts` and `src/routes/api/orpc.$.ts`: oRPC HTTP endpoints via TanStack Start server handlers (`/api/orpc`) that call `RPCHandler.handle(...)` directly, including auth email preview and user-status helpers used by login/signup
+  - `src/routes/api/auth.$.ts`: Better Auth route handler
+  - `src/routes/api/auth.google-scope-repair.ts`: server-side Google OAuth scope repair endpoint that starts targeted Better Auth relinking, hints the affected Google account, and preserves OAuth state cookies
+  - `src/lib/orpc.ts`: shared isomorphic oRPC client plus TanStack Query oRPC utilities, using a router-backed server-side client during SSR and the fetch RPC client in the browser
+  - `src/lib/auth.server.ts`: request-scoped server helpers for session lookup and blocking Google-scope repair target resolution
+  - `src/lib/auth.functions.ts`: TanStack Start server functions used by route loaders for auth and repair checks
+  - `src/lib/route-apis.ts`: typed TanStack Router route APIs used by shared client components
   - `src/lib/google-scope-repair.ts`: shared app-side helpers for canonical Google scope-repair URLs and safe return paths
   - `src/lib/query-client.ts`: shared React Query client factory
   - `src/lib/query-persister.ts`: shared TanStack query persistence helpers with eager browser-cache restore, manual cache writes, and persister-backed cache removal
-  - `src/lib/search-params.ts`: shared nuqs parsers/loaders/serializers for mailbox selection, mailbox folders, message, and search URL state, including the Drafts and Spam mailboxes
+  - `src/lib/search-params.ts`: shared TanStack Router search validation, normalization, and serialization for mailbox, auth, and settings URL state
   - `src/lib/auth.ts`: Better Auth React client wrapper
   - `src/lib/errors.ts`: shared client-side helpers for turning provider, auth, oRPC, and JSON-shaped failures into user-facing messages
   - `src/lib/gmail/compose.ts`: compose draft/session types, Gmail draft hydration, attachment runtime handling, and send/delete helpers through oRPC
@@ -59,8 +63,8 @@
   - `src/lib/gmail/thread-query.ts`: thread query options
   - `src/lib/gmail/labels-query.ts`: Gmail label query options used by message actions
   - `src/lib/mailboxes-query.ts`: active-organization mailbox query options used by the inbox shell and settings
-  - `src/components/providers.tsx`: client providers for next-themes and React Query
-  - `src/components/mailbox-workspace.tsx`: interactive inbox shell using React Query, nuqs URL state, active-organization mailbox selection, Gmail search queries, compose/message state, and bulk mailbox action handlers
+  - `src/components/providers.tsx`: client providers for next-themes and React Query under the TanStack Start root route
+  - `src/components/mailbox-workspace.tsx`: interactive inbox shell using React Query, TanStack Router search state, active-organization mailbox selection, Gmail search queries, compose/message state, and bulk mailbox action handlers
   - `src/components/auth-screen.tsx`: auth UI for separate login/signup routes using TanStack Form, TanStack Query mutations, and oRPC auth lookups
   - `src/components/settings-screen.tsx`: settings shell that wires tab state, session data, and the settings panels
   - `src/components/settings/*.tsx`: modular settings sidebar, panels, account dialogs, the personal-mailbox management panel, and the organization mail setup/test panel
@@ -68,7 +72,7 @@
   - `src/components/compose-editor.tsx`: Tiptap editor shell and toolbar used by compose
   - `src/components/mail-sidebar.tsx`: user profile, connected mailbox switcher, and mailbox-folder navigation, including Inbox, Drafts, Spam, Sent, and Trash
 - `packages/auth`: Better Auth server configuration
-  - `src/index.ts`: Better Auth config with Google OAuth, passkeys, magic links, linked-account support for multiple Google accounts, personal-organization repair, email-change verification placeholders, account deletion, and Next.js cookies
+  - `src/index.ts`: Better Auth config with Google OAuth, passkeys, magic links, linked-account support for multiple Google accounts, personal-organization repair, email-change verification placeholders, account deletion, and TanStack Start cookies
   - `src/organization.ts`: helpers for guaranteeing a personal organization per user and keeping `activeOrganizationId` valid
   - `src/email-placeholder.ts`: in-memory placeholder store for magic-link and verification URLs
   - `src/google-scopes.ts`: required Google scopes for Gmail access
@@ -110,17 +114,19 @@
 
 ## Architecture flow
 
-1. `apps/web` bootstraps a server-only oRPC client in `src/lib/orpc.server.ts` and reuses it through `src/lib/orpc.ts` during SSR; the browser still uses the normal RPC link to `/api/orpc`.
-2. Browser requests hit `apps/web/src/app/api/orpc/[[...rest]]/route.ts`.
-3. `@quietr/orpc/server` handles requests through `RPCHandler` and the shared router.
-4. Browser-side TanStack Query persistence restores mailbox state before network sync, while oRPC talks directly to Gmail for deltas, reloads, and mutations. Manual refreshes for unfiltered mailbox views now walk Gmail history to completion, reconcile all loaded cached rows by message id, and only fall back to a broader page reload when Gmail history can no longer describe the delta.
-5. The inbox shell first resolves the active organization's mailbox list, keeps `mailboxId` in the URL, and only issues Gmail API calls for the selected mailbox.
-6. Auth form preflight checks such as email-status and placeholder preview lookups run through oRPC query utilities instead of manual client `fetch` calls.
-7. The protected mail control API creates or refreshes SES identities, configures a custom MAIL FROM domain, creates SES receipt rules, and returns the DNS records required for the domain.
-8. SES receipt rules deliver inbound raw mail to S3 and publish receipt metadata to SNS.
-9. The SST receipt processor consumes the SNS notifications, looks up the configured domain, and writes a minimal inbound row to Postgres using the S3 object created by SES.
-10. The SST mail ingress function still accepts normalized inbound payloads from non-SES adapters when needed.
-11. The SST mail outbound function accepts a normalized send payload, checks that the sender domain is configured and active, and hands the send to SES.
+1. `apps/web/src/router.tsx` bootstraps TanStack Router with the generated `src/routeTree.gen.ts` and enables scroll restoration.
+2. `apps/web/src/routes/__root.tsx` owns the root document, providers, global styles, and app-level error/not-found boundaries.
+3. Route loaders use TanStack Start server functions from `src/lib/auth.functions.ts`, backed by `src/lib/auth.server.ts`, for request-scoped session and Google-scope repair checks.
+4. Browser requests hit `apps/web/src/routes/api/orpc.ts` and `apps/web/src/routes/api/orpc.$.ts`, where TanStack Start server routes call the shared `RPCHandler` directly with an oRPC context.
+5. `apps/web/src/lib/orpc.ts` uses an isomorphic client: the browser uses the fetch RPC link, while SSR uses the router-backed server-side client with request headers.
+6. Browser-side TanStack Query persistence restores mailbox state before network sync, while oRPC talks directly to Gmail for deltas, reloads, and mutations. Manual refreshes for unfiltered mailbox views now walk Gmail history to completion, reconcile all loaded cached rows by message id, and only fall back to a broader page reload when Gmail history can no longer describe the delta.
+7. The inbox shell first resolves the active organization's mailbox list, keeps validated mailbox state in TanStack Router search params, and only issues Gmail API calls for the selected mailbox.
+8. Auth form preflight checks such as email-status and placeholder preview lookups run through oRPC query utilities instead of manual client `fetch` calls.
+9. The protected mail control API creates or refreshes SES identities, configures a custom MAIL FROM domain, creates SES receipt rules, and returns the DNS records required for the domain.
+10. SES receipt rules deliver inbound raw mail to S3 and publish receipt metadata to SNS.
+11. The SST receipt processor consumes the SNS notifications, looks up the configured domain, and writes a minimal inbound row to Postgres using the S3 object created by SES.
+12. The SST mail ingress function still accepts normalized inbound payloads from non-SES adapters when needed.
+13. The SST mail outbound function accepts a normalized send payload, checks that the sender domain is configured and active, and hands the send to SES.
 
 ## TanStack conventions
 
@@ -157,12 +163,14 @@
 - Opening a saved draft hydrates the Gmail draft payload and attachment files back into the compose dialog so Drafts behaves like a resumable mailbox, not just a local draft shortcut.
 - `New Mail` always opens a fresh blank draft; previous unsent work remains resumable through the compose dialog's `Continue last draft` affordance.
 
-## Next.js routing notes
+## TanStack Start routing notes
 
-- `apps/web/src/app/layout.tsx` owns the root providers and global shell concerns.
-- Prefer App Router server components for auth checks and initial data loading. The inbox route currently uses `requireSession()` before handing off to client components.
-- Keep interactive stateful surfaces as client components, especially React Query consumers, compose flows, and search-param state.
-- Catch-all API handlers live under `src/app/api/**/route.ts`.
+- File routes live under `apps/web/src/routes/**`.
+- `apps/web/src/routes/__root.tsx` owns the root providers and global shell concerns.
+- Prefer route loaders and TanStack Start server functions for auth checks, redirects, and request-scoped work. Keep interactive stateful inbox surfaces as client components backed by React Query and TanStack Store.
+- Validate search with `validateSearch` and the shared schemas in `src/lib/search-params.ts`, then strip defaults with `stripSearchParams(...)` so URLs stay stable.
+- On the inbox route, keep `loaderDeps` limited to `mailboxId` so message selection, mailbox folder changes, and search query changes do not invalidate auth/scope-repair loader work.
+- API handlers live under `src/routes/api/**`.
 
 ## Getting started
 
@@ -176,7 +184,7 @@ Open `http://localhost:3000`.
 
 ## Mail via SST
 
-Mail infrastructure is the only part of this repo that runs through SST. The Next.js app is still started separately with `bun run dev`.
+Mail infrastructure is the only part of this repo that runs through SST. The TanStack Start app is still started separately with `bun run dev`.
 
 ### Mail commands
 
@@ -213,6 +221,7 @@ bunx sst secret set MailSendToken your-local-send-token --stage mail-dev --confi
 ```
 
 If you do not set them, the default dev placeholders are:
+
 - `MailIngestToken`: `dev-mail-ingest-token`
 - `MailSendToken`: `dev-mail-send-token`
 
@@ -254,6 +263,7 @@ console.log(rows);
 ```
 
 The response includes:
+
 - the SES/DKIM verification status
 - the inbound and outbound readiness flags
 - the SES receipt rule name
@@ -319,6 +329,7 @@ The mailbox simulator address lets you test SES sending before you have producti
 ### What DNS records are required
 
 For a newly registered domain in `eu-central-1`, the API returns records shaped like:
+
 - 3 DKIM `CNAME` records: `<token>._domainkey` -> `<token>.dkim.amazonses.com`
 - 1 inbound `MX` record for the domain: `10 inbound-smtp.eu-central-1.amazonaws.com`
 - 1 custom MAIL FROM `MX` record for `bounce.<domain>`: `10 feedback-smtp.eu-central-1.amazonses.com`
@@ -411,11 +422,11 @@ bun run db:push
 - `AWS_REGION` or `AWS_DEFAULT_REGION`: AWS region used by the S3 uploader and the SST deploy commands
 - `AWS_PROFILE` or standard AWS credential env vars: required when running the SST mail commands
 - `NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY`: Logo.dev publishable key used for sender avatars
-- `VITE_LOGO_DEV_PUBLISHABLE_KEY`: backward-compatible fallback mapped by `apps/web/next.config.ts`
+- `VITE_LOGO_DEV_PUBLISHABLE_KEY`: backward-compatible fallback that the sender-avatar resolver reads directly when `NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY` is unset
 - `sst.config.ts` provisions only the mail stack: `MailBucket`, `MailReceiptTopic`, `MailReceiptRole`, `MailIngestToken`, `MailSendToken`, the receipt processor, and the standalone `MailIngress` / `MailOutbound` function URLs. The web app continues to use its normal local and deployment path outside SST.
 
 ## Dependency management
 
 - Root `package.json` uses Bun workspaces and `workspaces.catalog` for version pinning.
-- Root `package.json` also mirrors the React/Next entries in a top-level `catalog` field so external tooling that does not understand `workspaces.catalog` can still detect the app stack.
+- Root `package.json` also mirrors the core React entries in a top-level `catalog` field so external tooling that does not understand `workspaces.catalog` can still detect the app stack.
 - Workspace packages consume shared versions via `catalog:` references.
