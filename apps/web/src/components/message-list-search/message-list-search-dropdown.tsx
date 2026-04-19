@@ -1,247 +1,136 @@
 "use client";
 
-import type { ReactNode } from "react";
 import {
-  ArrowRight01Icon,
-  Cancel01Icon,
-  Folder01Icon,
+  Calendar01Icon,
+  Calendar03Icon,
+  MailAtSign01Icon,
+  MailAtSign02Icon,
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { cn } from "@quietr/ui";
 import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 import {
-  SEARCH_CATEGORY_FILTER_OPTIONS,
   normalizeLabelSelectionKey,
-  selectCategoryFilterInSearchState,
-  toggleUserLabelInSearchState,
-  type SearchDropdownSectionId,
+  type SearchFieldFilterType,
   type StructuredSearchState,
 } from "./message-list-search-state";
 
-const SECTION_META: Record<SearchDropdownSectionId, { icon: IconSvgElement; label: string }> = {
-  categories: { icon: Folder01Icon, label: "Categories" },
-  labels: { icon: Tag01Icon, label: "Labels" },
-};
-
-type SearchStateUpdater = (
-  updater: StructuredSearchState | ((current: StructuredSearchState) => StructuredSearchState),
-) => void;
-
-const SearchAccordionTrigger = ({
-  children,
-  icon,
-  onClick,
-  open,
-}: {
-  children: string;
+export const searchFilterOptions: ReadonlyArray<{
+  hint: string;
   icon: IconSvgElement;
+  label: string;
+  type: SearchFieldFilterType;
+}> = [
+  { hint: "before:", icon: Calendar01Icon, label: "Before", type: "before" },
+  { hint: "after:", icon: Calendar03Icon, label: "After", type: "after" },
+  { hint: "from:", icon: MailAtSign01Icon, label: "From", type: "from" },
+  { hint: "to:", icon: MailAtSign02Icon, label: "To", type: "to" },
+];
+
+const SearchDropdownSectionLabel = ({ children }: { children: string }) => (
+  <p className="px-2.5 pb-1 text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+    {children}
+  </p>
+);
+
+const SearchDropdownRow = ({
+  active = false,
+  highlighted = false,
+  hint,
+  icon,
+  label,
+  onClick,
+}: {
+  active?: boolean;
+  highlighted?: boolean;
+  hint?: string;
+  icon: IconSvgElement;
+  label: string;
   onClick: () => void;
-  open: boolean;
 }) => (
   <button
-    aria-expanded={open}
     className={cn(
       "flex min-h-8 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground transition-colors outline-none hover:bg-muted focus-visible:bg-muted",
-      { "bg-muted/80 font-medium": open },
+      {
+        "bg-muted": highlighted,
+        "bg-muted/80 ring-1 ring-border ring-inset": active,
+      },
     )}
     onClick={onClick}
     type="button"
   >
-    <HugeiconsIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" icon={icon} />
-    <span className="min-w-0 flex-1 truncate">{children}</span>
-    <HugeiconsIcon
-      aria-hidden
-      className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform duration-150", {
-        "rotate-90": open,
-        "rotate-0": !open,
-      })}
-      icon={open ? Cancel01Icon : ArrowRight01Icon}
-    />
+    <HugeiconsIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" icon={icon} />
+    <span className="min-w-0 flex-1 truncate">{label}</span>
+    {hint ? <span className="text-[11px] text-muted-foreground">{hint}</span> : null}
   </button>
-);
-
-const SearchIndentedButton = ({
-  children,
-  onClick,
-  pressed = false,
-}: {
-  children: string;
-  onClick: () => void;
-  pressed?: boolean;
-}) => (
-  <button
-    aria-pressed={pressed}
-    className={cn(
-      "flex min-h-8 w-full items-center rounded-md px-2.5 py-1.5 pl-9 text-left text-[13px] text-foreground transition-colors outline-none hover:bg-muted focus-visible:bg-muted",
-      { "bg-muted ring-1 ring-border ring-inset": pressed },
-    )}
-    onClick={onClick}
-    type="button"
-  >
-    <span className="min-w-0 flex-1 truncate">{children}</span>
-  </button>
-);
-
-const SearchCategoriesBody = ({
-  categoryFilter,
-  updateSearchState,
-}: {
-  categoryFilter: StructuredSearchState["categoryFilter"];
-  updateSearchState: SearchStateUpdater;
-}) => (
-  <div className="space-y-0.5">
-    {SEARCH_CATEGORY_FILTER_OPTIONS.map((option) => (
-      <SearchIndentedButton
-        key={option.id}
-        onClick={() =>
-          updateSearchState((current) => selectCategoryFilterInSearchState(current, option.id))
-        }
-        pressed={categoryFilter === option.id}
-      >
-        {option.label}
-      </SearchIndentedButton>
-    ))}
-  </div>
-);
-
-const SearchLabelsBody = ({
-  draftSearchState,
-  labelsErrorMessage,
-  updateSearchState,
-  userLabels,
-}: {
-  draftSearchState: StructuredSearchState;
-  labelsErrorMessage: string | null;
-  updateSearchState: SearchStateUpdater;
-  userLabels: readonly GmailLabelListItem[];
-}) => {
-  const selectedUserLabelKeys = new Set(
-    draftSearchState.userLabels.map((value) => normalizeLabelSelectionKey(value)),
-  );
-
-  return (
-    <div className="space-y-1">
-      {labelsErrorMessage ? (
-        <div className="px-2.5 py-2 text-[13px] text-foreground">{labelsErrorMessage}</div>
-      ) : userLabels.length > 0 ? (
-        <div className="max-h-56 space-y-0.5 overflow-y-auto">
-          {userLabels.map((label) => (
-            <SearchIndentedButton
-              key={label.id}
-              onClick={() =>
-                updateSearchState((current) => toggleUserLabelInSearchState(current, label.name))
-              }
-              pressed={selectedUserLabelKeys.has(normalizeLabelSelectionKey(label.name))}
-            >
-              {label.name}
-            </SearchIndentedButton>
-          ))}
-        </div>
-      ) : (
-        <div className="px-2.5 py-2 text-[13px] text-muted-foreground">No custom labels.</div>
-      )}
-    </div>
-  );
-};
-
-const AccordionSection = ({
-  children,
-  icon,
-  label,
-  onToggle,
-  open,
-  sectionId,
-}: {
-  children: ReactNode;
-  icon: IconSvgElement;
-  label: string;
-  onToggle: (id: SearchDropdownSectionId) => void;
-  open: boolean;
-  sectionId: SearchDropdownSectionId;
-}) => (
-  <AccordionSectionInner
-    icon={icon}
-    label={label}
-    onToggle={onToggle}
-    open={open}
-    sectionId={sectionId}
-  >
-    {children}
-  </AccordionSectionInner>
-);
-
-const AccordionSectionInner = ({
-  children,
-  icon,
-  label,
-  onToggle,
-  open,
-  sectionId,
-}: {
-  children: ReactNode;
-  icon: IconSvgElement;
-  label: string;
-  onToggle: (id: SearchDropdownSectionId) => void;
-  open: boolean;
-  sectionId: SearchDropdownSectionId;
-}) => (
-  <div>
-    <SearchAccordionTrigger icon={icon} onClick={() => onToggle(sectionId)} open={open}>
-      {label}
-    </SearchAccordionTrigger>
-    {open ? <div className="pt-1">{children}</div> : null}
-  </div>
 );
 
 export const MessageListSearchDropdown = ({
   draftSearchState,
+  highlightedItemKey,
+  isLoadingLabels,
   labelsErrorMessage,
-  onOpenSectionChange,
-  openSection,
-  updateSearchState,
+  onSelectFilter,
+  onToggleLabel,
   userLabels,
 }: {
   draftSearchState: StructuredSearchState;
+  highlightedItemKey: string | null;
+  isLoadingLabels: boolean;
   labelsErrorMessage: string | null;
-  onOpenSectionChange: (value: SearchDropdownSectionId | null) => void;
-  openSection: SearchDropdownSectionId | null;
-  updateSearchState: SearchStateUpdater;
+  onSelectFilter: (type: SearchFieldFilterType) => void;
+  onToggleLabel: (labelName: string) => void;
   userLabels: readonly GmailLabelListItem[];
 }) => {
-  const handleSectionToggle = (sectionId: SearchDropdownSectionId) => {
-    onOpenSectionChange(openSection === sectionId ? null : sectionId);
-  };
+  const selectedUserLabelKeys = new Set(
+    draftSearchState.filters
+      .filter((filter) => filter.type === "label")
+      .map((filter) => normalizeLabelSelectionKey(filter.value)),
+  );
 
   return (
-    <div className="space-y-1">
-      <AccordionSection
-        icon={SECTION_META.categories.icon}
-        label={SECTION_META.categories.label}
-        onToggle={handleSectionToggle}
-        open={openSection === "categories"}
-        sectionId="categories"
-      >
-        <SearchCategoriesBody
-          categoryFilter={draftSearchState.categoryFilter}
-          updateSearchState={updateSearchState}
-        />
-      </AccordionSection>
+    <div className="space-y-3">
+      <div className="space-y-1">
+        <SearchDropdownSectionLabel>Filters</SearchDropdownSectionLabel>
+        {searchFilterOptions.map((option) => (
+          <SearchDropdownRow
+            active={draftSearchState.filters.some((filter) => filter.type === option.type)}
+            highlighted={highlightedItemKey === `filter:${option.type}`}
+            hint={option.hint}
+            icon={option.icon}
+            key={option.type}
+            label={option.label}
+            onClick={() => onSelectFilter(option.type)}
+          />
+        ))}
+      </div>
 
-      <AccordionSection
-        icon={SECTION_META.labels.icon}
-        label={SECTION_META.labels.label}
-        onToggle={handleSectionToggle}
-        open={openSection === "labels"}
-        sectionId="labels"
-      >
-        <SearchLabelsBody
-          draftSearchState={draftSearchState}
-          labelsErrorMessage={labelsErrorMessage}
-          updateSearchState={updateSearchState}
-          userLabels={userLabels}
-        />
-      </AccordionSection>
+      <div className="space-y-1">
+        <SearchDropdownSectionLabel>Labels</SearchDropdownSectionLabel>
+        {labelsErrorMessage ? (
+          <div className="px-2.5 py-2 text-[13px] text-foreground">{labelsErrorMessage}</div>
+        ) : isLoadingLabels ? (
+          <div className="px-2.5 py-2 text-[13px] text-muted-foreground">Loading labels...</div>
+        ) : userLabels.length > 0 ? (
+          <div className="max-h-56 space-y-0.5 overflow-y-auto">
+            {userLabels.map((label) => (
+              <SearchDropdownRow
+                active={selectedUserLabelKeys.has(normalizeLabelSelectionKey(label.name))}
+                highlighted={
+                  highlightedItemKey === `label:${normalizeLabelSelectionKey(label.name)}`
+                }
+                icon={Tag01Icon}
+                key={label.id}
+                label={label.name}
+                onClick={() => onToggleLabel(label.name)}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="px-2.5 py-2 text-[13px] text-muted-foreground">No custom labels.</div>
+        )}
+      </div>
     </div>
   );
 };

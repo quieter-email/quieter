@@ -54,17 +54,22 @@ type MessageListProps = {
   messages: ListMessagesPageResult[];
   onActivateMessage: (messageId: string) => void;
   onDeletePermanently: (messageId: string) => void | Promise<void>;
+  onDeleteThreadPermanently: (threadId: string) => void | Promise<void>;
   onLoadMore: () => void;
   onMarkAsRead: (messageId: string) => void | Promise<void>;
   onMarkAsSpam: (messageId: string) => void | Promise<void>;
   onMarkAsUnread: (messageId: string) => void | Promise<void>;
+  onMarkThreadAsSpam: (threadId: string) => void | Promise<void>;
+  onMoveThreadToTrash: (threadId: string) => void | Promise<void>;
   onMoveToTrash: (messageId: string) => void | Promise<void>;
   onOpenDraft: (message: MessageListItem) => void | Promise<void>;
   onRefresh: () => void | Promise<void>;
   onSearch: (query: string) => void;
   onUntrash: (messageId: string) => void | Promise<void>;
+  onUntrashThread: (threadId: string) => void | Promise<void>;
   onUnsubscribe: (messageId: string) => void | Promise<void>;
   onUnmarkAsSpam: (messageId: string) => void | Promise<void>;
+  onUnmarkThreadAsSpam: (threadId: string) => void | Promise<void>;
   onUpdateLabels: (
     messageId: string,
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
@@ -233,17 +238,22 @@ const MessageListScrollPane = ({
   isPending,
   messages,
   onDeletePermanently,
+  onDeleteThreadPermanently,
   onLoadMore,
   onMarkAsRead,
   onMarkAsSpam,
   onMarkAsUnread,
+  onMarkThreadAsSpam,
+  onMoveThreadToTrash,
   onMoveToTrash,
   onOpenDraft,
   onThreadPress,
   onThreadSelectionPress,
   onUntrash,
+  onUntrashThread,
   onUnsubscribe,
   onUnmarkAsSpam,
+  onUnmarkThreadAsSpam,
   onUpdateLabels,
   selectedThreadIds,
   searchQuery,
@@ -339,16 +349,21 @@ const MessageListScrollPane = ({
                 key={thread.threadId}
                 onDeleteDraft={onDeleteDraft}
                 onDeletePermanently={onDeletePermanently}
+                onDeleteThreadPermanently={onDeleteThreadPermanently}
                 onMarkAsRead={onMarkAsRead}
                 onMarkAsSpam={onMarkAsSpam}
                 onMarkAsUnread={onMarkAsUnread}
+                onMarkThreadAsSpam={onMarkThreadAsSpam}
+                onMoveThreadToTrash={onMoveThreadToTrash}
                 onMoveToTrash={onMoveToTrash}
                 onOpenDraft={onOpenDraft}
                 onPress={onThreadPress}
                 onSelectionPress={onThreadSelectionPress}
                 onUntrash={onUntrash}
+                onUntrashThread={onUntrashThread}
                 onUnsubscribe={onUnsubscribe}
                 onUnmarkAsSpam={onUnmarkAsSpam}
+                onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
                 onUpdateLabels={onUpdateLabels}
                 style={{
                   transform: `translateY(${virtualItem.start}px)`,
@@ -462,18 +477,22 @@ const useMessageListSelection = ({
     });
   };
 
-  const scrollListToTop = async () => {
-    if (scrollRef.current && scrollRef.current.scrollTop > SCROLL_TOP_EPSILON_PX) {
-      isProgrammaticScrollToTopRef.current = true;
-
-      try {
-        scrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
-        await waitForSmoothScrollTop(scrollRef.current);
-        await waitForNextPaint();
-      } finally {
-        isProgrammaticScrollToTopRef.current = false;
-      }
+  const scrollListToTop = () => {
+    if (!scrollRef.current || scrollRef.current.scrollTop <= SCROLL_TOP_EPSILON_PX) {
+      return false;
     }
+
+    isProgrammaticScrollToTopRef.current = true;
+
+    const scrollElement = scrollRef.current;
+    scrollElement.scrollTo({ top: 0, behavior: "smooth" });
+    void waitForSmoothScrollTop(scrollElement)
+      .then(() => waitForNextPaint())
+      .finally(() => {
+        isProgrammaticScrollToTopRef.current = false;
+      });
+
+    return true;
   };
 
   useEffect(() => {
@@ -696,17 +715,22 @@ export const MessageList = ({
   onSearch,
   onActivateMessage,
   onDeletePermanently,
+  onDeleteThreadPermanently,
   onLoadMore,
   onMarkAsRead,
   onMarkAsSpam,
   onMarkAsUnread,
+  onMarkThreadAsSpam,
+  onMoveThreadToTrash,
   onMoveToTrash,
   onOpenDraft,
   onRefresh,
   onUpdateLabels,
   onUntrash,
+  onUntrashThread,
   onUnsubscribe,
   onUnmarkAsSpam,
+  onUnmarkThreadAsSpam,
   searchQuery,
 }: MessageListProps) => {
   const flattenedMessages = messages.flatMap((page) => page.messages);
@@ -886,10 +910,13 @@ export const MessageList = ({
         isRefreshing={isRefreshing}
         messages={messages}
         onDeletePermanently={onDeletePermanently}
+        onDeleteThreadPermanently={onDeleteThreadPermanently}
         onLoadMore={onLoadMore}
         onMarkAsRead={onMarkAsRead}
         onMarkAsSpam={onMarkAsSpam}
         onMarkAsUnread={onMarkAsUnread}
+        onMarkThreadAsSpam={onMarkThreadAsSpam}
+        onMoveThreadToTrash={onMoveThreadToTrash}
         onMoveToTrash={onMoveToTrash}
         onOpenDraft={onOpenDraft}
         onRefresh={onRefresh}
@@ -897,8 +924,10 @@ export const MessageList = ({
         onThreadPress={handleThreadPress}
         onThreadSelectionPress={handleThreadSelectionPress}
         onUntrash={onUntrash}
+        onUntrashThread={onUntrashThread}
         onUnsubscribe={onUnsubscribe}
         onUnmarkAsSpam={onUnmarkAsSpam}
+        onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
         onUpdateLabels={onUpdateLabels}
         selectedThreadIds={selectedThreadIds}
         searchQuery={searchQuery}

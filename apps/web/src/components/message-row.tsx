@@ -26,15 +26,20 @@ type MessageRowProps = {
   onMarkAsRead?: (messageId: string) => void | Promise<void>;
   onMarkAsSpam?: (messageId: string) => void | Promise<void>;
   onMarkAsUnread?: (messageId: string) => void | Promise<void>;
+  onMarkThreadAsSpam?: (threadId: string) => void | Promise<void>;
   onOpenDraft?: (message: ThreadListEntry["anchorMessage"]) => void | Promise<void>;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
   onUpdateLabels?: (
     messageId: string,
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => void | Promise<void>;
+  onMoveThreadToTrash?: (threadId: string) => void | Promise<void>;
   onMoveToTrash?: (messageId: string) => void | Promise<void>;
+  onUntrashThread?: (threadId: string) => void | Promise<void>;
   onUntrash?: (messageId: string) => void | Promise<void>;
+  onUnmarkThreadAsSpam?: (threadId: string) => void | Promise<void>;
   onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
+  onDeleteThreadPermanently?: (threadId: string) => void | Promise<void>;
   onDeletePermanently?: (messageId: string) => void | Promise<void>;
   onPress?: (thread: ThreadListEntry, gesture: MessageRowSelectionGesture) => void;
   onSelectionPress?: (thread: ThreadListEntry, gesture: MessageRowSelectionGesture) => void;
@@ -56,16 +61,21 @@ const MessageRowContent = ({
   isSelectionMode,
   onDeleteDraft,
   onDeletePermanently,
+  onDeleteThreadPermanently,
   onMarkAsRead,
   onMarkAsSpam,
   onMarkAsUnread,
+  onMarkThreadAsSpam,
+  onMoveThreadToTrash,
   onMoveToTrash,
   onOpenDraft,
   onPress,
   onSelectionPress,
   onUntrash,
+  onUntrashThread,
   onUnsubscribe,
   onUnmarkAsSpam,
+  onUnmarkThreadAsSpam,
   onUpdateLabels,
   thread,
   mailboxId,
@@ -230,14 +240,24 @@ const MessageRowContent = ({
         onDeleteDraft={onDeleteDraft}
         mailbox={activeMailbox}
         message={anchorMessage}
-        onDeletePermanently={onDeletePermanently}
+        onDeletePermanently={(messageId) => {
+          void (onDeleteThreadPermanently?.(thread.threadId) ?? onDeletePermanently?.(messageId));
+        }}
         onMarkAsRead={onMarkAsRead}
-        onMarkAsSpam={onMarkAsSpam}
+        onMarkAsSpam={(messageId) => {
+          void (onMarkThreadAsSpam?.(thread.threadId) ?? onMarkAsSpam?.(messageId));
+        }}
         onMarkAsUnread={onMarkAsUnread}
-        onMoveToTrash={onMoveToTrash}
+        onMoveToTrash={(messageId) => {
+          void (onMoveThreadToTrash?.(thread.threadId) ?? onMoveToTrash?.(messageId));
+        }}
         onOpenDraft={onOpenDraft}
-        onUnmarkAsSpam={onUnmarkAsSpam}
-        onUntrash={onUntrash}
+        onUnmarkAsSpam={(messageId) => {
+          void (onUnmarkThreadAsSpam?.(thread.threadId) ?? onUnmarkAsSpam?.(messageId));
+        }}
+        onUntrash={(messageId) => {
+          void (onUntrashThread?.(thread.threadId) ?? onUntrash?.(messageId));
+        }}
         onUnsubscribe={onUnsubscribe}
         onUpdateLabels={onUpdateLabels}
         triggerClassName={cn("flex h-full min-w-0 flex-1")}
@@ -322,16 +342,21 @@ export const MessageRow = ({
   isSelectionMode,
   onDeleteDraft,
   onDeletePermanently,
+  onDeleteThreadPermanently,
   onMarkAsRead,
   onMarkAsSpam,
   onMarkAsUnread,
+  onMarkThreadAsSpam,
+  onMoveThreadToTrash,
   onMoveToTrash,
   onOpenDraft,
   onPress,
   onSelectionPress,
   onUntrash,
+  onUntrashThread,
   onUnsubscribe,
   onUnmarkAsSpam,
+  onUnmarkThreadAsSpam,
   onUpdateLabels,
   rowRef,
   style,
@@ -353,16 +378,21 @@ export const MessageRow = ({
         isSelectionMode={isSelectionMode}
         onDeleteDraft={onDeleteDraft}
         onDeletePermanently={onDeletePermanently}
+        onDeleteThreadPermanently={onDeleteThreadPermanently}
         onMarkAsRead={onMarkAsRead}
         onMarkAsSpam={onMarkAsSpam}
         onMarkAsUnread={onMarkAsUnread}
+        onMarkThreadAsSpam={onMarkThreadAsSpam}
+        onMoveThreadToTrash={onMoveThreadToTrash}
         onMoveToTrash={onMoveToTrash}
         onOpenDraft={onOpenDraft}
         onPress={onPress}
         onSelectionPress={onSelectionPress}
         onUntrash={onUntrash}
+        onUntrashThread={onUntrashThread}
         onUnsubscribe={onUnsubscribe}
         onUnmarkAsSpam={onUnmarkAsSpam}
+        onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
         onUpdateLabels={onUpdateLabels}
         thread={thread}
         mailboxId={mailboxId}

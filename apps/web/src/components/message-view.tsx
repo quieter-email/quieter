@@ -49,14 +49,19 @@ type MessageViewProps = {
   onMarkAsRead?: (messageId: string) => void | Promise<void>;
   onMarkAsSpam?: (messageId: string) => void | Promise<void>;
   onMarkAsUnread?: (messageId: string) => void | Promise<void>;
+  onMarkThreadAsSpam?: (threadId: string) => void | Promise<void>;
   onUpdateLabels?: (
     messageId: string,
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => void | Promise<void>;
+  onMoveThreadToTrash?: (threadId: string) => void | Promise<void>;
   onMoveToTrash?: (messageId: string) => void | Promise<void>;
+  onUntrashThread?: (threadId: string) => void | Promise<void>;
   onUntrash?: (messageId: string) => void | Promise<void>;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
+  onUnmarkThreadAsSpam?: (threadId: string) => void | Promise<void>;
   onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
+  onDeleteThreadPermanently?: (threadId: string) => void | Promise<void>;
   onDeletePermanently?: (messageId: string) => void | Promise<void>;
   isActionPending?: boolean;
 };
@@ -607,10 +612,15 @@ export const MessageView = ({
   onMarkAsSpam,
   onMarkAsUnread,
   onMarkThreadAsRead,
+  onMarkThreadAsSpam,
   onMarkThreadAsUnread,
+  onMoveThreadToTrash,
   onMoveToTrash,
+  onDeleteThreadPermanently,
+  onUntrashThread,
   onUntrash,
   onUnsubscribe,
+  onUnmarkThreadAsSpam,
   onUnmarkAsSpam,
   onUpdateLabels,
 }: MessageViewProps) => {
@@ -667,19 +677,31 @@ export const MessageView = ({
             mailbox={activeMailbox}
             mailboxId={mailboxId}
             message={message}
-            onDeletePermanently={onDeletePermanently}
             onMarkAsRead={(messageId) => {
               void (onMarkThreadAsRead?.(message.threadId) ?? onMarkAsRead?.(messageId));
             }}
-            onMarkAsSpam={onMarkAsSpam}
+            onMarkAsSpam={(messageId) => {
+              void (onMarkThreadAsSpam?.(message.threadId) ?? onMarkAsSpam?.(messageId));
+            }}
             onMarkAsUnread={(messageId) => {
               void (onMarkThreadAsUnread?.(message.threadId) ?? onMarkAsUnread?.(messageId));
             }}
-            onMoveToTrash={onMoveToTrash}
-            onUntrash={onUntrash}
+            onMoveToTrash={(messageId) => {
+              void (onMoveThreadToTrash?.(message.threadId) ?? onMoveToTrash?.(messageId));
+            }}
+            onUntrash={(messageId) => {
+              void (onUntrashThread?.(message.threadId) ?? onUntrash?.(messageId));
+            }}
             onUnsubscribe={onUnsubscribe}
-            onUnmarkAsSpam={onUnmarkAsSpam}
+            onUnmarkAsSpam={(messageId) => {
+              void (onUnmarkThreadAsSpam?.(message.threadId) ?? onUnmarkAsSpam?.(messageId));
+            }}
             onUpdateLabels={onUpdateLabels}
+            onDeletePermanently={(messageId) => {
+              void (
+                onDeleteThreadPermanently?.(message.threadId) ?? onDeletePermanently?.(messageId)
+              );
+            }}
           />
         </div>
 

@@ -1633,6 +1633,18 @@ export const untrashMessageInMailbox = async (
   }
 };
 
+export const untrashThreadInMailbox = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  _mailbox: MailboxCategory,
+  _searchQuery: string | null | undefined,
+  threadId: string,
+  signal?: AbortSignal,
+) => {
+  const updatedThread = await rpc.mail.untrashThread({ mailboxId, threadId }, { signal });
+  await applyResolvedThreadMetadataToCaches(queryClient, mailboxId, updatedThread);
+};
+
 export const moveThreadToTrashInMailbox = async (
   queryClient: QueryClient,
   mailboxId: string,

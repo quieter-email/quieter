@@ -8,7 +8,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useStore } from "@tanstack/react-store";
+import { useSelector } from "@tanstack/react-store";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ComposeDraftState } from "~/lib/gmail/compose";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
@@ -38,6 +38,7 @@ import {
   refreshLoadedMessagesPages,
   syncMessages,
   untrashMessageInMailbox,
+  untrashThreadInMailbox,
   unmarkThreadAsSpamInMailbox,
   unmarkMessageAsSpamInMailbox,
   updateMessageLabelsInMailbox,
@@ -114,7 +115,9 @@ type MailboxWorkspaceViewProps = {
   onMarkAsSpam: (messageId: string) => void;
   onMarkAsUnread: (messageId: string) => void;
   onMarkThreadAsRead: (threadId: string) => void;
+  onMarkThreadAsSpam: (threadId: string) => void;
   onMarkThreadAsUnread: (threadId: string) => void;
+  onMoveThreadToTrash: (threadId: string) => void;
   onMoveToTrash: (messageId: string) => void;
   onOpenDraft: (message: MessageListItem) => void;
   onRefresh: () => void;
@@ -124,9 +127,12 @@ type MailboxWorkspaceViewProps = {
   onSelectMailboxId: (mailboxId: string) => void;
   onSetDefaultMailbox: (mailboxId: string | null) => void;
   onUntrash: (messageId: string) => void;
+  onUntrashThread: (threadId: string) => void;
   onUnsubscribe: (messageId: string) => void;
   onUnmarkAsSpam: (messageId: string) => void;
+  onUnmarkThreadAsSpam: (threadId: string) => void;
   onUpdateLabels: (messageId: string, changes: LabelChangeSet) => void;
+  onDeleteThreadPermanently: (threadId: string) => void;
   selectedMailboxId: string | null;
   mailboxes: ConnectedMailbox[];
   searchQuery: string;
@@ -368,6 +374,18 @@ const createMailboxActionHandlers = ({
     });
   };
 
+  const moveThreadToTrash = async (threadId: string) => {
+    await runThreadAction(threadId, async () => {
+      await moveThreadToTrashInMailbox(
+        queryClient,
+        mailboxId,
+        activeMailbox,
+        activeSearchQuery,
+        threadId,
+      );
+    });
+  };
+
   const untrashMessage = async (messageId: string) => {
     await runMessageAction(messageId, async () => {
       await untrashMessageInMailbox(
@@ -376,6 +394,18 @@ const createMailboxActionHandlers = ({
         activeMailbox,
         activeSearchQuery,
         messageId,
+      );
+    });
+  };
+
+  const untrashThread = async (threadId: string) => {
+    await runThreadAction(threadId, async () => {
+      await untrashThreadInMailbox(
+        queryClient,
+        mailboxId,
+        activeMailbox,
+        activeSearchQuery,
+        threadId,
       );
     });
   };
@@ -394,6 +424,30 @@ const createMailboxActionHandlers = ({
         activeMailbox,
         activeSearchQuery,
         messageId,
+      );
+    });
+  };
+
+  const markThreadAsSpam = async (threadId: string) => {
+    await runThreadAction(threadId, async () => {
+      await markThreadAsSpamInMailbox(
+        queryClient,
+        mailboxId,
+        activeMailbox,
+        activeSearchQuery,
+        threadId,
+      );
+    });
+  };
+
+  const unmarkThreadAsSpam = async (threadId: string) => {
+    await runThreadAction(threadId, async () => {
+      await unmarkThreadAsSpamInMailbox(
+        queryClient,
+        mailboxId,
+        activeMailbox,
+        activeSearchQuery,
+        threadId,
       );
     });
   };
@@ -421,6 +475,18 @@ const createMailboxActionHandlers = ({
         activeMailbox,
         activeSearchQuery,
         messageId,
+      );
+    });
+  };
+
+  const deleteThreadPermanently = async (threadId: string) => {
+    await runThreadAction(threadId, async () => {
+      await deleteThreadPermanentlyInMailbox(
+        queryClient,
+        mailboxId,
+        activeMailbox,
+        activeSearchQuery,
+        threadId,
       );
     });
   };
@@ -541,6 +607,7 @@ const createMailboxActionHandlers = ({
     deleteDraft,
     deleteDrafts,
     deleteMessagePermanently,
+    deleteThreadPermanently,
     deleteThreadsPermanently,
     isMessageActionPending,
     isThreadActionPending,
@@ -548,14 +615,18 @@ const createMailboxActionHandlers = ({
     markMessageAsSpam,
     markMessageAsUnread,
     markThreadAsRead,
+    markThreadAsSpam,
     markThreadsAsRead,
     markThreadsAsSpam,
     markThreadsAsUnread,
     markThreadAsUnread,
+    moveThreadToTrash,
     moveThreadsToTrash,
     moveMessageToTrash,
     untrashMessage,
+    untrashThread,
     unsubscribeFromMessage,
+    unmarkThreadAsSpam,
     unmarkThreadsAsSpam,
     unmarkMessageAsSpam,
     updateMessageLabels,
@@ -570,8 +641,8 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
   const activeOrganizationState = authClient.useActiveOrganization();
   const composeDialogRef = useRef<ComposeDialogHandle | null>(null);
   const [workspaceStore] = useState(createMailboxWorkspaceStore);
-  const isManualRefreshing = useStore(workspaceStore, (state) => state.isManualRefreshing);
-  const isWindowActive = useStore(workspaceStore, (state) => state.isWindowActive);
+  const isManualRefreshing = useSelector(workspaceStore, (state) => state.isManualRefreshing);
+  const isWindowActive = useSelector(workspaceStore, (state) => state.isWindowActive);
   const {
     mailbox: activeMailbox,
     mailboxId,
@@ -758,6 +829,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     deleteDraft,
     deleteDrafts,
     deleteMessagePermanently,
+    deleteThreadPermanently,
     deleteThreadsPermanently,
     isMessageActionPending,
     isThreadActionPending,
@@ -765,14 +837,18 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     markMessageAsSpam,
     markMessageAsUnread,
     markThreadAsRead,
+    markThreadAsSpam,
     markThreadsAsRead,
     markThreadsAsSpam,
     markThreadsAsUnread,
     markThreadAsUnread,
+    moveThreadToTrash,
     moveThreadsToTrash,
     moveMessageToTrash,
     untrashMessage,
+    untrashThread,
     unsubscribeFromMessage,
+    unmarkThreadAsSpam,
     unmarkThreadsAsSpam,
     unmarkMessageAsSpam,
     updateMessageLabels,
@@ -914,6 +990,9 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       onDeletePermanently: (messageId) => {
         void deleteMessagePermanently(messageId);
       },
+      onDeleteThreadPermanently: (threadId) => {
+        void deleteThreadPermanently(threadId);
+      },
       onLoadMore: loadMoreMessages,
       onMarkAsRead: (messageId) => {
         void markMessageAsRead(messageId);
@@ -927,8 +1006,14 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       onMarkThreadAsRead: (threadId) => {
         void markThreadAsRead(threadId);
       },
+      onMarkThreadAsSpam: (threadId) => {
+        void markThreadAsSpam(threadId);
+      },
       onMarkThreadAsUnread: (threadId) => {
         void markThreadAsUnread(threadId);
+      },
+      onMoveThreadToTrash: (threadId) => {
+        void moveThreadToTrash(threadId);
       },
       onMoveToTrash: (messageId) => {
         void moveMessageToTrash(messageId);
@@ -952,8 +1037,14 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       onUntrash: (messageId) => {
         void untrashMessage(messageId);
       },
+      onUntrashThread: (threadId) => {
+        void untrashThread(threadId);
+      },
       onUnmarkAsSpam: (messageId) => {
         void unmarkMessageAsSpam(messageId);
+      },
+      onUnmarkThreadAsSpam: (threadId) => {
+        void unmarkThreadAsSpam(threadId);
       },
       onUnsubscribe: (messageId) => {
         void unsubscribeFromMessage(messageId);
@@ -1013,12 +1104,15 @@ const MailboxWorkspaceView = ({
   onComposeDraftRequested,
   onComposeNewMail,
   onDeletePermanently,
+  onDeleteThreadPermanently,
   onLoadMore,
   onMarkAsRead,
   onMarkAsSpam,
   onMarkAsUnread,
   onMarkThreadAsRead,
+  onMarkThreadAsSpam,
   onMarkThreadAsUnread,
+  onMoveThreadToTrash,
   onMoveToTrash,
   onOpenDraft,
   onRefresh,
@@ -1027,8 +1121,10 @@ const MailboxWorkspaceView = ({
   onSelectMailboxId,
   onSetDefaultMailbox,
   onUntrash,
+  onUntrashThread,
   onUnsubscribe,
   onUnmarkAsSpam,
+  onUnmarkThreadAsSpam,
   onUpdateLabels,
   mailboxId,
   mailboxes,
@@ -1080,17 +1176,22 @@ const MailboxWorkspaceView = ({
                   messages={messages}
                   onActivateMessage={onActivateMessage}
                   onDeletePermanently={onDeletePermanently}
+                  onDeleteThreadPermanently={onDeleteThreadPermanently}
                   onLoadMore={onLoadMore}
                   onMarkAsRead={onMarkAsRead}
                   onMarkAsSpam={onMarkAsSpam}
                   onMarkAsUnread={onMarkAsUnread}
+                  onMarkThreadAsSpam={onMarkThreadAsSpam}
+                  onMoveThreadToTrash={onMoveThreadToTrash}
                   onMoveToTrash={onMoveToTrash}
                   onOpenDraft={onOpenDraft}
                   onRefresh={onRefresh}
                   onSearch={onSearch}
                   onUntrash={onUntrash}
+                  onUntrashThread={onUntrashThread}
                   onUnsubscribe={onUnsubscribe}
                   onUnmarkAsSpam={onUnmarkAsSpam}
+                  onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
                   onUpdateLabels={onUpdateLabels}
                   searchQuery={searchQuery}
                 />
@@ -1109,15 +1210,20 @@ const MailboxWorkspaceView = ({
                   mailboxId={mailboxId}
                   onComposeDraftRequested={onComposeDraftRequested}
                   onDeletePermanently={onDeletePermanently}
+                  onDeleteThreadPermanently={onDeleteThreadPermanently}
                   onMarkAsRead={onMarkAsRead}
                   onMarkAsSpam={onMarkAsSpam}
                   onMarkAsUnread={onMarkAsUnread}
                   onMarkThreadAsRead={onMarkThreadAsRead}
+                  onMarkThreadAsSpam={onMarkThreadAsSpam}
                   onMarkThreadAsUnread={onMarkThreadAsUnread}
+                  onMoveThreadToTrash={onMoveThreadToTrash}
                   onMoveToTrash={onMoveToTrash}
                   onUntrash={onUntrash}
+                  onUntrashThread={onUntrashThread}
                   onUnsubscribe={onUnsubscribe}
                   onUnmarkAsSpam={onUnmarkAsSpam}
+                  onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
                   onUpdateLabels={onUpdateLabels}
                   selectedMessage={selectedMessage}
                 />

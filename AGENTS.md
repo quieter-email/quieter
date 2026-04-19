@@ -60,7 +60,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
   - `src/lib/gmail/compose-query.ts`: Persisted compose session query keys keyed by mailbox id.
   - `src/lib/gmail/mailbox-workspace-store.ts`: TanStack Store helpers for inbox-shell manual refresh, window activity, and pending mailbox action state.
   - `src/lib/gmail/attachments.ts`: On-demand Gmail attachment download helpers for mail detail surfaces.
-  - `src/lib/gmail/inbox-query.ts`: Mailbox-scoped inbox query keys, Gmail-search-aware loading, history-based sync helpers for unfiltered views, optimistic message actions, mailto-based unsubscribe actions, and thread-aware mailbox action helpers used by bulk selection.
+  - `src/lib/gmail/inbox-query.ts`: Mailbox-scoped inbox query keys, Gmail-search-aware loading, history-based sync helpers for unfiltered views, optimistic message actions, mailto-based unsubscribe actions, and thread-aware mailbox action helpers used by bulk selection and conversation-surface spam/trash actions.
   - `src/lib/gmail/thread-query.ts`: Thread query helpers.
   - `src/lib/gmail/labels-query.ts`: Shared `queryOptions(...)` helpers for Gmail label metadata.
   - `src/lib/mailboxes-query.ts`: Shared `queryOptions(...)` helpers for mailbox records in the active organization.
@@ -84,7 +84,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - `packages/orpc/`: Shared API contract + server/client helpers.
   - `src/compose.ts`: Shared compose schemas plus robust mail-address parsing used by both the web app and Gmail draft mutations.
   - `src/context.ts`: oRPC context creation.
-  - `src/router.ts`: App router with auth lookup procedures plus mailbox-scoped mail operations, domain configuration, captured-message inspection, list/search procedures, Drafts listing/loading, mailbox history sync procedures, mailto-based unsubscribe sending, default-mailbox preference, and thread-level mailbox mutations used by bulk selection.
+  - `src/router.ts`: App router with auth lookup procedures plus mailbox-scoped mail operations, domain configuration, captured-message inspection, list/search procedures, Drafts listing/loading, mailbox history sync procedures, mailto-based unsubscribe sending, default-mailbox preference, and thread-level mailbox mutations used by bulk selection and conversation-level spam/trash flows.
   - `src/mailbox-service.ts`: Mailbox ownership, personal Gmail sync, authorization, and disconnect helpers.
   - `src/mail-service.ts`: Mail-domain configuration, recipient-domain matching, sender-domain resolution, and inbound-message persistence helpers.
   - `src/mail-aws-service.ts`: SES domain registration, DNS record generation, receipt-rule automation, domain-status reads, and managed send helpers.
@@ -158,7 +158,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 - Sender avatars are derived at request time from the message sender and are not persisted in Postgres.
 - Manual `queryClient.setQueryData` writes are persisted with `persistQueryByKey` so optimistic cache updates survive reloads.
 - Gmail REST calls are executed server-side in `packages/orpc/src/gmail-service.ts`, with access tokens resolved from the selected mailbox's linked Google account through Better Auth.
-- Bulk mailbox actions operate on the loaded row set in the current mailbox and use thread-level Gmail mutations for conversation views.
+- Bulk mailbox actions and conversation-surface spam/trash actions operate on the loaded row set in the current mailbox and use thread-level Gmail mutations for conversation views.
 - Mailbox freshness uses Gmail history IDs, so background polling only reloads loaded pages when Gmail reports a relevant change.
 - Manual refreshes for unfiltered mailbox views now walk Gmail history deltas to completion, reconcile loaded cached rows by message id, and only fall back to a broader page reload when Gmail history can no longer describe the mailbox state.
 - Loaded mailbox rows are no longer gated by a fixed loaded-message sync cutoff; Gmail history deltas are intersected against the full cached mailbox window on the client.
@@ -186,6 +186,7 @@ Welcome! This guide is intended to get any AI agent or developer productive in t
 
 - Each workspace package has its own scripts and dev dependencies for `oxlint`, `oxfmt`, and `tsgo`.
 - Shared TypeScript config is in `packages/config`, while Oxlint/Oxfmt config is at repo root.
+- Server-side workspace packages that use Node globals such as `process` should declare `@types/node` in `devDependencies` and opt into `compilerOptions.types: ["node"]` in their package `tsconfig.json`.
 - Root `package.json` keeps Bun versions in `workspaces.catalog` and mirrors the core React entries in a top-level `catalog` field for external tooling compatibility.
 - Root `package.json` delegates mail SST commands to package-scoped scripts in `@quietr/aws` through Turbo; the web app is not started or deployed through SST.
 - Root `sst.config.ts` provisions the mail bucket, SES receipt topic, SES receipt IAM role, receipt processor, and the standalone mail ingress/outbound functions through SST. It links the bucket to the functions for AWS permissions and injects the bucket name plus the ingest/send tokens into the deployed functions.

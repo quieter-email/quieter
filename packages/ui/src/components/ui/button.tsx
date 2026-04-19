@@ -2,6 +2,7 @@
 
 import type { ButtonHTMLAttributes } from "react";
 import { Button as ButtonPrimitive } from "@base-ui/react/button";
+import { motion, type HTMLMotionProps } from "motion/react";
 import { forwardRef } from "react";
 import { cn } from "../../lib/cn";
 
@@ -17,12 +18,25 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, size = "default", type = "button", variant = "default", ...props }, ref) => (
     <ButtonPrimitive
       ref={ref}
+      render={(props) => (
+        <motion.button
+          initial={{ scale: 1 }}
+          whileTap={{
+            scale: 0.97,
+            transition: {
+              duration: 0.1,
+            },
+          }}
+          transition={{ type: "spring", stiffness: 300, damping: 10, mass: 0.75, duration: 0.1 }}
+          {...(props as HTMLMotionProps<"button">)}
+        />
+      )}
       className={cn(
         "squircle inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm leading-none font-medium whitespace-nowrap outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         {
           "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/85":
             variant === "default",
-          "border border-input bg-background text-foreground shadow-sm hover:bg-muted/60 active:bg-muted/80":
+          "border border-input bg-background text-foreground shadow-sm hover:bg-input/40 active:bg-input/60":
             variant === "outline",
           "bg-transparent text-foreground-dark hover:bg-secondary/50 hover:text-foreground active:bg-secondary active:text-foreground-light":
             variant === "ghost",

@@ -59,7 +59,7 @@
   - `src/lib/gmail/compose-query.ts`: persisted compose session query keys scoped by `mailboxId`
   - `src/lib/gmail/mailbox-workspace-store.ts`: TanStack Store helpers for inbox-shell manual refresh, window activity, and pending mailbox action state
   - `src/lib/gmail/attachments.ts`: on-demand Gmail attachment download helpers used by mail detail surfaces
-  - `src/lib/gmail/inbox-query.ts`: mailbox-scoped inbox query keys, Gmail-search-aware list loading, history-based live sync for unfiltered views, optimistic single-message actions, mailto-based unsubscribe actions, and thread-aware mailbox action helpers used by bulk selection
+  - `src/lib/gmail/inbox-query.ts`: mailbox-scoped inbox query keys, Gmail-search-aware list loading, history-based live sync for unfiltered views, optimistic single-message actions, mailto-based unsubscribe actions, and thread-aware mailbox action helpers used by bulk selection and conversation-surface spam/trash actions
   - `src/lib/gmail/thread-query.ts`: thread query options
   - `src/lib/gmail/labels-query.ts`: Gmail label query options used by message actions
   - `src/lib/mailboxes-query.ts`: active-organization mailbox query options used by the inbox shell and settings
@@ -82,7 +82,7 @@
   - `drizzle.config.ts`: Drizzle Kit config
 - `packages/orpc`: shared oRPC router, context, server handler, and client
   - `src/compose.ts`: shared compose schemas plus robust mail-address parsing used by both the web app and Gmail draft mutations
-  - `src/router.ts`: auth lookup procedures plus mailbox-scoped mail procedures for mailbox listing/sync, domain configuration, captured-message inspection, Gmail list/search procedures, Drafts listing/loading, mailbox history sync procedures, message actions, mailto-based unsubscribe sending, and thread-level mailbox mutations used by bulk selection
+  - `src/router.ts`: auth lookup procedures plus mailbox-scoped mail procedures for mailbox listing/sync, domain configuration, captured-message inspection, Gmail list/search procedures, Drafts listing/loading, mailbox history sync procedures, message actions, mailto-based unsubscribe sending, and thread-level mailbox mutations used by bulk selection and conversation-level spam/trash flows
   - `src/mailbox-service.ts`: mailbox ownership, personal Gmail mailbox sync, authorization, and disconnect helpers
   - `src/mail-service.ts`: mail-domain configuration, recipient-domain matching, sender-domain resolution, and inbound-message persistence helpers
   - `src/mail-aws-service.ts`: SES domain registration, DNS record generation, receipt-rule automation, domain-status reads, and managed send helpers
@@ -158,7 +158,7 @@
 - Manual `queryClient.setQueryData` updates are immediately written to local persistence via `persistQueryByKey` so optimistic UI changes survive reloads.
 - Mailbox, thread, and label query keys are mailbox-scoped so restored browser caches stay isolated per connected inbox.
 - Gmail REST calls are centralized server-side in `packages/orpc/src/gmail-service.ts`, with access tokens resolved from the selected mailbox's linked Google account through Better Auth.
-- Bulk mailbox actions operate on the loaded row set in the current mailbox and use thread-level Gmail mutations for conversation views.
+- Bulk mailbox actions and conversation-surface spam/trash actions operate on the loaded row set in the current mailbox and use thread-level Gmail mutations for conversation views.
 - Compose workflow state is owned by a mailbox-scoped TanStack Store, while the persisted compose session still lives in TanStack Query browser storage and draft content/attachments continue syncing through oRPC-backed Gmail draft APIs.
 - Opening a saved draft hydrates the Gmail draft payload and attachment files back into the compose dialog so Drafts behaves like a resumable mailbox, not just a local draft shortcut.
 - `New Mail` always opens a fresh blank draft; previous unsent work remains resumable through the compose dialog's `Continue last draft` affordance.
@@ -430,3 +430,4 @@ bun run db:push
 - Root `package.json` uses Bun workspaces and `workspaces.catalog` for version pinning.
 - Root `package.json` also mirrors the core React entries in a top-level `catalog` field so external tooling that does not understand `workspaces.catalog` can still detect the app stack.
 - Workspace packages consume shared versions via `catalog:` references.
+- Server-side workspace packages that read Node globals such as `process` should declare `@types/node` in `devDependencies` and opt into `compilerOptions.types: ["node"]` in their local `tsconfig.json` instead of relying on ambient globals.

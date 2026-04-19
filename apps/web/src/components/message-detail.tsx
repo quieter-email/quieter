@@ -19,14 +19,19 @@ type MessageDetailProps = {
   onMarkAsRead?: (messageId: string) => void | Promise<void>;
   onMarkAsSpam?: (messageId: string) => void | Promise<void>;
   onMarkAsUnread?: (messageId: string) => void | Promise<void>;
+  onMarkThreadAsSpam?: (threadId: string) => void | Promise<void>;
   onUpdateLabels?: (
     messageId: string,
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => void | Promise<void>;
+  onMoveThreadToTrash?: (threadId: string) => void | Promise<void>;
   onMoveToTrash?: (messageId: string) => void | Promise<void>;
+  onUntrashThread?: (threadId: string) => void | Promise<void>;
   onUntrash?: (messageId: string) => void | Promise<void>;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
+  onUnmarkThreadAsSpam?: (threadId: string) => void | Promise<void>;
   onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
+  onDeleteThreadPermanently?: (threadId: string) => void | Promise<void>;
   onDeletePermanently?: (messageId: string) => void | Promise<void>;
   isActionPending?: boolean;
 };
@@ -41,10 +46,15 @@ export const MessageDetail = ({
   onMarkAsSpam,
   onMarkAsUnread,
   onMarkThreadAsRead,
+  onMarkThreadAsSpam,
   onMarkThreadAsUnread,
+  onMoveThreadToTrash,
   onMoveToTrash,
+  onDeleteThreadPermanently,
+  onUntrashThread,
   onUntrash,
   onUnsubscribe,
+  onUnmarkThreadAsSpam,
   onUnmarkAsSpam,
   onUpdateLabels,
   selectedMessage,
@@ -89,10 +99,15 @@ export const MessageDetail = ({
               onMarkAsSpam={onMarkAsSpam}
               onMarkAsUnread={onMarkAsUnread}
               onMarkThreadAsRead={onMarkThreadAsRead}
+              onMarkThreadAsSpam={onMarkThreadAsSpam}
               onMarkThreadAsUnread={onMarkThreadAsUnread}
+              onMoveThreadToTrash={onMoveThreadToTrash}
               onMoveToTrash={onMoveToTrash}
+              onDeleteThreadPermanently={onDeleteThreadPermanently}
+              onUntrashThread={onUntrashThread}
               onUntrash={onUntrash}
               onUnsubscribe={onUnsubscribe}
+              onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
               onUnmarkAsSpam={onUnmarkAsSpam}
               onUpdateLabels={onUpdateLabels}
             />

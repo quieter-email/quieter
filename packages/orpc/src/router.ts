@@ -41,6 +41,7 @@ import {
   sendDraft,
   sendRawMessage,
   untrashMessage,
+  untrashThread,
   updateDraft,
   updateMessageLabels,
   updateThreadLabels,
@@ -837,6 +838,18 @@ export const appRouter = {
       .handler(async ({ context, input }) => {
         return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await untrashMessage(accessToken, input.messageId);
+        });
+      }),
+    untrashThread: protectedProcedure
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          threadId: z.string(),
+        }),
+      )
+      .handler(async ({ context, input }) => {
+        return await callGmail(context, input.mailboxId, async (accessToken) => {
+          return await untrashThread(accessToken, input.threadId);
         });
       }),
     moveThreadToTrash: protectedProcedure

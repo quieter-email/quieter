@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@quietr/config": "workspace:*",
+    "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
