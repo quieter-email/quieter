@@ -1,7 +1,7 @@
 import { createFileRoute, redirect, stripSearchParams } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { LoadingPage } from "~/components/loading-page";
-import { SettingsScreen } from "~/components/settings-screen";
+import { SettingsScreen } from "~/features/settings/components/settings-screen";
 import { getSessionUser } from "~/lib/auth.functions";
 import { settingsSearchDefaults, settingsSearchSchema } from "~/lib/search-params";
 

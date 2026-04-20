@@ -1,7 +1,8 @@
+import type { ComposeDraftAnchor } from "@quietr/orpc/compose";
 import { findInvalidMailAddresses } from "@quietr/orpc/compose";
+import { loadAttachmentFromServer } from "~/lib/gmail/attachments";
 import { rpc } from "~/lib/orpc";
-import { loadAttachmentFromServer } from "./attachments";
-export { loadAttachmentFromServer } from "./attachments";
+export { loadAttachmentFromServer } from "~/lib/gmail/attachments";
 
 const MAX_TOTAL_ATTACHMENT_BYTES = 24 * 1024 * 1024;
 const MAX_VISIBLE_INLINE_DRAFTS = 2;
@@ -49,6 +50,7 @@ export type ComposeDraftState = {
   localId: string;
   draftId?: string;
   messageId?: string;
+  draftAnchor?: ComposeDraftAnchor | null;
   replyContext?: ComposeReplyContext | null;
   recipients: ComposeRecipientFields;
   subject: string;
@@ -88,6 +90,7 @@ const createEmptyRecipients = (): ComposeRecipientFields => ({
 
 export const createEmptyComposeDraft = (): ComposeDraftState => ({
   localId: createLocalId(),
+  draftAnchor: null,
   replyContext: null,
   recipients: createEmptyRecipients(),
   subject: "",
@@ -110,6 +113,7 @@ const cloneAttachment = <T extends ComposeAttachment | ComposeInlineImage>(attac
 
 export const cloneComposeDraft = (draft: ComposeDraftState): ComposeDraftState => ({
   ...draft,
+  draftAnchor: draft.draftAnchor ? { ...draft.draftAnchor } : null,
   replyContext: draft.replyContext
     ? {
         ...draft.replyContext,
@@ -274,18 +278,22 @@ const assertAttachmentBudget = (draft: ComposeDraftState) => {
 
 const parseDraftResponse = (response: {
   draftId: string;
+  draftAnchor?: ComposeDraftAnchor | null;
   messageId?: string | null;
   bodyHtml: string;
   bodyText: string;
   subject: string;
   recipients: ComposeRecipientFields;
+  replyContext?: ComposeReplyContext | null;
 }) => ({
   draftId: response.draftId,
+  draftAnchor: response.draftAnchor ?? null,
   messageId: response.messageId ?? undefined,
   bodyHtml: response.bodyHtml,
   bodyText: response.bodyText,
   subject: response.subject,
   recipients: response.recipients,
+  replyContext: response.replyContext ?? null,
 });
 
 const findReferencedInlineImageIds = (html: string): Set<string> => {
@@ -407,7 +415,9 @@ export const hydrateComposeDraftRuntime = async (
 
   return {
     ...draft,
+    draftAnchor: response.draftAnchor ?? draft.draftAnchor ?? null,
     messageId: response.messageId ?? draft.messageId,
+    replyContext: response.replyContext ?? draft.replyContext ?? null,
     recipients: response.recipients,
     subject: response.subject,
     attachments,

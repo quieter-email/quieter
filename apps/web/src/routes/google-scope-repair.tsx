@@ -8,18 +8,17 @@ import {
   getGoogleScopeRepairStartHref,
 } from "~/lib/google-scope-repair";
 
-const rawSearchStringSchema = z.preprocess(
-  (value) => (typeof value === "string" ? value : undefined),
-  z.string().optional(),
-);
-
 const googleScopeRepairSearchSchema = z.object({
-  from: rawSearchStringSchema.transform((value) => getGoogleScopeRepairReturnTo(value ?? "/")),
+  from: z
+    .preprocess((value) => (typeof value === "string" ? value : undefined), z.string().optional())
+    .transform((value) => getGoogleScopeRepairReturnTo(value ?? "/")),
   returned: z.preprocess((value) => value === "1", z.boolean()),
-  targetAccountId: rawSearchStringSchema.transform((value) => {
-    const normalizedValue = value?.trim();
-    return normalizedValue ? normalizedValue : null;
-  }),
+  targetAccountId: z
+    .preprocess((value) => (typeof value === "string" ? value : undefined), z.string().optional())
+    .transform((value) => {
+      const normalizedValue = value?.trim();
+      return normalizedValue ? normalizedValue : null;
+    }),
 });
 
 export const Route = createFileRoute("/google-scope-repair")({

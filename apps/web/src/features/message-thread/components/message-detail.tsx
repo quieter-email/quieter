@@ -3,9 +3,9 @@
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Suspense } from "react";
-import type { ComposeDraftState } from "~/lib/gmail/compose";
+import type { ComposeDraftState } from "~/features/compose";
 import type { MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
-import { EmptyMessageState } from "./empty-message-state";
+import { EmptyMessageState } from "~/components/empty-message-state";
 import { MessageView } from "./message-view";
 
 type MessageDetailProps = {

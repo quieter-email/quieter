@@ -1,7 +1,7 @@
 import { createFileRoute, redirect, stripSearchParams } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
-import { InboxPageClient } from "~/components/inbox-page-client";
 import { LoadingPage } from "~/components/loading-page";
+import { InboxPageClient } from "~/features/mailbox/components/inbox-page-client";
 import { getGoogleScopeRepairTarget, getSessionUser } from "~/lib/auth.functions";
 import { getGoogleScopeRepairPageHref } from "~/lib/google-scope-repair";
 import { mailboxSearchDefaults, mailboxSearchSchema } from "~/lib/search-params";

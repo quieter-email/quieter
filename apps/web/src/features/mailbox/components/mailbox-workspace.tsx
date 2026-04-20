@@ -10,10 +10,13 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { useSelector } from "@tanstack/react-store";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ComposeDraftState } from "~/lib/gmail/compose";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
+import { type ComposeDraftState, buildComposeDraftFromSavedDraftMessage } from "~/features/compose";
+import { type ComposeDialogHandle, ComposeDialog } from "~/features/compose";
+import { MessageList } from "~/features/message-list/components/message-list";
+import { MessageDetail } from "~/features/message-thread/components/message-detail";
+import { MailSidebar } from "~/features/navigation/components/mail-sidebar";
 import { authClient } from "~/lib/auth";
-import { buildComposeDraftFromSavedDraftMessage } from "~/lib/gmail/compose-actions";
 import {
   type ListMessagesPageResult,
   type MailboxCategory,
@@ -60,10 +63,6 @@ import { mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 import { inboxRouteApi } from "~/lib/route-apis";
 import { toMailboxSearch } from "~/lib/search-params";
-import { type ComposeDialogHandle, ComposeDialog } from "./compose-dialog";
-import { MessageDetail } from "./message-detail";
-import { MessageList } from "./message-list";
-import { MailSidebar } from "./sidebar/mail-sidebar";
 
 type MailboxWorkspaceProps = {
   user: {
@@ -643,12 +642,8 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
   const [workspaceStore] = useState(createMailboxWorkspaceStore);
   const isManualRefreshing = useSelector(workspaceStore, (state) => state.isManualRefreshing);
   const isWindowActive = useSelector(workspaceStore, (state) => state.isWindowActive);
-  const {
-    mailbox: activeMailbox,
-    mailboxId,
-    messageId: activeMessageId,
-    query,
-  } = inboxRouteApi.useSearch();
+  const { mailbox: activeMailbox, mailboxId, messageId, query } = inboxRouteApi.useSearch();
+  const activeMessageId = messageId ?? null;
   const activeSearchQuery = query.trim();
   const activeOrganizationId = activeOrganizationState.data?.id ?? null;
   const activeOrganizationName = activeOrganizationState.data?.name ?? null;

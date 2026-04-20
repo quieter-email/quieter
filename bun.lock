@@ -159,7 +159,6 @@
         "@base-ui/react": "catalog:",
         "class-variance-authority": "^0.7.1",
         "date-fns": "^4.1.0",
-        "motion": "catalog:",
         "next-themes": "catalog:",
         "react": "catalog:",
         "react-day-picker": "^9.14.0",

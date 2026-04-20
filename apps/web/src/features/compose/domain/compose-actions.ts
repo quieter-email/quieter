@@ -1,11 +1,11 @@
-import { getMailAddressKey, splitMailAddressList } from "@quietr/orpc/compose";
-import type { MessageListItem } from "./gmail";
 import {
-  createEmptyComposeDraft,
-  type ComposeDraftState,
-  type ComposeReplyContext,
-} from "./compose";
-import { formatMessageDate, parseSender } from "./message-utils";
+  getMailAddressKey,
+  splitMailAddressList,
+  type ComposeDraftAnchor,
+} from "@quietr/orpc/compose";
+import type { MessageListItem } from "~/lib/gmail/gmail";
+import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
+import { createEmptyComposeDraft, type ComposeDraftState, type ComposeReplyContext } from "./draft";
 
 export type ComposeActionType = "reply" | "reply-all" | "forward";
 
@@ -124,11 +124,16 @@ const withSubjectPrefix = (
   return `${prefix} ${normalizedSubject}`;
 };
 
-const buildReplyContext = (message: MessageListItem): ComposeReplyContext | null => {
+const buildReplyContext = (
+  message: MessageListItem,
+  options?: { useInReplyTo?: boolean },
+): ComposeReplyContext | null => {
   const threadId = message.threadId?.trim();
   if (!threadId) return null;
 
-  const messageHeaderId = message.messageHeaderId?.trim();
+  const messageHeaderId = (
+    options?.useInReplyTo ? message.inReplyTo : message.messageHeaderId
+  )?.trim();
   const references = Array.from(
     new Set([
       ...(message.references?.match(/<[^>]+>/g) ?? []),
@@ -141,6 +146,36 @@ const buildReplyContext = (message: MessageListItem): ComposeReplyContext | null
     messageHeaderId,
     references,
   };
+};
+
+const buildDraftAnchor = (
+  message: MessageListItem,
+  action: ComposeActionType,
+): ComposeDraftAnchor | null => {
+  const sourceMessageId = message.id?.trim();
+  const sourceThreadId = message.threadId?.trim();
+
+  if (!sourceMessageId || !sourceThreadId) {
+    return null;
+  }
+
+  return {
+    sourceMessageId,
+    sourceMessageHeaderId: message.messageHeaderId?.trim() || undefined,
+    sourceThreadId,
+    seededBy: action,
+  };
+};
+
+const getMessageTimestamp = (message: MessageListItem): number => {
+  const source = message.internalDate ?? message.date;
+  if (!source) return 0;
+
+  const numeric = Number(source);
+  const parsed = Number.isFinite(numeric) ? new Date(numeric) : new Date(source);
+  const timestamp = parsed.getTime();
+
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
 const getReplyRecipients = (
@@ -228,13 +263,35 @@ export const getPreferredThreadActionMessage = (
 export const buildComposeDraftFromMessageAction = ({
   action,
   currentUserEmail,
+  existingDraftMessage,
   message,
 }: {
   action: ComposeActionType;
   currentUserEmail: string | null | undefined;
+  existingDraftMessage?: MessageListItem | null;
   message: MessageListItem;
 }): ComposeDraftState => {
+  if (existingDraftMessage?.draftId) {
+    const existingDraft = buildComposeDraftFromSavedDraftMessage(existingDraftMessage);
+
+    return {
+      ...existingDraft,
+      draftAnchor: buildDraftAnchor(message, action),
+      recipients:
+        action === "forward"
+          ? {
+              to: "",
+              cc: "",
+              bcc: "",
+            }
+          : getReplyRecipients(message, currentUserEmail, action === "reply-all"),
+      updatedAt: Date.now(),
+    };
+  }
+
   const draft = createEmptyComposeDraft();
+  const replyContext = buildReplyContext(message);
+  const draftAnchor = buildDraftAnchor(message, action);
 
   if (action === "forward") {
     const forwardedHeaderLines = buildForwardHeaderLines(message);
@@ -256,6 +313,8 @@ export const buildComposeDraftFromMessageAction = ({
 
     return {
       ...draft,
+      draftAnchor,
+      replyContext,
       subject: withSubjectPrefix(message.subject, "Fwd:", /^fwd?:/i),
       bodyHtml: `<p><br></p><p>---------- Forwarded message ---------</p>${forwardedHeaderHtml}<blockquote>${getMessageBodyHtml(message)}</blockquote>`,
       bodyText: [
@@ -274,7 +333,8 @@ export const buildComposeDraftFromMessageAction = ({
 
   return {
     ...draft,
-    replyContext: buildReplyContext(message),
+    draftAnchor,
+    replyContext,
     recipients,
     subject: withSubjectPrefix(message.subject, "Re:", /^re:/i),
     bodyHtml: `<p><br></p><p>${escapeHtml(lead)}</p><blockquote>${getMessageBodyHtml(message)}</blockquote>`,
@@ -289,8 +349,10 @@ export const buildComposeDraftFromSavedDraftMessage = (
 
   return {
     ...draft,
+    draftAnchor: message.draftAnchor ?? null,
     draftId: message.draftId,
     messageId: message.id,
+    replyContext: buildReplyContext(message, { useInReplyTo: true }),
     recipients: {
       to: message.to ?? "",
       cc: message.cc ?? "",
@@ -302,4 +364,40 @@ export const buildComposeDraftFromSavedDraftMessage = (
     saveStatus: message.draftId ? "saved" : "idle",
     updatedAt: Date.now(),
   };
+};
+
+export const findLinkedDraftForMessage = (
+  messages: readonly MessageListItem[],
+  sourceMessage: MessageListItem,
+): MessageListItem | null => {
+  if (sourceMessage.draftId) {
+    return null;
+  }
+
+  const sourceMessageHeaderId = sourceMessage.messageHeaderId?.trim();
+  let linkedDraft: MessageListItem | null = null;
+
+  for (const message of messages) {
+    if (!message.draftId || message.id === sourceMessage.id) {
+      continue;
+    }
+
+    const matchesByAnchor =
+      message.draftAnchor?.sourceMessageId?.trim() === sourceMessage.id &&
+      message.draftAnchor?.sourceThreadId?.trim() === sourceMessage.threadId;
+    const matchesByLegacyReply =
+      !message.draftAnchor &&
+      Boolean(sourceMessageHeaderId) &&
+      message.inReplyTo?.trim() === sourceMessageHeaderId;
+
+    if (!matchesByAnchor && !matchesByLegacyReply) {
+      continue;
+    }
+
+    if (!linkedDraft || getMessageTimestamp(message) > getMessageTimestamp(linkedDraft)) {
+      linkedDraft = message;
+    }
+  }
+
+  return linkedDraft;
 };

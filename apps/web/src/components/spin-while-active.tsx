@@ -3,9 +3,6 @@
 import type { PropsWithChildren } from "react";
 import { LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { useRef, useState } from "react";
-
-const SPIN_DURATION_S = 0.9;
-
 type SpinWhileActiveProps = PropsWithChildren<{
   active: boolean;
 }>;
@@ -47,9 +44,9 @@ export const SpinWhileActive = ({ active, children }: SpinWhileActiveProps) => {
           setIsSpinning(false);
         }}
         transition={{
-          duration: prefersReducedMotion ? 0 : SPIN_DURATION_S,
-          ease: "easeInOut",
-          rotate: { duration: prefersReducedMotion ? 0 : SPIN_DURATION_S, ease: "easeInOut" },
+          duration: prefersReducedMotion ? 0 : 1,
+          ease: [0.7, 0, 0.3, 1],
+          rotate: { duration: prefersReducedMotion ? 0 : 1, ease: [0.7, 0, 0.3, 1] },
         }}
       >
         {children}

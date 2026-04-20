@@ -14,7 +14,7 @@ import {
   normalizeLabelSelectionKey,
   type SearchFieldFilterType,
   type StructuredSearchState,
-} from "./message-list-search-state";
+} from "~/features/message-search/state/message-list-search-state";
 
 export const searchFilterOptions: ReadonlyArray<{
   hint: string;

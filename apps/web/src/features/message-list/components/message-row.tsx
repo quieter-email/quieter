@@ -6,10 +6,10 @@ import { useQuery } from "@tanstack/react-query";
 import { type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
+import { SenderAvatar } from "~/components/sender-avatar";
+import { MessageActionsContextMenu } from "~/features/message-thread/components/message-actions";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
-import { MessageActionsContextMenu } from "./message-actions";
-import { SenderAvatar } from "./sender-avatar";
 
 type MessageRowSelectionGesture = {
   additive: boolean;

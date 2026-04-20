@@ -4,7 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/client.ts",
-    "./compose": "./src/compose.ts",
+    "./compose": "./src/gmail/compose/schema.ts",
     "./context": "./src/context.ts",
     "./errors": "./src/errors.ts",
     "./mail-aws-service": "./src/mail-aws-service.ts",

@@ -21,10 +21,10 @@ import {
 } from "@quietr/ui";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
+import { MailboxSwitcherDropdown } from "~/features/navigation/components/mailbox-switcher";
+import { SidebarMailboxNav } from "~/features/navigation/components/sidebar-mailbox-nav";
 import { inboxRouteApi } from "~/lib/route-apis";
 import { serializeMailboxSearchParams, toSettingsSearch } from "~/lib/search-params";
-import { MailboxSwitcherDropdown } from "../mailbox-switcher";
-import { SidebarMailboxNav } from "../sidebar/sidebar-mailbox-nav";
 
 type MailSidebarProps = {
   activeOrganizationName: string | null;
@@ -140,7 +140,7 @@ export const MailSidebar = ({
             type="button"
           >
             <HugeiconsIcon className="size-4 shrink-0" icon={Edit01Icon} />
-            New Mail
+            Compose
           </Button>
         </div>
 

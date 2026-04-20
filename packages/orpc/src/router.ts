@@ -3,18 +3,8 @@ import { auth, ensureUserOrganizationState } from "@quietr/auth";
 import { getAuthEmailPreview } from "@quietr/auth/email-placeholder";
 import { getAuthUserStatus } from "@quietr/auth/user-status";
 import { z } from "zod";
-import {
-  composeDraftInputSchema,
-  composeSendDraftInputSchema,
-  splitMailAddressList,
-} from "./compose";
 import { getRequestHeaders, type OrpcContext } from "./context";
 import { orpcErrorMap } from "./errors";
-import {
-  extractInlineMessageAttachments,
-  extractMessageAttachments,
-  extractMessageContent,
-} from "./gmail-message-content";
 import {
   createDraft,
   deleteDraft,
@@ -38,7 +28,7 @@ import {
   markThreadAsUnread,
   moveMessageToTrash,
   moveThreadToTrash,
-  sendDraft,
+  sendDraft as sendGmailDraft,
   sendRawMessage,
   untrashMessage,
   untrashThread,
@@ -47,6 +37,17 @@ import {
   updateThreadLabels,
   type MailboxCategory,
 } from "./gmail-service";
+import { parseDraftMessage } from "./gmail/compose/draft-parser";
+import {
+  arrayBufferToBase64Url,
+  buildMimeMessage,
+  buildPlainTextMessage,
+} from "./gmail/compose/mime";
+import {
+  composeDraftInputSchema,
+  composeSendDraftInputSchema,
+  splitMailAddressList,
+} from "./gmail/compose/schema";
 import { listMailMessagesForOrganization, normalizeMailDomain } from "./mail-service";
 import {
   disconnectPersonalGmailMailbox,
@@ -70,217 +71,11 @@ const mailboxCategorySchema = z.enum([
 ] satisfies readonly MailboxCategory[]);
 
 const historySyncMailboxCategorySchema = z.enum(["inbox", "spam", "sent", "trash"]);
-
-const authEmailInputSchema = z.object({
-  email: z.string().trim().email(),
-});
-
 const mailboxIdSchema = z.string().trim().min(1);
 
-type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
 type ProtectedContext = OrpcContext & {
   activeOrganizationId: string;
   userId: string;
-};
-
-const bytesToBase64 = (bytes: Uint8Array) => {
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-
-  return btoa(binary);
-};
-
-const arrayBufferToBase64Url = (bytes: Uint8Array) =>
-  bytesToBase64(bytes).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
-
-const createMimeBoundary = (prefix: string) =>
-  `${prefix}_${crypto.randomUUID().replaceAll("-", "")}`;
-
-const encodeMimeHeaderValue = (value: string) => {
-  if (/^[\x20-\x7E]*$/.test(value)) return value;
-  return `=?UTF-8?B?${btoa(unescape(encodeURIComponent(value)))}?=`;
-};
-
-const encodeQuotedPrintable = (value: string) => {
-  const bytes = new TextEncoder().encode(value.replaceAll("\r\n", "\n"));
-  let output = "";
-
-  for (const byte of bytes) {
-    const isPrintable = (byte >= 33 && byte <= 60) || (byte >= 62 && byte <= 126);
-    if (isPrintable || byte === 9 || byte === 32) {
-      output += String.fromCharCode(byte);
-    } else if (byte === 10) {
-      output += "\r\n";
-    } else {
-      output += `=${byte.toString(16).toUpperCase().padStart(2, "0")}`;
-    }
-  }
-
-  return output;
-};
-
-const base64WithCrlf = (value: Uint8Array) => {
-  const output = bytesToBase64(value);
-  return output.replace(/.{1,76}/g, "$&\r\n").trim();
-};
-
-const fileToBytes = async (file: File) => new Uint8Array(await file.arrayBuffer());
-
-const collectRecipients = (value: string) => splitMailAddressList(value);
-
-const collectReplyReferences = (draft: ComposeDraftInput) => {
-  const values = [...(draft.replyContext?.references ?? []), draft.replyContext?.messageHeaderId];
-  const seen = new Set<string>();
-  const references: string[] = [];
-
-  for (const value of values) {
-    const normalized = value?.trim();
-    if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
-    references.push(normalized);
-  }
-
-  return references;
-};
-
-const buildMimeMessage = async (draft: ComposeDraftInput) => {
-  const headers: string[] = [];
-  const toRecipients = collectRecipients(draft.recipients.to);
-  const ccRecipients = collectRecipients(draft.recipients.cc);
-  const bccRecipients = collectRecipients(draft.recipients.bcc);
-  const replyReferences = collectReplyReferences(draft);
-
-  if (toRecipients.length > 0) headers.push(`To: ${toRecipients.join(", ")}`);
-  if (ccRecipients.length > 0) headers.push(`Cc: ${ccRecipients.join(", ")}`);
-  if (bccRecipients.length > 0) headers.push(`Bcc: ${bccRecipients.join(", ")}`);
-  if (draft.subject.trim()) headers.push(`Subject: ${encodeMimeHeaderValue(draft.subject)}`);
-  if (draft.replyContext?.messageHeaderId) {
-    headers.push(`In-Reply-To: ${draft.replyContext.messageHeaderId}`);
-  }
-  if (replyReferences.length > 0) {
-    headers.push(`References: ${replyReferences.join(" ")}`);
-  }
-  headers.push("MIME-Version: 1.0");
-
-  const alternativeBoundary = createMimeBoundary("alt");
-  const relatedBoundary = createMimeBoundary("rel");
-  const mixedBoundary = createMimeBoundary("mix");
-
-  const textPart = [
-    `--${alternativeBoundary}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    "Content-Transfer-Encoding: quoted-printable",
-    "",
-    encodeQuotedPrintable(draft.bodyText || ""),
-  ].join("\r\n");
-
-  const inlineImageParts = (
-    await Promise.all(
-      draft.inlineImages.map(async (inlineImage) => {
-        if (!inlineImage.file) {
-          return null;
-        }
-
-        return [
-          `--${relatedBoundary}`,
-          `Content-Type: ${inlineImage.mimeType}; name="${inlineImage.name}"`,
-          `Content-Disposition: inline; filename="${inlineImage.name}"`,
-          "Content-Transfer-Encoding: base64",
-          `Content-ID: <${inlineImage.contentId}>`,
-          "",
-          base64WithCrlf(await fileToBytes(inlineImage.file)),
-        ].join("\r\n");
-      }),
-    )
-  ).filter((part): part is string => Boolean(part));
-
-  const htmlBody = draft.bodyHtml || "<p></p>";
-  const htmlPart =
-    inlineImageParts.length > 0
-      ? [
-          `--${alternativeBoundary}`,
-          `Content-Type: multipart/related; boundary="${relatedBoundary}"`,
-          "",
-          `--${relatedBoundary}`,
-          'Content-Type: text/html; charset="UTF-8"',
-          "Content-Transfer-Encoding: quoted-printable",
-          "",
-          encodeQuotedPrintable(htmlBody),
-          ...inlineImageParts,
-          `--${relatedBoundary}--`,
-        ].join("\r\n")
-      : [
-          `--${alternativeBoundary}`,
-          'Content-Type: text/html; charset="UTF-8"',
-          "Content-Transfer-Encoding: quoted-printable",
-          "",
-          encodeQuotedPrintable(htmlBody),
-        ].join("\r\n");
-
-  let body = [textPart, htmlPart, `--${alternativeBoundary}--`].join("\r\n");
-  let contentType = `multipart/alternative; boundary="${alternativeBoundary}"`;
-
-  const attachments = (
-    await Promise.all(
-      draft.attachments
-        .filter((attachment) => !attachment.isInline)
-        .map(async (attachment) => {
-          if (!attachment.file) {
-            return null;
-          }
-
-          return [
-            `--${mixedBoundary}`,
-            `Content-Type: ${attachment.mimeType}; name="${attachment.name}"`,
-            `Content-Disposition: attachment; filename="${attachment.name}"`,
-            "Content-Transfer-Encoding: base64",
-            "",
-            base64WithCrlf(await fileToBytes(attachment.file)),
-          ].join("\r\n");
-        }),
-    )
-  ).filter((part): part is string => Boolean(part));
-
-  if (attachments.length > 0) {
-    body = [
-      `--${mixedBoundary}`,
-      `Content-Type: ${contentType}`,
-      "",
-      body,
-      ...attachments,
-      `--${mixedBoundary}--`,
-    ].join("\r\n");
-    contentType = `multipart/mixed; boundary="${mixedBoundary}"`;
-  }
-
-  return [...headers, `Content-Type: ${contentType}`, "", body].join("\r\n");
-};
-
-const buildPlainTextMessage = ({
-  body,
-  subject,
-  to,
-}: {
-  body: string;
-  subject: string;
-  to: string;
-}) => {
-  const headers = [`To: ${to}`];
-
-  if (subject.trim()) {
-    headers.push(`Subject: ${encodeMimeHeaderValue(subject)}`);
-  }
-
-  return [
-    ...headers,
-    "MIME-Version: 1.0",
-    'Content-Type: text/plain; charset="UTF-8"',
-    "Content-Transfer-Encoding: quoted-printable",
-    "",
-    encodeQuotedPrintable(body),
-  ].join("\r\n");
 };
 
 const parseListUnsubscribeMailto = (value: string) => {
@@ -317,44 +112,6 @@ const parseListUnsubscribeMailto = (value: string) => {
     body: url.searchParams.get("body") ?? "",
     subject: url.searchParams.get("subject") ?? "",
     to: recipients.join(", "),
-  };
-};
-
-const parseDraftMessage = (draft: Awaited<ReturnType<typeof getDraft>>) => {
-  const message = draft.message;
-  if (!message) {
-    return {
-      subject: "",
-      bodyHtml: "",
-      bodyText: "",
-      recipients: {
-        to: "",
-        cc: "",
-        bcc: "",
-      },
-      messageId: null,
-      attachments: [],
-      inlineImages: [],
-    };
-  }
-
-  const content = extractMessageContent(message.payload);
-  const headers = message.payload?.headers ?? [];
-  const readHeader = (name: string) =>
-    headers.find((header) => header.name.toLowerCase() === name.toLowerCase())?.value ?? "";
-
-  return {
-    subject: readHeader("Subject"),
-    bodyHtml: content.html ?? "",
-    bodyText: content.text ?? "",
-    recipients: {
-      to: readHeader("To"),
-      cc: readHeader("Cc"),
-      bcc: readHeader("Bcc"),
-    },
-    messageId: message.id,
-    attachments: extractMessageAttachments(message.payload),
-    inlineImages: extractInlineMessageAttachments(message.payload),
   };
 };
 
@@ -460,13 +217,21 @@ export const appRouter = {
   auth: {
     getEmailPreview: publicProcedure
       .route({ method: "GET" })
-      .input(authEmailInputSchema)
+      .input(
+        z.object({
+          email: z.string().trim().email(),
+        }),
+      )
       .handler(({ input }) => {
         return getAuthEmailPreview(input.email);
       }),
     getUserStatus: publicProcedure
       .route({ method: "GET" })
-      .input(authEmailInputSchema)
+      .input(
+        z.object({
+          email: z.string().trim().email(),
+        }),
+      )
       .handler(async ({ input }) => {
         return await getAuthUserStatus(input.email);
       }),
@@ -912,7 +677,9 @@ export const appRouter = {
       .handler(async ({ context, input }) => {
         return await callGmail(context, input.mailboxId, async (accessToken) => {
           const raw = arrayBufferToBase64Url(
-            new TextEncoder().encode(await buildMimeMessage(input.draft)),
+            new TextEncoder().encode(
+              await buildMimeMessage(input.draft, { includeQuietrDraftHeaders: true }),
+            ),
           );
           const response = input.draft.draftId
             ? await updateDraft(
@@ -926,9 +693,11 @@ export const appRouter = {
           const parsed = parseDraftMessage(response);
           return {
             draftId: response.id,
+            draftAnchor: parsed.draftAnchor,
             messageId: response.message?.id ?? parsed.messageId,
             bodyHtml: parsed.bodyHtml,
             bodyText: parsed.bodyText,
+            replyContext: parsed.replyContext,
             subject: parsed.subject,
             recipients: parsed.recipients,
           };
@@ -943,11 +712,11 @@ export const appRouter = {
       )
       .handler(async ({ context, input }) => {
         return await callGmail(context, input.mailboxId, async (accessToken) => {
+          const raw = arrayBufferToBase64Url(
+            new TextEncoder().encode(await buildMimeMessage(input.draft)),
+          );
           let draftId = input.draft.draftId ?? null;
           if (!draftId) {
-            const raw = arrayBufferToBase64Url(
-              new TextEncoder().encode(await buildMimeMessage(input.draft)),
-            );
             const savedDraft = await createDraft(
               accessToken,
               raw,
@@ -962,7 +731,12 @@ export const appRouter = {
             });
           }
 
-          return await sendDraft(accessToken, draftId);
+          return await sendGmailDraft(
+            accessToken,
+            draftId,
+            raw,
+            input.draft.replyContext?.threadId,
+          );
         });
       }),
     deleteDraft: protectedProcedure

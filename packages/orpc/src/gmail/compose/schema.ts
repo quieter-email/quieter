@@ -5,8 +5,6 @@ const EMAIL_ADDRESS_PATTERN = /([a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-
 const normalizeMailAddressValue = (value: string | undefined) =>
   value?.replaceAll(/\r?\n\s+/g, " ").trim() ?? "";
 
-const emailAddressSchema = z.string().email("Enter a valid email address.");
-
 const previewMailAddress = (value: string) => {
   const normalized = normalizeMailAddressValue(value);
   if (normalized.length <= 48) {
@@ -111,7 +109,9 @@ export const getMailAddressKey = (value: string): string => {
 
 export const findInvalidMailAddresses = (value: string | undefined): string[] =>
   splitMailAddressList(value).filter(
-    (entry) => !emailAddressSchema.safeParse(extractMailAddress(entry)).success,
+    (entry) =>
+      !z.string().email("Enter a valid email address.").safeParse(extractMailAddress(entry))
+        .success,
   );
 
 export const formatInvalidMailAddressMessage = (invalidEntries: readonly string[]): string => {
@@ -142,6 +142,25 @@ export const composeRecipientFieldsSchema = z.object({
   cc: composeRecipientFieldSchema,
   bcc: composeRecipientFieldSchema,
 });
+
+export const composeDraftSeededBySchema = z.enum(["reply", "reply-all", "forward"]);
+
+export const composeDraftAnchorSchema = z.object({
+  sourceMessageId: z.string(),
+  sourceThreadId: z.string(),
+  sourceMessageHeaderId: z.string().optional(),
+  seededBy: composeDraftSeededBySchema,
+});
+
+export type ComposeDraftSeededBy = z.infer<typeof composeDraftSeededBySchema>;
+export type ComposeDraftAnchor = z.infer<typeof composeDraftAnchorSchema>;
+
+export const QUIETR_DRAFT_HEADER_NAMES = {
+  seededBy: "X-Quietr-Seeded-By",
+  sourceMessageHeaderId: "X-Quietr-Source-Message-Header-Id",
+  sourceMessageId: "X-Quietr-Source-Message-Id",
+  sourceThreadId: "X-Quietr-Source-Thread-Id",
+} as const;
 
 export const composeDraftFormValuesSchema = z.object({
   to: composeRecipientFieldSchema,
@@ -193,6 +212,7 @@ export const composeDraftInputSchema = z.object({
   localId: z.string(),
   draftId: z.string().nullable().optional(),
   messageId: z.string().nullable().optional(),
+  draftAnchor: composeDraftAnchorSchema.nullable().optional(),
   replyContext: z
     .object({
       threadId: z.string(),

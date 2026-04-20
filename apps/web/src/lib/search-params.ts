@@ -41,29 +41,26 @@ export const settingsSearchDefaults = {
   tab: "general",
 } as const;
 
-const searchInputStringSchema = z.preprocess(
-  (value) => (typeof value === "string" ? value : undefined),
-  z.string().optional(),
-);
-
-export const mailboxSearchSchema = z
-  .object({
-    mailbox: searchInputStringSchema,
-    mailboxId: searchInputStringSchema,
-    messageId: searchInputStringSchema,
-    query: searchInputStringSchema,
-  })
-  .transform((search) => ({
-    mailbox: normalizeMailboxCategory(search.mailbox ?? null),
-    mailboxId: normalizeOptionalString(search.mailboxId),
-    messageId: normalizeOptionalString(search.messageId),
-    query: normalizeOptionalString(search.query) ?? "",
-  }));
+export const mailboxSearchSchema = z.object({
+  mailbox: z
+    .enum(mailboxCategories)
+    .catch(mailboxSearchDefaults.mailbox)
+    .default(mailboxSearchDefaults.mailbox),
+  mailboxId: z.string().trim().min(1).optional().catch(undefined),
+  messageId: z.string().trim().min(1).optional().catch(undefined),
+  query: z.string().trim().catch(mailboxSearchDefaults.query).default(mailboxSearchDefaults.query),
+});
 
 export const settingsSearchSchema = z
   .object({
-    from: searchInputStringSchema,
-    tab: searchInputStringSchema,
+    from: z.preprocess(
+      (value) => (typeof value === "string" ? value : undefined),
+      z.string().optional(),
+    ),
+    tab: z.preprocess(
+      (value) => (typeof value === "string" ? value : undefined),
+      z.string().optional(),
+    ),
   })
   .transform((search) => {
     const normalizedTab = normalizeOptionalString(search.tab);
@@ -77,13 +74,9 @@ export const settingsSearchSchema = z
     };
   });
 
-export const authSearchSchema = z
-  .object({
-    error: searchInputStringSchema,
-  })
-  .transform((search) => ({
-    error: normalizeOptionalString(search.error),
-  }));
+export const authSearchSchema = z.object({
+  error: z.string().trim().min(1).optional().catch(undefined),
+});
 
 export type MailboxSearch = z.output<typeof mailboxSearchSchema>;
 export type MailboxSearchInput = {

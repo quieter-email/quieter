@@ -3,11 +3,11 @@
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { settingsRouteApi } from "~/lib/route-apis";
 import { toSettingsSearch, type SettingsTab } from "~/lib/search-params";
-import { AccountSettingsPanel } from "./settings/account-settings-panel";
-import { GeneralSettingsPanel } from "./settings/general-settings-panel";
-import { MailboxesSettingsPanel } from "./settings/mailboxes-settings-panel";
-import { OrganizationSettingsPanel } from "./settings/organization-settings-panel";
-import { SettingsSidebar } from "./settings/settings-sidebar";
+import { AccountSettingsPanel } from "./account-settings-panel";
+import { GeneralSettingsPanel } from "./general-settings-panel";
+import { MailboxesSettingsPanel } from "./mailboxes-settings-panel";
+import { OrganizationSettingsPanel } from "./organization-settings-panel";
+import { SettingsSidebar } from "./settings-sidebar";
 
 type SettingsUser = {
   email: string;

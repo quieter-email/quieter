@@ -20,7 +20,7 @@ import Underline from "@tiptap/extension-underline";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef } from "react";
-import { normalizeComposeBodyHtml } from "~/lib/gmail/compose";
+import { normalizeComposeBodyHtml } from "../domain/draft";
 
 const ComposeImage = Image.extend({
   addAttributes() {
@@ -49,7 +49,6 @@ export const ComposeEditor = ({
   onInlineImageFiles,
 }: ComposeEditorProps) => {
   const lastSyncedHtmlRef = useRef(html);
-  const editorPlaceholderClassName = "min-h-72 text-[15px] leading-[1.75] text-muted-foreground/75";
 
   const editor = useEditor({
     autofocus: false,
@@ -194,7 +193,7 @@ export const ComposeEditor = ({
         {editor ? (
           <EditorContent editor={editor} />
         ) : (
-          <div aria-hidden className={editorPlaceholderClassName}>
+          <div aria-hidden className="min-h-72 text-[15px] leading-[1.75] text-muted-foreground/75">
             Write your message...
           </div>
         )}

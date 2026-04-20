@@ -4,7 +4,7 @@ import {
   cloneComposeSessionState,
   createInitialComposeSessionState,
   type ComposeSessionState,
-} from "./compose";
+} from "../domain/draft";
 
 export const getComposeSessionQueryKey = (mailboxId: string) =>
   ["compose-session", mailboxId] as const;

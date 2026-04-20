@@ -12,7 +12,10 @@ import { Button, cn, toast } from "@quietr/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { MailboxSettingsRow, OrganizationSwitcherSelect } from "~/components/mailbox-switcher";
+import {
+  MailboxSettingsRow,
+  OrganizationSwitcherSelect,
+} from "~/features/navigation/components/mailbox-switcher";
 import { authClient } from "~/lib/auth";
 import { getErrorMessage } from "~/lib/errors";
 import { getGoogleScopeRepairPageHref } from "~/lib/google-scope-repair";

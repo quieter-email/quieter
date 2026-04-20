@@ -1,14 +1,9 @@
 import { createStore } from "@tanstack/store";
-import {
-  createInitialComposeSessionState,
-  type ComposeDraftState,
-  type ComposeSessionState,
-} from "./compose";
+import { createInitialComposeSessionState, type ComposeSessionState } from "../domain/draft";
 
 export type ComposeDialogStoreState = {
   composeSession: ComposeSessionState;
   dialogOpen: boolean;
-  pendingFormSyncDraft: ComposeDraftState | null;
   showBcc: boolean;
   showCc: boolean;
   transitionBusy: boolean;
@@ -17,7 +12,6 @@ export type ComposeDialogStoreState = {
 export const createInitialComposeDialogStoreState = (): ComposeDialogStoreState => ({
   composeSession: createInitialComposeSessionState(),
   dialogOpen: false,
-  pendingFormSyncDraft: null,
   showBcc: false,
   showCc: false,
   transitionBusy: false,

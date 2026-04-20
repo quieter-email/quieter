@@ -6,10 +6,8 @@ import { Button, Calendar, IconButtonTooltip, cn } from "@quietr/ui";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { labelsQueryOptions } from "~/lib/gmail/labels-query";
-import { ArrowInteractionButton } from "../arrow-interaction-button";
-import { SpinWhileActive } from "../spin-while-active";
-import { MessageListSearchDropdown, searchFilterOptions } from "./message-list-search-dropdown";
+import { ArrowInteractionButton } from "~/components/arrow-interaction-button";
+import { SpinWhileActive } from "~/components/spin-while-active";
 import {
   getUserLabels,
   normalizeLabelSelectionKey,
@@ -19,7 +17,9 @@ import {
   type SearchFieldFilterType,
   type SearchFilterChip,
   type StructuredSearchState,
-} from "./message-list-search-state";
+} from "~/features/message-search/state/message-list-search-state";
+import { labelsQueryOptions } from "~/lib/gmail/labels-query";
+import { MessageListSearchDropdown, searchFilterOptions } from "./message-list-search-dropdown";
 
 export type MessageListSearchProps = {
   isRefreshing: boolean;

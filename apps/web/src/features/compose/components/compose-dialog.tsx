@@ -11,6 +11,8 @@ import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { z } from "zod";
 import { getErrorMessage, getFieldErrorMessage } from "~/lib/errors";
+import { refreshCachedMailboxQueries } from "~/lib/gmail/inbox-query";
+import { getThreadQueryKey } from "~/lib/gmail/thread-query";
 import {
   attachInlineImagesToHtml,
   clearComposeDraftRuntimeFiles,
@@ -27,10 +29,9 @@ import {
   syncInlineImagesWithHtml,
   type ComposeDraftState,
   type ComposeSessionState,
-} from "~/lib/gmail/compose";
-import { loadComposeSession, persistComposeSession } from "~/lib/gmail/compose-query";
-import { createComposeDialogStore } from "~/lib/gmail/compose-store";
-import { refreshCachedMailboxQueries } from "~/lib/gmail/inbox-query";
+} from "../domain/draft";
+import { loadComposeSession, persistComposeSession } from "../state/compose-query";
+import { createComposeDialogStore } from "../state/compose-store";
 import { ComposeEditor } from "./compose-editor";
 
 export type ComposeDialogHandle = {
@@ -43,15 +44,6 @@ type ComposeDialogProps = {
 };
 
 type ComposeFormValues = z.infer<typeof composeDraftFormValuesSchema>;
-
-const fieldContainerClass =
-  "flex min-h-10 items-center gap-3 rounded-md border border-input bg-background px-3.5 transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20";
-const fieldInputClass =
-  "min-w-0 flex-1 bg-transparent py-2.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/60";
-const recipientFieldTransition = {
-  duration: 0.09,
-  ease: "easeOut" as const,
-};
 
 const emptyFormValues: ComposeFormValues = {
   to: "",
@@ -78,6 +70,7 @@ const formValuesToDraft = (
     | "localId"
     | "draftId"
     | "messageId"
+    | "draftAnchor"
     | "replyContext"
     | "attachments"
     | "inlineImages"
@@ -121,7 +114,6 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
     const transitionBusy = useSelector(composeStore, (state) => state.transitionBusy);
     const activeDraft = useSelector(composeStore, (state) => state.composeSession.activeDraft);
     const lastDraft = useSelector(composeStore, (state) => state.composeSession.lastDraft);
-    const pendingFormSyncDraft = useSelector(composeStore, (state) => state.pendingFormSyncDraft);
     const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const savePromiseRef = useRef<Promise<void> | null>(null);
     const saveQueuedRef = useRef(false);
@@ -184,13 +176,6 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
       }));
     };
 
-    const setPendingFormDraftSync = (draft: ComposeDraftState | null) => {
-      composeStore.setState((state) => ({
-        ...state,
-        pendingFormSyncDraft: draft ? cloneComposeDraft(draft) : null,
-      }));
-    };
-
     const getCurrentFormValues = () => form.state.values;
 
     const clearActiveDraftError = () => {
@@ -235,10 +220,6 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
       });
     };
 
-    const queueComposeDraftFormSync = (draft: ComposeDraftState) => {
-      setPendingFormDraftSync(draft);
-    };
-
     const persistSession = async (session = getComposeSession()) => {
       if (!mailboxId) {
         return;
@@ -254,6 +235,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
         localId: meta.localId,
         draftId: meta.draftId,
         messageId: meta.messageId,
+        draftAnchor: meta.draftAnchor,
         replyContext: meta.replyContext,
         attachments: meta.attachments,
         inlineImages: meta.inlineImages,
@@ -331,6 +313,36 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
       return savedDraft;
     };
 
+    const refreshComposeThread = async (draft: ComposeDraftState) => {
+      if (!mailboxId) {
+        return;
+      }
+
+      const threadId = draft.replyContext?.threadId ?? draft.draftAnchor?.sourceThreadId;
+      if (!threadId) {
+        return;
+      }
+
+      await queryClient.invalidateQueries({
+        queryKey: getThreadQueryKey(mailboxId, threadId),
+      });
+      await queryClient.refetchQueries({
+        queryKey: getThreadQueryKey(mailboxId, threadId),
+        type: "active",
+      });
+    };
+
+    const mergeHydratedDraft = (
+      pendingDraft: ComposeDraftState,
+      hydratedDraft: ComposeDraftState,
+    ) =>
+      ({
+        ...hydratedDraft,
+        draftAnchor: pendingDraft.draftAnchor ?? hydratedDraft.draftAnchor ?? null,
+        localId: pendingDraft.localId,
+        recipients: pendingDraft.recipients,
+      }) satisfies ComposeDraftState;
+
     const scheduleAutosave = () => {
       clearTimeout(autosaveTimerRef.current);
 
@@ -382,7 +394,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
       };
 
       setComposeSession(nextSession);
-      queueComposeDraftFormSync(nextActiveDraft);
+      syncComposeDraftIntoForm(nextActiveDraft);
       setComposeDialogOpen(true);
     };
 
@@ -411,10 +423,10 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
 
       void hydrateComposeDraftRuntime(mailboxId, cloneComposeDraft(pendingDraft))
         .then((hydratedDraft) => {
-          const mergedDraft = { ...hydratedDraft, localId };
+          const mergedDraft = mergeHydratedDraft(pendingDraft, hydratedDraft);
           replaceDraftByLocalId(localId, mergedDraft);
           if (getComposeSession().activeDraft.localId === localId) {
-            queueComposeDraftFormSync(mergedDraft);
+            syncComposeDraftIntoForm(mergedDraft);
           }
         })
         .catch((error) => {
@@ -458,6 +470,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
         await Promise.all([
           refreshCachedMailboxQueries(queryClient, mailboxId, "drafts"),
           refreshCachedMailboxQueries(queryClient, mailboxId, "sent"),
+          refreshComposeThread(savedDraft),
         ]);
       } catch (error) {
         setActiveDraftErrorMessage(getErrorMessage(error, "Could not send message."));
@@ -498,7 +511,10 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
         setComposeDialogOpen(false);
         await persistSession(clearedSession);
         if (mailboxId) {
-          await refreshCachedMailboxQueries(queryClient, mailboxId, "drafts");
+          await Promise.all([
+            refreshCachedMailboxQueries(queryClient, mailboxId, "drafts"),
+            refreshComposeThread(draft),
+          ]);
         }
       } catch (error) {
         setActiveDraftErrorMessage(
@@ -537,7 +553,8 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
 
       void (async () => {
         try {
-          await flushActiveSave();
+          const savedDraft = await flushActiveSave();
+          await refreshComposeThread(savedDraft).catch(() => {});
         } catch {
           // Error is already surfaced on the draft; nothing else to do here.
         }
@@ -597,23 +614,22 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
 
       const loadedSession = loadComposeSession(queryClient, mailboxId);
       setComposeSession(loadedSession);
-      queueComposeDraftFormSync(loadedSession.activeDraft);
+      syncComposeDraftIntoForm(loadedSession.activeDraft);
     }, [mailboxId, queryClient]);
+
+    useEffect(() => {
+      if (!dialogOpen) {
+        return;
+      }
+
+      syncComposeDraftIntoForm(activeDraft);
+    }, [activeDraft.localId, dialogOpen]);
 
     useEffect(() => {
       return () => {
         clearTimeout(autosaveTimerRef.current);
       };
     }, []);
-
-    useEffect(() => {
-      if (!pendingFormSyncDraft) {
-        return;
-      }
-
-      syncComposeDraftIntoForm(pendingFormSyncDraft);
-      setPendingFormDraftSync(null);
-    }, [pendingFormSyncDraft]);
 
     const lastDraftExists = Boolean(lastDraft && hasComposeDraftContent(lastDraft));
     const draftStatusMessage =
@@ -667,15 +683,18 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
                     return (
                       <div className="space-y-2">
                         <div
-                          className={cn(fieldContainerClass, {
-                            "bg-destructive/10": Boolean(fieldError),
-                          })}
+                          className={cn(
+                            "flex min-h-10 items-center gap-3 rounded-md border border-input bg-background px-3.5 transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20",
+                            {
+                              "bg-destructive/10": Boolean(fieldError),
+                            },
+                          )}
                         >
                           <input
                             aria-invalid={fieldError ? true : undefined}
                             aria-label="Recipients"
                             autoComplete="off"
-                            className={fieldInputClass}
+                            className="min-w-0 flex-1 bg-transparent py-2.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/60"
                             onBlur={() => field.handleBlur()}
                             onChange={(event) => {
                               clearActiveDraftError();
@@ -743,7 +762,9 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
                           y: prefersReducedMotion ? 0 : -4,
                         }}
                         transition={
-                          prefersReducedMotion ? { duration: 0 } : recipientFieldTransition
+                          prefersReducedMotion
+                            ? { duration: 0 }
+                            : { duration: 0.09, ease: "easeOut" as const }
                         }
                       >
                         <form.Field name="cc">
@@ -753,15 +774,18 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
                             return (
                               <div className="space-y-2">
                                 <div
-                                  className={cn(fieldContainerClass, {
-                                    "bg-destructive/10": Boolean(fieldError),
-                                  })}
+                                  className={cn(
+                                    "flex min-h-10 items-center gap-3 rounded-md border border-input bg-background px-3.5 transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20",
+                                    {
+                                      "bg-destructive/10": Boolean(fieldError),
+                                    },
+                                  )}
                                 >
                                   <input
                                     aria-invalid={fieldError ? true : undefined}
                                     aria-label="Cc recipients"
                                     autoComplete="off"
-                                    className={fieldInputClass}
+                                    className="min-w-0 flex-1 bg-transparent py-2.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/60"
                                     onBlur={() => field.handleBlur()}
                                     onChange={(event) => {
                                       clearActiveDraftError();
@@ -805,7 +829,9 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
                           y: prefersReducedMotion ? 0 : -4,
                         }}
                         transition={
-                          prefersReducedMotion ? { duration: 0 } : recipientFieldTransition
+                          prefersReducedMotion
+                            ? { duration: 0 }
+                            : { duration: 0.09, ease: "easeOut" as const }
                         }
                       >
                         <form.Field name="bcc">
@@ -815,15 +841,18 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
                             return (
                               <div className="space-y-2">
                                 <div
-                                  className={cn(fieldContainerClass, {
-                                    "bg-destructive/10": Boolean(fieldError),
-                                  })}
+                                  className={cn(
+                                    "flex min-h-10 items-center gap-3 rounded-md border border-input bg-background px-3.5 transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20",
+                                    {
+                                      "bg-destructive/10": Boolean(fieldError),
+                                    },
+                                  )}
                                 >
                                   <input
                                     aria-invalid={fieldError ? true : undefined}
                                     aria-label="Bcc recipients"
                                     autoComplete="off"
-                                    className={fieldInputClass}
+                                    className="min-w-0 flex-1 bg-transparent py-2.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/60"
                                     onBlur={() => field.handleBlur()}
                                     onChange={(event) => {
                                       clearActiveDraftError();
@@ -851,11 +880,16 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
 
                 <form.Field name="subject">
                   {(field) => (
-                    <div className={cn(fieldContainerClass, "mt-3")}>
+                    <div
+                      className={cn(
+                        "flex min-h-10 items-center gap-3 rounded-md border border-input bg-background px-3.5 transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20",
+                        "mt-3",
+                      )}
+                    >
                       <input
                         aria-label="Subject"
                         autoComplete="off"
-                        className={fieldInputClass}
+                        className="min-w-0 flex-1 bg-transparent py-2.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/60"
                         onBlur={() => field.handleBlur()}
                         onChange={(event) => {
                           clearActiveDraftError();

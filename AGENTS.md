@@ -76,6 +76,7 @@
 - Icon-only controls should use the shared tooltip wrapper from `@quietr/ui` and a concise `aria-label`.
 - For incremental UI refinements, preserve existing layout, density, and hierarchy unless asked to redesign.
 - Prefer colocated one-off UI logic over extracting helpers used once.
+- Inline one-off schemas or validators used only once or twice instead of extracting a named constant for them.
 - Avoid unnecessary fallback logic and placeholder compatibility code.
 - Inline simple class lists, motion variants, and small constants instead of extracting them.
 

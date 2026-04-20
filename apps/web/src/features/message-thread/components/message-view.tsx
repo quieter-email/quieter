@@ -24,19 +24,26 @@ import {
 } from "@quietr/ui";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { ComposeDraftState } from "~/lib/gmail/compose";
+import { SenderAvatar } from "~/components/sender-avatar";
 import {
+  type ComposeDraftState,
   buildComposeDraftFromMessageAction,
+  buildComposeDraftFromSavedDraftMessage,
+  findLinkedDraftForMessage,
   hasDistinctReplyAllRecipients,
-} from "~/lib/gmail/compose-actions";
-import { isMessageUnread, type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
+} from "~/features/compose";
+import {
+  isMessageUnread,
+  type MailboxCategory,
+  MAILBOX_LABELS,
+  type MessageListItem,
+} from "~/lib/gmail/gmail";
 import { getMessageInspectorOptions } from "~/lib/gmail/message-inspector-query";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
 import { MessageActionsDropdown } from "./message-actions";
 import { MessageAttachments } from "./message-attachments";
 import { MessageBody } from "./message-body";
-import { SenderAvatar } from "./sender-avatar";
 
 type MessageViewProps = {
   activeMailbox: MailboxCategory;
@@ -81,6 +88,9 @@ const formatEnvelopeValue = (value?: string) => {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
 };
+
+const isDraftMessage = (message: MessageListItem) =>
+  Boolean(message.draftId || message.labelIds?.includes(MAILBOX_LABELS.drafts));
 
 const MessageHeaderContent = ({
   className,
@@ -186,6 +196,7 @@ const MessageHeaderContent = ({
 
 const MessageHeaderActions = ({
   className,
+  onContinueDraft,
   onDetails,
   onForward,
   onReply,
@@ -193,6 +204,7 @@ const MessageHeaderActions = ({
   showReplyAll = true,
 }: {
   className?: string;
+  onContinueDraft?: () => void;
   onDetails: () => void;
   onForward: () => void;
   onReply: () => void;
@@ -200,17 +212,34 @@ const MessageHeaderActions = ({
   showReplyAll?: boolean;
 }) => (
   <div className={cn("flex items-center justify-end gap-1.5", className)}>
-    <Button className="leading-tight" onClick={onReply} size="sm" variant="outline">
+    {onContinueDraft ? (
+      <Button
+        className="leading-tight"
+        onClick={onContinueDraft}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        Continue with draft
+      </Button>
+    ) : null}
+    <Button className="leading-tight" onClick={onReply} size="sm" type="button" variant="outline">
       <HugeiconsIcon aria-hidden icon={MailReply02Icon} />
       Reply
     </Button>
     {showReplyAll ? (
-      <Button className="leading-tight" onClick={onReplyAll} size="sm" variant="outline">
+      <Button
+        className="leading-tight"
+        onClick={onReplyAll}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
         <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
         Reply all
       </Button>
     ) : null}
-    <Button className="leading-tight" onClick={onForward} size="sm" variant="outline">
+    <Button className="leading-tight" onClick={onForward} size="sm" type="button" variant="outline">
       <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
       Forward
     </Button>
@@ -220,6 +249,7 @@ const MessageHeaderActions = ({
         className="ml-0.5 text-muted-foreground hover:text-foreground"
         onClick={onDetails}
         size="icon-sm"
+        type="button"
         variant="ghost"
       >
         <HugeiconsIcon aria-hidden icon={ZoomInAreaIcon} />
@@ -419,6 +449,7 @@ const MessageExpandButton = ({
 const ThreadMessageCard = ({
   currentUserEmail,
   expanded,
+  linkedDraftMessage,
   mailboxId,
   message,
   onComposeDraftRequested,
@@ -426,6 +457,7 @@ const ThreadMessageCard = ({
 }: {
   currentUserEmail?: string | null;
   expanded: boolean;
+  linkedDraftMessage: MessageListItem | null;
   mailboxId: string;
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
@@ -442,9 +474,18 @@ const ThreadMessageCard = ({
       buildComposeDraftFromMessageAction({
         action,
         currentUserEmail,
+        existingDraftMessage: linkedDraftMessage,
         message,
       }),
     );
+  };
+
+  const openLinkedDraft = () => {
+    if (!onComposeDraftRequested || !linkedDraftMessage) {
+      return;
+    }
+
+    onComposeDraftRequested(buildComposeDraftFromSavedDraftMessage(linkedDraftMessage));
   };
 
   return (
@@ -463,6 +504,7 @@ const ThreadMessageCard = ({
         headerActions={
           expanded ? (
             <MessageHeaderActions
+              onContinueDraft={linkedDraftMessage ? openLinkedDraft : undefined}
               onDetails={() => {
                 setDetailsDialogOpen(true);
               }}
@@ -502,11 +544,13 @@ const ThreadMessageCard = ({
 
 const SingleMessageCard = ({
   currentUserEmail,
+  linkedDraftMessage,
   mailboxId,
   message,
   onComposeDraftRequested,
 }: {
   currentUserEmail?: string | null;
+  linkedDraftMessage: MessageListItem | null;
   mailboxId: string;
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
@@ -522,9 +566,18 @@ const SingleMessageCard = ({
       buildComposeDraftFromMessageAction({
         action,
         currentUserEmail,
+        existingDraftMessage: linkedDraftMessage,
         message,
       }),
     );
+  };
+
+  const openLinkedDraft = () => {
+    if (!onComposeDraftRequested || !linkedDraftMessage) {
+      return;
+    }
+
+    onComposeDraftRequested(buildComposeDraftFromSavedDraftMessage(linkedDraftMessage));
   };
 
   return (
@@ -533,6 +586,7 @@ const SingleMessageCard = ({
         className="px-4 py-4 sm:px-5 sm:py-5"
         headerActions={
           <MessageHeaderActions
+            onContinueDraft={linkedDraftMessage ? openLinkedDraft : undefined}
             onDetails={() => {
               setDetailsDialogOpen(true);
             }}
@@ -579,12 +633,14 @@ const ThreadMessageList = ({
     <div className="flex flex-col gap-3">
       {messages.map((threadMessage) => {
         const isExpanded = expandedMessageId === threadMessage.id;
+        const linkedDraftMessage = findLinkedDraftForMessage(messages, threadMessage);
 
         return (
           <ThreadMessageCard
             currentUserEmail={currentUserEmail}
             expanded={isExpanded}
             key={threadMessage.id}
+            linkedDraftMessage={linkedDraftMessage}
             mailboxId={mailboxId}
             message={threadMessage}
             onComposeDraftRequested={onComposeDraftRequested}
@@ -628,13 +684,25 @@ export const MessageView = ({
     getThreadWithDetailsOptions(mailboxId, activeMailbox, message.threadId),
   );
 
-  const messages = threadQuery.data?.messages?.length
+  const threadMessages = threadQuery.data?.messages?.length
     ? [...threadQuery.data.messages].reverse()
     : [message];
-  const subject = threadQuery.data?.subject || message.subject || "(No subject)";
-  const threadIsUnread = messages.some((entry) => isMessageUnread(entry));
-  const isSingleMessageThread = messages.length === 1;
-  const threadAttachments = messages.flatMap((threadMessage) =>
+  const messages = threadMessages.filter((threadMessage) => !isDraftMessage(threadMessage));
+  const visibleMessages = messages.length > 0 ? messages : [message];
+  const subject =
+    visibleMessages.reduce<string | undefined>((resolvedSubject, threadMessage) => {
+      if (!threadMessage.subject?.trim()) {
+        return resolvedSubject;
+      }
+
+      return threadMessage.subject;
+    }, undefined) ||
+    threadQuery.data?.subject ||
+    message.subject ||
+    "(No subject)";
+  const threadIsUnread = visibleMessages.some((entry) => isMessageUnread(entry));
+  const isSingleMessageThread = visibleMessages.length === 1;
+  const threadAttachments = visibleMessages.flatMap((threadMessage) =>
     (threadMessage.attachments ?? []).map((attachment) => ({
       ...attachment,
       messageId: threadMessage.id,
@@ -707,7 +775,7 @@ export const MessageView = ({
 
         {!isSingleMessageThread ? (
           <p className="mt-2 text-sm text-muted-foreground">
-            {messages.length} {messages.length === 1 ? "message" : "messages"}
+            {visibleMessages.length} {visibleMessages.length === 1 ? "message" : "messages"}
           </p>
         ) : null}
 
@@ -723,14 +791,15 @@ export const MessageView = ({
           currentUserEmail={currentUserEmail}
           key={message.threadId}
           mailboxId={mailboxId}
-          messages={messages}
+          messages={visibleMessages}
           onComposeDraftRequested={onComposeDraftRequested}
         />
       ) : (
-        messages.map((threadMessage) => (
+        visibleMessages.map((threadMessage) => (
           <SingleMessageCard
             currentUserEmail={currentUserEmail}
             key={threadMessage.id}
+            linkedDraftMessage={findLinkedDraftForMessage(threadMessages, threadMessage)}
             mailboxId={mailboxId}
             message={threadMessage}
             onComposeDraftRequested={onComposeDraftRequested}

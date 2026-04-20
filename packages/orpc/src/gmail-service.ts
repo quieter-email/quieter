@@ -6,6 +6,8 @@ import {
   extractMessageContent,
   findRenderablePart,
 } from "./gmail-message-content";
+import { parseDraftAnchorFromHeaderReader } from "./gmail/compose/draft-anchor";
+import { QUIETR_DRAFT_HEADER_NAMES, type ComposeDraftAnchor } from "./gmail/compose/schema";
 import { getSenderAvatarUrls } from "./sender-avatar";
 
 export const MAILBOX_LABELS = {
@@ -207,12 +209,14 @@ export type MessageListItem = {
   id: string;
   threadId: string;
   draftId?: string;
+  draftAnchor?: ComposeDraftAnchor;
   snippet?: string;
   subject?: string;
   from?: string;
   to?: string;
   cc?: string;
   bcc?: string;
+  inReplyTo?: string;
   replyTo?: string;
   messageHeaderId?: string;
   references?: string;
@@ -306,11 +310,16 @@ const GMAIL_MESSAGE_METADATA_HEADERS = [
   "To",
   "Cc",
   "Bcc",
+  "In-Reply-To",
   "Reply-To",
   "Date",
   "Message-ID",
   "References",
   "List-Unsubscribe",
+  QUIETR_DRAFT_HEADER_NAMES.seededBy,
+  QUIETR_DRAFT_HEADER_NAMES.sourceMessageHeaderId,
+  QUIETR_DRAFT_HEADER_NAMES.sourceMessageId,
+  QUIETR_DRAFT_HEADER_NAMES.sourceThreadId,
 ] as const;
 const GMAIL_MESSAGE_METADATA_FIELDS =
   "id,threadId,labelIds,snippet,historyId,internalDate,payload(headers(name,value))";
@@ -708,11 +717,13 @@ const toMessageListItem = async (
     id: message.id,
     threadId: message.threadId,
     snippet: decodeMimeHeaderValue(message.snippet),
+    draftAnchor: parseDraftAnchorFromHeaderReader((name) => getHeader(message, name)),
     subject: getHeader(message, "Subject"),
     from,
     to: getHeader(message, "To"),
     cc: getHeader(message, "Cc"),
     bcc: getHeader(message, "Bcc"),
+    inReplyTo: getHeader(message, "In-Reply-To"),
     replyTo: getHeader(message, "Reply-To"),
     messageHeaderId: getHeader(message, "Message-ID"),
     references: getHeader(message, "References"),
@@ -782,6 +793,21 @@ const listDrafts = async (
     },
     signal: options?.signal,
   });
+};
+
+const getDraftIdForMessageHeaderId = async (
+  accessToken: string,
+  messageHeaderId: string,
+  threadId: string,
+  signal?: AbortSignal,
+) => {
+  const list = await listDrafts(accessToken, {
+    maxResults: 10,
+    query: `rfc822msgid:${messageHeaderId}`,
+    signal,
+  });
+
+  return list.drafts.find((draft) => draft.message?.threadId === threadId)?.id;
 };
 
 export const getGmailProfile = async (
@@ -1046,6 +1072,27 @@ export const getThreadWithDetails = async (
       ),
     )
   ).sort((left, right) => getMessageTimestamp(left) - getMessageTimestamp(right));
+  const draftIdsByMessageId = new Map(
+    (
+      await Promise.all(
+        messages
+          .filter(
+            (message) =>
+              message.labelIds?.includes(MAILBOX_LABELS.drafts) &&
+              Boolean(message.messageHeaderId?.trim()),
+          )
+          .map(async (message) => [
+            message.id,
+            await getDraftIdForMessageHeaderId(
+              accessToken,
+              message.messageHeaderId!.trim(),
+              message.threadId,
+              signal,
+            ),
+          ]),
+      )
+    ).filter((entry): entry is [string, string] => Boolean(entry[1])),
+  );
 
   const subject = messages.reduce<string | undefined>((resolved, message) => {
     if (!message.subject?.trim()) return resolved;
@@ -1056,7 +1103,14 @@ export const getThreadWithDetails = async (
     threadId: thread.id,
     snippet: decodeMimeHeaderValue(thread.snippet),
     subject,
-    messages,
+    messages: messages.map((message) =>
+      draftIdsByMessageId.has(message.id)
+        ? {
+            ...message,
+            draftId: draftIdsByMessageId.get(message.id),
+          }
+        : message,
+    ),
   };
 };
 
@@ -1585,11 +1639,21 @@ export const updateDraft = async (
 export const sendDraft = async (
   accessToken: string,
   draftId: string,
+  raw?: string,
+  threadId?: string,
   signal?: AbortSignal,
 ): Promise<GmailMessage> => {
   return await requestGmail(accessToken, "/gmail/v1/users/me/drafts/send", gmailMessageSchema, {
     method: "POST",
-    body: { id: draftId },
+    body: raw
+      ? {
+          id: draftId,
+          message: {
+            raw,
+            threadId,
+          },
+        }
+      : { id: draftId },
     signal,
   });
 };

@@ -26,9 +26,9 @@ import { useHotkey } from "@tanstack/react-hotkeys";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ListMessagesPageResult, MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
+import { MessageListSearch } from "~/features/message-search/components/message-list-search";
 import { getErrorMessage } from "~/lib/errors";
 import { buildThreadListEntries, type ThreadListEntry } from "~/lib/gmail/thread-list";
-import { MessageListSearch } from "./message-list-search/message-list-search";
 import { MessageRow } from "./message-row";
 
 type MessageListProps = {

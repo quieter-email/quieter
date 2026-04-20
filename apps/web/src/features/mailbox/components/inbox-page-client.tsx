@@ -1,6 +1,6 @@
 "use client";
 
-import { MailboxWorkspace } from "~/components/mailbox-workspace";
+import { MailboxWorkspace } from "~/features/mailbox/components/mailbox-workspace";
 
 type InboxPageClientProps = {
   user: {

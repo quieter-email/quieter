@@ -2,6 +2,7 @@
 
 import { ColorModeProvider, Toaster } from "@quietr/ui";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { MotionConfig } from "motion/react";
 import { type PropsWithChildren, useState } from "react";
 import { createQueryClient } from "~/lib/query-client";
 
@@ -10,10 +11,12 @@ export const Providers = ({ children }: PropsWithChildren) => {
 
   return (
     <ColorModeProvider initialColorMode="system">
-      <QueryClientProvider client={queryClient}>
-        {children}
-        <Toaster />
-      </QueryClientProvider>
+      <MotionConfig reducedMotion="user">
+        <QueryClientProvider client={queryClient}>
+          {children}
+          <Toaster />
+        </QueryClientProvider>
+      </MotionConfig>
     </ColorModeProvider>
   );
 };
