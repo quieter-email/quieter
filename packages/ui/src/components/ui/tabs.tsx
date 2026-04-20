@@ -25,7 +25,7 @@ export const TabsTab = ({
 }: ComponentPropsWithoutRef<typeof TabsPrimitive.Tab>) => (
   <TabsPrimitive.Tab
     className={cn(
-      "squircle inline-flex min-h-8 min-w-0 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background data-disabled:pointer-events-none data-disabled:opacity-50 data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm",
+      "squircle inline-flex min-h-8 min-w-0 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background data-active:bg-background data-active:text-foreground data-active:shadow-sm data-disabled:pointer-events-none data-disabled:opacity-50",
       className,
     )}
     {...props}

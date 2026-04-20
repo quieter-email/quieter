@@ -619,7 +619,7 @@ export const MessageListSearch = ({
                           autoCapitalize="off"
                           autoCorrect="off"
                           className={cn(
-                            "[field-sizing:content] min-w-[1ch] bg-transparent text-foreground outline-none",
+                            "field-sizing-content min-w-[1ch] bg-transparent text-foreground outline-none",
                             {
                               "mr-1": index === 0,
                               "mx-1": index > 0,

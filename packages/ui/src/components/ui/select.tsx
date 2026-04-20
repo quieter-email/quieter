@@ -14,7 +14,7 @@ export const SelectBackdrop = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.Backdrop>) => (
   <SelectPrimitive.Backdrop
     className={cn(
-      "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity duration-150 ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
+      "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0",
       className,
     )}
     {...props}
@@ -26,7 +26,7 @@ export const SelectValue = ({
   ...props
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.Value>) => (
   <SelectPrimitive.Value
-    className={cn("min-w-0 flex-1 truncate data-[placeholder]:text-muted-foreground", className)}
+    className={cn("min-w-0 flex-1 truncate data-placeholder:text-muted-foreground", className)}
     {...props}
   />
 );
@@ -77,7 +77,7 @@ export const SelectContent = ({
     >
       <SelectPrimitive.Popup
         className={cn(
-          "z-50 min-w-52 origin-[var(--transform-origin)] overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] outline-none data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[instant]:transition-none data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
+          "z-50 min-w-52 origin-(--transform-origin) overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] outline-none data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
           className,
         )}
         {...props}
@@ -94,7 +94,7 @@ export const SelectScrollUpArrow = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollUpArrow>) => (
   <SelectPrimitive.ScrollUpArrow
     className={cn(
-      "flex h-7 items-center justify-center text-muted-foreground transition-opacity duration-150 ease-out data-[ending-style]:opacity-0 data-[instant]:transition-none data-[starting-style]:opacity-0",
+      "flex h-7 items-center justify-center text-muted-foreground transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-instant:transition-none data-starting-style:opacity-0",
       className,
     )}
     {...props}
@@ -109,7 +109,7 @@ export const SelectScrollDownArrow = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollDownArrow>) => (
   <SelectPrimitive.ScrollDownArrow
     className={cn(
-      "flex h-7 items-center justify-center text-muted-foreground transition-opacity duration-150 ease-out data-[ending-style]:opacity-0 data-[instant]:transition-none data-[starting-style]:opacity-0",
+      "flex h-7 items-center justify-center text-muted-foreground transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-instant:transition-none data-starting-style:opacity-0",
       className,
     )}
     {...props}

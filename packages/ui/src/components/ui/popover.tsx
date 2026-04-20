@@ -31,7 +31,7 @@ export const PopoverContent = ({
     >
       <PopoverPrimitive.Popup
         className={cn(
-          "z-50 max-w-sm min-w-52 origin-[var(--transform-origin)] rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] outline-none data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[instant]:transition-none data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
+          "z-50 max-w-sm min-w-52 origin-(--transform-origin) rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] outline-none data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
           className,
         )}
         {...props}
@@ -81,7 +81,7 @@ export const PopoverBackdrop = ({
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Backdrop>) => (
   <PopoverPrimitive.Backdrop
     className={cn(
-      "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity duration-150 ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
+      "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0",
       className,
     )}
     {...props}
