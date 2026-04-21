@@ -45,8 +45,8 @@ export const SpinWhileActive = ({ active, children }: SpinWhileActiveProps) => {
         }}
         transition={{
           duration: prefersReducedMotion ? 0 : 1,
-          ease: [0.7, 0, 0.3, 1],
-          rotate: { duration: prefersReducedMotion ? 0 : 1, ease: [0.7, 0, 0.3, 1] },
+          ease: [0.75, 0, 0.25, 1],
+          rotate: { duration: prefersReducedMotion ? 0 : 1, ease: [0.75, 0, 0.25, 1] },
         }}
       >
         {children}

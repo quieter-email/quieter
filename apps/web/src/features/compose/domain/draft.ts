@@ -64,18 +64,12 @@ export type ComposeDraftState = {
   updatedAt: number;
 };
 
-export type ComposeSessionState = {
-  activeDraft: ComposeDraftState;
-  lastDraft: ComposeDraftState | null;
-};
-
 type RuntimeBinary = {
   file: File;
   objectUrl: string;
 };
 
 const runtimeBinaryById = new Map<string, RuntimeBinary>();
-const isBrowser = typeof window !== "undefined";
 
 const createLocalId = () => crypto.randomUUID();
 const now = () => Date.now();
@@ -103,11 +97,6 @@ export const createEmptyComposeDraft = (): ComposeDraftState => ({
   updatedAt: now(),
 });
 
-export const createInitialComposeSessionState = (): ComposeSessionState => ({
-  activeDraft: createEmptyComposeDraft(),
-  lastDraft: null,
-});
-
 const cloneAttachment = <T extends ComposeAttachment | ComposeInlineImage>(attachment: T): T =>
   ({ ...attachment }) as T;
 
@@ -125,10 +114,96 @@ export const cloneComposeDraft = (draft: ComposeDraftState): ComposeDraftState =
   inlineImages: draft.inlineImages.map((image) => cloneAttachment(image)),
 });
 
-export const cloneComposeSessionState = (session: ComposeSessionState): ComposeSessionState => ({
-  activeDraft: cloneComposeDraft(session.activeDraft),
-  lastDraft: session.lastDraft ? cloneComposeDraft(session.lastDraft) : null,
-});
+const areReplyContextsEqual = (
+  left: ComposeReplyContext | null | undefined,
+  right: ComposeReplyContext | null | undefined,
+) => {
+  if (!left && !right) return true;
+  if (!left || !right) return false;
+
+  return (
+    left.threadId === right.threadId &&
+    left.messageHeaderId === right.messageHeaderId &&
+    left.references.length === right.references.length &&
+    left.references.every((reference, index) => reference === right.references[index])
+  );
+};
+
+const areDraftAnchorsEqual = (
+  left: ComposeDraftAnchor | null | undefined,
+  right: ComposeDraftAnchor | null | undefined,
+) => {
+  if (!left && !right) return true;
+  if (!left || !right) return false;
+
+  return (
+    left.sourceMessageId === right.sourceMessageId &&
+    left.sourceThreadId === right.sourceThreadId &&
+    left.sourceMessageHeaderId === right.sourceMessageHeaderId &&
+    left.seededBy === right.seededBy
+  );
+};
+
+const areAttachmentsEqual = (
+  left: readonly ComposeAttachment[],
+  right: readonly ComposeAttachment[],
+) => {
+  if (left.length !== right.length) return false;
+
+  return left.every((attachment, index) => {
+    const other = right[index];
+    if (!other) return false;
+
+    return (
+      attachment.id === other.id &&
+      attachment.name === other.name &&
+      attachment.mimeType === other.mimeType &&
+      attachment.size === other.size &&
+      attachment.gmailAttachmentId === other.gmailAttachmentId &&
+      attachment.isInline === other.isInline
+    );
+  });
+};
+
+const areInlineImagesEqual = (
+  left: readonly ComposeInlineImage[],
+  right: readonly ComposeInlineImage[],
+) => {
+  if (left.length !== right.length) return false;
+
+  return left.every((image, index) => {
+    const other = right[index];
+    if (!other) return false;
+
+    return (
+      image.id === other.id &&
+      image.name === other.name &&
+      image.mimeType === other.mimeType &&
+      image.size === other.size &&
+      image.gmailAttachmentId === other.gmailAttachmentId &&
+      image.isInline === other.isInline &&
+      image.contentId === other.contentId
+    );
+  });
+};
+
+export const haveComposeDraftPersistedFieldsChanged = (
+  current: ComposeDraftState,
+  next: ComposeDraftState,
+) => {
+  return !(
+    areDraftAnchorsEqual(current.draftAnchor, next.draftAnchor) &&
+    areReplyContextsEqual(current.replyContext, next.replyContext) &&
+    current.recipients.to === next.recipients.to &&
+    current.recipients.cc === next.recipients.cc &&
+    current.recipients.bcc === next.recipients.bcc &&
+    current.subject === next.subject &&
+    current.bodyHtml === next.bodyHtml &&
+    current.bodyText === next.bodyText &&
+    areAttachmentsEqual(current.attachments, next.attachments) &&
+    areInlineImagesEqual(current.inlineImages, next.inlineImages)
+  );
+};
 
 const revokeRuntimeBinary = (id: string) => {
   const runtime = runtimeBinaryById.get(id);
@@ -169,7 +244,7 @@ export const validateRecipientInput = (value: string): string[] => findInvalidMa
 
 const htmlToText = (html: string): string => {
   if (!html) return "";
-  if (!isBrowser) {
+  if (typeof window === "undefined") {
     return html
       .replace(/<[^>]+>/g, " ")
       .replace(/\s+/g, " ")
@@ -184,7 +259,7 @@ const hasMeaningfulBodyHtml = (bodyHtml: string): boolean => {
   const normalizedHtml = bodyHtml.trim();
   if (!normalizedHtml) return false;
 
-  if (!isBrowser) {
+  if (typeof window === "undefined") {
     return /<(img|video|audio|iframe)\b/i.test(normalizedHtml);
   }
 
@@ -297,7 +372,7 @@ const parseDraftResponse = (response: {
 });
 
 const findReferencedInlineImageIds = (html: string): Set<string> => {
-  if (!html || !isBrowser) return new Set();
+  if (!html || typeof window === "undefined") return new Set();
   const doc = new DOMParser().parseFromString(html, "text/html");
   const ids = new Set<string>();
 
@@ -313,7 +388,7 @@ const updateInlineImageHtml = (
   html: string,
   inlineImages: readonly ComposeInlineImage[],
 ): string => {
-  if (!html || !isBrowser) return html;
+  if (!html || typeof window === "undefined") return html;
 
   const inlineImageById = new Map(inlineImages.map((image) => [image.id, image] as const));
   const inlineImageByContentId = new Map(
@@ -506,7 +581,7 @@ export const attachInlineImagesToHtml = (
   draft: ComposeDraftState,
   images: ComposeInlineImage[],
 ): string => {
-  if (!isBrowser) return draft.bodyHtml;
+  if (typeof window === "undefined") return draft.bodyHtml;
 
   const doc = new DOMParser().parseFromString(draft.bodyHtml || "<p></p>", "text/html");
   const body = doc.body;
@@ -529,25 +604,4 @@ export const attachInlineImagesToHtml = (
   }
 
   return body.innerHTML.trim();
-};
-
-export const buildFreshActiveComposeSession = (
-  session: ComposeSessionState,
-): ComposeSessionState => {
-  const activeDraft = cloneComposeDraft(session.activeDraft);
-  const nextLastDraft = hasComposeDraftContent(activeDraft) ? activeDraft : session.lastDraft;
-
-  return {
-    activeDraft: createEmptyComposeDraft(),
-    lastDraft: nextLastDraft ? cloneComposeDraft(nextLastDraft) : null,
-  };
-};
-
-export const swapComposeDrafts = (session: ComposeSessionState): ComposeSessionState => {
-  if (!session.lastDraft) return session;
-
-  return {
-    activeDraft: cloneComposeDraft(session.lastDraft),
-    lastDraft: cloneComposeDraft(session.activeDraft),
-  };
 };

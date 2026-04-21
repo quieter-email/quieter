@@ -11,12 +11,18 @@ import { useNavigate } from "@tanstack/react-router";
 import { useSelector } from "@tanstack/react-store";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
-import { type ComposeDraftState, buildComposeDraftFromSavedDraftMessage } from "~/features/compose";
+import {
+  type ComposeDraftState,
+  buildComposeDraftFromSavedDraftMessage,
+  cloneComposeDraft,
+  hydrateComposeDraftRuntime,
+} from "~/features/compose";
 import { type ComposeDialogHandle, ComposeDialog } from "~/features/compose";
 import { MessageList } from "~/features/message-list/components/message-list";
 import { MessageDetail } from "~/features/message-thread/components/message-detail";
 import { MailSidebar } from "~/features/navigation/components/mail-sidebar";
 import { authClient } from "~/lib/auth";
+import { getErrorMessage } from "~/lib/errors";
 import {
   type ListMessagesPageResult,
   type MailboxCategory,
@@ -149,6 +155,20 @@ type MailboxActionHandlerArgs = {
   unsubscribeFromMessageMutation: (messageId: string) => Promise<void>;
   mailboxId: string;
 };
+
+const mergeHydratedComposeDraft = (
+  pendingDraft: ComposeDraftState,
+  hydratedDraft: ComposeDraftState,
+): ComposeDraftState => ({
+  ...hydratedDraft,
+  localId: pendingDraft.localId,
+  draftAnchor: pendingDraft.draftAnchor ?? hydratedDraft.draftAnchor ?? null,
+  replyContext: pendingDraft.replyContext ?? hydratedDraft.replyContext ?? null,
+  recipients: pendingDraft.recipients,
+  subject: pendingDraft.subject,
+  bodyHtml: pendingDraft.bodyHtml,
+  bodyText: pendingDraft.bodyText,
+});
 
 const createMailboxActionHandlers = ({
   activeMailbox,
@@ -863,13 +883,32 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     mailboxId: selectedMailboxId ?? "",
   });
 
+  const openComposeDraft = async (draft: ComposeDraftState) => {
+    const pendingDraft = cloneComposeDraft(draft);
+    if (!selectedMailboxId || !pendingDraft.draftId) {
+      composeDialogRef.current?.openDraft(pendingDraft);
+      return;
+    }
+
+    try {
+      const hydratedDraft = await hydrateComposeDraftRuntime(selectedMailboxId, pendingDraft);
+      composeDialogRef.current?.openDraft(mergeHydratedComposeDraft(pendingDraft, hydratedDraft));
+    } catch (error) {
+      composeDialogRef.current?.openDraft({
+        ...pendingDraft,
+        errorMessage: getErrorMessage(error, "Could not load that draft."),
+        saveStatus: "error",
+      });
+    }
+  };
+
   const openDraft = (message: MessageListItem) => {
     if (!message.draftId) {
       return;
     }
 
     void setMailboxSearch({ messageId: null });
-    composeDialogRef.current?.openDraft(buildComposeDraftFromSavedDraftMessage(message));
+    void openComposeDraft(buildComposeDraftFromSavedDraftMessage(message));
   };
 
   const activateMessage = (messageId: string) => {
@@ -974,7 +1013,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
         void unmarkThreadsAsSpam(threads);
       },
       onComposeDraftRequested: (draft) => {
-        composeDialogRef.current?.openDraft(draft);
+        void openComposeDraft(draft);
       },
       onComposeNewMail: () => {
         composeDialogRef.current?.openNewMail();
@@ -1067,7 +1106,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         mailboxId={composeDialogMailboxId}
         ref={composeDialogRef}
       />
-      <LogoDevFooter />
     </>
   );
 };
@@ -1241,21 +1279,5 @@ const MailboxWorkspaceView = ({
         </div>
       </div>
     </main>
-  );
-};
-
-const LogoDevFooter = () => {
-  return (
-    <footer className="fixed right-4 bottom-4 px-3 py-1.5 text-[10px] text-muted-foreground">
-      <a
-        className="transition-colors hover:text-foreground"
-        href="https://logo.dev"
-        rel="noreferrer"
-        target="_blank"
-        title="Logo API"
-      >
-        Logos provided by Logo.dev
-      </a>
-    </footer>
   );
 };

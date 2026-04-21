@@ -615,11 +615,13 @@ const SingleMessageCard = ({
 };
 
 const ThreadMessageList = ({
+  allThreadMessages,
   currentUserEmail,
   mailboxId,
   messages,
   onComposeDraftRequested,
 }: {
+  allThreadMessages: MessageListItem[];
   currentUserEmail?: string | null;
   mailboxId: string;
   messages: MessageListItem[];
@@ -633,7 +635,7 @@ const ThreadMessageList = ({
     <div className="flex flex-col gap-3">
       {messages.map((threadMessage) => {
         const isExpanded = expandedMessageId === threadMessage.id;
-        const linkedDraftMessage = findLinkedDraftForMessage(messages, threadMessage);
+        const linkedDraftMessage = findLinkedDraftForMessage(allThreadMessages, threadMessage);
 
         return (
           <ThreadMessageCard
@@ -788,6 +790,7 @@ export const MessageView = ({
 
       {!isSingleMessageThread ? (
         <ThreadMessageList
+          allThreadMessages={threadMessages}
           currentUserEmail={currentUserEmail}
           key={message.threadId}
           mailboxId={mailboxId}
