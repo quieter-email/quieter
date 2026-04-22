@@ -20,7 +20,7 @@ import {
   SelectValue,
   cn,
   toast,
-} from "@quietr/ui";
+} from "@quieter/ui";
 import { mutationOptions, useMutation } from "@tanstack/react-query";
 import { authClient } from "~/lib/auth";
 import { getErrorMessage, unwrapResultError } from "~/lib/errors";

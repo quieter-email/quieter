@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { ORPCError } from "@orpc/client";
-import { rateLimitedErrorDataSchema } from "@quietr/orpc/errors";
+import { rateLimitedErrorDataSchema } from "@quieter/orpc/errors";
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
 import { persistQueryByKey } from "~/lib/query-persister";

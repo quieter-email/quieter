@@ -8,7 +8,7 @@ import {
   MailSend02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
-import { Button, cn } from "@quietr/ui";
+import { Button, cn } from "@quieter/ui";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 
 const SIDEBAR_MAILBOX_ITEMS: ReadonlyArray<{

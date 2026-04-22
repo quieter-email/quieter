@@ -12,16 +12,13 @@ const GET_METHOD_PATHS = new Set([
   "auth.getEmailPreview",
   "auth.getUserStatus",
   "mail.getAttachment",
-  "mail.getDomainSetup",
   "mail.getGoogleScopeRepairTarget",
   "mail.getMailboxSyncDelta",
   "mail.getMessageInspector",
   "mail.getThread",
-  "mail.listDomains",
   "mail.listLabels",
   "mail.listMailboxesForActiveOrganization",
   "mail.listMessages",
-  "mail.listStoredMessages",
   "mail.loadDraft",
 ]);
 

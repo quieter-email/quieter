@@ -77,11 +77,11 @@ function GoogleScopeRepairRouteComponent() {
             Reconnect {repairTarget.emailAddress}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Quietr needs Google permissions for {repairTarget.emailAddress}.
+            Quieter needs Google permissions for {repairTarget.emailAddress}.
           </p>
           {returned ? (
             <p className="text-sm text-muted-foreground">
-              If Google shows multiple accounts, choose {repairTarget.emailAddress}. Quietr will
+              If Google shows multiple accounts, choose {repairTarget.emailAddress}. Quieter will
               keep asking until this mailbox has the required permissions.
             </p>
           ) : null}

@@ -8,7 +8,7 @@ import {
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
-import { cn } from "@quietr/ui";
+import { cn } from "@quieter/ui";
 import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 import {
   normalizeLabelSelectionKey,

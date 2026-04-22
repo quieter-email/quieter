@@ -1,5 +1,5 @@
 {
-  "name": "@quietr/auth",
+  "name": "@quieter/auth",
   "private": true,
   "type": "module",
   "exports": {
@@ -18,12 +18,12 @@
   "dependencies": {
     "@better-auth/core": "catalog:",
     "@better-auth/passkey": "catalog:",
-    "@quietr/database": "workspace:*",
+    "@quieter/database": "workspace:*",
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:"
   },
   "devDependencies": {
-    "@quietr/config": "workspace:*",
+    "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
     "oxfmt": "catalog:",

@@ -1,4 +1,4 @@
-import { db, invitation, member, organization, session, user } from "@quietr/database";
+import { db, invitation, member, organization, session, user } from "@quieter/database";
 import { APIError } from "better-auth/api";
 import { and, eq, inArray, or } from "drizzle-orm";
 

@@ -3,7 +3,7 @@
 import { ThemeProvider, useTheme } from "next-themes";
 import { useSyncExternalStore, type PropsWithChildren } from "react";
 
-export const COLOR_MODE_STORAGE_KEY = "quietr-color-mode";
+export const COLOR_MODE_STORAGE_KEY = "quieter-color-mode";
 
 export type ColorMode = "light" | "dark";
 export type ConfigColorMode = ColorMode | "system";

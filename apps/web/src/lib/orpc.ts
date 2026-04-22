@@ -1,8 +1,8 @@
 import type { RouterClient } from "@orpc/server";
-import type { AppRouter } from "@quietr/orpc";
+import type { AppRouter } from "@quieter/orpc";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
-import { createOrpcClient } from "@quietr/orpc";
-import { createOrpcServerClient } from "@quietr/orpc/server-client";
+import { createOrpcClient } from "@quieter/orpc";
+import { createOrpcServerClient } from "@quieter/orpc/server-client";
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 

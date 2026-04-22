@@ -2,7 +2,7 @@ import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { authRelations, tables } from "./schema";
 
-const FALLBACK_DATABASE_URL = "postgresql://quietr:quietr@127.0.0.1:5432/quietr";
+const FALLBACK_DATABASE_URL = "postgresql://quieter:quieter@127.0.0.1:5432/quieter";
 const databaseUrl = process.env.DATABASE_URL?.trim() || FALLBACK_DATABASE_URL;
 
 export const assertDatabaseConfigured = () => {

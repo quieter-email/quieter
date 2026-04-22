@@ -1,5 +1,5 @@
 {
-  "extends": "@quietr/config/tsconfig/base.json",
+  "extends": "@quieter/config/tsconfig/base.json",
   "compilerOptions": {
     "lib": ["ES2022", "DOM"],
     "types": ["bun", "node"]

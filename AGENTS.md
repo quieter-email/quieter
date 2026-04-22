@@ -6,13 +6,13 @@
 - Client state: TanStack Query, TanStack Store, TanStack Hotkeys
 - API: oRPC + `@orpc/tanstack-query`
 - DB: Drizzle + Postgres (Neon HTTP)
-- UI: Tailwind CSS 4, `@quietr/ui`, Base UI, Vaul, Sonner, Hugeicons, Tiptap
+- UI: Tailwind CSS 4, `@quieter/ui`, Base UI, Vaul, Sonner, Hugeicons, Tiptap
 - Lint/format/typecheck: Oxlint, Oxfmt, `tsgo`
 
 ## Boundaries
 
 - `apps/*` consume shared logic via package imports.
-- `apps/*` consume reusable UI through `@quietr/ui`.
+- `apps/*` consume reusable UI through `@quieter/ui`.
 - Do not import Base UI, Vaul, or Sonner directly in app code unless extending `packages/ui` in the same change.
 - `packages/orpc` is the boundary between app and DB logic.
 - `packages/database` owns schema and migrations.
@@ -20,7 +20,7 @@
 
 ## Product Invariants
 
-- Quietr is an email client.
+- Quieter is an email client.
 - Gmail access is resolved through the selected mailbox in the active organization.
 - `member.defaultMailboxId` pins the per-org default mailbox. Invalid or missing `mailboxId` should resolve to that mailbox.
 - Better Auth organization plugin is the source of truth for orgs. Every user has a personal org. Gmail mailboxes are first-class mailbox records.
@@ -31,8 +31,8 @@
 
 ## Data + Routing
 
-- App router: [apps/web/src/router.tsx](/E:/Coding/quietr/apps/web/src/router.tsx)
-- Root providers/document: [apps/web/src/routes/__root.tsx](/E:/Coding/quietr/apps/web/src/routes/__root.tsx)
+- App router: [apps/web/src/router.tsx](/E:/Coding/quieter/apps/web/src/router.tsx)
+- Root providers/document: [apps/web/src/routes/__root.tsx](/E:/Coding/quieter/apps/web/src/routes/__root.tsx)
 - API handlers stay under `apps/web/src/routes/api/**`.
 - Use route loaders / TanStack Start server functions for auth guards and request-scoped SSR data.
 - Validate search params through shared schemas in `apps/web/src/lib/search-params.ts`.
@@ -52,12 +52,13 @@
 
 ## Mail Infra
 
-- Mail domain registration, inbound, and outbound flow through oRPC + SST + SES/S3/SNS.
-- `MAIL_INGEST_TOKEN` authenticates mail ingress.
-- `MAIL_SEND_TOKEN` authenticates mail outbound.
-- `MAIL_S3_BUCKET` is the default inbound bucket.
+- SST owns the standalone SES/S3/SNS mail infrastructure.
+- The mail stack is not currently wired into the web app, oRPC, or app-owned DB records.
+- Domain registration should not be added back without rebuilding the integration intentionally.
+- Mail ingress/outbound auth tokens come from SST linked secrets.
+- Inbound mail is stored under the fixed `mail/inbound/...` key prefix.
 - `AWS_REGION` or `AWS_DEFAULT_REGION` is required for the mail S3 uploader.
-- Local SES registration config can fall back to `.sst/outputs.json`.
+- Run the combined local dev session with `bun run dev`; Turbo runs the web app and SST mail stack side by side. Run direct SST commands through `bun run sst ...`; the wrapper defaults to `sst.config.ts` and the `mail-dev` stage.
 
 ## Schema + Generated Files
 
@@ -69,11 +70,11 @@
 
 ## Style Rules
 
-- Never couple app code directly to the DB; go through `@quietr/orpc`.
+- Never couple app code directly to the DB; go through `@quieter/orpc`.
 - Keep types strict. Avoid `any` and unnecessary casts.
 - Use object syntax for conditional classes inside `cn(...)`.
 - Avoid unnecessary `useEffect`, especially for resetting or mirroring local UI state.
-- Icon-only controls should use the shared tooltip wrapper from `@quietr/ui` and a concise `aria-label`.
+- Icon-only controls should use the shared tooltip wrapper from `@quieter/ui` and a concise `aria-label`.
 - For incremental UI refinements, preserve existing layout, density, and hierarchy unless asked to redesign.
 - Prefer colocated one-off UI logic over extracting helpers used once.
 - Inline one-off schemas or validators used only once or twice instead of extracting a named constant for them.

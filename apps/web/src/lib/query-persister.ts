@@ -6,7 +6,7 @@ import {
 
 const QUERY_PERSIST_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
 const QUERY_PERSIST_BUSTER = "v2";
-const QUERY_PERSIST_PREFIX = "quietr-query";
+const QUERY_PERSIST_PREFIX = "quieter-query";
 
 type BrowserQueryStorage = AsyncStorage<string>;
 

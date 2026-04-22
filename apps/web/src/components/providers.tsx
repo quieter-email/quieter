@@ -1,6 +1,6 @@
 "use client";
 
-import { ColorModeProvider, Toaster } from "@quietr/ui";
+import { ColorModeProvider, Toaster } from "@quieter/ui";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "motion/react";
 import { type PropsWithChildren, useState } from "react";

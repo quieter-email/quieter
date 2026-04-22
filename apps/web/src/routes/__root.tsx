@@ -33,7 +33,7 @@ export const Route = createRootRoute({
         name: "viewport",
       },
       {
-        title: "quietr",
+        title: "quieter",
       },
     ],
   }),

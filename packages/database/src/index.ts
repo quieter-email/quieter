@@ -4,8 +4,6 @@ export {
   authRelations,
   invitation,
   mailbox,
-  mailDomain,
-  mailMessage,
   member,
   organization,
   passkey,

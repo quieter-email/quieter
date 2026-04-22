@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { composeDraftInputSchema, QUIETR_DRAFT_HEADER_NAMES, splitMailAddressList } from "./schema";
+import {
+  composeDraftInputSchema,
+  QUIETER_DRAFT_HEADER_NAMES,
+  splitMailAddressList,
+} from "./schema";
 
 type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
 
@@ -65,27 +69,27 @@ const collectReplyReferences = (draft: ComposeDraftInput) => {
   return references;
 };
 
-const addQuietrDraftHeaders = (headers: string[], draft: ComposeDraftInput) => {
+const addQuieterDraftHeaders = (headers: string[], draft: ComposeDraftInput) => {
   if (!draft.draftAnchor) {
     return;
   }
 
   headers.push(
-    `${QUIETR_DRAFT_HEADER_NAMES.sourceMessageId}: ${draft.draftAnchor.sourceMessageId}`,
+    `${QUIETER_DRAFT_HEADER_NAMES.sourceMessageId}: ${draft.draftAnchor.sourceMessageId}`,
   );
-  headers.push(`${QUIETR_DRAFT_HEADER_NAMES.sourceThreadId}: ${draft.draftAnchor.sourceThreadId}`);
-  headers.push(`${QUIETR_DRAFT_HEADER_NAMES.seededBy}: ${draft.draftAnchor.seededBy}`);
+  headers.push(`${QUIETER_DRAFT_HEADER_NAMES.sourceThreadId}: ${draft.draftAnchor.sourceThreadId}`);
+  headers.push(`${QUIETER_DRAFT_HEADER_NAMES.seededBy}: ${draft.draftAnchor.seededBy}`);
 
   if (draft.draftAnchor.sourceMessageHeaderId?.trim()) {
     headers.push(
-      `${QUIETR_DRAFT_HEADER_NAMES.sourceMessageHeaderId}: ${draft.draftAnchor.sourceMessageHeaderId.trim()}`,
+      `${QUIETER_DRAFT_HEADER_NAMES.sourceMessageHeaderId}: ${draft.draftAnchor.sourceMessageHeaderId.trim()}`,
     );
   }
 };
 
 export const buildMimeMessage = async (
   draft: ComposeDraftInput,
-  options?: { includeQuietrDraftHeaders?: boolean },
+  options?: { includeQuieterDraftHeaders?: boolean },
 ) => {
   const headers: string[] = [];
   const toRecipients = collectRecipients(draft.recipients.to);
@@ -103,8 +107,8 @@ export const buildMimeMessage = async (
   if (replyReferences.length > 0) {
     headers.push(`References: ${replyReferences.join(" ")}`);
   }
-  if (options?.includeQuietrDraftHeaders) {
-    addQuietrDraftHeaders(headers, draft);
+  if (options?.includeQuieterDraftHeaders) {
+    addQuieterDraftHeaders(headers, draft);
   }
   headers.push("MIME-Version: 1.0");
 

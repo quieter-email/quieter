@@ -1,5 +1,5 @@
 {
-  "name": "@quietr/web",
+  "name": "@quieter/web",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,10 +19,10 @@
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/tanstack-query": "catalog:",
-    "@quietr/auth": "workspace:*",
-    "@quietr/database": "workspace:*",
-    "@quietr/orpc": "workspace:*",
-    "@quietr/ui": "workspace:*",
+    "@quieter/auth": "workspace:*",
+    "@quieter/database": "workspace:*",
+    "@quieter/orpc": "workspace:*",
+    "@quieter/ui": "workspace:*",
     "@tanstack/query-core": "catalog:",
     "@tanstack/query-persist-client-core": "catalog:",
     "@tanstack/react-form": "catalog:",
@@ -53,7 +53,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@quietr/config": "workspace:*",
+    "@quieter/config": "workspace:*",
     "@tailwindcss/vite": "catalog:",
     "@types/bun": "catalog:",
     "@types/react": "catalog:",

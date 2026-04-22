@@ -37,7 +37,7 @@ export const Calendar = ({
 }: CalendarProps) => (
   <DayPicker
     animate={animate}
-    className={cn("quietr-calendar w-fit", className)}
+    className={cn("quieter-calendar w-fit", className)}
     classNames={{
       ...defaultClassNames,
       root: cn("w-fit text-sm text-foreground", defaultClassNames.root),

@@ -1,5 +1,5 @@
 {
-  "name": "@quietr/config",
+  "name": "@quieter/config",
   "private": true,
   "type": "module",
   "exports": {

@@ -1,7 +1,7 @@
 "use client";
 import { Key02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, TextField, TextFieldInput } from "@quietr/ui";
+import { Button, TextField, TextFieldInput } from "@quieter/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { mutationOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";

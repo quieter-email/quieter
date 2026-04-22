@@ -1,8 +1,8 @@
 {
-  "extends": "@quietr/config/tsconfig/base.json",
+  "extends": "@quieter/config/tsconfig/base.json",
   "compilerOptions": {
     "lib": ["ES2022", "DOM"],
     "types": ["node"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "sst-env.d.ts"]
 }

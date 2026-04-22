@@ -21,7 +21,7 @@ import {
   DialogTitle,
   IconButtonTooltip,
   cn,
-} from "@quietr/ui";
+} from "@quieter/ui";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SenderAvatar } from "~/components/sender-avatar";

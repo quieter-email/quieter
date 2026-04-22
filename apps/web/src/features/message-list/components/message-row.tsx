@@ -1,7 +1,7 @@
 "use client";
 
-import { splitMailAddressList } from "@quietr/orpc/compose";
-import { cn } from "@quietr/ui";
+import { splitMailAddressList } from "@quieter/orpc/compose";
+import { cn } from "@quieter/ui";
 import { useQuery } from "@tanstack/react-query";
 import { type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 import type { MailboxCategory } from "~/lib/gmail/gmail";

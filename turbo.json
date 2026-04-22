@@ -59,10 +59,6 @@
     },
     "sst:deploy": {
       "env": [
-        "DATABASE_URL",
-        "MAIL_S3_PREFIX",
-        "EMAIL_S3_PREFIX",
-        "MANAGED_MAIL_S3_PREFIX",
         "AWS_REGION",
         "AWS_DEFAULT_REGION",
         "AWS_PROFILE",
@@ -79,10 +75,6 @@
     },
     "sst:deploy:production": {
       "env": [
-        "DATABASE_URL",
-        "MAIL_S3_PREFIX",
-        "EMAIL_S3_PREFIX",
-        "MANAGED_MAIL_S3_PREFIX",
         "AWS_REGION",
         "AWS_DEFAULT_REGION",
         "AWS_PROFILE",
@@ -99,10 +91,6 @@
     },
     "sst:diff": {
       "env": [
-        "DATABASE_URL",
-        "MAIL_S3_PREFIX",
-        "EMAIL_S3_PREFIX",
-        "MANAGED_MAIL_S3_PREFIX",
         "AWS_REGION",
         "AWS_DEFAULT_REGION",
         "AWS_PROFILE",
@@ -119,10 +107,6 @@
     },
     "sst:remove": {
       "env": [
-        "DATABASE_URL",
-        "MAIL_S3_PREFIX",
-        "EMAIL_S3_PREFIX",
-        "MANAGED_MAIL_S3_PREFIX",
         "AWS_REGION",
         "AWS_DEFAULT_REGION",
         "AWS_PROFILE",
@@ -139,10 +123,6 @@
     },
     "sst:remove:production": {
       "env": [
-        "DATABASE_URL",
-        "MAIL_S3_PREFIX",
-        "EMAIL_S3_PREFIX",
-        "MANAGED_MAIL_S3_PREFIX",
         "AWS_REGION",
         "AWS_DEFAULT_REGION",
         "AWS_PROFILE",
@@ -163,6 +143,16 @@
         "GOOGLE_CLIENT_ID",
         "GOOGLE_CLIENT_SECRET",
         "DATABASE_URL",
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+        "AWS_PROFILE",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_ROLE_ARN",
+        "AWS_WEB_IDENTITY_TOKEN_FILE",
+        "AWS_SHARED_CREDENTIALS_FILE",
+        "AWS_CONFIG_FILE",
         "VITE_LOGO_DEV_PUBLISHABLE_KEY",
         "NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY"
       ],
@@ -171,10 +161,6 @@
     },
     "sst:dev": {
       "env": [
-        "DATABASE_URL",
-        "MAIL_S3_PREFIX",
-        "EMAIL_S3_PREFIX",
-        "MANAGED_MAIL_S3_PREFIX",
         "AWS_REGION",
         "AWS_DEFAULT_REGION",
         "AWS_PROFILE",

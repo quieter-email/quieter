@@ -1,7 +1,7 @@
 import "@tanstack/react-start/server-only";
-import type { RouterOutputs } from "@quietr/orpc";
-import { getSessionWithOrganization } from "@quietr/auth";
-import { createOrpcServerClient } from "@quietr/orpc/server-client";
+import type { RouterOutputs } from "@quieter/orpc";
+import { getSessionWithOrganization } from "@quieter/auth";
+import { createOrpcServerClient } from "@quieter/orpc/server-client";
 
 export type SessionUser = {
   email: string;

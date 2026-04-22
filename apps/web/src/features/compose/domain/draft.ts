@@ -1,12 +1,12 @@
-import type { ComposeDraftAnchor } from "@quietr/orpc/compose";
-import { findInvalidMailAddresses } from "@quietr/orpc/compose";
+import type { ComposeDraftAnchor } from "@quieter/orpc/compose";
+import { findInvalidMailAddresses } from "@quieter/orpc/compose";
 import { loadAttachmentFromServer } from "~/lib/gmail/attachments";
 import { rpc } from "~/lib/orpc";
 export { loadAttachmentFromServer } from "~/lib/gmail/attachments";
 
 const MAX_TOTAL_ATTACHMENT_BYTES = 24 * 1024 * 1024;
 const MAX_VISIBLE_INLINE_DRAFTS = 2;
-const CONTENT_ID_PREFIX = "quietr-inline";
+const CONTENT_ID_PREFIX = "quieter-inline";
 
 export type ComposeSaveStatus = "idle" | "saving" | "saved" | "error" | "sending" | "discarding";
 

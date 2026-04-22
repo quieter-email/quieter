@@ -11,7 +11,7 @@ import {
   TextUnderlineIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { cn, IconButtonTooltip } from "@quietr/ui";
+import { cn, IconButtonTooltip } from "@quieter/ui";
 import FileHandler from "@tiptap/extension-file-handler";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";

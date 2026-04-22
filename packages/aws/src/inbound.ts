@@ -1,15 +1,9 @@
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import {
-  buildMailObjectKey,
-  createMailMessage,
-  findMailDomainByRecipients,
-  findMailMessageByProviderMessageId,
-} from "@quietr/orpc/mail-service";
+import { Resource } from "sst";
 import { z } from "zod";
 import {
   getBearerToken,
   parseEventJson,
-  readConfiguredEnv,
   toJson,
   type LambdaFunctionUrlEvent,
   type LambdaFunctionUrlResponse,
@@ -31,20 +25,6 @@ const inboundPayloadSchema = z
     path: ["rawMime"],
   });
 
-const getInboundToken = () => {
-  const token = readConfiguredEnv(
-    "MAIL_INGEST_TOKEN",
-    "EMAIL_INGEST_TOKEN",
-    "MANAGED_MAIL_INGEST_TOKEN",
-  );
-
-  if (!token) {
-    throw new Error("MAIL_INGEST_TOKEN environment variable is missing.");
-  }
-
-  return token;
-};
-
 let s3Client: S3Client | null = null;
 
 const getS3Client = () => {
@@ -55,15 +35,13 @@ const getS3Client = () => {
   return s3Client;
 };
 
-const toNormalizedRecipients = (recipients: string[]) =>
-  Array.from(
-    new Set(recipients.map((recipient) => recipient.trim().toLowerCase()).filter(Boolean)),
-  );
-
-const getRawMimeBytes = (input: z.infer<typeof inboundPayloadSchema>) =>
-  input.rawMimeBase64
-    ? Buffer.from(input.rawMimeBase64, "base64")
-    : Buffer.from(input.rawMime ?? "", "utf8");
+const getMailObjectKey = (receivedAt: Date) =>
+  `mail/inbound/${String(receivedAt.getUTCFullYear())}/${String(
+    receivedAt.getUTCMonth() + 1,
+  ).padStart(
+    2,
+    "0",
+  )}/${String(receivedAt.getUTCDate()).padStart(2, "0")}/${crypto.randomUUID()}.eml`;
 
 export const handler = async (
   event: LambdaFunctionUrlEvent,
@@ -82,7 +60,7 @@ export const handler = async (
 
     const bearerToken = getBearerToken(event.headers);
 
-    if (!bearerToken || bearerToken !== getInboundToken()) {
+    if (!bearerToken || bearerToken !== Resource.MailIngestToken.value) {
       return toJson(
         {
           error: "Unauthorized",
@@ -103,69 +81,29 @@ export const handler = async (
       );
     }
 
-    const recipients = toNormalizedRecipients(parsed.data.recipients);
-    const mailDomain = await findMailDomainByRecipients(recipients);
-
-    if (!mailDomain) {
-      return toJson(
-        {
-          error: "No active mail domain matched the recipients.",
-        },
-        404,
-      );
-    }
-
-    const providerMessageId = parsed.data.providerMessageId?.trim() || null;
-    if (providerMessageId) {
-      const existingMessage = await findMailMessageByProviderMessageId({
-        mailDomainId: mailDomain.id,
-        providerMessageId,
-      });
-
-      if (existingMessage) {
-        return toJson({
-          duplicate: true,
-          messageId: existingMessage.id,
-          s3Bucket: existingMessage.s3Bucket,
-          s3Key: existingMessage.s3Key,
-          stored: false,
-        });
-      }
-    }
-
-    const receivedAt = parsed.data.receivedAt ?? new Date();
-    const rawMimeBytes = getRawMimeBytes(parsed.data);
-    const s3Key = buildMailObjectKey(mailDomain, receivedAt);
-
     await getS3Client().send(
       new PutObjectCommand({
-        Body: rawMimeBytes,
-        Bucket: mailDomain.s3Bucket,
+        Body: parsed.data.rawMimeBase64
+          ? Buffer.from(parsed.data.rawMimeBase64, "base64")
+          : Buffer.from(parsed.data.rawMime ?? "", "utf8"),
+        Bucket: Resource.MailBucket.name,
         ContentType: "message/rfc822",
-        Key: s3Key,
+        Key: getMailObjectKey(parsed.data.receivedAt ?? new Date()),
       }),
     );
 
-    const storedMessage = await createMailMessage({
-      mailDomainId: mailDomain.id,
-      mailFrom: parsed.data.mailFrom ?? null,
-      messageIdHeader: parsed.data.messageIdHeader ?? null,
-      organizationId: mailDomain.organizationId,
-      providerMessageId,
-      rawSizeBytes: rawMimeBytes.byteLength,
-      receivedAt,
-      recipients,
-      s3Bucket: mailDomain.s3Bucket,
-      s3Key,
-      subject: parsed.data.subject ?? null,
-    });
-
     return toJson(
       {
-        domain: mailDomain.domain,
-        messageId: storedMessage.id,
-        s3Bucket: storedMessage.s3Bucket,
-        s3Key: storedMessage.s3Key,
+        providerMessageId: parsed.data.providerMessageId?.trim() || null,
+        recipients: Array.from(
+          new Set(
+            parsed.data.recipients
+              .map((recipient) => recipient.trim().toLowerCase())
+              .filter(Boolean),
+          ),
+        ),
+        s3Bucket: Resource.MailBucket.name,
+        s3Key: getMailObjectKey(parsed.data.receivedAt ?? new Date()),
         stored: true,
       },
       201,

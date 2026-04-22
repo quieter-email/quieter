@@ -21,7 +21,7 @@ import {
   DropdownMenuTrigger,
   IconButtonTooltip,
   toast,
-} from "@quietr/ui";
+} from "@quieter/ui";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";

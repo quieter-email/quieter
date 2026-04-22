@@ -2,7 +2,7 @@
 
 import { ComputerIcon, Moon01Icon, Sun01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, useColorMode } from "@quietr/ui";
+import { Button, useColorMode } from "@quieter/ui";
 
 export const GeneralSettingsPanel = () => {
   const { configColorMode, cycleColorMode, isMounted } = useColorMode();

@@ -2,7 +2,7 @@
 
 import { Attachment01Icon, Download01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { cn } from "@quietr/ui";
+import { cn } from "@quieter/ui";
 import { useState } from "react";
 import type { MessageAttachment } from "~/lib/gmail/gmail";
 import { getErrorMessage } from "~/lib/errors";

@@ -7,7 +7,7 @@ import {
   findRenderablePart,
 } from "./gmail-message-content";
 import { parseDraftAnchorFromHeaderReader } from "./gmail/compose/draft-anchor";
-import { QUIETR_DRAFT_HEADER_NAMES, type ComposeDraftAnchor } from "./gmail/compose/schema";
+import { QUIETER_DRAFT_HEADER_NAMES, type ComposeDraftAnchor } from "./gmail/compose/schema";
 import { getSenderAvatarUrls } from "./sender-avatar";
 
 export const MAILBOX_LABELS = {
@@ -316,10 +316,10 @@ const GMAIL_MESSAGE_METADATA_HEADERS = [
   "Message-ID",
   "References",
   "List-Unsubscribe",
-  QUIETR_DRAFT_HEADER_NAMES.seededBy,
-  QUIETR_DRAFT_HEADER_NAMES.sourceMessageHeaderId,
-  QUIETR_DRAFT_HEADER_NAMES.sourceMessageId,
-  QUIETR_DRAFT_HEADER_NAMES.sourceThreadId,
+  QUIETER_DRAFT_HEADER_NAMES.seededBy,
+  QUIETER_DRAFT_HEADER_NAMES.sourceMessageHeaderId,
+  QUIETER_DRAFT_HEADER_NAMES.sourceMessageId,
+  QUIETER_DRAFT_HEADER_NAMES.sourceThreadId,
 ] as const;
 const GMAIL_MESSAGE_METADATA_FIELDS =
   "id,threadId,labelIds,snippet,historyId,internalDate,payload(headers(name,value))";

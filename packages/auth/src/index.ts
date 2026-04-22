@@ -1,5 +1,5 @@
 import { passkey } from "@better-auth/passkey";
-import { db, member } from "@quietr/database";
+import { db, member } from "@quieter/database";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
@@ -16,7 +16,7 @@ import {
   getUserById,
 } from "./organization";
 
-const appName = process.env.BETTER_AUTH_APP_NAME ?? "Quietr";
+const appName = process.env.BETTER_AUTH_APP_NAME ?? "Quieter";
 
 const baseURL =
   process.env.BETTER_AUTH_URL ||
@@ -171,7 +171,7 @@ export const auth = betterAuth({
         type: "verification",
         url,
       });
-      console.info(`[quietr auth placeholder] verification for ${user.email}: ${url}`);
+      console.info(`[quieter auth placeholder] verification for ${user.email}: ${url}`);
     },
   },
   socialProviders: {
@@ -234,7 +234,7 @@ export const auth = betterAuth({
           type: "magic-link",
           url,
         });
-        console.info(`[quietr auth placeholder] magic link for ${email}: ${url}`);
+        console.info(`[quieter auth placeholder] magic link for ${email}: ${url}`);
       },
     }),
     tanstackStartCookies(),

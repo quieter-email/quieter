@@ -1,6 +1,6 @@
-import { auth, getSessionWithOrganization } from "@quietr/auth";
-import { REQUIRED_GOOGLE_SCOPES } from "@quietr/auth/google-scopes";
-import { createOrpcServerClient } from "@quietr/orpc/server-client";
+import { auth, getSessionWithOrganization } from "@quieter/auth";
+import { REQUIRED_GOOGLE_SCOPES } from "@quieter/auth/google-scopes";
+import { createOrpcServerClient } from "@quieter/orpc/server-client";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   getGoogleScopeRepairPageHref,

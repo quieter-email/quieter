@@ -8,7 +8,7 @@ import {
   UserIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button } from "@quietr/ui";
+import { Button } from "@quieter/ui";
 import type { SettingsTab } from "~/lib/search-params";
 
 type SettingsSidebarProps = {

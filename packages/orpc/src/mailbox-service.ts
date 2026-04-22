@@ -1,7 +1,7 @@
 import { ORPCError } from "@orpc/server";
-import { auth } from "@quietr/auth";
-import { hasRequiredGoogleScopes } from "@quietr/auth/google-scopes";
-import { db, mailbox, member, organization } from "@quietr/database";
+import { auth } from "@quieter/auth";
+import { hasRequiredGoogleScopes } from "@quieter/auth/google-scopes";
+import { db, mailbox, member, organization } from "@quieter/database";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { getGmailProfile } from "./gmail-service";
 
@@ -290,7 +290,7 @@ export const syncPersonalGmailMailboxes = async (input: {
         return account.accountId;
       } catch (error) {
         console.warn(
-          `[quietr mailbox sync] skipping Google account ${account.accountId} during mailbox sync: ${
+          `[quieter mailbox sync] skipping Google account ${account.accountId} during mailbox sync: ${
             error instanceof Error ? error.message : "Unknown error"
           }`,
         );

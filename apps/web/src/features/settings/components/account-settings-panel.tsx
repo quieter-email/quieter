@@ -21,7 +21,7 @@ import {
   DialogTitle,
   TextField,
   TextFieldInput,
-} from "@quietr/ui";
+} from "@quieter/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { mutationOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";

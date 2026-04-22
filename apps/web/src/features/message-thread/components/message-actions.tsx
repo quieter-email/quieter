@@ -35,7 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   IconButtonTooltip,
-} from "@quietr/ui";
+} from "@quieter/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useReducer, useState } from "react";
 import { getErrorMessage } from "~/lib/errors";

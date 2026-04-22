@@ -8,7 +8,7 @@ import {
   PinOffIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, cn, toast } from "@quietr/ui";
+import { Button, cn, toast } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -22,7 +22,7 @@ import { getGoogleScopeRepairPageHref } from "~/lib/google-scope-repair";
 import { mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 
-const PENDING_GMAIL_LINK_STORAGE_KEY = "quietr:pending-gmail-link";
+const PENDING_GMAIL_LINK_STORAGE_KEY = "quieter:pending-gmail-link";
 
 type PendingGmailLinkState = {
   mailboxCount: number;

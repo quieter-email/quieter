@@ -155,11 +155,11 @@ export const composeDraftAnchorSchema = z.object({
 export type ComposeDraftSeededBy = z.infer<typeof composeDraftSeededBySchema>;
 export type ComposeDraftAnchor = z.infer<typeof composeDraftAnchorSchema>;
 
-export const QUIETR_DRAFT_HEADER_NAMES = {
-  seededBy: "X-Quietr-Seeded-By",
-  sourceMessageHeaderId: "X-Quietr-Source-Message-Header-Id",
-  sourceMessageId: "X-Quietr-Source-Message-Id",
-  sourceThreadId: "X-Quietr-Source-Thread-Id",
+export const QUIETER_DRAFT_HEADER_NAMES = {
+  seededBy: "X-Quieter-Seeded-By",
+  sourceMessageHeaderId: "X-Quieter-Source-Message-Header-Id",
+  sourceMessageId: "X-Quieter-Source-Message-Id",
+  sourceThreadId: "X-Quieter-Source-Thread-Id",
 } as const;
 
 export const composeDraftFormValuesSchema = z.object({

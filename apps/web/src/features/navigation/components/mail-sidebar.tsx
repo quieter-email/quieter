@@ -18,7 +18,7 @@ import {
   DropdownMenuTrigger,
   IconButtonTooltip,
   useColorMode,
-} from "@quietr/ui";
+} from "@quieter/ui";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 import { MailboxSwitcherDropdown } from "~/features/navigation/components/mailbox-switcher";

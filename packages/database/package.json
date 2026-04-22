@@ -1,5 +1,5 @@
 {
-  "name": "@quietr/database",
+  "name": "@quieter/database",
   "private": true,
   "type": "module",
   "exports": {
@@ -21,7 +21,7 @@
     "drizzle-orm": "catalog:"
   },
   "devDependencies": {
-    "@quietr/config": "workspace:*",
+    "@quieter/config": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",

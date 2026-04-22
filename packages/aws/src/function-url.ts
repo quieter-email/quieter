@@ -15,17 +15,6 @@ export type LambdaFunctionUrlResponse = {
   statusCode: number;
 };
 
-export const readConfiguredEnv = (...names: string[]) => {
-  for (const name of names) {
-    const value = process.env[name]?.trim();
-    if (value) {
-      return value;
-    }
-  }
-
-  return null;
-};
-
 export const toJson = (body: unknown, statusCode = 200): LambdaFunctionUrlResponse => ({
   body: JSON.stringify(body),
   headers: {
@@ -35,26 +24,12 @@ export const toJson = (body: unknown, statusCode = 200): LambdaFunctionUrlRespon
   statusCode,
 });
 
-const getHeader = (
-  headers: Record<string, string | undefined> | null | undefined,
-  name: string,
-) => {
-  if (!headers) {
-    return null;
-  }
-
-  const lowerName = name.toLowerCase();
-  for (const [headerName, headerValue] of Object.entries(headers)) {
-    if (headerName.toLowerCase() === lowerName) {
-      return headerValue?.trim() || null;
-    }
-  }
-
-  return null;
-};
-
 export const getBearerToken = (headers: Record<string, string | undefined> | null | undefined) => {
-  const authorization = getHeader(headers, "authorization");
+  const authorization = headers
+    ? Object.entries(headers)
+        .find(([name]) => name.toLowerCase() === "authorization")?.[1]
+        ?.trim() || null
+    : null;
 
   if (!authorization?.startsWith("Bearer ")) {
     return null;

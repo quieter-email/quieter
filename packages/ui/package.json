@@ -1,5 +1,5 @@
 {
-  "name": "@quietr/ui",
+  "name": "@quieter/ui",
   "private": true,
   "type": "module",
   "sideEffects": [
@@ -30,7 +30,7 @@
     "vaul": "catalog:"
   },
   "devDependencies": {
-    "@quietr/config": "workspace:*",
+    "@quieter/config": "workspace:*",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@typescript/native-preview": "catalog:",

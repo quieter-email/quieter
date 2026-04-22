@@ -174,55 +174,6 @@ export const mailbox = pgTable(
   ],
 );
 
-export const mailDomain = pgTable(
-  "managedMailDomain",
-  {
-    id: text("id").primaryKey(),
-    organizationId: text("organizationId")
-      .notNull()
-      .references(() => organization.id),
-    domain: text("domain").notNull(),
-    inboundKeyPrefix: text("inboundKeyPrefix").notNull(),
-    isActive: boolean("isActive").notNull(),
-    s3Bucket: text("s3Bucket").notNull(),
-    createdAt: timestamp("createdAt").notNull(),
-    updatedAt: timestamp("updatedAt").notNull(),
-  },
-  (table) => [
-    index("managed_mail_domain_organization_id_idx").on(table.organizationId),
-    unique("managed_mail_domain_domain_unique").on(table.domain),
-  ],
-);
-
-export const mailMessage = pgTable(
-  "managedMailMessage",
-  {
-    id: text("id").primaryKey(),
-    organizationId: text("organizationId")
-      .notNull()
-      .references(() => organization.id),
-    mailDomainId: text("managedMailDomainId")
-      .notNull()
-      .references(() => mailDomain.id),
-    s3Bucket: text("s3Bucket").notNull(),
-    s3Key: text("s3Key").notNull(),
-    mailFrom: text("mailFrom"),
-    messageIdHeader: text("messageIdHeader"),
-    providerMessageId: text("providerMessageId"),
-    recipientsJson: text("recipientsJson").notNull(),
-    rawSizeBytes: bigint("rawSizeBytes", { mode: "number" }).notNull(),
-    receivedAt: timestamp("receivedAt").notNull(),
-    subject: text("subject"),
-    createdAt: timestamp("createdAt").notNull(),
-  },
-  (table) => [
-    index("managed_mail_message_organization_id_idx").on(table.organizationId),
-    index("managed_mail_message_domain_id_idx").on(table.mailDomainId),
-    index("managed_mail_message_received_at_idx").on(table.receivedAt),
-    unique("managed_mail_message_s3_bucket_s3_key_unique").on(table.s3Bucket, table.s3Key),
-  ],
-);
-
 export const tables = {
   user,
   organization,
@@ -233,8 +184,6 @@ export const tables = {
   member,
   invitation,
   mailbox,
-  mailDomain,
-  mailMessage,
 };
 
 export const authRelations = defineRelations(tables, (r) => ({
@@ -252,14 +201,6 @@ export const authRelations = defineRelations(tables, (r) => ({
       to: r.invitation.organizationId,
     }),
     mailboxes: r.many.mailbox({ from: r.organization.id, to: r.mailbox.organizationId }),
-    mailDomains: r.many.mailDomain({
-      from: r.organization.id,
-      to: r.mailDomain.organizationId,
-    }),
-    mailMessages: r.many.mailMessage({
-      from: r.organization.id,
-      to: r.mailMessage.organizationId,
-    }),
     members: r.many.member({ from: r.organization.id, to: r.member.organizationId }),
   },
   session: {
@@ -325,29 +266,6 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
     organization: r.one.organization({
       from: r.mailbox.organizationId,
-      to: r.organization.id,
-      optional: false,
-    }),
-  },
-  mailDomain: {
-    organization: r.one.organization({
-      from: r.mailDomain.organizationId,
-      to: r.organization.id,
-      optional: false,
-    }),
-    messages: r.many.mailMessage({
-      from: r.mailDomain.id,
-      to: r.mailMessage.mailDomainId,
-    }),
-  },
-  mailMessage: {
-    domain: r.one.mailDomain({
-      from: r.mailMessage.mailDomainId,
-      to: r.mailDomain.id,
-      optional: false,
-    }),
-    organization: r.one.organization({
-      from: r.mailMessage.organizationId,
       to: r.organization.id,
       optional: false,
     }),

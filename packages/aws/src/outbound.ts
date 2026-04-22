@@ -1,9 +1,9 @@
-import { sendManagedMail } from "@quietr/orpc/mail-aws-service";
+import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
+import { Resource } from "sst";
 import { z } from "zod";
 import {
   getBearerToken,
   parseEventJson,
-  readConfiguredEnv,
   toJson,
   type LambdaFunctionUrlEvent,
   type LambdaFunctionUrlResponse,
@@ -30,14 +30,14 @@ const normalizeAddresses = (addresses: string[] | undefined) =>
     new Set((addresses ?? []).map((address) => address.trim().toLowerCase()).filter(Boolean)),
   );
 
-const getOutboundToken = () => {
-  const token = readConfiguredEnv("MAIL_SEND_TOKEN", "EMAIL_SEND_TOKEN", "MANAGED_MAIL_SEND_TOKEN");
+let sesv2Client: SESv2Client | null = null;
 
-  if (!token) {
-    throw new Error("MAIL_SEND_TOKEN environment variable is missing.");
-  }
+const getSesv2Client = () => {
+  sesv2Client ??= new SESv2Client({
+    region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION,
+  });
 
-  return token;
+  return sesv2Client;
 };
 
 export const handler = async (
@@ -57,7 +57,7 @@ export const handler = async (
 
     const bearerToken = getBearerToken(event.headers);
 
-    if (!bearerToken || bearerToken !== getOutboundToken()) {
+    if (!bearerToken || bearerToken !== Resource.MailSendToken.value) {
       return toJson(
         {
           error: "Unauthorized",
@@ -78,20 +78,48 @@ export const handler = async (
       );
     }
 
-    const response = await sendManagedMail({
-      bcc: normalizeAddresses(parsed.data.bcc),
-      cc: normalizeAddresses(parsed.data.cc),
-      from: parsed.data.from.trim().toLowerCase(),
-      html: parsed.data.html,
-      replyTo: normalizeAddresses(parsed.data.replyTo),
-      subject: parsed.data.subject,
-      text: parsed.data.text,
-      to: normalizeAddresses(parsed.data.to),
-    });
+    const response = await getSesv2Client().send(
+      new SendEmailCommand({
+        Content: {
+          Simple: {
+            Body: {
+              ...(parsed.data.html
+                ? {
+                    Html: {
+                      Charset: "UTF-8",
+                      Data: parsed.data.html,
+                    },
+                  }
+                : {}),
+              ...(parsed.data.text
+                ? {
+                    Text: {
+                      Charset: "UTF-8",
+                      Data: parsed.data.text,
+                    },
+                  }
+                : {}),
+            },
+            Subject: {
+              Charset: "UTF-8",
+              Data: parsed.data.subject,
+            },
+          },
+        },
+        Destination: {
+          BccAddresses: normalizeAddresses(parsed.data.bcc),
+          CcAddresses: normalizeAddresses(parsed.data.cc),
+          ToAddresses: normalizeAddresses(parsed.data.to),
+        },
+        FromEmailAddress: parsed.data.from.trim().toLowerCase(),
+        ReplyToAddresses: normalizeAddresses(parsed.data.replyTo),
+      }),
+    );
 
     return toJson(
       {
-        ...response,
+        messageId: response.MessageId ?? null,
+        sent: true,
       },
       201,
     );

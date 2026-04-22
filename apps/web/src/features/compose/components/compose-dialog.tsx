@@ -2,8 +2,8 @@
 
 import { AlertCircleIcon, Loading03Icon, MailSend02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { composeDraftFormValuesSchema, composeSendFormValuesSchema } from "@quietr/orpc/compose";
-import { Button, Dialog, DialogContent, cn } from "@quietr/ui";
+import { composeDraftFormValuesSchema, composeSendFormValuesSchema } from "@quieter/orpc/compose";
+import { Button, Dialog, DialogContent, cn } from "@quieter/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
@@ -105,7 +105,7 @@ const createComposeDialogState = () => ({
   showCc: false,
 });
 
-const COMPOSE_DEBUG_STORAGE_KEY = "quietr:compose-debug";
+const COMPOSE_DEBUG_STORAGE_KEY = "quieter:compose-debug";
 
 const logComposeDebug = (event: string, payload?: Record<string, unknown> | undefined) => {
   if (

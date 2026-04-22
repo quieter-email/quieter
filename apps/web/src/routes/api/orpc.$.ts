@@ -1,5 +1,5 @@
-import { createOrpcContext } from "@quietr/orpc/context";
-import { orpcHandler } from "@quietr/orpc/server";
+import { createOrpcContext } from "@quieter/orpc/context";
+import { orpcHandler } from "@quieter/orpc/server";
 import { createFileRoute } from "@tanstack/react-router";
 
 const endpoint = "/api/orpc" as const;

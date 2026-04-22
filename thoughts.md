@@ -1,6 +1,6 @@
 ## 1. Product Vision
 
-Quietr is not just an email client. The intended trajectory is:
+Quieter is not just an email client. The intended trajectory is:
 
 **Stage 1 — Better Inbox UX**
 A Gmail/Outlook client with superior UI and workflow improvements.
@@ -25,7 +25,7 @@ The most important modeling decision is:
 
 **The system revolves around mailboxes, not users.**
 
-A mailbox is an email address being operated through Quietr.
+A mailbox is an email address being operated through Quieter.
 
 Examples:
 
@@ -57,7 +57,7 @@ Possible providers:
 ```
 gmail
 outlook
-quietr_hosted (SES)
+quieter_hosted (SES)
 imap (future)
 ```
 
@@ -67,7 +67,7 @@ Examples:
 | --------------------------------------------- | ------------- |
 | [leander@gmail.com](mailto:leander@gmail.com) | Gmail         |
 | [name@outlook.com](mailto:name@outlook.com)   | Outlook       |
-| [support@quietr.io](mailto:support@quietr.io) | Quietr hosted |
+| [support@quieter.io](mailto:support@quieter.io) | Quieter hosted |
 
 Provider affects:
 
@@ -132,11 +132,11 @@ If someone leaves the company, the mailbox stays.
 
 # 5. Users
 
-A user represents a **person logged into Quietr**.
+A user represents a **person logged into Quieter**.
 
 Users:
 
-- authenticate into Quietr
+- authenticate into Quieter
 - connect mailboxes
 - operate mailboxes
 - belong to organizations
@@ -152,8 +152,8 @@ Leander might operate:
 
 ```
 leander@gmail.com
-support@quietr.io
-jobs@quietr.io
+support@quieter.io
+jobs@quieter.io
 ```
 
 But the user **does not equal the mailbox**.
@@ -176,7 +176,7 @@ They group:
 Example:
 
 ```
-Organization: Quietr
+Organization: Quieter
 Members:
 - Leander
 - Alice
@@ -186,9 +186,9 @@ Members:
 Mailboxes in this organization:
 
 ```
-support@quietr.io
-jobs@quietr.io
-billing@quietr.io
+support@quieter.io
+jobs@quieter.io
+billing@quieter.io
 ```
 
 Organizations exist to support:
@@ -233,7 +233,7 @@ Access to a mailbox is determined by membership.
 Example:
 
 ```
-support@quietr.io
+support@quieter.io
 ```
 
 Members:
@@ -270,7 +270,7 @@ Connecting Gmail/Outlook creates a **mailbox connection**, not a user identity.
 Example flow:
 
 ```
-User logs into Quietr
+User logs into Quieter
 → Connect Gmail
 → OAuth granted
 → Mailbox created
@@ -297,7 +297,7 @@ But it **can later be shared** if desired.
 
 # 10. Gmail Inbox Sharing
 
-A Gmail inbox can technically be shared in Quietr, but:
+A Gmail inbox can technically be shared in Quieter, but:
 
 **it should not be the default.**
 
@@ -332,21 +332,21 @@ Domains belong to organizations.
 Example:
 
 ```
-quietr.io
+quieter.io
 ```
 
 Owned by:
 
 ```
-Organization: Quietr
+Organization: Quieter
 ```
 
 Mailboxes under that domain:
 
 ```
-support@quietr.io
-hello@quietr.io
-jobs@quietr.io
+support@quieter.io
+hello@quieter.io
+jobs@quieter.io
 ```
 
 Domains should **not belong to individual users**.
@@ -365,7 +365,7 @@ Three modes were proposed:
 
 ### Mode 1 — Inbox
 
-Quietr acts as a better email client.
+Quieter acts as a better email client.
 
 Features:
 
@@ -463,24 +463,24 @@ Gmail API
 Outlook API
 ```
 
-Quietr backend:
+Quieter backend:
 
 ```
-Quietr API
+Quieter API
 ```
 
 Services:
 
 ```
 Third-party inbox connector
-Quietr inbox engine
+Quieter inbox engine
 Support platform layer
 ```
 
 UI:
 
 ```
-Quietr UI
+Quieter UI
 ```
 
 The support platform integrates with:
@@ -563,9 +563,9 @@ Personal
   me@leander.dev
 
 Teams
-  Quietr
-    support@quietr.io
-    jobs@quietr.io
+  Quieter
+    support@quieter.io
+    jobs@quieter.io
 
   University Lab
     contact@lab.edu
@@ -584,8 +584,8 @@ Self-hosting targets institutions like universities.
 Example deployment:
 
 ```
-Quietr UI
-Quietr API
+Quieter UI
+Quieter API
 ```
 
 Connected to:
@@ -617,7 +617,7 @@ Existing products fall into categories:
 | Zendesk     | Support system    |
 | Front       | Shared inbox      |
 
-Quietr aims to combine:
+Quieter aims to combine:
 
 ```
 Email client
@@ -731,6 +731,6 @@ Integration
 AIConfiguration
 ```
 
-Everything in Quietr revolves around **mailboxes being operated by humans and AI**.
+Everything in Quieter revolves around **mailboxes being operated by humans and AI**.
 
 That is the conceptual center of the product.

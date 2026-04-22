@@ -1,6 +1,6 @@
-# quietr
+# quieter
 
-Quietr is a Bun monorepo for an email client centered on Gmail today, with shared packages for auth, database, API, UI, and a small SST-managed mail stack.
+Quieter is a Bun monorepo for an email client centered on Gmail today, with shared packages for auth, database, API, UI, and a small SST-managed mail stack.
 
 ## Stack
 
@@ -31,16 +31,16 @@ Quietr is a Bun monorepo for an email client centered on Gmail today, with share
 - Google auth requests `https://mail.google.com/` plus profile/email scopes; missing scope goes through a dedicated repair flow.
 - Magic-link and verification email delivery still use local placeholder previews rather than real auth email sending.
 - Inbox list selection supports mailbox-aware bulk actions, Shift range select, Ctrl/Cmd toggle, `Mod+A`, and `Escape`.
-- When Gmail exposes `List-Unsubscribe`, Quietr uses a mailto-based unsubscribe action.
+- When Gmail exposes `List-Unsubscribe`, Quieter uses a mailto-based unsubscribe action.
 
 ## Architecture
 
 - The app boots from `apps/web`, with route loaders and TanStack Start server functions handling auth guards and request-scoped checks.
-- App code talks to shared server logic through `@quietr/orpc`; app code should not couple directly to the database.
+- App code talks to shared server logic through `@quieter/orpc`; app code should not couple directly to the database.
 - Gmail API access runs server-side in `packages/orpc/src/gmail-service.ts`.
 - Mailbox-scoped TanStack Query data always includes `mailboxId` in query keys so persisted caches do not bleed across inboxes.
 - Better Auth reactive hooks remain the source of truth for auth state.
-- `packages/ui` is the shared UI boundary for app code; app surfaces should import from `@quietr/ui` rather than Base UI, Vaul, or Sonner directly.
+- `packages/ui` is the shared UI boundary for app code; app surfaces should import from `@quieter/ui` rather than Base UI, Vaul, or Sonner directly.
 
 ## Inbox Sync
 
@@ -65,7 +65,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ```bash
 bun run dev
-bun run mail:dev
+bun run sst dev
 bun run lint
 bun run lint:fix
 bun run fmt
@@ -79,42 +79,34 @@ bun run db:migrate
 
 ## Mail Stack
 
-Only the mail infrastructure runs through SST. The web app still runs separately with `bun run dev`.
+Only the mail infrastructure is managed by SST. For local development, `bun run dev` starts the web app and SST mail stack side by side through Turbo. Use `bun run sst ...` when you want to run SST directly.
 
 Mail commands:
 
 ```bash
-bun run mail:dev
-bun run mail:diff
-bun run mail:deploy
-bun run mail:deploy:production
-bun run mail:remove
-bun run mail:remove:production
-```
-
-SST also has alias commands:
-
-```bash
-bun run sst:dev
-bun run sst:diff
-bun run sst:deploy
-bun run sst:remove
+bun run sst dev
+bun run sst diff
+bun run sst deploy
+bun run sst deploy --stage production
+bun run sst remove
+bun run sst remove --stage production
+bun run sst unlock
 ```
 
 Local mail workflow:
 
 1. Run `bun run dev`.
-2. In another terminal, run `bun run mail:dev`.
-3. If needed, set real stage secrets for `MailIngestToken` and `MailSendToken`.
-4. Read `.sst/outputs.json` for `mailIngressUrl`, `mailOutboundUrl`, and `mailBucket`.
+2. If needed, set real stage secrets for `MailIngestToken` and `MailSendToken`.
+3. Read `.sst/outputs.json` for `mailIngressUrl`, `mailOutboundUrl`, and `mailBucket`.
 
 The mail stack supports:
 
-- protected domain registration through oRPC
-- SES domain verification and receipt rule setup
-- inbound raw mail storage in S3
-- SNS-driven receipt processing into Postgres
-- outbound send through SES for configured active domains
+- standalone SES/S3/SNS infrastructure managed by SST
+- token-protected inbound raw mail storage in S3
+- SNS receipt notifications for later processing
+- token-protected outbound send through SES
+
+It is not currently wired into the web app or oRPC. Domain registration and app-owned managed mail records have been removed so the mail setup can be rebuilt cleanly later.
 
 ## Environment
 
@@ -133,16 +125,12 @@ Auth/runtime:
 
 Mail:
 
-- `MAIL_INGEST_TOKEN`
-- `MAIL_SEND_TOKEN`
-- `MAIL_S3_BUCKET`
-- `MAIL_S3_PREFIX`
-- `MAIL_RECEIPT_TOPIC_ARN`
-- `MAIL_RECEIPT_ROLE_ARN`
-- `MAIL_RECEIPT_RULE_SET_NAME`
-- `MAIL_STACK_OUTPUTS_FILE`
 - `AWS_REGION` or `AWS_DEFAULT_REGION`
-- `AWS_PROFILE` or equivalent AWS credentials for SST commands
+- `AWS_PROFILE` or equivalent AWS credentials for direct SST commands
+
+The mail ingress/outbound auth tokens are provisioned as SST linked secrets rather than configured as repo env vars, and inbound mail is stored under the fixed `mail/inbound/...` key prefix.
+
+The repo `bun run sst ...` wrapper defaults local SST commands to `sst.config.ts`, the `mail-dev` stage, and the `quieter-sst` AWS profile fallback.
 
 ## Database Workflow
 

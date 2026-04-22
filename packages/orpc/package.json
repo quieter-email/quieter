@@ -1,5 +1,5 @@
 {
-  "name": "@quietr/orpc",
+  "name": "@quieter/orpc",
   "private": true,
   "type": "module",
   "exports": {
@@ -7,8 +7,6 @@
     "./compose": "./src/gmail/compose/schema.ts",
     "./context": "./src/context.ts",
     "./errors": "./src/errors.ts",
-    "./mail-aws-service": "./src/mail-aws-service.ts",
-    "./mail-service": "./src/mail-service.ts",
     "./mailbox-service": "./src/mailbox-service.ts",
     "./server": "./src/server.ts",
     "./server-client": "./src/server-client.ts",
@@ -24,17 +22,15 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-ses": "catalog:",
-    "@aws-sdk/client-sesv2": "catalog:",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
-    "@quietr/auth": "workspace:*",
-    "@quietr/database": "workspace:*",
+    "@quieter/auth": "workspace:*",
+    "@quieter/database": "workspace:*",
     "drizzle-orm": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@quietr/config": "workspace:*",
+    "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
     "oxfmt": "catalog:",

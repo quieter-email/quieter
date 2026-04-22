@@ -2,7 +2,7 @@
 
 import { Refresh01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, Calendar, IconButtonTooltip, cn } from "@quietr/ui";
+import { Button, Calendar, IconButtonTooltip, cn } from "@quieter/ui";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
