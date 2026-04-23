@@ -5,7 +5,7 @@ import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  plugins: [tanstackStart(), viteReact(), tailwindcss(), nitro()],
+  plugins: [tanstackStart(), viteReact(), tailwindcss(), nitro({ preset: "vercel" })],
   resolve: {
     tsconfigPaths: true,
   },

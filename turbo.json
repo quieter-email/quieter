@@ -25,7 +25,14 @@
         "AWS_EC2_METADATA_DISABLED"
       ],
       "inputs": ["$TURBO_DEFAULT$"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**", ".output/**", "!.output/cache/**"]
+      "outputs": [
+        "dist/**",
+        ".next/**",
+        "!.next/cache/**",
+        ".output/**",
+        "!.output/cache/**",
+        ".vercel/output/**"
+      ]
     },
     "lint": {
       "dependsOn": ["^lint"],
