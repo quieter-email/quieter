@@ -2,34 +2,16 @@ import { createFileRoute, redirect, stripSearchParams } from "@tanstack/react-ro
 import { zodValidator } from "@tanstack/zod-adapter";
 import { LoadingPage } from "~/components/loading-page";
 import { InboxPageClient } from "~/features/mailbox/components/inbox-page-client";
-import { getGoogleScopeRepairTarget, getSessionUser } from "~/lib/auth.functions";
-import { getGoogleScopeRepairPageHref } from "~/lib/google-scope-repair";
+import { getSessionUser } from "~/lib/auth.functions";
 import { mailboxSearchDefaults, mailboxSearchSchema } from "~/lib/search-params";
 
 export const Route = createFileRoute("/")({
   validateSearch: zodValidator(mailboxSearchSchema),
-  loaderDeps: ({ search }) => ({
-    preferredMailboxId: search.mailboxId,
-  }),
   search: {
     middlewares: [stripSearchParams(mailboxSearchDefaults)],
   },
   ssr: "data-only",
-  loader: async ({ deps }) => {
-    const repairTarget = await getGoogleScopeRepairTarget({
-      data: {
-        preferredMailboxId: deps.preferredMailboxId,
-      },
-    });
-
-    if (repairTarget) {
-      throw redirect({
-        to: getGoogleScopeRepairPageHref({
-          targetAccountId: repairTarget.providerAccountId,
-        }),
-      });
-    }
-
+  loader: async () => {
     const user = await getSessionUser();
 
     if (!user) {

@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SitePasswordRouteImport } from './routes/site-password'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as LoginRouteImport } from './routes/login'
@@ -16,11 +17,17 @@ import { Route as HomeRouteImport } from './routes/home'
 import { Route as GoogleScopeRepairRouteImport } from './routes/google-scope-repair'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiSitePasswordRouteImport } from './routes/api/site-password'
 import { Route as ApiOrpcRouteImport } from './routes/api/orpc'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
 import { Route as ApiAuthGoogleScopeRepairRouteImport } from './routes/api/auth.google-scope-repair'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 
+const SitePasswordRoute = SitePasswordRouteImport.update({
+  id: '/site-password',
+  path: '/site-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
@@ -56,6 +63,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSitePasswordRoute = ApiSitePasswordRouteImport.update({
+  id: '/api/site-password',
+  path: '/api/site-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiOrpcRoute = ApiOrpcRouteImport.update({
   id: '/api/orpc',
   path: '/api/orpc',
@@ -86,7 +98,9 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
+  '/site-password': typeof SitePasswordRoute
   '/api/orpc': typeof ApiOrpcRouteWithChildren
+  '/api/site-password': typeof ApiSitePasswordRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/auth/google-scope-repair': typeof ApiAuthGoogleScopeRepairRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
@@ -99,7 +113,9 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
+  '/site-password': typeof SitePasswordRoute
   '/api/orpc': typeof ApiOrpcRouteWithChildren
+  '/api/site-password': typeof ApiSitePasswordRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/auth/google-scope-repair': typeof ApiAuthGoogleScopeRepairRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
@@ -113,7 +129,9 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
+  '/site-password': typeof SitePasswordRoute
   '/api/orpc': typeof ApiOrpcRouteWithChildren
+  '/api/site-password': typeof ApiSitePasswordRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/auth/google-scope-repair': typeof ApiAuthGoogleScopeRepairRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
@@ -128,7 +146,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/settings'
     | '/signup'
+    | '/site-password'
     | '/api/orpc'
+    | '/api/site-password'
     | '/api/auth/$'
     | '/api/auth/google-scope-repair'
     | '/api/orpc/$'
@@ -141,7 +161,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/settings'
     | '/signup'
+    | '/site-password'
     | '/api/orpc'
+    | '/api/site-password'
     | '/api/auth/$'
     | '/api/auth/google-scope-repair'
     | '/api/orpc/$'
@@ -154,7 +176,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/settings'
     | '/signup'
+    | '/site-password'
     | '/api/orpc'
+    | '/api/site-password'
     | '/api/auth/$'
     | '/api/auth/google-scope-repair'
     | '/api/orpc/$'
@@ -168,13 +192,22 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRoute
   SignupRoute: typeof SignupRoute
+  SitePasswordRoute: typeof SitePasswordRoute
   ApiOrpcRoute: typeof ApiOrpcRouteWithChildren
+  ApiSitePasswordRoute: typeof ApiSitePasswordRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiAuthGoogleScopeRepairRoute: typeof ApiAuthGoogleScopeRepairRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/site-password': {
+      id: '/site-password'
+      path: '/site-password'
+      fullPath: '/site-password'
+      preLoaderRoute: typeof SitePasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signup': {
       id: '/signup'
       path: '/signup'
@@ -222,6 +255,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/site-password': {
+      id: '/api/site-password'
+      path: '/api/site-password'
+      fullPath: '/api/site-password'
+      preLoaderRoute: typeof ApiSitePasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/orpc': {
@@ -274,7 +314,9 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   SettingsRoute: SettingsRoute,
   SignupRoute: SignupRoute,
+  SitePasswordRoute: SitePasswordRoute,
   ApiOrpcRoute: ApiOrpcRouteWithChildren,
+  ApiSitePasswordRoute: ApiSitePasswordRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiAuthGoogleScopeRepairRoute: ApiAuthGoogleScopeRepairRoute,
 }

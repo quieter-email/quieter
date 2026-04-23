@@ -10,7 +10,6 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, cn, toast } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   MailboxSettingsRow,
@@ -18,7 +17,6 @@ import {
 } from "~/features/navigation/components/mailbox-switcher";
 import { authClient } from "~/lib/auth";
 import { getErrorMessage } from "~/lib/errors";
-import { getGoogleScopeRepairPageHref } from "~/lib/google-scope-repair";
 import { mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 
@@ -87,17 +85,10 @@ export const MailboxesSettingsPanel = () => {
     activeOrganization.personalOwnerUserId === sessionUserId;
   const mailboxesQuery = useQuery(mailboxesQueryOptions(activeOrganizationId));
   const mailboxes = mailboxesQuery.data?.mailboxes ?? [];
-  const googleScopeRepairTarget = mailboxesQuery.data?.googleScopeRepairTarget ?? null;
   const pendingGmailLinkMatchesOrganization =
     pendingGmailLink != null && pendingGmailLink.organizationId === activeOrganizationId;
   const isGmailConnecting =
     pendingGmailLinkMatchesOrganization && (mailboxesQuery.isPending || mailboxesQuery.isFetching);
-  const googleScopeRepairHref = googleScopeRepairTarget
-    ? getGoogleScopeRepairPageHref({
-        from: "/settings?tab=mailboxes",
-        targetAccountId: googleScopeRepairTarget.providerAccountId,
-      })
-    : null;
   const defaultMailboxId = mailboxesQuery.data?.defaultMailboxId ?? null;
   const disconnectMailboxMutation = useMutation({
     ...orpc.mail.disconnectMailbox.mutationOptions(),
@@ -198,16 +189,7 @@ export const MailboxesSettingsPanel = () => {
           <OrganizationSwitcherSelect />
         </div>
 
-        {isPersonalOrganization && googleScopeRepairHref ? (
-          <Link
-            className="inline-flex h-8 items-center justify-center rounded-md border border-primary bg-primary px-3.5 text-[13px] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-            to={googleScopeRepairHref}
-          >
-            Reconnect {googleScopeRepairTarget?.emailAddress}
-          </Link>
-        ) : null}
-
-        {isPersonalOrganization && !googleScopeRepairHref ? (
+        {isPersonalOrganization ? (
           <Button
             disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
             onClick={() => {
@@ -225,13 +207,6 @@ export const MailboxesSettingsPanel = () => {
           </Button>
         ) : null}
       </div>
-
-      {googleScopeRepairTarget ? (
-        <p className="text-sm text-muted-foreground">
-          {googleScopeRepairTarget.emailAddress} needs to be reconnected. Reconnecting a different
-          mailbox will not fix it.
-        </p>
-      ) : null}
 
       {!isPersonalOrganization ? (
         <p className="text-sm text-muted-foreground">Gmail lives in your personal organization.</p>

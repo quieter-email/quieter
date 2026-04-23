@@ -203,16 +203,21 @@ const createGmailMailboxFromAccount = async (input: {
   organizationId: string;
   userId: string;
 }): Promise<{
-  mailbox: GmailMailbox;
+  mailbox: GmailMailbox | null;
   repairTarget: GoogleScopeRepairTarget | null;
 }> => {
   if (!hasRequiredGoogleScopes(input.account.scopes)) {
-    return createGmailRepairMailbox({
+    const repair = createGmailRepairMailbox({
       account: input.account,
       organizationId: input.organizationId,
       repairReason: "missing_scopes",
       userId: input.userId,
     });
+
+    return {
+      mailbox: null,
+      repairTarget: repair.repairTarget,
+    };
   }
 
   let accessToken: string | null = null;
@@ -223,21 +228,31 @@ const createGmailMailboxFromAccount = async (input: {
       input.account.accountId,
     );
   } catch {
-    return createGmailRepairMailbox({
+    const repair = createGmailRepairMailbox({
       account: input.account,
       organizationId: input.organizationId,
       repairReason: "invalid_access_token",
       userId: input.userId,
     });
+
+    return {
+      mailbox: null,
+      repairTarget: repair.repairTarget,
+    };
   }
 
   if (!accessToken) {
-    return createGmailRepairMailbox({
+    const repair = createGmailRepairMailbox({
       account: input.account,
       organizationId: input.organizationId,
       repairReason: "invalid_access_token",
       userId: input.userId,
     });
+
+    return {
+      mailbox: null,
+      repairTarget: repair.repairTarget,
+    };
   }
 
   try {
@@ -263,18 +278,24 @@ const createGmailMailboxFromAccount = async (input: {
       throw error;
     }
 
-    return createGmailRepairMailbox({
+    const repair = createGmailRepairMailbox({
       account: input.account,
       organizationId: input.organizationId,
       repairReason: "invalid_access_token",
       userId: input.userId,
     });
+
+    return {
+      mailbox: null,
+      repairTarget: repair.repairTarget,
+    };
   }
 };
 
 const listPersonalGmailMailboxes = async (input: {
   activeOrganization: ActiveOrganization;
   headers: Headers;
+  includeRepairTargets?: boolean;
   userId: string;
 }) => {
   if (input.activeOrganization.personalOwnerUserId !== input.userId) {
@@ -299,10 +320,13 @@ const listPersonalGmailMailboxes = async (input: {
   return {
     mailboxes: gmailMailboxResults
       .map((result) => result.mailbox)
+      .filter((mailbox): mailbox is GmailMailbox => mailbox != null)
       .sort((left, right) => left.emailAddress.localeCompare(right.emailAddress)),
-    repairTargets: gmailMailboxResults
-      .flatMap((result) => (result.repairTarget ? [result.repairTarget] : []))
-      .sort((left, right) => left.emailAddress.localeCompare(right.emailAddress)),
+    repairTargets: input.includeRepairTargets
+      ? gmailMailboxResults
+          .flatMap((result) => (result.repairTarget ? [result.repairTarget] : []))
+          .sort((left, right) => left.emailAddress.localeCompare(right.emailAddress))
+      : [],
   };
 };
 
@@ -414,6 +438,7 @@ export const getGoogleScopeRepairTarget = async (input: {
   const gmailState = await listPersonalGmailMailboxes({
     activeOrganization,
     headers: input.headers,
+    includeRepairTargets: true,
     userId: input.userId,
   });
 

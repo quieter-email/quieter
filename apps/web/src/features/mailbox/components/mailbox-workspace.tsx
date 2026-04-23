@@ -1,7 +1,5 @@
 "use client";
 
-import { ORPCError } from "@orpc/client";
-import { mailboxScopeRepairRequiredErrorDataSchema } from "@quieter/orpc/errors";
 import {
   type QueryClient,
   useInfiniteQuery,
@@ -67,7 +65,6 @@ import {
   type MailboxWorkspaceStore,
 } from "~/lib/gmail/mailbox-workspace-store";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
-import { getGoogleScopeRepairPageHref } from "~/lib/google-scope-repair";
 import { mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 import { inboxRouteApi } from "~/lib/route-apis";
@@ -79,15 +76,6 @@ type MailboxWorkspaceProps = {
     email?: string | null;
     name?: string | null;
   };
-};
-
-const getMailboxScopeRepairProviderAccountId = (error: unknown) => {
-  if (!(error instanceof ORPCError) || error.code !== "MAILBOX_SCOPE_REPAIR_REQUIRED") {
-    return null;
-  }
-
-  const parsedData = mailboxScopeRepairRequiredErrorDataSchema.safeParse(error.data);
-  return parsedData.success ? parsedData.data.providerAccountId : null;
 };
 
 type LabelChangeSet = {
@@ -743,10 +731,6 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       isLiveSyncEnabled,
     ),
   );
-  const mailboxScopeRepairProviderAccountId =
-    getMailboxScopeRepairProviderAccountId(messagesQuery.error) ??
-    getMailboxScopeRepairProviderAccountId(syncQuery.error);
-
   const flattenedMessages = messagesQuery.data?.pages.flatMap((page) => page.messages) ?? [];
 
   const refreshMessages = async () => {
@@ -849,19 +833,6 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       messageId: null,
     });
   }, [mailboxId, mailboxesQuery.isPending, selectedMailboxId]);
-
-  useEffect(() => {
-    if (!mailboxScopeRepairProviderAccountId) {
-      return;
-    }
-
-    void navigate({
-      to: getGoogleScopeRepairPageHref({
-        from: `${window.location.pathname}${window.location.search}`,
-        targetAccountId: mailboxScopeRepairProviderAccountId,
-      }),
-    });
-  }, [mailboxScopeRepairProviderAccountId, navigate]);
 
   useLayoutEffect(() => {
     if (

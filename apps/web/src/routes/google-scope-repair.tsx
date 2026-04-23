@@ -1,4 +1,4 @@
-import { Link, createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect, stripSearchParams } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { z } from "zod";
 import { getGoogleScopeRepairTarget, getSessionUser } from "~/lib/auth.functions";
@@ -21,8 +21,16 @@ const googleScopeRepairSearchSchema = z.object({
     }),
 });
 
+const googleScopeRepairSearchDefaults = {
+  from: "/",
+  returned: false,
+} as const;
+
 export const Route = createFileRoute("/google-scope-repair")({
   validateSearch: zodValidator(googleScopeRepairSearchSchema),
+  search: {
+    middlewares: [stripSearchParams(googleScopeRepairSearchDefaults)],
+  },
   loaderDeps: ({ search }) => ({
     from: search.from,
     targetAccountId: search.targetAccountId,
@@ -51,7 +59,7 @@ export const Route = createFileRoute("/google-scope-repair")({
 
     if (deps.targetAccountId !== repairTarget.providerAccountId) {
       throw redirect({
-        to: getGoogleScopeRepairPageHref({
+        href: getGoogleScopeRepairPageHref({
           from: deps.from,
           targetAccountId: repairTarget.providerAccountId,
         }),
@@ -91,15 +99,15 @@ function GoogleScopeRepairRouteComponent() {
         </div>
 
         <div className="pt-1">
-          <Link
+          <a
             className="inline-flex h-9 items-center justify-center rounded-md border border-primary bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-            to={getGoogleScopeRepairStartHref({
+            href={getGoogleScopeRepairStartHref({
               from: returnTo,
               targetAccountId: repairTarget.providerAccountId,
             })}
           >
             Continue to Google
-          </Link>
+          </a>
         </div>
       </div>
     </div>
