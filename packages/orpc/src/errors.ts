@@ -8,7 +8,7 @@ export const rateLimitedErrorDataSchema = z.object({
 export const mailboxScopeRepairRequiredErrorDataSchema = z.object({
   mailboxId: z.string().min(1),
   providerAccountId: z.string().min(1),
-  emailAddress: z.string().email(),
+  emailAddress: z.string().min(1),
 });
 
 export const personalOrganizationRequiredErrorDataSchema = z.object({

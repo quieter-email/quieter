@@ -29,6 +29,7 @@ export type MailboxSwitcherMailbox = {
   displayName: string | null;
   emailAddress: string;
   id: string;
+  provider: string;
 };
 
 type OrganizationSummary = {

@@ -33,6 +33,7 @@ type MailSidebarProps = {
     id: string;
     emailAddress: string;
     displayName: string | null;
+    provider: string;
   }>;
   selectedMailboxId: string | null;
   selectedMailbox: MailboxCategory;

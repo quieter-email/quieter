@@ -109,9 +109,7 @@ export const member = pgTable(
       .notNull()
       .references(() => user.id),
     role: text("role").notNull(),
-    defaultMailboxId: text("defaultMailboxId").references(() => mailbox.id, {
-      onDelete: "set null",
-    }),
+    defaultMailboxId: text("defaultMailboxId"),
     createdAt: timestamp("createdAt").notNull(),
   },
   (table) => [
@@ -153,20 +151,11 @@ export const mailbox = pgTable(
     provider: text("provider").notNull(),
     emailAddress: text("emailAddress").notNull(),
     displayName: text("displayName"),
-    providerAccountId: text("providerAccountId").notNull(),
-    connectedUserId: text("connectedUserId")
-      .notNull()
-      .references(() => user.id),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
     index("mailbox_organization_id_idx").on(table.organizationId),
-    index("mailbox_connected_user_id_idx").on(table.connectedUserId),
-    unique("mailbox_provider_provider_account_id_unique").on(
-      table.provider,
-      table.providerAccountId,
-    ),
     unique("mailbox_organization_id_email_address_unique").on(
       table.organizationId,
       table.emailAddress,
@@ -190,7 +179,6 @@ export const authRelations = defineRelations(tables, (r) => ({
   user: {
     accounts: r.many.account({ from: r.user.id, to: r.account.userId }),
     invitations: r.many.invitation({ from: r.user.id, to: r.invitation.inviterId }),
-    mailboxes: r.many.mailbox({ from: r.user.id, to: r.mailbox.connectedUserId }),
     memberships: r.many.member({ from: r.user.id, to: r.member.userId }),
     sessions: r.many.session({ from: r.user.id, to: r.session.userId }),
     passkeys: r.many.passkey({ from: r.user.id, to: r.passkey.userId }),
@@ -230,11 +218,6 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
   },
   member: {
-    defaultMailbox: r.one.mailbox({
-      from: r.member.defaultMailboxId,
-      to: r.mailbox.id,
-      optional: true,
-    }),
     organization: r.one.organization({
       from: r.member.organizationId,
       to: r.organization.id,
@@ -259,11 +242,6 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
   },
   mailbox: {
-    connectedUser: r.one.user({
-      from: r.mailbox.connectedUserId,
-      to: r.user.id,
-      optional: false,
-    }),
     organization: r.one.organization({
       from: r.mailbox.organizationId,
       to: r.organization.id,

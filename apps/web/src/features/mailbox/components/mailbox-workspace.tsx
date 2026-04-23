@@ -1,5 +1,7 @@
 "use client";
 
+import { ORPCError } from "@orpc/client";
+import { mailboxScopeRepairRequiredErrorDataSchema } from "@quieter/orpc/errors";
 import {
   type QueryClient,
   useInfiniteQuery,
@@ -65,6 +67,7 @@ import {
   type MailboxWorkspaceStore,
 } from "~/lib/gmail/mailbox-workspace-store";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
+import { getGoogleScopeRepairPageHref } from "~/lib/google-scope-repair";
 import { mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 import { inboxRouteApi } from "~/lib/route-apis";
@@ -78,6 +81,15 @@ type MailboxWorkspaceProps = {
   };
 };
 
+const getMailboxScopeRepairProviderAccountId = (error: unknown) => {
+  if (!(error instanceof ORPCError) || error.code !== "MAILBOX_SCOPE_REPAIR_REQUIRED") {
+    return null;
+  }
+
+  const parsedData = mailboxScopeRepairRequiredErrorDataSchema.safeParse(error.data);
+  return parsedData.success ? parsedData.data.providerAccountId : null;
+};
+
 type LabelChangeSet = {
   addLabelIds?: string[];
   removeLabelIds?: string[];
@@ -87,6 +99,7 @@ type ConnectedMailbox = {
   id: string;
   emailAddress: string;
   displayName: string | null;
+  provider: string;
 };
 
 type MailboxWorkspaceViewProps = {
@@ -101,7 +114,7 @@ type MailboxWorkspaceViewProps = {
   onBulkMarkAsUnread: (threads: ThreadListEntry[]) => void;
   onBulkMoveToTrash: (threads: ThreadListEntry[]) => void;
   onBulkUnmarkAsSpam: (threads: ThreadListEntry[]) => void;
-  error: Error | null;
+  error: unknown;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   onDeleteDraft: (message: MessageListItem) => void;
@@ -186,7 +199,14 @@ const createMailboxActionHandlers = ({
     isThreadActionPendingInStore(workspaceStore, threadId);
 
   const getUniqueIds = (ids: readonly string[]) =>
-    Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+    Array.from(
+      new Set(
+        ids.flatMap((id) => {
+          const normalizedId = id.trim();
+          return normalizedId ? [normalizedId] : [];
+        }),
+      ),
+    );
 
   const setMessageActionPending = (messageId: string, pending: boolean) => {
     setMailboxWorkspaceMessagePending(workspaceStore, messageId, pending);
@@ -674,6 +694,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       displayName: mailbox.displayName,
       emailAddress: mailbox.emailAddress,
       id: mailbox.id,
+      provider: mailbox.provider,
     }))
     .sort((a, b) => {
       if (a.id === defaultMailboxId) return -1;
@@ -722,6 +743,9 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       isLiveSyncEnabled,
     ),
   );
+  const mailboxScopeRepairProviderAccountId =
+    getMailboxScopeRepairProviderAccountId(messagesQuery.error) ??
+    getMailboxScopeRepairProviderAccountId(syncQuery.error);
 
   const flattenedMessages = messagesQuery.data?.pages.flatMap((page) => page.messages) ?? [];
 
@@ -825,6 +849,19 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       messageId: null,
     });
   }, [mailboxId, mailboxesQuery.isPending, selectedMailboxId]);
+
+  useEffect(() => {
+    if (!mailboxScopeRepairProviderAccountId) {
+      return;
+    }
+
+    void navigate({
+      to: getGoogleScopeRepairPageHref({
+        from: `${window.location.pathname}${window.location.search}`,
+        targetAccountId: mailboxScopeRepairProviderAccountId,
+      }),
+    });
+  }, [mailboxScopeRepairProviderAccountId, navigate]);
 
   useLayoutEffect(() => {
     if (

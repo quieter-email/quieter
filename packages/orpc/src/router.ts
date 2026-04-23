@@ -185,6 +185,7 @@ const callGmail = async <TValue>(
     activeOrganizationId: context.activeOrganizationId,
     headers,
     mailboxId,
+    userId: context.userId,
   });
 
   try {
@@ -195,7 +196,9 @@ const callGmail = async <TValue>(
     }
 
     const refreshedAccessToken = await refreshAuthorizedGmailAccessToken({
+      emailAddress: mailbox.emailAddress,
       headers,
+      mailboxId: mailbox.id,
       providerAccountId: mailbox.providerAccountId,
       userId: mailbox.connectedUserId,
     });
@@ -292,6 +295,7 @@ export const appRouter = {
       .handler(async ({ context, input }) => {
         return await setDefaultMailbox({
           activeOrganizationId: context.activeOrganizationId,
+          headers: getRequestHeaders(context),
           mailboxId: input.mailboxId,
           userId: context.userId,
         });

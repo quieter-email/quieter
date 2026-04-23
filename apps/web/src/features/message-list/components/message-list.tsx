@@ -42,7 +42,7 @@ type MessageListProps = {
   onBulkMarkAsUnread: (threads: ThreadListEntry[]) => void | Promise<void>;
   onBulkMoveToTrash: (threads: ThreadListEntry[]) => void | Promise<void>;
   onBulkUnmarkAsSpam: (threads: ThreadListEntry[]) => void | Promise<void>;
-  error: Error | null;
+  error: unknown;
   hasNextPage: boolean;
   isError: boolean;
   isFetchingNextPage: boolean;
@@ -322,7 +322,11 @@ const MessageListScrollPane = ({
         </div>
       ) : null}
 
-      {isError ? <p className="px-2 py-8 text-sm text-destructive">{error?.message}</p> : null}
+      {isError ? (
+        <p className="px-2 py-8 text-sm text-destructive">
+          {getErrorMessage(error, "Could not load messages.")}
+        </p>
+      ) : null}
 
       {!isError && threadedMessages.length > 0 ? (
         <ul

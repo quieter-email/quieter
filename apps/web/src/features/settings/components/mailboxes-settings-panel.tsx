@@ -228,8 +228,8 @@ export const MailboxesSettingsPanel = () => {
 
       {googleScopeRepairTarget ? (
         <p className="text-sm text-muted-foreground">
-          {googleScopeRepairTarget.emailAddress} needs Google permissions. Reconnect that mailbox.
-          Reconnecting a different mailbox will not fix it.
+          {googleScopeRepairTarget.emailAddress} needs to be reconnected. Reconnecting a different
+          mailbox will not fix it.
         </p>
       ) : null}
 
@@ -248,7 +248,7 @@ export const MailboxesSettingsPanel = () => {
 
       {mailboxesQuery.isError ? (
         <p className="text-sm text-destructive">
-          {mailboxesQuery.error.message || "Could not load mailboxes."}
+          {getErrorMessage(mailboxesQuery.error, "Could not load mailboxes.")}
         </p>
       ) : null}
 
@@ -270,6 +270,7 @@ export const MailboxesSettingsPanel = () => {
           {mailboxes.map((mailbox) => {
             const isDisconnecting = disconnectMailboxMutation.variables?.mailboxId === mailbox.id;
             const isDefault = mailbox.id === defaultMailboxId;
+            const isGmailMailbox = mailbox.provider === "gmail";
 
             return (
               <MailboxSettingsRow
@@ -299,7 +300,7 @@ export const MailboxesSettingsPanel = () => {
                       {isDefault ? "Default" : "Set default"}
                     </Button>
 
-                    {isPersonalOrganization ? (
+                    {isPersonalOrganization && isGmailMailbox ? (
                       <Button
                         disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
                         onClick={() => {

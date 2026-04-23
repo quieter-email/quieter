@@ -14,6 +14,16 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "MailIngress": {
+      "name": string
+      "type": "sst.aws.Function"
+      "url": string
+    }
+    "MailOutbound": {
+      "name": string
+      "type": "sst.aws.Function"
+      "url": string
+    }
     "MailReceiptTopic": {
       "arn": string
       "type": "sst.aws.SnsTopic"

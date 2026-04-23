@@ -21,10 +21,11 @@
 ## Product Invariants
 
 - Quieter is an email client.
-- Gmail access is resolved through the selected mailbox in the active organization.
+- Gmail access is resolved through the selected Better Auth linked Google account in the user's personal organization.
 - `member.defaultMailboxId` pins the per-org default mailbox. Invalid or missing `mailboxId` should resolve to that mailbox.
-- Better Auth organization plugin is the source of truth for orgs. Every user has a personal org. Gmail mailboxes are first-class mailbox records.
-- Google auth must request `https://mail.google.com/` plus profile/email scopes. Missing scope goes to the dedicated repair flow for the exact broken mailbox.
+- Better Auth organization plugin is the source of truth for orgs. Every user has a personal org. Gmail mailboxes are derived from linked Google accounts, not `mailbox` table rows.
+- Managed/non-Gmail mailboxes are the table-backed mailbox records.
+- Google auth must request `https://mail.google.com/` plus profile/email scopes. Missing scope goes to the dedicated repair flow for the exact broken Gmail account.
 - Auth emails are local preview/placeholder flows, not real outbound delivery.
 - If Gmail exposes `List-Unsubscribe` mailto, use the single unsubscribe action that sends the email.
 - Mailbox list selection supports Shift range, Ctrl/Cmd toggle, `Mod+A`, and `Escape`.
@@ -37,7 +38,7 @@
 - Use route loaders / TanStack Start server functions for auth guards and request-scoped SSR data.
 - Validate search params through shared schemas in `apps/web/src/lib/search-params.ts`.
 - Keep inbox `loaderDeps` limited to `mailboxId`.
-- Gmail REST calls run server-side in `packages/orpc/src/gmail-service.ts`.
+- Gmail REST calls run server-side in `packages/orpc/src/gmail-service.ts`; tokens are resolved through Better Auth linked accounts.
 - Mailbox-scoped query keys must include `mailboxId`.
 - Persist manual `queryClient.setQueryData` writes with `persistQueryByKey`.
 - Prefer TanStack Query for app-owned async/server state.

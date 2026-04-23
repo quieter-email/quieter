@@ -1,5 +1,5 @@
 {
-  "$schema": "https://v2-9-4.turborepo.dev/schema.json",
+  "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
   "envMode": "strict",
   "globalDependencies": [".env*"],
@@ -45,97 +45,20 @@
     "db:generate": {
       "env": ["DATABASE_URL"],
       "cache": false,
-      "outputs": ["drizzle/**"]
+      "outputs": ["drizzle/**"],
+      "interactive": true
     },
     "db:migrate": {
       "env": ["DATABASE_URL"],
       "cache": false,
-      "outputs": []
+      "outputs": [],
+      "interactive": true
     },
     "db:push": {
       "env": ["DATABASE_URL"],
       "cache": false,
-      "outputs": []
-    },
-    "sst:deploy": {
-      "env": [
-        "AWS_REGION",
-        "AWS_DEFAULT_REGION",
-        "AWS_PROFILE",
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
-        "AWS_SESSION_TOKEN",
-        "AWS_ROLE_ARN",
-        "AWS_WEB_IDENTITY_TOKEN_FILE",
-        "AWS_SHARED_CREDENTIALS_FILE",
-        "AWS_CONFIG_FILE"
-      ],
-      "cache": false,
-      "outputs": []
-    },
-    "sst:deploy:production": {
-      "env": [
-        "AWS_REGION",
-        "AWS_DEFAULT_REGION",
-        "AWS_PROFILE",
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
-        "AWS_SESSION_TOKEN",
-        "AWS_ROLE_ARN",
-        "AWS_WEB_IDENTITY_TOKEN_FILE",
-        "AWS_SHARED_CREDENTIALS_FILE",
-        "AWS_CONFIG_FILE"
-      ],
-      "cache": false,
-      "outputs": []
-    },
-    "sst:diff": {
-      "env": [
-        "AWS_REGION",
-        "AWS_DEFAULT_REGION",
-        "AWS_PROFILE",
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
-        "AWS_SESSION_TOKEN",
-        "AWS_ROLE_ARN",
-        "AWS_WEB_IDENTITY_TOKEN_FILE",
-        "AWS_SHARED_CREDENTIALS_FILE",
-        "AWS_CONFIG_FILE"
-      ],
-      "cache": false,
-      "outputs": []
-    },
-    "sst:remove": {
-      "env": [
-        "AWS_REGION",
-        "AWS_DEFAULT_REGION",
-        "AWS_PROFILE",
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
-        "AWS_SESSION_TOKEN",
-        "AWS_ROLE_ARN",
-        "AWS_WEB_IDENTITY_TOKEN_FILE",
-        "AWS_SHARED_CREDENTIALS_FILE",
-        "AWS_CONFIG_FILE"
-      ],
-      "cache": false,
-      "outputs": []
-    },
-    "sst:remove:production": {
-      "env": [
-        "AWS_REGION",
-        "AWS_DEFAULT_REGION",
-        "AWS_PROFILE",
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
-        "AWS_SESSION_TOKEN",
-        "AWS_ROLE_ARN",
-        "AWS_WEB_IDENTITY_TOKEN_FILE",
-        "AWS_SHARED_CREDENTIALS_FILE",
-        "AWS_CONFIG_FILE"
-      ],
-      "cache": false,
-      "outputs": []
+      "outputs": [],
+      "interactive": true
     },
     "dev": {
       "env": [
@@ -155,22 +78,6 @@
         "AWS_CONFIG_FILE",
         "VITE_LOGO_DEV_PUBLISHABLE_KEY",
         "NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY"
-      ],
-      "cache": false,
-      "persistent": true
-    },
-    "sst:dev": {
-      "env": [
-        "AWS_REGION",
-        "AWS_DEFAULT_REGION",
-        "AWS_PROFILE",
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
-        "AWS_SESSION_TOKEN",
-        "AWS_ROLE_ARN",
-        "AWS_WEB_IDENTITY_TOKEN_FILE",
-        "AWS_SHARED_CREDENTIALS_FILE",
-        "AWS_CONFIG_FILE"
       ],
       "cache": false,
       "persistent": true

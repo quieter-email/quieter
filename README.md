@@ -25,9 +25,9 @@ Quieter is a Bun monorepo for an email client centered on Gmail today, with shar
 
 ## Product Notes
 
-- Gmail access is mailbox-scoped within the active organization.
-- Every user has a personal organization, and connected Gmail mailboxes live there as first-class records.
-- `member.defaultMailboxId` controls the default mailbox per organization.
+- Gmail access is resolved from the selected Better Auth linked Google account in the user's personal organization.
+- Managed/non-Gmail mailboxes are table-backed records; Gmail accounts are not persisted in the `mailbox` table.
+- `member.defaultMailboxId` controls the default mailbox per organization and stores either a Gmail mailbox key or a managed mailbox id.
 - Google auth requests `https://mail.google.com/` plus profile/email scopes; missing scope goes through a dedicated repair flow.
 - Magic-link and verification email delivery still use local placeholder previews rather than real auth email sending.
 - Inbox list selection supports mailbox-aware bulk actions, Shift range select, Ctrl/Cmd toggle, `Mod+A`, and `Escape`.
@@ -37,7 +37,7 @@ Quieter is a Bun monorepo for an email client centered on Gmail today, with shar
 
 - The app boots from `apps/web`, with route loaders and TanStack Start server functions handling auth guards and request-scoped checks.
 - App code talks to shared server logic through `@quieter/orpc`; app code should not couple directly to the database.
-- Gmail API access runs server-side in `packages/orpc/src/gmail-service.ts`.
+- Gmail API calls run server-side in `packages/orpc/src/gmail-service.ts`; token lookup and refresh go through Better Auth linked accounts.
 - Mailbox-scoped TanStack Query data always includes `mailboxId` in query keys so persisted caches do not bleed across inboxes.
 - Better Auth reactive hooks remain the source of truth for auth state.
 - `packages/ui` is the shared UI boundary for app code; app surfaces should import from `@quieter/ui` rather than Base UI, Vaul, or Sonner directly.

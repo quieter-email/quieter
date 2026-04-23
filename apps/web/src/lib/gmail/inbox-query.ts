@@ -49,6 +49,21 @@ const getRateLimitCooldownRemainingMs = (query: {
   return Math.max(0, query.state.errorUpdatedAt + retryAfterMs - Date.now());
 };
 
+const isNonRetryableMailboxError = (error: unknown) => {
+  return (
+    error instanceof ORPCError &&
+    ["FORBIDDEN", "MAILBOX_SCOPE_REPAIR_REQUIRED", "NOT_FOUND", "UNAUTHORIZED"].includes(error.code)
+  );
+};
+
+const shouldRetryGmailQuery = (failureCount: number, error: unknown) => {
+  return (
+    !isNonRetryableMailboxError(error) &&
+    getRateLimitedRetryAfterMs(error) == null &&
+    failureCount < 3
+  );
+};
+
 export const getMessagesQueryKey = (
   mailboxId: string,
   mailbox: MailboxCategory,
@@ -1830,7 +1845,7 @@ export const messagesQueryOptions = (
     getNextPageParam: (lastPage: ListMessagesPageResult) => lastPage.nextPageToken ?? undefined,
     staleTime: GMAIL_QUERY_STALE_TIME_MS,
     enabled,
-    retry: (failureCount, error) => getRateLimitedRetryAfterMs(error) == null && failureCount < 3,
+    retry: shouldRetryGmailQuery,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -1852,7 +1867,7 @@ export const liveSyncQueryOptions = (
         getMessagesQueryKey(mailboxId, mailbox, searchQuery),
       )?.pages[0],
     persister: undefined,
-    retry: (failureCount, error) => getRateLimitedRetryAfterMs(error) == null && failureCount < 3,
+    retry: shouldRetryGmailQuery,
     staleTime: 0,
     refetchOnMount: (query) =>
       (getRateLimitCooldownRemainingMs(query) ?? 0) > 0 ? false : "always",

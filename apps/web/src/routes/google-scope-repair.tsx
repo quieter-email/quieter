@@ -28,19 +28,20 @@ export const Route = createFileRoute("/google-scope-repair")({
     targetAccountId: search.targetAccountId,
   }),
   loader: async ({ deps }) => {
-    const user = await getSessionUser();
+    const [user, repairTarget] = await Promise.all([
+      getSessionUser(),
+      getGoogleScopeRepairTarget({
+        data: {
+          targetAccountId: deps.targetAccountId,
+        },
+      }),
+    ]);
 
     if (!user) {
       throw redirect({
         to: "/home",
       });
     }
-
-    const repairTarget = await getGoogleScopeRepairTarget({
-      data: {
-        targetAccountId: deps.targetAccountId,
-      },
-    });
 
     if (!repairTarget) {
       throw redirect({
@@ -68,6 +69,10 @@ export const Route = createFileRoute("/google-scope-repair")({
 function GoogleScopeRepairRouteComponent() {
   const { returned } = Route.useSearch();
   const { repairTarget, returnTo } = Route.useLoaderData();
+  const repairDescription =
+    repairTarget.repairReason === "missing_scopes"
+      ? `Quieter needs Google permissions for ${repairTarget.emailAddress}.`
+      : `Quieter needs you to reconnect Google for ${repairTarget.emailAddress}.`;
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-2xl items-center px-6 py-20">
@@ -76,9 +81,7 @@ function GoogleScopeRepairRouteComponent() {
           <h1 className="text-lg font-medium tracking-tight text-foreground">
             Reconnect {repairTarget.emailAddress}
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Quieter needs Google permissions for {repairTarget.emailAddress}.
-          </p>
+          <p className="text-sm text-muted-foreground">{repairDescription}</p>
           {returned ? (
             <p className="text-sm text-muted-foreground">
               If Google shows multiple accounts, choose {repairTarget.emailAddress}. Quieter will
