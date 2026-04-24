@@ -132,6 +132,8 @@ The mail ingress/outbound auth tokens are provisioned as SST linked secrets rath
 
 The repo `bun run sst ...` wrapper defaults local SST commands to `sst.config.ts`, the `mail-dev` stage, and the `quieter-sst` AWS profile fallback.
 
+On Windows ARM64, the wrapper also seeds SST's local Pulumi plugin cache with the `windows-amd64` `random` provider when Pulumi requests a version that is not published for `windows-arm64`.
+
 ## Database Workflow
 
 - Use `bun run db:push` for normal local schema changes.

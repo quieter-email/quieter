@@ -181,10 +181,12 @@ const SettingsRow = ({ action, label, value }: SettingsRowProps) => (
 );
 
 const MutedActionButton = ({
+  buttonClassName,
   icon,
   label,
   reason,
 }: {
+  buttonClassName?: string;
   icon: ReactNode;
   label: string;
   reason: string;
@@ -195,7 +197,10 @@ const MutedActionButton = ({
       render={<span tabIndex={0} />}
     >
       <Button
-        className="pointer-events-none border-border/60 bg-transparent text-muted-foreground opacity-100 hover:bg-transparent hover:text-muted-foreground"
+        className={
+          buttonClassName ??
+          "pointer-events-none border-border/60 bg-transparent text-muted-foreground opacity-100 hover:bg-transparent hover:text-muted-foreground"
+        }
         disabled
         size="sm"
         variant="outline"
@@ -1626,6 +1631,7 @@ export const OrganizationSettingsPanel = () => {
   const canUpdateOrganization = hasOrganizationPermission(activeRole, {
     organization: ["update"],
   });
+  const isPersonalOrganization = activeOrganization?.personalOwnerUserId != null;
   const updateOrganizationReason =
     activeOrganization && !canUpdateOrganization
       ? "Only admins and owners can edit organization details."
@@ -1635,7 +1641,11 @@ export const OrganizationSettingsPanel = () => {
       ? "Assign another owner before leaving."
       : null;
   const deleteOrganizationReason =
-    activeOrganization && !canDeleteOrganization ? "Only owners can delete organizations." : null;
+    activeOrganization && isPersonalOrganization
+      ? "You cannot delete your personal organization."
+      : activeOrganization && !canDeleteOrganization
+        ? "Only owners can delete organizations."
+        : null;
   const peopleSummary = activeOrganization
     ? [
         formatCount(activeOrganization.members.length, "member"),
@@ -1724,6 +1734,7 @@ export const OrganizationSettingsPanel = () => {
               action={
                 deleteOrganizationReason ? (
                   <MutedActionButton
+                    buttonClassName="pointer-events-none border-destructive/25 bg-destructive/10 text-destructive/80 opacity-100 hover:bg-destructive/10 hover:text-destructive/80"
                     icon={<HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />}
                     label="Delete"
                     reason={deleteOrganizationReason}

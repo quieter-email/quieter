@@ -185,7 +185,7 @@ export const MailboxesSettingsPanel = () => {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="w-full max-w-64">
+        <div className="">
           <OrganizationSwitcherSelect />
         </div>
 
@@ -209,7 +209,9 @@ export const MailboxesSettingsPanel = () => {
       </div>
 
       {!isPersonalOrganization ? (
-        <p className="text-sm text-muted-foreground">Gmail lives in your personal organization.</p>
+        <p className="text-sm text-muted-foreground">
+          Use your personal organization to connect your Gmail accounts.
+        </p>
       ) : null}
 
       {isGmailConnecting ? (

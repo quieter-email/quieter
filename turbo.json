@@ -93,9 +93,12 @@
         "AWS_WEB_IDENTITY_TOKEN_FILE",
         "AWS_SHARED_CREDENTIALS_FILE",
         "AWS_CONFIG_FILE",
+        "BUN_INSTALL_CACHE_DIR",
+        "SST_BUN_PATH",
         "VITE_LOGO_DEV_PUBLISHABLE_KEY",
         "NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY"
       ],
+      "passThroughEnv": ["BUN_INSTALL_CACHE_DIR", "SST_BUN_PATH"],
       "cache": false,
       "persistent": true
     }
