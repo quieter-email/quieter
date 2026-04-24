@@ -21,9 +21,6 @@ const baseURL =
   (process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`) ||
   "http://localhost:3000";
 
-const isOrganizationRepairPath = (path: string) =>
-  path === "/get-session" || path.startsWith("/organization");
-
 export const getSessionWithOrganization = async (headers: Headers) => {
   const session = await auth.api.getSession({ headers });
 
@@ -53,22 +50,19 @@ export const getSessionWithOrganization = async (headers: Headers) => {
 export const auth = betterAuth({
   appName,
   baseURL,
+  trustedOrigins: [baseURL],
   database: drizzleAdapter(db, {
     provider: "pg",
   }),
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
-      if (!isOrganizationRepairPath(ctx.path)) {
-        return;
-      }
+      if (ctx.path !== "/get-session" && !ctx.path.startsWith("/organization")) return;
 
       const currentSession = await getSessionFromCtx(ctx, {
         disableCookieCache: true,
       }).catch(() => null);
 
-      if (!currentSession?.user || !currentSession.session) {
-        return;
-      }
+      if (!currentSession?.user || !currentSession.session) return;
 
       const organizationState = await ensureUserOrganizationState(currentSession.user, {
         activeOrganizationId: currentSession.session.activeOrganizationId ?? null,
@@ -81,9 +75,8 @@ export const auth = betterAuth({
         typeof ctx.body === "object" &&
         "organizationId" in ctx.body &&
         typeof ctx.body.organizationId === "string"
-      ) {
+      )
         await assertCanLeaveOrganization(currentSession.user, ctx.body.organizationId);
-      }
 
       if (organizationState.activeOrganizationId !== currentSession.session.activeOrganizationId) {
         ctx.context.session = {
@@ -113,11 +106,10 @@ export const auth = betterAuth({
         before: async (nextSession) => {
           const currentUser = await getUserById(nextSession.userId);
 
-          if (!currentUser) {
+          if (!currentUser)
             throw new APIError("INTERNAL_SERVER_ERROR", {
               message: "Could not create session because the user record is missing.",
             });
-          }
 
           const organizationState = await ensureUserOrganizationState(currentUser, {
             activeOrganizationId:
@@ -187,22 +179,20 @@ export const auth = betterAuth({
     organization({
       organizationHooks: {
         beforeDeleteOrganization: async ({ organization, user }) => {
-          if (organization.personalOwnerUserId) {
+          if (organization.personalOwnerUserId)
             throw new APIError("BAD_REQUEST", {
               message: "Legacy personal organizations cannot be deleted here.",
             });
-          }
 
           await ensureUserOrganizationState(user);
         },
         beforeRemoveMember: async ({ organization, user }) => {
           await ensureUserOrganizationState(user);
 
-          if (organization.personalOwnerUserId) {
+          if (organization.personalOwnerUserId)
             throw new APIError("BAD_REQUEST", {
               message: "Legacy personal organization memberships cannot be changed here.",
             });
-          }
         },
       },
       schema: {
