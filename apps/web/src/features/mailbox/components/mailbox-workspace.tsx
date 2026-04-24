@@ -65,7 +65,7 @@ import {
   type MailboxWorkspaceStore,
 } from "~/lib/gmail/mailbox-workspace-store";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
-import { mailboxesQueryOptions } from "~/lib/mailboxes-query";
+import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 import { inboxRouteApi } from "~/lib/route-apis";
 import { toMailboxSearch } from "~/lib/search-params";
@@ -674,7 +674,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
   const activeMessageId = messageId ?? null;
   const activeSearchQuery = query.trim();
   const activeOrganizationId = activeOrganizationState.data?.id ?? null;
-  const activeOrganizationName = activeOrganizationState.data?.name ?? null;
+  const activeOrganizationName = activeOrganizationState.data?.name ?? "Personal";
   const mailboxesQuery = useQuery(mailboxesQueryOptions(activeOrganizationId));
   const defaultMailboxId = mailboxesQuery.data?.defaultMailboxId ?? null;
   const mailboxes = (mailboxesQuery.data?.mailboxes ?? [])
@@ -701,8 +701,9 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
   const setDefaultMailboxMutation = useMutation({
     ...orpc.mail.setDefaultMailbox.mutationOptions(),
     onSuccess: async () => {
-      if (!activeOrganizationId) return;
-      await queryClient.invalidateQueries({ queryKey: ["mailboxes", activeOrganizationId] });
+      await queryClient.invalidateQueries({
+        queryKey: getMailboxesQueryKey(activeOrganizationId),
+      });
     },
   });
 

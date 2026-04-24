@@ -1604,7 +1604,9 @@ export const OrganizationSettingsPanel = () => {
   const organizationsState = authClient.useListOrganizations();
   const activeMember = activeMemberState.data ?? null;
   const activeOrganization = activeOrganizationState.data ?? null;
-  const organizations = organizationsState.data ?? [];
+  const organizations = (organizationsState.data ?? []).filter(
+    (organization) => organization.personalOwnerUserId == null,
+  );
   const activeRole = activeMember ? normalizeOrganizationRole(activeMember.role) : null;
   const pendingInvitations =
     activeOrganization?.invitations.filter((invitation) => invitation.status === "pending") ?? [];
@@ -1631,7 +1633,6 @@ export const OrganizationSettingsPanel = () => {
   const canUpdateOrganization = hasOrganizationPermission(activeRole, {
     organization: ["update"],
   });
-  const isPersonalOrganization = activeOrganization?.personalOwnerUserId != null;
   const updateOrganizationReason =
     activeOrganization && !canUpdateOrganization
       ? "Only admins and owners can edit organization details."
@@ -1641,11 +1642,7 @@ export const OrganizationSettingsPanel = () => {
       ? "Assign another owner before leaving."
       : null;
   const deleteOrganizationReason =
-    activeOrganization && isPersonalOrganization
-      ? "You cannot delete your personal organization."
-      : activeOrganization && !canDeleteOrganization
-        ? "Only owners can delete organizations."
-        : null;
+    activeOrganization && !canDeleteOrganization ? "Only owners can delete organizations." : null;
   const peopleSummary = activeOrganization
     ? [
         formatCount(activeOrganization.members.length, "member"),

@@ -25,9 +25,9 @@ Quieter is a Bun monorepo for an email client centered on Gmail today, with shar
 
 ## Product Notes
 
-- Gmail access is resolved from the selected Better Auth linked Google account in the user's personal organization.
+- Gmail access is resolved from the selected Better Auth linked Google account in the built-in Personal workspace.
 - Managed/non-Gmail mailboxes are table-backed records; Gmail accounts are not persisted in the `mailbox` table.
-- `member.defaultMailboxId` controls the default mailbox per organization and stores either a Gmail mailbox key or a managed mailbox id.
+- `user.defaultMailboxId` controls the Personal default mailbox. `member.defaultMailboxId` controls the default mailbox per organization and stores managed mailbox ids.
 - Google auth requests `https://mail.google.com/` plus profile/email scopes; missing scope goes through a dedicated repair flow.
 - Magic-link and verification email delivery still use local placeholder previews rather than real auth email sending.
 - Inbox list selection supports mailbox-aware bulk actions, Shift range select, Ctrl/Cmd toggle, `Mod+A`, and `Escape`.
@@ -126,11 +126,11 @@ Auth/runtime:
 Mail:
 
 - `AWS_REGION` or `AWS_DEFAULT_REGION`
-- `AWS_PROFILE` or equivalent AWS credentials for direct SST commands
+- `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` for direct SST commands
 
 The mail ingress/outbound auth tokens are provisioned as SST linked secrets rather than configured as repo env vars, and inbound mail is stored under the fixed `mail/inbound/...` key prefix.
 
-The repo `bun run sst ...` wrapper defaults local SST commands to `sst.config.ts`, the `mail-dev` stage, and the `quieter-sst` AWS profile fallback.
+The repo `bun run sst ...` wrapper defaults local SST commands to `sst.config.ts` and the `mail-dev` stage. It loads credentials from `.env.local`, strips inherited `AWS_*` shell variables, and ignores profile-based AWS config so local SST commands do not depend on AWS CLI login state.
 
 On Windows ARM64, the wrapper also seeds SST's local Pulumi plugin cache with the `windows-amd64` `random` provider when Pulumi requests a version that is not published for `windows-arm64`.
 

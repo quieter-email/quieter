@@ -48,6 +48,7 @@ import {
   composeSendDraftInputSchema,
   splitMailAddressList,
 } from "./gmail/compose/schema";
+import { checkMailDomainSetup, createMailDomainSetup } from "./mail-domain-service";
 import {
   disconnectPersonalGmailMailbox,
   getAuthorizedGmailMailbox,
@@ -73,7 +74,7 @@ const historySyncMailboxCategorySchema = z.enum(["inbox", "spam", "sent", "trash
 const mailboxIdSchema = z.string().trim().min(1);
 
 type ProtectedContext = OrpcContext & {
-  activeOrganizationId: string;
+  activeOrganizationId: string | null;
   userId: string;
 };
 
@@ -232,6 +233,32 @@ export const appRouter = {
       )
       .handler(async ({ input }) => {
         return await getAuthUserStatus(input.email);
+      }),
+  },
+  mailDomains: {
+    createSetup: protectedProcedure
+      .input(
+        z.object({
+          domain: z.string().trim().min(1),
+        }),
+      )
+      .handler(async ({ context, input }) => {
+        return await createMailDomainSetup({
+          activeOrganizationId: context.activeOrganizationId,
+          domain: input.domain,
+        });
+      }),
+    checkSetup: protectedProcedure
+      .input(
+        z.object({
+          domain: z.string().trim().min(1),
+        }),
+      )
+      .handler(async ({ context, input }) => {
+        return await checkMailDomainSetup({
+          activeOrganizationId: context.activeOrganizationId,
+          domain: input.domain,
+        });
       }),
   },
   mail: {

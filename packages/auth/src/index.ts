@@ -1,22 +1,20 @@
 import { passkey } from "@better-auth/passkey";
-import { db, member } from "@quieter/database";
+import { db } from "@quieter/database";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { magicLink, organization } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
-import { eq } from "drizzle-orm";
 import { storeAuthEmailPreview } from "./email-placeholder";
 import { REQUIRED_GOOGLE_SCOPES } from "./google-scopes";
 import {
   assertCanLeaveOrganization,
   cleanupOrganizationsForDeletedUser,
   ensureUserOrganizationState,
-  ensureUsersHavePersonalOrganizations,
   getUserById,
 } from "./organization";
 
-const appName = process.env.BETTER_AUTH_APP_NAME ?? "Quieter";
+const appName = process.env.BETTER_AUTH_APP_NAME ?? "quieter";
 
 const baseURL =
   process.env.BETTER_AUTH_URL ||
@@ -33,12 +31,13 @@ export const getSessionWithOrganization = async (headers: Headers) => {
     return session;
   }
 
+  const currentActiveOrganizationId = session.session.activeOrganizationId ?? null;
   const organizationState = await ensureUserOrganizationState(session.user, {
-    activeOrganizationId: session.session.activeOrganizationId ?? null,
+    activeOrganizationId: currentActiveOrganizationId,
     sessionToken: session.session.token,
   });
 
-  if (organizationState.activeOrganizationId === session.session.activeOrganizationId) {
+  if (organizationState.activeOrganizationId === currentActiveOrganizationId) {
     return session;
   }
 
@@ -190,27 +189,18 @@ export const auth = betterAuth({
         beforeDeleteOrganization: async ({ organization, user }) => {
           if (organization.personalOwnerUserId) {
             throw new APIError("BAD_REQUEST", {
-              message: "Personal organizations can't be deleted.",
+              message: "Legacy personal organizations cannot be deleted here.",
             });
           }
-
-          const organizationMembers = await db
-            .select({ userId: member.userId })
-            .from(member)
-            .where(eq(member.organizationId, organization.id));
-
-          await ensureUsersHavePersonalOrganizations(
-            organizationMembers.map((organizationMember) => organizationMember.userId),
-          );
 
           await ensureUserOrganizationState(user);
         },
         beforeRemoveMember: async ({ organization, user }) => {
           await ensureUserOrganizationState(user);
 
-          if (organization.personalOwnerUserId === user.id) {
+          if (organization.personalOwnerUserId) {
             throw new APIError("BAD_REQUEST", {
-              message: "You can't leave your personal organization.",
+              message: "Legacy personal organization memberships cannot be changed here.",
             });
           }
         },
@@ -241,8 +231,4 @@ export const auth = betterAuth({
   ],
 });
 
-export {
-  REQUIRED_GOOGLE_SCOPES,
-  ensureUserOrganizationState,
-  ensureUsersHavePersonalOrganizations,
-};
+export { REQUIRED_GOOGLE_SCOPES, ensureUserOrganizationState };

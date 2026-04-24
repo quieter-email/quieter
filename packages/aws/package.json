@@ -8,7 +8,7 @@
     "./receipt": "./src/receipt.ts"
   },
   "scripts": {
-    "dev": "bunx --env-file=../../.env.local sst dev --config ../../sst.config.ts --stage mail-dev",
+    "dev": "bun ../../scripts/sst.ts dev",
     "fmt": "oxfmt --config ../../oxfmt.json .",
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
     "lint": "oxlint --config ../../oxlint.json .",

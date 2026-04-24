@@ -1,5 +1,43 @@
-import { bigint, boolean, index, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  boolean,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+} from "drizzle-orm/pg-core";
 import { defineRelations } from "drizzle-orm/relations";
+
+export type MailDomainStatus = "failed" | "pending_dns" | "verified";
+
+export type MailDomainDnsRecord = {
+  name: string;
+  priority?: number;
+  purpose: "dkim" | "dmarc" | "inbound_mx" | "mail_from_mx" | "mail_from_spf";
+  required: true;
+  type: "CNAME" | "MX" | "TXT";
+  value: string;
+};
+
+export type MailDomainCheckResult = {
+  checks: Array<{
+    expected?: string[];
+    found?: string[];
+    message: string;
+    ok: boolean;
+    purpose:
+      | "dkim"
+      | "dmarc"
+      | "inbound_mx"
+      | "mail_from_mx"
+      | "mail_from_spf"
+      | "ses_identity"
+      | "ses_mail_from";
+  }>;
+  checkedAt: string;
+};
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -7,6 +45,7 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("emailVerified").notNull(),
   image: text("image"),
+  defaultMailboxId: text("defaultMailboxId"),
   createdAt: timestamp("createdAt").notNull(),
   updatedAt: timestamp("updatedAt").notNull(),
 });
@@ -163,6 +202,28 @@ export const mailbox = pgTable(
   ],
 );
 
+export const mailDomain = pgTable(
+  "mailDomain",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id),
+    domain: text("domain").notNull(),
+    mailFromDomain: text("mailFromDomain").notNull(),
+    status: text("status").$type<MailDomainStatus>().notNull(),
+    requiredDnsRecords: jsonb("requiredDnsRecords").$type<MailDomainDnsRecord[]>().notNull(),
+    lastCheckResult: jsonb("lastCheckResult").$type<MailDomainCheckResult>(),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+    verifiedAt: timestamp("verifiedAt"),
+  },
+  (table) => [
+    index("mail_domain_organization_id_idx").on(table.organizationId),
+    unique("mail_domain_organization_id_domain_unique").on(table.organizationId, table.domain),
+  ],
+);
+
 export const tables = {
   user,
   organization,
@@ -173,6 +234,7 @@ export const tables = {
   member,
   invitation,
   mailbox,
+  mailDomain,
 };
 
 export const authRelations = defineRelations(tables, (r) => ({
@@ -189,6 +251,7 @@ export const authRelations = defineRelations(tables, (r) => ({
       to: r.invitation.organizationId,
     }),
     mailboxes: r.many.mailbox({ from: r.organization.id, to: r.mailbox.organizationId }),
+    mailDomains: r.many.mailDomain({ from: r.organization.id, to: r.mailDomain.organizationId }),
     members: r.many.member({ from: r.organization.id, to: r.member.organizationId }),
   },
   session: {
@@ -244,6 +307,13 @@ export const authRelations = defineRelations(tables, (r) => ({
   mailbox: {
     organization: r.one.organization({
       from: r.mailbox.organizationId,
+      to: r.organization.id,
+      optional: false,
+    }),
+  },
+  mailDomain: {
+    organization: r.one.organization({
+      from: r.mailDomain.organizationId,
       to: r.organization.id,
       optional: false,
     }),

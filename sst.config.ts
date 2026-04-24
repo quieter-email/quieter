@@ -3,13 +3,10 @@
 
 export default $config({
   app(input) {
-    const awsProfile = process.env.AWS_PROFILE ?? "quieter-sst";
-
     return {
       home: "aws",
       name: "quieter",
       protect: input.stage === "production",
-      ...(awsProfile ? { providers: { aws: { profile: awsProfile } } } : {}),
       removal: input.stage === "production" ? "retain" : "remove",
     };
   },

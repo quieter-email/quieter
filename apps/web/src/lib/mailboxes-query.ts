@@ -2,7 +2,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
 
 export const getMailboxesQueryKey = (activeOrganizationId: string | null | undefined) =>
-  ["mailboxes", activeOrganizationId ?? "none"] as const;
+  ["mailboxes", activeOrganizationId ?? "personal"] as const;
 
 export const mailboxesQueryOptions = (
   activeOrganizationId: string | null | undefined,
@@ -11,7 +11,7 @@ export const mailboxesQueryOptions = (
   queryOptions({
     queryKey: getMailboxesQueryKey(activeOrganizationId),
     queryFn: ({ signal }) => rpc.mail.listMailboxesForActiveOrganization(undefined, { signal }),
-    enabled: enabled && Boolean(activeOrganizationId),
+    enabled,
     staleTime: 0,
     refetchOnMount: "always",
     refetchOnWindowFocus: false,

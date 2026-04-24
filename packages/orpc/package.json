@@ -22,6 +22,8 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-ses": "catalog:",
+    "@aws-sdk/client-sesv2": "catalog:",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@quieter/auth": "workspace:*",

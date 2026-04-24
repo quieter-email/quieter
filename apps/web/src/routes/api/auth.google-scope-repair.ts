@@ -42,7 +42,7 @@ export const Route = createFileRoute("/api/auth/google-scope-repair")({
         const authHeaders = new Headers(request.headers);
         const session = await getSessionWithOrganization(authHeaders);
 
-        if (!session?.user || !session.session?.activeOrganizationId) {
+        if (!session?.user || !session.session) {
           return redirectResponse(new URL("/home", requestUrl));
         }
 

@@ -21,9 +21,9 @@
 ## Product Invariants
 
 - Quieter is an email client.
-- Gmail access is resolved through the selected Better Auth linked Google account in the user's personal organization.
-- `member.defaultMailboxId` pins the per-org default mailbox. Invalid or missing `mailboxId` should resolve to that mailbox.
-- Better Auth organization plugin is the source of truth for orgs. Every user has a personal org. Gmail mailboxes are derived from linked Google accounts, not `mailbox` table rows.
+- Gmail access is resolved through the selected Better Auth linked Google account in the built-in Personal workspace.
+- `user.defaultMailboxId` pins the Personal default mailbox. `member.defaultMailboxId` pins per-org default mailboxes. Invalid or missing `mailboxId` should resolve to the relevant default mailbox.
+- Better Auth organization plugin is the source of truth for explicit orgs only. Users can have zero or more organizations. Personal is always available but is not a Better Auth organization. Gmail mailboxes are derived from linked Google accounts, not `mailbox` table rows.
 - Managed/non-Gmail mailboxes are the table-backed mailbox records.
 - Google auth must request `https://mail.google.com/` plus profile/email scopes. Missing scope goes to the dedicated repair flow for the exact broken Gmail account.
 - Auth emails are local preview/placeholder flows, not real outbound delivery.
@@ -59,7 +59,7 @@
 - Mail ingress/outbound auth tokens come from SST linked secrets.
 - Inbound mail is stored under the fixed `mail/inbound/...` key prefix.
 - `AWS_REGION` or `AWS_DEFAULT_REGION` is required for the mail S3 uploader.
-- Run the combined local dev session with `bun run dev`; Turbo runs the web app and SST mail stack side by side. Run direct SST commands through `bun run sst ...`; the wrapper defaults to `sst.config.ts` and the `mail-dev` stage.
+- Run the combined local dev session with `bun run dev`; Turbo runs the web app and SST mail stack side by side. Run direct SST commands through `bun run sst ...`; the wrapper defaults to `sst.config.ts` and the `mail-dev` stage, and loads AWS credentials from `.env.local`.
 
 ## Schema + Generated Files
 

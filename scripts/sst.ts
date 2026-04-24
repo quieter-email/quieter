@@ -1,17 +1,75 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const args = process.argv.slice(2);
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const envFilePath = resolve(repoRoot, ".env.local");
 const passThroughCommands = new Set(["--help", "-h", "help", "version", "upgrade", "telemetry"]);
 const windowsArmRandomProviderVersion = "4.16.6";
 const windowsArmRandomProviderDir = `resource-random-v${windowsArmRandomProviderVersion}`;
 
 const hasOption = (name: string) => args.some((arg) => arg === name || arg.startsWith(`${name}=`));
 const shouldUseAppDefaults = args.length > 0 && !passThroughCommands.has(args[0] ?? "");
+
+const parseEnvFile = (path: string) => {
+  if (!existsSync(path)) {
+    throw new Error(`${path} is required for SST commands.`);
+  }
+
+  const values: Record<string, string> = {};
+
+  for (const rawLine of readFileSync(path, "utf8").split(/\r?\n/)) {
+    const line = rawLine.trim();
+
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+
+    const equalsIndex = line.indexOf("=");
+
+    if (equalsIndex === -1) {
+      continue;
+    }
+
+    const key = line.slice(0, equalsIndex).trim();
+    let value = line.slice(equalsIndex + 1).trim();
+
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+
+    values[key] = value;
+  }
+
+  return values;
+};
+
+const createSstEnv = () => {
+  const env = { ...process.env };
+
+  for (const key of Object.keys(env)) {
+    if (key.toUpperCase().startsWith("AWS_")) {
+      delete env[key];
+    }
+  }
+
+  const localEnv = parseEnvFile(envFilePath);
+
+  delete localEnv.AWS_PROFILE;
+  delete localEnv.AWS_CONFIG_FILE;
+  delete localEnv.AWS_SHARED_CREDENTIALS_FILE;
+
+  return {
+    ...env,
+    ...localEnv,
+  };
+};
 
 const runOrThrow = (command: string, commandArgs: string[], options?: { cwd?: string }) => {
   const result = spawnSync(command, commandArgs, {
@@ -86,7 +144,7 @@ if (shouldUseAppDefaults && !hasOption("--stage")) {
 
 const result = spawnSync("bunx", ["sst", ...sstArgs], {
   cwd: repoRoot,
-  env: process.env,
+  env: createSstEnv(),
   shell: process.platform === "win32",
   stdio: "inherit",
 });

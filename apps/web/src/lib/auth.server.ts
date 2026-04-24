@@ -47,7 +47,7 @@ export const getGoogleScopeRepairTargetForRequest = async (
   const authHeaders = getAuthHeaders(request);
   const session = await getSessionWithOrganization(authHeaders);
 
-  if (!session?.user || !session.session?.activeOrganizationId) {
+  if (!session?.user || !session.session) {
     return null;
   }
 

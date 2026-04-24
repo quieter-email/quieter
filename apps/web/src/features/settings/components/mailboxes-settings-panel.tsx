@@ -17,10 +17,11 @@ import {
 } from "~/features/navigation/components/mailbox-switcher";
 import { authClient } from "~/lib/auth";
 import { getErrorMessage } from "~/lib/errors";
-import { mailboxesQueryOptions } from "~/lib/mailboxes-query";
+import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 
 const PENDING_GMAIL_LINK_STORAGE_KEY = "quieter:pending-gmail-link";
+const PERSONAL_WORKSPACE_ID = "personal";
 
 type PendingGmailLinkState = {
   mailboxCount: number;
@@ -79,14 +80,12 @@ export const MailboxesSettingsPanel = () => {
   );
   const activeOrganization = activeOrganizationState.data ?? null;
   const activeOrganizationId = activeOrganization?.id ?? null;
-  const sessionUserId = sessionState.data?.user.id ?? null;
-  const isPersonalOrganization =
-    activeOrganization?.personalOwnerUserId != null &&
-    activeOrganization.personalOwnerUserId === sessionUserId;
+  const activeWorkspaceId = activeOrganizationId ?? PERSONAL_WORKSPACE_ID;
+  const isPersonalWorkspace = activeOrganizationId == null;
   const mailboxesQuery = useQuery(mailboxesQueryOptions(activeOrganizationId));
   const mailboxes = mailboxesQuery.data?.mailboxes ?? [];
   const pendingGmailLinkMatchesOrganization =
-    pendingGmailLink != null && pendingGmailLink.organizationId === activeOrganizationId;
+    pendingGmailLink != null && pendingGmailLink.organizationId === activeWorkspaceId;
   const isGmailConnecting =
     pendingGmailLinkMatchesOrganization && (mailboxesQuery.isPending || mailboxesQuery.isFetching);
   const defaultMailboxId = mailboxesQuery.data?.defaultMailboxId ?? null;
@@ -94,12 +93,8 @@ export const MailboxesSettingsPanel = () => {
     ...orpc.mail.disconnectMailbox.mutationOptions(),
     mutationKey: ["mail", "disconnect-mailbox"],
     onSuccess: async () => {
-      if (!activeOrganizationId) {
-        return;
-      }
-
       await queryClient.invalidateQueries({
-        queryKey: ["mailboxes", activeOrganizationId],
+        queryKey: getMailboxesQueryKey(activeOrganizationId),
       });
     },
   });
@@ -107,22 +102,18 @@ export const MailboxesSettingsPanel = () => {
     ...orpc.mail.setDefaultMailbox.mutationOptions(),
     mutationKey: ["mail", "set-default-mailbox"],
     onSuccess: async () => {
-      if (!activeOrganizationId) {
-        return;
-      }
-
       await queryClient.invalidateQueries({
-        queryKey: ["mailboxes", activeOrganizationId],
+        queryKey: getMailboxesQueryKey(activeOrganizationId),
       });
     },
   });
 
   useEffect(() => {
     setPendingGmailLink(readPendingGmailLink());
-  }, [activeOrganizationId]);
+  }, [activeWorkspaceId]);
 
   useEffect(() => {
-    if (!pendingGmailLink || pendingGmailLink.organizationId !== activeOrganizationId) {
+    if (!pendingGmailLink || pendingGmailLink.organizationId !== activeWorkspaceId) {
       return;
     }
 
@@ -142,7 +133,7 @@ export const MailboxesSettingsPanel = () => {
       toast.success("Gmail connected.");
     }
   }, [
-    activeOrganizationId,
+    activeWorkspaceId,
     mailboxes.length,
     mailboxesQuery.isError,
     mailboxesQuery.isFetching,
@@ -151,7 +142,7 @@ export const MailboxesSettingsPanel = () => {
   ]);
 
   const handleConnectGmail = async () => {
-    if (!activeOrganizationId || !isPersonalOrganization) {
+    if (!isPersonalWorkspace) {
       return;
     }
 
@@ -159,7 +150,7 @@ export const MailboxesSettingsPanel = () => {
 
     const nextPendingGmailLink = {
       mailboxCount: mailboxes.length,
-      organizationId: activeOrganizationId,
+      organizationId: activeWorkspaceId,
       startedAt: Date.now(),
     } satisfies PendingGmailLinkState;
 
@@ -178,7 +169,7 @@ export const MailboxesSettingsPanel = () => {
     }
   };
 
-  if (!activeOrganization) {
+  if (activeOrganizationState.isPending || sessionState.isPending) {
     return <p className="text-sm text-muted-foreground">loading organization...</p>;
   }
 
@@ -189,7 +180,7 @@ export const MailboxesSettingsPanel = () => {
           <OrganizationSwitcherSelect />
         </div>
 
-        {isPersonalOrganization ? (
+        {isPersonalWorkspace ? (
           <Button
             disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
             onClick={() => {
@@ -208,41 +199,35 @@ export const MailboxesSettingsPanel = () => {
         ) : null}
       </div>
 
-      {!isPersonalOrganization ? (
-        <p className="text-sm text-muted-foreground">
-          Use your personal organization to connect your Gmail accounts.
-        </p>
-      ) : null}
-
-      {isGmailConnecting ? (
+      {isGmailConnecting && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
           <span>syncing Gmail...</span>
         </div>
-      ) : null}
+      )}
 
       {connectError ? <p className="text-sm text-destructive">{connectError}</p> : null}
 
-      {mailboxesQuery.isError ? (
+      {mailboxesQuery.isError && (
         <p className="text-sm text-destructive">
           {getErrorMessage(mailboxesQuery.error, "Could not load mailboxes.")}
         </p>
-      ) : null}
+      )}
 
-      {!mailboxesQuery.isError && !isGmailConnecting && mailboxesQuery.isPending ? (
+      {!mailboxesQuery.isError && !isGmailConnecting && mailboxesQuery.isPending && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
           <span>loading mailboxes...</span>
         </div>
-      ) : null}
+      )}
 
-      {!mailboxesQuery.isPending && !mailboxesQuery.isError && mailboxes.length === 0 ? (
+      {!mailboxesQuery.isPending && !mailboxesQuery.isError && mailboxes.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          {isPersonalOrganization ? "No mailboxes yet." : "No mailboxes in this organization."}
+          {isPersonalWorkspace ? "No mailboxes yet." : "No mailboxes in this organization."}
         </p>
-      ) : null}
+      )}
 
-      {mailboxes.length > 0 ? (
+      {mailboxes.length > 0 && (
         <div className="divide-y divide-border/70">
           {mailboxes.map((mailbox) => {
             const isDisconnecting = disconnectMailboxMutation.variables?.mailboxId === mailbox.id;
@@ -277,7 +262,7 @@ export const MailboxesSettingsPanel = () => {
                       {isDefault ? "Default" : "Set default"}
                     </Button>
 
-                    {isPersonalOrganization && isGmailMailbox ? (
+                    {isPersonalWorkspace && isGmailMailbox ? (
                       <Button
                         disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
                         onClick={() => {
@@ -303,13 +288,13 @@ export const MailboxesSettingsPanel = () => {
             );
           })}
         </div>
-      ) : null}
+      )}
 
-      {disconnectMailboxMutation.isError ? (
+      {disconnectMailboxMutation.isError && (
         <p className="text-sm text-destructive">
           {getErrorMessage(disconnectMailboxMutation.error, "Could not disconnect that mailbox.")}
         </p>
-      ) : null}
+      )}
     </div>
   );
 };

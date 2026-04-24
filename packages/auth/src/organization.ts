@@ -1,6 +1,6 @@
 import { db, invitation, member, organization, session, user } from "@quieter/database";
 import { APIError } from "better-auth/api";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 
 type AuthUser = typeof user.$inferSelect;
 
@@ -12,162 +12,55 @@ type EnsureUserOrganizationStateOptions = {
 };
 
 type EnsureUserOrganizationStateResult = {
-  activeOrganizationId: string;
+  activeOrganizationId: string | null;
   organizationIds: string[];
-  personalOrganizationId: string;
-};
-
-const slugifyOrganizationValue = (value: string) =>
-  value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-const buildPersonalOrganizationName = (currentUser: UserIdentity) => {
-  const baseName = currentUser.name.trim() || currentUser.email.trim() || "Personal";
-
-  return `${baseName}'s Personal`;
-};
-
-const buildLegacyPersonalOrganizationSlug = (userId: string) => `personal-${userId}`;
-
-const buildPersonalOrganizationSlug = (currentUser: UserIdentity) => {
-  const emailHandle = currentUser.email.split("@")[0] ?? "";
-  const readableBase =
-    slugifyOrganizationValue(currentUser.name) ||
-    slugifyOrganizationValue(emailHandle) ||
-    "personal";
-  const normalizedUserId = slugifyOrganizationValue(currentUser.id) || currentUser.id.toLowerCase();
-
-  return `${readableBase}-personal-${normalizedUserId}`;
-};
-
-const getPersonalOrganization = async (userId: string) => {
-  const personalSlug = buildLegacyPersonalOrganizationSlug(userId);
-  const [personalOrganization] = await db
-    .select()
-    .from(organization)
-    .where(or(eq(organization.personalOwnerUserId, userId), eq(organization.slug, personalSlug)))
-    .limit(1);
-
-  return personalOrganization ?? null;
 };
 
 const getUserOrganizationIds = async (userId: string) => {
   const rows = await db
+    .select({
+      organizationId: member.organizationId,
+      personalOwnerUserId: organization.personalOwnerUserId,
+    })
+    .from(member)
+    .innerJoin(organization, eq(organization.id, member.organizationId))
+    .where(and(eq(member.userId, userId), isNotNull(organization.personalOwnerUserId)));
+
+  if (rows.length > 0) {
+    const legacyOrganizationIds = rows.map((row) => row.organizationId);
+    const ownedLegacyOrganizationIds = rows
+      .filter((row) => row.personalOwnerUserId === userId)
+      .map((row) => row.organizationId);
+
+    await db.delete(member).where(inArray(member.organizationId, legacyOrganizationIds));
+
+    if (ownedLegacyOrganizationIds.length > 0) {
+      await db
+        .delete(invitation)
+        .where(inArray(invitation.organizationId, ownedLegacyOrganizationIds));
+      await db.delete(member).where(inArray(member.organizationId, ownedLegacyOrganizationIds));
+      await db.delete(organization).where(inArray(organization.id, ownedLegacyOrganizationIds));
+    }
+  }
+
+  const organizationRows = await db
     .select({ organizationId: member.organizationId })
     .from(member)
-    .where(eq(member.userId, userId));
+    .innerJoin(organization, eq(organization.id, member.organizationId))
+    .where(and(eq(member.userId, userId), isNull(organization.personalOwnerUserId)));
 
-  return rows.map((row) => row.organizationId);
-};
-
-const ensurePersonalMembership = async (organizationId: string, userId: string) => {
-  const [existingMembership] = await db
-    .select({ id: member.id })
-    .from(member)
-    .where(and(eq(member.organizationId, organizationId), eq(member.userId, userId)))
-    .limit(1);
-
-  if (existingMembership) {
-    return;
-  }
-
-  try {
-    await db.insert(member).values({
-      createdAt: new Date(),
-      id: crypto.randomUUID(),
-      organizationId,
-      role: "owner",
-      userId,
-    });
-  } catch (error) {
-    const [membershipAfterInsert] = await db
-      .select({ id: member.id })
-      .from(member)
-      .where(and(eq(member.organizationId, organizationId), eq(member.userId, userId)))
-      .limit(1);
-
-    if (!membershipAfterInsert) {
-      throw error;
-    }
-  }
-};
-
-const ensurePersonalOrganization = async (currentUser: UserIdentity) => {
-  let personalOrganization = await getPersonalOrganization(currentUser.id);
-  const nextPersonalName = buildPersonalOrganizationName(currentUser);
-  const legacyPersonalSlug = buildLegacyPersonalOrganizationSlug(currentUser.id);
-  const personalSlug = buildPersonalOrganizationSlug(currentUser);
-  const now = new Date();
-
-  if (!personalOrganization) {
-    try {
-      const [createdOrganization] = await db
-        .insert(organization)
-        .values({
-          createdAt: now,
-          id: crypto.randomUUID(),
-          metadata: null,
-          name: nextPersonalName,
-          personalOwnerUserId: currentUser.id,
-          slug: personalSlug,
-          updatedAt: now,
-        })
-        .returning();
-
-      personalOrganization = createdOrganization ?? null;
-    } catch (error) {
-      personalOrganization = await getPersonalOrganization(currentUser.id);
-
-      if (!personalOrganization) {
-        throw error;
-      }
-    }
-  }
-
-  if (!personalOrganization) {
-    throw new Error("Could not create a personal organization.");
-  }
-
-  const shouldUpgradeLegacySlug = personalOrganization.slug === legacyPersonalSlug;
-
-  if (personalOrganization.personalOwnerUserId !== currentUser.id || shouldUpgradeLegacySlug) {
-    try {
-      const [updatedOrganization] = await db
-        .update(organization)
-        .set({
-          personalOwnerUserId: currentUser.id,
-          slug: shouldUpgradeLegacySlug ? personalSlug : personalOrganization.slug,
-          updatedAt: now,
-        })
-        .where(eq(organization.id, personalOrganization.id))
-        .returning();
-
-      personalOrganization = updatedOrganization ?? personalOrganization;
-    } catch (error) {
-      if (personalOrganization.personalOwnerUserId !== currentUser.id) {
-        throw error;
-      }
-    }
-  }
-
-  await ensurePersonalMembership(personalOrganization.id, currentUser.id);
-
-  return personalOrganization;
+  return organizationRows.map((row) => row.organizationId);
 };
 
 export const ensureUserOrganizationState = async (
   currentUser: UserIdentity,
   options: EnsureUserOrganizationStateOptions = {},
 ): Promise<EnsureUserOrganizationStateResult> => {
-  const personalOrganization = await ensurePersonalOrganization(currentUser);
   const organizationIds = await getUserOrganizationIds(currentUser.id);
   const activeOrganizationId =
     options.activeOrganizationId && organizationIds.includes(options.activeOrganizationId)
       ? options.activeOrganizationId
-      : personalOrganization.id;
+      : null;
 
   if (options.sessionToken && activeOrganizationId !== options.activeOrganizationId) {
     await db
@@ -182,14 +75,11 @@ export const ensureUserOrganizationState = async (
   return {
     activeOrganizationId,
     organizationIds,
-    personalOrganizationId: personalOrganization.id,
   };
 };
 
 export const ensureUsersHavePersonalOrganizations = async (userIds: string[]) => {
-  const uniqueUserIds = [...new Set(userIds)];
-
-  if (uniqueUserIds.length === 0) {
+  if (userIds.length === 0) {
     return;
   }
 
@@ -200,7 +90,7 @@ export const ensureUsersHavePersonalOrganizations = async (userIds: string[]) =>
       name: user.name,
     })
     .from(user)
-    .where(inArray(user.id, uniqueUserIds));
+    .where(inArray(user.id, [...new Set(userIds)]));
 
   await Promise.all(users.map((currentUser) => ensureUserOrganizationState(currentUser)));
 };
@@ -220,23 +110,18 @@ export const getUserById = async (userId: string) => {
 };
 
 export const cleanupOrganizationsForDeletedUser = async (userId: string) => {
-  const personalOrganization = await getPersonalOrganization(userId);
+  const legacyOrganizations = await db
+    .select({ id: organization.id })
+    .from(organization)
+    .where(eq(organization.personalOwnerUserId, userId));
+  const legacyOrganizationIds = legacyOrganizations.map(
+    (legacyOrganization) => legacyOrganization.id,
+  );
 
-  if (personalOrganization) {
-    const personalOrganizationMembers = await db
-      .select({ userId: member.userId })
-      .from(member)
-      .where(eq(member.organizationId, personalOrganization.id));
-
-    await ensureUsersHavePersonalOrganizations(
-      personalOrganizationMembers
-        .map((personalOrganizationMember) => personalOrganizationMember.userId)
-        .filter((memberUserId) => memberUserId !== userId),
-    );
-
-    await db.delete(invitation).where(eq(invitation.organizationId, personalOrganization.id));
-    await db.delete(member).where(eq(member.organizationId, personalOrganization.id));
-    await db.delete(organization).where(eq(organization.id, personalOrganization.id));
+  if (legacyOrganizationIds.length > 0) {
+    await db.delete(invitation).where(inArray(invitation.organizationId, legacyOrganizationIds));
+    await db.delete(member).where(inArray(member.organizationId, legacyOrganizationIds));
+    await db.delete(organization).where(inArray(organization.id, legacyOrganizationIds));
   }
 
   await db.delete(invitation).where(eq(invitation.inviterId, userId));
@@ -249,17 +134,9 @@ export const assertCanLeaveOrganization = async (
 ) => {
   const organizationState = await ensureUserOrganizationState(currentUser);
 
-  if (organizationId === organizationState.personalOrganizationId) {
+  if (!organizationState.organizationIds.includes(organizationId)) {
     throw new APIError("BAD_REQUEST", {
-      message: "You can't leave your personal organization.",
-    });
-  }
-
-  if (organizationState.organizationIds.length <= 1) {
-    throw new APIError("BAD_REQUEST", {
-      message: "You must keep at least one organization.",
+      message: "You are not a member of that organization.",
     });
   }
 };
-
-export { ensurePersonalOrganization };

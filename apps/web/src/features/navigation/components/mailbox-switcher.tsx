@@ -61,6 +61,8 @@ const getMailboxTitle = (mailbox: MailboxSwitcherMailbox) => mailbox.emailAddres
 
 const getMailboxSubtitle = () => null;
 
+const PERSONAL_WORKSPACE_ID = "personal";
+
 const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => (
   <div className={cn("flex min-w-0 items-center justify-between gap-3 rounded-md", className)}>
     <div className="min-w-0">
@@ -77,16 +79,23 @@ const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => 
 const useOrganizationSwitcher = () => {
   const activeOrganizationState = authClient.useActiveOrganization();
   const organizationsState = authClient.useListOrganizations();
-  const organizations = (organizationsState.data ?? []).map((organization) => ({
-    id: organization.id,
-    name: organization.name,
-  })) satisfies OrganizationSummary[];
-  const activeOrganizationId = activeOrganizationState.data?.id ?? null;
+  const organizations = [
+    { id: PERSONAL_WORKSPACE_ID, name: "Personal" },
+    ...(organizationsState.data ?? [])
+      .filter((organization) => organization.personalOwnerUserId == null)
+      .map((organization) => ({
+        id: organization.id,
+        name: organization.name,
+      })),
+  ] satisfies OrganizationSummary[];
+  const activeOrganizationId = activeOrganizationState.data?.id ?? PERSONAL_WORKSPACE_ID;
   const setActiveOrganizationMutation = useMutation(
     mutationOptions({
       mutationFn: async (organizationId: string) =>
         unwrapResultError(
-          await authClient.organization.setActive({ organizationId }),
+          await authClient.organization.setActive({
+            organizationId: organizationId === PERSONAL_WORKSPACE_ID ? null : organizationId,
+          }),
           "Could not switch organization.",
         ),
       mutationKey: ["auth", "organization", "set-active"],

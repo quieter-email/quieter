@@ -4,6 +4,7 @@ export {
   authRelations,
   invitation,
   mailbox,
+  mailDomain,
   member,
   organization,
   passkey,
@@ -11,4 +12,7 @@ export {
   tables,
   user,
   verification,
+  type MailDomainCheckResult,
+  type MailDomainDnsRecord,
+  type MailDomainStatus,
 } from "./schema";
