@@ -34,6 +34,7 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
+  --scrollbar-thumb: var(--secondary);
   --chart-1: oklch(0.32 0 0);
   --chart-2: oklch(0.42 0 0);
   --chart-3: oklch(0.52 0 0);
@@ -96,6 +97,7 @@
   --border: oklch(0.27 0 0);
   --input: oklch(0.27 0 0);
   --ring: oklch(0.44 0 0);
+  --scrollbar-thumb: var(--secondary);
   --chart-1: oklch(0.42 0 0);
   --chart-2: oklch(0.52 0 0);
   --chart-3: oklch(0.62 0 0);
@@ -174,6 +176,24 @@
 @layer base {
   * {
     @apply border-border;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+    scrollbar-width: thin;
+  }
+
+  *::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
   }
 
   body {
