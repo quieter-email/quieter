@@ -27,7 +27,6 @@ import { inboxRouteApi } from "~/lib/route-apis";
 import { serializeMailboxSearchParams, toSettingsSearch } from "~/lib/search-params";
 
 type MailSidebarProps = {
-  activeOrganizationName: string | null;
   defaultMailboxId: string | null;
   mailboxes: Array<{
     id: string;
@@ -41,10 +40,10 @@ type MailSidebarProps = {
   onSelectMailboxId: (mailboxId: string) => void;
   onSetDefaultMailbox: (mailboxId: string | null) => void;
   onComposeNewMail: () => void;
+  workspaceName: string;
 };
 
 export const MailSidebar = ({
-  activeOrganizationName,
   defaultMailboxId,
   mailboxes,
   onComposeNewMail,
@@ -53,6 +52,7 @@ export const MailSidebar = ({
   onSetDefaultMailbox,
   selectedMailboxId,
   selectedMailbox,
+  workspaceName,
 }: MailSidebarProps) => {
   const navigate = useNavigate();
   const pathname = useRouterState({
@@ -70,12 +70,12 @@ export const MailSidebar = ({
       <div className="flex min-h-0 flex-1 flex-col px-3 py-6">
         <div className="flex min-w-0 items-start justify-between gap-3 pl-2">
           <MailboxSwitcherDropdown
-            activeOrganizationName={activeOrganizationName}
             defaultMailboxId={defaultMailboxId}
             mailboxes={mailboxes}
             onSelectMailboxId={onSelectMailboxId}
             onSetDefaultMailbox={onSetDefaultMailbox}
             selectedMailboxId={selectedMailboxId}
+            workspaceName={workspaceName}
           />
 
           <DropdownMenu>

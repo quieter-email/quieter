@@ -4,6 +4,12 @@ import type { ReactNode } from "react";
 import { Loading03Icon, PinIcon, PinOffIcon, UserGroupIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  PERSONAL_WORKSPACE_ID,
+  toOrganizationId,
+  toWorkspaceId,
+  type WorkspaceId,
+} from "@quieter/auth/workspace";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -32,7 +38,7 @@ export type MailboxSwitcherMailbox = {
   provider: string;
 };
 
-type OrganizationSummary = {
+type WorkspaceSummary = {
   id: string;
   name: string;
 };
@@ -44,24 +50,22 @@ type MailboxSummaryProps = {
   mailbox: MailboxSwitcherMailbox;
 };
 
-type OrganizationSwitcherSelectProps = {
-  onOrganizationChange?: () => void;
+type WorkspaceSwitcherSelectProps = {
+  onWorkspaceChange?: () => void;
 };
 
 type MailboxSwitcherDropdownProps = {
-  activeOrganizationName: string | null;
   defaultMailboxId: string | null;
   mailboxes: MailboxSwitcherMailbox[];
   onSelectMailboxId: (mailboxId: string) => void;
   onSetDefaultMailbox: (mailboxId: string | null) => void;
   selectedMailboxId: string | null;
+  workspaceName: string;
 };
 
 const getMailboxTitle = (mailbox: MailboxSwitcherMailbox) => mailbox.emailAddress;
 
 const getMailboxSubtitle = () => null;
-
-const PERSONAL_WORKSPACE_ID = "personal";
 
 const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => (
   <div className={cn("flex min-w-0 items-center justify-between gap-3 rounded-md", className)}>
@@ -76,59 +80,54 @@ const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => 
   </div>
 );
 
-const useOrganizationSwitcher = () => {
+const useWorkspaceSwitcher = () => {
   const activeOrganizationState = authClient.useActiveOrganization();
   const organizationsState = authClient.useListOrganizations();
-  const organizations = [
+  const workspaces = [
     { id: PERSONAL_WORKSPACE_ID, name: "Personal" },
-    ...(organizationsState.data ?? [])
-      .filter((organization) => organization.personalOwnerUserId == null)
-      .map((organization) => ({
-        id: organization.id,
-        name: organization.name,
-      })),
-  ] satisfies OrganizationSummary[];
-  const activeOrganizationId = activeOrganizationState.data?.id ?? PERSONAL_WORKSPACE_ID;
-  const setActiveOrganizationMutation = useMutation(
+    ...(organizationsState.data ?? []).map((organization) => ({
+      id: organization.id,
+      name: organization.name,
+    })),
+  ] satisfies WorkspaceSummary[];
+  const workspaceId = toWorkspaceId(activeOrganizationState.data?.id);
+  const setWorkspaceMutation = useMutation(
     mutationOptions({
-      mutationFn: async (organizationId: string) =>
+      mutationFn: async (nextWorkspaceId: WorkspaceId) =>
         unwrapResultError(
           await authClient.organization.setActive({
-            organizationId: organizationId === PERSONAL_WORKSPACE_ID ? null : organizationId,
+            organizationId: toOrganizationId(nextWorkspaceId),
           }),
-          "Could not switch organization.",
+          "Could not switch workspace.",
         ),
       mutationKey: ["auth", "organization", "set-active"],
     }),
   );
 
-  const setActiveOrganization = async (organizationId: string) => {
-    if (!organizationId || organizationId === activeOrganizationId) {
+  const setWorkspace = async (nextWorkspaceId: WorkspaceId) => {
+    if (!nextWorkspaceId || nextWorkspaceId === workspaceId) {
       return;
     }
 
     try {
-      await setActiveOrganizationMutation.mutateAsync(organizationId);
+      await setWorkspaceMutation.mutateAsync(nextWorkspaceId);
     } catch (error) {
-      toast.error(getErrorMessage(error, "Could not switch organization."));
+      toast.error(getErrorMessage(error, "Could not switch workspace."));
     }
   };
 
   return {
-    activeOrganization: activeOrganizationState.data ?? null,
-    activeOrganizationId,
-    isPending: setActiveOrganizationMutation.isPending,
-    organizations,
-    setActiveOrganization,
+    isPending: setWorkspaceMutation.isPending,
+    setWorkspace,
+    workspaceId,
+    workspaces,
   };
 };
 
-const OrganizationSwitcherSubmenu = ({ onOrganizationChange }: OrganizationSwitcherSelectProps) => {
-  const { activeOrganizationId, isPending, organizations, setActiveOrganization } =
-    useOrganizationSwitcher();
-  const activeOrganizationName =
-    organizations.find((organization) => organization.id === activeOrganizationId)?.name ??
-    "organization";
+const WorkspaceSwitcherSubmenu = ({ onWorkspaceChange }: WorkspaceSwitcherSelectProps) => {
+  const { isPending, setWorkspace, workspaceId, workspaces } = useWorkspaceSwitcher();
+  const workspaceName =
+    workspaces.find((workspace) => workspace.id === workspaceId)?.name ?? "Personal";
 
   return (
     <DropdownMenuSubmenu>
@@ -141,24 +140,24 @@ const OrganizationSwitcherSubmenu = ({ onOrganizationChange }: OrganizationSwitc
             })}
             icon={isPending ? Loading03Icon : UserGroupIcon}
           />
-          <span className="truncate">{activeOrganizationName}</span>
+          <span className="truncate">{workspaceName}</span>
         </div>
       </DropdownMenuSubmenuTrigger>
 
       <DropdownMenuSubmenuContent className="w-64 p-1">
-        {organizations.map((organization) => (
+        {workspaces.map((workspace) => (
           <DropdownMenuItem
             className={cn({
-              "bg-muted/70": organization.id === activeOrganizationId,
+              "bg-muted/70": workspace.id === workspaceId,
             })}
             closeOnSelect={false}
-            key={organization.id}
+            key={workspace.id}
             onSelect={() => {
-              onOrganizationChange?.();
-              void setActiveOrganization(organization.id);
+              onWorkspaceChange?.();
+              void setWorkspace(workspace.id);
             }}
           >
-            <span className="truncate">{organization.name}</span>
+            <span className="truncate">{workspace.name}</span>
           </DropdownMenuItem>
         ))}
       </DropdownMenuSubmenuContent>
@@ -166,31 +165,28 @@ const OrganizationSwitcherSubmenu = ({ onOrganizationChange }: OrganizationSwitc
   );
 };
 
-export const OrganizationSwitcherSelect = ({
-  onOrganizationChange,
-}: OrganizationSwitcherSelectProps) => {
-  const { activeOrganizationId, isPending, organizations, setActiveOrganization } =
-    useOrganizationSwitcher();
-  const organizationSelectItems = organizations.map((organization) => ({
-    label: organization.name,
-    value: organization.id,
+export const WorkspaceSwitcherSelect = ({ onWorkspaceChange }: WorkspaceSwitcherSelectProps) => {
+  const { isPending, setWorkspace, workspaceId, workspaces } = useWorkspaceSwitcher();
+  const workspaceSelectItems = workspaces.map((workspace) => ({
+    label: workspace.name,
+    value: workspace.id,
   }));
 
   return (
     <Select
-      items={organizationSelectItems}
+      items={workspaceSelectItems}
       modal={false}
       onValueChange={(value) => {
         if (!value) {
           return;
         }
 
-        onOrganizationChange?.();
-        void setActiveOrganization(value);
+        onWorkspaceChange?.();
+        void setWorkspace(value);
       }}
-      value={activeOrganizationId ?? undefined}
+      value={workspaceId}
     >
-      <SelectTrigger aria-label="Switch organization" className="h-8">
+      <SelectTrigger aria-label="Switch workspace" className="h-8">
         <HugeiconsIcon
           aria-hidden
           className={cn("size-4 shrink-0", {
@@ -198,14 +194,14 @@ export const OrganizationSwitcherSelect = ({
           })}
           icon={isPending ? Loading03Icon : UserGroupIcon}
         />
-        <SelectValue placeholder="organization" />
+        <SelectValue placeholder="workspace" />
       </SelectTrigger>
 
       <SelectContent positionerClassName="z-[60]">
         <SelectList>
-          {organizations.map((organization) => (
-            <SelectItem key={organization.id} value={organization.id}>
-              {organization.name}
+          {workspaces.map((workspace) => (
+            <SelectItem key={workspace.id} value={workspace.id}>
+              {workspace.name}
             </SelectItem>
           ))}
         </SelectList>
@@ -215,17 +211,16 @@ export const OrganizationSwitcherSelect = ({
 };
 
 export const MailboxSwitcherDropdown = ({
-  activeOrganizationName,
   defaultMailboxId,
   mailboxes,
   onSelectMailboxId,
   onSetDefaultMailbox,
   selectedMailboxId,
+  workspaceName,
 }: MailboxSwitcherDropdownProps) => {
   const selectedMailbox =
     mailboxes.find((mailbox) => mailbox.id === selectedMailboxId) ?? mailboxes[0] ?? null;
   const primaryLabel = selectedMailbox?.emailAddress ?? "no mailbox";
-  const secondaryLabel = activeOrganizationName ?? "no organization";
 
   return (
     <DropdownMenu>
@@ -237,14 +232,14 @@ export const MailboxSwitcherDropdown = ({
           <p className="truncate text-[13px] leading-5 font-medium tracking-tight text-foreground">
             {primaryLabel}
           </p>
-          <p className="mt-1 truncate text-xs text-muted-foreground">{secondaryLabel}</p>
+          <p className="mt-1 truncate text-xs text-muted-foreground">{workspaceName}</p>
         </div>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="start" className="w-80 p-2" side="right" sideOffset={10}>
-        <OrganizationSwitcherSubmenu />
+      <DropdownMenuContent align="start" className="w-80" side="right" sideOffset={10}>
+        <WorkspaceSwitcherSubmenu />
 
-        <DropdownMenuSeparator className="my-2" />
+        <DropdownMenuSeparator />
 
         <div className="flex max-h-80 flex-col gap-1 overflow-y-auto">
           {mailboxes.length > 0 ? (
@@ -254,7 +249,7 @@ export const MailboxSwitcherDropdown = ({
 
               return (
                 <DropdownMenuItem
-                  className={cn("group/item h-auto", {
+                  className={cn("group/item", {
                     "bg-muted/70": isActive,
                   })}
                   key={mailbox.id}
@@ -285,7 +280,7 @@ export const MailboxSwitcherDropdown = ({
                         />
                       </button>
                     }
-                    className="w-full px-2 py-1.5"
+                    className="w-full"
                     isActive={isActive}
                     mailbox={mailbox}
                   />

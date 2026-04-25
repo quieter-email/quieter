@@ -205,7 +205,7 @@ export const aggregateMailDomainStatus = (checks: MailDomainCheck[]): MailDomain
 const ensureExplicitOrganization = (organizationId: string | null) => {
   if (!organizationId) {
     throw new ORPCError("BAD_REQUEST", {
-      message: "Managed mail domains belong to an organization.",
+      message: "Managed mail domains belong to a team.",
     });
   }
 
@@ -583,7 +583,7 @@ export const checkMailDomainSetup = async (input: {
 
   if (!storedDomain) {
     throw new ORPCError("NOT_FOUND", {
-      message: "Mail domain setup was not found in the active organization.",
+      message: "Mail domain setup was not found in the active team.",
     });
   }
 

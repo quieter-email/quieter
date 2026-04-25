@@ -66,7 +66,7 @@ export const SettingsSidebar = ({ activeTab, onBack, onSelectTab }: SettingsSide
         variant={activeTab === "organization" ? "default" : "ghost"}
       >
         <HugeiconsIcon className="size-4" icon={UserGroupIcon} />
-        Organization
+        Teams
       </Button>
     </div>
   </aside>

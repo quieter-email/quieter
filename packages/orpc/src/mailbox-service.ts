@@ -86,7 +86,7 @@ export const getActiveOrganization = async (
 
   if (!activeOrganization) {
     throw new ORPCError("NOT_FOUND", {
-      message: "The active organization could not be found.",
+      message: "The active team could not be found.",
     });
   }
 
@@ -458,7 +458,7 @@ const getPersonalDefaultMailboxId = async (userId: string) => {
   return row?.defaultMailboxId ?? null;
 };
 
-export const listMailboxesForOrganization = async (input: {
+export const listMailboxesForActiveWorkspace = async (input: {
   activeOrganizationId: string | null;
   headers: Headers;
   userId: string;
@@ -519,7 +519,7 @@ const getAuthorizedManagedMailbox = async (input: {
 
   if (!selectedMailbox || selectedMailbox.organizationId !== input.activeOrganizationId) {
     throw new ORPCError("NOT_FOUND", {
-      message: "Mailbox not found in the active organization.",
+      message: "Mailbox not found in the active team.",
     });
   }
 
@@ -618,7 +618,7 @@ export const setDefaultMailbox = async (input: {
     } else {
       if (!input.activeOrganizationId) {
         throw new ORPCError("BAD_REQUEST", {
-          message: "Managed mailboxes belong to an organization.",
+          message: "Managed mailboxes belong to a team.",
         });
       }
 

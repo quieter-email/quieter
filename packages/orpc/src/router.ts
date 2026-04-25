@@ -53,7 +53,7 @@ import {
   disconnectPersonalGmailMailbox,
   getAuthorizedGmailMailbox,
   getGoogleScopeRepairTarget,
-  listMailboxesForOrganization,
+  listMailboxesForActiveWorkspace,
   refreshAuthorizedGmailAccessToken,
   setDefaultMailbox,
   syncPersonalGmailMailboxes,
@@ -281,10 +281,10 @@ export const appRouter = {
           });
         });
       }),
-    listMailboxesForActiveOrganization: protectedProcedure
+    listMailboxesForActiveWorkspace: protectedProcedure
       .route({ method: "GET" })
       .handler(async ({ context }) => {
-        return await listMailboxesForOrganization({
+        return await listMailboxesForActiveWorkspace({
           activeOrganizationId: context.activeOrganizationId,
           headers: getRequestHeaders(context),
           userId: context.userId,

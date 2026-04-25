@@ -10,6 +10,7 @@ import {
   UserGroupIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { toWorkspaceId } from "@quieter/auth/workspace";
 import {
   Button,
   Dialog,
@@ -85,10 +86,10 @@ const formatCount = (count: number, singular: string, plural = `${singular}s`) =
   count === 1 ? `1 ${singular}` : `${count} ${plural}`;
 
 const splitOrganizationRoles = (value: string) =>
-  value
-    .split(",")
-    .map((part) => part.trim().toLowerCase())
-    .filter(Boolean);
+  value.split(",").flatMap((part) => {
+    const role = part.trim().toLowerCase();
+    return role ? [role] : [];
+  });
 
 const formatRoleLabel = (value: string) =>
   splitOrganizationRoles(value)
@@ -221,10 +222,7 @@ const CreateOrganizationDialog = () => {
   const [open, setOpen] = useState(false);
   const createOrganizationMutationOptions = mutationOptions({
     mutationFn: async (input: { name: string; slug: string }) =>
-      unwrapResultError(
-        await authClient.organization.create(input),
-        "Could not create organization.",
-      ),
+      unwrapResultError(await authClient.organization.create(input), "Could not create team."),
     mutationKey: ["auth", "organization", "create"],
   });
   const createOrganizationMutation = useMutation(createOrganizationMutationOptions);
@@ -249,7 +247,7 @@ const CreateOrganizationDialog = () => {
         });
         handleOpenChange(false);
       } catch (mutationError) {
-        setSubmitError(getErrorMessage(mutationError, "Could not create organization."));
+        setSubmitError(getErrorMessage(mutationError, "Could not create team."));
       }
     },
     validationLogic: revalidateLogic(),
@@ -294,7 +292,7 @@ const CreateOrganizationDialog = () => {
       <Dialog onOpenChange={handleOpenChange} open={open}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create organization</DialogTitle>
+            <DialogTitle>Create team</DialogTitle>
           </DialogHeader>
 
           <form
@@ -317,7 +315,7 @@ const CreateOrganizationDialog = () => {
                           setSubmitError(null);
                           field.handleChange(event.target.value);
                         }}
-                        placeholder="Organization name"
+                        placeholder="Team name"
                         value={field.state.value}
                       />
                       {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
@@ -340,7 +338,7 @@ const CreateOrganizationDialog = () => {
                           setSubmitError(null);
                           field.handleChange(event.target.value);
                         }}
-                        placeholder="organization-slug"
+                        placeholder="team-slug"
                         value={field.state.value}
                       />
                       {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
@@ -386,7 +384,7 @@ const EditOrganizationDialog = ({
           data: input,
           organizationId: activeOrganization.id,
         }),
-        "Could not update organization.",
+        "Could not update team.",
       ),
     mutationKey: ["auth", "organization", "update"],
   });
@@ -412,7 +410,7 @@ const EditOrganizationDialog = ({
         });
         handleOpenChange(false);
       } catch (mutationError) {
-        setSubmitError(getErrorMessage(mutationError, "Could not update organization."));
+        setSubmitError(getErrorMessage(mutationError, "Could not update team."));
       }
     },
     validationLogic: revalidateLogic(),
@@ -457,7 +455,7 @@ const EditOrganizationDialog = ({
       <Dialog onOpenChange={handleOpenChange} open={open}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit organization</DialogTitle>
+            <DialogTitle>Edit team</DialogTitle>
           </DialogHeader>
 
           <form
@@ -1105,13 +1103,13 @@ const LeaveOrganizationDialog = ({
         await authClient.organization.leave({
           organizationId: activeOrganization.id,
         }),
-        "Could not leave organization.",
+        "Could not leave team.",
       );
 
       if (nextOrganizationId) {
         await unwrapResultError(
           await authClient.organization.setActive({ organizationId: nextOrganizationId }),
-          "Could not switch organization.",
+          "Could not switch team.",
         );
       }
     },
@@ -1129,7 +1127,7 @@ const LeaveOrganizationDialog = ({
         await leaveOrganizationMutation.mutateAsync();
         handleOpenChange(false);
       } catch (mutationError) {
-        setSubmitError(getErrorMessage(mutationError, "Could not leave organization."));
+        setSubmitError(getErrorMessage(mutationError, "Could not leave team."));
       }
     },
     validationLogic: revalidateLogic(),
@@ -1139,7 +1137,7 @@ const LeaveOrganizationDialog = ({
           .string()
           .trim()
           .toLowerCase()
-          .regex(/^leave organization$/, 'Type "leave organization".'),
+          .regex(/^leave team$/, 'Type "leave team".'),
       }),
     },
   });
@@ -1168,7 +1166,7 @@ const LeaveOrganizationDialog = ({
       <Dialog onOpenChange={handleOpenChange} open={open}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Leave organization</DialogTitle>
+            <DialogTitle>Leave team</DialogTitle>
           </DialogHeader>
 
           <form
@@ -1178,7 +1176,7 @@ const LeaveOrganizationDialog = ({
           >
             <DialogBody className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Type <span className="font-medium text-foreground">leave organization</span>
+                Type <span className="font-medium text-foreground">leave team</span>
               </p>
 
               <form.Field name="confirmation">
@@ -1195,7 +1193,7 @@ const LeaveOrganizationDialog = ({
                           setSubmitError(null);
                           field.handleChange(event.target.value);
                         }}
-                        placeholder="leave organization"
+                        placeholder="leave team"
                         value={field.state.value}
                       />
                       {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
@@ -1247,13 +1245,13 @@ const DeleteOrganizationDialog = ({
         await authClient.organization.delete({
           organizationId: activeOrganization.id,
         }),
-        "Could not delete organization.",
+        "Could not delete team.",
       );
 
       if (nextOrganizationId) {
         await unwrapResultError(
           await authClient.organization.setActive({ organizationId: nextOrganizationId }),
-          "Could not switch organization.",
+          "Could not switch team.",
         );
       }
     },
@@ -1271,7 +1269,7 @@ const DeleteOrganizationDialog = ({
         await deleteOrganizationMutation.mutateAsync();
         handleOpenChange(false);
       } catch (mutationError) {
-        setSubmitError(getErrorMessage(mutationError, "Could not delete organization."));
+        setSubmitError(getErrorMessage(mutationError, "Could not delete team."));
       }
     },
     validationLogic: revalidateLogic(),
@@ -1281,7 +1279,7 @@ const DeleteOrganizationDialog = ({
           .string()
           .trim()
           .toLowerCase()
-          .regex(/^delete organization$/, 'Type "delete organization".'),
+          .regex(/^delete team$/, 'Type "delete team".'),
       }),
     },
   });
@@ -1310,7 +1308,7 @@ const DeleteOrganizationDialog = ({
       <Dialog onOpenChange={handleOpenChange} open={open}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete organization</DialogTitle>
+            <DialogTitle>Delete team</DialogTitle>
           </DialogHeader>
 
           <form
@@ -1320,7 +1318,7 @@ const DeleteOrganizationDialog = ({
           >
             <DialogBody className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Type <span className="font-medium text-foreground">delete organization</span>
+                Type <span className="font-medium text-foreground">delete team</span>
               </p>
 
               <form.Field name="confirmation">
@@ -1337,7 +1335,7 @@ const DeleteOrganizationDialog = ({
                           setSubmitError(null);
                           field.handleChange(event.target.value);
                         }}
-                        placeholder="delete organization"
+                        placeholder="delete team"
                         value={field.state.value}
                       />
                       {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
@@ -1511,11 +1509,11 @@ const PendingInvitationsSection = () => {
 };
 
 const OrganizationList = ({
-  activeOrganizationId,
+  activeWorkspaceId,
   activeRole,
   organizations,
 }: {
-  activeOrganizationId: string | null;
+  activeWorkspaceId: string;
   activeRole: OrganizationRoleOption | null;
   organizations: OrganizationSummary[];
 }) => {
@@ -1525,14 +1523,14 @@ const OrganizationList = ({
     mutationFn: async (organizationId: string) =>
       unwrapResultError(
         await authClient.organization.setActive({ organizationId }),
-        "Could not switch organization.",
+        "Could not switch team.",
       ),
     mutationKey: ["auth", "organization", "set-active"],
   });
   const setActiveOrganizationMutation = useMutation(setActiveOrganizationMutationOptions);
 
   const handleSetActiveOrganization = async (organizationId: string) => {
-    if (organizationId === activeOrganizationId) {
+    if (organizationId === activeWorkspaceId) {
       return;
     }
 
@@ -1542,7 +1540,7 @@ const OrganizationList = ({
       setPendingOrganizationId(organizationId);
       await setActiveOrganizationMutation.mutateAsync(organizationId);
     } catch (mutationError) {
-      setError(getErrorMessage(mutationError, "Could not switch organization."));
+      setError(getErrorMessage(mutationError, "Could not switch team."));
     } finally {
       setPendingOrganizationId(null);
     }
@@ -1551,7 +1549,7 @@ const OrganizationList = ({
   return (
     <div>
       {organizations.map((organization) => {
-        const isActive = organization.id === activeOrganizationId;
+        const isActive = organization.id === activeWorkspaceId;
         const isPending =
           pendingOrganizationId === organization.id && setActiveOrganizationMutation.isPending;
 
@@ -1578,7 +1576,7 @@ const OrganizationList = ({
                   ) : (
                     <HugeiconsIcon aria-hidden className="size-4" icon={UserGroupIcon} />
                   )}
-                  Set active
+                  Open team
                 </Button>
               )
             }
@@ -1604,9 +1602,8 @@ export const OrganizationSettingsPanel = () => {
   const organizationsState = authClient.useListOrganizations();
   const activeMember = activeMemberState.data ?? null;
   const activeOrganization = activeOrganizationState.data ?? null;
-  const organizations = (organizationsState.data ?? []).filter(
-    (organization) => organization.personalOwnerUserId == null,
-  );
+  const activeWorkspaceId = toWorkspaceId(activeOrganization?.id);
+  const organizations = organizationsState.data ?? [];
   const activeRole = activeMember ? normalizeOrganizationRole(activeMember.role) : null;
   const pendingInvitations =
     activeOrganization?.invitations.filter((invitation) => invitation.status === "pending") ?? [];
@@ -1635,14 +1632,14 @@ export const OrganizationSettingsPanel = () => {
   });
   const updateOrganizationReason =
     activeOrganization && !canUpdateOrganization
-      ? "Only admins and owners can edit organization details."
+      ? "Only admins and owners can edit team details."
       : null;
   const leaveOrganizationReason =
     activeOrganization && activeRole === "owner" && ownerCount <= 1
       ? "Assign another owner before leaving."
       : null;
   const deleteOrganizationReason =
-    activeOrganization && !canDeleteOrganization ? "Only owners can delete organizations." : null;
+    activeOrganization && !canDeleteOrganization ? "Only owners can delete teams." : null;
   const peopleSummary = activeOrganization
     ? [
         formatCount(activeOrganization.members.length, "member"),
@@ -1664,15 +1661,15 @@ export const OrganizationSettingsPanel = () => {
         <PendingInvitationsSection />
 
         {organizationsState.isPending ? (
-          <p className="text-sm text-muted-foreground">Loading organizations...</p>
+          <p className="text-sm text-muted-foreground">Loading teams...</p>
         ) : organizations.length > 0 ? (
           <OrganizationList
-            activeOrganizationId={activeOrganization?.id ?? null}
+            activeWorkspaceId={activeWorkspaceId}
             activeRole={activeRole}
             organizations={organizations}
           />
         ) : (
-          <p className="text-sm text-muted-foreground">No organizations yet.</p>
+          <p className="text-sm text-muted-foreground">No teams yet.</p>
         )}
 
         {activeOrganization ? (
@@ -1689,7 +1686,7 @@ export const OrganizationSettingsPanel = () => {
                   <EditOrganizationDialog activeOrganization={activeOrganization} />
                 )
               }
-              label="Organization"
+              label="Team"
               value={[activeOrganization.name, activeOrganization.slug].filter(Boolean).join(" / ")}
             />
 
@@ -1724,7 +1721,7 @@ export const OrganizationSettingsPanel = () => {
                 )
               }
               label="Membership"
-              value={activeRole ? formatRoleLabel(activeRole) : "Current organization"}
+              value={activeRole ? formatRoleLabel(activeRole) : "Current team"}
             />
 
             <SettingsRow
@@ -1743,13 +1740,19 @@ export const OrganizationSettingsPanel = () => {
                   />
                 )
               }
-              label="Delete organization"
+              label="Delete team"
               value="Permanent"
             />
           </div>
         ) : organizations.length > 0 ? (
-          <p className="text-sm text-muted-foreground">Pick an organization above.</p>
-        ) : null}
+          <p className="text-sm text-muted-foreground">
+            Personal is selected. Team management applies to teams.
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Personal is selected. Create a team to manage members and managed mailboxes.
+          </p>
+        )}
       </div>
     </TooltipProvider>
   );

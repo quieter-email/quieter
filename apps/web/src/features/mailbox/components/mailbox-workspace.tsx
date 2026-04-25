@@ -1,5 +1,6 @@
 "use client";
 
+import { isPersonalWorkspaceId, toWorkspaceId } from "@quieter/auth/workspace";
 import {
   type QueryClient,
   useInfiniteQuery,
@@ -93,7 +94,6 @@ type ConnectedMailbox = {
 type MailboxWorkspaceViewProps = {
   activeMailbox: MailboxCategory;
   activeMessageId: string | null;
-  activeOrganizationName: string | null;
   hasMailbox: boolean;
   onBulkDeleteDrafts: (threads: ThreadListEntry[]) => void;
   onBulkDeletePermanently: (threads: ThreadListEntry[]) => void;
@@ -107,6 +107,7 @@ type MailboxWorkspaceViewProps = {
   isFetchingNextPage: boolean;
   onDeleteDraft: (message: MessageListItem) => void;
   isMessageActionPending: (messageId: string | null | undefined) => boolean;
+  isPersonalWorkspace: boolean;
   isMessagesError: boolean;
   isMessagesPending: boolean;
   isRefreshing: boolean;
@@ -145,6 +146,7 @@ type MailboxWorkspaceViewProps = {
   selectedMessage: MessageListItem | null;
   mailboxId: string | null;
   user: MailboxWorkspaceProps["user"];
+  workspaceName: string;
 };
 
 type MailboxActionHandlerArgs = {
@@ -673,9 +675,10 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
   const { mailbox: activeMailbox, mailboxId, messageId, query } = inboxRouteApi.useSearch();
   const activeMessageId = messageId ?? null;
   const activeSearchQuery = query.trim();
-  const activeOrganizationId = activeOrganizationState.data?.id ?? null;
-  const activeOrganizationName = activeOrganizationState.data?.name ?? "Personal";
-  const mailboxesQuery = useQuery(mailboxesQueryOptions(activeOrganizationId));
+  const workspaceId = toWorkspaceId(activeOrganizationState.data?.id);
+  const workspaceName = activeOrganizationState.data?.name ?? "Personal";
+  const isPersonalWorkspace = isPersonalWorkspaceId(workspaceId);
+  const mailboxesQuery = useQuery(mailboxesQueryOptions(workspaceId));
   const defaultMailboxId = mailboxesQuery.data?.defaultMailboxId ?? null;
   const mailboxes = (mailboxesQuery.data?.mailboxes ?? [])
     .map((mailbox) => ({
@@ -702,7 +705,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     ...orpc.mail.setDefaultMailbox.mutationOptions(),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: getMailboxesQueryKey(activeOrganizationId),
+        queryKey: getMailboxesQueryKey(workspaceId),
       });
     },
   });
@@ -979,19 +982,19 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     (messagesQuery.isRefetching && !messagesQuery.isFetchingNextPage);
 
   return {
-    composeDialogKey: selectedMailboxId ?? activeOrganizationId ?? user.id ?? "signed-out",
+    composeDialogKey: selectedMailboxId ?? `${workspaceId}:${user.id ?? "signed-out"}`,
     composeDialogRef,
     composeDialogMailboxId: selectedMailboxId,
     viewProps: {
       activeMailbox,
       activeMessageId,
-      activeOrganizationName,
       defaultMailboxId,
       error: messagesQuery.error ?? null,
       hasNextPage: Boolean(messagesQuery.hasNextPage),
       hasMailbox: Boolean(selectedMailboxId),
       isFetchingNextPage: messagesQuery.isFetchingNextPage,
       isMessageActionPending,
+      isPersonalWorkspace,
       isMessagesError: messagesQuery.isError,
       isMessagesPending: messagesQuery.isPending,
       isRefreshing,
@@ -1099,6 +1102,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       selectedMessage,
       selectedMailboxId,
       user,
+      workspaceName,
     } satisfies MailboxWorkspaceViewProps,
   };
 };
@@ -1122,7 +1126,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
 const MailboxWorkspaceView = ({
   activeMailbox,
   activeMessageId,
-  activeOrganizationName,
   defaultMailboxId,
   hasMailbox,
   onBulkDeleteDrafts,
@@ -1137,6 +1140,7 @@ const MailboxWorkspaceView = ({
   isFetchingNextPage,
   onDeleteDraft,
   isMessageActionPending,
+  isPersonalWorkspace,
   isMessagesError,
   isMessagesPending,
   isRefreshing,
@@ -1173,6 +1177,7 @@ const MailboxWorkspaceView = ({
   searchQuery,
   selectedMessage,
   selectedMailboxId,
+  workspaceName,
 }: MailboxWorkspaceViewProps) => {
   return (
     <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-background text-foreground">
@@ -1180,7 +1185,6 @@ const MailboxWorkspaceView = ({
         <div className="pointer-events-none absolute inset-0" />
 
         <MailSidebar
-          activeOrganizationName={activeOrganizationName}
           defaultMailboxId={defaultMailboxId}
           mailboxes={mailboxes}
           onComposeNewMail={onComposeNewMail}
@@ -1189,6 +1193,7 @@ const MailboxWorkspaceView = ({
           onSetDefaultMailbox={onSetDefaultMailbox}
           selectedMailbox={activeMailbox}
           selectedMailboxId={selectedMailboxId}
+          workspaceName={workspaceName}
         />
 
         <div className="relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
@@ -1275,12 +1280,12 @@ const MailboxWorkspaceView = ({
             <section className="flex min-h-0 flex-1 items-center justify-center border-r border-border bg-background-light px-8">
               <div className="max-w-md space-y-3 text-center">
                 <h1 className="text-lg font-semibold tracking-tight text-foreground">
-                  No mailboxes in this organization
+                  No mailboxes in {workspaceName}
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  {activeOrganizationName
-                    ? `${activeOrganizationName} does not have a connected mailbox yet.`
-                    : "This organization does not have a connected mailbox yet."}
+                  {isPersonalWorkspace
+                    ? "Connect Gmail to use Personal mail."
+                    : "This team does not have a managed mailbox yet."}
                 </p>
               </div>
             </section>

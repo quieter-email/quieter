@@ -8,12 +8,13 @@ import {
   PinOffIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { isPersonalWorkspaceId, toWorkspaceId } from "@quieter/auth/workspace";
 import { Button, cn, toast } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import {
   MailboxSettingsRow,
-  OrganizationSwitcherSelect,
+  WorkspaceSwitcherSelect,
 } from "~/features/navigation/components/mailbox-switcher";
 import { authClient } from "~/lib/auth";
 import { getErrorMessage } from "~/lib/errors";
@@ -21,12 +22,11 @@ import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-que
 import { orpc } from "~/lib/orpc";
 
 const PENDING_GMAIL_LINK_STORAGE_KEY = "quieter:pending-gmail-link";
-const PERSONAL_WORKSPACE_ID = "personal";
 
 type PendingGmailLinkState = {
   mailboxCount: number;
-  organizationId: string;
   startedAt: number;
+  workspaceId: string;
 };
 
 const readPendingGmailLink = (): PendingGmailLinkState | null => {
@@ -45,8 +45,8 @@ const readPendingGmailLink = (): PendingGmailLinkState | null => {
       typeof parsedValue !== "object" ||
       parsedValue === null ||
       typeof parsedValue.mailboxCount !== "number" ||
-      typeof parsedValue.organizationId !== "string" ||
-      typeof parsedValue.startedAt !== "number"
+      typeof parsedValue.startedAt !== "number" ||
+      typeof parsedValue.workspaceId !== "string"
     ) {
       return null;
     }
@@ -78,23 +78,21 @@ export const MailboxesSettingsPanel = () => {
   const [pendingGmailLink, setPendingGmailLink] = useState<PendingGmailLinkState | null>(() =>
     readPendingGmailLink(),
   );
-  const activeOrganization = activeOrganizationState.data ?? null;
-  const activeOrganizationId = activeOrganization?.id ?? null;
-  const activeWorkspaceId = activeOrganizationId ?? PERSONAL_WORKSPACE_ID;
-  const isPersonalWorkspace = activeOrganizationId == null;
-  const mailboxesQuery = useQuery(mailboxesQueryOptions(activeOrganizationId));
+  const workspaceId = toWorkspaceId(activeOrganizationState.data?.id);
+  const isPersonalWorkspace = isPersonalWorkspaceId(workspaceId);
+  const mailboxesQuery = useQuery(mailboxesQueryOptions(workspaceId));
   const mailboxes = mailboxesQuery.data?.mailboxes ?? [];
-  const pendingGmailLinkMatchesOrganization =
-    pendingGmailLink != null && pendingGmailLink.organizationId === activeWorkspaceId;
+  const pendingGmailLinkMatchesWorkspace =
+    pendingGmailLink != null && pendingGmailLink.workspaceId === workspaceId;
   const isGmailConnecting =
-    pendingGmailLinkMatchesOrganization && (mailboxesQuery.isPending || mailboxesQuery.isFetching);
+    pendingGmailLinkMatchesWorkspace && (mailboxesQuery.isPending || mailboxesQuery.isFetching);
   const defaultMailboxId = mailboxesQuery.data?.defaultMailboxId ?? null;
   const disconnectMailboxMutation = useMutation({
     ...orpc.mail.disconnectMailbox.mutationOptions(),
     mutationKey: ["mail", "disconnect-mailbox"],
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: getMailboxesQueryKey(activeOrganizationId),
+        queryKey: getMailboxesQueryKey(workspaceId),
       });
     },
   });
@@ -103,17 +101,17 @@ export const MailboxesSettingsPanel = () => {
     mutationKey: ["mail", "set-default-mailbox"],
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: getMailboxesQueryKey(activeOrganizationId),
+        queryKey: getMailboxesQueryKey(workspaceId),
       });
     },
   });
 
   useEffect(() => {
     setPendingGmailLink(readPendingGmailLink());
-  }, [activeWorkspaceId]);
+  }, [workspaceId]);
 
   useEffect(() => {
-    if (!pendingGmailLink || pendingGmailLink.organizationId !== activeWorkspaceId) {
+    if (!pendingGmailLink || pendingGmailLink.workspaceId !== workspaceId) {
       return;
     }
 
@@ -133,12 +131,12 @@ export const MailboxesSettingsPanel = () => {
       toast.success("Gmail connected.");
     }
   }, [
-    activeWorkspaceId,
     mailboxes.length,
     mailboxesQuery.isError,
     mailboxesQuery.isFetching,
     mailboxesQuery.isPending,
     pendingGmailLink,
+    workspaceId,
   ]);
 
   const handleConnectGmail = async () => {
@@ -150,8 +148,8 @@ export const MailboxesSettingsPanel = () => {
 
     const nextPendingGmailLink = {
       mailboxCount: mailboxes.length,
-      organizationId: activeWorkspaceId,
       startedAt: Date.now(),
+      workspaceId,
     } satisfies PendingGmailLinkState;
 
     writePendingGmailLink(nextPendingGmailLink);
@@ -170,14 +168,14 @@ export const MailboxesSettingsPanel = () => {
   };
 
   if (activeOrganizationState.isPending || sessionState.isPending) {
-    return <p className="text-sm text-muted-foreground">loading organization...</p>;
+    return <p className="text-sm text-muted-foreground">loading workspace...</p>;
   }
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
         <div className="">
-          <OrganizationSwitcherSelect />
+          <WorkspaceSwitcherSelect />
         </div>
 
         {isPersonalWorkspace ? (
@@ -223,7 +221,7 @@ export const MailboxesSettingsPanel = () => {
 
       {!mailboxesQuery.isPending && !mailboxesQuery.isError && mailboxes.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          {isPersonalWorkspace ? "No mailboxes yet." : "No mailboxes in this organization."}
+          {isPersonalWorkspace ? "No Gmail accounts connected yet." : "No mailboxes in this team."}
         </p>
       )}
 
