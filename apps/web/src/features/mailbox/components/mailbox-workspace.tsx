@@ -12,6 +12,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useSelector } from "@tanstack/react-store";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
+import { LoadingPage } from "~/components/loading-page";
 import {
   type ComposeDraftState,
   buildComposeDraftFromSavedDraftMessage,
@@ -108,6 +109,7 @@ type MailboxWorkspaceViewProps = {
   isFetchingNextPage: boolean;
   onDeleteDraft: (message: MessageListItem) => void;
   isMessageActionPending: (messageId: string | null | undefined) => boolean;
+  isMailboxesPending: boolean;
   isPersonalWorkspace: boolean;
   isMessagesError: boolean;
   isMessagesPending: boolean;
@@ -1011,6 +1013,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       hasMailbox: Boolean(selectedMailboxId),
       isFetchingNextPage: messagesQuery.isFetchingNextPage,
       isMessageActionPending,
+      isMailboxesPending: mailboxesQuery.isPending,
       isPersonalWorkspace,
       isMessagesError: messagesQuery.isError,
       isMessagesPending: messagesQuery.isPending,
@@ -1160,6 +1163,7 @@ const MailboxWorkspaceView = ({
   isFetchingNextPage,
   onDeleteDraft,
   isMessageActionPending,
+  isMailboxesPending,
   isPersonalWorkspace,
   isMessagesError,
   isMessagesPending,
@@ -1200,6 +1204,13 @@ const MailboxWorkspaceView = ({
   selectedMailboxId,
   workspaceName,
 }: MailboxWorkspaceViewProps) => {
+  if (isMailboxesPending) {
+    return <LoadingPage />;
+  }
+
+  const hasLoadedMessages = messages.some((page) => page.messages.length > 0);
+  const isLoadingEmptyMessages = !hasLoadedMessages && (isMessagesPending || isRefreshing);
+
   return (
     <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-background text-foreground">
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
@@ -1289,6 +1300,7 @@ const MailboxWorkspaceView = ({
                   onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
                   onUpdateLabels={onUpdateLabels}
                   onUpdateThreadLabels={onUpdateThreadLabels}
+                  isPending={isLoadingEmptyMessages}
                   selectedMessage={selectedMessage}
                 />
               </div>

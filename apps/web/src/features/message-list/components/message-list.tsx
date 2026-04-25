@@ -77,6 +77,16 @@ const SCROLL_WAIT_TIMEOUT_MS = 600;
 const MESSAGE_ROW_HEIGHT_PX = 72;
 const MESSAGE_ROW_GAP_PX = 0;
 const MESSAGE_LIST_OVERSCAN = 12;
+const MESSAGE_LIST_SKELETON_ROW_IDS = [
+  "message-list-skeleton-1",
+  "message-list-skeleton-2",
+  "message-list-skeleton-3",
+  "message-list-skeleton-4",
+  "message-list-skeleton-5",
+  "message-list-skeleton-6",
+  "message-list-skeleton-7",
+  "message-list-skeleton-8",
+] as const;
 
 type MessageListScrollPaneProps = Omit<
   MessageListProps,
@@ -120,6 +130,28 @@ type MessageListBulkAction = {
   label: string;
   onSelect: () => void | Promise<void>;
 };
+
+const MessageListLoadingSkeleton = () => (
+  <div className="space-y-1" role="status">
+    <span className="sr-only">Loading messages...</span>
+    {MESSAGE_LIST_SKELETON_ROW_IDS.map((rowId) => (
+      <div
+        aria-hidden="true"
+        className="flex h-[72px] animate-pulse items-center gap-3.5 rounded-xl px-3.5"
+        key={rowId}
+      >
+        <div className="size-10 shrink-0 rounded-lg bg-muted/80" />
+        <div className="min-w-0 flex-1 space-y-2.5">
+          <div className="flex items-center justify-between gap-4">
+            <div className="h-3.5 w-32 rounded-md bg-muted/80" />
+            <div className="h-3 w-12 rounded-md bg-muted/70" />
+          </div>
+          <div className="h-3.5 w-3/4 rounded-md bg-muted/70" />
+        </div>
+      </div>
+    ))}
+  </div>
+);
 
 const MessageListBulkActions = ({
   actions,
@@ -231,6 +263,7 @@ const MessageListScrollPane = ({
   onDeleteDraft,
   isMessageActionPending,
   isPending,
+  isRefreshing,
   messages,
   onDeleteThreadPermanently,
   onLoadMore,
@@ -257,6 +290,7 @@ const MessageListScrollPane = ({
     flattenedMessages.map((message) => [message.id, message.threadId] as const),
   );
   const activeThreadId = activeMessageId ? (messageThreadIds.get(activeMessageId) ?? null) : null;
+  const isLoadingEmptyMessages = threadedMessages.length === 0 && (isPending || isRefreshing);
 
   const messageVirtualizer = useVirtualizer({
     count: threadedMessages.length,
@@ -306,11 +340,7 @@ const MessageListScrollPane = ({
       }}
       ref={scrollRef}
     >
-      {isPending && threadedMessages.length === 0 ? (
-        <div className="grid place-items-center px-2 py-8">
-          <HugeiconsIcon className="animate-spin text-muted-foreground" icon={Loading03Icon} />
-        </div>
-      ) : null}
+      {isLoadingEmptyMessages ? <MessageListLoadingSkeleton /> : null}
 
       {isError ? (
         <p className="px-2 py-8 text-sm text-destructive">
@@ -365,7 +395,7 @@ const MessageListScrollPane = ({
         </ul>
       ) : null}
 
-      {!isPending && !isError && threadedMessages.length === 0 ? (
+      {!isLoadingEmptyMessages && !isError && threadedMessages.length === 0 ? (
         <p className="px-2 py-8 text-sm text-muted-foreground">
           {activeMailbox === "drafts"
             ? searchQuery
