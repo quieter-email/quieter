@@ -39,7 +39,7 @@ export const NumberFieldInput = ({
 );
 
 const numberFieldButtonClassName =
-  "flex size-10 shrink-0 items-center justify-center bg-background text-muted-foreground outline-none transition-colors duration-150 ease-out hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 focus-visible:bg-muted/60 focus-visible:text-foreground";
+  "flex size-10 shrink-0 items-center justify-center bg-background text-muted-foreground transition-transform duration-100 ease-out outline-none active:scale-[0.97] hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 focus-visible:bg-muted/60 focus-visible:text-foreground motion-reduce:transition-none motion-reduce:active:scale-100";
 
 export const NumberFieldIncrement = ({
   children,

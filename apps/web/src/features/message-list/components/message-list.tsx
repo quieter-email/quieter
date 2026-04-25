@@ -53,25 +53,20 @@ type MessageListProps = {
   isRefreshing: boolean;
   messages: ListMessagesPageResult[];
   onActivateMessage: (messageId: string) => void;
-  onDeletePermanently: (messageId: string) => void | Promise<void>;
   onDeleteThreadPermanently: (threadId: string) => void | Promise<void>;
   onLoadMore: () => void;
-  onMarkAsRead: (messageId: string) => void | Promise<void>;
-  onMarkAsSpam: (messageId: string) => void | Promise<void>;
-  onMarkAsUnread: (messageId: string) => void | Promise<void>;
+  onMarkThreadAsRead: (threadId: string) => void | Promise<void>;
   onMarkThreadAsSpam: (threadId: string) => void | Promise<void>;
+  onMarkThreadAsUnread: (threadId: string) => void | Promise<void>;
   onMoveThreadToTrash: (threadId: string) => void | Promise<void>;
-  onMoveToTrash: (messageId: string) => void | Promise<void>;
   onOpenDraft: (message: MessageListItem) => void | Promise<void>;
   onRefresh: () => void | Promise<void>;
   onSearch: (query: string) => void;
-  onUntrash: (messageId: string) => void | Promise<void>;
   onUntrashThread: (threadId: string) => void | Promise<void>;
   onUnsubscribe: (messageId: string) => void | Promise<void>;
-  onUnmarkAsSpam: (messageId: string) => void | Promise<void>;
   onUnmarkThreadAsSpam: (threadId: string) => void | Promise<void>;
-  onUpdateLabels: (
-    messageId: string,
+  onUpdateThreadLabels: (
+    threadId: string,
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => void | Promise<void>;
   searchQuery: string;
@@ -237,24 +232,19 @@ const MessageListScrollPane = ({
   isMessageActionPending,
   isPending,
   messages,
-  onDeletePermanently,
   onDeleteThreadPermanently,
   onLoadMore,
-  onMarkAsRead,
-  onMarkAsSpam,
-  onMarkAsUnread,
+  onMarkThreadAsRead,
   onMarkThreadAsSpam,
+  onMarkThreadAsUnread,
   onMoveThreadToTrash,
-  onMoveToTrash,
   onOpenDraft,
   onThreadPress,
   onThreadSelectionPress,
-  onUntrash,
   onUntrashThread,
   onUnsubscribe,
-  onUnmarkAsSpam,
   onUnmarkThreadAsSpam,
-  onUpdateLabels,
+  onUpdateThreadLabels,
   selectedThreadIds,
   searchQuery,
   threadedMessages,
@@ -352,23 +342,18 @@ const MessageListScrollPane = ({
                 isSelectionMode={isSelectionMode}
                 key={thread.threadId}
                 onDeleteDraft={onDeleteDraft}
-                onDeletePermanently={onDeletePermanently}
                 onDeleteThreadPermanently={onDeleteThreadPermanently}
-                onMarkAsRead={onMarkAsRead}
-                onMarkAsSpam={onMarkAsSpam}
-                onMarkAsUnread={onMarkAsUnread}
+                onMarkThreadAsRead={onMarkThreadAsRead}
                 onMarkThreadAsSpam={onMarkThreadAsSpam}
+                onMarkThreadAsUnread={onMarkThreadAsUnread}
                 onMoveThreadToTrash={onMoveThreadToTrash}
-                onMoveToTrash={onMoveToTrash}
                 onOpenDraft={onOpenDraft}
                 onPress={onThreadPress}
                 onSelectionPress={onThreadSelectionPress}
-                onUntrash={onUntrash}
                 onUntrashThread={onUntrashThread}
                 onUnsubscribe={onUnsubscribe}
-                onUnmarkAsSpam={onUnmarkAsSpam}
                 onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
-                onUpdateLabels={onUpdateLabels}
+                onUpdateThreadLabels={onUpdateThreadLabels}
                 style={{
                   transform: `translateY(${virtualItem.start}px)`,
                 }}
@@ -718,22 +703,17 @@ export const MessageList = ({
   messages,
   onSearch,
   onActivateMessage,
-  onDeletePermanently,
   onDeleteThreadPermanently,
   onLoadMore,
-  onMarkAsRead,
-  onMarkAsSpam,
-  onMarkAsUnread,
+  onMarkThreadAsRead,
   onMarkThreadAsSpam,
+  onMarkThreadAsUnread,
   onMoveThreadToTrash,
-  onMoveToTrash,
   onOpenDraft,
   onRefresh,
-  onUpdateLabels,
-  onUntrash,
+  onUpdateThreadLabels,
   onUntrashThread,
   onUnsubscribe,
-  onUnmarkAsSpam,
   onUnmarkThreadAsSpam,
   searchQuery,
 }: MessageListProps) => {
@@ -913,26 +893,21 @@ export const MessageList = ({
         isPending={isPending}
         isRefreshing={isRefreshing}
         messages={messages}
-        onDeletePermanently={onDeletePermanently}
         onDeleteThreadPermanently={onDeleteThreadPermanently}
         onLoadMore={onLoadMore}
-        onMarkAsRead={onMarkAsRead}
-        onMarkAsSpam={onMarkAsSpam}
-        onMarkAsUnread={onMarkAsUnread}
+        onMarkThreadAsRead={onMarkThreadAsRead}
         onMarkThreadAsSpam={onMarkThreadAsSpam}
+        onMarkThreadAsUnread={onMarkThreadAsUnread}
         onMoveThreadToTrash={onMoveThreadToTrash}
-        onMoveToTrash={onMoveToTrash}
         onOpenDraft={onOpenDraft}
         onRefresh={onRefresh}
         onSearch={onSearch}
         onThreadPress={handleThreadPress}
         onThreadSelectionPress={handleThreadSelectionPress}
-        onUntrash={onUntrash}
         onUntrashThread={onUntrashThread}
         onUnsubscribe={onUnsubscribe}
-        onUnmarkAsSpam={onUnmarkAsSpam}
         onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
-        onUpdateLabels={onUpdateLabels}
+        onUpdateThreadLabels={onUpdateThreadLabels}
         selectedThreadIds={selectedThreadIds}
         searchQuery={searchQuery}
         threadedMessages={threadedMessages}

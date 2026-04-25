@@ -38,7 +38,7 @@ export const SelectTrigger = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>) => (
   <SelectPrimitive.Trigger
     className={cn(
-      "squircle inline-flex h-9 w-full shrink-0 items-center justify-between gap-2 rounded-md border border-input bg-background px-3.5 text-sm leading-none font-normal whitespace-nowrap text-foreground shadow-sm transition-colors duration-150 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+      "squircle inline-flex h-9 w-full shrink-0 items-center justify-between gap-2 rounded-md border border-input bg-background px-3.5 text-sm leading-none font-normal whitespace-nowrap text-foreground shadow-sm transition-transform duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
       className,
     )}
     {...props}
@@ -132,7 +132,7 @@ export const SelectItem = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.Item>) => (
   <SelectPrimitive.Item
     className={cn(
-      "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm text-foreground transition-colors duration-150 ease-out outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted/60",
+      "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm text-foreground transition-transform duration-100 ease-out outline-none select-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted/60 motion-reduce:transition-none motion-reduce:active:scale-100",
       className,
     )}
     {...props}

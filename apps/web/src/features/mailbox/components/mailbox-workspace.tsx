@@ -52,6 +52,7 @@ import {
   unmarkThreadAsSpamInMailbox,
   unmarkMessageAsSpamInMailbox,
   updateMessageLabelsInMailbox,
+  updateThreadLabelsInMailbox,
 } from "~/lib/gmail/inbox-query";
 import {
   createMailboxWorkspaceStore,
@@ -139,6 +140,7 @@ type MailboxWorkspaceViewProps = {
   onUnmarkAsSpam: (messageId: string) => void;
   onUnmarkThreadAsSpam: (threadId: string) => void;
   onUpdateLabels: (messageId: string, changes: LabelChangeSet) => void;
+  onUpdateThreadLabels: (threadId: string, changes: LabelChangeSet) => void;
   onDeleteThreadPermanently: (threadId: string) => void;
   selectedMailboxId: string | null;
   mailboxes: ConnectedMailbox[];
@@ -386,6 +388,19 @@ const createMailboxActionHandlers = ({
         activeMailbox,
         activeSearchQuery,
         messageId,
+        changes,
+      );
+    });
+  };
+
+  const updateThreadLabels = async (threadId: string, changes: LabelChangeSet) => {
+    await runThreadAction(threadId, async () => {
+      await updateThreadLabelsInMailbox(
+        queryClient,
+        mailboxId,
+        activeMailbox,
+        activeSearchQuery,
+        threadId,
         changes,
       );
     });
@@ -659,6 +674,7 @@ const createMailboxActionHandlers = ({
     unmarkThreadsAsSpam,
     unmarkMessageAsSpam,
     updateMessageLabels,
+    updateThreadLabels,
   };
 };
 
@@ -879,6 +895,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     unmarkThreadsAsSpam,
     unmarkMessageAsSpam,
     updateMessageLabels,
+    updateThreadLabels,
   } = createMailboxActionHandlers({
     activeMailbox,
     activeSearchQuery,
@@ -1098,6 +1115,9 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       onUpdateLabels: (messageId, changes) => {
         void updateMessageLabels(messageId, changes);
       },
+      onUpdateThreadLabels: (threadId, changes) => {
+        void updateThreadLabels(threadId, changes);
+      },
       searchQuery: activeSearchQuery,
       selectedMessage,
       selectedMailboxId,
@@ -1172,6 +1192,7 @@ const MailboxWorkspaceView = ({
   onUnmarkAsSpam,
   onUnmarkThreadAsSpam,
   onUpdateLabels,
+  onUpdateThreadLabels,
   mailboxId,
   mailboxes,
   searchQuery,
@@ -1222,24 +1243,19 @@ const MailboxWorkspaceView = ({
                   isRefreshing={isRefreshing}
                   messages={messages}
                   onActivateMessage={onActivateMessage}
-                  onDeletePermanently={onDeletePermanently}
                   onDeleteThreadPermanently={onDeleteThreadPermanently}
                   onLoadMore={onLoadMore}
-                  onMarkAsRead={onMarkAsRead}
-                  onMarkAsSpam={onMarkAsSpam}
-                  onMarkAsUnread={onMarkAsUnread}
+                  onMarkThreadAsRead={onMarkThreadAsRead}
                   onMarkThreadAsSpam={onMarkThreadAsSpam}
+                  onMarkThreadAsUnread={onMarkThreadAsUnread}
                   onMoveThreadToTrash={onMoveThreadToTrash}
-                  onMoveToTrash={onMoveToTrash}
                   onOpenDraft={onOpenDraft}
                   onRefresh={onRefresh}
                   onSearch={onSearch}
-                  onUntrash={onUntrash}
                   onUntrashThread={onUntrashThread}
                   onUnsubscribe={onUnsubscribe}
-                  onUnmarkAsSpam={onUnmarkAsSpam}
                   onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
-                  onUpdateLabels={onUpdateLabels}
+                  onUpdateThreadLabels={onUpdateThreadLabels}
                   searchQuery={searchQuery}
                 />
               </section>
@@ -1272,6 +1288,7 @@ const MailboxWorkspaceView = ({
                   onUnmarkAsSpam={onUnmarkAsSpam}
                   onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
                   onUpdateLabels={onUpdateLabels}
+                  onUpdateThreadLabels={onUpdateThreadLabels}
                   selectedMessage={selectedMessage}
                 />
               </div>

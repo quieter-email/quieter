@@ -7,8 +7,21 @@ import { ChevronRightIcon } from "./icons";
 
 export const DropdownMenu = MenuPrimitive.Root;
 export const DropdownMenuSubmenu = MenuPrimitive.SubmenuRoot;
-export const DropdownMenuTrigger = MenuPrimitive.Trigger;
 export const DropdownMenuPortal = MenuPrimitive.Portal;
+
+export const DropdownMenuTrigger = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof MenuPrimitive.Trigger>) => (
+  <MenuPrimitive.Trigger
+    className={cn(
+      "squircle",
+      className,
+      "transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+    )}
+    {...props}
+  />
+);
 
 export const DropdownMenuContent = ({
   align = "center",
@@ -88,7 +101,7 @@ export const DropdownMenuItem = ({
 }: DropdownMenuItemProps) => (
   <MenuPrimitive.Item
     className={cn(
-      "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-sm text-foreground outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted/60",
+      "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-sm text-foreground transition-transform duration-100 ease-out outline-none select-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted/60 motion-reduce:transition-none motion-reduce:active:scale-100",
       className,
     )}
     closeOnClick={closeOnSelect}
@@ -104,7 +117,7 @@ export const DropdownMenuSubmenuTrigger = ({
 }: ComponentPropsWithoutRef<typeof MenuPrimitive.SubmenuTrigger>) => (
   <MenuPrimitive.SubmenuTrigger
     className={cn(
-      "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-sm text-foreground outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted/60",
+      "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-sm text-foreground transition-transform duration-100 ease-out outline-none select-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted/60 motion-reduce:transition-none motion-reduce:active:scale-100",
       className,
     )}
     {...props}

@@ -6,8 +6,21 @@ import type { ButtonProps } from "./button";
 import { cn } from "../../lib/cn";
 
 export const AlertDialog = AlertDialogPrimitive.Root;
-export const AlertDialogTrigger = AlertDialogPrimitive.Trigger;
 export const AlertDialogPortal = AlertDialogPrimitive.Portal;
+
+export const AlertDialogTrigger = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Trigger>) => (
+  <AlertDialogPrimitive.Trigger
+    className={cn(
+      "squircle",
+      className,
+      "transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+    )}
+    {...props}
+  />
+);
 
 export const AlertDialogContent = ({
   children,
@@ -73,7 +86,7 @@ export const AlertDialogCloseButton = ({
 }) => (
   <AlertDialogPrimitive.Close
     className={cn(
-      "squircle inline-flex min-w-20 shrink-0 items-center justify-center gap-2 rounded-md px-3.5 text-[13px] leading-none font-medium whitespace-nowrap transition-colors duration-150 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+      "squircle inline-flex min-w-20 shrink-0 items-center justify-center gap-2 rounded-md px-3.5 text-[13px] leading-none font-medium whitespace-nowrap transition-transform duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
       variant === "default" &&
         "h-8 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/85",
       variant === "outline" &&

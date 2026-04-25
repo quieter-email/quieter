@@ -24,6 +24,10 @@ type MessageDetailProps = {
     messageId: string,
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => void | Promise<void>;
+  onUpdateThreadLabels?: (
+    threadId: string,
+    changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
+  ) => void | Promise<void>;
   onMoveThreadToTrash?: (threadId: string) => void | Promise<void>;
   onMoveToTrash?: (messageId: string) => void | Promise<void>;
   onUntrashThread?: (threadId: string) => void | Promise<void>;
@@ -57,6 +61,7 @@ export const MessageDetail = ({
   onUnmarkThreadAsSpam,
   onUnmarkAsSpam,
   onUpdateLabels,
+  onUpdateThreadLabels,
   selectedMessage,
   mailboxId,
 }: MessageDetailProps) => {
@@ -110,6 +115,7 @@ export const MessageDetail = ({
               onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
               onUnmarkAsSpam={onUnmarkAsSpam}
               onUpdateLabels={onUpdateLabels}
+              onUpdateThreadLabels={onUpdateThreadLabels}
             />
           </Suspense>
         ) : (

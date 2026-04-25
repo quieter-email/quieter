@@ -5,8 +5,21 @@ import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import { cn } from "../../lib/cn";
 
 export const Popover = PopoverPrimitive.Root;
-export const PopoverTrigger = PopoverPrimitive.Trigger;
 export const PopoverPortal = PopoverPrimitive.Portal;
+
+export const PopoverTrigger = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof PopoverPrimitive.Trigger>) => (
+  <PopoverPrimitive.Trigger
+    className={cn(
+      "squircle",
+      className,
+      "transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+    )}
+    {...props}
+  />
+);
 
 export const PopoverContent = ({
   align = "center",

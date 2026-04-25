@@ -3,7 +3,9 @@
 import {
   ArrowDown01Icon,
   ArrowRightDoubleIcon,
+  Edit01Icon,
   Loading03Icon,
+  MailRemove01Icon,
   MailReply02Icon,
   MailReplyAll02Icon,
   ZoomInAreaIcon,
@@ -20,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
   IconButtonTooltip,
+  TooltipProvider,
   cn,
 } from "@quieter/ui";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
@@ -59,6 +62,10 @@ type MessageViewProps = {
   onMarkThreadAsSpam?: (threadId: string) => void | Promise<void>;
   onUpdateLabels?: (
     messageId: string,
+    changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
+  ) => void | Promise<void>;
+  onUpdateThreadLabels?: (
+    threadId: string,
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => void | Promise<void>;
   onMoveThreadToTrash?: (threadId: string) => void | Promise<void>;
@@ -108,10 +115,9 @@ const MessageHeaderContent = ({
   const senderInitial = (senderName.trim().charAt(0) || "?").toUpperCase();
   const date = formatMessageDate(message, "full") || "--";
   const preview = previewMode === "collapsed" && !isExpanded ? message.snippet?.trim() || "" : "";
-  const participantRows = [
-    { label: "To", value: formatEnvelopeValue(message.to) },
-    { label: "From", value: formatEnvelopeValue(message.from) },
-  ].filter((row) => Boolean(row.value));
+  const participantRows = [{ label: "To", value: formatEnvelopeValue(message.to) }].filter((row) =>
+    Boolean(row.value),
+  );
   const showParticipants =
     participantRows.length > 0 && (previewMode !== "collapsed" || Boolean(isExpanded));
   const content = (
@@ -133,6 +139,8 @@ const MessageHeaderContent = ({
         {senderEmail ? (
           <span className="truncate text-xs text-muted-foreground sm:text-sm">{senderEmail}</span>
         ) : null}
+
+        <span className="shrink-0 text-xs text-muted-foreground sm:text-sm">{date}</span>
       </div>
 
       {preview ? <p className="mt-1 truncate text-sm text-foreground">{preview}</p> : null}
@@ -151,13 +159,7 @@ const MessageHeaderContent = ({
   );
 
   return (
-    <div
-      className={cn(
-        "flex gap-4",
-        { "items-start": Boolean(preview), "items-center": !preview },
-        className,
-      )}
-    >
+    <div className={cn("flex items-start gap-4", className)}>
       <div className="mt-0.5 shrink-0">
         <SenderAvatar
           avatarUrlDark={message.senderAvatarUrls?.dark}
@@ -181,13 +183,12 @@ const MessageHeaderContent = ({
             content
           )}
 
-          <div className="ml-2 flex shrink-0 flex-col items-end justify-between gap-1.5 pl-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground sm:text-sm">{date}</span>
+          <TooltipProvider>
+            <div className="ml-auto flex shrink-0 items-center justify-end gap-1 pl-4">
+              {headerActions}
               {trailing}
             </div>
-            {headerActions}
-          </div>
+          </TooltipProvider>
         </div>
       </div>
     </div>
@@ -201,52 +202,92 @@ const MessageHeaderActions = ({
   onForward,
   onReply,
   onReplyAll,
+  onUnsubscribe,
+  isPending,
   showReplyAll = true,
 }: {
   className?: string;
+  isPending?: boolean;
   onContinueDraft?: () => void;
   onDetails: () => void;
   onForward: () => void;
   onReply: () => void;
   onReplyAll: () => void;
+  onUnsubscribe?: () => void;
   showReplyAll?: boolean;
 }) => (
-  <div className={cn("flex items-center justify-end gap-1.5", className)}>
+  <div className={cn("flex items-center justify-end gap-0.5", className)}>
     {onContinueDraft ? (
-      <Button
-        className="leading-tight"
-        onClick={onContinueDraft}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        Continue with draft
-      </Button>
+      <IconButtonTooltip label="Continue with draft">
+        <Button
+          aria-label="Continue with draft"
+          className="text-muted-foreground hover:text-foreground"
+          onClick={onContinueDraft}
+          size="icon-sm"
+          type="button"
+          variant="ghost"
+        >
+          <HugeiconsIcon aria-hidden icon={Edit01Icon} />
+        </Button>
+      </IconButtonTooltip>
     ) : null}
-    <Button className="leading-tight" onClick={onReply} size="sm" type="button" variant="outline">
-      <HugeiconsIcon aria-hidden icon={MailReply02Icon} />
-      Reply
-    </Button>
+    <IconButtonTooltip label="Reply">
+      <Button
+        aria-label="Reply"
+        className="text-muted-foreground hover:text-foreground"
+        onClick={onReply}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        <HugeiconsIcon aria-hidden icon={MailReply02Icon} />
+      </Button>
+    </IconButtonTooltip>
     {showReplyAll ? (
-      <Button
-        className="leading-tight"
-        onClick={onReplyAll}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
-        Reply all
-      </Button>
+      <IconButtonTooltip label="Reply all">
+        <Button
+          aria-label="Reply all"
+          className="text-muted-foreground hover:text-foreground"
+          onClick={onReplyAll}
+          size="icon-sm"
+          type="button"
+          variant="ghost"
+        >
+          <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
+        </Button>
+      </IconButtonTooltip>
     ) : null}
-    <Button className="leading-tight" onClick={onForward} size="sm" type="button" variant="outline">
-      <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
-      Forward
-    </Button>
+    <IconButtonTooltip label="Forward">
+      <Button
+        aria-label="Forward"
+        className="text-muted-foreground hover:text-foreground"
+        onClick={onForward}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
+      </Button>
+    </IconButtonTooltip>
+    {onUnsubscribe ? (
+      <IconButtonTooltip label="Unsubscribe">
+        <Button
+          aria-label="Unsubscribe"
+          className="text-muted-foreground hover:text-foreground"
+          disabled={isPending}
+          onClick={onUnsubscribe}
+          size="icon-sm"
+          type="button"
+          variant="ghost"
+        >
+          <HugeiconsIcon aria-hidden icon={MailRemove01Icon} />
+        </Button>
+      </IconButtonTooltip>
+    ) : null}
     <IconButtonTooltip label="Details">
       <Button
         aria-label="Details"
-        className="ml-0.5 text-muted-foreground hover:text-foreground"
+        className="text-muted-foreground hover:text-foreground"
         onClick={onDetails}
         size="icon-sm"
         type="button"
@@ -453,14 +494,18 @@ const ThreadMessageCard = ({
   mailboxId,
   message,
   onComposeDraftRequested,
+  onUnsubscribe,
   onToggleExpanded,
+  isActionPending,
 }: {
   currentUserEmail?: string | null;
   expanded: boolean;
+  isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
   mailboxId: string;
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+  onUnsubscribe?: (messageId: string) => void | Promise<void>;
   onToggleExpanded: () => void;
 }) => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
@@ -490,14 +535,10 @@ const ThreadMessageCard = ({
 
   return (
     <section
-      className={cn(
-        "overflow-hidden rounded-xl border border-border transition-colors duration-200",
-        {
-          "bg-background-light": expanded,
-          "bg-muted/40": isMessageUnread(message) && !expanded,
-          "bg-background hover:bg-muted/30": !expanded && !isMessageUnread(message),
-        },
-      )}
+      className={cn("border-b border-border transition-colors duration-200", {
+        "border-border": expanded || !isMessageUnread(message),
+        "border-foreground/40": isMessageUnread(message) && !expanded,
+      })}
     >
       <MessageHeaderContent
         className="px-4 py-4 sm:px-5 sm:py-4"
@@ -509,8 +550,16 @@ const ThreadMessageCard = ({
                 setDetailsDialogOpen(true);
               }}
               onForward={() => openComposeAction("forward")}
+              isPending={isActionPending}
               onReply={() => openComposeAction("reply")}
               onReplyAll={() => openComposeAction("reply-all")}
+              onUnsubscribe={
+                message.unsubscribeMailto && onUnsubscribe
+                  ? () => {
+                      void onUnsubscribe(message.id);
+                    }
+                  : undefined
+              }
               showReplyAll={hasDistinctReplyAllRecipients(message, currentUserEmail)}
             />
           ) : null
@@ -548,12 +597,16 @@ const SingleMessageCard = ({
   mailboxId,
   message,
   onComposeDraftRequested,
+  onUnsubscribe,
+  isActionPending,
 }: {
   currentUserEmail?: string | null;
+  isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
   mailboxId: string;
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+  onUnsubscribe?: (messageId: string) => void | Promise<void>;
 }) => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
@@ -581,7 +634,7 @@ const SingleMessageCard = ({
   };
 
   return (
-    <section className="overflow-hidden rounded-xl border border-border bg-background-light">
+    <section className="border-b border-border">
       <MessageHeaderContent
         className="px-4 py-4 sm:px-5 sm:py-5"
         headerActions={
@@ -591,8 +644,16 @@ const SingleMessageCard = ({
               setDetailsDialogOpen(true);
             }}
             onForward={() => openComposeAction("forward")}
+            isPending={isActionPending}
             onReply={() => openComposeAction("reply")}
             onReplyAll={() => openComposeAction("reply-all")}
+            onUnsubscribe={
+              message.unsubscribeMailto && onUnsubscribe
+                ? () => {
+                    void onUnsubscribe(message.id);
+                  }
+                : undefined
+            }
             showReplyAll={hasDistinctReplyAllRecipients(message, currentUserEmail)}
           />
         }
@@ -620,19 +681,23 @@ const ThreadMessageList = ({
   mailboxId,
   messages,
   onComposeDraftRequested,
+  onUnsubscribe,
+  isActionPending,
 }: {
   allThreadMessages: MessageListItem[];
   currentUserEmail?: string | null;
+  isActionPending?: boolean;
   mailboxId: string;
   messages: MessageListItem[];
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+  onUnsubscribe?: (messageId: string) => void | Promise<void>;
 }) => {
   const [expandedMessageId, setExpandedMessageId] = useState<string | null>(
     messages[0]?.id ?? null,
   );
 
   return (
-    <div className="flex flex-col gap-3">
+    <div>
       {messages.map((threadMessage) => {
         const isExpanded = expandedMessageId === threadMessage.id;
         const linkedDraftMessage = findLinkedDraftForMessage(allThreadMessages, threadMessage);
@@ -641,11 +706,13 @@ const ThreadMessageList = ({
           <ThreadMessageCard
             currentUserEmail={currentUserEmail}
             expanded={isExpanded}
+            isActionPending={isActionPending}
             key={threadMessage.id}
             linkedDraftMessage={linkedDraftMessage}
             mailboxId={mailboxId}
             message={threadMessage}
             onComposeDraftRequested={onComposeDraftRequested}
+            onUnsubscribe={onUnsubscribe}
             onToggleExpanded={() => {
               setExpandedMessageId((current) =>
                 current === threadMessage.id ? null : threadMessage.id,
@@ -665,22 +732,15 @@ export const MessageView = ({
   isActionPending,
   message,
   onComposeDraftRequested,
-  onDeletePermanently,
-  onMarkAsRead,
-  onMarkAsSpam,
-  onMarkAsUnread,
   onMarkThreadAsRead,
   onMarkThreadAsSpam,
   onMarkThreadAsUnread,
   onMoveThreadToTrash,
-  onMoveToTrash,
   onDeleteThreadPermanently,
   onUntrashThread,
-  onUntrash,
   onUnsubscribe,
   onUnmarkThreadAsSpam,
-  onUnmarkAsSpam,
-  onUpdateLabels,
+  onUpdateThreadLabels,
 }: MessageViewProps) => {
   const threadQuery = useSuspenseQuery(
     getThreadWithDetailsOptions(mailboxId, activeMailbox, message.threadId),
@@ -734,8 +794,8 @@ export const MessageView = ({
   }, [isActionPending, message.threadId, onMarkThreadAsRead, threadIsUnread]);
 
   return (
-    <article className="mx-auto w-full max-w-5xl space-y-4">
-      <header className="rounded-xl border border-border bg-background-light px-5 py-5 sm:px-6 sm:py-6">
+    <article className="-mx-4 w-auto sm:-mx-5 lg:-mx-6">
+      <header className="border-b border-border px-5 py-5 sm:px-6 sm:py-6">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-8">
           <h1 className="min-w-0 text-lg leading-tight font-medium tracking-tight wrap-break-word text-foreground sm:text-xl">
             {subject}
@@ -747,30 +807,31 @@ export const MessageView = ({
             mailbox={activeMailbox}
             mailboxId={mailboxId}
             message={message}
-            onMarkAsRead={(messageId) => {
-              void (onMarkThreadAsRead?.(message.threadId) ?? onMarkAsRead?.(messageId));
+            onMarkAsRead={() => {
+              void onMarkThreadAsRead?.(message.threadId);
             }}
-            onMarkAsSpam={(messageId) => {
-              void (onMarkThreadAsSpam?.(message.threadId) ?? onMarkAsSpam?.(messageId));
+            onMarkAsSpam={() => {
+              void onMarkThreadAsSpam?.(message.threadId);
             }}
-            onMarkAsUnread={(messageId) => {
-              void (onMarkThreadAsUnread?.(message.threadId) ?? onMarkAsUnread?.(messageId));
+            onMarkAsUnread={() => {
+              void onMarkThreadAsUnread?.(message.threadId);
             }}
-            onMoveToTrash={(messageId) => {
-              void (onMoveThreadToTrash?.(message.threadId) ?? onMoveToTrash?.(messageId));
+            onMoveToTrash={() => {
+              void onMoveThreadToTrash?.(message.threadId);
             }}
-            onUntrash={(messageId) => {
-              void (onUntrashThread?.(message.threadId) ?? onUntrash?.(messageId));
+            onUntrash={() => {
+              void onUntrashThread?.(message.threadId);
             }}
-            onUnsubscribe={onUnsubscribe}
-            onUnmarkAsSpam={(messageId) => {
-              void (onUnmarkThreadAsSpam?.(message.threadId) ?? onUnmarkAsSpam?.(messageId));
+            onUnmarkAsSpam={() => {
+              void onUnmarkThreadAsSpam?.(message.threadId);
             }}
-            onUpdateLabels={onUpdateLabels}
-            onDeletePermanently={(messageId) => {
-              void (
-                onDeleteThreadPermanently?.(message.threadId) ?? onDeletePermanently?.(messageId)
-              );
+            onUpdateLabels={
+              onUpdateThreadLabels
+                ? (_messageId, changes) => onUpdateThreadLabels(message.threadId, changes)
+                : undefined
+            }
+            onDeletePermanently={() => {
+              void onDeleteThreadPermanently?.(message.threadId);
             }}
           />
         </div>
@@ -792,20 +853,24 @@ export const MessageView = ({
         <ThreadMessageList
           allThreadMessages={threadMessages}
           currentUserEmail={currentUserEmail}
+          isActionPending={isActionPending}
           key={message.threadId}
           mailboxId={mailboxId}
           messages={visibleMessages}
           onComposeDraftRequested={onComposeDraftRequested}
+          onUnsubscribe={onUnsubscribe}
         />
       ) : (
         visibleMessages.map((threadMessage) => (
           <SingleMessageCard
             currentUserEmail={currentUserEmail}
+            isActionPending={isActionPending}
             key={threadMessage.id}
             linkedDraftMessage={findLinkedDraftForMessage(threadMessages, threadMessage)}
             mailboxId={mailboxId}
             message={threadMessage}
             onComposeDraftRequested={onComposeDraftRequested}
+            onUnsubscribe={onUnsubscribe}
           />
         ))
       )}

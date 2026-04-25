@@ -5,8 +5,20 @@ import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu
 import { cn } from "../../lib/cn";
 
 export const ContextMenu = ContextMenuPrimitive.Root;
-export const ContextMenuTrigger = ContextMenuPrimitive.Trigger;
 export const ContextMenuPortal = ContextMenuPrimitive.Portal;
+
+export const ContextMenuTrigger = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Trigger>) => (
+  <ContextMenuPrimitive.Trigger
+    className={cn(
+      "squircle transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      className,
+    )}
+    {...props}
+  />
+);
 
 export const ContextMenuContent = ({
   align = "center",
@@ -55,7 +67,7 @@ export const ContextMenuItem = ({
 }: ContextMenuItemProps) => (
   <ContextMenuPrimitive.Item
     className={cn(
-      "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-sm text-foreground outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted/60",
+      "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-sm text-foreground transition-transform duration-100 ease-out outline-none select-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted/60 motion-reduce:transition-none motion-reduce:active:scale-100",
       className,
     )}
     closeOnClick={closeOnSelect}
