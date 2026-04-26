@@ -195,19 +195,6 @@
   }
 }
 
-/*
- * Progressive-enhancement squircle corners.
- *
- * The `.squircle` class is a no-op in browsers that do not support the
- * experimental `corner-shape` property (https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Values/corner-shape-value),
- * so elements keep their normal `rounded-*` border-radius as a fallback.
- *
- * When supported, we switch the corner curve to a superellipse(2) squircle
- * and scale the radius up. A squircle with the same radius as a plain round
- * corner reads visually flatter / less rounded, so the multipliers below are
- * tuned so the squircle variant lands close to the rounded fallback's
- * apparent roundness.
- */
 @layer utilities {
   @supports (corner-shape: squircle) {
     .squircle {

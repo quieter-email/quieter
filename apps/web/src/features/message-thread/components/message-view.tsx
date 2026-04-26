@@ -406,16 +406,18 @@ const MessageInspectorPanel = ({
 
 const MessageContentSection = ({
   compact,
+  isLoading,
   message,
 }: {
   compact?: boolean;
+  isLoading?: boolean;
   message: MessageListItem;
 }) => (
   <div className="border-t border-border/60 pt-4 sm:pt-5">
     <MessageBody
       compact={compact}
       html={message.bodyHtml}
-      snippet={message.snippet}
+      isLoading={isLoading}
       text={message.bodyText}
     />
   </div>
@@ -424,9 +426,11 @@ const MessageContentSection = ({
 const ThreadMessageBody = ({
   compact,
   expanded,
+  isLoading,
   message,
 }: {
   expanded: boolean;
+  isLoading?: boolean;
   message: MessageListItem;
   compact?: boolean;
 }) => (
@@ -449,7 +453,7 @@ const ThreadMessageBody = ({
           },
         )}
       >
-        <MessageContentSection compact={compact} message={message} />
+        <MessageContentSection compact={compact} isLoading={isLoading} message={message} />
       </div>
     </div>
   </div>
@@ -490,6 +494,7 @@ const MessageExpandButton = ({
 const ThreadMessageCard = ({
   currentUserEmail,
   expanded,
+  isLoading,
   linkedDraftMessage,
   mailboxId,
   message,
@@ -500,6 +505,7 @@ const ThreadMessageCard = ({
 }: {
   currentUserEmail?: string | null;
   expanded: boolean;
+  isLoading?: boolean;
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
   mailboxId: string;
@@ -578,7 +584,7 @@ const ThreadMessageCard = ({
       />
 
       <div id={`message-body-${message.id}`}>
-        <ThreadMessageBody compact expanded={expanded} message={message} />
+        <ThreadMessageBody compact expanded={expanded} isLoading={isLoading} message={message} />
       </div>
 
       <MessageInspectorPanel
@@ -593,6 +599,7 @@ const ThreadMessageCard = ({
 
 const SingleMessageCard = ({
   currentUserEmail,
+  isLoading,
   linkedDraftMessage,
   mailboxId,
   message,
@@ -601,6 +608,7 @@ const SingleMessageCard = ({
   isActionPending,
 }: {
   currentUserEmail?: string | null;
+  isLoading?: boolean;
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
   mailboxId: string;
@@ -662,7 +670,7 @@ const SingleMessageCard = ({
       />
 
       <div className="px-4 pb-4 sm:px-5 sm:pb-5">
-        <MessageContentSection compact message={message} />
+        <MessageContentSection compact isLoading={isLoading} message={message} />
       </div>
 
       <MessageInspectorPanel
@@ -678,6 +686,7 @@ const SingleMessageCard = ({
 const ThreadMessageList = ({
   allThreadMessages,
   currentUserEmail,
+  isLoading,
   mailboxId,
   messages,
   onComposeDraftRequested,
@@ -686,6 +695,7 @@ const ThreadMessageList = ({
 }: {
   allThreadMessages: MessageListItem[];
   currentUserEmail?: string | null;
+  isLoading?: boolean;
   isActionPending?: boolean;
   mailboxId: string;
   messages: MessageListItem[];
@@ -706,6 +716,7 @@ const ThreadMessageList = ({
           <ThreadMessageCard
             currentUserEmail={currentUserEmail}
             expanded={isExpanded}
+            isLoading={isLoading}
             isActionPending={isActionPending}
             key={threadMessage.id}
             linkedDraftMessage={linkedDraftMessage}
@@ -745,6 +756,7 @@ export const MessageView = ({
   const threadQuery = useSuspenseQuery(
     getThreadWithDetailsOptions(mailboxId, activeMailbox, message.threadId),
   );
+  const isBodyRefreshPending = threadQuery.isFetching;
 
   const threadMessages = threadQuery.data?.messages?.length
     ? [...threadQuery.data.messages].reverse()
@@ -853,6 +865,7 @@ export const MessageView = ({
         <ThreadMessageList
           allThreadMessages={threadMessages}
           currentUserEmail={currentUserEmail}
+          isLoading={isBodyRefreshPending}
           isActionPending={isActionPending}
           key={message.threadId}
           mailboxId={mailboxId}
@@ -864,6 +877,7 @@ export const MessageView = ({
         visibleMessages.map((threadMessage) => (
           <SingleMessageCard
             currentUserEmail={currentUserEmail}
+            isLoading={isBodyRefreshPending}
             isActionPending={isActionPending}
             key={threadMessage.id}
             linkedDraftMessage={findLinkedDraftForMessage(threadMessages, threadMessage)}

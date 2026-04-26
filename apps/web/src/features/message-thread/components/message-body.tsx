@@ -7,8 +7,8 @@ import { useEffect, useRef } from "react";
 type MessageBodyProps = {
   html?: string;
   text?: string;
-  snippet?: string;
   compact?: boolean;
+  isLoading?: boolean;
 };
 
 type ResolvedColorMode = "light" | "dark";
@@ -141,8 +141,8 @@ const HtmlMessageBody = ({ compact, html }: { html: string; compact?: boolean })
   return <div className={cn({ "mt-3": compact, "mt-6": !compact })} ref={hostRef} />;
 };
 
-export const MessageBody = ({ compact, html, snippet, text }: MessageBodyProps) => {
-  const fallbackText = text?.trim() || snippet?.trim() || "No content.";
+export const MessageBody = ({ compact, html, isLoading, text }: MessageBodyProps) => {
+  const fallbackText = text?.trim() || (isLoading ? "Loading content..." : "No content.");
 
   if (!html?.trim()) {
     return (
