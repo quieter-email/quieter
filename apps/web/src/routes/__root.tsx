@@ -6,18 +6,34 @@ import { Providers } from "~/components/providers";
 import { toMailboxSearch } from "~/lib/search-params";
 import appCss from "~/styles.css?url";
 
-const faviconHref =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f172a'/%3E%3Ctext x='32' y='41' text-anchor='middle' font-size='30' fill='white'%3Eq%3C/text%3E%3C/svg%3E";
-
 export const Route = createRootRoute({
   component: RootComponent,
   errorComponent: RootErrorComponent,
   head: () => ({
     links: [
       {
-        href: faviconHref,
+        href: "/favicon.ico",
+        rel: "icon",
+        sizes: "any",
+      },
+      {
+        href: "/icon.svg",
         rel: "icon",
         type: "image/svg+xml",
+      },
+      {
+        href: "/apple-touch-icon.png",
+        rel: "apple-touch-icon",
+        sizes: "180x180",
+      },
+      {
+        href: "/site.webmanifest",
+        rel: "manifest",
+      },
+      {
+        color: "#1a1a1a",
+        href: "/safari-pinned-tab.svg",
+        rel: "mask-icon",
       },
       {
         href: appCss,
@@ -34,6 +50,40 @@ export const Route = createRootRoute({
       },
       {
         title: "quieter",
+      },
+      {
+        content: "light dark",
+        name: "color-scheme",
+      },
+      {
+        content: "#f7f4ee",
+        media: "(prefers-color-scheme: light)",
+        name: "theme-color",
+      },
+      {
+        content: "#141414",
+        media: "(prefers-color-scheme: dark)",
+        name: "theme-color",
+      },
+      {
+        content: "quieter",
+        property: "og:title",
+      },
+      {
+        content: "Email, without the noise.",
+        property: "og:description",
+      },
+      {
+        content: "/og-image.png",
+        property: "og:image",
+      },
+      {
+        content: "summary_large_image",
+        name: "twitter:card",
+      },
+      {
+        content: "/og-image.png",
+        name: "twitter:image",
       },
     ],
   }),
@@ -58,6 +108,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       </head>
       <body>
         {children}
+        <LogoDevFooter />
         <Scripts />
       </body>
     </html>
@@ -119,3 +170,18 @@ function RootNotFoundComponent() {
     </div>
   );
 }
+
+const LogoDevFooter = () => {
+  return (
+    <footer className="absolute right-2 bottom-2 z-20 px-3 py-1.5 text-[10px] text-muted-foreground">
+      <a
+        className="transition-colors hover:text-foreground"
+        href="https://logo.dev"
+        target="_blank"
+        title="Logos provided by logo.dev"
+      >
+        Logos provided by logo.dev
+      </a>
+    </footer>
+  );
+};

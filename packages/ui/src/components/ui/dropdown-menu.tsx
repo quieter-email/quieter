@@ -26,6 +26,7 @@ export const DropdownMenuTrigger = ({
 export const DropdownMenuContent = ({
   align = "center",
   alignOffset = 0,
+  anchor,
   className,
   side = "bottom",
   sideOffset = 6,
@@ -33,12 +34,13 @@ export const DropdownMenuContent = ({
 }: ComponentPropsWithoutRef<typeof MenuPrimitive.Popup> &
   Pick<
     ComponentPropsWithoutRef<typeof MenuPrimitive.Positioner>,
-    "align" | "alignOffset" | "side" | "sideOffset"
+    "align" | "alignOffset" | "anchor" | "side" | "sideOffset"
   >) => (
   <DropdownMenuPortal>
     <MenuPrimitive.Positioner
       align={align}
       alignOffset={alignOffset}
+      anchor={anchor}
       className="z-50"
       side={side}
       sideOffset={sideOffset}

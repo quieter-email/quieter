@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ComposeDraftAnchor } from "./gmail/compose/schema";
 import {
   decodePartBody,
   decodeMimeHeaderValue,
@@ -7,7 +8,6 @@ import {
   findRenderablePart,
 } from "./gmail-message-content";
 import { parseDraftAnchorFromHeaderReader } from "./gmail/compose/draft-anchor";
-import { QUIETER_DRAFT_HEADER_NAMES, type ComposeDraftAnchor } from "./gmail/compose/schema";
 import { getSenderAvatarUrls } from "./sender-avatar";
 
 export const MAILBOX_LABELS = {
@@ -208,6 +208,8 @@ export type GmailMessagePart = RecursiveMessagePart;
 export type MessageListItem = {
   id: string;
   threadId: string;
+  threadMessageCount?: number;
+  threadAttachmentCount?: number;
   draftId?: string;
   draftAnchor?: ComposeDraftAnchor;
   snippet?: string;
@@ -292,6 +294,11 @@ export type MailboxSyncDelta = {
 };
 export { decodeMimeHeaderValue, extractMessageContent };
 
+type ThreadListSummary = {
+  messageCount: number;
+  attachmentCount: number;
+};
+
 const GMAIL_BATCH_MESSAGE_CHUNK_SIZE = 25;
 const GMAIL_METADATA_RETRY_LIMIT = 2;
 const GMAIL_METADATA_RETRY_BASE_DELAY_MS = 250;
@@ -304,25 +311,12 @@ const GMAIL_RATE_LIMIT_REASONS = new Set([
   "userratelimitexceeded",
 ]);
 const GMAIL_RATE_LIMIT_RETRY_AFTER_MS = 1000 * 60;
-const GMAIL_MESSAGE_METADATA_HEADERS = [
-  "Subject",
-  "From",
-  "To",
-  "Cc",
-  "Bcc",
-  "In-Reply-To",
-  "Reply-To",
-  "Date",
-  "Message-ID",
-  "References",
-  "List-Unsubscribe",
-  QUIETER_DRAFT_HEADER_NAMES.seededBy,
-  QUIETER_DRAFT_HEADER_NAMES.sourceMessageHeaderId,
-  QUIETER_DRAFT_HEADER_NAMES.sourceMessageId,
-  QUIETER_DRAFT_HEADER_NAMES.sourceThreadId,
-] as const;
-const GMAIL_MESSAGE_METADATA_FIELDS =
-  "id,threadId,labelIds,snippet,historyId,internalDate,payload(headers(name,value))";
+const GMAIL_MESSAGE_PAYLOAD_METADATA_FIELDS =
+  "headers(name,value),mimeType,filename,body(attachmentId,size),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size)))))";
+const GMAIL_THREAD_PAYLOAD_METADATA_FIELDS =
+  "headers(name,value),mimeType,filename,body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data)))))";
+const GMAIL_MESSAGE_METADATA_FIELDS = `id,threadId,labelIds,snippet,historyId,internalDate,payload(${GMAIL_MESSAGE_PAYLOAD_METADATA_FIELDS})`;
+const GMAIL_THREAD_LIST_METADATA_FIELDS = `id,messages(id,threadId,payload(${GMAIL_THREAD_PAYLOAD_METADATA_FIELDS}))`;
 const GMAIL_MESSAGE_LIST_FIELDS = "messages(id,threadId),nextPageToken,resultSizeEstimate";
 const GMAIL_DRAFT_LIST_FIELDS = "drafts(id,message(id,threadId)),nextPageToken,resultSizeEstimate";
 const GMAIL_LABEL_LIST_FIELDS = "labels(id,name,type,labelListVisibility,messageListVisibility)";
@@ -704,9 +698,14 @@ const resolveMessageContent = async (
 const toMessageListItem = async (
   accessToken: string,
   message: GmailMessage,
-  includeBody = false,
+  options: {
+    includeAttachmentMetadata?: boolean;
+    includeBody?: boolean;
+    threadSummary?: ThreadListSummary;
+  } = {},
   signal?: AbortSignal,
 ): Promise<MessageListItem> => {
+  const includeBody = options.includeBody ?? false;
   const labelIds = normalizeLabelIds(message.labelIds);
   const content = includeBody
     ? await resolveMessageContent(accessToken, message, signal)
@@ -716,6 +715,8 @@ const toMessageListItem = async (
   return {
     id: message.id,
     threadId: message.threadId,
+    threadMessageCount: options.threadSummary?.messageCount,
+    threadAttachmentCount: options.threadSummary?.attachmentCount,
     snippet: decodeMimeHeaderValue(message.snippet),
     draftAnchor: parseDraftAnchorFromHeaderReader((name) => getHeader(message, name)),
     subject: getHeader(message, "Subject"),
@@ -731,7 +732,10 @@ const toMessageListItem = async (
     internalDate: message.internalDate,
     bodyHtml: content.html,
     bodyText: content.text,
-    attachments: includeBody ? extractMessageAttachments(message.payload) : undefined,
+    attachments:
+      includeBody || options.includeAttachmentMetadata
+        ? extractMessageAttachments(message.payload)
+        : undefined,
     unsubscribeMailto: extractListUnsubscribeMailto(getHeader(message, "List-Unsubscribe")),
     senderAvatarUrls: await getSenderAvatarUrls(from),
     labelIds,
@@ -836,8 +840,7 @@ export const getGmailMessageMetadata = async (
         {
           query: {
             fields: GMAIL_MESSAGE_METADATA_FIELDS,
-            format: "metadata",
-            metadataHeaders: GMAIL_MESSAGE_METADATA_HEADERS,
+            format: "full",
           },
           signal,
         },
@@ -889,8 +892,7 @@ const getGmailMessagesMetadataBatch = async (
         `message-${index}`,
         buildGmailPathWithQuery(`/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}`, {
           fields: GMAIL_MESSAGE_METADATA_FIELDS,
-          format: "metadata",
-          metadataHeaders: GMAIL_MESSAGE_METADATA_HEADERS,
+          format: "full",
         }),
       ),
     ),
@@ -958,6 +960,137 @@ const getGmailMessagesMetadata = async (
   return messages;
 };
 
+const getGmailThreadsListMetadataBatch = async (
+  accessToken: string,
+  threadIds: readonly string[],
+  signal?: AbortSignal,
+) => {
+  if (threadIds.length === 0) return [];
+
+  const boundary = `batch_${crypto.randomUUID().replaceAll("-", "")}`;
+  const body = [
+    ...threadIds.map((threadId, index) =>
+      buildBatchPart(
+        boundary,
+        `thread-${index}`,
+        buildGmailPathWithQuery(`/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}`, {
+          fields: GMAIL_THREAD_LIST_METADATA_FIELDS,
+          format: "full",
+        }),
+      ),
+    ),
+    `--${boundary}--`,
+    "",
+  ].join("\r\n");
+
+  const response = await fetch("https://gmail.googleapis.com/batch/gmail/v1", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": `multipart/mixed; boundary=${boundary}`,
+    },
+    body,
+    signal,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw await createGoogleApiError(response);
+  }
+
+  const text = await response.text();
+  const parts = parseBatchResponseParts(response, text);
+
+  if (parts.length !== threadIds.length) {
+    throw new Error("Gmail batch response size did not match the requested thread count.");
+  }
+
+  return parts.map((part) => {
+    if (part.status === 404) {
+      return null;
+    }
+
+    if (part.status < 200 || part.status >= 300) {
+      const error = new Error(
+        part.body || `Gmail batch subrequest failed with status ${part.status}.`,
+      ) as Error & { status: number };
+      error.status = part.status;
+      throw error;
+    }
+
+    const parsed = part.body.trim() ? JSON.parse(part.body) : {};
+    return gmailThreadSchema.parse(parsed);
+  });
+};
+
+const getGmailThreadsListMetadata = async (
+  accessToken: string,
+  threadIds: readonly string[],
+  signal?: AbortSignal,
+) => {
+  const uniqueThreadIds = Array.from(new Set(threadIds));
+  const threads: Array<z.infer<typeof gmailThreadSchema> | null> = [];
+
+  for (const batchThreadIds of chunkArray(uniqueThreadIds, GMAIL_BATCH_MESSAGE_CHUNK_SIZE)) {
+    try {
+      threads.push(
+        ...(await getGmailThreadsListMetadataBatch(accessToken, batchThreadIds, signal)),
+      );
+    } catch {
+      for (const threadId of batchThreadIds) {
+        try {
+          const thread = await requestGmail(
+            accessToken,
+            `/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}`,
+            gmailThreadSchema,
+            {
+              query: {
+                fields: GMAIL_THREAD_LIST_METADATA_FIELDS,
+                format: "full",
+              },
+              signal,
+            },
+          );
+          threads.push(thread);
+        } catch (error) {
+          if (isErrorWithStatus(error) && error.status === 404) {
+            threads.push(null);
+            continue;
+          }
+
+          throw error;
+        }
+      }
+    }
+  }
+
+  return threads;
+};
+
+const getThreadListSummaries = async (
+  accessToken: string,
+  threadIds: readonly string[],
+  signal?: AbortSignal,
+) => {
+  const summariesByThreadId = new Map<string, ThreadListSummary>();
+  const threads = await getGmailThreadsListMetadata(accessToken, threadIds, signal);
+
+  for (const thread of threads) {
+    if (!thread) continue;
+
+    const messages = thread.messages ?? [];
+    summariesByThreadId.set(thread.id, {
+      attachmentCount: messages.reduce(
+        (count, message) => count + extractMessageAttachments(message.payload).length,
+        0,
+      ),
+      messageCount: messages.length,
+    });
+  }
+
+  return summariesByThreadId;
+};
+
 export const listMessagesWithDetails = async (
   accessToken: string,
   options?: {
@@ -979,12 +1112,22 @@ export const listMessagesWithDetails = async (
   const orderedDetails = list.messages
     .map((message) => detailsById.get(message.id))
     .filter((message): message is GmailMessage => Boolean(message));
+  const threadSummariesById = await getThreadListSummaries(
+    accessToken,
+    orderedDetails.map((message) => message.threadId),
+    options?.signal,
+  );
   const historyId =
     orderedDetails[0]?.historyId ?? (await getGmailProfile(accessToken, options?.signal)).historyId;
 
   return {
     messages: await Promise.all(
-      orderedDetails.map(async (message) => await toMessageListItem(accessToken, message)),
+      orderedDetails.map(
+        async (message) =>
+          await toMessageListItem(accessToken, message, {
+            threadSummary: threadSummariesById.get(message.threadId),
+          }),
+      ),
     ),
     nextPageToken: list.nextPageToken,
     resultSizeEstimate: list.resultSizeEstimate,
@@ -1037,11 +1180,18 @@ export const listDraftsWithDetails = async (
       },
     ];
   });
+  const threadSummariesById = await getThreadListSummaries(
+    accessToken,
+    orderedDrafts.map((draft) => draft.message.threadId),
+    options?.signal,
+  );
 
   return {
     messages: await Promise.all(
       orderedDrafts.map(async (draft) => ({
-        ...(await toMessageListItem(accessToken, draft.message)),
+        ...(await toMessageListItem(accessToken, draft.message, {
+          threadSummary: threadSummariesById.get(draft.message.threadId),
+        })),
         draftId: draft.draftId,
       })),
     ),
@@ -1068,7 +1218,8 @@ export const getThreadWithDetails = async (
   const messages = (
     await Promise.all(
       (thread.messages ?? []).map(
-        async (message) => await toMessageListItem(accessToken, message, true, signal),
+        async (message) =>
+          await toMessageListItem(accessToken, message, { includeBody: true }, signal),
       ),
     )
   ).sort((left, right) => getMessageTimestamp(left) - getMessageTimestamp(right));
@@ -1295,6 +1446,23 @@ export const getMailboxSyncDelta = async (
       }
 
       updatedMessages.push(await toMessageListItem(accessToken, changedMessage));
+    }
+
+    const threadSummariesById = await getThreadListSummaries(
+      accessToken,
+      updatedMessages.map((message) => message.threadId),
+      options.signal,
+    );
+
+    for (const [index, updatedMessage] of updatedMessages.entries()) {
+      const threadSummary = threadSummariesById.get(updatedMessage.threadId);
+      if (!threadSummary) continue;
+
+      updatedMessages[index] = {
+        ...updatedMessage,
+        threadAttachmentCount: threadSummary.attachmentCount,
+        threadMessageCount: threadSummary.messageCount,
+      };
     }
   }
 

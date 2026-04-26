@@ -634,7 +634,7 @@ const SingleMessageCard = ({
   };
 
   return (
-    <section className="border-b border-border">
+    <section>
       <MessageHeaderContent
         className="px-4 py-4 sm:px-5 sm:py-5"
         headerActions={

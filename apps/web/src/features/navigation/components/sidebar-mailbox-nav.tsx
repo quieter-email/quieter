@@ -37,7 +37,7 @@ export const SidebarMailboxNav = ({ onSelectMailbox, selectedMailbox }: SidebarM
         <Button
           aria-current={isActive ? "page" : undefined}
           className={cn(
-            "group relative h-9 w-full justify-start gap-3 rounded-md px-3 text-left text-sm font-medium",
+            "group relative w-full justify-start gap-3 rounded-md px-3 text-left text-sm font-medium",
             {
               "bg-secondary text-secondary-foreground hover:bg-secondary active:bg-secondary":
                 isActive,
@@ -45,7 +45,6 @@ export const SidebarMailboxNav = ({ onSelectMailbox, selectedMailbox }: SidebarM
           )}
           key={item.id}
           onClick={() => onSelectMailbox(item.id)}
-          size="sm"
           type="button"
           variant="ghost"
         >
@@ -57,7 +56,7 @@ export const SidebarMailboxNav = ({ onSelectMailbox, selectedMailbox }: SidebarM
             })}
             icon={item.icon}
           />
-          <span>{item.label}</span>
+          {item.label}
         </Button>
       );
     })}

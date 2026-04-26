@@ -119,7 +119,8 @@ const buildDraftListEntry = (message: MessageListItem): ThreadListEntry => ({
   participants: [],
   subject: message.subject?.trim() || "(No subject)",
   preview: message.snippet?.trim() || "",
-  messageCount: 1,
+  messageCount: Math.max(1, message.threadMessageCount ?? 0),
+  attachmentCount: message.threadAttachmentCount ?? message.attachments?.length ?? 0,
   unreadCount: 0,
 });
 

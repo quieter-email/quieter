@@ -2,6 +2,7 @@
 
 import type { ButtonHTMLAttributes } from "react";
 import { Button as ButtonPrimitive } from "@base-ui/react/button";
+import { createLink, type LinkComponent } from "@tanstack/react-router";
 import { forwardRef } from "react";
 import { cn } from "../../lib/cn";
 
@@ -18,7 +19,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     <ButtonPrimitive
       ref={ref}
       className={cn(
-        "squircle inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm leading-none font-medium whitespace-nowrap transition-transform duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "squircle inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm leading-none font-medium whitespace-nowrap transition-all duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         {
           "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/85":
             variant === "default",
@@ -44,3 +45,15 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 );
 
 Button.displayName = "Button";
+
+const LinkButtonComponent = createLink(Button);
+
+export const LinkButton: LinkComponent<typeof Button> = (props) => {
+  const linkProps = {
+    ...props,
+    className: cn("cursor-pointer", props.className),
+    preload: props.preload ?? "viewport",
+  };
+
+  return <LinkButtonComponent {...linkProps} />;
+};

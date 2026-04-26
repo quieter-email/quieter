@@ -1,4 +1,4 @@
-export { Button, type ButtonProps } from "./components/ui/button";
+export { Button, type ButtonProps, LinkButton } from "./components/ui/button";
 export {
   Accordion,
   AccordionHeader,

@@ -4,8 +4,13 @@ import { Refresh01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, Calendar, IconButtonTooltip, cn } from "@quieter/ui";
 import { useQuery } from "@tanstack/react-query";
-import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type FocusEvent as ReactFocusEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { ArrowInteractionButton } from "~/components/arrow-interaction-button";
 import { SpinWhileActive } from "~/components/spin-while-active";
 import {
@@ -110,13 +115,10 @@ export const MessageListSearch = ({
   const segmentRefs = useRef<Array<HTMLElement | null>>([]);
   const dateTokenRefs = useRef(new Map<number, HTMLDivElement>());
   const pendingFocusRef = useRef<PendingFocusTarget | null>(null);
-  const openWithAnimationRef = useRef(false);
-  const prefersReducedMotion = useReducedMotion();
   const [draftState, setDraftState] = useState<{
     baseQuery: string;
     value: StructuredSearchState;
   } | null>(null);
-  const [animateDropdown, setAnimateDropdown] = useState(false);
   const [activeDateFilterIndex, setActiveDateFilterIndex] = useState<number | null>(null);
   const [activeDropdownIndex, setActiveDropdownIndex] = useState<number | null>(null);
   const [datePopoverLeft, setDatePopoverLeft] = useState(0);
@@ -130,8 +132,6 @@ export const MessageListSearch = ({
     activeDateFilterIndex === null ? null : (currentState.filters[activeDateFilterIndex] ?? null);
 
   const openDropdown = (preserveHighlight = false) => {
-    setAnimateDropdown(openWithAnimationRef.current);
-    openWithAnimationRef.current = false;
     if (!preserveHighlight) {
       setActiveDropdownIndex(null);
     }
@@ -140,8 +140,34 @@ export const MessageListSearch = ({
 
   const closeDropdown = () => {
     setActiveDropdownIndex(null);
-    setAnimateDropdown(false);
     setIsDropdownOpen(false);
+  };
+
+  const closeSearchOverlays = () => {
+    closeDropdown();
+    setActiveDateFilterIndex(null);
+  };
+
+  const isSearchSurfaceTarget = (target: EventTarget | null) => {
+    if (!(target instanceof Node)) {
+      return false;
+    }
+
+    return fieldRef.current?.contains(target) ?? false;
+  };
+
+  const handleSearchFieldBlur = (event: ReactFocusEvent<HTMLElement>) => {
+    if (isSearchSurfaceTarget(event.relatedTarget)) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      if (isSearchSurfaceTarget(document.activeElement)) {
+        return;
+      }
+
+      closeSearchOverlays();
+    });
   };
 
   const stageState = (nextState: StructuredSearchState) => {
@@ -416,29 +442,37 @@ export const MessageListSearch = ({
     }
 
     const handlePointerDownOutside = (event: PointerEvent) => {
-      if (containerRef.current?.contains(event.target as Node)) {
+      const target = event.target;
+      if (!(target instanceof Node)) {
         return;
       }
 
-      closeDropdown();
-      setActiveDateFilterIndex(null);
+      if (isSearchSurfaceTarget(target)) {
+        return;
+      }
+
+      closeSearchOverlays();
     };
 
     const handleFocusInOutside = (event: FocusEvent) => {
-      if (containerRef.current?.contains(event.target as Node)) {
+      const target = event.target;
+      if (!(target instanceof Node)) {
         return;
       }
 
-      closeDropdown();
-      setActiveDateFilterIndex(null);
+      if (isSearchSurfaceTarget(target)) {
+        return;
+      }
+
+      closeSearchOverlays();
     };
 
-    document.addEventListener("pointerdown", handlePointerDownOutside);
-    document.addEventListener("focusin", handleFocusInOutside);
+    document.addEventListener("pointerdown", handlePointerDownOutside, true);
+    document.addEventListener("focusin", handleFocusInOutside, true);
 
     return () => {
-      document.removeEventListener("pointerdown", handlePointerDownOutside);
-      document.removeEventListener("focusin", handleFocusInOutside);
+      document.removeEventListener("pointerdown", handlePointerDownOutside, true);
+      document.removeEventListener("focusin", handleFocusInOutside, true);
     };
   }, [activeDateFilterIndex, isDropdownOpen]);
 
@@ -491,444 +525,402 @@ export const MessageListSearch = ({
   }, [activeDateFilterIndex, currentState.filters]);
 
   return (
-    <LazyMotion features={domAnimation}>
-      <div className="border-b border-border bg-background-light px-4 py-3" role="search">
-        <div ref={containerRef} className="relative">
-          <div className="flex min-w-0 items-center gap-2">
-            <IconButtonTooltip label="Refresh list">
-              <Button
-                aria-label="Refresh list"
-                disabled={isRefreshing}
-                onClick={() => void onRefresh()}
-                size="icon-sm"
-                variant="outline"
-              >
-                <SpinWhileActive active={isRefreshing}>
-                  <HugeiconsIcon icon={Refresh01Icon} />
-                </SpinWhileActive>
-              </Button>
-            </IconButtonTooltip>
+    <div className="border-b border-border bg-background-light px-4 py-3" role="search">
+      <div ref={containerRef} className="relative">
+        <div className="flex min-w-0 items-center gap-2">
+          <IconButtonTooltip label="Refresh list">
+            <Button
+              aria-label="Refresh list"
+              disabled={isRefreshing}
+              onClick={() => void onRefresh()}
+              size="icon-sm"
+              variant="outline"
+            >
+              <SpinWhileActive active={isRefreshing}>
+                <HugeiconsIcon icon={Refresh01Icon} />
+              </SpinWhileActive>
+            </Button>
+          </IconButtonTooltip>
 
-            <div ref={fieldRef} className="relative min-w-0 flex-1">
+          <div ref={fieldRef} className="relative min-w-0 flex-1" onBlur={handleSearchFieldBlur}>
+            <div className="flex h-8 min-w-0 items-center gap-1 rounded-md border border-input bg-background pr-1 shadow-sm transition-colors duration-150 ease-out focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
               <div
-                className="flex h-8 min-w-0 items-center gap-1 rounded-md border border-input bg-background pr-1 shadow-sm transition-colors duration-150 ease-out focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20"
-                onPointerDownCapture={(event) => {
-                  if (event.pointerType) {
-                    openWithAnimationRef.current = true;
+                className={cn(
+                  "flex h-8 min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+                  {
+                    "pl-[3px]": currentState.filters.length > 0,
+                    "pl-2": currentState.filters.length === 0,
+                  },
+                )}
+                onMouseDown={(event) => {
+                  const target = event.target as HTMLElement;
+                  if (target.closest("button, input")) {
+                    return;
                   }
+
+                  event.preventDefault();
+                  setActiveDateFilterIndex(null);
+                  openDropdown();
+                  focusTextInput({ toEnd: true });
                 }}
+                ref={rowRef}
+                role="presentation"
               >
-                <div
-                  className={cn(
-                    "flex h-8 min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-                    {
-                      "pl-[3px]": currentState.filters.length > 0,
-                      "pl-2": currentState.filters.length === 0,
-                    },
-                  )}
-                  onMouseDown={(event) => {
-                    const target = event.target as HTMLElement;
-                    if (target.closest("button, input")) {
-                      return;
-                    }
-
-                    event.preventDefault();
-                    setActiveDateFilterIndex(null);
-                    openDropdown();
-                    focusTextInput({ toEnd: true });
-                  }}
-                  ref={rowRef}
-                  role="presentation"
-                >
-                  {currentState.filters.map((filter, index) => {
-                    if (filter.type === "label") {
-                      return (
-                        <button
-                          className="inline-flex h-6 shrink-0 items-center rounded-sm border border-border/80 bg-muted/80 px-2 text-[13px] text-foreground transition-colors outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20"
-                          key={`label:${normalizeLabelSelectionKey(filter.value)}`}
-                          onClick={() => {
-                            removeFilterAtIndex(index);
-                          }}
-                          onFocus={() => {
-                            setActiveDateFilterIndex(null);
-                            openDropdown();
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                              event.preventDefault();
-                              handleDropdownNavigation(
-                                event.key === "ArrowDown" ? "next" : "previous",
-                              );
-                              return;
-                            }
-
-                            if (event.key === "ArrowLeft") {
-                              event.preventDefault();
-                              focusPreviousSegment(index);
-                              return;
-                            }
-
-                            if (event.key === "ArrowRight") {
-                              event.preventDefault();
-                              moveOutOfSegment(index, "next");
-                              return;
-                            }
-
-                            if (
-                              event.key === "Backspace" ||
-                              event.key === "Delete" ||
-                              event.key === "Enter" ||
-                              event.key === " "
-                            ) {
-                              event.preventDefault();
-                              removeFilterAtIndex(index);
-                            }
-                          }}
-                          ref={(node) => {
-                            segmentRefs.current[index] = node;
-                          }}
-                          type="button"
-                        >
-                          {filter.value}
-                        </button>
-                      );
-                    }
-
-                    const isDateFilter = filter.type === "after" || filter.type === "before";
+                {currentState.filters.map((filter, index) => {
+                  if (filter.type === "label") {
                     return (
-                      <div
-                        className={cn(
-                          "inline-flex h-6 shrink-0 items-center gap-1 rounded-xs border border-border/80 bg-muted/80 px-1.5 text-[13px] text-foreground transition-colors",
-                          {
-                            "border-ring ring-2 ring-ring/20": activeDateFilterIndex === index,
-                          },
-                        )}
-                        key={filter.type}
-                        ref={(node) => {
-                          if (node) {
-                            dateTokenRefs.current.set(index, node);
+                      <button
+                        className="inline-flex h-6 shrink-0 items-center rounded-sm border border-border/80 bg-muted/80 px-2 text-[13px] text-foreground transition-colors outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20"
+                        key={`label:${normalizeLabelSelectionKey(filter.value)}`}
+                        onClick={() => {
+                          removeFilterAtIndex(index);
+                        }}
+                        onFocus={() => {
+                          setActiveDateFilterIndex(null);
+                          openDropdown();
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                            event.preventDefault();
+                            handleDropdownNavigation(
+                              event.key === "ArrowDown" ? "next" : "previous",
+                            );
                             return;
                           }
 
-                          dateTokenRefs.current.delete(index);
+                          if (event.key === "ArrowLeft") {
+                            event.preventDefault();
+                            focusPreviousSegment(index);
+                            return;
+                          }
+
+                          if (event.key === "ArrowRight") {
+                            event.preventDefault();
+                            moveOutOfSegment(index, "next");
+                            return;
+                          }
+
+                          if (
+                            event.key === "Backspace" ||
+                            event.key === "Delete" ||
+                            event.key === "Enter" ||
+                            event.key === " "
+                          ) {
+                            event.preventDefault();
+                            removeFilterAtIndex(index);
+                          }
                         }}
+                        ref={(node) => {
+                          segmentRefs.current[index] = node;
+                        }}
+                        type="button"
                       >
-                        <span className="shrink-0 text-muted-foreground">{`${filter.type}:`}</span>
-                        <input
-                          aria-label={`${filter.type} filter value`}
-                          autoCapitalize="off"
-                          autoCorrect="off"
-                          className={cn(
-                            "field-sizing-content min-w-[1ch] bg-transparent text-foreground outline-none",
-                            {
-                              "mr-1": index === 0,
-                              "mx-1": index > 0,
-                              "placeholder:text-muted-foreground": isDateFilter,
-                            },
-                          )}
-                          onChange={(event) => {
-                            const nextFilters = [...currentState.filters];
-                            nextFilters[index] = {
-                              ...nextFilters[index],
-                              value: event.currentTarget.value,
-                            };
-                            stageState({
-                              ...currentState,
-                              filters: nextFilters,
-                            });
-                          }}
-                          onFocus={() => {
-                            if (isDateFilter) {
-                              setActiveDateFilterIndex(index);
-                              closeDropdown();
-                              return;
-                            }
-
-                            setActiveDateFilterIndex(null);
-                            openDropdown();
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                              if (activeDateFilterIndex !== null) {
-                                return;
-                              }
-
-                              event.preventDefault();
-                              handleDropdownNavigation(
-                                event.key === "ArrowDown" ? "next" : "previous",
-                              );
-                              return;
-                            }
-
-                            if (
-                              event.key === "ArrowLeft" &&
-                              event.currentTarget.selectionStart === 0 &&
-                              event.currentTarget.selectionEnd === 0
-                            ) {
-                              event.preventDefault();
-                              moveOutOfSegment(index, "previous");
-                              return;
-                            }
-
-                            if (
-                              event.key === "ArrowRight" &&
-                              event.currentTarget.selectionStart ===
-                                event.currentTarget.value.length &&
-                              event.currentTarget.selectionEnd === event.currentTarget.value.length
-                            ) {
-                              event.preventDefault();
-                              moveOutOfSegment(index, "next");
-                              return;
-                            }
-
-                            if (event.key === " ") {
-                              event.preventDefault();
-                              exitSegmentToTextInput();
-                              return;
-                            }
-
-                            if (
-                              event.key === "Backspace" &&
-                              event.currentTarget.value.length === 0
-                            ) {
-                              event.preventDefault();
-                              removeFilterAtIndex(
-                                index,
-                                index === 0
-                                  ? { kind: "text", toEnd: true }
-                                  : {
-                                      index: index - 1,
-                                      kind: "segment",
-                                      toEnd: currentState.filters[index - 1]?.type !== "label",
-                                    },
-                              );
-                              return;
-                            }
-
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              if (activateHighlightedDropdownItem()) {
-                                return;
-                              }
-
-                              commitState(currentState, true);
-                              return;
-                            }
-
-                            if (event.key === "Escape") {
-                              event.preventDefault();
-                              setActiveDateFilterIndex(null);
-                              closeDropdown();
-                            }
-                          }}
-                          onMouseDown={() => {
-                            if (isDateFilter) {
-                              setActiveDateFilterIndex(index);
-                              closeDropdown();
-                            }
-                          }}
-                          placeholder={isDateFilter ? "YYYY/M/D" : ""}
-                          ref={(node) => {
-                            segmentRefs.current[index] = node;
-                          }}
-                          spellCheck={false}
-                          type="text"
-                          value={filter.value}
-                        />
-                      </div>
+                        {filter.value}
+                      </button>
                     );
-                  })}
+                  }
 
-                  <input
-                    aria-label="Search"
-                    autoCapitalize="off"
-                    autoCorrect="off"
-                    className="h-6 min-w-[8ch] flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground"
-                    onChange={(event) => {
-                      setActiveDropdownIndex(null);
-                      stageState({
-                        ...currentState,
-                        text: event.currentTarget.value,
-                      });
-                    }}
-                    onFocus={() => {
-                      setActiveDateFilterIndex(null);
-                      openDropdown();
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === " ") {
-                        const didCommitTypedToken = handleTextInputSpace();
-                        if (didCommitTypedToken) {
-                          event.preventDefault();
-                          return;
-                        }
-                      }
-
-                      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                        event.preventDefault();
-                        handleDropdownNavigation(event.key === "ArrowDown" ? "next" : "previous");
-                        return;
-                      }
-
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        if (activateHighlightedDropdownItem()) {
+                  const isDateFilter = filter.type === "after" || filter.type === "before";
+                  return (
+                    <div
+                      className={cn(
+                        "inline-flex h-6 shrink-0 items-center gap-1 rounded-xs border border-border/80 bg-muted/80 px-1.5 text-[13px] text-foreground transition-colors",
+                        {
+                          "border-ring ring-2 ring-ring/20": activeDateFilterIndex === index,
+                        },
+                      )}
+                      key={filter.type}
+                      ref={(node) => {
+                        if (node) {
+                          dateTokenRefs.current.set(index, node);
                           return;
                         }
 
-                        commitState(currentState, true);
+                        dateTokenRefs.current.delete(index);
+                      }}
+                    >
+                      <span className="shrink-0 text-muted-foreground">{`${filter.type}:`}</span>
+                      <input
+                        aria-label={`${filter.type} filter value`}
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        className={cn(
+                          "field-sizing-content min-w-[1ch] bg-transparent text-foreground outline-none",
+                          {
+                            "mr-1": index === 0,
+                            "mx-1": index > 0,
+                            "placeholder:text-muted-foreground": isDateFilter,
+                          },
+                        )}
+                        onChange={(event) => {
+                          const nextFilters = [...currentState.filters];
+                          nextFilters[index] = {
+                            ...nextFilters[index],
+                            value: event.currentTarget.value,
+                          };
+                          stageState({
+                            ...currentState,
+                            filters: nextFilters,
+                          });
+                        }}
+                        onFocus={() => {
+                          if (isDateFilter) {
+                            setActiveDateFilterIndex(index);
+                            closeDropdown();
+                            return;
+                          }
+
+                          setActiveDateFilterIndex(null);
+                          openDropdown();
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                            if (activeDateFilterIndex !== null) {
+                              return;
+                            }
+
+                            event.preventDefault();
+                            handleDropdownNavigation(
+                              event.key === "ArrowDown" ? "next" : "previous",
+                            );
+                            return;
+                          }
+
+                          if (
+                            event.key === "ArrowLeft" &&
+                            event.currentTarget.selectionStart === 0 &&
+                            event.currentTarget.selectionEnd === 0
+                          ) {
+                            event.preventDefault();
+                            moveOutOfSegment(index, "previous");
+                            return;
+                          }
+
+                          if (
+                            event.key === "ArrowRight" &&
+                            event.currentTarget.selectionStart ===
+                              event.currentTarget.value.length &&
+                            event.currentTarget.selectionEnd === event.currentTarget.value.length
+                          ) {
+                            event.preventDefault();
+                            moveOutOfSegment(index, "next");
+                            return;
+                          }
+
+                          if (event.key === " ") {
+                            event.preventDefault();
+                            exitSegmentToTextInput();
+                            return;
+                          }
+
+                          if (event.key === "Backspace" && event.currentTarget.value.length === 0) {
+                            event.preventDefault();
+                            removeFilterAtIndex(
+                              index,
+                              index === 0
+                                ? { kind: "text", toEnd: true }
+                                : {
+                                    index: index - 1,
+                                    kind: "segment",
+                                    toEnd: currentState.filters[index - 1]?.type !== "label",
+                                  },
+                            );
+                            return;
+                          }
+
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            if (activateHighlightedDropdownItem()) {
+                              return;
+                            }
+
+                            commitState(currentState, true);
+                            return;
+                          }
+
+                          if (event.key === "Escape") {
+                            event.preventDefault();
+                            setActiveDateFilterIndex(null);
+                            closeDropdown();
+                          }
+                        }}
+                        onMouseDown={() => {
+                          if (isDateFilter) {
+                            setActiveDateFilterIndex(index);
+                            closeDropdown();
+                          }
+                        }}
+                        placeholder={isDateFilter ? "YYYY/M/D" : ""}
+                        ref={(node) => {
+                          segmentRefs.current[index] = node;
+                        }}
+                        spellCheck={false}
+                        type="text"
+                        value={filter.value}
+                      />
+                    </div>
+                  );
+                })}
+
+                <input
+                  aria-label="Search"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  className="h-6 min-w-[8ch] flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground"
+                  onChange={(event) => {
+                    setActiveDropdownIndex(null);
+                    stageState({
+                      ...currentState,
+                      text: event.currentTarget.value,
+                    });
+                  }}
+                  onFocus={() => {
+                    setActiveDateFilterIndex(null);
+                    openDropdown();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === " ") {
+                      const didCommitTypedToken = handleTextInputSpace();
+                      if (didCommitTypedToken) {
+                        event.preventDefault();
                         return;
                       }
+                    }
 
-                      if (event.key === "Escape") {
-                        event.preventDefault();
-                        closeDropdown();
-                        textInputRef.current?.blur();
-                        return;
-                      }
-
-                      if (
-                        event.key === "Backspace" &&
-                        currentState.text.length === 0 &&
-                        currentState.filters.length > 0
-                      ) {
-                        event.preventDefault();
-                        removeFilterAtIndex(currentState.filters.length - 1);
-                        return;
-                      }
-
-                      if (
-                        event.key === "ArrowLeft" &&
-                        event.currentTarget.selectionStart === 0 &&
-                        event.currentTarget.selectionEnd === 0 &&
-                        currentState.filters.length > 0
-                      ) {
-                        event.preventDefault();
-                        focusSegment(currentState.filters.length - 1, {
-                          toEnd: currentState.filters.at(-1)?.type !== "label",
-                        });
-                      }
-                    }}
-                    placeholder={currentState.filters.length > 0 ? "" : "Search"}
-                    ref={textInputRef}
-                    spellCheck={false}
-                    type="text"
-                    value={currentState.text}
-                  />
-                </div>
-
-                <IconButtonTooltip label="Run search">
-                  <Button
-                    aria-label="Run search"
-                    className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      commitState(currentState, true);
-                    }}
-                    onMouseDown={(event) => {
+                    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                       event.preventDefault();
-                    }}
-                    size="icon-sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <HugeiconsIcon icon={Search01Icon} />
-                  </Button>
-                </IconButtonTooltip>
+                      handleDropdownNavigation(event.key === "ArrowDown" ? "next" : "previous");
+                      return;
+                    }
+
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      if (activateHighlightedDropdownItem()) {
+                        return;
+                      }
+
+                      commitState(currentState, true);
+                      return;
+                    }
+
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      closeDropdown();
+                      textInputRef.current?.blur();
+                      return;
+                    }
+
+                    if (
+                      event.key === "Backspace" &&
+                      currentState.text.length === 0 &&
+                      currentState.filters.length > 0
+                    ) {
+                      event.preventDefault();
+                      removeFilterAtIndex(currentState.filters.length - 1);
+                      return;
+                    }
+
+                    if (
+                      event.key === "ArrowLeft" &&
+                      event.currentTarget.selectionStart === 0 &&
+                      event.currentTarget.selectionEnd === 0 &&
+                      currentState.filters.length > 0
+                    ) {
+                      event.preventDefault();
+                      focusSegment(currentState.filters.length - 1, {
+                        toEnd: currentState.filters.at(-1)?.type !== "label",
+                      });
+                    }
+                  }}
+                  placeholder={currentState.filters.length > 0 ? "" : "Search"}
+                  ref={textInputRef}
+                  spellCheck={false}
+                  type="text"
+                  value={currentState.text}
+                />
               </div>
 
-              {activeDateFilter &&
-              activeDateFilterIndex !== null &&
-              (activeDateFilter.type === "after" || activeDateFilter.type === "before") ? (
-                <div
-                  className="absolute top-full z-40 mt-2 rounded-lg border border-border bg-popover p-2 shadow-lg"
-                  style={{ left: datePopoverLeft }}
+              <IconButtonTooltip label="Run search">
+                <Button
+                  aria-label="Run search"
+                  className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    commitState(currentState, true);
+                  }}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                  }}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
                 >
-                  <Calendar
-                    mode="single"
-                    month={parseDateFilterValue(activeDateFilter.value) ?? new Date()}
-                    onSelect={(date) => {
-                      if (!date) {
-                        return;
-                      }
-
-                      const nextFilters = [...currentState.filters];
-                      nextFilters[activeDateFilterIndex] = {
-                        ...nextFilters[activeDateFilterIndex],
-                        value: formatDateFilterValue(date),
-                      };
-                      stageState({
-                        ...currentState,
-                        filters: nextFilters,
-                      });
-                      setActiveDateFilterIndex(null);
-                      openDropdown();
-                      pendingFocusRef.current = { kind: "text", toEnd: true };
-                    }}
-                    selected={parseDateFilterValue(activeDateFilter.value)}
-                  />
-                </div>
-              ) : null}
-
-              <AnimatePresence initial={false}>
-                {isDropdownOpen ? (
-                  <m.div
-                    animate={{ opacity: 1, transform: "translateY(0px)" }}
-                    className="absolute inset-x-0 top-full z-30 mt-2 overflow-hidden rounded-lg border border-border bg-popover p-2 shadow-lg"
-                    exit={{
-                      opacity: 0,
-                      transform:
-                        animateDropdown && !prefersReducedMotion
-                          ? "translateY(-4px)"
-                          : "translateY(0px)",
-                    }}
-                    initial={{
-                      opacity: animateDropdown && !prefersReducedMotion ? 0 : 1,
-                      transform:
-                        animateDropdown && !prefersReducedMotion
-                          ? "translateY(-4px)"
-                          : "translateY(0px)",
-                    }}
-                    transition={
-                      animateDropdown && !prefersReducedMotion
-                        ? {
-                            opacity: { duration: 0.14, ease: "easeOut" },
-                            transform: { duration: 0.14, ease: "easeOut" },
-                          }
-                        : { duration: 0 }
-                    }
-                  >
-                    <MessageListSearchDropdown
-                      draftSearchState={currentState}
-                      highlightedItemKey={highlightedDropdownItemKey}
-                      isLoadingLabels={labelsQuery.isPending}
-                      labelsErrorMessage={
-                        labelsQuery.isPending ? null : (labelsQuery.error?.message ?? null)
-                      }
-                      onSelectFilter={handleFilterSelection}
-                      onToggleLabel={toggleLabelToken}
-                      userLabels={labelsQuery.isPending ? [] : userLabels}
-                    />
-                  </m.div>
-                ) : null}
-              </AnimatePresence>
+                  <HugeiconsIcon icon={Search01Icon} />
+                </Button>
+              </IconButtonTooltip>
             </div>
 
-            <IconButtonTooltip label="Scroll to top">
-              <ArrowInteractionButton
-                aria-label="Scroll to top"
-                onClick={async () => {
-                  const didScroll = await onScrollToTop();
-                  return typeof didScroll === "boolean" ? didScroll : true;
-                }}
-                size="icon-sm"
-                type="button"
-                variant="outline"
-              />
-            </IconButtonTooltip>
+            {activeDateFilter &&
+            activeDateFilterIndex !== null &&
+            (activeDateFilter.type === "after" || activeDateFilter.type === "before") ? (
+              <div
+                className="absolute top-full z-40 mt-2 rounded-lg border border-border bg-popover p-2 shadow-lg"
+                style={{ left: datePopoverLeft }}
+              >
+                <Calendar
+                  mode="single"
+                  month={parseDateFilterValue(activeDateFilter.value) ?? new Date()}
+                  onSelect={(date) => {
+                    if (!date) {
+                      return;
+                    }
+
+                    const nextFilters = [...currentState.filters];
+                    nextFilters[activeDateFilterIndex] = {
+                      ...nextFilters[activeDateFilterIndex],
+                      value: formatDateFilterValue(date),
+                    };
+                    stageState({
+                      ...currentState,
+                      filters: nextFilters,
+                    });
+                    setActiveDateFilterIndex(null);
+                    openDropdown();
+                    pendingFocusRef.current = { kind: "text", toEnd: true };
+                  }}
+                  selected={parseDateFilterValue(activeDateFilter.value)}
+                />
+              </div>
+            ) : null}
+
+            <MessageListSearchDropdown
+              draftSearchState={currentState}
+              highlightedItemKey={highlightedDropdownItemKey}
+              isLoadingLabels={labelsQuery.isPending}
+              isOpen={isDropdownOpen}
+              labelsErrorMessage={
+                labelsQuery.isPending ? null : (labelsQuery.error?.message ?? null)
+              }
+              onSelectFilter={handleFilterSelection}
+              onToggleLabel={toggleLabelToken}
+              userLabels={labelsQuery.isPending ? [] : userLabels}
+            />
           </div>
+
+          <IconButtonTooltip label="Scroll to top">
+            <ArrowInteractionButton
+              aria-label="Scroll to top"
+              onClick={async () => {
+                const didScroll = await onScrollToTop();
+                return typeof didScroll === "boolean" ? didScroll : true;
+              }}
+              size="icon-sm"
+              type="button"
+              variant="outline"
+            />
+          </IconButtonTooltip>
         </div>
       </div>
-    </LazyMotion>
+    </div>
   );
 };

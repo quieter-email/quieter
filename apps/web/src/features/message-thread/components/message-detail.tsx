@@ -107,7 +107,7 @@ export const MessageDetail = ({
   return (
     <section className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
       <div
-        className="h-full overflow-y-auto px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6"
+        className="h-full overflow-y-auto px-4 sm:px-5 lg:px-6"
         data-message-detail-scroll-container
       >
         {isPending && !selectedMessage ? (

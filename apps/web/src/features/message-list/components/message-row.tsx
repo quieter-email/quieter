@@ -1,15 +1,15 @@
 "use client";
 
+import { FileAttachmentIcon, MessageMultiple01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { splitMailAddressList } from "@quieter/orpc/compose";
 import { cn } from "@quieter/ui";
-import { useQuery } from "@tanstack/react-query";
 import { type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import { SenderAvatar } from "~/components/sender-avatar";
 import { MessageActionsContextMenu } from "~/features/message-thread/components/message-actions";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
-import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
 
 type MessageRowSelectionGesture = {
   additive: boolean;
@@ -48,6 +48,24 @@ type MessageRowProps = {
 
 type MessageRowContentProps = Omit<MessageRowProps, "className" | "dataIndex" | "rowRef" | "style">;
 
+const MessageRowMetaBadge = ({
+  icon,
+  label,
+  title,
+}: {
+  icon: IconSvgElement;
+  label: string;
+  title: string;
+}) => (
+  <span
+    className="squircle inline-flex h-5 shrink-0 items-center gap-1 rounded-md border border-border/70 bg-background/75 px-1.5 text-[11px] leading-none font-medium text-muted-foreground tabular-nums shadow-xs"
+    title={title}
+  >
+    <HugeiconsIcon aria-hidden className="size-3.5" icon={icon} />
+    <span>{label}</span>
+  </span>
+);
+
 const MessageRowContent = ({
   activeMailbox,
   isActionPending,
@@ -83,14 +101,7 @@ const MessageRowContent = ({
   const date = formatMessageDate(anchorMessage, "compact");
   const unread = !isDraftMailbox && thread.unreadCount > 0;
   const threaded = thread.messageCount > 1;
-  const threadDetailsQuery = useQuery(
-    getThreadWithDetailsOptions(mailboxId, activeMailbox, thread.threadId, Boolean(isActive)),
-  );
-  const attachmentCount =
-    threadDetailsQuery.data?.messages.reduce(
-      (count, message) => count + (message.attachments?.length ?? 0),
-      0,
-    ) ?? 0;
+  const attachmentCount = thread.attachmentCount;
   const showSelectionControl = Boolean(isSelectionMode);
   const metaTextClassName = cn("text-xs tabular-nums", {
     "font-semibold text-foreground/90": unread,
@@ -289,20 +300,29 @@ const MessageRowContent = ({
                   ) : null}
                 </p>
 
-                <div className="flex shrink-0 items-center gap-1.5">
+                <div className="flex shrink-0 items-center gap-2">
                   {attachmentCount > 0 ? (
-                    <span
-                      className="text-[11px] text-muted-foreground"
+                    <MessageRowMetaBadge
+                      icon={FileAttachmentIcon}
+                      label={String(attachmentCount)}
                       title={
                         attachmentCount === 1
                           ? "This thread has 1 attachment."
                           : `This thread has ${attachmentCount} attachments.`
                       }
-                    >
-                      {attachmentCount === 1 ? "file" : `${attachmentCount} files`}
-                    </span>
+                    />
                   ) : null}
-                  {threaded && <span className={metaTextClassName}>{thread.messageCount}x</span>}
+                  {threaded ? (
+                    <MessageRowMetaBadge
+                      icon={MessageMultiple01Icon}
+                      label={String(thread.messageCount)}
+                      title={
+                        thread.messageCount === 1
+                          ? "This thread has 1 message."
+                          : `This thread has ${thread.messageCount} messages.`
+                      }
+                    />
+                  ) : null}
                   <span className={metaTextClassName}>{date || "--"}</span>
                 </div>
               </div>

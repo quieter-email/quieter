@@ -61,6 +61,7 @@
     "db:migrate": "turbo run db:migrate --filter=@quieter/database",
     "db:push": "turbo run db:push --filter=@quieter/database",
     "dev": "turbo run dev",
+    "generate:assets": "bun scripts/generate-web-assets.ts",
     "fmt": "turbo run fmt",
     "fmt:check": "turbo run fmt:check",
     "lint": "turbo run lint",

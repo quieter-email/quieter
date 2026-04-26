@@ -17,6 +17,7 @@ export type ThreadListEntry = {
   subject: string;
   preview: string;
   messageCount: number;
+  attachmentCount: number;
   unreadCount: number;
 };
 
@@ -53,7 +54,8 @@ export const buildThreadListEntries = (messages: readonly MessageListItem[]): Th
         participants: [participant],
         subject: message.subject?.trim() || "(No subject)",
         preview: message.snippet?.trim() || "",
-        messageCount: 1,
+        messageCount: Math.max(1, message.threadMessageCount ?? 0),
+        attachmentCount: message.threadAttachmentCount ?? message.attachments?.length ?? 0,
         unreadCount: isMessageUnread(message) ? 1 : 0,
       };
 
@@ -63,7 +65,14 @@ export const buildThreadListEntries = (messages: readonly MessageListItem[]): Th
     }
 
     existingThread.messages.push(message);
-    existingThread.messageCount += 1;
+    existingThread.messageCount = Math.max(
+      existingThread.messageCount,
+      existingThread.messages.length,
+      message.threadMessageCount ?? 0,
+    );
+    existingThread.attachmentCount =
+      message.threadAttachmentCount ??
+      existingThread.attachmentCount + (message.attachments?.length ?? 0);
 
     if (!existingThread.preview && message.snippet?.trim()) {
       existingThread.preview = message.snippet.trim();

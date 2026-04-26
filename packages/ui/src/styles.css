@@ -177,12 +177,6 @@
   * {
     @apply border-border;
     scrollbar-color: var(--scrollbar-thumb) transparent;
-    scrollbar-width: thin;
-  }
-
-  *::-webkit-scrollbar {
-    height: 8px;
-    width: 8px;
   }
 
   *::-webkit-scrollbar-track {
