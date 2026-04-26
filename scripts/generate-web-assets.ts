@@ -1,5 +1,6 @@
+import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, extname, isAbsolute, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, parse, resolve } from "node:path";
 import { inflateSync } from "node:zlib";
 
 const projectRoot = resolve(import.meta.dir, "..");
@@ -19,6 +20,7 @@ type PdfShape =
       color: string;
       height: number;
       kind: "rect";
+      opacity: number;
       width: number;
       x: number;
       y: number;
@@ -27,30 +29,36 @@ type PdfShape =
       color: string;
       d: string;
       kind: "path";
+      opacity: number;
       transform: string;
     };
 
 const args = Bun.argv.slice(2);
-const adaptiveIcon = args.includes("--adaptive-icon");
 const inputArg = args.find((arg) => !arg.startsWith("--"));
 
 if (!inputArg) {
-  console.error("Usage: bun scripts/generate-web-assets.ts <path-to-logo.svg|logo.ai> [--adaptive-icon]");
+  console.error("Usage: bun scripts/generate-web-assets.ts <path-to-logo.svg|logo.ai>");
   process.exit(1);
 }
 
 const sourcePath = isAbsolute(inputArg) ? inputArg : resolve(projectRoot, inputArg);
 const sourceName = basename(sourcePath);
 const sourceExt = extname(sourcePath).toLowerCase();
+const lightPath = findLightVariant(sourcePath);
+const combinationPath = findCombinationVariant(sourcePath);
 
 await mkdir(webPublicDir, { recursive: true });
 await mkdir(tempDir, { recursive: true });
 
 const logo = await loadLogoSvg(sourcePath, sourceExt);
+const lightLogo = lightPath ? await loadLogoSvg(lightPath, extname(lightPath).toLowerCase()) : null;
+const ogLogo = combinationPath
+  ? await loadLogoSvg(combinationPath, extname(combinationPath).toLowerCase())
+  : logo;
 
 await writeFile(
   resolve(webPublicDir, "icon.svg"),
-  adaptiveIcon ? buildAdaptiveIconSvg(logo) : buildStaticIconSvg(logo, 1000),
+  lightLogo ? buildSchemeIconSvg({ dark: logo, light: lightLogo }) : buildStaticIconSvg(logo, 1000),
 );
 await writeFile(resolve(webPublicDir, "safari-pinned-tab.svg"), buildPinnedTabSvg(logo));
 await writeFile(resolve(webPublicDir, "site.webmanifest"), JSON.stringify(buildManifest(), null, 2) + "\n");
@@ -60,7 +68,7 @@ const renderJobs = [
   { file: "icon-192.png", size: 192, svg: buildStaticIconSvg(logo, 1000) },
   { file: "icon-512.png", size: 512, svg: buildStaticIconSvg(logo, 1000) },
   { file: "icon-maskable-512.png", size: 512, svg: buildMaskableIconSvg(logo) },
-  { file: "og-image.png", size: 1200, svg: buildOgImageSvg(logo), height: 630 },
+  { file: "og-image.png", size: 1200, svg: buildOgImageSvg(ogLogo), height: 630 },
 ];
 
 for (const job of renderJobs) {
@@ -84,6 +92,16 @@ await writeFile(
 await rm(tempDir, { force: true, recursive: true });
 
 console.log(`Generated web assets from ${sourceName}:`);
+console.log(`  source: ${sourcePath}`);
+
+if (lightPath) {
+  console.log(`  light variant: ${lightPath}`);
+}
+
+if (combinationPath) {
+  console.log(`  og source: ${combinationPath}`);
+}
+
 console.log("  apps/web/public/favicon.ico");
 console.log("  apps/web/public/icon.svg");
 console.log("  apps/web/public/apple-touch-icon.png");
@@ -93,6 +111,25 @@ console.log("  apps/web/public/icon-maskable-512.png");
 console.log("  apps/web/public/safari-pinned-tab.svg");
 console.log("  apps/web/public/og-image.png");
 console.log("  apps/web/public/site.webmanifest");
+
+function findLightVariant(path: string) {
+  const parsed = parse(path);
+
+  if (parsed.name.endsWith("_light")) {
+    return existsSync(path) ? path : null;
+  }
+
+  const candidate = join(dirname(path), `${parsed.name}_light${parsed.ext}`);
+  return existsSync(candidate) ? candidate : null;
+}
+
+function findCombinationVariant(path: string) {
+  const parsed = parse(path);
+  const name = parsed.name.endsWith("_light") ? "combination_light" : "combination";
+  const candidate = join(dirname(path), `${name}${parsed.ext}`);
+
+  return existsSync(candidate) ? candidate : null;
+}
 
 async function loadLogoSvg(path: string, ext: string) {
   if (ext === ".svg") {
@@ -113,8 +150,8 @@ async function loadLogoSvg(path: string, ext: string) {
 }
 
 function convertPdfCompatibleAiToSvg(source: Buffer) {
-  const content = readPdfPageContent(source);
-  const shapes = parsePdfShapes(content);
+  const { content, graphicsStates, xobjects } = readPdfPageContent(source);
+  const shapes = parsePdfShapes(content, { graphicsStates, xobjects });
   const contentSvg = shapes.map(shapeToSvg).join("\n");
   const foregroundSvg = shapes
     .filter((shape) => shape.kind === "path")
@@ -157,17 +194,83 @@ function readPdfPageContent(source: Buffer) {
     stream = stream.subarray(0, -1);
   }
 
-  return inflateSync(stream).toString("latin1");
+  const xobjects = new Map<string, string>();
+  const graphicsStates = new Map<string, number>();
+
+  for (const match of latin.matchAll(/\/(GS\d+)\s+(\d+)\s+0\s+R/g)) {
+    const [, name, id] = match;
+    const objectStart = latin.indexOf(`${id} 0 obj`);
+    const objectEnd = latin.indexOf("endobj", objectStart);
+    const object = objectStart >= 0 && objectEnd >= 0 ? latin.slice(objectStart, objectEnd) : "";
+    const opacity = object.match(/\/ca\s+([0-9.]+)/)?.[1] ?? object.match(/\/CA\s+([0-9.]+)/)?.[1];
+
+    if (opacity) {
+      graphicsStates.set(name, Number(opacity));
+    }
+  }
+
+  for (const match of latin.matchAll(/\/(Fm\d+)\s+(\d+)\s+0\s+R/g)) {
+    const [, name, id] = match;
+    xobjects.set(name, readPdfStream(source, latin, id));
+  }
+
+  return {
+    content: decodePdfStream(stream),
+    graphicsStates,
+    xobjects,
+  };
 }
 
-function parsePdfShapes(content: string) {
+function readPdfStream(source: Buffer, latin: string, objectId: string) {
+  const objectStart = latin.indexOf(`${objectId} 0 obj`);
+  const streamStart = latin.indexOf("stream", objectStart);
+  const streamEnd = latin.indexOf("endstream", streamStart);
+
+  if (objectStart < 0 || streamStart < 0 || streamEnd < 0) {
+    throw new Error(`Could not read PDF stream object ${objectId}.`);
+  }
+
+  let stream = source.subarray(streamStart + "stream".length, streamEnd);
+
+  if (stream[0] === 13 && stream[1] === 10) {
+    stream = stream.subarray(2);
+  } else if (stream[0] === 10 || stream[0] === 13) {
+    stream = stream.subarray(1);
+  }
+
+  while (stream.at(-1) === 10 || stream.at(-1) === 13) {
+    stream = stream.subarray(0, -1);
+  }
+
+  return decodePdfStream(stream);
+}
+
+function decodePdfStream(stream: Buffer) {
+  try {
+    return inflateSync(stream).toString("latin1");
+  } catch {
+    return stream.toString("latin1");
+  }
+}
+
+function parsePdfShapes(
+  content: string,
+  resources: {
+    graphicsStates: Map<string, number>;
+    xobjects: Map<string, string>;
+  },
+  baseMatrix = [1, 0, 0, 1, 0, 0],
+  baseOpacity = 1,
+) {
   const tokens = content.match(/\/?[A-Za-z][A-Za-z0-9]*|-?\d*\.?\d+/g) ?? [];
   const shapes: PdfShape[] = [];
   const stack: number[] = [];
-  const matrixStack: number[][] = [];
+  const stateStack: Array<{ matrix: number[]; opacity: number }> = [];
   let color = brand.light;
-  let matrix = [1, 0, 0, 1, 0, 0];
+  let matrix = [...baseMatrix];
+  let opacity = baseOpacity;
   let path = "";
+  let lastName = "";
 
   for (const token of tokens) {
     const value = Number(token);
@@ -177,13 +280,25 @@ function parsePdfShapes(content: string) {
       continue;
     }
 
+    if (token.startsWith("/")) {
+      lastName = token.slice(1);
+      continue;
+    }
+
     switch (token) {
       case "q":
-        matrixStack.push([...matrix]);
+        stateStack.push({ matrix: [...matrix], opacity });
         break;
-      case "Q":
-        matrix = matrixStack.pop() ?? matrix;
+      case "Q": {
+        const state = stateStack.pop();
+
+        if (state) {
+          matrix = state.matrix;
+          opacity = state.opacity;
+        }
+
         break;
+      }
       case "cm": {
         const [a, b, c, d, e, f] = stack.splice(-6);
         matrix = multiplyMatrix(matrix, [a, b, c, d, e, f]);
@@ -216,21 +331,33 @@ function parsePdfShapes(content: string) {
         const [x, y, width, height] = stack.splice(-4);
 
         if (path) {
-          shapes.push({ color, d: path, kind: "path", transform: matrixToSvg(matrix) });
+          shapes.push({ color, d: path, kind: "path", opacity, transform: matrixToSvg(matrix) });
           path = "";
         }
 
-        shapes.push({ color, height, kind: "rect", width, x, y });
+        shapes.push({ color, height, kind: "rect", opacity, width, x, y });
         break;
       }
       case "f":
       case "F":
       case "f*":
         if (path) {
-          shapes.push({ color, d: path, kind: "path", transform: matrixToSvg(matrix) });
+          shapes.push({ color, d: path, kind: "path", opacity, transform: matrixToSvg(matrix) });
           path = "";
         }
         break;
+      case "gs":
+        opacity = baseOpacity * (resources.graphicsStates.get(lastName) ?? 1);
+        break;
+      case "Do": {
+        const xobject = resources.xobjects.get(lastName);
+
+        if (xobject) {
+          shapes.push(...parsePdfShapes(xobject, resources, matrix, opacity));
+        }
+
+        break;
+      }
     }
   }
 
@@ -252,25 +379,33 @@ function multiplyMatrix(left: number[], right: number[]) {
 }
 
 function shapeToSvg(shape: PdfShape) {
+  const opacity = shape.opacity < 1 ? ` fill-opacity="${trim(shape.opacity)}"` : "";
+
   if (shape.kind === "rect") {
-    return `<rect x="${trim(shape.x)}" y="${trim(shape.y)}" width="${trim(shape.width)}" height="${trim(shape.height)}" fill="${shape.color}"/>`;
+    return `<rect x="${trim(shape.x)}" y="${trim(shape.y)}" width="${trim(shape.width)}" height="${trim(shape.height)}" fill="${shape.color}"${opacity}/>`;
   }
 
-  return `<path d="${shape.d}" fill="${shape.color}" transform="${shape.transform}"/>`;
+  return `<path d="${shape.d}" fill="${shape.color}"${opacity} transform="${shape.transform}"/>`;
 }
 
-function buildAdaptiveIconSvg(logo: { foreground: string; viewBox: string }) {
+function buildSchemeIconSvg(logo: {
+  dark: { content: string; viewBox: string };
+  light: { content: string; viewBox: string };
+}) {
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="${logo.viewBox}">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="${logo.dark.viewBox}">
   <style>
-    :root { --icon-bg: ${brand.dark}; --icon-fg: ${brand.light}; }
+    .dark { display: none; }
     @media (prefers-color-scheme: dark) {
-      :root { --icon-bg: ${brand.light}; --icon-fg: ${brand.dark}; }
+      .light { display: none; }
+      .dark { display: inline; }
     }
   </style>
-  <rect width="1000" height="1000" fill="var(--icon-bg)"/>
-  <g color="var(--icon-fg)">
-${indent(logo.foreground, 4)}
+  <g class="light">
+${indent(logo.light.content, 4)}
+  </g>
+  <g class="dark">
+${indent(logo.dark.content, 4)}
   </g>
 </svg>
 `;
@@ -305,16 +440,12 @@ ${indent(logo.foreground, 4)}
 `;
 }
 
-function buildOgImageSvg(logo: { foreground: string }) {
+function buildOgImageSvg(logo: { content: string }) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <rect width="1200" height="630" fill="${brand.page}"/>
-  <rect x="88" y="95" width="440" height="440" rx="96" fill="${brand.dark}"/>
-  <g color="${brand.light}" transform="translate(132 139) scale(0.352)">
-${indent(logo.foreground, 4)}
+  <g transform="translate(0 -285) scale(1.2)">
+${indent(logo.content, 4)}
   </g>
-  <text x="590" y="297" fill="${brand.dark}" font-family="Inter, Arial, sans-serif" font-size="112" font-weight="650">quieter</text>
-  <text x="596" y="370" fill="#65615a" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="450">Email, without the noise.</text>
 </svg>
 `;
 }
