@@ -404,25 +404,6 @@ const MessageInspectorPanel = ({
   );
 };
 
-const MessageContentSection = ({
-  compact,
-  isLoading,
-  message,
-}: {
-  compact?: boolean;
-  isLoading?: boolean;
-  message: MessageListItem;
-}) => (
-  <div className="border-t border-border/60 pt-4 sm:pt-5">
-    <MessageBody
-      compact={compact}
-      html={message.bodyHtml}
-      isLoading={isLoading}
-      text={message.bodyText}
-    />
-  </div>
-);
-
 const ThreadMessageBody = ({
   compact,
   expanded,
@@ -448,12 +429,17 @@ const ThreadMessageBody = ({
         className={cn(
           "px-4 pb-4 transition-[opacity,transform,padding] duration-200 ease-out sm:px-5 sm:pb-5",
           {
-            "translate-y-0 pt-2 opacity-100": expanded,
-            "-translate-y-1 pt-0 opacity-0": !expanded,
+            "translate-y-0 opacity-100": expanded,
+            "-translate-y-1 opacity-0": !expanded,
           },
         )}
       >
-        <MessageContentSection compact={compact} isLoading={isLoading} message={message} />
+        <MessageBody
+          compact={compact}
+          html={message.bodyHtml}
+          isLoading={isLoading}
+          text={message.bodyText}
+        />
       </div>
     </div>
   </div>
@@ -670,7 +656,12 @@ const SingleMessageCard = ({
       />
 
       <div className="px-4 pb-4 sm:px-5 sm:pb-5">
-        <MessageContentSection compact isLoading={isLoading} message={message} />
+        <MessageBody
+          compact
+          html={message.bodyHtml}
+          isLoading={isLoading}
+          text={message.bodyText}
+        />
       </div>
 
       <MessageInspectorPanel

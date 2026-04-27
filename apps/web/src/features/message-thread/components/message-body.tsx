@@ -116,7 +116,7 @@ const prepareShadowContent = (rawHtml: string): string => {
   return `${getBaseStyles()}${content}`;
 };
 
-const HtmlMessageBody = ({ compact, html }: { html: string; compact?: boolean }) => {
+const HtmlMessageBody = ({ html }: { html: string }) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const shadowRootRef = useRef<ShadowRoot | null>(null);
 
@@ -127,18 +127,11 @@ const HtmlMessageBody = ({ compact, html }: { html: string; compact?: boolean })
     shadowRootRef.current.innerHTML = prepareShadowContent(html);
   }, [html]);
 
-  return <div className={cn({ "mt-3": compact, "mt-6": !compact })} ref={hostRef} />;
+  return <div ref={hostRef} />;
 };
 
-const MessageBodyLoadingSkeleton = ({ compact }: { compact?: boolean }) => (
-  <div
-    aria-label="Loading message content"
-    className={cn("space-y-3", {
-      "mt-3": compact,
-      "mt-6": !compact,
-    })}
-    role="status"
-  >
+const MessageBodyLoadingSkeleton = () => (
+  <div aria-label="Loading message content" className="space-y-3" role="status">
     <div aria-hidden="true" className="animate-pulse space-y-3">
       <div className="h-3.5 w-full rounded-md bg-muted/75" />
       <div className="h-3.5 w-11/12 rounded-md bg-muted/70" />
@@ -157,12 +150,7 @@ export const MessageBody = ({ compact, html, isLoading, text }: MessageBodyProps
 
   if (!html?.trim()) {
     return (
-      <p
-        className={cn("text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground", {
-          "mt-3": compact,
-          "mt-6": !compact,
-        })}
-      >
+      <p className={cn("text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground")}>
         {fallbackText || "No content."}
       </p>
     );
