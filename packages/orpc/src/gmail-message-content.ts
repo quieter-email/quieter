@@ -257,10 +257,13 @@ export const decodeMimeHeaderValue = (value?: string): string | undefined => {
   return normalizedValue || undefined;
 };
 
+const getContentDisposition = (part: GmailMessagePart): string | undefined =>
+  getHeader(part, "Content-Disposition")?.toLowerCase();
+
 const isAttachmentPart = (part: GmailMessagePart): boolean => {
   if (part.filename?.trim()) return true;
 
-  const contentDisposition = getHeader(part, "Content-Disposition")?.toLowerCase();
+  const contentDisposition = getContentDisposition(part);
   return Boolean(contentDisposition?.startsWith("attachment"));
 };
 
@@ -362,7 +365,13 @@ export const extractMessageAttachments = (
     }
 
     const contentId = normalizeContentId(getHeader(part, "Content-ID"));
-    if (contentId && referencedInlineContentIds.has(contentId)) continue;
+    const contentDisposition = getContentDisposition(part);
+    if (
+      contentId &&
+      (referencedInlineContentIds.has(contentId) || contentDisposition?.startsWith("inline"))
+    ) {
+      continue;
+    }
 
     const fileName = getAttachmentFileName(part, index);
     const dedupeKey = `${attachmentId}:${fileName}`;

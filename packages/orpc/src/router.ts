@@ -179,7 +179,7 @@ const isGmailAuthError = (error: unknown) =>
 const callGmail = async <TValue>(
   context: ProtectedContext,
   mailboxId: string,
-  runner: (accessToken: string) => Promise<TValue>,
+  runner: (accessToken: string, signal?: AbortSignal) => Promise<TValue>,
 ): Promise<TValue> => {
   const headers = getRequestHeaders(context);
   const { accessToken, mailbox } = await getAuthorizedGmailMailbox({
@@ -190,7 +190,7 @@ const callGmail = async <TValue>(
   });
 
   try {
-    return await runner(accessToken);
+    return await runner(accessToken, context.signal);
   } catch (error) {
     if (!isGmailAuthError(error)) {
       return rethrowKnownRateLimit(context, error);
@@ -205,7 +205,7 @@ const callGmail = async <TValue>(
     });
 
     try {
-      return await runner(refreshedAccessToken);
+      return await runner(refreshedAccessToken, context.signal);
     } catch (retryError) {
       return rethrowKnownRateLimit(context, retryError);
     }
@@ -339,18 +339,20 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callGmail(context, input.mailboxId, async (accessToken) => {
+        return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
           return input.category === "drafts"
             ? await listDraftsWithDetails(accessToken, {
                 pageToken: input.pageToken,
                 maxResults: input.maxResults,
                 query: input.query?.trim() || undefined,
+                signal,
               })
             : await listMessagesWithDetails(accessToken, {
                 mailbox: input.category,
                 pageToken: input.pageToken,
                 maxResults: input.maxResults,
                 query: input.query?.trim() || undefined,
+                signal,
               });
         });
       }),
@@ -364,9 +366,10 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callGmail(context, input.mailboxId, async (accessToken) => {
+        return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
           return await getMailboxSyncDelta(accessToken, {
             mailbox: input.category,
+            signal,
             startHistoryId: input.startHistoryId,
           });
         });
@@ -380,8 +383,8 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callGmail(context, input.mailboxId, async (accessToken) => {
-          return await getThreadWithDetails(accessToken, input.threadId);
+        return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
+          return await getThreadWithDetails(accessToken, input.threadId, signal);
         });
       }),
     getMessageInspector: protectedProcedure
@@ -393,8 +396,8 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callGmail(context, input.mailboxId, async (accessToken) => {
-          return await getMessageInspector(accessToken, input.messageId);
+        return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
+          return await getMessageInspector(accessToken, input.messageId, signal);
         });
       }),
     listLabels: protectedProcedure
@@ -405,8 +408,8 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callGmail(context, input.mailboxId, async (accessToken) => {
-          return await listLabels(accessToken);
+        return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
+          return await listLabels(accessToken, signal);
         });
       }),
     markMessageAsRead: protectedProcedure
@@ -572,8 +575,8 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callGmail(context, input.mailboxId, async (accessToken) => {
-          const draft = await getDraft(accessToken, input.draftId);
+        return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
+          const draft = await getDraft(accessToken, input.draftId, signal);
           return parseDraftMessage(draft);
         });
       }),
@@ -670,8 +673,8 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callGmail(context, input.mailboxId, async (accessToken) => {
-          const message = await getGmailMessageMetadata(accessToken, input.messageId);
+        return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
+          const message = await getGmailMessageMetadata(accessToken, input.messageId, signal);
           const unsubscribeMailto = extractListUnsubscribeMailto(
             message.payload?.headers?.find(
               (header) => header.name.toLowerCase() === "list-unsubscribe",
@@ -707,11 +710,12 @@ export const appRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        return await callGmail(context, input.mailboxId, async (accessToken) => {
+        return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
           const attachment = await getMessageAttachment(
             accessToken,
             input.messageId,
             input.attachmentId,
+            signal,
           );
           const bytes = attachment.data
             ? Uint8Array.from(

@@ -316,7 +316,9 @@ const GMAIL_MESSAGE_PAYLOAD_METADATA_FIELDS =
 const GMAIL_THREAD_PAYLOAD_METADATA_FIELDS =
   "headers(name,value),mimeType,filename,body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data)))))";
 const GMAIL_MESSAGE_METADATA_FIELDS = `id,threadId,labelIds,snippet,historyId,internalDate,payload(${GMAIL_MESSAGE_PAYLOAD_METADATA_FIELDS})`;
-const GMAIL_THREAD_LIST_METADATA_FIELDS = `id,messages(id,threadId,labelIds,payload(${GMAIL_THREAD_PAYLOAD_METADATA_FIELDS}))`;
+const GMAIL_THREAD_DETAIL_MESSAGE_FIELDS = `id,threadId,labelIds,snippet,historyId,internalDate,payload(${GMAIL_THREAD_PAYLOAD_METADATA_FIELDS})`;
+const GMAIL_THREAD_DETAIL_FIELDS = `id,snippet,messages(${GMAIL_THREAD_DETAIL_MESSAGE_FIELDS})`;
+const GMAIL_THREAD_LIST_METADATA_FIELDS = `id,messages(id,threadId,labelIds,payload(${GMAIL_MESSAGE_PAYLOAD_METADATA_FIELDS}))`;
 const GMAIL_MESSAGE_LIST_FIELDS = "messages(id,threadId),nextPageToken,resultSizeEstimate";
 const GMAIL_DRAFT_LIST_FIELDS = "drafts(id,message(id,threadId)),nextPageToken,resultSizeEstimate";
 const GMAIL_LABEL_LIST_FIELDS = "labels(id,name,type,labelListVisibility,messageListVisibility)";
@@ -1109,7 +1111,15 @@ export const listMessagesWithDetails = async (
 ): Promise<ListMessagesPageResult> => {
   const list = await listMessages(accessToken, options);
   const messageIds = list.messages.map((message) => message.id);
-  const details = await getGmailMessagesMetadata(accessToken, messageIds, options?.signal);
+  const [details, threadSummariesById] = await Promise.all([
+    getGmailMessagesMetadata(accessToken, messageIds, options?.signal),
+    getThreadListSummaries(
+      accessToken,
+      list.messages.map((message) => message.threadId),
+      { includeDrafts: false },
+      options?.signal,
+    ),
+  ]);
   const detailsById = new Map(
     details
       .filter((message): message is GmailMessage => Boolean(message))
@@ -1118,12 +1128,6 @@ export const listMessagesWithDetails = async (
   const orderedDetails = list.messages
     .map((message) => detailsById.get(message.id))
     .filter((message): message is GmailMessage => Boolean(message));
-  const threadSummariesById = await getThreadListSummaries(
-    accessToken,
-    orderedDetails.map((message) => message.threadId),
-    { includeDrafts: false },
-    options?.signal,
-  );
   const historyId =
     orderedDetails[0]?.historyId ?? (await getGmailProfile(accessToken, options?.signal)).historyId;
 
@@ -1153,7 +1157,7 @@ export const listDraftsWithDetails = async (
 ): Promise<ListMessagesPageResult> => {
   const list = await listDrafts(accessToken, options);
   const draftRefs = list.drafts.flatMap((draft) => {
-    if (!draft.message?.id) {
+    if (!draft.message?.id || !draft.message.threadId) {
       return [];
     }
 
@@ -1161,14 +1165,23 @@ export const listDraftsWithDetails = async (
       {
         draftId: draft.id,
         messageId: draft.message.id,
+        threadId: draft.message.threadId,
       },
     ];
   });
-  const details = await getGmailMessagesMetadata(
-    accessToken,
-    draftRefs.map((draft) => draft.messageId),
-    options?.signal,
-  );
+  const [details, threadSummariesById] = await Promise.all([
+    getGmailMessagesMetadata(
+      accessToken,
+      draftRefs.map((draft) => draft.messageId),
+      options?.signal,
+    ),
+    getThreadListSummaries(
+      accessToken,
+      draftRefs.map((draft) => draft.threadId),
+      { includeDrafts: true },
+      options?.signal,
+    ),
+  ]);
   const detailsById = new Map(
     details
       .filter((message): message is GmailMessage => Boolean(message))
@@ -1187,13 +1200,6 @@ export const listDraftsWithDetails = async (
       },
     ];
   });
-  const threadSummariesById = await getThreadListSummaries(
-    accessToken,
-    orderedDrafts.map((draft) => draft.message.threadId),
-    { includeDrafts: true },
-    options?.signal,
-  );
-
   return {
     messages: await Promise.all(
       orderedDrafts.map(async (draft) => ({
@@ -1218,7 +1224,7 @@ export const getThreadWithDetails = async (
     `/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}`,
     gmailThreadSchema,
     {
-      query: { format: "full" },
+      query: { fields: GMAIL_THREAD_DETAIL_FIELDS, format: "full" },
       signal,
     },
   );

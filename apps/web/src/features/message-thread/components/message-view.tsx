@@ -25,7 +25,7 @@ import {
   TooltipProvider,
   cn,
 } from "@quieter/ui";
-import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SenderAvatar } from "~/components/sender-avatar";
 import {
@@ -753,10 +753,16 @@ export const MessageView = ({
   onUnmarkThreadAsSpam,
   onUpdateThreadLabels,
 }: MessageViewProps) => {
-  const threadQuery = useSuspenseQuery(
-    getThreadWithDetailsOptions(mailboxId, activeMailbox, message.threadId),
-  );
-  const isBodyRefreshPending = threadQuery.isFetching;
+  const threadQuery = useQuery({
+    ...getThreadWithDetailsOptions(mailboxId, activeMailbox, message.threadId),
+    placeholderData: {
+      threadId: message.threadId,
+      snippet: message.snippet,
+      subject: message.subject,
+      messages: [message],
+    },
+  });
+  const isBodyRefreshPending = threadQuery.isPending || threadQuery.isFetching;
 
   const threadMessages = threadQuery.data?.messages?.length
     ? [...threadQuery.data.messages].reverse()
