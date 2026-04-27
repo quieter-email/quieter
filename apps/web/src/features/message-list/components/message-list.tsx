@@ -210,7 +210,7 @@ const MessageListSelectionToolbar = ({
   onToggleAll: (selected: boolean) => void;
   selectedCount: number;
 }) => (
-  <div className="border-b border-border bg-background-light px-4 py-3">
+  <div className="bg-background-light px-4 py-3">
     <div className="flex min-w-0 items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-2.5">
         <IconButtonTooltip label="Select all">
@@ -334,7 +334,7 @@ const MessageListScrollPane = ({
 
   return (
     <div
-      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-4 contain-strict"
+      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pt-2 pb-4 contain-strict"
       onScroll={() => {
         if (isProgrammaticScrollToTopRef.current) return;
         maybeLoadMore();

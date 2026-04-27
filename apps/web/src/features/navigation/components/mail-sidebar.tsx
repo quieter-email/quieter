@@ -37,7 +37,7 @@ export const MailSidebar = ({
 }: MailSidebarProps) => {
   return (
     <aside
-      className="relative hidden h-full shrink-0 border-r border-border bg-background text-foreground lg:flex lg:flex-col"
+      className="relative hidden h-full shrink-0 bg-background text-foreground lg:flex lg:flex-col"
       style={{ width: "248px" }}
     >
       <div className="flex min-h-0 flex-1 flex-col px-3 pt-6 pb-4">

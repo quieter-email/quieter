@@ -1,6 +1,6 @@
 "use client";
 
-import { cn, useColorMode } from "@quieter/ui";
+import { cn } from "@quieter/ui";
 import DOMPurify from "isomorphic-dompurify";
 import { useEffect, useRef } from "react";
 
@@ -11,33 +11,26 @@ type MessageBodyProps = {
   isLoading?: boolean;
 };
 
-type ResolvedColorMode = "light" | "dark";
-
-const getBaseStyles = (colorMode: ResolvedColorMode): string => {
-  const bg = colorMode === "dark" ? "#18181b" : "#ffffff";
-  const fg = colorMode === "dark" ? "#e4e4e7" : "#18181b";
-  const link = colorMode === "dark" ? "#60a5fa" : "#2563eb";
-  const muted = colorMode === "dark" ? "#a1a1aa" : "#71717a";
-  const border = colorMode === "dark" ? "#3f3f46" : "#e4e4e7";
-
+const getBaseStyles = (): string => {
   return `<style>
   :host {
     display: block;
-    background: ${bg};
-    color: ${fg};
+    color-scheme: light;
+    background: #ffffff;
+    color: #18181b;
     overflow-wrap: break-word;
     word-break: break-word;
   }
-  :where(html, body) { margin: 0; padding: 0; }
-  :where(img, picture, svg) { max-width: 100%; height: auto; }
-  * { color: inherit !important; }
-  :where(html, body, div, td, th, table, tr, span, p, section, article, header, footer, main, aside, nav, blockquote) {
-    background-color: transparent !important;
-    background-image: none !important;
+  :where(html, body) {
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+    color: #18181b;
   }
-  a, a * { color: ${link} !important; text-decoration: underline; }
-  :where(hr) { border-color: ${border}; }
-  :where(blockquote) { border-left: 3px solid ${border}; padding-left: 12px; color: ${muted} !important; }
+  :where(img, picture, svg) { max-width: 100%; height: auto; }
+  :where(a) { color: inherit; text-decoration: underline; }
+  :where(hr) { border-color: #e4e4e7; }
+  :where(blockquote) { border-left: 3px solid #e4e4e7; padding-left: 12px; }
 </style>`;
 };
 
@@ -117,14 +110,13 @@ const sanitizeHtml = (rawHtml: string): string => {
     .replaceAll(REPLACEMENT_CHARACTER_REGEX, "");
 };
 
-const prepareShadowContent = (rawHtml: string, colorMode: ResolvedColorMode): string => {
+const prepareShadowContent = (rawHtml: string): string => {
   const sanitized = sanitizeHtml(rawHtml);
   const content = sanitized.trim().replaceAll(DOCUMENT_WRAPPER_REGEX, "");
-  return `${getBaseStyles(colorMode)}${content}`;
+  return `${getBaseStyles()}${content}`;
 };
 
 const HtmlMessageBody = ({ compact, html }: { html: string; compact?: boolean }) => {
-  const { colorMode } = useColorMode();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const shadowRootRef = useRef<ShadowRoot | null>(null);
 
@@ -132,11 +124,8 @@ const HtmlMessageBody = ({ compact, html }: { html: string; compact?: boolean })
     if (!hostRef.current) return;
 
     shadowRootRef.current ??= hostRef.current.attachShadow({ mode: "open" });
-    shadowRootRef.current.innerHTML = prepareShadowContent(
-      html,
-      colorMode === "dark" ? "dark" : "light",
-    );
-  }, [colorMode, html]);
+    shadowRootRef.current.innerHTML = prepareShadowContent(html);
+  }, [html]);
 
   return <div className={cn({ "mt-3": compact, "mt-6": !compact })} ref={hostRef} />;
 };

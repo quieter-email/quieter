@@ -525,7 +525,7 @@ export const MessageListSearch = ({
   }, [activeDateFilterIndex, currentState.filters]);
 
   return (
-    <div className="border-b border-border bg-background-light px-4 py-3" role="search">
+    <div className="bg-background-light px-4 py-3" role="search">
       <div ref={containerRef} className="relative">
         <div className="flex min-w-0 items-center gap-2">
           <IconButtonTooltip label="Refresh list">

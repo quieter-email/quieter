@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useSelector } from "@tanstack/react-store";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import { LoadingPage } from "~/components/loading-page";
 import {
@@ -67,7 +67,7 @@ import {
   setMailboxWorkspaceWindowActive,
   type MailboxWorkspaceStore,
 } from "~/lib/gmail/mailbox-workspace-store";
-import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
+import { getThreadQueryKey, getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 import { inboxRouteApi } from "~/lib/route-apis";
@@ -92,6 +92,10 @@ type ConnectedMailbox = {
   displayName: string | null;
   provider: string;
 };
+
+const BACKGROUND_THREAD_BODY_PREFETCH_LIMIT = 8;
+const BACKGROUND_THREAD_BODY_PREFETCH_TIMEOUT_MS = 3000;
+const BACKGROUND_THREAD_BODY_PREFETCH_FALLBACK_DELAY_MS = 600;
 
 type MailboxWorkspaceViewProps = {
   activeMailbox: MailboxCategory;
@@ -753,7 +757,23 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       isLiveSyncEnabled,
     ),
   );
-  const flattenedMessages = messagesQuery.data?.pages.flatMap((page) => page.messages) ?? [];
+  const flattenedMessages = useMemo(
+    () => messagesQuery.data?.pages.flatMap((page) => page.messages) ?? [],
+    [messagesQuery.data],
+  );
+  const backgroundThreadIds = useMemo(() => {
+    const threadIds: string[] = [];
+    const seenThreadIds = new Set<string>();
+
+    for (const message of flattenedMessages) {
+      if (seenThreadIds.has(message.threadId)) continue;
+      seenThreadIds.add(message.threadId);
+      threadIds.push(message.threadId);
+      if (threadIds.length >= BACKGROUND_THREAD_BODY_PREFETCH_LIMIT) break;
+    }
+
+    return threadIds;
+  }, [flattenedMessages]);
 
   const refreshMessages = async () => {
     if (!selectedMailboxId) {
@@ -869,6 +889,109 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
 
     void setMailboxSearch({ messageId: null });
   }, [activeMessageId, messagesQuery.data, messagesQuery.isPending, selectedMessage]);
+
+  useEffect(() => {
+    if (
+      !selectedMailboxId ||
+      activeMailbox === "drafts" ||
+      activeSearchQuery.length > 0 ||
+      !isWindowActive ||
+      isManualRefreshing ||
+      messagesQuery.isFetching ||
+      syncQuery.isFetching ||
+      backgroundThreadIds.length === 0
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    let idleCallbackId: number | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let nextThreadIndex = 0;
+
+    function cancelScheduledPrefetch() {
+      if (idleCallbackId != null) {
+        window.cancelIdleCallback(idleCallbackId);
+        idleCallbackId = null;
+      }
+
+      if (timeoutId != null) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    }
+
+    function prefetchNextThreads(deadline?: IdleDeadline) {
+      idleCallbackId = null;
+      timeoutId = null;
+
+      if (cancelled) return;
+
+      while (
+        nextThreadIndex < backgroundThreadIds.length &&
+        (deadline == null || deadline.didTimeout || deadline.timeRemaining() > 8)
+      ) {
+        const threadId = backgroundThreadIds[nextThreadIndex];
+        nextThreadIndex += 1;
+
+        if (!threadId || threadId === selectedMessage?.threadId) {
+          continue;
+        }
+
+        const threadQueryKey = getThreadQueryKey(selectedMailboxId, threadId);
+        if (queryClient.isFetching({ queryKey: threadQueryKey }) > 0) {
+          continue;
+        }
+
+        void queryClient
+          .prefetchQuery(getThreadWithDetailsOptions(selectedMailboxId, activeMailbox, threadId))
+          .finally(() => {
+            if (!cancelled && nextThreadIndex < backgroundThreadIds.length) {
+              scheduleNextPrefetch();
+            }
+          });
+        return;
+      }
+
+      if (nextThreadIndex < backgroundThreadIds.length) {
+        scheduleNextPrefetch();
+      }
+    }
+
+    function scheduleNextPrefetch() {
+      cancelScheduledPrefetch();
+
+      if ("requestIdleCallback" in window) {
+        idleCallbackId = window.requestIdleCallback(prefetchNextThreads, {
+          timeout: BACKGROUND_THREAD_BODY_PREFETCH_TIMEOUT_MS,
+        });
+        return;
+      }
+
+      timeoutId = setTimeout(
+        () => prefetchNextThreads(),
+        BACKGROUND_THREAD_BODY_PREFETCH_FALLBACK_DELAY_MS,
+      );
+    }
+
+    scheduleNextPrefetch();
+
+    return () => {
+      cancelled = true;
+      cancelScheduledPrefetch();
+    };
+  }, [
+    activeMailbox,
+    activeSearchQuery,
+    backgroundThreadIds,
+    isManualRefreshing,
+    isWindowActive,
+    messagesQuery.isFetching,
+    queryClient,
+    selectedMailboxId,
+    selectedMessage?.threadId,
+    syncQuery.isFetching,
+  ]);
 
   const {
     deleteDraft,
@@ -1228,7 +1351,7 @@ const MailboxWorkspaceView = ({
           workspaceName={workspaceName}
         />
 
-        <div className="relative flex min-h-0 flex-1 flex-col gap-1 bg-background p-1 lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+        <div className="relative flex min-h-0 flex-1 flex-col gap-1 bg-background py-1 pr-1 lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
           {hasMailbox && mailboxId ? (
             <>
               <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-background-light">
@@ -1306,7 +1429,7 @@ const MailboxWorkspaceView = ({
               </div>
             </>
           ) : (
-            <section className="flex min-h-0 flex-1 items-center justify-center border-r border-border bg-background-light px-8">
+            <section className="flex min-h-0 flex-1 items-center justify-center bg-background-light px-8">
               <div className="max-w-md space-y-3 text-center">
                 <h1 className="text-lg font-semibold tracking-tight text-foreground">
                   No mailboxes in {workspaceName}

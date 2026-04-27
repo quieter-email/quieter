@@ -162,7 +162,7 @@ const MessageRowContent = ({
   return (
     <div
       className={cn(
-        "relative flex h-[72px] items-stretch rounded-xl transition-transform duration-100 ease-out motion-safe:has-[button:active]:scale-[0.98]",
+        "relative flex h-[72px] items-stretch overflow-hidden rounded-xl transition-transform duration-100 ease-out motion-safe:has-[button:active]:scale-[0.98]",
         {
           "bg-muted/80 ring-1 ring-border/80 ring-inset": isSelected,
           "bg-muted": isActive && !isSelected,
@@ -171,6 +171,12 @@ const MessageRowContent = ({
         },
       )}
     >
+      {unread ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 left-0 h-9 w-[3px] -translate-y-1/2 rounded-r-full bg-primary"
+        />
+      ) : null}
       <div className="relative ml-3.5 flex h-full w-10 shrink-0 items-center justify-center">
         <button
           aria-label={selectionAriaLabel}
