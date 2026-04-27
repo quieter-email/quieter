@@ -20,7 +20,7 @@ type SettingsSidebarProps = {
 export const SettingsSidebar = ({ activeTab, onBack, onSelectTab }: SettingsSidebarProps) => (
   <aside className="mr-20 border-r pr-20">
     <button
-      className="inline-flex h-8 w-fit shrink-0 items-center justify-center gap-2 rounded-md border border-transparent bg-transparent px-3 text-xs leading-none font-medium whitespace-nowrap text-muted-foreground transition-colors outline-none select-none hover:border-border/80 hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:bg-muted/80 disabled:pointer-events-none disabled:opacity-50"
+      className="inline-flex h-8 w-fit shrink-0 items-center justify-center gap-2 rounded-md border border-transparent bg-transparent px-3 text-xs leading-none font-medium whitespace-nowrap text-muted-foreground outline-none select-none hover:border-border/80 hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:bg-muted/80 disabled:pointer-events-none disabled:opacity-50"
       onClick={onBack}
       type="button"
     >

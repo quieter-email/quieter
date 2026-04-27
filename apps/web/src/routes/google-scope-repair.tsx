@@ -100,7 +100,7 @@ function GoogleScopeRepairRouteComponent() {
 
         <div className="pt-1">
           <a
-            className="inline-flex h-9 items-center justify-center rounded-md border border-primary bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+            className="inline-flex h-9 items-center justify-center rounded-md border border-primary bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
             href={getGoogleScopeRepairStartHref({
               from: returnTo,
               targetAccountId: repairTarget.providerAccountId,

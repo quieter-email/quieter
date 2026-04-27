@@ -640,7 +640,7 @@ export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
         <IconButtonTooltip label="Message actions">
           <DropdownMenuTrigger
             aria-label="Open message actions"
-            className="inline-flex size-9 items-center justify-center rounded-md border border-input bg-background shadow-sm transition-colors outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50"
+            className="inline-flex size-9 items-center justify-center rounded-md border border-input bg-background shadow-sm outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50"
             disabled={isBusy}
             type="button"
           >

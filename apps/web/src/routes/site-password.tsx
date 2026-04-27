@@ -41,7 +41,7 @@ function SitePasswordRouteComponent() {
             <p className="text-sm text-destructive">That password did not work.</p>
           ) : null}
           <button
-            className="inline-flex h-10 items-center justify-center rounded-md border border-primary bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+            className="inline-flex h-10 items-center justify-center rounded-md border border-primary bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
             type="submit"
           >
             Continue

@@ -141,8 +141,30 @@ const HtmlMessageBody = ({ compact, html }: { html: string; compact?: boolean })
   return <div className={cn({ "mt-3": compact, "mt-6": !compact })} ref={hostRef} />;
 };
 
+const MessageBodyLoadingSkeleton = ({ compact }: { compact?: boolean }) => (
+  <div
+    aria-label="Loading message content"
+    className={cn("space-y-3", {
+      "mt-3": compact,
+      "mt-6": !compact,
+    })}
+    role="status"
+  >
+    <div aria-hidden="true" className="animate-pulse space-y-3">
+      <div className="h-3.5 w-full rounded-md bg-muted/75" />
+      <div className="h-3.5 w-11/12 rounded-md bg-muted/70" />
+      <div className="h-3.5 w-4/5 rounded-md bg-muted/65" />
+      <div className="h-3.5 w-2/3 rounded-md bg-muted/60" />
+    </div>
+  </div>
+);
+
 export const MessageBody = ({ compact, html, isLoading, text }: MessageBodyProps) => {
-  const fallbackText = text?.trim() || (isLoading ? "Loading content..." : "No content.");
+  const fallbackText = text?.trim();
+
+  if (!html?.trim() && !fallbackText && isLoading) {
+    return <MessageBodyLoadingSkeleton compact={compact} />;
+  }
 
   if (!html?.trim()) {
     return (
@@ -152,7 +174,7 @@ export const MessageBody = ({ compact, html, isLoading, text }: MessageBodyProps
           "mt-6": !compact,
         })}
       >
-        {fallbackText}
+        {fallbackText || "No content."}
       </p>
     );
   }

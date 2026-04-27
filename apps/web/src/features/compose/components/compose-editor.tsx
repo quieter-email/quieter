@@ -208,7 +208,7 @@ export const ComposeEditor = ({
               <button
                 aria-label={action.label}
                 className={cn(
-                  "inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/55 hover:text-foreground focus-visible:outline-none",
+                  "inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/55 hover:text-foreground focus-visible:outline-none",
                   {
                     "bg-muted/75 text-foreground": action.active,
                     "opacity-35 hover:bg-transparent hover:text-muted-foreground": isDisabled,

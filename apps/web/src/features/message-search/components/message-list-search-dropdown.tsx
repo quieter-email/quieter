@@ -53,7 +53,7 @@ const SearchDropdownRow = ({
 }) => (
   <button
     className={cn(
-      "flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground transition-colors outline-none hover:bg-muted focus-visible:bg-muted",
+      "flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground outline-none hover:bg-muted focus-visible:bg-muted",
       {
         "bg-muted": highlighted,
         "bg-muted/80 ring-1 ring-border ring-inset": active,
@@ -187,7 +187,7 @@ export const MessageListSearchDropdown = ({
               aria-expanded={showLabelsSubmenu}
               aria-haspopup="true"
               className={cn(
-                "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground transition-colors outline-none hover:bg-muted focus-visible:bg-muted",
+                "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground outline-none hover:bg-muted focus-visible:bg-muted",
                 {
                   "bg-muted": isLabelHighlighted,
                   "bg-muted/80 ring-1 ring-border ring-inset": selectedUserLabelKeys.size > 0,

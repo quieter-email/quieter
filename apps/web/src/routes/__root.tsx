@@ -131,7 +131,7 @@ function RootErrorComponent({ error, reset }: { error: Error | null; reset: () =
 
         <div className="mt-6 flex flex-wrap gap-3">
           <button
-            className="rounded-md border border-input bg-background px-4 py-2 text-sm text-foreground shadow-sm transition-colors hover:border-foreground/25 hover:bg-muted/60"
+            className="rounded-md border border-input bg-background px-4 py-2 text-sm text-foreground shadow-sm hover:border-foreground/25 hover:bg-muted/60"
             onClick={() => reset()}
             type="button"
           >
@@ -139,7 +139,7 @@ function RootErrorComponent({ error, reset }: { error: Error | null; reset: () =
           </button>
 
           <Link
-            className="rounded-md border border-input bg-background px-4 py-2 text-sm text-foreground shadow-sm transition-colors hover:border-foreground/25 hover:bg-muted/60"
+            className="rounded-md border border-input bg-background px-4 py-2 text-sm text-foreground shadow-sm hover:border-foreground/25 hover:bg-muted/60"
             search={toMailboxSearch({})}
             to="/"
           >
@@ -160,7 +160,7 @@ function RootNotFoundComponent() {
           The route you requested does not exist.
         </p>
         <Link
-          className="mt-6 inline-flex rounded-md border border-input bg-background px-4 py-2 text-sm text-foreground shadow-sm transition-colors hover:border-foreground/25 hover:bg-muted/60"
+          className="mt-6 inline-flex rounded-md border border-input bg-background px-4 py-2 text-sm text-foreground shadow-sm hover:border-foreground/25 hover:bg-muted/60"
           search={toMailboxSearch({})}
           to="/"
         >
@@ -175,7 +175,7 @@ const LogoDevFooter = () => {
   return (
     <footer className="absolute right-2 bottom-2 z-20 px-3 py-1.5 text-[10px] text-muted-foreground">
       <a
-        className="transition-colors hover:text-foreground"
+        className="hover:text-foreground"
         href="https://logo.dev"
         target="_blank"
         title="Logos provided by logo.dev"

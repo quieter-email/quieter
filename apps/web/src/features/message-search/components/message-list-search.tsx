@@ -570,7 +570,7 @@ export const MessageListSearch = ({
                   if (filter.type === "label") {
                     return (
                       <button
-                        className="inline-flex h-6 shrink-0 items-center rounded-sm border border-border/80 bg-muted/80 px-2 text-[13px] text-foreground transition-colors outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20"
+                        className="inline-flex h-6 shrink-0 items-center rounded-sm border border-border/80 bg-muted/80 px-2 text-[13px] text-foreground outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20"
                         key={`label:${normalizeLabelSelectionKey(filter.value)}`}
                         onClick={() => {
                           removeFilterAtIndex(index);
