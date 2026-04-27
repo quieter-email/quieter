@@ -316,7 +316,7 @@ const GMAIL_MESSAGE_PAYLOAD_METADATA_FIELDS =
 const GMAIL_THREAD_PAYLOAD_METADATA_FIELDS =
   "headers(name,value),mimeType,filename,body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data)))))";
 const GMAIL_MESSAGE_METADATA_FIELDS = `id,threadId,labelIds,snippet,historyId,internalDate,payload(${GMAIL_MESSAGE_PAYLOAD_METADATA_FIELDS})`;
-const GMAIL_THREAD_LIST_METADATA_FIELDS = `id,messages(id,threadId,payload(${GMAIL_THREAD_PAYLOAD_METADATA_FIELDS}))`;
+const GMAIL_THREAD_LIST_METADATA_FIELDS = `id,messages(id,threadId,labelIds,payload(${GMAIL_THREAD_PAYLOAD_METADATA_FIELDS}))`;
 const GMAIL_MESSAGE_LIST_FIELDS = "messages(id,threadId),nextPageToken,resultSizeEstimate";
 const GMAIL_DRAFT_LIST_FIELDS = "drafts(id,message(id,threadId)),nextPageToken,resultSizeEstimate";
 const GMAIL_LABEL_LIST_FIELDS = "labels(id,name,type,labelListVisibility,messageListVisibility)";
@@ -333,6 +333,9 @@ const normalizeLabelIds = (labelIds: string[] | undefined): string[] | undefined
 
 const hasUnreadLabel = (labelIds: string[] | undefined): boolean =>
   Boolean(labelIds?.includes(GMAIL_UNREAD_LABEL));
+
+const hasDraftLabel = (labelIds: string[] | undefined): boolean =>
+  Boolean(labelIds?.includes(MAILBOX_LABELS.drafts));
 
 const isKnownGmailRateLimit = (details: {
   googleReason?: string;
@@ -1070,6 +1073,7 @@ const getGmailThreadsListMetadata = async (
 const getThreadListSummaries = async (
   accessToken: string,
   threadIds: readonly string[],
+  options?: { includeDrafts?: boolean },
   signal?: AbortSignal,
 ) => {
   const summariesByThreadId = new Map<string, ThreadListSummary>();
@@ -1078,7 +1082,9 @@ const getThreadListSummaries = async (
   for (const thread of threads) {
     if (!thread) continue;
 
-    const messages = thread.messages ?? [];
+    const messages = (thread.messages ?? []).filter(
+      (message) => options?.includeDrafts || !hasDraftLabel(message.labelIds),
+    );
     summariesByThreadId.set(thread.id, {
       attachmentCount: messages.reduce(
         (count, message) => count + extractMessageAttachments(message.payload).length,
@@ -1115,6 +1121,7 @@ export const listMessagesWithDetails = async (
   const threadSummariesById = await getThreadListSummaries(
     accessToken,
     orderedDetails.map((message) => message.threadId),
+    { includeDrafts: false },
     options?.signal,
   );
   const historyId =
@@ -1183,6 +1190,7 @@ export const listDraftsWithDetails = async (
   const threadSummariesById = await getThreadListSummaries(
     accessToken,
     orderedDrafts.map((draft) => draft.message.threadId),
+    { includeDrafts: true },
     options?.signal,
   );
 
@@ -1451,6 +1459,7 @@ export const getMailboxSyncDelta = async (
     const threadSummariesById = await getThreadListSummaries(
       accessToken,
       updatedMessages.map((message) => message.threadId),
+      { includeDrafts: options.mailbox === "drafts" },
       options.signal,
     );
 

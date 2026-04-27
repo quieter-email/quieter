@@ -7,6 +7,7 @@ import { assertDatabaseConfigured, db } from "@quieter/database";
 export type OrpcContext = {
   db: typeof db;
   headers: Headers;
+  signal?: AbortSignal;
 } & RequestHeadersPluginContext &
   ResponseHeadersPluginContext;
 
@@ -21,6 +22,7 @@ export function createOrpcContext(
   return {
     db,
     headers: new Headers(options.req?.headers ?? options.headers),
+    signal: options.req?.signal,
   };
 }
 
