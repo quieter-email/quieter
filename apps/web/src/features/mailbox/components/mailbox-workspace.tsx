@@ -1228,10 +1228,10 @@ const MailboxWorkspaceView = ({
           workspaceName={workspaceName}
         />
 
-        <div className="relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+        <div className="relative flex min-h-0 flex-1 flex-col gap-1 bg-background p-1 lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
           {hasMailbox && mailboxId ? (
             <>
-              <section className="flex min-h-0 min-w-0 flex-col border-r border-border bg-background-light">
+              <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-background-light">
                 <MessageList
                   activeMailbox={activeMailbox}
                   activeMessageId={activeMessageId}
@@ -1271,7 +1271,7 @@ const MailboxWorkspaceView = ({
                 />
               </section>
 
-              <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-background">
+              <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-background-light">
                 <MessageDetail
                   activeMailbox={activeMailbox}
                   currentUserEmail={

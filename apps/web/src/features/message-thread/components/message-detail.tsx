@@ -105,7 +105,7 @@ export const MessageDetail = ({
     );
 
   return (
-    <section className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
+    <section className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background-light">
       <div
         className="h-full overflow-y-auto px-4 sm:px-5 lg:px-6"
         data-message-detail-scroll-container
