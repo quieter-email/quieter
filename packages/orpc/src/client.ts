@@ -9,7 +9,6 @@ type OrpcClientContext = ClientRetryPluginContext;
 
 export type AppRouterClient = RouterClient<AppRouter, OrpcClientContext>;
 const GET_METHOD_PATHS = new Set([
-  "auth.getEmailPreview",
   "auth.getUserStatus",
   "mail.getAttachment",
   "mail.getGoogleScopeRepairTarget",
@@ -19,7 +18,6 @@ const GET_METHOD_PATHS = new Set([
   "mail.listLabels",
   "mail.listMailboxesForActiveWorkspace",
   "mail.listMessages",
-  "mail.loadDraft",
 ]);
 
 const toProcedurePath = (path: readonly string[] | string): string =>

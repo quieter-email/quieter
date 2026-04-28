@@ -37,14 +37,6 @@ type SettingsUser = {
   name: string;
 };
 
-type PlaceholderPreview = {
-  createdAt: number;
-  email: string;
-  token: string;
-  type: "magic-link" | "verification";
-  url: string;
-};
-
 type AccountSettingsPanelProps = {
   initialUser: SettingsUser;
 };
@@ -190,7 +182,6 @@ const EditNameDialog = ({
 
 const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
   const [open, setOpen] = useState(false);
-  const [preview, setPreview] = useState<PlaceholderPreview | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const changeEmailMutationOptions = mutationOptions({
@@ -207,13 +198,6 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
       }
 
       unwrapResultError(await authClient.changeEmail(input), "Could not start email change.");
-
-      return await queryClient.fetchQuery(
-        orpc.auth.getEmailPreview.queryOptions({
-          input: { email: input.newEmail },
-          staleTime: 0,
-        }),
-      );
     },
   });
   const changeEmailMutation = useMutation(changeEmailMutationOptions);
@@ -222,15 +206,13 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
       email: currentEmail,
     },
     onSubmit: async ({ value }) => {
-      setPreview(null);
       setSubmitError(null);
 
       try {
-        const nextPreview = await changeEmailMutation.mutateAsync({
+        await changeEmailMutation.mutateAsync({
           callbackURL: "/settings?tab=account",
           newEmail: value.email.trim().toLowerCase(),
         });
-        setPreview(nextPreview);
       } catch (mutationError) {
         setSubmitError(getErrorMessage(mutationError, "Could not start email change."));
       }
@@ -255,7 +237,6 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
   });
 
   const openDialog = () => {
-    setPreview(null);
     setSubmitError(null);
     form.reset({ email: currentEmail });
     setOpen(true);
@@ -264,7 +245,6 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (!nextOpen) {
-      setPreview(null);
       setSubmitError(null);
       form.reset({ email: currentEmail });
     }
@@ -302,7 +282,6 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
                         name={field.name}
                         onBlur={() => field.handleBlur()}
                         onChange={(event) => {
-                          setPreview(null);
                           setSubmitError(null);
                           field.handleChange(event.target.value);
                         }}
@@ -314,15 +293,6 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
                   );
                 }}
               </form.Field>
-
-              {preview ? (
-                <div className="space-y-2 text-sm">
-                  <p className="text-muted-foreground">Placeholder verification link</p>
-                  <a className="break-all underline" href={preview.url}>
-                    {preview.url}
-                  </a>
-                </div>
-              ) : null}
 
               {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
             </DialogBody>

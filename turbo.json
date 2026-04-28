@@ -12,7 +12,8 @@
         "GOOGLE_CLIENT_SECRET",
         "DATABASE_URL",
         "VITE_LOGO_DEV_PUBLISHABLE_KEY",
-        "NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY"
+        "NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY",
+        "BETTER_AUTH_URL"
       ],
       "passThroughEnv": [
         "GOOGLE_API_KEY",
@@ -59,6 +60,11 @@
       "outputs": [],
       "cache": false
     },
+    "test": {
+      "dependsOn": ["^test"],
+      "outputs": [],
+      "cache": false
+    },
     "db:generate": {
       "env": ["DATABASE_URL"],
       "cache": false,
@@ -96,7 +102,8 @@
         "BUN_INSTALL_CACHE_DIR",
         "SST_BUN_PATH",
         "VITE_LOGO_DEV_PUBLISHABLE_KEY",
-        "NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY"
+        "NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY",
+        "BETTER_AUTH_URL"
       ],
       "passThroughEnv": ["BUN_INSTALL_CACHE_DIR", "SST_BUN_PATH"],
       "cache": false,

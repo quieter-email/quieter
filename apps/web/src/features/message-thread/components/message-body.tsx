@@ -141,11 +141,11 @@ const MessageBodyLoadingSkeleton = () => (
   </div>
 );
 
-export const MessageBody = ({ compact, html, isLoading, text }: MessageBodyProps) => {
+export const MessageBody = ({ html, isLoading, text }: MessageBodyProps) => {
   const fallbackText = text?.trim();
 
   if (!html?.trim() && !fallbackText && isLoading) {
-    return <MessageBodyLoadingSkeleton compact={compact} />;
+    return <MessageBodyLoadingSkeleton />;
   }
 
   if (!html?.trim()) {
@@ -156,5 +156,5 @@ export const MessageBody = ({ compact, html, isLoading, text }: MessageBodyProps
     );
   }
 
-  return <HtmlMessageBody compact={compact} html={html} />;
+  return <HtmlMessageBody html={html} />;
 };

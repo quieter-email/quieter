@@ -25,14 +25,13 @@ export const SenderAvatar = ({
   const activeAvatarUrl =
     colorMode === "dark" ? (avatarUrlDark ?? avatarUrlLight) : (avatarUrlLight ?? avatarUrlDark);
   const activeAvatarStatus = activeAvatarUrl ? avatarStatusByUrl[activeAvatarUrl] : undefined;
-  const canRenderAvatar = Boolean(activeAvatarUrl) && activeAvatarStatus !== "error";
+  const canRenderAvatar = !!activeAvatarUrl && activeAvatarStatus !== "error";
   const showFallback = !activeAvatarUrl || activeAvatarStatus !== "loaded";
 
   const updateAvatarStatus = (url: string, status: AvatarStatus) => {
-    setAvatarStatusByUrl((current) => {
-      if (current[url] === status) return current;
-      return { ...current, [url]: status };
-    });
+    setAvatarStatusByUrl((current) =>
+      current[url] === status ? current : { ...current, [url]: status },
+    );
   };
 
   return (

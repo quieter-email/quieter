@@ -9,7 +9,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui";
-import type { SettingsTab } from "~/lib/search-params";
+import type { SettingsTab } from "~/features/settings/domain/settings-tab";
 
 type SettingsSidebarProps = {
   activeTab: SettingsTab;

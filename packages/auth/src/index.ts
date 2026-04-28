@@ -3,9 +3,8 @@ import { db } from "@quieter/database";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
-import { magicLink, organization } from "better-auth/plugins";
+import { magicLink, organization, lastLoginMethod } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
-import { storeAuthEmailPreview } from "./email-placeholder";
 import { REQUIRED_GOOGLE_SCOPES } from "./google-scopes";
 import {
   assertCanLeaveOrganization,
@@ -155,14 +154,8 @@ export const auth = betterAuth({
     },
   },
   emailVerification: {
-    sendVerificationEmail: async ({ token, url, user }) => {
-      storeAuthEmailPreview({
-        email: user.email,
-        token,
-        type: "verification",
-        url,
-      });
-      console.info(`[quieter auth placeholder] verification for ${user.email}: ${url}`);
+    sendVerificationEmail: async () => {
+      // TODO: Wire this to real auth email delivery.
     },
   },
   socialProviders: {
@@ -207,16 +200,11 @@ export const auth = betterAuth({
       },
     }),
     magicLink({
-      sendMagicLink: async ({ email, token, url }) => {
-        storeAuthEmailPreview({
-          email,
-          token,
-          type: "magic-link",
-          url,
-        });
-        console.info(`[quieter auth placeholder] magic link for ${email}: ${url}`);
+      sendMagicLink: async () => {
+        // TODO: Wire this to real auth email delivery.
       },
     }),
+    lastLoginMethod(),
     tanstackStartCookies(),
   ],
 });

@@ -162,8 +162,8 @@ export {
   Tooltip,
   TooltipArrow,
   TooltipContent,
+  TooltipGroup,
   TooltipPortal,
-  TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip";
 export { cn } from "./lib/cn";

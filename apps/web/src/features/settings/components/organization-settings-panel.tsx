@@ -31,7 +31,7 @@ import {
   Tooltip,
   TooltipArrow,
   TooltipContent,
-  TooltipProvider,
+  TooltipGroup,
   TooltipTrigger,
 } from "@quieter/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
@@ -1652,7 +1652,7 @@ export const OrganizationSettingsPanel = () => {
     : null;
 
   return (
-    <TooltipProvider>
+    <TooltipGroup>
       <div className="space-y-6">
         <div className="flex justify-end">
           <CreateOrganizationDialog />
@@ -1754,6 +1754,6 @@ export const OrganizationSettingsPanel = () => {
           </p>
         )}
       </div>
-    </TooltipProvider>
+    </TooltipGroup>
   );
 };

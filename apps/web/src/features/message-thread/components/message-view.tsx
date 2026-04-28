@@ -22,7 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
   IconButtonTooltip,
-  TooltipProvider,
+  TooltipGroup,
   cn,
 } from "@quieter/ui";
 import { useQuery } from "@tanstack/react-query";
@@ -98,6 +98,14 @@ const formatEnvelopeValue = (value?: string) => {
 
 const isDraftMessage = (message: MessageListItem) =>
   Boolean(message.draftId || message.labelIds?.includes(MAILBOX_LABELS.drafts));
+
+const hasRenderableBody = (message: MessageListItem) =>
+  Boolean(message.bodyHtml?.trim() || message.bodyText?.trim());
+
+const getMessagesMissingLoadedBody = (messages: readonly MessageListItem[]) =>
+  messages.filter(
+    (threadMessage) => Boolean(threadMessage.snippet?.trim()) && !hasRenderableBody(threadMessage),
+  );
 
 const MessageHeaderContent = ({
   className,
@@ -183,12 +191,12 @@ const MessageHeaderContent = ({
             content
           )}
 
-          <TooltipProvider>
+          <TooltipGroup>
             <div className="ml-auto flex shrink-0 items-center justify-end gap-1 pl-4">
               {headerActions}
               {trailing}
             </div>
-          </TooltipProvider>
+          </TooltipGroup>
         </div>
       </div>
     </div>
@@ -753,13 +761,24 @@ export const MessageView = ({
       messages: [message],
     },
   });
-  const isBodyRefreshPending = threadQuery.isPending || threadQuery.isFetching;
+  const {
+    isError: isThreadError,
+    isFetching: isThreadFetching,
+    isPending: isThreadPending,
+    refetch: refetchThread,
+  } = threadQuery;
 
   const threadMessages = threadQuery.data?.messages?.length
     ? [...threadQuery.data.messages].reverse()
     : [message];
   const messages = threadMessages.filter((threadMessage) => !isDraftMessage(threadMessage));
   const visibleMessages = messages.length > 0 ? messages : [message];
+  const messagesMissingLoadedBody = getMessagesMissingLoadedBody(visibleMessages);
+  const missingLoadedBodyKey = messagesMissingLoadedBody
+    .map((threadMessage) => threadMessage.id)
+    .join(":");
+  const hasMissingLoadedBody = messagesMissingLoadedBody.length > 0;
+  const isBodyRefreshPending = isThreadPending || isThreadFetching || hasMissingLoadedBody;
   const subject =
     visibleMessages.reduce<string | undefined>((resolvedSubject, threadMessage) => {
       if (!threadMessage.subject?.trim()) {
@@ -780,6 +799,35 @@ export const MessageView = ({
     })),
   );
   const autoMarkedThreadIdsRef = useRef<Set<string>>(new Set());
+  const bodyRefreshRequestKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!hasMissingLoadedBody) {
+      bodyRefreshRequestKeyRef.current = null;
+      return;
+    }
+
+    if (isThreadError || isThreadFetching || isThreadPending) {
+      return;
+    }
+
+    const requestKey = `${mailboxId}:${message.threadId}:${missingLoadedBodyKey}`;
+    if (bodyRefreshRequestKeyRef.current === requestKey) {
+      return;
+    }
+
+    bodyRefreshRequestKeyRef.current = requestKey;
+    void refetchThread();
+  }, [
+    hasMissingLoadedBody,
+    isThreadError,
+    isThreadFetching,
+    isThreadPending,
+    mailboxId,
+    message.threadId,
+    missingLoadedBodyKey,
+    refetchThread,
+  ]);
 
   useEffect(() => {
     if (!threadIsUnread) {

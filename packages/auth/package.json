@@ -4,7 +4,6 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./email-placeholder": "./src/email-placeholder.ts",
     "./google-scopes": "./src/google-scopes.ts",
     "./user-status": "./src/user-status.ts",
     "./workspace": "./src/workspace.ts"

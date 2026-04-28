@@ -1,14 +1,10 @@
 import type { ComposeDraftAnchor } from "@quieter/orpc/compose";
-import { findInvalidMailAddresses } from "@quieter/orpc/compose";
-import { loadAttachmentFromServer } from "~/lib/gmail/attachments";
 import { rpc } from "~/lib/orpc";
-export { loadAttachmentFromServer } from "~/lib/gmail/attachments";
 
 const MAX_TOTAL_ATTACHMENT_BYTES = 24 * 1024 * 1024;
-const MAX_VISIBLE_INLINE_DRAFTS = 2;
 const CONTENT_ID_PREFIX = "quieter-inline";
 
-export type ComposeSaveStatus = "idle" | "saving" | "saved" | "error" | "sending" | "discarding";
+export type ComposeSaveStatus = "idle" | "saving" | "saved" | "error" | "sending";
 
 export type ComposeRecipientFields = {
   to: string;
@@ -22,28 +18,21 @@ export type ComposeReplyContext = {
   references: string[];
 };
 
-export type ComposeAttachment = {
+type ComposeAssetBase = {
   id: string;
   name: string;
   mimeType: string;
   size: number;
   gmailAttachmentId?: string;
-  isInline: boolean;
 };
 
-export type ComposeInlineImage = ComposeAttachment & {
+export type ComposeAttachment = ComposeAssetBase & {
+  isInline: false;
+};
+
+export type ComposeInlineImage = ComposeAssetBase & {
   contentId: string;
-};
-
-type DraftAttachmentPayload = {
-  attachmentId: string;
-  fileName: string;
-  mimeType: string;
-  size: number;
-};
-
-type DraftInlineImagePayload = DraftAttachmentPayload & {
-  contentId: string;
+  isInline: true;
 };
 
 export type ComposeDraftState = {
@@ -71,22 +60,17 @@ type RuntimeBinary = {
 
 const runtimeBinaryById = new Map<string, RuntimeBinary>();
 
-const createLocalId = () => crypto.randomUUID();
-const now = () => Date.now();
-
 const normalizeString = (value: string): string => value.replaceAll(/\u200B/g, "").trim();
 
-const createEmptyRecipients = (): ComposeRecipientFields => ({
-  to: "",
-  cc: "",
-  bcc: "",
-});
-
 export const createEmptyComposeDraft = (): ComposeDraftState => ({
-  localId: createLocalId(),
+  localId: crypto.randomUUID(),
   draftAnchor: null,
   replyContext: null,
-  recipients: createEmptyRecipients(),
+  recipients: {
+    to: "",
+    cc: "",
+    bcc: "",
+  },
   subject: "",
   bodyHtml: "",
   bodyText: "",
@@ -94,11 +78,8 @@ export const createEmptyComposeDraft = (): ComposeDraftState => ({
   inlineImages: [],
   saveStatus: "idle",
   errorMessage: null,
-  updatedAt: now(),
+  updatedAt: Date.now(),
 });
-
-const cloneAttachment = <T extends ComposeAttachment | ComposeInlineImage>(attachment: T): T =>
-  ({ ...attachment }) as T;
 
 export const cloneComposeDraft = (draft: ComposeDraftState): ComposeDraftState => ({
   ...draft,
@@ -110,8 +91,8 @@ export const cloneComposeDraft = (draft: ComposeDraftState): ComposeDraftState =
       }
     : null,
   recipients: { ...draft.recipients },
-  attachments: draft.attachments.map((attachment) => cloneAttachment(attachment)),
-  inlineImages: draft.inlineImages.map((image) => cloneAttachment(image)),
+  attachments: draft.attachments.map((attachment) => ({ ...attachment })),
+  inlineImages: draft.inlineImages.map((image) => ({ ...image })),
 });
 
 const areReplyContextsEqual = (
@@ -144,9 +125,9 @@ const areDraftAnchorsEqual = (
   );
 };
 
-const areAttachmentsEqual = (
-  left: readonly ComposeAttachment[],
-  right: readonly ComposeAttachment[],
+const areComposeAssetsEqual = (
+  left: readonly (ComposeAttachment | ComposeInlineImage)[],
+  right: readonly (ComposeAttachment | ComposeInlineImage)[],
 ) => {
   if (left.length !== right.length) return false;
 
@@ -160,29 +141,10 @@ const areAttachmentsEqual = (
       attachment.mimeType === other.mimeType &&
       attachment.size === other.size &&
       attachment.gmailAttachmentId === other.gmailAttachmentId &&
-      attachment.isInline === other.isInline
-    );
-  });
-};
-
-const areInlineImagesEqual = (
-  left: readonly ComposeInlineImage[],
-  right: readonly ComposeInlineImage[],
-) => {
-  if (left.length !== right.length) return false;
-
-  return left.every((image, index) => {
-    const other = right[index];
-    if (!other) return false;
-
-    return (
-      image.id === other.id &&
-      image.name === other.name &&
-      image.mimeType === other.mimeType &&
-      image.size === other.size &&
-      image.gmailAttachmentId === other.gmailAttachmentId &&
-      image.isInline === other.isInline &&
-      image.contentId === other.contentId
+      attachment.isInline === other.isInline &&
+      ("contentId" in attachment
+        ? "contentId" in other && attachment.contentId === other.contentId
+        : !("contentId" in other))
     );
   });
 };
@@ -200,8 +162,8 @@ export const haveComposeDraftPersistedFieldsChanged = (
     current.subject === next.subject &&
     current.bodyHtml === next.bodyHtml &&
     current.bodyText === next.bodyText &&
-    areAttachmentsEqual(current.attachments, next.attachments) &&
-    areInlineImagesEqual(current.inlineImages, next.inlineImages)
+    areComposeAssetsEqual(current.attachments, next.attachments) &&
+    areComposeAssetsEqual(current.inlineImages, next.inlineImages)
   );
 };
 
@@ -216,10 +178,7 @@ export const removeComposeRuntimeFile = (id: string) => {
   revokeRuntimeBinary(id);
 };
 
-export const getComposeRuntimeFile = (id: string): File | undefined =>
-  runtimeBinaryById.get(id)?.file;
-
-export const getComposeRuntimeObjectUrl = (id: string): string | undefined =>
+const getComposeRuntimeObjectUrl = (id: string): string | undefined =>
   runtimeBinaryById.get(id)?.objectUrl;
 
 const rememberRuntimeFile = (id: string, file: File) => {
@@ -231,16 +190,10 @@ const rememberRuntimeFile = (id: string, file: File) => {
 };
 
 export const clearComposeDraftRuntimeFiles = (draft: ComposeDraftState) => {
-  for (const attachment of draft.attachments) {
-    revokeRuntimeBinary(attachment.id);
-  }
-
-  for (const image of draft.inlineImages) {
-    revokeRuntimeBinary(image.id);
+  for (const asset of [...draft.attachments, ...draft.inlineImages]) {
+    revokeRuntimeBinary(asset.id);
   }
 };
-
-export const validateRecipientInput = (value: string): string[] => findInvalidMailAddresses(value);
 
 const htmlToText = (html: string): string => {
   if (!html) return "";
@@ -255,6 +208,30 @@ const htmlToText = (html: string): string => {
   return doc.body.textContent?.replace(/\s+\n/g, "\n").trim() ?? "";
 };
 
+const escapeHtml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+
+export const textToComposeBodyHtml = (value: string): string => {
+  const normalized = value.trim();
+  if (!normalized) return "";
+
+  return normalized
+    .split(/\r?\n(?:\r?\n)+/g)
+    .map(
+      (paragraph) =>
+        `<p>${paragraph
+          .split(/\r?\n/g)
+          .map((line) => (line ? escapeHtml(line) : "<br>"))
+          .join("<br>")}</p>`,
+    )
+    .join("");
+};
+
 const hasMeaningfulBodyHtml = (bodyHtml: string): boolean => {
   const normalizedHtml = bodyHtml.trim();
   if (!normalizedHtml) return false;
@@ -267,16 +244,19 @@ const hasMeaningfulBodyHtml = (bodyHtml: string): boolean => {
   return Boolean(doc.body.querySelector("img,video,audio,iframe"));
 };
 
-export const normalizeComposeBodyHtml = (bodyHtml: string, bodyText?: string): string => {
+export const normalizeComposeBodyHtml = (bodyHtml: string): string => {
   const normalizedHtml = bodyHtml.trim();
   if (!normalizedHtml) return "";
 
-  if (normalizeString(bodyText ?? htmlToText(normalizedHtml))) {
+  if (normalizeString(htmlToText(normalizedHtml))) {
     return normalizedHtml;
   }
 
   return hasMeaningfulBodyHtml(normalizedHtml) ? normalizedHtml : "";
 };
+
+export const getRenderableComposeBodyHtml = (bodyHtml: string, bodyText: string): string =>
+  normalizeComposeBodyHtml(bodyHtml) || textToComposeBodyHtml(bodyText);
 
 export const hasComposeDraftContent = (draft: ComposeDraftState): boolean => {
   return Boolean(
@@ -284,14 +264,15 @@ export const hasComposeDraftContent = (draft: ComposeDraftState): boolean => {
     normalizeString(draft.recipients.cc) ||
     normalizeString(draft.recipients.bcc) ||
     normalizeString(draft.subject) ||
-    normalizeComposeBodyHtml(draft.bodyHtml, draft.bodyText) ||
+    normalizeComposeBodyHtml(draft.bodyHtml) ||
+    normalizeString(draft.bodyText) ||
     draft.attachments.length > 0 ||
     draft.inlineImages.length > 0,
   );
 };
 
 const attachRuntimeFile = <T extends ComposeAttachment | ComposeInlineImage>(asset: T) => {
-  const runtimeFile = getComposeRuntimeFile(asset.id);
+  const runtimeFile = runtimeBinaryById.get(asset.id)?.file;
   if (!runtimeFile) {
     throw new Error(`Missing file payload for ${asset.name}.`);
   }
@@ -302,44 +283,39 @@ const attachRuntimeFile = <T extends ComposeAttachment | ComposeInlineImage>(ass
   };
 };
 
-const createInlineImageFromFile = (
-  file: File,
-  options?: { contentId?: string; gmailAttachmentId?: string; id?: string },
-): ComposeInlineImage => {
-  const id = options?.id ?? createLocalId();
+type CreateComposeAssetOptions = {
+  gmailAttachmentId?: string;
+  id?: string;
+};
+
+const createComposeAssetBase = (file: File, options: CreateComposeAssetOptions = {}) => {
+  const id = options.id ?? crypto.randomUUID();
   rememberRuntimeFile(id, file);
+
   return {
     id,
     name: file.name,
     mimeType: file.type || "application/octet-stream",
     size: file.size,
-    contentId: options?.contentId ?? `${CONTENT_ID_PREFIX}-${id}`,
-    gmailAttachmentId: options?.gmailAttachmentId,
+    gmailAttachmentId: options.gmailAttachmentId,
+  };
+};
+
+const createComposeInlineImageFromFile = (
+  file: File,
+  options?: CreateComposeAssetOptions & { contentId?: string },
+): ComposeInlineImage => {
+  const asset = createComposeAssetBase(file, options);
+
+  return {
+    ...asset,
+    contentId: options?.contentId ?? `${CONTENT_ID_PREFIX}-${asset.id}`,
     isInline: true,
   };
 };
 
-const createAttachmentFromFile = (
-  file: File,
-  options?: { gmailAttachmentId?: string; id?: string },
-): ComposeAttachment => {
-  const id = options?.id ?? createLocalId();
-  rememberRuntimeFile(id, file);
-  return {
-    id,
-    name: file.name,
-    mimeType: file.type || "application/octet-stream",
-    size: file.size,
-    gmailAttachmentId: options?.gmailAttachmentId,
-    isInline: false,
-  };
-};
-
-export const createComposeAttachmentsFromFiles = async (files: FileList | File[]) =>
-  Array.from(files, (file) => createAttachmentFromFile(file));
-
 export const createComposeInlineImagesFromFiles = async (files: FileList | File[]) =>
-  Array.from(files, (file) => createInlineImageFromFile(file));
+  Array.from(files, (file) => createComposeInlineImageFromFile(file));
 
 const assertAttachmentBudget = (draft: ComposeDraftState) => {
   const totalSize =
@@ -350,26 +326,6 @@ const assertAttachmentBudget = (draft: ComposeDraftState) => {
     throw new Error("Attachments exceed the 24MB compose limit.");
   }
 };
-
-const parseDraftResponse = (response: {
-  draftId: string;
-  draftAnchor?: ComposeDraftAnchor | null;
-  messageId?: string | null;
-  bodyHtml: string;
-  bodyText: string;
-  subject: string;
-  recipients: ComposeRecipientFields;
-  replyContext?: ComposeReplyContext | null;
-}) => ({
-  draftId: response.draftId,
-  draftAnchor: response.draftAnchor ?? null,
-  messageId: response.messageId ?? undefined,
-  bodyHtml: response.bodyHtml,
-  bodyText: response.bodyText,
-  subject: response.subject,
-  recipients: response.recipients,
-  replyContext: response.replyContext ?? null,
-});
 
 const findReferencedInlineImageIds = (html: string): Set<string> => {
   if (!html || typeof window === "undefined") return new Set();
@@ -384,131 +340,6 @@ const findReferencedInlineImageIds = (html: string): Set<string> => {
   return ids;
 };
 
-const updateInlineImageHtml = (
-  html: string,
-  inlineImages: readonly ComposeInlineImage[],
-): string => {
-  if (!html || typeof window === "undefined") return html;
-
-  const inlineImageById = new Map(inlineImages.map((image) => [image.id, image] as const));
-  const inlineImageByContentId = new Map(
-    inlineImages.map((image) => [
-      image.contentId.trim().replace(/^<|>$/g, "").toLowerCase(),
-      image,
-    ]),
-  );
-  const doc = new DOMParser().parseFromString(html, "text/html");
-
-  for (const image of Array.from(doc.querySelectorAll("img"))) {
-    const imageId = image.getAttribute("data-compose-inline-id");
-    const cidSource = image.getAttribute("src") ?? "";
-    const cidMatch = cidSource.match(/^cid:(.+)$/i);
-    const normalizedContentId = cidMatch?.[1]?.trim().replace(/^<|>$/g, "").toLowerCase();
-    const asset = imageId
-      ? inlineImageById.get(imageId)
-      : normalizedContentId
-        ? inlineImageByContentId.get(normalizedContentId)
-        : undefined;
-    if (!asset) continue;
-    const objectUrl = getComposeRuntimeObjectUrl(asset.id);
-    if (objectUrl) {
-      image.setAttribute("src", objectUrl);
-      image.setAttribute("data-compose-inline-id", asset.id);
-    }
-  }
-
-  return doc.body.innerHTML.trim();
-};
-
-const hydrateDraftAttachment = async (
-  mailboxId: string,
-  messageId: string,
-  attachment: DraftAttachmentPayload,
-  signal?: AbortSignal,
-) => {
-  const file = await loadAttachmentFromServer(
-    mailboxId,
-    messageId,
-    attachment.attachmentId,
-    attachment.fileName,
-    attachment.mimeType,
-    signal,
-  );
-
-  return createAttachmentFromFile(file, {
-    gmailAttachmentId: attachment.attachmentId,
-  });
-};
-
-const hydrateDraftInlineImage = async (
-  mailboxId: string,
-  messageId: string,
-  inlineImage: DraftInlineImagePayload,
-  signal?: AbortSignal,
-) => {
-  const file = await loadAttachmentFromServer(
-    mailboxId,
-    messageId,
-    inlineImage.attachmentId,
-    inlineImage.fileName,
-    inlineImage.mimeType,
-    signal,
-  );
-
-  return createInlineImageFromFile(file, {
-    contentId: inlineImage.contentId,
-    gmailAttachmentId: inlineImage.attachmentId,
-  });
-};
-
-export const hydrateComposeDraftRuntime = async (
-  mailboxId: string,
-  draft: ComposeDraftState,
-  signal?: AbortSignal,
-): Promise<ComposeDraftState> => {
-  if (!draft.draftId) return draft;
-
-  const response = await rpc.mail.loadDraft({ mailboxId, draftId: draft.draftId }, { signal });
-  const attachments =
-    response.messageId && response.attachments.length > 0
-      ? await Promise.all(
-          response.attachments.map(
-            async (attachment) =>
-              await hydrateDraftAttachment(mailboxId, response.messageId!, attachment, signal),
-          ),
-        )
-      : [];
-  const inlineImages =
-    response.messageId && response.inlineImages.length > 0
-      ? await Promise.all(
-          response.inlineImages.map(
-            async (inlineImage) =>
-              await hydrateDraftInlineImage(mailboxId, response.messageId!, inlineImage, signal),
-          ),
-        )
-      : [];
-
-  return {
-    ...draft,
-    draftAnchor: response.draftAnchor ?? draft.draftAnchor ?? null,
-    messageId: response.messageId ?? draft.messageId,
-    replyContext: response.replyContext ?? draft.replyContext ?? null,
-    recipients: response.recipients,
-    subject: response.subject,
-    attachments,
-    inlineImages,
-    bodyHtml: updateInlineImageHtml(
-      response.bodyHtml,
-      inlineImages.slice(0, MAX_VISIBLE_INLINE_DRAFTS),
-    ),
-    bodyText: response.bodyText || htmlToText(response.bodyHtml),
-    saveStatus: "saved",
-    errorMessage: null,
-    lastSavedAt: now(),
-    updatedAt: now(),
-  };
-};
-
 export const syncInlineImagesWithHtml = (
   draft: ComposeDraftState,
   bodyHtml: string,
@@ -521,16 +352,14 @@ export const syncInlineImagesWithHtml = (
     bodyHtml,
     bodyText: htmlToText(bodyHtml),
     inlineImages: nextInlineImages,
-    updatedAt: now(),
+    updatedAt: Date.now(),
   };
 };
 
 const serializeDraft = async (draft: ComposeDraftState) => {
   assertAttachmentBudget(draft);
   const inlineImages = draft.inlineImages.map((image) => attachRuntimeFile(image));
-  const attachments = draft.attachments
-    .filter((attachment) => !attachment.isInline)
-    .map((attachment) => attachRuntimeFile(attachment));
+  const attachments = draft.attachments.map((attachment) => attachRuntimeFile(attachment));
 
   return {
     ...draft,
@@ -548,15 +377,22 @@ export const saveComposeDraft = async (
     { mailboxId, draft: await serializeDraft(draft) },
     { signal },
   );
-  const metadata = parseDraftResponse(response);
+  const bodyHtml = getRenderableComposeBodyHtml(response.bodyHtml, response.bodyText);
 
   return {
     ...draft,
-    ...metadata,
+    draftId: response.draftId,
+    draftAnchor: response.draftAnchor ?? null,
+    messageId: response.messageId ?? undefined,
+    bodyHtml,
+    bodyText: response.bodyText || htmlToText(bodyHtml),
+    subject: response.subject,
+    recipients: response.recipients,
+    replyContext: response.replyContext ?? null,
     saveStatus: "saved",
     errorMessage: null,
-    lastSavedAt: now(),
-    updatedAt: now(),
+    lastSavedAt: Date.now(),
+    updatedAt: Date.now(),
   };
 };
 
@@ -565,7 +401,7 @@ export const sendComposeDraft = async (
   draft: ComposeDraftState,
   signal?: AbortSignal,
 ) => {
-  return await rpc.mail.sendDraft({ mailboxId, draft: await serializeDraft(draft) }, { signal });
+  return rpc.mail.sendDraft({ mailboxId, draft: await serializeDraft(draft) }, { signal });
 };
 
 export const deleteComposeDraft = async (

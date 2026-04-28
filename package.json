@@ -61,18 +61,22 @@
     "db:migrate": "turbo run db:migrate --filter=@quieter/database",
     "db:push": "turbo run db:push --filter=@quieter/database",
     "dev": "turbo run dev",
-    "generate:assets": "bun scripts/generate-web-assets.ts",
     "fmt": "turbo run fmt",
     "fmt:check": "turbo run fmt:check",
+    "generate:assets": "bun scripts/generate-web-assets.ts",
     "lint": "turbo run lint",
     "lint:fix": "turbo run lint:fix",
+    "prepare": "husky",
     "sst": "bun scripts/sst.ts",
+    "test": "turbo run test",
     "typecheck": "turbo run typecheck"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0"
   },
   "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "sst": "^4.10.1",
     "turbo": "^2.9.6",
     "tw-animate-css": "^1.4.0"
@@ -82,6 +86,14 @@
     "@better-auth/utils": "0.3.1",
     "@tanstack/query-core": "5.96.2",
     "better-call": "1.3.2"
+  },
+  "lint-staged": {
+    "**/*": [
+      "oxlint --fix --config oxlint.json",
+      "oxfmt --config oxfmt.json",
+      "tsgo --noEmit",
+      "test"
+    ]
   },
   "engines": {
     "bun": ">=1.3.9"
@@ -94,3 +106,4 @@
     "react-dom": "^19.2.4"
   }
 }
+

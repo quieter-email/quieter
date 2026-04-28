@@ -6,18 +6,71 @@ import { Button, type ButtonProps, cn } from "@quieter/ui";
 import { LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { useState } from "react";
 
-type ArrowInteractionButtonClickEvent = Parameters<NonNullable<ButtonProps["onClick"]>>[0];
+type ArrowIconMotionKind = "idle" | "success" | "failure";
 
-export const ArrowInteractionButton = ({
-  className,
-  onClick,
-  ...props
-}: Omit<ButtonProps, "onClick"> & {
-  onClick: (event: ArrowInteractionButtonClickEvent) => boolean | Promise<boolean>;
-}) => {
+const arrowPrimaryVariants = {
+  idle: {
+    opacity: 1,
+    transform: "translateY(0%) scaleX(1) scaleY(1)",
+    transition: { duration: 0 },
+  },
+  successFrom: {
+    opacity: 1,
+    transform: "translateY(0%) scaleX(1) scaleY(1)",
+  },
+  failureFrom: {
+    transform: "translateY(0%) scaleX(1) scaleY(1)",
+  },
+  success: {
+    opacity: [1, 1, 0.88],
+    transform: [
+      "translateY(0%) scaleX(1) scaleY(1)",
+      "translateY(10%) scaleX(0.95) scaleY(0.98)",
+      "translateY(-120%) scaleX(0.82) scaleY(1.08)",
+    ],
+    transition: {
+      duration: 1,
+      ease: [0.22, 1, 0.36, 1] as const,
+      times: [0, 0.42, 1],
+    },
+  },
+  failure: {
+    transform: [
+      "translateY(0%) scaleX(1) scaleY(1)",
+      "translateY(-40%) scaleX(0.97) scaleY(0.97)",
+      "translateY(-18%) scaleX(1) scaleY(1)",
+      "translateY(0%) scaleX(1) scaleY(1)",
+    ],
+    transition: {
+      duration: 1,
+      ease: [0.22, 1, 0.36, 1] as const,
+      times: [0, 0.38, 0.68, 1],
+    },
+  },
+};
+
+const arrowSecondaryVariants = {
+  from: {
+    opacity: 1,
+    transform: "translateY(120%) scaleX(0.88) scaleY(1.04)",
+  },
+  to: {
+    opacity: 1,
+    transform: "translateY(0%) scaleX(1) scaleY(1)",
+    transition: { bounce: 0.14, delay: 0.22, duration: 1.42, type: "spring" as const },
+  },
+};
+
+const arrowPrimaryInitial: Record<ArrowIconMotionKind, keyof typeof arrowPrimaryVariants> = {
+  idle: "idle",
+  success: "successFrom",
+  failure: "failureFrom",
+};
+
+export const ArrowInteractionButton = ({ className, onClick, ...props }: ButtonProps) => {
   const shouldReduceMotion = useReducedMotion() ?? false;
-  const [animation, setAnimation] = useState({
-    kind: "idle" as "idle" | "success" | "failure",
+  const [animation, setAnimation] = useState<{ kind: ArrowIconMotionKind; nonce: number }>({
+    kind: "idle",
     nonce: 0,
   });
 
@@ -26,7 +79,7 @@ export const ArrowInteractionButton = ({
       {...props}
       className={cn("relative overflow-hidden", className)}
       onClick={(event) => {
-        void Promise.resolve(onClick(event))
+        void Promise.resolve(onClick?.(event))
           .then((success) => {
             if (shouldReduceMotion) return;
             setAnimation((previous) => ({
@@ -50,54 +103,24 @@ export const ArrowInteractionButton = ({
           </span>
           <m.span
             key={`primary-${animation.kind}-${animation.nonce}`}
-            animate={
-              animation.kind === "success"
-                ? {
-                    opacity: [1, 1, 0.88],
-                    transform: [
-                      "translateY(0%) scaleX(1) scaleY(1)",
-                      "translateY(10%) scaleX(0.95) scaleY(0.98)",
-                      "translateY(-120%) scaleX(0.82) scaleY(1.08)",
-                    ],
-                  }
-                : animation.kind === "failure"
-                  ? {
-                      transform: [
-                        "translateY(0%) scaleX(1) scaleY(1)",
-                        "translateY(-40%) scaleX(0.97) scaleY(0.97)",
-                        "translateY(-18%) scaleX(1) scaleY(1)",
-                        "translateY(0%) scaleX(1) scaleY(1)",
-                      ],
-                    }
-                  : { opacity: 1, transform: "translateY(0%) scaleX(1) scaleY(1)" }
-            }
+            animate={animation.kind}
             className="pointer-events-none absolute inset-0 inline-grid place-items-center will-change-transform"
-            initial={
-              animation.kind === "failure"
-                ? { transform: "translateY(0%) scaleX(1) scaleY(1)" }
-                : { opacity: 1, transform: "translateY(0%) scaleX(1) scaleY(1)" }
-            }
-            transition={
-              animation.kind === "success"
-                ? { duration: 1.2, ease: [0.22, 1, 0.36, 1], times: [0, 0.42, 1] }
-                : animation.kind === "failure"
-                  ? { duration: 1.28, ease: [0.22, 1, 0.36, 1], times: [0, 0.38, 0.68, 1] }
-                  : { duration: 0 }
-            }
+            initial={arrowPrimaryInitial[animation.kind]}
+            variants={arrowPrimaryVariants}
           >
             <HugeiconsIcon icon={ArrowUp01Icon} />
           </m.span>
-          {animation.kind === "success" ? (
+          {animation.kind === "success" && (
             <m.span
               key={`secondary-${animation.nonce}`}
-              animate={{ opacity: 1, transform: "translateY(0%) scaleX(1) scaleY(1)" }}
+              animate="to"
               className="pointer-events-none absolute inset-0 inline-grid place-items-center will-change-transform"
-              initial={{ opacity: 1, transform: "translateY(120%) scaleX(0.88) scaleY(1.04)" }}
-              transition={{ bounce: 0.14, delay: 0.22, duration: 1.42, type: "spring" }}
+              initial="from"
+              variants={arrowSecondaryVariants}
             >
               <HugeiconsIcon icon={ArrowUp01Icon} />
             </m.span>
-          ) : null}
+          )}
         </span>
       </LazyMotion>
     </Button>

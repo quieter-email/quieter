@@ -377,6 +377,17 @@ const applyMessageMetadata = (
   };
 };
 
+const mergeThreadSyncMessage = (
+  currentMessage: MessageListItem,
+  syncedMessage: MessageListItem,
+): MessageListItem => ({
+  ...syncedMessage,
+  attachments: syncedMessage.attachments ?? currentMessage.attachments,
+  bodyHtml: syncedMessage.bodyHtml ?? currentMessage.bodyHtml,
+  bodyText: syncedMessage.bodyText ?? currentMessage.bodyText,
+  draftId: syncedMessage.draftId ?? currentMessage.draftId,
+});
+
 const toMessageMetadataById = (updates: readonly MessageMetadataMutationResult[]) =>
   new Map(updates.map((update) => [update.id, update] as const));
 
@@ -887,7 +898,9 @@ const applyMailboxSyncDelta = async (
     const threadQueryKey = getThreadQueryKey(mailboxId, updatedMessage.threadId);
     touchedThreadQueryKeys.set(threadQueryKey.join("::"), threadQueryKey);
     queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
-      updateMessageInThreadData(currentData, updatedMessage.id, () => updatedMessage),
+      updateMessageInThreadData(currentData, updatedMessage.id, (message) =>
+        mergeThreadSyncMessage(message, updatedMessage),
+      ),
     );
   }
 
@@ -1822,6 +1835,27 @@ export const deleteDraftInMailbox = async (
     );
     throw error;
   }
+};
+
+export const removeDraftMessageFromCaches = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  messageId: string,
+  threadId?: string | null,
+) => {
+  const touchedQueryKeys = removeMessageFromCachedMailboxQueries(queryClient, mailboxId, messageId);
+  const threadQueryKey = threadId ? getThreadQueryKey(mailboxId, threadId) : null;
+
+  if (threadQueryKey) {
+    queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
+      removeMessageFromThreadData(currentData, messageId),
+    );
+  }
+
+  await persistQueryKeys(
+    queryClient,
+    threadQueryKey ? [...touchedQueryKeys, threadQueryKey] : touchedQueryKeys,
+  );
 };
 
 export const messagesQueryOptions = (

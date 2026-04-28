@@ -12,19 +12,14 @@ import { useNavigate } from "@tanstack/react-router";
 import { useSelector } from "@tanstack/react-store";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
+import type { MailboxSearch } from "~/routes/index";
 import { LoadingPage } from "~/components/loading-page";
-import {
-  type ComposeDraftState,
-  buildComposeDraftFromSavedDraftMessage,
-  cloneComposeDraft,
-  hydrateComposeDraftRuntime,
-} from "~/features/compose";
+import { type ComposeDraftState, buildComposeDraftFromSavedDraftMessage } from "~/features/compose";
 import { type ComposeDialogHandle, ComposeDialog } from "~/features/compose";
 import { MessageList } from "~/features/message-list/components/message-list";
 import { MessageDetail } from "~/features/message-thread/components/message-detail";
 import { MailSidebar } from "~/features/navigation/components/mail-sidebar";
 import { authClient } from "~/lib/auth";
-import { getErrorMessage } from "~/lib/errors";
 import {
   type ListMessagesPageResult,
   type MailboxCategory,
@@ -71,7 +66,6 @@ import { getThreadQueryKey, getThreadWithDetailsOptions } from "~/lib/gmail/thre
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 import { inboxRouteApi } from "~/lib/route-apis";
-import { toMailboxSearch } from "~/lib/search-params";
 
 type MailboxWorkspaceProps = {
   user: {
@@ -92,6 +86,31 @@ type ConnectedMailbox = {
   displayName: string | null;
   provider: string;
 };
+
+type MailboxSearchPatch = {
+  mailbox?: MailboxCategory;
+  mailboxId?: string | null;
+  messageId?: string | null;
+  query?: string | null;
+};
+
+const mergeMailboxSearch = (previous: MailboxSearch, patch: MailboxSearchPatch): MailboxSearch => ({
+  mailbox: patch.mailbox ?? previous.mailbox,
+  mailboxId:
+    patch.mailboxId === undefined
+      ? previous.mailboxId
+      : patch.mailboxId === null
+        ? undefined
+        : patch.mailboxId.trim() || undefined,
+  messageId:
+    patch.messageId === undefined
+      ? previous.messageId
+      : patch.messageId === null
+        ? undefined
+        : patch.messageId.trim() || undefined,
+  query:
+    patch.query === undefined ? previous.query : patch.query === null ? "" : patch.query.trim(),
+});
 
 const BACKGROUND_THREAD_BODY_PREFETCH_LIMIT = 8;
 const BACKGROUND_THREAD_BODY_PREFETCH_TIMEOUT_MS = 3000;
@@ -166,20 +185,6 @@ type MailboxActionHandlerArgs = {
   unsubscribeFromMessageMutation: (messageId: string) => Promise<void>;
   mailboxId: string;
 };
-
-const mergeHydratedComposeDraft = (
-  pendingDraft: ComposeDraftState,
-  hydratedDraft: ComposeDraftState,
-): ComposeDraftState => ({
-  ...hydratedDraft,
-  localId: pendingDraft.localId,
-  draftAnchor: pendingDraft.draftAnchor ?? hydratedDraft.draftAnchor ?? null,
-  replyContext: pendingDraft.replyContext ?? hydratedDraft.replyContext ?? null,
-  recipients: pendingDraft.recipients,
-  subject: pendingDraft.subject,
-  bodyHtml: pendingDraft.bodyHtml,
-  bodyText: pendingDraft.bodyText,
-});
 
 const createMailboxActionHandlers = ({
   activeMailbox,
@@ -822,20 +827,11 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     }
   }
 
-  const setMailboxSearch = (search: {
-    mailbox?: MailboxCategory;
-    mailboxId?: string | null;
-    messageId?: string | null;
-    query?: string | null;
-  }) => {
+  const setMailboxSearch = (patch: MailboxSearchPatch) => {
     return navigate({
       replace: true,
       resetScroll: false,
-      search: (previous) =>
-        toMailboxSearch({
-          ...previous,
-          ...search,
-        }),
+      search: (previous) => mergeMailboxSearch(previous, patch),
       to: ".",
     });
   };
@@ -1037,23 +1033,8 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     mailboxId: selectedMailboxId ?? "",
   });
 
-  const openComposeDraft = async (draft: ComposeDraftState) => {
-    const pendingDraft = cloneComposeDraft(draft);
-    if (!selectedMailboxId || !pendingDraft.draftId) {
-      composeDialogRef.current?.openDraft(pendingDraft);
-      return;
-    }
-
-    try {
-      const hydratedDraft = await hydrateComposeDraftRuntime(selectedMailboxId, pendingDraft);
-      composeDialogRef.current?.openDraft(mergeHydratedComposeDraft(pendingDraft, hydratedDraft));
-    } catch (error) {
-      composeDialogRef.current?.openDraft({
-        ...pendingDraft,
-        errorMessage: getErrorMessage(error, "Could not load that draft."),
-        saveStatus: "error",
-      });
-    }
+  const openComposeDraft = (draft: ComposeDraftState) => {
+    composeDialogRef.current?.openDraft(draft);
   };
 
   const openDraft = (message: MessageListItem) => {
@@ -1062,7 +1043,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
     }
 
     void setMailboxSearch({ messageId: null });
-    void openComposeDraft(buildComposeDraftFromSavedDraftMessage(message));
+    openComposeDraft(buildComposeDraftFromSavedDraftMessage(message));
   };
 
   const activateMessage = (messageId: string) => {
@@ -1168,7 +1149,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
         void unmarkThreadsAsSpam(threads);
       },
       onComposeDraftRequested: (draft) => {
-        void openComposeDraft(draft);
+        openComposeDraft(draft);
       },
       onComposeNewMail: () => {
         composeDialogRef.current?.openNewMail();

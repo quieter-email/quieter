@@ -1,8 +1,8 @@
 "use client";
 
 import { useNavigate, useRouter } from "@tanstack/react-router";
+import { type SettingsTab } from "~/features/settings/domain/settings-tab";
 import { settingsRouteApi } from "~/lib/route-apis";
-import { toSettingsSearch, type SettingsTab } from "~/lib/search-params";
 import { AccountSettingsPanel } from "./account-settings-panel";
 import { GeneralSettingsPanel } from "./general-settings-panel";
 import { MailboxesSettingsPanel } from "./mailboxes-settings-panel";
@@ -33,11 +33,10 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
     void navigate({
       replace: true,
       resetScroll: false,
-      search: (previous) =>
-        toSettingsSearch({
-          ...previous,
-          tab: nextTab,
-        }),
+      search: (previous) => ({
+        ...previous,
+        tab: nextTab,
+      }),
       to: ".",
     });
   };

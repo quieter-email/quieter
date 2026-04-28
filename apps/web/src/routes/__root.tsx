@@ -3,7 +3,6 @@
 import type { ReactNode } from "react";
 import { HeadContent, Link, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
 import { Providers } from "~/components/providers";
-import { toMailboxSearch } from "~/lib/search-params";
 import appCss from "~/styles.css?url";
 
 export const Route = createRootRoute({
@@ -140,7 +139,6 @@ function RootErrorComponent({ error, reset }: { error: Error | null; reset: () =
 
           <Link
             className="rounded-md border border-input bg-background px-4 py-2 text-sm text-foreground shadow-sm hover:border-foreground/25 hover:bg-muted/60"
-            search={toMailboxSearch({})}
             to="/"
           >
             Back to inbox
@@ -161,7 +159,6 @@ function RootNotFoundComponent() {
         </p>
         <Link
           className="mt-6 inline-flex rounded-md border border-input bg-background px-4 py-2 text-sm text-foreground shadow-sm hover:border-foreground/25 hover:bg-muted/60"
-          search={toMailboxSearch({})}
           to="/"
         >
           Go to inbox

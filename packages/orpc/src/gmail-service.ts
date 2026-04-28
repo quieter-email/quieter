@@ -1169,11 +1169,22 @@ export const listDraftsWithDetails = async (
       },
     ];
   });
-  const [details, threadSummariesById] = await Promise.all([
-    getGmailMessagesMetadata(
-      accessToken,
-      draftRefs.map((draft) => draft.messageId),
-      options?.signal,
+  const [draftDetails, threadSummariesById] = await Promise.all([
+    Promise.all(
+      draftRefs.map(async (draft) => {
+        try {
+          return {
+            draftId: draft.draftId,
+            draft: await getDraft(accessToken, draft.draftId, options?.signal),
+          };
+        } catch (error) {
+          if (isErrorWithStatus(error) && error.status === 404) {
+            return null;
+          }
+
+          throw error;
+        }
+      }),
     ),
     getThreadListSummaries(
       accessToken,
@@ -1182,30 +1193,23 @@ export const listDraftsWithDetails = async (
       options?.signal,
     ),
   ]);
-  const detailsById = new Map(
-    details
-      .filter((message): message is GmailMessage => Boolean(message))
-      .map((message) => [message.id, message] as const),
-  );
-  const orderedDrafts = draftRefs.flatMap((draft) => {
-    const message = detailsById.get(draft.messageId);
-    if (!message) {
-      return [];
-    }
-
-    return [
-      {
-        draftId: draft.draftId,
-        message,
-      },
-    ];
+  const orderedDrafts = draftDetails.flatMap((draft) => {
+    const message = draft?.draft.message;
+    return message ? [{ draftId: draft.draftId, message }] : [];
   });
+
   return {
     messages: await Promise.all(
       orderedDrafts.map(async (draft) => ({
-        ...(await toMessageListItem(accessToken, draft.message, {
-          threadSummary: threadSummariesById.get(draft.message.threadId),
-        })),
+        ...(await toMessageListItem(
+          accessToken,
+          draft.message,
+          {
+            includeBody: true,
+            threadSummary: threadSummariesById.get(draft.message.threadId),
+          },
+          options?.signal,
+        )),
         draftId: draft.draftId,
       })),
     ),

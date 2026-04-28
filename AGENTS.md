@@ -36,7 +36,7 @@
 - Root providers/document: [apps/web/src/routes/__root.tsx](/E:/Coding/quieter/apps/web/src/routes/__root.tsx)
 - API handlers stay under `apps/web/src/routes/api/**`.
 - Use route loaders / TanStack Start server functions for auth guards and request-scoped SSR data.
-- Validate search params through shared schemas in `apps/web/src/lib/search-params.ts`.
+- Validate search params with `validateSearch` + Zod (colocated on the route file; settings tab ids are shared via `apps/web/src/features/settings/domain/settings-tab.ts`).
 - Keep inbox `loaderDeps` limited to `mailboxId`.
 - Gmail REST calls run server-side in `packages/orpc/src/gmail-service.ts`; tokens are resolved through Better Auth linked accounts.
 - Mailbox-scoped query keys must include `mailboxId`.

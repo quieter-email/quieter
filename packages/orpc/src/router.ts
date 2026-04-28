@@ -1,6 +1,5 @@
 import { ORPCError, os } from "@orpc/server";
 import { auth, ensureUserOrganizationState } from "@quieter/auth";
-import { getAuthEmailPreview } from "@quieter/auth/email-placeholder";
 import { getAuthUserStatus } from "@quieter/auth/user-status";
 import { z } from "zod";
 import { getRequestHeaders, type OrpcContext } from "./context";
@@ -11,7 +10,6 @@ import {
   deleteMessagePermanently,
   deleteThreadPermanently,
   extractListUnsubscribeMailto,
-  getDraft,
   getGmailMessageMetadata,
   getMailboxSyncDelta,
   getMessageAttachment,
@@ -214,16 +212,6 @@ const callGmail = async <TValue>(
 
 export const appRouter = {
   auth: {
-    getEmailPreview: publicProcedure
-      .route({ method: "GET" })
-      .input(
-        z.object({
-          email: z.string().trim().email(),
-        }),
-      )
-      .handler(({ input }) => {
-        return getAuthEmailPreview(input.email);
-      }),
     getUserStatus: publicProcedure
       .route({ method: "GET" })
       .input(
@@ -564,20 +552,6 @@ export const appRouter = {
       .handler(async ({ context, input }) => {
         return await callGmail(context, input.mailboxId, async (accessToken) => {
           return await deleteThreadPermanently(accessToken, input.threadId);
-        });
-      }),
-    loadDraft: protectedProcedure
-      .route({ method: "GET" })
-      .input(
-        z.object({
-          mailboxId: mailboxIdSchema,
-          draftId: z.string(),
-        }),
-      )
-      .handler(async ({ context, input }) => {
-        return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
-          const draft = await getDraft(accessToken, input.draftId, signal);
-          return parseDraftMessage(draft);
         });
       }),
     saveDraft: protectedProcedure

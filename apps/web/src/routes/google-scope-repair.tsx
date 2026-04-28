@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, stripSearchParams } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { z } from "zod";
 import { getGoogleScopeRepairTarget, getSessionUser } from "~/lib/auth.functions";
@@ -21,16 +21,8 @@ const googleScopeRepairSearchSchema = z.object({
     }),
 });
 
-const googleScopeRepairSearchDefaults = {
-  from: "/",
-  returned: false,
-} as const;
-
 export const Route = createFileRoute("/google-scope-repair")({
   validateSearch: zodValidator(googleScopeRepairSearchSchema),
-  search: {
-    middlewares: [stripSearchParams(googleScopeRepairSearchDefaults)],
-  },
   loaderDeps: ({ search }) => ({
     from: search.from,
     targetAccountId: search.targetAccountId,
