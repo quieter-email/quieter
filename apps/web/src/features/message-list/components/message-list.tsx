@@ -1,116 +1,15 @@
 "use client";
 
-import {
-  Cancel01Icon,
-  Delete01Icon,
-  Delete02Icon,
-  Loading03Icon,
-  Mail01Icon,
-  MailOpen02Icon,
-  MoreVerticalIcon,
-} from "@hugeicons/core-free-icons";
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
-import {
-  Button,
-  Checkbox,
-  CheckboxIndicator,
-  cn,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  IconButtonTooltip,
-  toast,
-} from "@quieter/ui";
-import { useHotkey } from "@tanstack/react-hotkeys";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ListMessagesPageResult, MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
+import { Delete01Icon, Delete02Icon, Mail01Icon, MailOpen02Icon } from "@hugeicons/core-free-icons";
+import { toast } from "@quieter/ui";
+import type { MessageListItem } from "~/lib/gmail/gmail";
 import { MessageListSearch } from "~/features/message-search/components/message-list-search";
 import { getErrorMessage } from "~/lib/errors";
 import { buildThreadListEntries, type ThreadListEntry } from "~/lib/gmail/thread-list";
-import { MessageRow } from "./message-row";
-
-type MessageListProps = {
-  activeMailbox: MailboxCategory;
-  activeMessageId?: string | null;
-  mailboxId: string;
-  onBulkDeleteDrafts: (threads: ThreadListEntry[]) => void | Promise<void>;
-  onBulkDeletePermanently: (threads: ThreadListEntry[]) => void | Promise<void>;
-  onBulkMarkAsRead: (threads: ThreadListEntry[]) => void | Promise<void>;
-  onBulkMarkAsSpam: (threads: ThreadListEntry[]) => void | Promise<void>;
-  onBulkMarkAsUnread: (threads: ThreadListEntry[]) => void | Promise<void>;
-  onBulkMoveToTrash: (threads: ThreadListEntry[]) => void | Promise<void>;
-  onBulkUnmarkAsSpam: (threads: ThreadListEntry[]) => void | Promise<void>;
-  error: unknown;
-  hasNextPage: boolean;
-  isError: boolean;
-  isFetchingNextPage: boolean;
-  onDeleteDraft: (message: MessageListItem) => void | Promise<void>;
-  isMessageActionPending?: (messageId: string) => boolean;
-  isThreadActionPending?: (threadId: string) => boolean;
-  isPending: boolean;
-  isRefreshing: boolean;
-  messages: ListMessagesPageResult[];
-  onActivateMessage: (messageId: string) => void;
-  onDeleteThreadPermanently: (threadId: string) => void | Promise<void>;
-  onLoadMore: () => void;
-  onMarkThreadAsRead: (threadId: string) => void | Promise<void>;
-  onMarkThreadAsSpam: (threadId: string) => void | Promise<void>;
-  onMarkThreadAsUnread: (threadId: string) => void | Promise<void>;
-  onMoveThreadToTrash: (threadId: string) => void | Promise<void>;
-  onOpenDraft: (message: MessageListItem) => void | Promise<void>;
-  onRefresh: () => void | Promise<void>;
-  onSearch: (query: string) => void;
-  onUntrashThread: (threadId: string) => void | Promise<void>;
-  onUnsubscribe: (messageId: string) => void | Promise<void>;
-  onUnmarkThreadAsSpam: (threadId: string) => void | Promise<void>;
-  onUpdateThreadLabels: (
-    threadId: string,
-    changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
-  ) => void | Promise<void>;
-  searchQuery: string;
-};
-
-const SCROLL_TOP_EPSILON_PX = 2;
-const SCROLL_WAIT_TIMEOUT_MS = 600;
-const MESSAGE_ROW_HEIGHT_PX = 72;
-const MESSAGE_ROW_GAP_PX = 0;
-const MESSAGE_LIST_OVERSCAN = 12;
-const MESSAGE_LIST_SKELETON_ROW_IDS = [
-  "message-list-skeleton-1",
-  "message-list-skeleton-2",
-  "message-list-skeleton-3",
-  "message-list-skeleton-4",
-  "message-list-skeleton-5",
-  "message-list-skeleton-6",
-  "message-list-skeleton-7",
-  "message-list-skeleton-8",
-] as const;
-
-type MessageListScrollPaneProps = Omit<
-  MessageListProps,
-  | "onBulkDeleteDrafts"
-  | "onBulkDeletePermanently"
-  | "onBulkMarkAsRead"
-  | "onBulkMarkAsSpam"
-  | "onBulkMarkAsUnread"
-  | "onBulkMoveToTrash"
-  | "onBulkUnmarkAsSpam"
-  | "onActivateMessage"
-> & {
-  isProgrammaticScrollToTopRef: RefObject<boolean>;
-  isSelectionMode: boolean;
-  onThreadPress: (thread: ThreadListEntry, gesture: { additive: boolean; range: boolean }) => void;
-  onThreadSelectionPress: (
-    thread: ThreadListEntry,
-    gesture: { additive: boolean; range: boolean },
-  ) => void;
-  scrollRef: RefObject<HTMLDivElement | null>;
-  selectedThreadIds: ReadonlySet<string>;
-  threadedMessages: ThreadListEntry[];
-  mailboxId: string;
-};
+import type { MessageListBulkAction, MessageListProps } from "./message-list-types";
+import { MessageListScrollPane } from "./message-list-scroll-pane";
+import { MessageListSelectionToolbar } from "./message-list-selection-toolbar";
+import { useMessageListSelection } from "./use-message-list-selection";
 
 const buildDraftListEntry = (message: MessageListItem): ThreadListEntry => ({
   threadId: message.draftId ?? message.id,
@@ -124,631 +23,24 @@ const buildDraftListEntry = (message: MessageListItem): ThreadListEntry => ({
   unreadCount: 0,
 });
 
-type MessageListBulkAction = {
-  destructive?: boolean;
-  icon: IconSvgElement;
-  id: string;
-  label: string;
-  onSelect: () => void | Promise<void>;
-};
-
-const MessageListLoadingSkeleton = () => (
-  <div className="space-y-1" role="status">
-    <span className="sr-only">Loading messages...</span>
-    {MESSAGE_LIST_SKELETON_ROW_IDS.map((rowId) => (
-      <div
-        aria-hidden="true"
-        className="flex h-[72px] animate-pulse items-center gap-3.5 rounded-xl px-3.5"
-        key={rowId}
-      >
-        <div className="size-10 shrink-0 rounded-lg bg-muted/80" />
-        <div className="min-w-0 flex-1 space-y-2.5">
-          <div className="flex items-center justify-between gap-4">
-            <div className="h-3.5 w-32 rounded-md bg-muted/80" />
-            <div className="h-3 w-12 rounded-md bg-muted/70" />
-          </div>
-          <div className="h-3.5 w-3/4 rounded-md bg-muted/70" />
-        </div>
-      </div>
-    ))}
-  </div>
-);
-
-const MessageListBulkActions = ({
-  actions,
-  disabled,
-}: {
-  actions: readonly MessageListBulkAction[];
-  disabled: boolean;
-}) => (
-  <DropdownMenu>
-    <IconButtonTooltip label="Bulk actions">
-      <DropdownMenuTrigger
-        aria-label="Open bulk actions"
-        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-input bg-background text-foreground shadow-sm outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:bg-muted/80 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
-        disabled={disabled || actions.length === 0}
-        type="button"
-      >
-        <HugeiconsIcon aria-hidden icon={MoreVerticalIcon} />
-      </DropdownMenuTrigger>
-    </IconButtonTooltip>
-
-    <DropdownMenuContent align="end">
-      {actions.map((action) => (
-        <div key={action.id}>
-          <DropdownMenuItem
-            className={cn({ "text-destructive": action.destructive })}
-            onSelect={() => {
-              void action.onSelect();
-            }}
-          >
-            <HugeiconsIcon aria-hidden className="size-4" icon={action.icon} />
-            <span>{action.label}</span>
-          </DropdownMenuItem>
-        </div>
-      ))}
-    </DropdownMenuContent>
-  </DropdownMenu>
-);
-
-const MessageListSelectionToolbar = ({
-  allSelected,
-  disabled,
-  indeterminate,
-  itemLabelPlural,
-  onClearSelection,
-  onToggleAll,
-  selectedCount,
-  actions,
-}: {
-  actions: readonly MessageListBulkAction[];
-  allSelected: boolean;
-  disabled: boolean;
-  indeterminate: boolean;
-  itemLabelPlural: string;
-  onClearSelection: () => void;
-  onToggleAll: (selected: boolean) => void;
-  selectedCount: number;
-}) => (
-  <div className="bg-background-light px-4 py-3">
-    <div className="flex min-w-0 items-center justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <IconButtonTooltip label="Select all">
-          <Checkbox
-            aria-label={`Select all ${itemLabelPlural}`}
-            checked={allSelected}
-            className="size-[18px] rounded-[5px]"
-            disabled={disabled}
-            indeterminate={indeterminate}
-            onCheckedChange={(checked) => {
-              onToggleAll(checked);
-            }}
-          >
-            <CheckboxIndicator />
-          </Checkbox>
-        </IconButtonTooltip>
-
-        <p className="truncate text-sm font-medium text-foreground">{selectedCount} selected</p>
-      </div>
-
-      <div className="flex items-center gap-1">
-        <MessageListBulkActions actions={actions} disabled={disabled || selectedCount === 0} />
-        <IconButtonTooltip label="Clear selection">
-          <Button
-            aria-label="Clear selection"
-            disabled={disabled}
-            onClick={onClearSelection}
-            size="icon-sm"
-            type="button"
-            variant="outline"
-          >
-            <HugeiconsIcon aria-hidden icon={Cancel01Icon} />
-          </Button>
-        </IconButtonTooltip>
-      </div>
-    </div>
-  </div>
-);
-
-const MessageListScrollPane = ({
-  isProgrammaticScrollToTopRef,
-  isSelectionMode,
-  scrollRef,
-  activeMailbox,
-  activeMessageId,
-  isThreadActionPending,
-  error,
-  hasNextPage,
-  isError,
-  isFetchingNextPage,
-  onDeleteDraft,
-  isMessageActionPending,
-  isPending,
-  isRefreshing,
-  messages,
-  onDeleteThreadPermanently,
-  onLoadMore,
-  onMarkThreadAsRead,
-  onMarkThreadAsSpam,
-  onMarkThreadAsUnread,
-  onMoveThreadToTrash,
-  onOpenDraft,
-  onThreadPress,
-  onThreadSelectionPress,
-  onUntrashThread,
-  onUnsubscribe,
-  onUnmarkThreadAsSpam,
-  onUpdateThreadLabels,
-  selectedThreadIds,
-  searchQuery,
-  threadedMessages,
-  mailboxId,
-}: MessageListScrollPaneProps) => {
-  const hasViewportAutoPrefetchedRef = useRef(false);
-  const flattenedMessages = messages.flatMap((page) => page.messages);
-  const threadedMessageIds = threadedMessages.map((thread) => thread.threadId);
-  const messageThreadIds = new Map(
-    flattenedMessages.map((message) => [message.id, message.threadId] as const),
-  );
-  const activeThreadId =
-    (activeMessageId && (messageThreadIds.get(activeMessageId) ?? null)) || null;
-  const isLoadingEmptyMessages = threadedMessages.length === 0 && (isPending || isRefreshing);
-
-  const messageVirtualizer = useVirtualizer({
-    count: threadedMessages.length,
-    estimateSize: () => MESSAGE_ROW_HEIGHT_PX,
-    gap: MESSAGE_ROW_GAP_PX,
-    getItemKey: (index) => threadedMessageIds[index] ?? index,
-    getScrollElement: () => scrollRef.current,
-    overscan: MESSAGE_LIST_OVERSCAN,
-  });
-
-  const tryLoadMore = () => {
-    if (!hasNextPage || isFetchingNextPage || isPending || isError) return;
-    onLoadMore();
-  };
-
-  const shouldPrefetch = (element: HTMLDivElement) => {
-    const distanceToBottom = element.scrollHeight - (element.scrollTop + element.clientHeight);
-    const threshold = Math.max(element.clientHeight, 400);
-    return distanceToBottom <= threshold;
-  };
-
-  const maybeLoadMore = () => {
-    if (!scrollRef.current) return;
-    if (!shouldPrefetch(scrollRef.current)) return;
-    tryLoadMore();
-  };
-
-  useLayoutEffect(() => {
-    if (
-      threadedMessages.length === 0 ||
-      !scrollRef.current ||
-      hasViewportAutoPrefetchedRef.current
-    ) {
-      return;
-    }
-
-    hasViewportAutoPrefetchedRef.current = true;
-    maybeLoadMore();
-  }, [threadedMessages.length]);
-
-  return (
-    <div
-      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pt-2 pb-4 contain-strict"
-      onScroll={() => {
-        if (isProgrammaticScrollToTopRef.current) return;
-        maybeLoadMore();
-      }}
-      ref={scrollRef}
-    >
-      {isLoadingEmptyMessages && <MessageListLoadingSkeleton />}
-
-      {isError && (
-        <p className="px-2 py-8 text-sm text-destructive">
-          {getErrorMessage(error, "Could not load messages.")}
-        </p>
-      )}
-
-      {!isError && threadedMessages.length > 0 && (
-        <ul
-          className="relative"
-          style={{
-            height: `${messageVirtualizer.getTotalSize()}px`,
-          }}
-        >
-          {messageVirtualizer.getVirtualItems().map((virtualItem) => {
-            const thread = threadedMessages[virtualItem.index];
-
-            return (
-              thread && (
-                <MessageRow
-                  activeMailbox={activeMailbox}
-                  className="absolute top-0 left-0 w-full"
-                  dataIndex={virtualItem.index}
-                  isActionPending={
-                    isMessageActionPending?.(thread.anchorMessage.id) ||
-                    isThreadActionPending?.(thread.threadId)
-                  }
-                  isActive={activeThreadId === thread.threadId}
-                  isSelected={selectedThreadIds.has(thread.threadId)}
-                  isSelectionMode={isSelectionMode}
-                  key={thread.threadId}
-                  onDeleteDraft={onDeleteDraft}
-                  onDeleteThreadPermanently={onDeleteThreadPermanently}
-                  onMarkThreadAsRead={onMarkThreadAsRead}
-                  onMarkThreadAsSpam={onMarkThreadAsSpam}
-                  onMarkThreadAsUnread={onMarkThreadAsUnread}
-                  onMoveThreadToTrash={onMoveThreadToTrash}
-                  onOpenDraft={onOpenDraft}
-                  onPress={onThreadPress}
-                  onSelectionPress={onThreadSelectionPress}
-                  onUntrashThread={onUntrashThread}
-                  onUnsubscribe={onUnsubscribe}
-                  onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
-                  onUpdateThreadLabels={onUpdateThreadLabels}
-                  style={{
-                    transform: `translateY(${virtualItem.start}px)`,
-                  }}
-                  thread={thread}
-                  mailboxId={mailboxId}
-                />
-              )
-            );
-          })}
-        </ul>
-      )}
-
-      {!isLoadingEmptyMessages && !isError && threadedMessages.length === 0 && (
-        <p className="px-2 py-8 text-sm text-muted-foreground">
-          {activeMailbox === "drafts"
-            ? searchQuery
-              ? "No drafts found."
-              : "No drafts."
-            : searchQuery
-              ? "No messages found."
-              : "No messages."}
-        </p>
-      )}
-
-      {!isError && threadedMessages.length > 0 && (
-        <p className="px-2 py-5 text-center text-xs text-muted-foreground">
-          {isFetchingNextPage || hasNextPage ? (
-            <HugeiconsIcon
-              className="mx-auto animate-spin text-muted-foreground"
-              icon={Loading03Icon}
-            />
-          ) : (
-            "You're all caught up."
-          )}
-        </p>
-      )}
-    </div>
-  );
-};
-
-const useMessageListSelection = ({
-  activeMailbox,
-  activeThreadId,
-  onActivateMessage,
-  searchQuery,
-  threadedMessages,
-}: {
-  activeMailbox: MailboxCategory;
-  activeThreadId: string | null;
-  onActivateMessage: (messageId: string) => void;
-  searchQuery: string;
-  threadedMessages: ThreadListEntry[];
-}) => {
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const isProgrammaticScrollToTopRef = useRef(false);
-  const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(new Set());
-  const [selectionAnchorThreadId, setSelectionAnchorThreadId] = useState<string | null>(null);
-  const loadedThreadIds = threadedMessages.map((thread) => thread.threadId);
-  const threadById = new Map(threadedMessages.map((thread) => [thread.threadId, thread] as const));
-  const loadedThreadIndexById = new Map(
-    loadedThreadIds.map((threadId, index) => [threadId, index] as const),
-  );
-  const selectedThreads = Array.from(selectedThreadIds)
-    .map((threadId) => threadById.get(threadId))
-    .filter((thread): thread is ThreadListEntry => !!thread);
-  const selectedCount = selectedThreadIds.size;
-  const totalCount = threadedMessages.length;
-  const isSelectionMode = selectedCount > 0;
-  const allSelected = totalCount > 0 && selectedCount === totalCount;
-  const selectionIndeterminate = selectedCount > 0 && !allSelected;
-
-  const waitForSmoothScrollTop = async (element: HTMLDivElement) => {
-    await new Promise<void>((resolve) => {
-      let done = false;
-
-      const cleanup = () => {
-        element.removeEventListener("scroll", onScroll);
-        element.removeEventListener("scrollend", onScrollEnd as EventListener);
-        clearTimeout(timeoutId);
-      };
-
-      const finish = () => {
-        if (done) return;
-        done = true;
-        cleanup();
-        resolve();
-      };
-
-      const onScroll = () => {
-        if (element.scrollTop <= SCROLL_TOP_EPSILON_PX) finish();
-      };
-
-      const onScrollEnd = () => finish();
-      const timeoutId = setTimeout(finish, SCROLL_WAIT_TIMEOUT_MS);
-
-      element.addEventListener("scroll", onScroll, { passive: true });
-
-      if ("onscrollend" in element) {
-        element.addEventListener("scrollend", onScrollEnd as EventListener, { passive: true });
-      }
-
-      if (element.scrollTop <= SCROLL_TOP_EPSILON_PX) finish();
-    });
-  };
-
-  const waitForNextPaint = async () => {
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => resolve());
-      });
-    });
-  };
-
-  const scrollListToTop = () => {
-    if (!scrollRef.current || scrollRef.current.scrollTop <= SCROLL_TOP_EPSILON_PX) {
-      return false;
-    }
-
-    isProgrammaticScrollToTopRef.current = true;
-
-    const scrollElement = scrollRef.current;
-    scrollElement.scrollTo({ top: 0, behavior: "smooth" });
-    void waitForSmoothScrollTop(scrollElement)
-      .then(() => waitForNextPaint())
-      .finally(() => {
-        isProgrammaticScrollToTopRef.current = false;
-      });
-
-    return true;
-  };
-
-  useEffect(() => {
-    setSelectedThreadIds(new Set());
-    setSelectionAnchorThreadId(null);
-  }, [activeMailbox, searchQuery]);
-
-  useEffect(() => {
-    const loadedThreadIdSet = new Set(loadedThreadIds);
-    setSelectedThreadIds((current) => {
-      const nextSelectedIds = Array.from(current).filter((threadId) =>
-        loadedThreadIdSet.has(threadId),
-      );
-      return nextSelectedIds.length === current.size ? current : new Set(nextSelectedIds);
-    });
-    setSelectionAnchorThreadId(
-      (current) => (current && loadedThreadIdSet.has(current) && current) || null,
-    );
-  }, [loadedThreadIds]);
-
-  const clearSelection = () => {
-    setSelectedThreadIds(new Set());
-    setSelectionAnchorThreadId(null);
-  };
-
-  const selectSingleThread = (threadId: string) => {
-    setSelectedThreadIds(new Set([threadId]));
-    setSelectionAnchorThreadId(threadId);
-  };
-
-  const toggleThreadSelection = (threadId: string) => {
-    setSelectedThreadIds((current) => {
-      const next = new Set(current);
-      if (next.has(threadId)) {
-        next.delete(threadId);
-      } else {
-        next.add(threadId);
-      }
-      return next;
-    });
-    setSelectionAnchorThreadId(threadId);
-  };
-
-  const startAdditiveSelection = (threadId: string) => {
-    setSelectedThreadIds(() => {
-      const next = new Set<string>();
-
-      if (activeThreadId && loadedThreadIndexById.has(activeThreadId)) {
-        next.add(activeThreadId);
-      }
-
-      next.add(threadId);
-      return next;
-    });
-    setSelectionAnchorThreadId(threadId);
-  };
-
-  const selectThreadRange = (threadId: string, additive: boolean) => {
-    const targetIndex = loadedThreadIndexById.get(threadId);
-    const fallbackAnchorThreadId =
-      selectionAnchorThreadId ??
-      ((activeThreadId && loadedThreadIndexById.has(activeThreadId) && activeThreadId) || null);
-    const anchorIndex = fallbackAnchorThreadId
-      ? loadedThreadIndexById.get(fallbackAnchorThreadId)
-      : undefined;
-
-    if (targetIndex == null) return;
-
-    setSelectedThreadIds((current) => {
-      if (anchorIndex == null) {
-        if (additive) {
-          const next = new Set(current);
-
-          if (activeThreadId && loadedThreadIndexById.has(activeThreadId)) {
-            next.add(activeThreadId);
-          }
-
-          next.add(threadId);
-          return next;
-        }
-
-        return new Set([threadId]);
-      }
-
-      const next = additive ? new Set(current) : new Set<string>();
-      const startIndex = Math.min(anchorIndex, targetIndex);
-      const endIndex = Math.max(anchorIndex, targetIndex);
-
-      for (let index = startIndex; index <= endIndex; index += 1) {
-        const rangeThreadId = loadedThreadIds[index];
-        if (rangeThreadId) {
-          next.add(rangeThreadId);
-        }
-      }
-
-      return next;
-    });
-    setSelectionAnchorThreadId(threadId);
-  };
-
-  const toggleAllLoadedThreads = (selected: boolean) => {
-    setSelectedThreadIds(selected ? new Set(loadedThreadIds) : new Set());
-    setSelectionAnchorThreadId((selected && (loadedThreadIds[0] ?? null)) || null);
-  };
-
-  const handleThreadSelectionPress = (
-    thread: ThreadListEntry,
-    gesture: { additive: boolean; range: boolean },
-  ) => {
-    if (gesture.range) {
-      selectThreadRange(thread.threadId, gesture.additive);
-      return;
-    }
-
-    if (!isSelectionMode && gesture.additive) {
-      startAdditiveSelection(thread.threadId);
-      return;
-    }
-
-    if (!isSelectionMode && !gesture.additive) {
-      selectSingleThread(thread.threadId);
-      return;
-    }
-
-    toggleThreadSelection(thread.threadId);
-  };
-
-  const handleThreadPress = (
-    thread: ThreadListEntry,
-    gesture: { additive: boolean; range: boolean },
-  ) => {
-    if (gesture.range) {
-      selectThreadRange(thread.threadId, gesture.additive);
-      return;
-    }
-
-    if (!isSelectionMode && gesture.additive) {
-      startAdditiveSelection(thread.threadId);
-      return;
-    }
-
-    if (isSelectionMode && !gesture.additive) {
-      toggleThreadSelection(thread.threadId);
-      return;
-    }
-
-    if (gesture.additive) {
-      toggleThreadSelection(thread.threadId);
-      return;
-    }
-
-    setSelectionAnchorThreadId(thread.threadId);
-    onActivateMessage(thread.anchorMessage.id);
-  };
-
-  useHotkey(
-    "Mod+A",
-    () => {
-      toggleAllLoadedThreads(true);
-    },
-    {
-      enabled: totalCount > 0,
-      ignoreInputs: true,
-      preventDefault: true,
-      stopPropagation: true,
-    },
-  );
-
-  useHotkey(
-    "Escape",
-    () => {
-      clearSelection();
-    },
-    {
-      enabled: isSelectionMode,
-      ignoreInputs: true,
-      preventDefault: true,
-      stopPropagation: true,
-    },
-  );
-
-  return {
-    allSelected,
-    clearSelection,
-    handleThreadPress,
-    handleThreadSelectionPress,
-    isProgrammaticScrollToTopRef,
-    isSelectionMode,
-    scrollListToTop,
-    scrollRef,
-    selectedCount,
-    selectedThreadIds,
-    selectedThreads,
-    selectionIndeterminate,
-    toggleAllLoadedThreads,
-  };
-};
-
 export const MessageList = ({
   activeMailbox,
   activeMessageId,
   mailboxId,
-  onBulkDeleteDrafts,
-  onBulkDeletePermanently,
-  onBulkMarkAsRead,
-  onBulkMarkAsSpam,
-  onBulkMarkAsUnread,
-  onBulkMoveToTrash,
-  onBulkUnmarkAsSpam,
   error,
   hasNextPage,
   isError,
   isFetchingNextPage,
-  onDeleteDraft,
-  isMessageActionPending,
-  isThreadActionPending,
   isPending,
   isRefreshing,
+  mailboxActions,
   messages,
-  onSearch,
   onActivateMessage,
-  onDeleteThreadPermanently,
   onLoadMore,
-  onMarkThreadAsRead,
-  onMarkThreadAsSpam,
-  onMarkThreadAsUnread,
-  onMoveThreadToTrash,
   onOpenDraft,
   onRefresh,
-  onUpdateThreadLabels,
-  onUntrashThread,
-  onUnsubscribe,
-  onUnmarkThreadAsSpam,
+  onSearch,
+  pendingActions,
   searchQuery,
 }: MessageListProps) => {
   const flattenedMessages = messages.flatMap((page) => page.messages);
@@ -771,10 +63,8 @@ export const MessageList = ({
     handleThreadPress,
     handleThreadSelectionPress,
     isProgrammaticScrollToTopRef,
-    isSelectionMode,
     scrollListToTop,
     scrollRef,
-    selectedCount,
     selectedThreadIds,
     selectedThreads,
     selectionIndeterminate,
@@ -788,7 +78,8 @@ export const MessageList = ({
   });
   const isBulkActionPending = selectedThreads.some(
     (thread) =>
-      isMessageActionPending?.(thread.anchorMessage.id) || isThreadActionPending?.(thread.threadId),
+      pendingActions.isMessageActionPending(thread.anchorMessage.id) ||
+      pendingActions.isThreadActionPending(thread.threadId),
   );
 
   const runBulkAction = async (
@@ -813,7 +104,7 @@ export const MessageList = ({
             id: "delete-drafts",
             label: "Delete drafts",
             onSelect: async () => {
-              await runBulkAction(onBulkDeleteDrafts, "Could not delete those drafts.");
+              await runBulkAction(mailboxActions.deleteDrafts, "Could not delete those drafts.");
             },
           },
         ]
@@ -823,7 +114,10 @@ export const MessageList = ({
             id: "mark-threads-read",
             label: "Mark as Read",
             onSelect: async () => {
-              await runBulkAction(onBulkMarkAsRead, "Could not mark those conversations as read.");
+              await runBulkAction(
+                mailboxActions.markThreadsAsRead,
+                "Could not mark those conversations as read.",
+              );
             },
           },
           {
@@ -832,7 +126,7 @@ export const MessageList = ({
             label: "Mark as Unread",
             onSelect: async () => {
               await runBulkAction(
-                onBulkMarkAsUnread,
+                mailboxActions.markThreadsAsUnread,
                 "Could not mark those conversations as unread.",
               );
             },
@@ -846,7 +140,7 @@ export const MessageList = ({
                   label: "Mark as Spam",
                   onSelect: async () => {
                     await runBulkAction(
-                      onBulkMarkAsSpam,
+                      mailboxActions.markThreadsAsSpam,
                       "Could not move those conversations to spam.",
                     );
                   },
@@ -861,7 +155,7 @@ export const MessageList = ({
                   label: "Unmark as Spam",
                   onSelect: async () => {
                     await runBulkAction(
-                      onBulkUnmarkAsSpam,
+                      mailboxActions.unmarkThreadsAsSpam,
                       "Could not remove those conversations from spam.",
                     );
                   },
@@ -875,7 +169,9 @@ export const MessageList = ({
             label: activeMailbox === "trash" ? "Delete permanently" : "Move to Trash",
             onSelect: async () => {
               await runBulkAction(
-                activeMailbox === "trash" ? onBulkDeletePermanently : onBulkMoveToTrash,
+                activeMailbox === "trash"
+                  ? mailboxActions.deleteThreadsPermanently
+                  : mailboxActions.moveThreadsToTrash,
                 activeMailbox === "trash"
                   ? "Could not delete those conversations."
                   : "Could not move those conversations to trash.",
@@ -888,7 +184,7 @@ export const MessageList = ({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {isSelectionMode ? (
+      {selectedThreadIds.size > 0 ? (
         <MessageListSelectionToolbar
           actions={bulkActions}
           allSelected={allSelected}
@@ -897,7 +193,7 @@ export const MessageList = ({
           itemLabelPlural={activeMailbox === "drafts" ? "drafts" : "conversations"}
           onClearSelection={clearSelection}
           onToggleAll={toggleAllLoadedThreads}
-          selectedCount={selectedCount}
+          selectedCount={selectedThreadIds.size}
         />
       ) : (
         <MessageListSearch
@@ -913,7 +209,7 @@ export const MessageList = ({
       <MessageListScrollPane
         key={scrollPaneKey}
         isProgrammaticScrollToTopRef={isProgrammaticScrollToTopRef}
-        isSelectionMode={isSelectionMode}
+        selectedThreadIds={selectedThreadIds}
         scrollRef={scrollRef}
         activeMailbox={activeMailbox}
         activeMessageId={activeMessageId}
@@ -921,28 +217,15 @@ export const MessageList = ({
         hasNextPage={hasNextPage}
         isError={isError}
         isFetchingNextPage={isFetchingNextPage}
-        onDeleteDraft={onDeleteDraft}
-        isMessageActionPending={isMessageActionPending}
-        isThreadActionPending={isThreadActionPending}
         isPending={isPending}
         isRefreshing={isRefreshing}
+        mailboxActions={mailboxActions}
         messages={messages}
-        onDeleteThreadPermanently={onDeleteThreadPermanently}
         onLoadMore={onLoadMore}
-        onMarkThreadAsRead={onMarkThreadAsRead}
-        onMarkThreadAsSpam={onMarkThreadAsSpam}
-        onMarkThreadAsUnread={onMarkThreadAsUnread}
-        onMoveThreadToTrash={onMoveThreadToTrash}
         onOpenDraft={onOpenDraft}
-        onRefresh={onRefresh}
-        onSearch={onSearch}
         onThreadPress={handleThreadPress}
         onThreadSelectionPress={handleThreadSelectionPress}
-        onUntrashThread={onUntrashThread}
-        onUnsubscribe={onUnsubscribe}
-        onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
-        onUpdateThreadLabels={onUpdateThreadLabels}
-        selectedThreadIds={selectedThreadIds}
+        pendingActions={pendingActions}
         searchQuery={searchQuery}
         threadedMessages={threadedMessages}
         mailboxId={mailboxId}

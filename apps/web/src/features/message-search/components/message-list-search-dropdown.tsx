@@ -189,6 +189,7 @@ export const MessageListSearchDropdown = ({
     createPortal(
       <div
         className="fixed z-50"
+        data-search-dropdown-content
         onPointerEnter={cancelCloseLabelsSubmenu}
         onPointerLeave={scheduleCloseLabelsSubmenu}
         style={{
