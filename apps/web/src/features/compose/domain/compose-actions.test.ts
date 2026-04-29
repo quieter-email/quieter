@@ -62,7 +62,11 @@ describe("buildComposeDraftFromMessageAction", () => {
       subject: "Re: Project update",
       bodyHtml: "<p>Already started.</p>",
       bodyText: "Already started.",
-      inReplyTo: "<msg-1@example.com>",
+      draftAnchor: {
+        seededBy: "reply",
+        sourceMessageId: "msg-1",
+        sourceThreadId: "thread-1",
+      },
     } satisfies MessageListItem;
 
     const draft = buildComposeDraftFromMessageAction({

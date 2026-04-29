@@ -171,31 +171,11 @@ export const auth = betterAuth({
     passkey(),
     organization({
       organizationHooks: {
-        beforeDeleteOrganization: async ({ organization, user }) => {
-          if (organization.personalOwnerUserId)
-            throw new APIError("BAD_REQUEST", {
-              message: "Legacy personal organizations cannot be deleted here.",
-            });
-
+        beforeDeleteOrganization: async ({ user }) => {
           await ensureUserOrganizationState(user);
         },
-        beforeRemoveMember: async ({ organization, user }) => {
+        beforeRemoveMember: async ({ user }) => {
           await ensureUserOrganizationState(user);
-
-          if (organization.personalOwnerUserId)
-            throw new APIError("BAD_REQUEST", {
-              message: "Legacy personal organization memberships cannot be changed here.",
-            });
-        },
-      },
-      schema: {
-        organization: {
-          additionalFields: {
-            personalOwnerUserId: {
-              required: false,
-              type: "string",
-            },
-          },
         },
       },
     }),

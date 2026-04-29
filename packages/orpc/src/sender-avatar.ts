@@ -24,11 +24,7 @@ const PERSONAL_EMAIL_DOMAINS = new Set([
 ]);
 
 const getLogoDevPublishableKey = (): string => {
-  return (
-    process.env.NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY ??
-    process.env.VITE_LOGO_DEV_PUBLISHABLE_KEY ??
-    ""
-  ).trim();
+  return (process.env.VITE_LOGO_DEV_PUBLISHABLE_KEY ?? "").trim();
 };
 
 const getClampedAvatarSize = (requestedSize: number | undefined): number => {

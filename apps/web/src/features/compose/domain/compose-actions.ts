@@ -374,7 +374,6 @@ export const findLinkedDraftForMessage = (
     return null;
   }
 
-  const sourceMessageHeaderId = sourceMessage.messageHeaderId?.trim();
   let linkedDraft: MessageListItem | null = null;
 
   for (const message of messages) {
@@ -385,12 +384,8 @@ export const findLinkedDraftForMessage = (
     const matchesByAnchor =
       message.draftAnchor?.sourceMessageId?.trim() === sourceMessage.id &&
       message.draftAnchor?.sourceThreadId?.trim() === sourceMessage.threadId;
-    const matchesByLegacyReply =
-      !message.draftAnchor &&
-      !!sourceMessageHeaderId &&
-      message.inReplyTo?.trim() === sourceMessageHeaderId;
 
-    if (!matchesByAnchor && !matchesByLegacyReply) {
+    if (!matchesByAnchor) {
       continue;
     }
 

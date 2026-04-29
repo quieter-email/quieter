@@ -2,6 +2,7 @@
 
 import type { CSSProperties, PropsWithChildren } from "react";
 import {
+  ArrowUpRight01Icon,
   Delete01Icon,
   Delete02Icon,
   Edit01Icon,
@@ -47,6 +48,7 @@ import {
   type MessageListItem,
 } from "~/lib/gmail/gmail";
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
+import { getMessageUnsubscribeTarget, openUnsubscribeUrl } from "./message-unsubscribe";
 
 type LabelChanges = {
   addLabelIds?: string[];
@@ -494,7 +496,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
   const [openLabelsDialog, setOpenLabelsDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const showMarkAsSpam = props.mailbox === "inbox";
-  const showUnsubscribe = !!props.message.unsubscribeMailto;
+  const unsubscribeTarget = getMessageUnsubscribeTarget(props.message);
 
   if (isDraftMailbox) {
     return {
@@ -554,16 +556,22 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
       label: "Modify Labels",
       onSelect: () => setOpenLabelsDialog(true),
     },
-    ...(showUnsubscribe
+    ...(unsubscribeTarget
       ? [
           {
             type: "item" as const,
             id: "unsubscribe",
-            disabled: isBusy || !actions.onUnsubscribe,
-            icon: Mail01Icon,
+            disabled:
+              unsubscribeTarget.kind === "mailto" ? isBusy || !actions.onUnsubscribe : false,
+            icon: unsubscribeTarget.kind === "mailto" ? Mail01Icon : ArrowUpRight01Icon,
             label: "Unsubscribe",
             onSelect: () => {
-              void actions.onUnsubscribe?.(props.message.id);
+              if (unsubscribeTarget.kind === "mailto") {
+                void actions.onUnsubscribe?.(props.message.id);
+                return;
+              }
+
+              openUnsubscribeUrl(unsubscribeTarget.url);
             },
           },
         ]

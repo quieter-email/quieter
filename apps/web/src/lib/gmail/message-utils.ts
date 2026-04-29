@@ -23,12 +23,10 @@ export const formatMessageDate = (message: MessageListItem, format: "compact" | 
   const parsed = getParsedMessageDate(message);
   if (!parsed) return "";
 
-  return new Intl.DateTimeFormat(
-    undefined,
-    format === "compact"
-      ? { dateStyle: "medium", timeStyle: "short" }
-      : { dateStyle: "long", timeStyle: "short" },
-  ).format(parsed);
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: format === "compact" ? "medium" : "long",
+    timeStyle: "short",
+  }).format(parsed);
 };
 
 export const parseSender = (from?: string) => {

@@ -228,6 +228,7 @@ export type MessageListItem = {
   bodyText?: string;
   attachments?: MessageAttachment[];
   unsubscribeMailto?: string;
+  unsubscribeUrl?: string;
   senderAvatarUrls?: { light: string; dark: string };
   labelIds?: string[];
   isUnread?: boolean;
@@ -614,38 +615,45 @@ const decodeRawMessageText = (raw: string | undefined) => {
   return new TextDecoder().decode(decodeBase64UrlToBytes(raw));
 };
 
-export const extractListUnsubscribeMailto = (value: string | undefined) => {
+export const extractListUnsubscribeTargets = (value: string | undefined) => {
   const normalized = decodeMimeHeaderValue(value)?.trim();
-  if (!normalized) return undefined;
+  let mailto: string | undefined;
+  let url: string | undefined;
 
-  const entries = normalized.match(/<[^>]+>|[^,]+/g) ?? [];
-
-  for (const entry of entries) {
-    const candidate = entry.trim().replace(/^<|>$/g, "").trim();
-    if (!candidate || !candidate.toLowerCase().startsWith("mailto:")) {
+  for (const candidate of normalized
+    ?.match(/<[^>]+>|[^,]+/g)
+    ?.map((entry) => entry.trim().replace(/^<|>$/g, "").trim())
+    .filter(Boolean) ?? []) {
+    const normalizedCandidate = candidate.toLowerCase();
+    if (
+      !normalizedCandidate.startsWith("mailto:") &&
+      !normalizedCandidate.startsWith("http://") &&
+      !normalizedCandidate.startsWith("https://")
+    ) {
       continue;
     }
 
     try {
-      const url = new URL(candidate);
-      if (url.protocol !== "mailto:") {
-        continue;
+      const parsedUrl = new URL(candidate);
+
+      if (!mailto && parsedUrl.protocol === "mailto:") {
+        const pathname = decodeURIComponent(parsedUrl.pathname).trim();
+        const queryTo = parsedUrl.searchParams.get("to")?.trim();
+
+        if (pathname || queryTo) {
+          mailto = candidate;
+        }
       }
 
-      const pathname = decodeURIComponent(url.pathname).trim();
-      const queryTo = url.searchParams.get("to")?.trim();
-
-      if (!pathname && !queryTo) {
-        continue;
+      if (!url && (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:")) {
+        url = candidate;
       }
-
-      return candidate;
     } catch {
       continue;
     }
   }
 
-  return undefined;
+  return { mailto, url };
 };
 
 const resolveRenderablePartBody = async (
@@ -716,6 +724,7 @@ const toMessageListItem = async (
     ? await resolveMessageContent(accessToken, message, signal)
     : { html: undefined, text: undefined };
   const from = getHeader(message, "From");
+  const unsubscribeTargets = extractListUnsubscribeTargets(getHeader(message, "List-Unsubscribe"));
 
   return {
     id: message.id,
@@ -741,7 +750,8 @@ const toMessageListItem = async (
       includeBody || options.includeAttachmentMetadata
         ? extractMessageAttachments(message.payload)
         : undefined,
-    unsubscribeMailto: extractListUnsubscribeMailto(getHeader(message, "List-Unsubscribe")),
+    unsubscribeMailto: unsubscribeTargets.mailto,
+    unsubscribeUrl: unsubscribeTargets.url,
     senderAvatarUrls: await getSenderAvatarUrls(from),
     labelIds,
     isUnread: hasUnreadLabel(labelIds),

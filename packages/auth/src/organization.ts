@@ -1,6 +1,6 @@
 import { db, invitation, member, organization, session, user } from "@quieter/database";
 import { APIError } from "better-auth/api";
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 type AuthUser = typeof user.$inferSelect;
 
@@ -17,37 +17,11 @@ type EnsureUserOrganizationStateResult = {
 };
 
 const getUserOrganizationIds = async (userId: string) => {
-  const rows = await db
-    .select({
-      organizationId: member.organizationId,
-      personalOwnerUserId: organization.personalOwnerUserId,
-    })
-    .from(member)
-    .innerJoin(organization, eq(organization.id, member.organizationId))
-    .where(and(eq(member.userId, userId), isNotNull(organization.personalOwnerUserId)));
-
-  if (rows.length > 0) {
-    const legacyOrganizationIds = rows.map((row) => row.organizationId);
-    const ownedLegacyOrganizationIds = rows
-      .filter((row) => row.personalOwnerUserId === userId)
-      .map((row) => row.organizationId);
-
-    await db.delete(member).where(inArray(member.organizationId, legacyOrganizationIds));
-
-    if (ownedLegacyOrganizationIds.length > 0) {
-      await db
-        .delete(invitation)
-        .where(inArray(invitation.organizationId, ownedLegacyOrganizationIds));
-      await db.delete(member).where(inArray(member.organizationId, ownedLegacyOrganizationIds));
-      await db.delete(organization).where(inArray(organization.id, ownedLegacyOrganizationIds));
-    }
-  }
-
   const organizationRows = await db
     .select({ organizationId: member.organizationId })
     .from(member)
     .innerJoin(organization, eq(organization.id, member.organizationId))
-    .where(and(eq(member.userId, userId), isNull(organization.personalOwnerUserId)));
+    .where(eq(member.userId, userId));
 
   return organizationRows.map((row) => row.organizationId);
 };
@@ -110,20 +84,6 @@ export const getUserById = async (userId: string) => {
 };
 
 export const cleanupOrganizationsForDeletedUser = async (userId: string) => {
-  const legacyOrganizations = await db
-    .select({ id: organization.id })
-    .from(organization)
-    .where(eq(organization.personalOwnerUserId, userId));
-  const legacyOrganizationIds = legacyOrganizations.map(
-    (legacyOrganization) => legacyOrganization.id,
-  );
-
-  if (legacyOrganizationIds.length > 0) {
-    await db.delete(invitation).where(inArray(invitation.organizationId, legacyOrganizationIds));
-    await db.delete(member).where(inArray(member.organizationId, legacyOrganizationIds));
-    await db.delete(organization).where(inArray(organization.id, legacyOrganizationIds));
-  }
-
   await db.delete(invitation).where(eq(invitation.inviterId, userId));
   await db.delete(member).where(eq(member.userId, userId));
 };

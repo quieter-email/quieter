@@ -64,6 +64,7 @@ export const mergeMessagePreservingLoadedDetails = (
     syncedMessage.threadAttachmentCount ?? currentMessage.threadAttachmentCount,
   threadMessageCount: syncedMessage.threadMessageCount ?? currentMessage.threadMessageCount,
   unsubscribeMailto: syncedMessage.unsubscribeMailto ?? currentMessage.unsubscribeMailto,
+  unsubscribeUrl: syncedMessage.unsubscribeUrl ?? currentMessage.unsubscribeUrl,
 });
 
 export const mergeRefreshedMailboxPagesIntoQueryData = (

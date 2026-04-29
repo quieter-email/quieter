@@ -33,7 +33,7 @@
 ## Data + Routing
 
 - App router: [apps/web/src/router.tsx](/E:/Coding/quieter/apps/web/src/router.tsx)
-- Root providers/document: [apps/web/src/routes/__root.tsx](/E:/Coding/quieter/apps/web/src/routes/__root.tsx)
+- Root providers/document: [apps/web/src/routes/\_\_root.tsx](/E:/Coding/quieter/apps/web/src/routes/__root.tsx)
 - API handlers stay under `apps/web/src/routes/api/**`.
 - Use route loaders / TanStack Start server functions for auth guards and request-scoped SSR data.
 - Validate search params with `validateSearch` + Zod (colocated on the route file; settings tab ids are shared via `apps/web/src/features/settings/domain/settings-tab.ts`).
@@ -64,7 +64,7 @@
 ## Schema + Generated Files
 
 - Schema changes go in `packages/database/src/schema.ts`.
-- Use `bun run db:push` by default.
+- Use `bun run db:push --force` by default.
 - Only generate/apply migrations when explicitly needed.
 - Do not hand-edit Drizzle migration snapshots unless repairing generated output.
 - Do not hand-edit `apps/web/src/routeTree.gen.ts`.
@@ -81,6 +81,8 @@
 - Inline one-off schemas or validators used only once or twice instead of extracting a named constant for them.
 - Avoid unnecessary fallback logic and placeholder compatibility code.
 - Inline simple class lists, motion variants, and small constants instead of extracting them.
+- Before finishing an implementation, make the code the cleanest minimal shape: avoid duplicate logic, unnecessary abstraction, single-use helpers, excessive object destructuring, one-line helper functions, unnecessary type guards, impossible-case branching, and defensive checks that do not protect a real boundary.
+- Do not keep legacy code, placeholder compatibility paths, or fallback branches around when the change makes them obsolete. Remove them in the same change, and call out the removal in the handoff when useful.
 
 ## Workflow
 

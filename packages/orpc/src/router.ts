@@ -9,7 +9,7 @@ import {
   deleteDraft,
   deleteMessagePermanently,
   deleteThreadPermanently,
-  extractListUnsubscribeMailto,
+  extractListUnsubscribeTargets,
   getGmailMessageMetadata,
   getMailboxSyncDelta,
   getMessageAttachment,
@@ -649,11 +649,11 @@ export const appRouter = {
       .handler(async ({ context, input }) => {
         return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
           const message = await getGmailMessageMetadata(accessToken, input.messageId, signal);
-          const unsubscribeMailto = extractListUnsubscribeMailto(
+          const unsubscribeMailto = extractListUnsubscribeTargets(
             message.payload?.headers?.find(
               (header) => header.name.toLowerCase() === "list-unsubscribe",
             )?.value,
-          );
+          ).mailto;
 
           if (!unsubscribeMailto) {
             throw new ORPCError("BAD_REQUEST", {

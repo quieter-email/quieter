@@ -12,7 +12,6 @@
         "GOOGLE_CLIENT_SECRET",
         "DATABASE_URL",
         "VITE_LOGO_DEV_PUBLISHABLE_KEY",
-        "NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY",
         "BETTER_AUTH_URL"
       ],
       "passThroughEnv": [
@@ -26,14 +25,7 @@
         "AWS_EC2_METADATA_DISABLED"
       ],
       "inputs": ["$TURBO_DEFAULT$"],
-      "outputs": [
-        "dist/**",
-        ".next/**",
-        "!.next/cache/**",
-        ".output/**",
-        "!.output/cache/**",
-        ".vercel/output/**"
-      ]
+      "outputs": ["dist/**", ".output/**", "!.output/cache/**", ".vercel/output/**"]
     },
     "lint": {
       "dependsOn": ["^lint"],
@@ -102,7 +94,6 @@
         "BUN_INSTALL_CACHE_DIR",
         "SST_BUN_PATH",
         "VITE_LOGO_DEV_PUBLISHABLE_KEY",
-        "NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE_KEY",
         "BETTER_AUTH_URL"
       ],
       "passThroughEnv": ["BUN_INSTALL_CACHE_DIR", "SST_BUN_PATH"],

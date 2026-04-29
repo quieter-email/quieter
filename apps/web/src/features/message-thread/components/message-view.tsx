@@ -3,6 +3,7 @@
 import {
   ArrowDown01Icon,
   ArrowRightDoubleIcon,
+  ArrowUpRight01Icon,
   Edit01Icon,
   Loading03Icon,
   MailRemove01Icon,
@@ -54,6 +55,11 @@ import {
 } from "./message-actions";
 import { MessageAttachments } from "./message-attachments";
 import { MessageBody } from "./message-body";
+import {
+  getMessageUnsubscribeTarget,
+  openUnsubscribeUrl,
+  type MessageUnsubscribeTarget,
+} from "./message-unsubscribe";
 
 type MessageViewProps = {
   activeMailbox: MailboxCategory;
@@ -76,6 +82,11 @@ type MessageHeaderContentProps = {
   trailing?: ReactNode;
 };
 
+type MessageUnsubscribeAction = {
+  kind: MessageUnsubscribeTarget["kind"];
+  onClick: () => void;
+};
+
 const formatEnvelopeValue = (value?: string) => {
   const trimmed = value?.trim();
   return trimmed || null;
@@ -91,6 +102,34 @@ const getMessagesMissingLoadedBody = (messages: readonly MessageListItem[]) =>
   messages.filter(
     (threadMessage) => !!threadMessage.snippet?.trim() && !hasRenderableBody(threadMessage),
   );
+
+const getMessageUnsubscribeAction = (
+  message: MessageListItem,
+  onUnsubscribe?: (messageId: string) => void | Promise<void>,
+): MessageUnsubscribeAction | undefined => {
+  const target = getMessageUnsubscribeTarget(message);
+  if (!target) {
+    return undefined;
+  }
+
+  if (target.kind === "mailto") {
+    if (!onUnsubscribe) {
+      return undefined;
+    }
+
+    return {
+      kind: "mailto",
+      onClick: () => {
+        void onUnsubscribe(message.id);
+      },
+    };
+  }
+
+  return {
+    kind: "url",
+    onClick: () => openUnsubscribeUrl(target.url),
+  };
+};
 
 const MessageHeaderContent = ({
   className,
@@ -206,7 +245,7 @@ const MessageHeaderActions = ({
   onForward: () => void;
   onReply: () => void;
   onReplyAll: () => void;
-  onUnsubscribe?: () => void;
+  onUnsubscribe?: MessageUnsubscribeAction;
   showReplyAll?: boolean;
 }) => (
   <div className={cn("flex items-center justify-end gap-0.5", className)}>
@@ -267,13 +306,16 @@ const MessageHeaderActions = ({
         <Button
           aria-label="Unsubscribe"
           className="text-muted-foreground hover:text-foreground"
-          disabled={isPending}
-          onClick={onUnsubscribe}
+          disabled={isPending && onUnsubscribe.kind === "mailto"}
+          onClick={onUnsubscribe.onClick}
           size="icon-sm"
           type="button"
           variant="ghost"
         >
-          <HugeiconsIcon aria-hidden icon={MailRemove01Icon} />
+          <HugeiconsIcon
+            aria-hidden
+            icon={onUnsubscribe.kind === "mailto" ? MailRemove01Icon : ArrowUpRight01Icon}
+          />
         </Button>
       </IconButtonTooltip>
     )}
@@ -540,13 +582,7 @@ const ThreadMessageCard = ({
               isPending={isActionPending}
               onReply={() => openComposeAction("reply")}
               onReplyAll={() => openComposeAction("reply-all")}
-              onUnsubscribe={
-                message.unsubscribeMailto && onUnsubscribe
-                  ? () => {
-                      void onUnsubscribe(message.id);
-                    }
-                  : undefined
-              }
+              onUnsubscribe={getMessageUnsubscribeAction(message, onUnsubscribe)}
               showReplyAll={hasDistinctReplyAllRecipients(message, currentUserEmail)}
             />
           ) : null
@@ -636,13 +672,7 @@ const SingleMessageCard = ({
             isPending={isActionPending}
             onReply={() => openComposeAction("reply")}
             onReplyAll={() => openComposeAction("reply-all")}
-            onUnsubscribe={
-              message.unsubscribeMailto && onUnsubscribe
-                ? () => {
-                    void onUnsubscribe(message.id);
-                  }
-                : undefined
-            }
+            onUnsubscribe={getMessageUnsubscribeAction(message, onUnsubscribe)}
             showReplyAll={hasDistinctReplyAllRecipients(message, currentUserEmail)}
           />
         }
