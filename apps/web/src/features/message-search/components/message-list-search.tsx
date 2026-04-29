@@ -207,7 +207,6 @@ export const MessageListSearch = ({
 
   const stageState = (nextState: StructuredSearchState) => {
     setDraftState(nextState);
-    publishSearchQuery(serializeStructuredSearchState(nextState));
   };
 
   const updateFilterValue = (index: number, value: string) => {
@@ -315,7 +314,11 @@ export const MessageListSearch = ({
     pendingFocusRef.current = nextFocus;
   };
 
-  const commitState = (nextState: StructuredSearchState, closeAfterCommit = false) => {
+  const commitState = (
+    nextState: StructuredSearchState,
+    closeAfterCommit = false,
+    { refreshIfUnchanged = false }: { refreshIfUnchanged?: boolean } = {},
+  ) => {
     const normalizedState = {
       filters: nextState.filters.filter((filter) => filter.value.trim().length > 0),
       text: normalizeSearchText(nextState.text),
@@ -325,7 +328,7 @@ export const MessageListSearch = ({
     setDraftState(
       normalizedQuery === latestCommittedSearchQueryRef.current ? null : normalizedState,
     );
-    publishSearchQuery(normalizedQuery, { refreshIfUnchanged: true });
+    publishSearchQuery(normalizedQuery, { refreshIfUnchanged });
     if (closeAfterCommit) {
       closeSearchOverlays();
     }
@@ -432,7 +435,7 @@ export const MessageListSearch = ({
 
   const commitOrActivateHighlightedDropdownItem = () => {
     if (!activateHighlightedDropdownItem()) {
-      commitState(currentState, true);
+      commitState(currentState, true, { refreshIfUnchanged: true });
     }
   };
 
@@ -832,7 +835,7 @@ export const MessageListSearch = ({
                   className="size-6 shrink-0 text-muted-foreground hover:text-foreground"
                   onClick={(event) => {
                     event.stopPropagation();
-                    commitState(currentState, true);
+                    commitState(currentState, true, { refreshIfUnchanged: true });
                   }}
                   onMouseDown={(event) => {
                     event.preventDefault();
