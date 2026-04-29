@@ -405,9 +405,7 @@ const MessageActionsDialogs = ({
               <p className="text-sm text-muted-foreground">No custom labels.</p>
             )}
 
-            {state.labelError ? (
-              <p className="text-sm text-destructive">{state.labelError}</p>
-            ) : null}
+            {state.labelError && <p className="text-sm text-destructive">{state.labelError}</p>}
           </DialogBody>
 
           <DialogFooter>
@@ -440,9 +438,7 @@ const MessageActionsDialogs = ({
           </DialogHeader>
 
           <DialogBody>
-            {state.deleteError ? (
-              <p className="text-sm text-destructive">{state.deleteError}</p>
-            ) : null}
+            {state.deleteError && <p className="text-sm text-destructive">{state.deleteError}</p>}
           </DialogBody>
 
           <DialogFooter>
@@ -466,11 +462,11 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
   const isDraftMailbox = props.mailbox === "drafts";
   const isSpamMailbox = props.mailbox === "spam";
   const isTrashMailbox = props.mailbox === "trash";
-  const isBusy = Boolean(props.isPending);
+  const isBusy = !!props.isPending;
   const [openLabelsDialog, setOpenLabelsDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const showMarkAsSpam = props.mailbox === "inbox";
-  const showUnsubscribe = Boolean(props.message.unsubscribeMailto);
+  const showUnsubscribe = !!props.message.unsubscribeMailto;
 
   if (isDraftMailbox) {
     return {

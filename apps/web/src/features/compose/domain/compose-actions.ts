@@ -387,7 +387,7 @@ export const findLinkedDraftForMessage = (
       message.draftAnchor?.sourceThreadId?.trim() === sourceMessage.threadId;
     const matchesByLegacyReply =
       !message.draftAnchor &&
-      Boolean(sourceMessageHeaderId) &&
+      !!sourceMessageHeaderId &&
       message.inReplyTo?.trim() === sourceMessageHeaderId;
 
     if (!matchesByAnchor && !matchesByLegacyReply) {

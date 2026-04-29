@@ -83,13 +83,11 @@ export const createEmptyComposeDraft = (): ComposeDraftState => ({
 
 export const cloneComposeDraft = (draft: ComposeDraftState): ComposeDraftState => ({
   ...draft,
-  draftAnchor: draft.draftAnchor ? { ...draft.draftAnchor } : null,
-  replyContext: draft.replyContext
-    ? {
-        ...draft.replyContext,
-        references: [...draft.replyContext.references],
-      }
-    : null,
+  draftAnchor: draft.draftAnchor && { ...draft.draftAnchor },
+  replyContext: draft.replyContext && {
+    ...draft.replyContext,
+    references: [...draft.replyContext.references],
+  },
   recipients: { ...draft.recipients },
   attachments: draft.attachments.map((attachment) => ({ ...attachment })),
   inlineImages: draft.inlineImages.map((image) => ({ ...image })),
@@ -241,7 +239,7 @@ const hasMeaningfulBodyHtml = (bodyHtml: string): boolean => {
   }
 
   const doc = new DOMParser().parseFromString(normalizedHtml, "text/html");
-  return Boolean(doc.body.querySelector("img,video,audio,iframe"));
+  return !!doc.body.querySelector("img,video,audio,iframe");
 };
 
 export const normalizeComposeBodyHtml = (bodyHtml: string): string => {
@@ -259,7 +257,7 @@ export const getRenderableComposeBodyHtml = (bodyHtml: string, bodyText: string)
   normalizeComposeBodyHtml(bodyHtml) || textToComposeBodyHtml(bodyText);
 
 export const hasComposeDraftContent = (draft: ComposeDraftState): boolean => {
-  return Boolean(
+  return !!(
     normalizeString(draft.recipients.to) ||
     normalizeString(draft.recipients.cc) ||
     normalizeString(draft.recipients.bcc) ||
@@ -267,7 +265,7 @@ export const hasComposeDraftContent = (draft: ComposeDraftState): boolean => {
     normalizeComposeBodyHtml(draft.bodyHtml) ||
     normalizeString(draft.bodyText) ||
     draft.attachments.length > 0 ||
-    draft.inlineImages.length > 0,
+    draft.inlineImages.length > 0
   );
 };
 

@@ -178,7 +178,7 @@ export const MailboxesSettingsPanel = () => {
           <WorkspaceSwitcherSelect />
         </div>
 
-        {isPersonalWorkspace ? (
+        {isPersonalWorkspace && (
           <Button
             disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
             onClick={() => {
@@ -194,7 +194,7 @@ export const MailboxesSettingsPanel = () => {
             />
             {isGmailConnecting ? "Connecting Gmail" : "Add Gmail"}
           </Button>
-        ) : null}
+        )}
       </div>
 
       {isGmailConnecting && (
@@ -204,7 +204,7 @@ export const MailboxesSettingsPanel = () => {
         </div>
       )}
 
-      {connectError ? <p className="text-sm text-destructive">{connectError}</p> : null}
+      {connectError && <p className="text-sm text-destructive">{connectError}</p>}
 
       {mailboxesQuery.isError && (
         <p className="text-sm text-destructive">
@@ -260,7 +260,7 @@ export const MailboxesSettingsPanel = () => {
                       {isDefault ? "Default" : "Set default"}
                     </Button>
 
-                    {isPersonalWorkspace && isGmailMailbox ? (
+                    {isPersonalWorkspace && isGmailMailbox && (
                       <Button
                         disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
                         onClick={() => {
@@ -277,7 +277,7 @@ export const MailboxesSettingsPanel = () => {
                         />
                         Remove
                       </Button>
-                    ) : null}
+                    )}
                   </div>
                 }
                 key={mailbox.id}

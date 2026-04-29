@@ -742,12 +742,12 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       selectedMailboxId ?? "",
       activeMailbox,
       activeSearchQuery,
-      Boolean(selectedMailboxId),
+      !!selectedMailboxId,
     ),
   );
-  const hasLoadedMessages = Boolean(messagesQuery.data?.pages.length);
+  const hasLoadedMessages = !!messagesQuery.data?.pages.length;
   const isLiveSyncEnabled =
-    Boolean(selectedMailboxId) &&
+    !!selectedMailboxId &&
     activeMailbox !== "drafts" &&
     activeSearchQuery.length === 0 &&
     isWindowActive &&
@@ -1090,7 +1090,7 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
 
     void setMailboxSearch({
       messageId: null,
-      query: normalizedQuery.length > 0 ? normalizedQuery : null,
+      query: normalizedQuery || null,
     });
   };
 
@@ -1113,8 +1113,8 @@ const useMailboxWorkspaceModel = (user: MailboxWorkspaceProps["user"]) => {
       activeMessageId,
       defaultMailboxId,
       error: messagesQuery.error ?? null,
-      hasNextPage: Boolean(messagesQuery.hasNextPage),
-      hasMailbox: Boolean(selectedMailboxId),
+      hasNextPage: !!messagesQuery.hasNextPage,
+      hasMailbox: !!selectedMailboxId,
       isFetchingNextPage: messagesQuery.isFetchingNextPage,
       isMessageActionPending,
       isMailboxesPending: mailboxesQuery.isPending,

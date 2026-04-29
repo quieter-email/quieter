@@ -51,7 +51,7 @@ await mkdir(webPublicDir, { recursive: true });
 await mkdir(tempDir, { recursive: true });
 
 const logo = await loadLogoSvg(sourcePath, sourceExt);
-const lightLogo = lightPath ? await loadLogoSvg(lightPath, extname(lightPath).toLowerCase()) : null;
+const lightLogo = lightPath && (await loadLogoSvg(lightPath, extname(lightPath).toLowerCase()));
 const ogLogo = combinationPath
   ? await loadLogoSvg(combinationPath, extname(combinationPath).toLowerCase())
   : logo;
@@ -61,7 +61,10 @@ await writeFile(
   lightLogo ? buildSchemeIconSvg({ dark: logo, light: lightLogo }) : buildStaticIconSvg(logo, 1000),
 );
 await writeFile(resolve(webPublicDir, "safari-pinned-tab.svg"), buildPinnedTabSvg(logo));
-await writeFile(resolve(webPublicDir, "site.webmanifest"), JSON.stringify(buildManifest(), null, 2) + "\n");
+await writeFile(
+  resolve(webPublicDir, "site.webmanifest"),
+  JSON.stringify(buildManifest(), null, 2) + "\n",
+);
 
 const renderJobs = [
   { file: "apple-touch-icon.png", size: 180, svg: buildStaticIconSvg(logo, 1000) },
@@ -116,11 +119,11 @@ function findLightVariant(path: string) {
   const parsed = parse(path);
 
   if (parsed.name.endsWith("_light")) {
-    return existsSync(path) ? path : null;
+    return (existsSync(path) && path) || null;
   }
 
   const candidate = join(dirname(path), `${parsed.name}_light${parsed.ext}`);
-  return existsSync(candidate) ? candidate : null;
+  return (existsSync(candidate) && candidate) || null;
 }
 
 function findCombinationVariant(path: string) {
@@ -128,7 +131,7 @@ function findCombinationVariant(path: string) {
   const name = parsed.name.endsWith("_light") ? "combination_light" : "combination";
   const candidate = join(dirname(path), `${name}${parsed.ext}`);
 
-  return existsSync(candidate) ? candidate : null;
+  return (existsSync(candidate) && candidate) || null;
 }
 
 async function loadLogoSvg(path: string, ext: string) {
@@ -361,7 +364,9 @@ function parsePdfShapes(
     }
   }
 
-  return shapes.filter((shape) => !(shape.kind === "rect" && shape.width === 1000 && shape.height === -1000));
+  return shapes.filter(
+    (shape) => !(shape.kind === "rect" && shape.width === 1000 && shape.height === -1000),
+  );
 }
 
 function multiplyMatrix(left: number[], right: number[]) {

@@ -34,7 +34,7 @@ type ComposeDialogState = {
   showCc: boolean;
 };
 
-const AUTOSAVE_DELAY_MS = 3000;
+const AUTOSAVE_DELAY_MS = 1000;
 
 const createDialogState = (): ComposeDialogState => ({
   draft: createEmptyComposeDraft(),
@@ -43,7 +43,7 @@ const createDialogState = (): ComposeDialogState => ({
   showCc: false,
 });
 
-const getDraftStatusMessage = (draft: ComposeDraftState) => {
+export const getDraftStatusMessage = (draft: ComposeDraftState) => {
   if (draft.saveStatus === "sending") return "Sending message...";
   if (draft.saveStatus === "saving") return "Saving draft...";
   if (draft.saveStatus === "error") return "Draft needs attention";
@@ -82,18 +82,16 @@ export const useComposeDialogController = ({ mailboxId }: { mailboxId: string | 
     setState((current) => ({ ...current, draft }));
   };
 
-  const resetFormToDraft = (draft: ComposeDraftState) => {
-    writeComposeFormValues(form, draftToComposeFormValues(draft));
-  };
-
   const openDraftInDialog = (draft: ComposeDraftState) => {
     activeDraftRef.current = draft;
-    resetFormToDraft(draft);
+
+    writeComposeFormValues(form, draftToComposeFormValues(draft));
+
     setState({
       draft,
       open: true,
-      showBcc: Boolean(draft.recipients.bcc.trim()),
-      showCc: Boolean(draft.recipients.cc.trim()),
+      showBcc: !!draft.recipients.bcc.trim(),
+      showCc: !!draft.recipients.cc.trim(),
     });
   };
 
@@ -120,13 +118,12 @@ export const useComposeDialogController = ({ mailboxId }: { mailboxId: string | 
   };
 
   const shouldSaveDraft = (draft: ComposeDraftState, values: ComposeFormValues) =>
-    mailboxId
-      ? shouldPersistComposeDraft({
-          currentDraft: activeDraftRef.current,
-          nextDraft: draft,
-          values,
-        })
-      : false;
+    !!mailboxId &&
+    shouldPersistComposeDraft({
+      currentDraft: activeDraftRef.current,
+      nextDraft: draft,
+      values,
+    });
 
   const refreshThread = async (draft: ComposeDraftState) => {
     if (!mailboxId) return;
@@ -382,19 +379,14 @@ export const useComposeDialogController = ({ mailboxId }: { mailboxId: string | 
   }, []);
 
   return {
-    activeDraft: state.draft,
     addInlineImageFiles,
     clearActiveDraftError,
-    dialogOpen: state.open,
     discardActiveDraft,
-    draftStatusMessage: getDraftStatusMessage(state.draft),
     form,
     handleDialogOpenChange,
-    isSending: state.draft.saveStatus === "sending",
     openComposeDraft,
     scheduleAutosave,
-    showBcc: state.showBcc,
-    showCc: state.showCc,
+    state,
     toggleRecipientVisibility,
   };
 };

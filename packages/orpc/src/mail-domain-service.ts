@@ -505,7 +505,7 @@ export const createMailDomainSetup = async (input: {
     ? MAIL_DOMAIN_STATUS_VERIFIED
     : MAIL_DOMAIN_STATUS_PENDING;
   const now = new Date();
-  const verifiedAt = status === MAIL_DOMAIN_STATUS_VERIFIED ? now : null;
+  const verifiedAt = (status === MAIL_DOMAIN_STATUS_VERIFIED && now) || null;
   const [existingDomain] = await db
     .select({ id: mailDomain.id, createdAt: mailDomain.createdAt })
     .from(mailDomain)
@@ -606,7 +606,7 @@ export const checkMailDomainSetup = async (input: {
   const status = aggregateMailDomainStatus(checks);
   const now = new Date();
   const verifiedAt =
-    status === MAIL_DOMAIN_STATUS_VERIFIED ? (storedDomain.verifiedAt ?? now) : null;
+    (status === MAIL_DOMAIN_STATUS_VERIFIED && (storedDomain.verifiedAt ?? now)) || null;
   const lastCheckResult = {
     checkedAt: now.toISOString(),
     checks,

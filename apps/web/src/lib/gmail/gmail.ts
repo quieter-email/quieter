@@ -53,7 +53,7 @@ export const applyLabelIdChanges = (
 };
 
 export const isMessageUnread = (message: { isUnread?: boolean; labelIds?: string[] }) => {
-  return message.isUnread ?? Boolean(message.labelIds?.includes("UNREAD"));
+  return message.isUnread ?? !!message.labelIds?.includes("UNREAD");
 };
 
 export const isMessageInMailbox = (message: { labelIds?: string[] }, mailbox: MailboxCategory) => {

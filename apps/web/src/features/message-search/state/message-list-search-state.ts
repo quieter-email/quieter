@@ -184,7 +184,7 @@ export const tokenizeStructuredSearchQuery = (query: string): StructuredSearchQu
     }
 
     const token = readStructuredToken(query, cursor);
-    const filter = token ? parseStructuredSearchFilterToken(token) : null;
+    const filter = token && parseStructuredSearchFilterToken(token);
     if (!filter || !token) {
       cursor += 1;
       continue;

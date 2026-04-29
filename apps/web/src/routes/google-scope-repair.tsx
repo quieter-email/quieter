@@ -17,7 +17,7 @@ const googleScopeRepairSearchSchema = z.object({
     .preprocess((value) => (typeof value === "string" ? value : undefined), z.string().optional())
     .transform((value) => {
       const normalizedValue = value?.trim();
-      return normalizedValue ? normalizedValue : null;
+      return normalizedValue || null;
     }),
 });
 
@@ -82,12 +82,12 @@ function GoogleScopeRepairRouteComponent() {
             Reconnect {repairTarget.emailAddress}
           </h1>
           <p className="text-sm text-muted-foreground">{repairDescription}</p>
-          {returned ? (
+          {returned && (
             <p className="text-sm text-muted-foreground">
               If Google shows multiple accounts, choose {repairTarget.emailAddress}. Quieter will
               keep asking until this mailbox has the required permissions.
             </p>
-          ) : null}
+          )}
         </div>
 
         <div className="pt-1">

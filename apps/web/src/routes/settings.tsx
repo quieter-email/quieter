@@ -12,7 +12,7 @@ const normalizeOptionalString = (value: unknown) => {
   }
 
   const normalizedValue = value.trim();
-  return normalizedValue ? normalizedValue : null;
+  return normalizedValue || null;
 };
 
 const normalizeRelativePath = (value: string | null | undefined) => {

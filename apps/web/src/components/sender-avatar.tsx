@@ -42,9 +42,9 @@ export const SenderAvatar = ({
         className,
       )}
     >
-      {showFallback ? <span className={labelClassName}>{fallbackLabel}</span> : null}
+      {showFallback && <span className={labelClassName}>{fallbackLabel}</span>}
 
-      {canRenderAvatar && activeAvatarUrl ? (
+      {canRenderAvatar && activeAvatarUrl && (
         <img
           alt=""
           aria-hidden="true"
@@ -60,7 +60,7 @@ export const SenderAvatar = ({
           }}
           src={activeAvatarUrl}
         />
-      ) : null}
+      )}
     </div>
   );
 };

@@ -124,7 +124,7 @@ export const ComposeEditor = ({
       id: "bold",
       label: "Bold",
       icon: TextBoldIcon,
-      active: Boolean(editor?.isActive("bold")),
+      active: !!editor?.isActive("bold"),
       disabled: !editor?.can().chain().focus().toggleBold().run(),
       onClick: () => editor?.chain().focus().toggleBold().run(),
     },
@@ -132,7 +132,7 @@ export const ComposeEditor = ({
       id: "italic",
       label: "Italic",
       icon: TextItalicIcon,
-      active: Boolean(editor?.isActive("italic")),
+      active: !!editor?.isActive("italic"),
       disabled: !editor?.can().chain().focus().toggleItalic().run(),
       onClick: () => editor?.chain().focus().toggleItalic().run(),
     },
@@ -140,7 +140,7 @@ export const ComposeEditor = ({
       id: "underline",
       label: "Underline",
       icon: TextUnderlineIcon,
-      active: Boolean(editor?.isActive("underline")),
+      active: !!editor?.isActive("underline"),
       disabled: !editor?.can().chain().focus().toggleUnderline().run(),
       onClick: () => editor?.chain().focus().toggleUnderline().run(),
     },
@@ -148,7 +148,7 @@ export const ComposeEditor = ({
       id: "bullet-list",
       label: "Bullet list",
       icon: LeftToRightListBulletIcon,
-      active: Boolean(editor?.isActive("bulletList")),
+      active: !!editor?.isActive("bulletList"),
       disabled: !editor?.can().chain().focus().toggleBulletList().run(),
       onClick: () => editor?.chain().focus().toggleBulletList().run(),
     },
@@ -156,7 +156,7 @@ export const ComposeEditor = ({
       id: "ordered-list",
       label: "Ordered list",
       icon: LeftToRightListNumberIcon,
-      active: Boolean(editor?.isActive("orderedList")),
+      active: !!editor?.isActive("orderedList"),
       disabled: !editor?.can().chain().focus().toggleOrderedList().run(),
       onClick: () => editor?.chain().focus().toggleOrderedList().run(),
     },
@@ -164,7 +164,7 @@ export const ComposeEditor = ({
       id: "quote",
       label: "Quote",
       icon: QuoteUpIcon,
-      active: Boolean(editor?.isActive("blockquote")),
+      active: !!editor?.isActive("blockquote"),
       disabled: !editor?.can().chain().focus().toggleBlockquote().run(),
       onClick: () => editor?.chain().focus().toggleBlockquote().run(),
     },
@@ -205,7 +205,7 @@ export const ComposeEditor = ({
       <div className="flex shrink-0 items-center gap-1 px-3 pb-3">
         <TooltipGroup>
           {toolbarActions.map((action) => {
-            const isDisabled = Boolean(disabled || action.disabled);
+            const isDisabled = !!(disabled || action.disabled);
 
             return (
               <IconButtonTooltip key={action.id} label={action.label}>

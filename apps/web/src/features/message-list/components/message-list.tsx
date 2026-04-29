@@ -290,7 +290,8 @@ const MessageListScrollPane = ({
   const messageThreadIds = new Map(
     flattenedMessages.map((message) => [message.id, message.threadId] as const),
   );
-  const activeThreadId = activeMessageId ? (messageThreadIds.get(activeMessageId) ?? null) : null;
+  const activeThreadId =
+    (activeMessageId && (messageThreadIds.get(activeMessageId) ?? null)) || null;
   const isLoadingEmptyMessages = threadedMessages.length === 0 && (isPending || isRefreshing);
 
   const messageVirtualizer = useVirtualizer({
@@ -341,15 +342,15 @@ const MessageListScrollPane = ({
       }}
       ref={scrollRef}
     >
-      {isLoadingEmptyMessages ? <MessageListLoadingSkeleton /> : null}
+      {isLoadingEmptyMessages && <MessageListLoadingSkeleton />}
 
-      {isError ? (
+      {isError && (
         <p className="px-2 py-8 text-sm text-destructive">
           {getErrorMessage(error, "Could not load messages.")}
         </p>
-      ) : null}
+      )}
 
-      {!isError && threadedMessages.length > 0 ? (
+      {!isError && threadedMessages.length > 0 && (
         <ul
           className="relative"
           style={{
@@ -359,44 +360,46 @@ const MessageListScrollPane = ({
           {messageVirtualizer.getVirtualItems().map((virtualItem) => {
             const thread = threadedMessages[virtualItem.index];
 
-            return thread ? (
-              <MessageRow
-                activeMailbox={activeMailbox}
-                className="absolute top-0 left-0 w-full"
-                dataIndex={virtualItem.index}
-                isActionPending={
-                  isMessageActionPending?.(thread.anchorMessage.id) ||
-                  isThreadActionPending?.(thread.threadId)
-                }
-                isActive={activeThreadId === thread.threadId}
-                isSelected={selectedThreadIds.has(thread.threadId)}
-                isSelectionMode={isSelectionMode}
-                key={thread.threadId}
-                onDeleteDraft={onDeleteDraft}
-                onDeleteThreadPermanently={onDeleteThreadPermanently}
-                onMarkThreadAsRead={onMarkThreadAsRead}
-                onMarkThreadAsSpam={onMarkThreadAsSpam}
-                onMarkThreadAsUnread={onMarkThreadAsUnread}
-                onMoveThreadToTrash={onMoveThreadToTrash}
-                onOpenDraft={onOpenDraft}
-                onPress={onThreadPress}
-                onSelectionPress={onThreadSelectionPress}
-                onUntrashThread={onUntrashThread}
-                onUnsubscribe={onUnsubscribe}
-                onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
-                onUpdateThreadLabels={onUpdateThreadLabels}
-                style={{
-                  transform: `translateY(${virtualItem.start}px)`,
-                }}
-                thread={thread}
-                mailboxId={mailboxId}
-              />
-            ) : null;
+            return (
+              thread && (
+                <MessageRow
+                  activeMailbox={activeMailbox}
+                  className="absolute top-0 left-0 w-full"
+                  dataIndex={virtualItem.index}
+                  isActionPending={
+                    isMessageActionPending?.(thread.anchorMessage.id) ||
+                    isThreadActionPending?.(thread.threadId)
+                  }
+                  isActive={activeThreadId === thread.threadId}
+                  isSelected={selectedThreadIds.has(thread.threadId)}
+                  isSelectionMode={isSelectionMode}
+                  key={thread.threadId}
+                  onDeleteDraft={onDeleteDraft}
+                  onDeleteThreadPermanently={onDeleteThreadPermanently}
+                  onMarkThreadAsRead={onMarkThreadAsRead}
+                  onMarkThreadAsSpam={onMarkThreadAsSpam}
+                  onMarkThreadAsUnread={onMarkThreadAsUnread}
+                  onMoveThreadToTrash={onMoveThreadToTrash}
+                  onOpenDraft={onOpenDraft}
+                  onPress={onThreadPress}
+                  onSelectionPress={onThreadSelectionPress}
+                  onUntrashThread={onUntrashThread}
+                  onUnsubscribe={onUnsubscribe}
+                  onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
+                  onUpdateThreadLabels={onUpdateThreadLabels}
+                  style={{
+                    transform: `translateY(${virtualItem.start}px)`,
+                  }}
+                  thread={thread}
+                  mailboxId={mailboxId}
+                />
+              )
+            );
           })}
         </ul>
-      ) : null}
+      )}
 
-      {!isLoadingEmptyMessages && !isError && threadedMessages.length === 0 ? (
+      {!isLoadingEmptyMessages && !isError && threadedMessages.length === 0 && (
         <p className="px-2 py-8 text-sm text-muted-foreground">
           {activeMailbox === "drafts"
             ? searchQuery
@@ -406,9 +409,9 @@ const MessageListScrollPane = ({
               ? "No messages found."
               : "No messages."}
         </p>
-      ) : null}
+      )}
 
-      {!isError && threadedMessages.length > 0 ? (
+      {!isError && threadedMessages.length > 0 && (
         <p className="px-2 py-5 text-center text-xs text-muted-foreground">
           {isFetchingNextPage || hasNextPage ? (
             <HugeiconsIcon
@@ -419,7 +422,7 @@ const MessageListScrollPane = ({
             "You're all caught up."
           )}
         </p>
-      ) : null}
+      )}
     </div>
   );
 };
@@ -448,7 +451,7 @@ const useMessageListSelection = ({
   );
   const selectedThreads = Array.from(selectedThreadIds)
     .map((threadId) => threadById.get(threadId))
-    .filter((thread): thread is ThreadListEntry => Boolean(thread));
+    .filter((thread): thread is ThreadListEntry => !!thread);
   const selectedCount = selectedThreadIds.size;
   const totalCount = threadedMessages.length;
   const isSelectionMode = selectedCount > 0;
@@ -528,8 +531,8 @@ const useMessageListSelection = ({
       );
       return nextSelectedIds.length === current.size ? current : new Set(nextSelectedIds);
     });
-    setSelectionAnchorThreadId((current) =>
-      current && loadedThreadIdSet.has(current) ? current : null,
+    setSelectionAnchorThreadId(
+      (current) => (current && loadedThreadIdSet.has(current) && current) || null,
     );
   }, [loadedThreadIds]);
 
@@ -574,7 +577,7 @@ const useMessageListSelection = ({
     const targetIndex = loadedThreadIndexById.get(threadId);
     const fallbackAnchorThreadId =
       selectionAnchorThreadId ??
-      (activeThreadId && loadedThreadIndexById.has(activeThreadId) ? activeThreadId : null);
+      ((activeThreadId && loadedThreadIndexById.has(activeThreadId) && activeThreadId) || null);
     const anchorIndex = fallbackAnchorThreadId
       ? loadedThreadIndexById.get(fallbackAnchorThreadId)
       : undefined;
@@ -615,7 +618,7 @@ const useMessageListSelection = ({
 
   const toggleAllLoadedThreads = (selected: boolean) => {
     setSelectedThreadIds(selected ? new Set(loadedThreadIds) : new Set());
-    setSelectionAnchorThreadId(selected ? (loadedThreadIds[0] ?? null) : null);
+    setSelectionAnchorThreadId((selected && (loadedThreadIds[0] ?? null)) || null);
   };
 
   const handleThreadSelectionPress = (

@@ -10,6 +10,7 @@ import type { ComposeFormValues } from "../domain/compose-form";
 import { hasComposeDraftContent, type ComposeDraftState } from "../domain/draft";
 import { ComposeEditor } from "./compose-editor";
 import {
+  getDraftStatusMessage,
   useComposeDialogController,
   type ComposeDialogController,
 } from "./use-compose-dialog-controller";
@@ -62,7 +63,7 @@ const ComposeTextField = ({
   <div className="space-y-2">
     <div
       className={cn(composeInputFrameClass, className, {
-        "bg-destructive/10": Boolean(errorMessage),
+        "bg-destructive/10": !!errorMessage,
       })}
     >
       <input
@@ -81,7 +82,7 @@ const ComposeTextField = ({
       {endAdornment}
     </div>
 
-    {errorMessage ? <p className="pl-1 text-xs text-destructive">{errorMessage}</p> : null}
+    {errorMessage && <p className="pl-1 text-xs text-destructive">{errorMessage}</p>}
   </div>
 );
 
@@ -130,7 +131,7 @@ const AnimatedRecipientField = ({
 
   return (
     <AnimatePresence initial={false}>
-      {open ? (
+      {open && (
         <m.div
           animate={{ height: "auto", marginTop: 12, opacity: 1, y: 0 }}
           className="overflow-hidden"
@@ -141,7 +142,7 @@ const AnimatedRecipientField = ({
         >
           {children}
         </m.div>
-      ) : null}
+      )}
     </AnimatePresence>
   );
 };
@@ -150,18 +151,13 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
   function ComposeDialog({ mailboxId }, ref) {
     const compose = useComposeDialogController({ mailboxId });
     const {
-      activeDraft,
+      state,
       addInlineImageFiles,
       clearActiveDraftError,
-      dialogOpen,
       discardActiveDraft,
-      draftStatusMessage,
       form,
       handleDialogOpenChange,
-      isSending,
       scheduleAutosave,
-      showBcc,
-      showCc,
       toggleRecipientVisibility,
     } = compose;
 
@@ -174,10 +170,10 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
       },
     }));
 
-    const composeError = activeDraft.errorMessage;
-    const canDiscardDraft = Boolean(activeDraft.draftId || hasComposeDraftContent(activeDraft));
+    const canDiscardDraft = !!(state.draft.draftId || hasComposeDraftContent(state.draft));
+
     return (
-      <Dialog onOpenChange={handleDialogOpenChange} open={dialogOpen}>
+      <Dialog onOpenChange={handleDialogOpenChange} open={state.open}>
         <DialogContent className="max-h-[85vh] w-[min(92vw,46rem)] overflow-hidden bg-background-light p-0 transition-opacity duration-100 data-ending-style:scale-100 data-starting-style:scale-100">
           <form
             action={async () => {
@@ -191,7 +187,9 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
                   <p className="text-sm font-semibold tracking-tight text-foreground">
                     New message
                   </p>
-                  <p className="text-xs text-muted-foreground">{draftStatusMessage}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {getDraftStatusMessage(compose.state.draft)}
+                  </p>
                 </div>
               </div>
 
@@ -203,10 +201,10 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
                     <div className="flex shrink-0 items-center gap-3">
                       <button
                         aria-controls="compose-cc-field"
-                        aria-expanded={showCc}
+                        aria-expanded={state.showCc}
                         className={cn("text-xs transition-colors", {
-                          "text-foreground": showCc,
-                          "text-muted-foreground hover:text-foreground": !showCc,
+                          "text-foreground": state.showCc,
+                          "text-muted-foreground hover:text-foreground": !state.showCc,
                         })}
                         onClick={() => toggleRecipientVisibility("cc")}
                         type="button"
@@ -215,10 +213,10 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
                       </button>
                       <button
                         aria-controls="compose-bcc-field"
-                        aria-expanded={showBcc}
+                        aria-expanded={state.showBcc}
                         className={cn("text-xs transition-colors", {
-                          "text-foreground": showBcc,
-                          "text-muted-foreground hover:text-foreground": !showBcc,
+                          "text-foreground": state.showBcc,
+                          "text-muted-foreground hover:text-foreground": !state.showBcc,
                         })}
                         onClick={() => toggleRecipientVisibility("bcc")}
                         type="button"
@@ -235,7 +233,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
                 />
 
                 <LazyMotion features={domAnimation}>
-                  <AnimatedRecipientField id="compose-cc-field" open={showCc}>
+                  <AnimatedRecipientField id="compose-cc-field" open={state.showCc}>
                     <ComposeFormTextField
                       ariaLabel="Cc recipients"
                       clearActiveDraftError={clearActiveDraftError}
@@ -247,7 +245,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
                     />
                   </AnimatedRecipientField>
 
-                  <AnimatedRecipientField id="compose-bcc-field" open={showBcc}>
+                  <AnimatedRecipientField id="compose-bcc-field" open={state.showBcc}>
                     <ComposeFormTextField
                       ariaLabel="Bcc recipients"
                       clearActiveDraftError={clearActiveDraftError}
@@ -275,7 +273,7 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
                 {(field) => (
                   <ComposeEditor
                     className="flex-1"
-                    disabled={isSending || !mailboxId}
+                    disabled={state.draft.saveStatus === "sending" || !mailboxId}
                     html={field.state.value}
                     onBlur={() => field.handleBlur()}
                     onChange={({ html, text }) => {
@@ -290,20 +288,20 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
               </form.Field>
 
               <div className="flex min-h-10 shrink-0 items-center justify-end gap-3 pt-1">
-                {composeError ? (
+                {state.draft.errorMessage && (
                   <div
                     aria-live="polite"
                     className="mr-auto flex min-w-0 items-center gap-2 text-sm text-destructive"
                   >
                     <HugeiconsIcon className="size-4 shrink-0" icon={AlertCircleIcon} />
-                    <span className="truncate">{composeError}</span>
+                    <span className="truncate">{state.draft.errorMessage}</span>
                   </div>
-                ) : null}
+                )}
 
-                {canDiscardDraft ? (
+                {canDiscardDraft && (
                   <Button
-                    className={cn({ "mr-auto": !composeError })}
-                    disabled={isSending}
+                    className={cn({ "mr-auto": !state.draft.errorMessage })}
+                    disabled={state.draft.saveStatus === "sending"}
                     onClick={() => {
                       void discardActiveDraft();
                     }}
@@ -311,17 +309,17 @@ export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>
                     type="button"
                     variant="ghost"
                   >
-                    {activeDraft.draftId ? "Discard draft" : "Discard"}
+                    {state.draft.draftId ? "Discard draft" : "Discard"}
                   </Button>
-                ) : null}
+                )}
 
                 <Button
-                  disabled={isSending || !mailboxId}
+                  disabled={state.draft.saveStatus === "sending" || !mailboxId}
                   size="sm"
                   type="submit"
-                  variant={activeDraft.saveStatus === "sending" ? "outline" : "default"}
+                  variant={state.draft.saveStatus === "sending" ? "outline" : "default"}
                 >
-                  {activeDraft.saveStatus === "sending" ? (
+                  {state.draft.saveStatus === "sending" ? (
                     <HugeiconsIcon className="animate-spin" icon={Loading03Icon} />
                   ) : (
                     <HugeiconsIcon icon={MailSend02Icon} />

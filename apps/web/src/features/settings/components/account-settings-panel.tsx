@@ -153,13 +153,13 @@ const EditNameDialog = ({
                         }}
                         value={field.state.value}
                       />
-                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                      {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
                     </TextField>
                   );
                 }}
               </form.Field>
 
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
             </DialogBody>
 
             <DialogFooter>
@@ -288,13 +288,13 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
                         type="email"
                         value={field.state.value}
                       />
-                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                      {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
                     </TextField>
                   );
                 }}
               </form.Field>
 
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
             </DialogBody>
 
             <DialogFooter>
@@ -500,7 +500,7 @@ const PasskeysDialog = ({
               )}
             </div>
 
-            {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+            {submitError && <p className="text-sm text-destructive">{submitError}</p>}
           </DialogBody>
 
           <DialogFooter>
@@ -614,13 +614,13 @@ const DeleteAccountDialog = () => {
                         placeholder="delete my account"
                         value={field.state.value}
                       />
-                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                      {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
                     </TextField>
                   );
                 }}
               </form.Field>
 
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
             </DialogBody>
 
             <DialogFooter>
@@ -687,7 +687,7 @@ export const AccountSettingsPanel = ({ initialUser }: AccountSettingsPanelProps)
       <div className="pb-8">
         <h1 className="text-2xl font-medium tracking-tight text-foreground">{user.name}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{user.email}</p>
-        {sessionError ? <p className="mt-4 text-sm text-destructive">{sessionError}</p> : null}
+        {sessionError && <p className="mt-4 text-sm text-destructive">{sessionError}</p>}
       </div>
 
       <div>

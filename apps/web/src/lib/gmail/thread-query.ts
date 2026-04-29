@@ -13,11 +13,11 @@ export const getThreadQueryKey = (mailboxId: string, threadId: string) =>
   ["message-thread", THREAD_QUERY_VERSION, mailboxId, threadId] as const;
 
 const hasRenderableBody = (message: MessageListItem) =>
-  Boolean(message.bodyHtml?.trim() || message.bodyText?.trim());
+  !!(message.bodyHtml?.trim() || message.bodyText?.trim());
 
 const shouldRefreshThreadContent = (data: ThreadMessagesResult | undefined) =>
   !data?.messages.length ||
-  data.messages.some((message) => Boolean(message.snippet?.trim()) && !hasRenderableBody(message));
+  data.messages.some((message) => !!message.snippet?.trim() && !hasRenderableBody(message));
 
 export const getThreadWithDetailsOptions = (
   mailboxId: string,

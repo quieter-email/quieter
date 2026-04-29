@@ -181,7 +181,7 @@ export const AuthScreen = ({ mode }: { mode: "login" | "signup" }) => {
           }}
           className="mt-8 space-y-3"
         >
-          {isSignup ? (
+          {isSignup && (
             <form.Field name="name">
               {(field) => {
                 return (
@@ -204,7 +204,7 @@ export const AuthScreen = ({ mode }: { mode: "login" | "signup" }) => {
                 );
               }}
             </form.Field>
-          ) : null}
+          )}
 
           <form.Field name="email">
             {(field) => {

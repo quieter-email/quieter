@@ -10,7 +10,8 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { cn } from "@quieter/ui";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 import {
   normalizeLabelSelectionKey,
@@ -64,7 +65,7 @@ const SearchDropdownRow = ({
   >
     <HugeiconsIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" icon={icon} />
     <span className="min-w-0 flex-1 truncate">{label}</span>
-    {hint ? <span className="text-[11px] text-muted-foreground">{hint}</span> : null}
+    {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
   </button>
 );
 
@@ -91,6 +92,12 @@ export const MessageListSearchDropdown = ({
   const [labelsConeWidth, setLabelsConeWidth] = useState(320);
   const [labelsConeOriginY, setLabelsConeOriginY] = useState(32);
   const [labelsSubmenuHeight, setLabelsSubmenuHeight] = useState(224);
+  const [labelsSubmenuPosition, setLabelsSubmenuPosition] = useState({
+    left: 0,
+    top: 0,
+    triggerHeight: 32,
+  });
+  const closeLabelsSubmenuTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const labelsSubmenuRef = useRef<HTMLDivElement>(null);
   const labelsTriggerRef = useRef<HTMLButtonElement>(null);
   const selectedUserLabelKeys = new Set(
@@ -104,6 +111,25 @@ export const MessageListSearchDropdown = ({
   const closeLabelsSubmenu = () => {
     setIsLabelsSubmenuOpen(false);
   };
+
+  const cancelCloseLabelsSubmenu = () => {
+    if (!closeLabelsSubmenuTimeoutRef.current) {
+      return;
+    }
+
+    clearTimeout(closeLabelsSubmenuTimeoutRef.current);
+    closeLabelsSubmenuTimeoutRef.current = null;
+  };
+
+  const scheduleCloseLabelsSubmenu = () => {
+    cancelCloseLabelsSubmenu();
+    closeLabelsSubmenuTimeoutRef.current = setTimeout(() => {
+      closeLabelsSubmenu();
+      closeLabelsSubmenuTimeoutRef.current = null;
+    }, 80);
+  };
+
+  useEffect(() => cancelCloseLabelsSubmenu, []);
 
   useLayoutEffect(() => {
     if (!showLabelsSubmenu) {
@@ -119,6 +145,21 @@ export const MessageListSearchDropdown = ({
     setLabelsConeWidth(trigger.offsetWidth + 8);
     setLabelsConeOriginY(trigger.offsetHeight);
     setLabelsSubmenuHeight(submenu.offsetHeight);
+    const triggerRect = trigger.getBoundingClientRect();
+    const submenuWidth = submenu.offsetWidth;
+    const submenuHeight = submenu.offsetHeight;
+    const viewportGap = 8;
+    setLabelsSubmenuPosition({
+      left: Math.min(
+        triggerRect.right + viewportGap,
+        Math.max(viewportGap, window.innerWidth - submenuWidth - viewportGap),
+      ),
+      top: Math.min(
+        triggerRect.top,
+        Math.max(viewportGap, window.innerHeight - submenuHeight - viewportGap),
+      ),
+      triggerHeight: triggerRect.height,
+    });
   }, [showLabelsSubmenu, isLoadingLabels, labelsErrorMessage, userLabels.length]);
 
   const labelsContent = labelsErrorMessage ? (
@@ -141,6 +182,34 @@ export const MessageListSearchDropdown = ({
   ) : (
     <div className="px-2.5 py-2 text-[13px] text-muted-foreground">No custom labels.</div>
   );
+
+  const labelsSubmenu =
+    showLabelsSubmenu &&
+    typeof document !== "undefined" &&
+    createPortal(
+      <div
+        className="fixed z-50"
+        onPointerEnter={cancelCloseLabelsSubmenu}
+        onPointerLeave={scheduleCloseLabelsSubmenu}
+        style={{
+          height: Math.max(labelsSubmenuHeight, labelsSubmenuPosition.triggerHeight),
+          left: labelsSubmenuPosition.left - 8,
+          top: labelsSubmenuPosition.top,
+          width: 296,
+        }}
+      >
+        <div aria-hidden className="absolute top-0 left-0 h-full w-2" />
+        <div
+          aria-label="Labels"
+          className="absolute top-0 left-2 w-72 rounded-lg border border-border bg-popover p-1 shadow-lg"
+          ref={labelsSubmenuRef}
+          role="group"
+        >
+          {labelsContent}
+        </div>
+      </div>,
+      document.body,
+    );
 
   if (!isOpen) {
     return null;
@@ -177,10 +246,11 @@ export const MessageListSearchDropdown = ({
           <div
             className="relative"
             onPointerEnter={() => {
+              cancelCloseLabelsSubmenu();
               setIsLabelsSubmenuOpen(true);
             }}
             onPointerLeave={() => {
-              closeLabelsSubmenu();
+              scheduleCloseLabelsSubmenu();
             }}
           >
             <button
@@ -212,7 +282,7 @@ export const MessageListSearchDropdown = ({
               />
             </button>
 
-            {showLabelsSubmenu ? (
+            {showLabelsSubmenu && (
               <>
                 <svg
                   aria-hidden
@@ -228,16 +298,9 @@ export const MessageListSearchDropdown = ({
                     pointerEvents="all"
                   />
                 </svg>
-                <div
-                  aria-label="Labels"
-                  className="absolute top-0 left-[calc(100%+0.5rem)] z-50 w-72 rounded-lg border border-border bg-popover p-1 shadow-lg"
-                  ref={labelsSubmenuRef}
-                  role="group"
-                >
-                  {labelsContent}
-                </div>
+                {labelsSubmenu}
               </>
-            ) : null}
+            )}
           </div>
         </div>
       </div>

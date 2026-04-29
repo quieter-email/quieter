@@ -1000,10 +1000,8 @@ const updateSingleMessageMutation = async (
 
   const previousMessagesQueries = snapshotMessagesQueries(queryClient, mailboxId);
   const threadId = messageToUpdate?.threadId;
-  const threadQueryKey = threadId ? getThreadQueryKey(mailboxId, threadId) : null;
-  const previousThreadQuery = threadQueryKey
-    ? snapshotThreadQuery(queryClient, threadQueryKey)
-    : null;
+  const threadQueryKey = threadId && getThreadQueryKey(mailboxId, threadId);
+  const previousThreadQuery = threadQueryKey && snapshotThreadQuery(queryClient, threadQueryKey);
   const optimisticMessage = optimisticUpdater(messageToUpdate);
 
   const optimisticTouchedQueryKeys = applyMessageToCachedMailboxQueries(
@@ -1282,10 +1280,8 @@ export const updateMessageLabelsInMailbox = async (
 
   const previousMessagesQueries = snapshotMessagesQueries(queryClient, mailboxId);
   const threadId = messageToUpdate?.threadId;
-  const threadQueryKey = threadId ? getThreadQueryKey(mailboxId, threadId) : null;
-  const previousThreadQuery = threadQueryKey
-    ? snapshotThreadQuery(queryClient, threadQueryKey)
-    : null;
+  const threadQueryKey = threadId && getThreadQueryKey(mailboxId, threadId);
+  const previousThreadQuery = threadQueryKey && snapshotThreadQuery(queryClient, threadQueryKey);
   const optimisticMessage = applyMessageLabelChangesLocally(messageToUpdate, changes);
 
   const optimisticTouchedQueryKeys = applyMessageToCachedMailboxQueries(
@@ -1474,10 +1470,8 @@ export const moveMessageToTrashInMailbox = async (
 
   const previousMessagesQueries = snapshotMessagesQueries(queryClient, mailboxId);
   const threadId = messageToUpdate?.threadId;
-  const threadQueryKey = threadId ? getThreadQueryKey(mailboxId, threadId) : null;
-  const previousThreadQuery = threadQueryKey
-    ? snapshotThreadQuery(queryClient, threadQueryKey)
-    : null;
+  const threadQueryKey = threadId && getThreadQueryKey(mailboxId, threadId);
+  const previousThreadQuery = threadQueryKey && snapshotThreadQuery(queryClient, threadQueryKey);
   const optimisticMessage = moveMessageToTrashLocally(messageToUpdate);
 
   const optimisticTouchedQueryKeys = applyMessageToCachedMailboxQueries(
@@ -1578,10 +1572,8 @@ export const untrashMessageInMailbox = async (
 
   const previousMessagesQueries = snapshotMessagesQueries(queryClient, mailboxId);
   const threadId = messageToUpdate.threadId;
-  const threadQueryKey = threadId ? getThreadQueryKey(mailboxId, threadId) : null;
-  const previousThreadQuery = threadQueryKey
-    ? snapshotThreadQuery(queryClient, threadQueryKey)
-    : null;
+  const threadQueryKey = threadId && getThreadQueryKey(mailboxId, threadId);
+  const previousThreadQuery = threadQueryKey && snapshotThreadQuery(queryClient, threadQueryKey);
   const optimisticMessage = removeMessageFromTrashLocally(messageToUpdate);
 
   const optimisticTouchedQueryKeys = applyMessageToCachedMailboxQueries(
@@ -1707,10 +1699,8 @@ export const deleteMessagePermanentlyInMailbox = async (
 
   const previousMessagesQueries = snapshotMessagesQueries(queryClient, mailboxId);
   const threadId = messageToUpdate?.threadId;
-  const threadQueryKey = threadId ? getThreadQueryKey(mailboxId, threadId) : null;
-  const previousThreadQuery = threadQueryKey
-    ? snapshotThreadQuery(queryClient, threadQueryKey)
-    : null;
+  const threadQueryKey = threadId && getThreadQueryKey(mailboxId, threadId);
+  const previousThreadQuery = threadQueryKey && snapshotThreadQuery(queryClient, threadQueryKey);
 
   const optimisticTouchedQueryKeys = removeMessageFromCachedMailboxQueries(
     queryClient,
@@ -1794,12 +1784,9 @@ export const deleteDraftInMailbox = async (
   }
 
   const previousMessagesQueries = snapshotMessagesQueries(queryClient, mailboxId);
-  const threadQueryKey = messageToUpdate.threadId
-    ? getThreadQueryKey(mailboxId, messageToUpdate.threadId)
-    : null;
-  const previousThreadQuery = threadQueryKey
-    ? snapshotThreadQuery(queryClient, threadQueryKey)
-    : null;
+  const threadQueryKey =
+    messageToUpdate.threadId && getThreadQueryKey(mailboxId, messageToUpdate.threadId);
+  const previousThreadQuery = threadQueryKey && snapshotThreadQuery(queryClient, threadQueryKey);
   const optimisticTouchedQueryKeys = removeMessageFromCachedMailboxQueries(
     queryClient,
     mailboxId,
@@ -1844,7 +1831,7 @@ export const removeDraftMessageFromCaches = async (
   threadId?: string | null,
 ) => {
   const touchedQueryKeys = removeMessageFromCachedMailboxQueries(queryClient, mailboxId, messageId);
-  const threadQueryKey = threadId ? getThreadQueryKey(mailboxId, threadId) : null;
+  const threadQueryKey = threadId && getThreadQueryKey(mailboxId, threadId);
 
   if (threadQueryKey) {
     queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>

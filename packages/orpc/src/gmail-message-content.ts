@@ -264,7 +264,7 @@ const isAttachmentPart = (part: GmailMessagePart): boolean => {
   if (part.filename?.trim()) return true;
 
   const contentDisposition = getContentDisposition(part);
-  return Boolean(contentDisposition?.startsWith("attachment"));
+  return !!contentDisposition?.startsWith("attachment");
 };
 
 const collectParts = (part: GmailMessagePart | undefined): GmailMessagePart[] => {
@@ -289,8 +289,8 @@ export const findRenderablePart = (
       normalizeMimeType(part.mimeType) === mimeType &&
       !isAttachmentPart(part) &&
       (options?.requireInlineData
-        ? Boolean(part.body?.data)
-        : Boolean(part.body?.data || part.body?.attachmentId)),
+        ? !!part.body?.data
+        : !!(part.body?.data || part.body?.attachmentId)),
   );
 
 const findRenderableInlinePart = (

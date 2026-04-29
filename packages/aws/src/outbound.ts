@@ -20,7 +20,7 @@ const outboundPayloadSchema = z
     text: z.string().min(1).optional(),
     to: z.array(z.string().trim().email()).min(1),
   })
-  .refine((input) => Boolean(input.html || input.text), {
+  .refine((input) => !!(input.html || input.text), {
     message: "Either text or html is required.",
     path: ["text"],
   });

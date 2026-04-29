@@ -334,10 +334,10 @@ const normalizeLabelIds = (labelIds: string[] | undefined): string[] | undefined
 };
 
 const hasUnreadLabel = (labelIds: string[] | undefined): boolean =>
-  Boolean(labelIds?.includes(GMAIL_UNREAD_LABEL));
+  !!labelIds?.includes(GMAIL_UNREAD_LABEL);
 
 const hasDraftLabel = (labelIds: string[] | undefined): boolean =>
-  Boolean(labelIds?.includes(MAILBOX_LABELS.drafts));
+  !!labelIds?.includes(MAILBOX_LABELS.drafts);
 
 const isKnownGmailRateLimit = (details: {
   googleReason?: string;
@@ -362,11 +362,11 @@ const isKnownGmailRateLimit = (details: {
   }
 
   const normalizedMessage = details.message?.trim().toLowerCase();
-  return Boolean(
+  return !!(
     normalizedMessage &&
     (normalizedMessage.includes("quota exceeded") ||
       normalizedMessage.includes("rate limit exceeded") ||
-      normalizedMessage.includes("resource exhausted")),
+      normalizedMessage.includes("resource exhausted"))
   );
 };
 
@@ -1122,12 +1122,12 @@ export const listMessagesWithDetails = async (
   ]);
   const detailsById = new Map(
     details
-      .filter((message): message is GmailMessage => Boolean(message))
+      .filter((message): message is GmailMessage => !!message)
       .map((message) => [message.id, message] as const),
   );
   const orderedDetails = list.messages
     .map((message) => detailsById.get(message.id))
-    .filter((message): message is GmailMessage => Boolean(message));
+    .filter((message): message is GmailMessage => !!message);
   const historyId =
     orderedDetails[0]?.historyId ?? (await getGmailProfile(accessToken, options?.signal)).historyId;
 
@@ -1248,7 +1248,7 @@ export const getThreadWithDetails = async (
           .filter(
             (message) =>
               message.labelIds?.includes(MAILBOX_LABELS.drafts) &&
-              Boolean(message.messageHeaderId?.trim()),
+              !!message.messageHeaderId?.trim(),
           )
           .map(async (message) => [
             message.id,
@@ -1260,7 +1260,7 @@ export const getThreadWithDetails = async (
             ),
           ]),
       )
-    ).filter((entry): entry is [string, string] => Boolean(entry[1])),
+    ).filter((entry): entry is [string, string] => !!entry[1]),
   );
 
   const subject = messages.reduce<string | undefined>((resolved, message) => {

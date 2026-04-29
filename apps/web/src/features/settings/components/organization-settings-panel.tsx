@@ -318,7 +318,7 @@ const CreateOrganizationDialog = () => {
                         placeholder="Team name"
                         value={field.state.value}
                       />
-                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                      {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
                     </TextField>
                   );
                 }}
@@ -341,13 +341,13 @@ const CreateOrganizationDialog = () => {
                         placeholder="team-slug"
                         value={field.state.value}
                       />
-                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                      {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
                     </TextField>
                   );
                 }}
               </form.Field>
 
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
             </DialogBody>
 
             <DialogFooter>
@@ -480,7 +480,7 @@ const EditOrganizationDialog = ({
                         }}
                         value={field.state.value}
                       />
-                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                      {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
                     </TextField>
                   );
                 }}
@@ -502,13 +502,13 @@ const EditOrganizationDialog = ({
                         }}
                         value={field.state.value}
                       />
-                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                      {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
                     </TextField>
                   );
                 }}
               </form.Field>
 
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
             </DialogBody>
 
             <DialogFooter>
@@ -632,7 +632,7 @@ const ManagePeopleMemberRoleForm = ({
             )}
           </form.Subscribe>
 
-          {canRemoveMembers ? (
+          {canRemoveMembers && (
             <Button
               disabled={isSavingRole || isRemovingMember}
               onClick={() => void onRemoveMember(member.id)}
@@ -647,7 +647,7 @@ const ManagePeopleMemberRoleForm = ({
               )}
               Remove
             </Button>
-          ) : null}
+          )}
         </form>
       ) : (
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -656,7 +656,7 @@ const ManagePeopleMemberRoleForm = ({
             {isActiveMember ? " / You" : ""}
           </p>
 
-          {canRemoveMembers && !isActiveMember ? (
+          {canRemoveMembers && !isActiveMember && (
             <Button
               disabled={isRemovingMember}
               onClick={() => void onRemoveMember(member.id)}
@@ -670,7 +670,7 @@ const ManagePeopleMemberRoleForm = ({
               )}
               Remove
             </Button>
-          ) : null}
+          )}
         </div>
       )}
     </div>
@@ -717,7 +717,7 @@ const ManagePeoplePendingInvitations = ({
                 </p>
               </div>
 
-              {canCancelInvitations ? (
+              {canCancelInvitations && (
                 <Button
                   disabled={isCancelingInvitation}
                   onClick={() => void onCancelInvitation(invitation.id)}
@@ -735,7 +735,7 @@ const ManagePeoplePendingInvitations = ({
                   )}
                   Cancel
                 </Button>
-              ) : null}
+              )}
             </div>
           );
         })}
@@ -974,7 +974,7 @@ const ManagePeopleDialog = ({
           </DialogHeader>
 
           <DialogBody className="max-h-[70vh] space-y-5 overflow-y-auto">
-            {canInviteMembers ? (
+            {canInviteMembers && (
               <form
                 className="space-y-3"
                 action={async () => {
@@ -1002,9 +1002,7 @@ const ManagePeopleDialog = ({
                               value={field.state.value}
                             />
                           </TextField>
-                          {fieldError ? (
-                            <p className="text-sm text-destructive">{fieldError}</p>
-                          ) : null}
+                          {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
                         </div>
                       );
                     }}
@@ -1054,7 +1052,7 @@ const ManagePeopleDialog = ({
                   </Button>
                 </div>
               </form>
-            ) : null}
+            )}
 
             <ManagePeopleMembersSection
               activeMember={activeMember}
@@ -1076,7 +1074,7 @@ const ManagePeopleDialog = ({
               pendingInvitations={pendingInvitations}
             />
 
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {error && <p className="text-sm text-destructive">{error}</p>}
           </DialogBody>
 
           <DialogFooter>
@@ -1196,13 +1194,13 @@ const LeaveOrganizationDialog = ({
                         placeholder="leave team"
                         value={field.state.value}
                       />
-                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                      {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
                     </TextField>
                   );
                 }}
               </form.Field>
 
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
             </DialogBody>
 
             <DialogFooter>
@@ -1338,13 +1336,13 @@ const DeleteOrganizationDialog = ({
                         placeholder="delete team"
                         value={field.state.value}
                       />
-                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+                      {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
                     </TextField>
                   );
                 }}
               </form.Field>
 
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
             </DialogBody>
 
             <DialogFooter>
@@ -1379,7 +1377,7 @@ const PendingInvitationsSection = () => {
   const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(null);
   const userId = sessionState.data?.user.id ?? "";
   const userInvitationsQuery = useQuery(
-    userInvitationsQueryOptions(userId, Boolean(sessionState.data?.user.email)),
+    userInvitationsQueryOptions(userId, !!sessionState.data?.user.email),
   );
 
   const acceptInvitationMutationOptions = mutationOptions({
@@ -1470,13 +1468,13 @@ const PendingInvitationsSection = () => {
                   onClick={() => void handleInvitationAction(invitation, "accept")}
                   size="sm"
                 >
-                  {isPendingAction && acceptInvitationMutation.isPending ? (
+                  {isPendingAction && acceptInvitationMutation.isPending && (
                     <HugeiconsIcon
                       aria-hidden
                       className="size-4 animate-spin"
                       icon={Loading03Icon}
                     />
-                  ) : null}
+                  )}
                   Accept
                 </Button>
 
@@ -1486,13 +1484,13 @@ const PendingInvitationsSection = () => {
                   size="sm"
                   variant="outline"
                 >
-                  {isPendingAction && rejectInvitationMutation.isPending ? (
+                  {isPendingAction && rejectInvitationMutation.isPending && (
                     <HugeiconsIcon
                       aria-hidden
                       className="size-4 animate-spin"
                       icon={Loading03Icon}
                     />
-                  ) : null}
+                  )}
                   Decline
                 </Button>
               </div>
@@ -1503,7 +1501,7 @@ const PendingInvitationsSection = () => {
           />
         );
       })}
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 };
@@ -1584,14 +1582,14 @@ const OrganizationList = ({
             label={organization.name}
             value={[
               organization.slug,
-              isActive && activeRole ? `${formatRoleLabel(activeRole)} role` : null,
+              isActive && activeRole && `${formatRoleLabel(activeRole)} role`,
             ]
               .filter(Boolean)
               .join(" / ")}
           />
         );
       })}
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 };
@@ -1604,7 +1602,7 @@ export const OrganizationSettingsPanel = () => {
   const activeOrganization = activeOrganizationState.data ?? null;
   const activeWorkspaceId = toWorkspaceId(activeOrganization?.id);
   const organizations = organizationsState.data ?? [];
-  const activeRole = activeMember ? normalizeOrganizationRole(activeMember.role) : null;
+  const activeRole = activeMember && normalizeOrganizationRole(activeMember.role);
   const pendingInvitations =
     activeOrganization?.invitations.filter((invitation) => invitation.status === "pending") ?? [];
   const ownerCount =
@@ -1631,25 +1629,26 @@ export const OrganizationSettingsPanel = () => {
     organization: ["update"],
   });
   const updateOrganizationReason =
-    activeOrganization && !canUpdateOrganization
-      ? "Only admins and owners can edit team details."
-      : null;
+    (activeOrganization &&
+      !canUpdateOrganization &&
+      "Only admins and owners can edit team details.") ||
+    null;
   const leaveOrganizationReason =
-    activeOrganization && activeRole === "owner" && ownerCount <= 1
-      ? "Assign another owner before leaving."
-      : null;
+    (activeOrganization &&
+      activeRole === "owner" &&
+      ownerCount <= 1 &&
+      "Assign another owner before leaving.") ||
+    null;
   const deleteOrganizationReason =
-    activeOrganization && !canDeleteOrganization ? "Only owners can delete teams." : null;
-  const peopleSummary = activeOrganization
-    ? [
-        formatCount(activeOrganization.members.length, "member"),
-        pendingInvitations.length > 0
-          ? formatCount(pendingInvitations.length, "pending invitation")
-          : null,
-      ]
-        .filter(Boolean)
-        .join(", ")
-    : null;
+    (activeOrganization && !canDeleteOrganization && "Only owners can delete teams.") || null;
+  const peopleSummary =
+    activeOrganization &&
+    [
+      formatCount(activeOrganization.members.length, "member"),
+      pendingInvitations.length > 0 && formatCount(pendingInvitations.length, "pending invitation"),
+    ]
+      .filter(Boolean)
+      .join(", ");
 
   return (
     <TooltipGroup>

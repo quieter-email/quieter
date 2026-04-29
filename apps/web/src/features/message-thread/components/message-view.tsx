@@ -93,18 +93,18 @@ type MessageHeaderContentProps = {
 
 const formatEnvelopeValue = (value?: string) => {
   const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
+  return trimmed || null;
 };
 
 const isDraftMessage = (message: MessageListItem) =>
-  Boolean(message.draftId || message.labelIds?.includes(MAILBOX_LABELS.drafts));
+  !!(message.draftId || message.labelIds?.includes(MAILBOX_LABELS.drafts));
 
 const hasRenderableBody = (message: MessageListItem) =>
-  Boolean(message.bodyHtml?.trim() || message.bodyText?.trim());
+  !!(message.bodyHtml?.trim() || message.bodyText?.trim());
 
 const getMessagesMissingLoadedBody = (messages: readonly MessageListItem[]) =>
   messages.filter(
-    (threadMessage) => Boolean(threadMessage.snippet?.trim()) && !hasRenderableBody(threadMessage),
+    (threadMessage) => !!threadMessage.snippet?.trim() && !hasRenderableBody(threadMessage),
   );
 
 const MessageHeaderContent = ({
@@ -123,37 +123,37 @@ const MessageHeaderContent = ({
   const senderInitial = (senderName.trim().charAt(0) || "?").toUpperCase();
   const date = formatMessageDate(message, "full") || "--";
   const preview = previewMode === "collapsed" && !isExpanded ? message.snippet?.trim() || "" : "";
-  const participantRows = [{ label: "To", value: formatEnvelopeValue(message.to) }].filter((row) =>
-    Boolean(row.value),
+  const participantRows = [{ label: "To", value: formatEnvelopeValue(message.to) }].filter(
+    (row) => !!row.value,
   );
   const showParticipants =
-    participantRows.length > 0 && (previewMode !== "collapsed" || Boolean(isExpanded));
+    participantRows.length > 0 && (previewMode !== "collapsed" || !!isExpanded);
   const content = (
     <div className="min-w-0 flex-1">
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-        {isMessageUnread(message) ? (
+        {isMessageUnread(message) && (
           <span aria-hidden className="size-2 rounded-full bg-foreground/75" />
-        ) : null}
+        )}
 
         <span
           className={cn("truncate text-sm text-foreground sm:text-[15px]", senderNameClassName, {
-            "font-semibold text-foreground": Boolean(isExpanded) || isMessageUnread(message),
+            "font-semibold text-foreground": !!isExpanded || isMessageUnread(message),
             "font-medium": !isExpanded && !isMessageUnread(message),
           })}
         >
           {senderName}
         </span>
 
-        {senderEmail ? (
+        {senderEmail && (
           <span className="truncate text-xs text-muted-foreground sm:text-sm">{senderEmail}</span>
-        ) : null}
+        )}
 
         <span className="shrink-0 text-xs text-muted-foreground sm:text-sm">{date}</span>
       </div>
 
-      {preview ? <p className="mt-1 truncate text-sm text-foreground">{preview}</p> : null}
+      {preview && <p className="mt-1 truncate text-sm text-foreground">{preview}</p>}
 
-      {showParticipants ? (
+      {showParticipants && (
         <div className="mt-1.5 space-y-1">
           {participantRows.map((row) => (
             <div className="flex min-w-0 items-baseline gap-2 text-xs sm:text-sm" key={row.label}>
@@ -162,7 +162,7 @@ const MessageHeaderContent = ({
             </div>
           ))}
         </div>
-      ) : null}
+      )}
     </div>
   );
 
@@ -225,7 +225,7 @@ const MessageHeaderActions = ({
   showReplyAll?: boolean;
 }) => (
   <div className={cn("flex items-center justify-end gap-0.5", className)}>
-    {onContinueDraft ? (
+    {onContinueDraft && (
       <IconButtonTooltip label="Continue with draft">
         <Button
           aria-label="Continue with draft"
@@ -238,7 +238,7 @@ const MessageHeaderActions = ({
           <HugeiconsIcon aria-hidden icon={Edit01Icon} />
         </Button>
       </IconButtonTooltip>
-    ) : null}
+    )}
     <IconButtonTooltip label="Reply">
       <Button
         aria-label="Reply"
@@ -251,7 +251,7 @@ const MessageHeaderActions = ({
         <HugeiconsIcon aria-hidden icon={MailReply02Icon} />
       </Button>
     </IconButtonTooltip>
-    {showReplyAll ? (
+    {showReplyAll && (
       <IconButtonTooltip label="Reply all">
         <Button
           aria-label="Reply all"
@@ -264,7 +264,7 @@ const MessageHeaderActions = ({
           <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
         </Button>
       </IconButtonTooltip>
-    ) : null}
+    )}
     <IconButtonTooltip label="Forward">
       <Button
         aria-label="Forward"
@@ -277,7 +277,7 @@ const MessageHeaderActions = ({
         <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
       </Button>
     </IconButtonTooltip>
-    {onUnsubscribe ? (
+    {onUnsubscribe && (
       <IconButtonTooltip label="Unsubscribe">
         <Button
           aria-label="Unsubscribe"
@@ -291,7 +291,7 @@ const MessageHeaderActions = ({
           <HugeiconsIcon aria-hidden icon={MailRemove01Icon} />
         </Button>
       </IconButtonTooltip>
-    ) : null}
+    )}
     <IconButtonTooltip label="Details">
       <Button
         aria-label="Details"
@@ -342,66 +342,68 @@ const MessageInspectorPanel = ({
             <p className="text-sm text-destructive">
               {inspectorQuery.error.message || "Could not load message details."}
             </p>
-          ) : inspector ? (
-            <>
-              <section className="space-y-2">
-                <h3 className="text-sm font-semibold text-foreground">Summary</h3>
-                {[
-                  { label: "Message ID", value: inspector.messageHeaderId },
-                  { label: "Subject", value: inspector.subject },
-                  { label: "Date", value: inspector.date },
-                  { label: "Snippet", value: inspector.snippet },
-                ]
-                  .filter((row) => Boolean(row.value?.trim()))
-                  .map((row) => (
-                    <p className="text-sm text-foreground" key={row.label}>
-                      <span className="font-semibold text-foreground">{row.label}: </span>
-                      <span className="wrap-break-word">{row.value}</span>
+          ) : (
+            inspector && (
+              <>
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground">Summary</h3>
+                  {[
+                    { label: "Message ID", value: inspector.messageHeaderId },
+                    { label: "Subject", value: inspector.subject },
+                    { label: "Date", value: inspector.date },
+                    { label: "Snippet", value: inspector.snippet },
+                  ]
+                    .filter((row) => !!row.value?.trim())
+                    .map((row) => (
+                      <p className="text-sm text-foreground" key={row.label}>
+                        <span className="font-semibold text-foreground">{row.label}: </span>
+                        <span className="wrap-break-word">{row.value}</span>
+                      </p>
+                    ))}
+                </section>
+
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground">Headers</h3>
+                  {inspector.headers.map((header) => (
+                    <p
+                      className="text-sm text-foreground"
+                      key={`${inspector.messageHeaderId}-${header.name}-${header.value}`}
+                    >
+                      <span className="font-semibold text-foreground">{header.name}: </span>
+                      <span className="wrap-break-word">{header.value}</span>
                     </p>
                   ))}
-              </section>
-
-              <section className="space-y-2">
-                <h3 className="text-sm font-semibold text-foreground">Headers</h3>
-                {inspector.headers.map((header) => (
-                  <p
-                    className="text-sm text-foreground"
-                    key={`${inspector.messageHeaderId}-${header.name}-${header.value}`}
-                  >
-                    <span className="font-semibold text-foreground">{header.name}: </span>
-                    <span className="wrap-break-word">{header.value}</span>
-                  </p>
-                ))}
-              </section>
-
-              {inspector.rawText ? (
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Decoded source</h3>
-                  <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground">
-                    {inspector.rawText}
-                  </pre>
                 </section>
-              ) : null}
 
-              {inspector.raw ? (
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Raw Gmail payload</h3>
-                  <pre className="overflow-x-auto text-sm break-all whitespace-pre-wrap text-foreground">
-                    {inspector.raw}
-                  </pre>
-                </section>
-              ) : null}
+                {inspector.rawText && (
+                  <section className="space-y-2">
+                    <h3 className="text-sm font-semibold text-foreground">Decoded source</h3>
+                    <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground">
+                      {inspector.rawText}
+                    </pre>
+                  </section>
+                )}
 
-              {payloadText ? (
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Structured payload</h3>
-                  <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground">
-                    {payloadText}
-                  </pre>
-                </section>
-              ) : null}
-            </>
-          ) : null}
+                {inspector.raw && (
+                  <section className="space-y-2">
+                    <h3 className="text-sm font-semibold text-foreground">Raw Gmail payload</h3>
+                    <pre className="overflow-x-auto text-sm break-all whitespace-pre-wrap text-foreground">
+                      {inspector.raw}
+                    </pre>
+                  </section>
+                )}
+
+                {payloadText && (
+                  <section className="space-y-2">
+                    <h3 className="text-sm font-semibold text-foreground">Structured payload</h3>
+                    <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground">
+                      {payloadText}
+                    </pre>
+                  </section>
+                )}
+              </>
+            )
+          )}
         </DialogBody>
 
         <DialogFooter>
@@ -893,11 +895,11 @@ export const MessageView = ({
           />
         </div>
 
-        {!isSingleMessageThread ? (
+        {!isSingleMessageThread && (
           <p className="mt-2 text-sm text-muted-foreground">
             {visibleMessages.length} {visibleMessages.length === 1 ? "message" : "messages"}
           </p>
-        ) : null}
+        )}
 
         <MessageAttachments
           attachments={threadAttachments}

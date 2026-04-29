@@ -73,7 +73,7 @@ const createBrowserQueryStorage = (): BrowserQueryStorage | undefined => {
 const browserQueryStorage = createBrowserQueryStorage();
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === "object";
+  !!value && typeof value === "object";
 
 const hasText = (value: unknown) => typeof value === "string" && value.trim().length > 0;
 

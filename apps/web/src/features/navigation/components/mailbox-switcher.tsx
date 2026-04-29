@@ -71,9 +71,9 @@ const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => 
   <div className={cn("flex min-w-0 items-center justify-between gap-3 rounded-md", className)}>
     <div className="min-w-0">
       <p className="truncate text-sm text-foreground">{getMailboxTitle(mailbox)}</p>
-      {getMailboxSubtitle() ? (
+      {getMailboxSubtitle() && (
         <p className="truncate text-xs text-muted-foreground">{getMailboxSubtitle()}</p>
-      ) : null}
+      )}
     </div>
 
     {action}
@@ -303,6 +303,6 @@ export const MailboxSettingsRow = ({
 }: Omit<MailboxSummaryProps, "isActive">) => (
   <div className={cn("flex items-center justify-between gap-3 py-3", className)}>
     <MailboxSummary className="min-w-0 flex-1" mailbox={mailbox} />
-    {action ? <div className="shrink-0">{action}</div> : null}
+    {action && <div className="shrink-0">{action}</div>}
   </div>
 );

@@ -485,7 +485,11 @@ export const MessageListSearch = ({
     }
 
     if (activeDropdownIndex !== null && activeDropdownIndex >= dropdownItems.length) {
-      setActiveDropdownIndex(dropdownItems.length > 0 ? dropdownItems.length - 1 : null);
+      if (dropdownItems.length > 0) {
+        setActiveDropdownIndex(dropdownItems.length - 1);
+      } else {
+        setActiveDropdownIndex(null);
+      }
     }
   }, [activeDateFilterIndex, activeDropdownIndex, dropdownItems.length, isDropdownOpen]);
 
@@ -861,37 +865,37 @@ export const MessageListSearch = ({
             </div>
 
             {activeDateFilter &&
-            activeDateFilterIndex !== null &&
-            (activeDateFilter.type === "after" || activeDateFilter.type === "before") ? (
-              <div
-                className="absolute top-full z-40 mt-2 rounded-lg border border-border bg-popover p-2 shadow-lg"
-                style={{ left: datePopoverLeft }}
-              >
-                <Calendar
-                  mode="single"
-                  month={parseDateFilterValue(activeDateFilter.value) ?? new Date()}
-                  onSelect={(date) => {
-                    if (!date) {
-                      return;
-                    }
+              activeDateFilterIndex !== null &&
+              (activeDateFilter.type === "after" || activeDateFilter.type === "before") && (
+                <div
+                  className="absolute top-full z-40 mt-2 rounded-lg border border-border bg-popover p-2 shadow-lg"
+                  style={{ left: datePopoverLeft }}
+                >
+                  <Calendar
+                    mode="single"
+                    month={parseDateFilterValue(activeDateFilter.value) ?? new Date()}
+                    onSelect={(date) => {
+                      if (!date) {
+                        return;
+                      }
 
-                    const nextFilters = [...currentState.filters];
-                    nextFilters[activeDateFilterIndex] = {
-                      ...nextFilters[activeDateFilterIndex],
-                      value: formatDateFilterValue(date),
-                    };
-                    stageState({
-                      ...currentState,
-                      filters: nextFilters,
-                    });
-                    setActiveDateFilterIndex(null);
-                    openDropdown();
-                    pendingFocusRef.current = { kind: "text", toEnd: true };
-                  }}
-                  selected={parseDateFilterValue(activeDateFilter.value)}
-                />
-              </div>
-            ) : null}
+                      const nextFilters = [...currentState.filters];
+                      nextFilters[activeDateFilterIndex] = {
+                        ...nextFilters[activeDateFilterIndex],
+                        value: formatDateFilterValue(date),
+                      };
+                      stageState({
+                        ...currentState,
+                        filters: nextFilters,
+                      });
+                      setActiveDateFilterIndex(null);
+                      openDropdown();
+                      pendingFocusRef.current = { kind: "text", toEnd: true };
+                    }}
+                    selected={parseDateFilterValue(activeDateFilter.value)}
+                  />
+                </div>
+              )}
 
             <MessageListSearchDropdown
               draftSearchState={currentState}

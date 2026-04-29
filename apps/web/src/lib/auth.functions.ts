@@ -4,7 +4,7 @@ import { getGoogleScopeRepairTargetForRequest, getSessionUserForRequest } from "
 
 const normalizeOptionalString = (value: string | null | undefined) => {
   const normalizedValue = value?.trim();
-  return normalizedValue ? normalizedValue : null;
+  return normalizedValue || null;
 };
 
 export const getSessionUser = createServerFn({ method: "GET" }).handler(async () => {

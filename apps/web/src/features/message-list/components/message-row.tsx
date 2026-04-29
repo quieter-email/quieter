@@ -102,7 +102,7 @@ const MessageRowContent = ({
   const unread = !isDraftMailbox && thread.unreadCount > 0;
   const threaded = thread.messageCount > 1;
   const attachmentCount = thread.attachmentCount;
-  const showSelectionControl = Boolean(isSelectionMode);
+  const showSelectionControl = !!isSelectionMode;
   const metaTextClassName = cn("text-xs tabular-nums", {
     "font-semibold text-foreground/90": unread,
     "text-muted-foreground": !unread,
@@ -171,16 +171,16 @@ const MessageRowContent = ({
         },
       )}
     >
-      {unread ? (
+      {unread && (
         <span
           aria-hidden
           className="pointer-events-none absolute top-1/2 left-0 h-9 w-[3px] -translate-y-1/2 rounded-r-full bg-primary"
         />
-      ) : null}
+      )}
       <div className="relative ml-3.5 flex h-full w-10 shrink-0 items-center justify-center">
         <button
           aria-label={selectionAriaLabel}
-          aria-pressed={Boolean(isSelected)}
+          aria-pressed={!!isSelected}
           className={cn(
             "absolute inset-0 flex items-center justify-center rounded-xl transition-[opacity,transform] duration-100 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
             {
@@ -203,7 +203,7 @@ const MessageRowContent = ({
 
         <button
           aria-label={selectionAriaLabel}
-          aria-pressed={Boolean(isSelected)}
+          aria-pressed={!!isSelected}
           className={cn(
             "absolute inset-0 flex items-center justify-center rounded-xl transition-[opacity,transform] duration-100 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
             {
@@ -295,19 +295,17 @@ const MessageRowContent = ({
             <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 overflow-hidden">
               <div className="flex w-full min-w-0 items-center justify-between gap-2">
                 <p className="min-w-0 truncate text-left text-sm text-foreground">
-                  {isDraftMailbox ? (
-                    <span className="font-medium text-muted-foreground">To </span>
-                  ) : null}
+                  {isDraftMailbox && <span className="font-medium text-muted-foreground">To </span>}
                   <span className={cn({ "font-semibold": unread, "font-medium": !unread })}>
                     {senderLabel}
                   </span>
-                  {senderEmail ? (
+                  {senderEmail && (
                     <span className="ml-2 text-xs text-muted-foreground">{senderEmail}</span>
-                  ) : null}
+                  )}
                 </p>
 
                 <div className="flex shrink-0 items-center gap-2">
-                  {attachmentCount > 0 ? (
+                  {attachmentCount > 0 && (
                     <MessageRowMetaBadge
                       icon={FileAttachmentIcon}
                       label={String(attachmentCount)}
@@ -317,8 +315,8 @@ const MessageRowContent = ({
                           : `This thread has ${attachmentCount} attachments.`
                       }
                     />
-                  ) : null}
-                  {threaded ? (
+                  )}
+                  {threaded && (
                     <MessageRowMetaBadge
                       icon={MessageMultiple01Icon}
                       label={String(thread.messageCount)}
@@ -328,7 +326,7 @@ const MessageRowContent = ({
                           : `This thread has ${thread.messageCount} messages.`
                       }
                     />
-                  ) : null}
+                  )}
                   <span className={metaTextClassName}>{date || "--"}</span>
                 </div>
               </div>
