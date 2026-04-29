@@ -27,6 +27,10 @@ import {
 } from "@quieter/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import type {
+  MailboxActions,
+  MailboxPendingActions,
+} from "~/features/mailbox/components/mailbox-action-handlers";
 import { SenderAvatar } from "~/components/sender-avatar";
 import {
   type ComposeDraftState,
@@ -44,7 +48,10 @@ import {
 import { getMessageInspectorOptions } from "~/lib/gmail/message-inspector-query";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
-import { MessageActionsDropdown } from "./message-actions";
+import {
+  createMailboxThreadMessageActionHandlers,
+  MessageActionsDropdown,
+} from "./message-actions";
 import { MessageAttachments } from "./message-attachments";
 import { MessageBody } from "./message-body";
 
@@ -52,32 +59,10 @@ type MessageViewProps = {
   activeMailbox: MailboxCategory;
   currentUserEmail?: string | null;
   mailboxId: string;
+  mailboxActions: MailboxActions;
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
-  onMarkThreadAsRead?: (threadId: string) => void | Promise<void>;
-  onMarkThreadAsUnread?: (threadId: string) => void | Promise<void>;
-  onMarkAsRead?: (messageId: string) => void | Promise<void>;
-  onMarkAsSpam?: (messageId: string) => void | Promise<void>;
-  onMarkAsUnread?: (messageId: string) => void | Promise<void>;
-  onMarkThreadAsSpam?: (threadId: string) => void | Promise<void>;
-  onUpdateLabels?: (
-    messageId: string,
-    changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
-  ) => void | Promise<void>;
-  onUpdateThreadLabels?: (
-    threadId: string,
-    changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
-  ) => void | Promise<void>;
-  onMoveThreadToTrash?: (threadId: string) => void | Promise<void>;
-  onMoveToTrash?: (messageId: string) => void | Promise<void>;
-  onUntrashThread?: (threadId: string) => void | Promise<void>;
-  onUntrash?: (messageId: string) => void | Promise<void>;
-  onUnsubscribe?: (messageId: string) => void | Promise<void>;
-  onUnmarkThreadAsSpam?: (threadId: string) => void | Promise<void>;
-  onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
-  onDeleteThreadPermanently?: (threadId: string) => void | Promise<void>;
-  onDeletePermanently?: (messageId: string) => void | Promise<void>;
-  isActionPending?: boolean;
+  pendingActions: MailboxPendingActions;
 };
 
 type MessageHeaderContentProps = {
@@ -741,18 +726,10 @@ export const MessageView = ({
   activeMailbox,
   mailboxId,
   currentUserEmail,
-  isActionPending,
+  mailboxActions,
   message,
   onComposeDraftRequested,
-  onMarkThreadAsRead,
-  onMarkThreadAsSpam,
-  onMarkThreadAsUnread,
-  onMoveThreadToTrash,
-  onDeleteThreadPermanently,
-  onUntrashThread,
-  onUnsubscribe,
-  onUnmarkThreadAsSpam,
-  onUpdateThreadLabels,
+  pendingActions,
 }: MessageViewProps) => {
   const threadQuery = useQuery({
     ...getThreadWithDetailsOptions(mailboxId, activeMailbox, message.threadId),
@@ -802,6 +779,9 @@ export const MessageView = ({
   );
   const autoMarkedThreadIdsRef = useRef<Set<string>>(new Set());
   const bodyRefreshRequestKeyRef = useRef<string | null>(null);
+  const isActionPending =
+    pendingActions.isMessageActionPending(message.id) ||
+    pendingActions.isThreadActionPending(message.threadId);
 
   useEffect(() => {
     if (!hasMissingLoadedBody) {
@@ -837,20 +817,16 @@ export const MessageView = ({
       return;
     }
 
-    if (
-      isActionPending ||
-      !onMarkThreadAsRead ||
-      autoMarkedThreadIdsRef.current.has(message.threadId)
-    ) {
+    if (isActionPending || autoMarkedThreadIdsRef.current.has(message.threadId)) {
       return;
     }
 
     autoMarkedThreadIdsRef.current.add(message.threadId);
 
-    Promise.resolve(onMarkThreadAsRead(message.threadId)).catch(() => {
+    Promise.resolve(mailboxActions.markThreadAsRead(message.threadId)).catch(() => {
       autoMarkedThreadIdsRef.current.delete(message.threadId);
     });
-  }, [isActionPending, message.threadId, onMarkThreadAsRead, threadIsUnread]);
+  }, [isActionPending, mailboxActions, message.threadId, threadIsUnread]);
 
   return (
     <article className="-mx-4 w-auto sm:-mx-5 lg:-mx-6">
@@ -861,37 +837,15 @@ export const MessageView = ({
           </h1>
 
           <MessageActionsDropdown
+            actions={createMailboxThreadMessageActionHandlers({
+              mailboxActions,
+              threadId: message.threadId,
+            })}
             isPending={isActionPending}
             isUnread={threadIsUnread}
             mailbox={activeMailbox}
             mailboxId={mailboxId}
             message={message}
-            onMarkAsRead={() => {
-              void onMarkThreadAsRead?.(message.threadId);
-            }}
-            onMarkAsSpam={() => {
-              void onMarkThreadAsSpam?.(message.threadId);
-            }}
-            onMarkAsUnread={() => {
-              void onMarkThreadAsUnread?.(message.threadId);
-            }}
-            onMoveToTrash={() => {
-              void onMoveThreadToTrash?.(message.threadId);
-            }}
-            onUntrash={() => {
-              void onUntrashThread?.(message.threadId);
-            }}
-            onUnmarkAsSpam={() => {
-              void onUnmarkThreadAsSpam?.(message.threadId);
-            }}
-            onUpdateLabels={
-              onUpdateThreadLabels
-                ? (_messageId, changes) => onUpdateThreadLabels(message.threadId, changes)
-                : undefined
-            }
-            onDeletePermanently={() => {
-              void onDeleteThreadPermanently?.(message.threadId);
-            }}
           />
         </div>
 
@@ -918,7 +872,7 @@ export const MessageView = ({
           mailboxId={mailboxId}
           messages={visibleMessages}
           onComposeDraftRequested={onComposeDraftRequested}
-          onUnsubscribe={onUnsubscribe}
+          onUnsubscribe={mailboxActions.unsubscribeFromMessage}
         />
       ) : (
         visibleMessages.map((threadMessage) => (
@@ -931,7 +885,7 @@ export const MessageView = ({
             mailboxId={mailboxId}
             message={threadMessage}
             onComposeDraftRequested={onComposeDraftRequested}
-            onUnsubscribe={onUnsubscribe}
+            onUnsubscribe={mailboxActions.unsubscribeFromMessage}
           />
         ))
       )}

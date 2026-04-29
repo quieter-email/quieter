@@ -60,9 +60,6 @@ export const MessageDetail = ({
   selectedMessage,
   mailboxId,
 }: MessageDetailProps) => {
-  const isActionPending =
-    pendingActions.isMessageActionPending(selectedMessage?.id) ||
-    pendingActions.isThreadActionPending(selectedMessage?.threadId);
   const emptyState =
     activeMailbox === "drafts" ? (
       <EmptyMessageState
@@ -95,27 +92,11 @@ export const MessageDetail = ({
             <MessageView
               activeMailbox={activeMailbox}
               currentUserEmail={currentUserEmail}
-              isActionPending={isActionPending}
+              mailboxActions={mailboxActions}
               mailboxId={mailboxId}
               message={selectedMessage}
               onComposeDraftRequested={onComposeDraftRequested}
-              onDeletePermanently={mailboxActions.deleteMessagePermanently}
-              onDeleteThreadPermanently={mailboxActions.deleteThreadPermanently}
-              onMarkAsRead={mailboxActions.markMessageAsRead}
-              onMarkAsSpam={mailboxActions.markMessageAsSpam}
-              onMarkAsUnread={mailboxActions.markMessageAsUnread}
-              onMarkThreadAsRead={mailboxActions.markThreadAsRead}
-              onMarkThreadAsSpam={mailboxActions.markThreadAsSpam}
-              onMarkThreadAsUnread={mailboxActions.markThreadAsUnread}
-              onMoveThreadToTrash={mailboxActions.moveThreadToTrash}
-              onMoveToTrash={mailboxActions.moveMessageToTrash}
-              onUntrash={mailboxActions.untrashMessage}
-              onUntrashThread={mailboxActions.untrashThread}
-              onUnsubscribe={mailboxActions.unsubscribeFromMessage}
-              onUnmarkAsSpam={mailboxActions.unmarkMessageAsSpam}
-              onUnmarkThreadAsSpam={mailboxActions.unmarkThreadAsSpam}
-              onUpdateLabels={mailboxActions.updateMessageLabels}
-              onUpdateThreadLabels={mailboxActions.updateThreadLabels}
+              pendingActions={pendingActions}
             />
           </Suspense>
         ) : (

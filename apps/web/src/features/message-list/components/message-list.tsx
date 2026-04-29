@@ -23,29 +23,10 @@ const buildDraftListEntry = (message: MessageListItem): ThreadListEntry => ({
   unreadCount: 0,
 });
 
-export const MessageList = ({
-  activeMailbox,
-  activeMessageId,
-  mailboxId,
-  error,
-  hasNextPage,
-  isError,
-  isFetchingNextPage,
-  isPending,
-  isRefreshing,
-  mailboxActions,
-  messages,
-  onActivateMessage,
-  onLoadMore,
-  onOpenDraft,
-  onRefresh,
-  onSearch,
-  pendingActions,
-  searchQuery,
-}: MessageListProps) => {
-  const flattenedMessages = messages.flatMap((page) => page.messages);
+export const MessageList = (props: MessageListProps) => {
+  const flattenedMessages = props.messages.flatMap((page) => page.messages);
   const threadedMessages =
-    activeMailbox === "drafts"
+    props.activeMailbox === "drafts"
       ? flattenedMessages.map((message) => buildDraftListEntry(message))
       : buildThreadListEntries(flattenedMessages);
   const messageThreadIds = new Map(
@@ -54,49 +35,37 @@ export const MessageList = ({
     }),
   );
   const activeThreadId =
-    activeMailbox === "drafts" || !activeMessageId
+    props.activeMailbox === "drafts" || !props.activeMessageId
       ? null
-      : (messageThreadIds.get(activeMessageId) ?? null);
-  const {
-    allSelected,
-    clearSelection,
-    handleThreadPress,
-    handleThreadSelectionPress,
-    isProgrammaticScrollToTopRef,
-    scrollListToTop,
-    scrollRef,
-    selectedThreadIds,
-    selectedThreads,
-    selectionIndeterminate,
-    toggleAllLoadedThreads,
-  } = useMessageListSelection({
-    activeMailbox,
+      : (messageThreadIds.get(props.activeMessageId) ?? null);
+  const selection = useMessageListSelection({
+    activeMailbox: props.activeMailbox,
     activeThreadId,
-    onActivateMessage,
-    searchQuery,
+    onActivateMessage: props.onActivateMessage,
+    searchQuery: props.searchQuery,
     threadedMessages,
   });
-  const isBulkActionPending = selectedThreads.some(
+  const isBulkActionPending = selection.selectedThreads.some(
     (thread) =>
-      pendingActions.isMessageActionPending(thread.anchorMessage.id) ||
-      pendingActions.isThreadActionPending(thread.threadId),
+      props.pendingActions.isMessageActionPending(thread.anchorMessage.id) ||
+      props.pendingActions.isThreadActionPending(thread.threadId),
   );
 
   const runBulkAction = async (
     action: (threads: ThreadListEntry[]) => void | Promise<void>,
     fallbackMessage: string,
   ) => {
-    if (selectedThreads.length === 0) return;
+    if (selection.selectedThreads.length === 0) return;
 
     try {
-      await action(selectedThreads);
+      await action(selection.selectedThreads);
     } catch (error) {
       toast.error(getErrorMessage(error, fallbackMessage));
     }
   };
 
   const bulkActions: MessageListBulkAction[] =
-    activeMailbox === "drafts"
+    props.activeMailbox === "drafts"
       ? [
           {
             destructive: true,
@@ -104,7 +73,10 @@ export const MessageList = ({
             id: "delete-drafts",
             label: "Delete drafts",
             onSelect: async () => {
-              await runBulkAction(mailboxActions.deleteDrafts, "Could not delete those drafts.");
+              await runBulkAction(
+                props.mailboxActions.deleteDrafts,
+                "Could not delete those drafts.",
+              );
             },
           },
         ]
@@ -115,7 +87,7 @@ export const MessageList = ({
             label: "Mark as Read",
             onSelect: async () => {
               await runBulkAction(
-                mailboxActions.markThreadsAsRead,
+                props.mailboxActions.markThreadsAsRead,
                 "Could not mark those conversations as read.",
               );
             },
@@ -126,12 +98,12 @@ export const MessageList = ({
             label: "Mark as Unread",
             onSelect: async () => {
               await runBulkAction(
-                mailboxActions.markThreadsAsUnread,
+                props.mailboxActions.markThreadsAsUnread,
                 "Could not mark those conversations as unread.",
               );
             },
           },
-          ...(activeMailbox === "inbox"
+          ...(props.activeMailbox === "inbox"
             ? [
                 {
                   destructive: true,
@@ -140,14 +112,14 @@ export const MessageList = ({
                   label: "Mark as Spam",
                   onSelect: async () => {
                     await runBulkAction(
-                      mailboxActions.markThreadsAsSpam,
+                      props.mailboxActions.markThreadsAsSpam,
                       "Could not move those conversations to spam.",
                     );
                   },
                 } satisfies MessageListBulkAction,
               ]
             : []),
-          ...(activeMailbox === "spam"
+          ...(props.activeMailbox === "spam"
             ? [
                 {
                   icon: Mail01Icon,
@@ -155,7 +127,7 @@ export const MessageList = ({
                   label: "Unmark as Spam",
                   onSelect: async () => {
                     await runBulkAction(
-                      mailboxActions.unmarkThreadsAsSpam,
+                      props.mailboxActions.unmarkThreadsAsSpam,
                       "Could not remove those conversations from spam.",
                     );
                   },
@@ -164,15 +136,15 @@ export const MessageList = ({
             : []),
           {
             destructive: true,
-            icon: activeMailbox === "trash" ? Delete02Icon : Delete01Icon,
-            id: activeMailbox === "trash" ? "delete-threads" : "move-threads-trash",
-            label: activeMailbox === "trash" ? "Delete permanently" : "Move to Trash",
+            icon: props.activeMailbox === "trash" ? Delete02Icon : Delete01Icon,
+            id: props.activeMailbox === "trash" ? "delete-threads" : "move-threads-trash",
+            label: props.activeMailbox === "trash" ? "Delete permanently" : "Move to Trash",
             onSelect: async () => {
               await runBulkAction(
-                activeMailbox === "trash"
-                  ? mailboxActions.deleteThreadsPermanently
-                  : mailboxActions.moveThreadsToTrash,
-                activeMailbox === "trash"
+                props.activeMailbox === "trash"
+                  ? props.mailboxActions.deleteThreadsPermanently
+                  : props.mailboxActions.moveThreadsToTrash,
+                props.activeMailbox === "trash"
                   ? "Could not delete those conversations."
                   : "Could not move those conversations to trash.",
               );
@@ -180,55 +152,37 @@ export const MessageList = ({
           },
         ];
 
-  const scrollPaneKey = `${activeMailbox}:${searchQuery}`;
+  const scrollPaneKey = `${props.activeMailbox}:${props.searchQuery}`;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {selectedThreadIds.size > 0 ? (
+      {selection.selectedThreadIds.size > 0 ? (
         <MessageListSelectionToolbar
           actions={bulkActions}
-          allSelected={allSelected}
-          disabled={isPending || isBulkActionPending}
-          indeterminate={selectionIndeterminate}
-          itemLabelPlural={activeMailbox === "drafts" ? "drafts" : "conversations"}
-          onClearSelection={clearSelection}
-          onToggleAll={toggleAllLoadedThreads}
-          selectedCount={selectedThreadIds.size}
+          allSelected={selection.allSelected}
+          disabled={props.isPending || isBulkActionPending}
+          indeterminate={selection.selectionIndeterminate}
+          itemLabelPlural={props.activeMailbox === "drafts" ? "drafts" : "conversations"}
+          onClearSelection={selection.clearSelection}
+          onToggleAll={selection.toggleAllLoadedThreads}
+          selectedCount={selection.selectedThreadIds.size}
         />
       ) : (
         <MessageListSearch
-          isRefreshing={isRefreshing}
-          mailboxId={mailboxId}
-          onRefresh={onRefresh}
-          onScrollToTop={scrollListToTop}
-          onSearch={onSearch}
-          searchQuery={searchQuery}
+          isRefreshing={props.isRefreshing}
+          mailboxId={props.mailboxId}
+          onRefresh={props.onRefresh}
+          onScrollToTop={selection.scrollListToTop}
+          onSearch={props.onSearch}
+          searchQuery={props.searchQuery}
         />
       )}
 
       <MessageListScrollPane
         key={scrollPaneKey}
-        isProgrammaticScrollToTopRef={isProgrammaticScrollToTopRef}
-        selectedThreadIds={selectedThreadIds}
-        scrollRef={scrollRef}
-        activeMailbox={activeMailbox}
-        activeMessageId={activeMessageId}
-        error={error}
-        hasNextPage={hasNextPage}
-        isError={isError}
-        isFetchingNextPage={isFetchingNextPage}
-        isPending={isPending}
-        isRefreshing={isRefreshing}
-        mailboxActions={mailboxActions}
-        messages={messages}
-        onLoadMore={onLoadMore}
-        onOpenDraft={onOpenDraft}
-        onThreadPress={handleThreadPress}
-        onThreadSelectionPress={handleThreadSelectionPress}
-        pendingActions={pendingActions}
-        searchQuery={searchQuery}
+        list={props}
+        selection={selection}
         threadedMessages={threadedMessages}
-        mailboxId={mailboxId}
       />
     </div>
   );

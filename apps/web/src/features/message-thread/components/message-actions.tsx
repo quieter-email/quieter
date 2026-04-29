@@ -38,6 +38,7 @@ import {
 } from "@quieter/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useReducer, useState } from "react";
+import type { MailboxActions } from "~/features/mailbox/components/mailbox-action-handlers";
 import { getErrorMessage } from "~/lib/errors";
 import {
   type GmailLabelListItem,
@@ -53,10 +54,15 @@ type LabelChanges = {
 };
 
 type MessageActionsSharedProps = {
+  actions: MessageActionsHandlers;
   mailboxId: string;
   message: MessageListItem;
   mailbox: MailboxCategory;
   isUnread?: boolean;
+  isPending?: boolean;
+};
+
+type MessageActionsHandlers = {
   onDeleteDraft?: (message: MessageListItem) => void | Promise<void>;
   onMarkAsRead?: (messageId: string) => void | Promise<void>;
   onMarkAsSpam?: (messageId: string) => void | Promise<void>;
@@ -68,7 +74,6 @@ type MessageActionsSharedProps = {
   onUntrash?: (messageId: string) => void | Promise<void>;
   onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
   onDeletePermanently?: (messageId: string) => void | Promise<void>;
-  isPending?: boolean;
 };
 
 type MessageActionsDropdownProps = MessageActionsSharedProps;
@@ -96,6 +101,28 @@ type MenuSeparator = {
 };
 
 type MenuEntry = MenuAction | MenuSeparator;
+
+export const createMailboxThreadMessageActionHandlers = ({
+  mailboxActions,
+  onOpenDraft,
+  threadId,
+}: {
+  mailboxActions: MailboxActions;
+  onOpenDraft?: (message: MessageListItem) => void | Promise<void>;
+  threadId: string;
+}): MessageActionsHandlers => ({
+  onDeleteDraft: mailboxActions.deleteDraft,
+  onDeletePermanently: () => mailboxActions.deleteThreadPermanently(threadId),
+  onMarkAsRead: () => mailboxActions.markThreadAsRead(threadId),
+  onMarkAsSpam: () => mailboxActions.markThreadAsSpam(threadId),
+  onMarkAsUnread: () => mailboxActions.markThreadAsUnread(threadId),
+  onMoveToTrash: () => mailboxActions.moveThreadToTrash(threadId),
+  onOpenDraft,
+  onUnmarkAsSpam: () => mailboxActions.unmarkThreadAsSpam(threadId),
+  onUnsubscribe: mailboxActions.unsubscribeFromMessage,
+  onUntrash: () => mailboxActions.untrashThread(threadId),
+  onUpdateLabels: (_messageId, changes) => mailboxActions.updateThreadLabels(threadId, changes),
+});
 
 const areStringArraysEqual = (left: readonly string[], right: readonly string[]) => {
   if (left.length !== right.length) return false;
@@ -458,6 +485,7 @@ const MessageActionsDialogs = ({
 };
 
 const useMessageActionEntries = (props: MessageActionsSharedProps) => {
+  const actions = props.actions;
   const isUnread = props.isUnread ?? isMessageUnread(props.message);
   const isDraftMailbox = props.mailbox === "drafts";
   const isSpamMailbox = props.mailbox === "spam";
@@ -475,11 +503,11 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
         {
           type: "item",
           id: "open-draft",
-          disabled: isBusy || !props.onOpenDraft,
+          disabled: isBusy || !actions.onOpenDraft,
           icon: Edit01Icon,
           label: "Open draft",
           onSelect: () => {
-            void props.onOpenDraft?.(props.message);
+            void actions.onOpenDraft?.(props.message);
           },
         },
         {
@@ -490,11 +518,11 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
           type: "item",
           id: "delete-draft",
           destructive: true,
-          disabled: isBusy || !props.onDeleteDraft,
+          disabled: isBusy || !actions.onDeleteDraft,
           icon: Delete02Icon,
           label: "Delete draft",
           onSelect: () => {
-            void props.onDeleteDraft?.(props.message);
+            void actions.onDeleteDraft?.(props.message);
           },
         },
       ] satisfies MenuEntry[],
@@ -506,22 +534,22 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
     {
       type: "item",
       id: "toggle-read-state",
-      disabled: isBusy || (isUnread ? !props.onMarkAsRead : !props.onMarkAsUnread),
+      disabled: isBusy || (isUnread ? !actions.onMarkAsRead : !actions.onMarkAsUnread),
       icon: isUnread ? MailOpen02Icon : Mail01Icon,
       label: isUnread ? "Mark as Read" : "Mark as Unread",
       onSelect: () => {
         if (isUnread) {
-          void props.onMarkAsRead?.(props.message.id);
+          void actions.onMarkAsRead?.(props.message.id);
           return;
         }
 
-        void props.onMarkAsUnread?.(props.message.id);
+        void actions.onMarkAsUnread?.(props.message.id);
       },
     },
     {
       type: "item",
       id: "modify-labels",
-      disabled: isBusy || !props.onUpdateLabels,
+      disabled: isBusy || !actions.onUpdateLabels,
       icon: Tag01Icon,
       label: "Modify Labels",
       onSelect: () => setOpenLabelsDialog(true),
@@ -531,11 +559,11 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
           {
             type: "item" as const,
             id: "unsubscribe",
-            disabled: isBusy || !props.onUnsubscribe,
+            disabled: isBusy || !actions.onUnsubscribe,
             icon: Mail01Icon,
             label: "Unsubscribe",
             onSelect: () => {
-              void props.onUnsubscribe?.(props.message.id);
+              void actions.onUnsubscribe?.(props.message.id);
             },
           },
         ]
@@ -550,11 +578,11 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
             type: "item" as const,
             id: "mark-as-spam",
             destructive: true,
-            disabled: isBusy || !props.onMarkAsSpam,
+            disabled: isBusy || !actions.onMarkAsSpam,
             icon: Delete02Icon,
             label: "Mark as Spam",
             onSelect: () => {
-              void props.onMarkAsSpam?.(props.message.id);
+              void actions.onMarkAsSpam?.(props.message.id);
             },
           },
         ]
@@ -564,11 +592,11 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
           {
             type: "item" as const,
             id: "unmark-as-spam",
-            disabled: isBusy || !props.onUnmarkAsSpam,
+            disabled: isBusy || !actions.onUnmarkAsSpam,
             icon: Mail01Icon,
             label: "Unmark as Spam",
             onSelect: () => {
-              void props.onUnmarkAsSpam?.(props.message.id);
+              void actions.onUnmarkAsSpam?.(props.message.id);
             },
           },
         ]
@@ -578,11 +606,11 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
           {
             type: "item" as const,
             id: "remove-from-trash",
-            disabled: isBusy || !props.onUntrash,
+            disabled: isBusy || !actions.onUntrash,
             icon: InboxIcon,
             label: "Move to Inbox",
             onSelect: () => {
-              void props.onUntrash?.(props.message.id);
+              void actions.onUntrash?.(props.message.id);
             },
           },
         ]
@@ -591,7 +619,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
       type: "item",
       id: isTrashMailbox ? "delete-permanently" : "move-to-trash",
       destructive: true,
-      disabled: isBusy || (isTrashMailbox ? !props.onDeletePermanently : !props.onMoveToTrash),
+      disabled: isBusy || (isTrashMailbox ? !actions.onDeletePermanently : !actions.onMoveToTrash),
       icon: isTrashMailbox ? Delete02Icon : Delete01Icon,
       label: isTrashMailbox ? "Delete permanently" : "Move to Trash",
       onSelect: () => {
@@ -600,7 +628,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
           return;
         }
 
-        void props.onMoveToTrash?.(props.message.id);
+        void actions.onMoveToTrash?.(props.message.id);
       },
     },
   ];
@@ -611,10 +639,10 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
       isTrashMailbox={isTrashMailbox}
       mailboxId={props.mailboxId}
       message={props.message}
-      onDeletePermanently={props.onDeletePermanently}
+      onDeletePermanently={actions.onDeletePermanently}
       onOpenDeleteDialog={setOpenDeleteDialog}
       onOpenLabelsDialog={setOpenLabelsDialog}
-      onUpdateLabels={props.onUpdateLabels}
+      onUpdateLabels={actions.onUpdateLabels}
       openDeleteDialog={openDeleteDialog}
       openLabelsDialog={openLabelsDialog}
     />

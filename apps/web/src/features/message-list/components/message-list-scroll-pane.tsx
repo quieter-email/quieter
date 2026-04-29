@@ -3,10 +3,11 @@
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { type RefObject, useLayoutEffect } from "react";
+import { useLayoutEffect } from "react";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import { getErrorMessage } from "~/lib/errors";
-import type { MessageListProps, ThreadPressGesture } from "./message-list-types";
+import type { MessageListProps } from "./message-list-types";
+import type { useMessageListSelection } from "./use-message-list-selection";
 import { MessageRow } from "./message-row";
 
 const MESSAGE_ROW_HEIGHT_PX = 72;
@@ -23,29 +24,9 @@ const MESSAGE_LIST_SKELETON_ROW_IDS = [
   "message-list-skeleton-8",
 ] as const;
 
-type MessageListScrollPaneProps = Pick<
-  MessageListProps,
-  | "activeMailbox"
-  | "activeMessageId"
-  | "error"
-  | "hasNextPage"
-  | "isError"
-  | "isFetchingNextPage"
-  | "isPending"
-  | "isRefreshing"
-  | "mailboxId"
-  | "mailboxActions"
-  | "messages"
-  | "onLoadMore"
-  | "onOpenDraft"
-  | "pendingActions"
-  | "searchQuery"
-> & {
-  isProgrammaticScrollToTopRef: RefObject<boolean>;
-  onThreadPress: (thread: ThreadListEntry, gesture: ThreadPressGesture) => void;
-  onThreadSelectionPress: (thread: ThreadListEntry, gesture: ThreadPressGesture) => void;
-  scrollRef: RefObject<HTMLDivElement | null>;
-  selectedThreadIds: ReadonlySet<string>;
+type MessageListScrollPaneProps = {
+  list: MessageListProps;
+  selection: ReturnType<typeof useMessageListSelection>;
   threadedMessages: ThreadListEntry[];
 };
 
@@ -72,39 +53,22 @@ const MessageListLoadingSkeleton = () => (
 );
 
 export const MessageListScrollPane = ({
-  isProgrammaticScrollToTopRef,
-  scrollRef,
-  activeMailbox,
-  activeMessageId,
-  error,
-  hasNextPage,
-  isError,
-  isFetchingNextPage,
-  isPending,
-  isRefreshing,
-  mailboxActions,
-  messages,
-  onLoadMore,
-  onOpenDraft,
-  onThreadPress,
-  onThreadSelectionPress,
-  pendingActions,
-  selectedThreadIds,
-  searchQuery,
+  list,
+  selection,
   threadedMessages,
-  mailboxId,
 }: MessageListScrollPaneProps) => {
-  const flattenedMessages = messages.flatMap((page) => page.messages);
+  const flattenedMessages = list.messages.flatMap((page) => page.messages);
   const activeThreadId =
-    flattenedMessages.find((message) => message.id === activeMessageId)?.threadId ?? null;
-  const isLoadingEmptyMessages = threadedMessages.length === 0 && (isPending || isRefreshing);
+    flattenedMessages.find((message) => message.id === list.activeMessageId)?.threadId ?? null;
+  const isLoadingEmptyMessages =
+    threadedMessages.length === 0 && (list.isPending || list.isRefreshing);
 
   const messageVirtualizer = useVirtualizer({
     count: threadedMessages.length,
     estimateSize: () => MESSAGE_ROW_HEIGHT_PX,
     gap: MESSAGE_ROW_GAP_PX,
     getItemKey: (index) => threadedMessages[index].threadId ?? index,
-    getScrollElement: () => scrollRef.current,
+    getScrollElement: () => selection.scrollRef.current,
     overscan: MESSAGE_LIST_OVERSCAN,
   });
 
@@ -116,16 +80,16 @@ export const MessageListScrollPane = ({
 
   const maybeLoadMore = () => {
     if (
-      !scrollRef.current ||
-      !shouldPrefetch(scrollRef.current) ||
-      !hasNextPage ||
-      isFetchingNextPage ||
-      isPending ||
-      isError
+      !selection.scrollRef.current ||
+      !shouldPrefetch(selection.scrollRef.current) ||
+      !list.hasNextPage ||
+      list.isFetchingNextPage ||
+      list.isPending ||
+      list.isError
     )
       return;
 
-    onLoadMore();
+    list.onLoadMore();
   };
 
   useLayoutEffect(() => {
@@ -136,20 +100,20 @@ export const MessageListScrollPane = ({
     <div
       className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pt-2 pb-4 contain-strict"
       onScroll={() => {
-        if (isProgrammaticScrollToTopRef.current) return;
+        if (selection.isProgrammaticScrollToTopRef.current) return;
         maybeLoadMore();
       }}
-      ref={scrollRef}
+      ref={selection.scrollRef}
     >
       {isLoadingEmptyMessages && <MessageListLoadingSkeleton />}
 
-      {isError && (
+      {list.isError && (
         <p className="px-2 py-8 text-sm text-destructive">
-          {getErrorMessage(error, "Could not load messages.")}
+          {getErrorMessage(list.error, "Could not load messages.")}
         </p>
       )}
 
-      {!isError && threadedMessages.length > 0 && (
+      {!list.isError && threadedMessages.length > 0 && (
         <ul
           className="relative"
           style={{
@@ -162,35 +126,18 @@ export const MessageListScrollPane = ({
             return (
               thread && (
                 <MessageRow
-                  activeMailbox={activeMailbox}
                   className="absolute top-0 left-0 w-full"
                   dataIndex={virtualItem.index}
-                  isActionPending={
-                    pendingActions.isMessageActionPending(thread.anchorMessage.id) ||
-                    pendingActions.isThreadActionPending(thread.threadId)
-                  }
                   isActive={activeThreadId === thread.threadId}
-                  isSelected={selectedThreadIds.has(thread.threadId)}
-                  isSelectionMode={selectedThreadIds.size > 0}
+                  isSelected={selection.selectedThreadIds.has(thread.threadId)}
+                  isSelectionMode={selection.selectedThreadIds.size > 0}
                   key={thread.threadId}
-                  onDeleteDraft={mailboxActions.deleteDraft}
-                  onDeleteThreadPermanently={mailboxActions.deleteThreadPermanently}
-                  onMarkThreadAsRead={mailboxActions.markThreadAsRead}
-                  onMarkThreadAsSpam={mailboxActions.markThreadAsSpam}
-                  onMarkThreadAsUnread={mailboxActions.markThreadAsUnread}
-                  onMoveThreadToTrash={mailboxActions.moveThreadToTrash}
-                  onOpenDraft={onOpenDraft}
-                  onPress={onThreadPress}
-                  onSelectionPress={onThreadSelectionPress}
-                  onUntrashThread={mailboxActions.untrashThread}
-                  onUnsubscribe={mailboxActions.unsubscribeFromMessage}
-                  onUnmarkThreadAsSpam={mailboxActions.unmarkThreadAsSpam}
-                  onUpdateThreadLabels={mailboxActions.updateThreadLabels}
+                  list={list}
+                  selection={selection}
                   style={{
                     transform: `translateY(${virtualItem.start}px)`,
                   }}
                   thread={thread}
-                  mailboxId={mailboxId}
                 />
               )
             );
@@ -198,21 +145,21 @@ export const MessageListScrollPane = ({
         </ul>
       )}
 
-      {!isLoadingEmptyMessages && !isError && threadedMessages.length === 0 && (
+      {!isLoadingEmptyMessages && !list.isError && threadedMessages.length === 0 && (
         <p className="px-2 py-8 text-sm text-muted-foreground">
-          {activeMailbox === "drafts"
-            ? searchQuery
+          {list.activeMailbox === "drafts"
+            ? list.searchQuery
               ? "No drafts found."
               : "No drafts."
-            : searchQuery
+            : list.searchQuery
               ? "No messages found."
               : "No messages."}
         </p>
       )}
 
-      {!isError && threadedMessages.length > 0 && (
+      {!list.isError && threadedMessages.length > 0 && (
         <p className="px-2 py-5 text-center text-xs text-muted-foreground">
-          {isFetchingNextPage || hasNextPage ? (
+          {list.isFetchingNextPage || list.hasNextPage ? (
             <HugeiconsIcon
               className="mx-auto animate-spin text-muted-foreground"
               icon={Loading03Icon}
