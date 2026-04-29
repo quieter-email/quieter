@@ -1,9 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { ORPCError } from "@orpc/client";
-import { rateLimitedErrorDataSchema } from "@quieter/orpc/errors";
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
-import { persistQueryByKey } from "~/lib/query-persister";
+import { queryPersister } from "~/lib/query-persister";
 import {
   addUnreadLabel,
   applyLabelIdChanges,
@@ -23,45 +21,6 @@ import { getThreadQueryKey } from "./thread-query";
 const normalizeSearchQuery = (searchQuery: string | null | undefined) => {
   const normalized = searchQuery?.trim();
   return normalized && normalized.length > 0 ? normalized : undefined;
-};
-
-const getRateLimitedRetryAfterMs = (error: unknown) => {
-  if (!(error instanceof ORPCError) || error.code !== "RATE_LIMITED") {
-    return undefined;
-  }
-
-  const parsedErrorData = rateLimitedErrorDataSchema.safeParse(error.data);
-  if (!parsedErrorData.success) {
-    return undefined;
-  }
-
-  return parsedErrorData.data.retryAfter * 1000;
-};
-
-const getRateLimitCooldownRemainingMs = (query: {
-  state: { error: unknown; errorUpdatedAt: number };
-}) => {
-  const retryAfterMs = getRateLimitedRetryAfterMs(query.state.error);
-  if (retryAfterMs == null) {
-    return undefined;
-  }
-
-  return Math.max(0, query.state.errorUpdatedAt + retryAfterMs - Date.now());
-};
-
-const isNonRetryableMailboxError = (error: unknown) => {
-  return (
-    error instanceof ORPCError &&
-    ["FORBIDDEN", "MAILBOX_SCOPE_REPAIR_REQUIRED", "NOT_FOUND", "UNAUTHORIZED"].includes(error.code)
-  );
-};
-
-const shouldRetryGmailQuery = (failureCount: number, error: unknown) => {
-  return (
-    !isNonRetryableMailboxError(error) &&
-    getRateLimitedRetryAfterMs(error) == null &&
-    failureCount < 3
-  );
 };
 
 export const getMessagesQueryKey = (
@@ -151,6 +110,62 @@ const toLoadedPagesData = (
   pageParams,
 });
 
+const mergeSyncIntoMessage = (
+  currentMessage: MessageListItem,
+  syncedMessage: MessageListItem,
+): MessageListItem => ({
+  ...syncedMessage,
+  attachments: syncedMessage.attachments ?? currentMessage.attachments,
+  bodyHtml: syncedMessage.bodyHtml ?? currentMessage.bodyHtml,
+  bodyText: syncedMessage.bodyText ?? currentMessage.bodyText,
+  draftAnchor: syncedMessage.draftAnchor ?? currentMessage.draftAnchor,
+  draftId: syncedMessage.draftId ?? currentMessage.draftId,
+  senderAvatarUrls: syncedMessage.senderAvatarUrls ?? currentMessage.senderAvatarUrls,
+  unsubscribeMailto: syncedMessage.unsubscribeMailto ?? currentMessage.unsubscribeMailto,
+});
+
+/** Maps message id -> row as currently cached across all loaded pages */
+const buildCachedMessageLookup = (data: MessagesQueryData | undefined) => {
+  const map = new Map<string, MessageListItem>();
+
+  if (!data?.pages.length) return map;
+
+  for (const page of data.pages) {
+    for (const message of page.messages) {
+      map.set(message.id, message);
+    }
+  }
+
+  return map;
+};
+
+const mergeWithCachedMailboxRow = (
+  cachedById: Map<string, MessageListItem>,
+  syncedMessage: MessageListItem,
+) => {
+  const previous = cachedById.get(syncedMessage.id);
+
+  return previous ? mergeSyncIntoMessage(previous, syncedMessage) : syncedMessage;
+};
+
+const mergeRefreshedMailboxPagesIntoQueryData = (
+  previous: MessagesQueryData | undefined,
+  refreshedPages: ListMessagesPageResult[],
+  refreshedPageParams: Array<string | undefined>,
+): MessagesQueryData => {
+  if (!previous?.pages.length) {
+    return toLoadedPagesData(refreshedPages, refreshedPageParams);
+  }
+
+  const cachedById = buildCachedMessageLookup(previous);
+  const mergedPages = refreshedPages.map((page) => ({
+    ...page,
+    messages: page.messages.map((message) => mergeWithCachedMailboxRow(cachedById, message)),
+  }));
+
+  return toLoadedPagesData(mergedPages, refreshedPageParams);
+};
+
 const replaceFirstPageInQueryData = (
   data: MessagesQueryData | undefined,
   firstPage: ListMessagesPageResult,
@@ -159,8 +174,14 @@ const replaceFirstPageInQueryData = (
     return toFirstPageData(firstPage);
   }
 
+  const cachedById = buildCachedMessageLookup(data);
+  const mergedFirstPage: ListMessagesPageResult = {
+    ...firstPage,
+    messages: firstPage.messages.map((message) => mergeWithCachedMailboxRow(cachedById, message)),
+  };
+
   return {
-    pages: [firstPage, ...data.pages.slice(1)],
+    pages: [mergedFirstPage, ...data.pages.slice(1)],
     pageParams: [undefined, ...data.pageParams.slice(1)],
   };
 };
@@ -377,17 +398,6 @@ const applyMessageMetadata = (
   };
 };
 
-const mergeThreadSyncMessage = (
-  currentMessage: MessageListItem,
-  syncedMessage: MessageListItem,
-): MessageListItem => ({
-  ...syncedMessage,
-  attachments: syncedMessage.attachments ?? currentMessage.attachments,
-  bodyHtml: syncedMessage.bodyHtml ?? currentMessage.bodyHtml,
-  bodyText: syncedMessage.bodyText ?? currentMessage.bodyText,
-  draftId: syncedMessage.draftId ?? currentMessage.draftId,
-});
-
 const toMessageMetadataById = (updates: readonly MessageMetadataMutationResult[]) =>
   new Map(updates.map((update) => [update.id, update] as const));
 
@@ -452,7 +462,13 @@ const applySyncDeltaToQueryData = (
 
   const nextMessages = currentMessages
     .filter((message) => !removedMessageIdsSet.has(message.id))
-    .map((message) => updatedMessagesById.get(message.id) ?? message);
+    .map((message) => {
+      const synced = updatedMessagesById.get(message.id);
+
+      if (!synced) return message;
+
+      return mergeSyncIntoMessage(message, synced);
+    });
   const nextMessageIds = new Set(nextMessages.map((message) => message.id));
 
   for (const updatedMessage of updatedMessages) {
@@ -587,7 +603,7 @@ const persistQueryKeys = async (
     const queryKeyId = queryKey.join("::");
     if (seenQueryKeys.has(queryKeyId)) continue;
     seenQueryKeys.add(queryKeyId);
-    await persistQueryByKey(queryClient, queryKey);
+    await queryPersister.persistQueryByKey(queryKey, queryClient);
   }
 };
 
@@ -617,7 +633,9 @@ const reconcileMessageInCachedMailboxQuery = (
       return removeMessageFromQueryData(cachedQuery.data, nextMessage.id);
     }
 
-    return updateMessageInQueryData(cachedQuery.data, nextMessage.id, () => nextMessage);
+    return updateMessageInQueryData(cachedQuery.data, nextMessage.id, (currentMessage) =>
+      mergeSyncIntoMessage(currentMessage, nextMessage),
+    );
   }
 
   if (cachedQuery.searchQuery || !isMessageInMailbox(nextMessage, cachedQuery.mailbox)) {
@@ -718,7 +736,6 @@ const applyResolvedThreadMetadataToCaches = async (
     touchedQueryKeys.push(
       ...applyMessageToCachedMailboxQueries(queryClient, mailboxId, resolvedMessage),
     );
-    prefetchNewMailboxQueries(queryClient, mailboxId, previousMessage, resolvedMessage);
   }
 
   queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
@@ -737,26 +754,6 @@ const applyResolvedThreadMetadataToCaches = async (
   );
 
   await persistQueryKeys(queryClient, [...touchedQueryKeys, threadQueryKey]);
-};
-
-const prefetchNewMailboxQueries = (
-  queryClient: QueryClient,
-  mailboxId: string,
-  previousMessage: MessageListItem,
-  nextMessage: MessageListItem,
-) => {
-  for (const mailbox of ["inbox", "spam", "sent", "trash", "drafts"] satisfies MailboxCategory[]) {
-    if (
-      !isMessageInMailbox(nextMessage, mailbox) ||
-      isMessageInMailbox(previousMessage, mailbox) ||
-      queryClient.getQueryData<MessagesQueryData>(getMessagesQueryKey(mailboxId, mailbox))?.pages
-        .length
-    ) {
-      continue;
-    }
-
-    void queryClient.prefetchInfiniteQuery(messagesQueryOptions(mailboxId, mailbox));
-  }
 };
 
 const fetchMessagesPage = async (
@@ -796,7 +793,7 @@ export const refreshMessagesFirstPage = async (
   queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
     replaceFirstPageInQueryData(data, refreshedFirstPage),
   );
-  await persistQueryByKey(queryClient, messagesQueryKey);
+  await queryPersister.persistQueryByKey(messagesQueryKey, queryClient);
   return refreshedFirstPage;
 };
 
@@ -829,11 +826,10 @@ export const refreshLoadedMessagesPages = async (
     pageToken = refreshedPage.nextPageToken;
   }
 
-  queryClient.setQueryData<MessagesQueryData>(
-    messagesQueryKey,
-    toLoadedPagesData(refreshedPages, refreshedPageParams),
+  queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
+    mergeRefreshedMailboxPagesIntoQueryData(data, refreshedPages, refreshedPageParams),
   );
-  await persistQueryByKey(queryClient, messagesQueryKey);
+  await queryPersister.persistQueryByKey(messagesQueryKey, queryClient);
   return refreshedPages[0];
 };
 
@@ -890,7 +886,7 @@ const applyMailboxSyncDelta = async (
     );
   }
 
-  await persistQueryByKey(queryClient, messagesQueryKey);
+  await queryPersister.persistQueryByKey(messagesQueryKey, queryClient);
 
   const touchedThreadQueryKeys = new Map<string, ReturnType<typeof getThreadQueryKey>>();
 
@@ -899,7 +895,7 @@ const applyMailboxSyncDelta = async (
     touchedThreadQueryKeys.set(threadQueryKey.join("::"), threadQueryKey);
     queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
       updateMessageInThreadData(currentData, updatedMessage.id, (message) =>
-        mergeThreadSyncMessage(message, updatedMessage),
+        mergeSyncIntoMessage(message, updatedMessage),
       ),
     );
   }
@@ -916,7 +912,7 @@ const applyMailboxSyncDelta = async (
   }
 
   for (const threadQueryKey of touchedThreadQueryKeys.values()) {
-    await persistQueryByKey(queryClient, threadQueryKey);
+    await queryPersister.persistQueryByKey(threadQueryKey, queryClient);
   }
 };
 
@@ -1037,7 +1033,6 @@ const updateSingleMessageMutation = async (
       mailboxId,
       resolvedMessage,
     );
-    prefetchNewMailboxQueries(queryClient, mailboxId, messageToUpdate, resolvedMessage);
 
     if (threadQueryKey) {
       queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
@@ -1325,7 +1320,6 @@ export const updateMessageLabelsInMailbox = async (
       mailboxId,
       resolvedMessage,
     );
-    prefetchNewMailboxQueries(queryClient, mailboxId, messageToUpdate, resolvedMessage);
 
     if (threadQueryKey) {
       queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
@@ -1618,7 +1612,6 @@ export const untrashMessageInMailbox = async (
       mailboxId,
       resolvedMessage,
     );
-    prefetchNewMailboxQueries(queryClient, mailboxId, messageToUpdate, resolvedMessage);
 
     if (threadQueryKey) {
       queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
@@ -1866,7 +1859,7 @@ export const messagesQueryOptions = (
     getNextPageParam: (lastPage: ListMessagesPageResult) => lastPage.nextPageToken ?? undefined,
     staleTime: GMAIL_QUERY_STALE_TIME_MS,
     enabled,
-    retry: shouldRetryGmailQuery,
+    retry: 3,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -1888,18 +1881,11 @@ export const liveSyncQueryOptions = (
         getMessagesQueryKey(mailboxId, mailbox, searchQuery),
       )?.pages[0],
     persister: undefined,
-    retry: shouldRetryGmailQuery,
+    retry: 3,
     staleTime: 0,
-    refetchOnMount: (query) =>
-      (getRateLimitCooldownRemainingMs(query) ?? 0) > 0 ? false : "always",
-    refetchOnWindowFocus: (query) =>
-      (getRateLimitCooldownRemainingMs(query) ?? 0) > 0 ? false : "always",
-    refetchOnReconnect: (query) =>
-      (getRateLimitCooldownRemainingMs(query) ?? 0) > 0 ? false : "always",
-    refetchInterval: (query) =>
-      Math.max(
-        GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
-        getRateLimitCooldownRemainingMs(query) ?? 0,
-      ),
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
+    refetchInterval: GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
     refetchIntervalInBackground: false,
   });

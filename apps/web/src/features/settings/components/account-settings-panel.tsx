@@ -30,7 +30,7 @@ import { z } from "zod";
 import { authClient } from "~/lib/auth";
 import { getErrorMessage, getFieldErrorMessage, unwrapResultError } from "~/lib/errors";
 import { orpc } from "~/lib/orpc";
-import { clearPersistedQueryCache } from "~/lib/query-persister";
+import { queryPersister } from "~/lib/query-persister";
 
 type SettingsUser = {
   email: string;
@@ -528,7 +528,7 @@ const DeleteAccountDialog = () => {
     mutationKey: ["auth", "delete-user"],
     onSuccess: async () => {
       queryClient.clear();
-      await clearPersistedQueryCache();
+      await queryPersister.removeQueries();
       await navigate({
         to: "/home",
       });
@@ -665,7 +665,7 @@ export const AccountSettingsPanel = ({ initialUser }: AccountSettingsPanelProps)
     mutationKey: ["auth", "sign-out"],
     onSuccess: async () => {
       queryClient.clear();
-      await clearPersistedQueryCache();
+      await queryPersister.removeQueries();
       await navigate({
         to: "/home",
       });

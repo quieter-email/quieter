@@ -18,9 +18,7 @@ import { Route as GoogleScopeRepairRouteImport } from './routes/google-scope-rep
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiSitePasswordRouteImport } from './routes/api/site-password'
-import { Route as ApiOrpcRouteImport } from './routes/api/orpc'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
-import { Route as ApiAuthGoogleScopeRepairRouteImport } from './routes/api/auth.google-scope-repair'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 
 const SitePasswordRoute = SitePasswordRouteImport.update({
@@ -68,22 +66,11 @@ const ApiSitePasswordRoute = ApiSitePasswordRouteImport.update({
   path: '/api/site-password',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiOrpcRoute = ApiOrpcRouteImport.update({
-  id: '/api/orpc',
-  path: '/api/orpc',
+const ApiOrpcSplatRoute = ApiOrpcSplatRouteImport.update({
+  id: '/api/orpc/$',
+  path: '/api/orpc/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiOrpcSplatRoute = ApiOrpcSplatRouteImport.update({
-  id: '/$',
-  path: '/$',
-  getParentRoute: () => ApiOrpcRoute,
-} as any)
-const ApiAuthGoogleScopeRepairRoute =
-  ApiAuthGoogleScopeRepairRouteImport.update({
-    id: '/api/auth/google-scope-repair',
-    path: '/api/auth/google-scope-repair',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -99,10 +86,8 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
   '/site-password': typeof SitePasswordRoute
-  '/api/orpc': typeof ApiOrpcRouteWithChildren
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
-  '/api/auth/google-scope-repair': typeof ApiAuthGoogleScopeRepairRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
 }
 export interface FileRoutesByTo {
@@ -114,10 +99,8 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
   '/site-password': typeof SitePasswordRoute
-  '/api/orpc': typeof ApiOrpcRouteWithChildren
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
-  '/api/auth/google-scope-repair': typeof ApiAuthGoogleScopeRepairRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
 }
 export interface FileRoutesById {
@@ -130,10 +113,8 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
   '/site-password': typeof SitePasswordRoute
-  '/api/orpc': typeof ApiOrpcRouteWithChildren
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
-  '/api/auth/google-scope-repair': typeof ApiAuthGoogleScopeRepairRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
 }
 export interface FileRouteTypes {
@@ -147,10 +128,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/signup'
     | '/site-password'
-    | '/api/orpc'
     | '/api/site-password'
     | '/api/auth/$'
-    | '/api/auth/google-scope-repair'
     | '/api/orpc/$'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -162,10 +141,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/signup'
     | '/site-password'
-    | '/api/orpc'
     | '/api/site-password'
     | '/api/auth/$'
-    | '/api/auth/google-scope-repair'
     | '/api/orpc/$'
   id:
     | '__root__'
@@ -177,10 +154,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/signup'
     | '/site-password'
-    | '/api/orpc'
     | '/api/site-password'
     | '/api/auth/$'
-    | '/api/auth/google-scope-repair'
     | '/api/orpc/$'
   fileRoutesById: FileRoutesById
 }
@@ -193,10 +168,9 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   SignupRoute: typeof SignupRoute
   SitePasswordRoute: typeof SitePasswordRoute
-  ApiOrpcRoute: typeof ApiOrpcRouteWithChildren
   ApiSitePasswordRoute: typeof ApiSitePasswordRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
-  ApiAuthGoogleScopeRepairRoute: typeof ApiAuthGoogleScopeRepairRoute
+  ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -264,25 +238,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSitePasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/orpc': {
-      id: '/api/orpc'
-      path: '/api/orpc'
-      fullPath: '/api/orpc'
-      preLoaderRoute: typeof ApiOrpcRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/orpc/$': {
       id: '/api/orpc/$'
-      path: '/$'
+      path: '/api/orpc/$'
       fullPath: '/api/orpc/$'
       preLoaderRoute: typeof ApiOrpcSplatRouteImport
-      parentRoute: typeof ApiOrpcRoute
-    }
-    '/api/auth/google-scope-repair': {
-      id: '/api/auth/google-scope-repair'
-      path: '/api/auth/google-scope-repair'
-      fullPath: '/api/auth/google-scope-repair'
-      preLoaderRoute: typeof ApiAuthGoogleScopeRepairRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -295,17 +255,6 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface ApiOrpcRouteChildren {
-  ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
-}
-
-const ApiOrpcRouteChildren: ApiOrpcRouteChildren = {
-  ApiOrpcSplatRoute: ApiOrpcSplatRoute,
-}
-
-const ApiOrpcRouteWithChildren =
-  ApiOrpcRoute._addFileChildren(ApiOrpcRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
@@ -315,10 +264,9 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   SignupRoute: SignupRoute,
   SitePasswordRoute: SitePasswordRoute,
-  ApiOrpcRoute: ApiOrpcRouteWithChildren,
   ApiSitePasswordRoute: ApiSitePasswordRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
-  ApiAuthGoogleScopeRepairRoute: ApiAuthGoogleScopeRepairRoute,
+  ApiOrpcSplatRoute: ApiOrpcSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
