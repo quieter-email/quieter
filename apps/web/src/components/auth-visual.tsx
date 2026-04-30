@@ -485,16 +485,16 @@ export const AuthVisual = () => {
 
     const resizeObserver = new ResizeObserver(() => queueRender());
     resizeObserver.observe(canvas);
-    globalThis.window.addEventListener("pointermove", handlePointerMove);
-    globalThis.window.addEventListener("pointerrawupdate", handlePointerRawUpdate);
-    globalThis.window.addEventListener("pointerdown", handlePointerDown);
+    canvas.addEventListener("pointermove", handlePointerMove);
+    canvas.addEventListener("pointerrawupdate", handlePointerRawUpdate);
+    canvas.addEventListener("pointerdown", handlePointerDown);
 
     return () => {
       if (animationFrame) globalThis.cancelAnimationFrame(animationFrame);
       resizeObserver.disconnect();
-      globalThis.window.removeEventListener("pointermove", handlePointerMove);
-      globalThis.window.removeEventListener("pointerrawupdate", handlePointerRawUpdate);
-      globalThis.window.removeEventListener("pointerdown", handlePointerDown);
+      canvas.removeEventListener("pointermove", handlePointerMove);
+      canvas.removeEventListener("pointerrawupdate", handlePointerRawUpdate);
+      canvas.removeEventListener("pointerdown", handlePointerDown);
       gl.deleteBuffer(buffer);
       gl.deleteProgram(program);
     };

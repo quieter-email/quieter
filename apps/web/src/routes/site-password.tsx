@@ -5,7 +5,7 @@ import { z } from "zod";
 export const Route = createFileRoute("/site-password")({
   validateSearch: zodValidator(
     z.object({
-      returnTo: z.string().catch("/").default("/"),
+      returnTo: z.string().regex(/^\//).catch("/").default("/"),
       sitePasswordError: z
         .union([z.literal("1"), z.literal("true")])
         .optional()

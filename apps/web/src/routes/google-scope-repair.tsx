@@ -151,7 +151,16 @@ function GoogleScopeRepairRouteComponent() {
           >
             {isStartingRepair ? "Opening Google..." : "Continue to Google"}
           </button>
-          {repairError && <p className="mt-3 text-sm text-destructive">{repairError}</p>}
+          {repairError && (
+            <div
+              aria-live="polite"
+              className="mt-3 text-sm text-destructive"
+              role="status"
+              tabIndex={-1}
+            >
+              {repairError}
+            </div>
+          )}
         </div>
       </div>
     </div>
