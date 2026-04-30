@@ -1,6 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import { authRelations, tables } from "./schema";
+import { authRelations } from "./schema";
 
 const getDatabaseUrl = () => {
   const databaseUrl = process.env.DATABASE_URL?.trim();
@@ -18,7 +18,6 @@ const createDatabaseClient = () => {
   const sql = neon(getDatabaseUrl());
   return drizzle({
     client: sql,
-    schema: tables,
     relations: authRelations,
   });
 };

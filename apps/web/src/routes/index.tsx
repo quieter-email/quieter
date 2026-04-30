@@ -5,27 +5,15 @@ import { LoadingPage } from "~/components/loading-page";
 import { InboxPageClient } from "~/features/mailbox/components/inbox-page-client";
 import { getSessionUser } from "~/lib/auth.functions";
 
-const mailboxCategories = ["inbox", "spam", "sent", "trash", "drafts"] as const;
-
-const mailboxSearchDefaults = {
-  mailbox: "inbox",
-  query: "",
-} as const;
-
-const mailboxSearchSchema = z.object({
-  mailbox: z
-    .enum(mailboxCategories)
-    .catch(mailboxSearchDefaults.mailbox)
-    .default(mailboxSearchDefaults.mailbox),
-  mailboxId: z.string().trim().min(1).optional().catch(undefined),
-  messageId: z.string().trim().min(1).optional().catch(undefined),
-  query: z.string().trim().catch(mailboxSearchDefaults.query).default(mailboxSearchDefaults.query),
-});
-
-export type MailboxSearch = z.output<typeof mailboxSearchSchema>;
-
 export const Route = createFileRoute("/")({
-  validateSearch: zodValidator(mailboxSearchSchema),
+  validateSearch: zodValidator(
+    z.object({
+      mailbox: z.enum(["inbox", "spam", "sent", "trash", "drafts"]).catch("inbox").default("inbox"),
+      mailboxId: z.string().trim().min(1).optional().catch(undefined),
+      messageId: z.string().trim().min(1).optional().catch(undefined),
+      query: z.string().trim().catch("").default(""),
+    }),
+  ),
   ssr: "data-only",
   loader: async () => {
     const user = await getSessionUser();
@@ -43,6 +31,8 @@ export const Route = createFileRoute("/")({
   pendingComponent: LoadingPage,
   component: InboxRouteComponent,
 });
+
+export type MailboxSearch = ReturnType<typeof Route.useSearch>;
 
 function InboxRouteComponent() {
   const { user } = Route.useLoaderData();

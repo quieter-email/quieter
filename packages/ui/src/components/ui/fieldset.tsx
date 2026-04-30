@@ -9,7 +9,7 @@ export const Fieldset = ({
   ...props
 }: ComponentPropsWithoutRef<typeof FieldsetPrimitive.Root>) => (
   <FieldsetPrimitive.Root
-    className={cn("grid gap-3 rounded-lg border border-border bg-card/60 p-4", className)}
+    className={cn("grid gap-3 rounded-lg border bg-card/60 p-4", className)}
     {...props}
   />
 );

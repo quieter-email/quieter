@@ -12,10 +12,7 @@ export const AccordionItem = ({
   ...props
 }: ComponentPropsWithoutRef<typeof AccordionPrimitive.Item>) => (
   <AccordionPrimitive.Item
-    className={cn(
-      "overflow-hidden rounded-lg border border-border bg-card text-card-foreground",
-      className,
-    )}
+    className={cn("overflow-hidden rounded-lg border bg-card text-card-foreground", className)}
     {...props}
   />
 );
@@ -54,10 +51,7 @@ export const AccordionPanel = ({
   ...props
 }: ComponentPropsWithoutRef<typeof AccordionPrimitive.Panel>) => (
   <AccordionPrimitive.Panel
-    className={cn(
-      "overflow-hidden border-t border-border px-4 py-3 text-sm text-muted-foreground",
-      className,
-    )}
+    className={cn("overflow-hidden border-t px-4 py-3 text-sm text-muted-foreground", className)}
     {...props}
   />
 );

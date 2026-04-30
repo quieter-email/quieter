@@ -122,7 +122,7 @@ function RootErrorComponent({ error, reset }: { error: Error | null; reset: () =
 
   return (
     <div className="grid min-h-dvh place-items-center bg-background px-6 py-10">
-      <div className="w-full max-w-xl rounded-2xl border border-border bg-background-light p-8 shadow-sm">
+      <div className="w-full max-w-xl rounded-2xl border bg-background-light p-8 shadow-sm">
         <h1 className="text-3xl font-medium tracking-tight text-foreground-dark">
           Something broke.
         </h1>
@@ -152,7 +152,7 @@ function RootErrorComponent({ error, reset }: { error: Error | null; reset: () =
 function RootNotFoundComponent() {
   return (
     <div className="grid min-h-dvh place-items-center bg-background px-6 py-10">
-      <div className="w-full max-w-xl rounded-2xl border border-border bg-background-light p-8 shadow-sm">
+      <div className="w-full max-w-xl rounded-2xl border bg-background-light p-8 shadow-sm">
         <h1 className="text-3xl font-medium tracking-tight text-foreground">Page not found</h1>
         <p className="mt-3 text-sm text-muted-foreground">
           The route you requested does not exist.

@@ -562,8 +562,7 @@ const ThreadMessageCard = ({
 
   return (
     <section
-      className={cn("border-b border-border transition-colors duration-200", {
-        "border-border": expanded || !isMessageUnread(message),
+      className={cn("border-b transition-colors duration-200", {
         "border-foreground/40": isMessageUnread(message) && !expanded,
       })}
     >
@@ -858,7 +857,7 @@ export const MessageView = ({
 
   return (
     <article className="-mx-4 w-auto sm:-mx-5 lg:-mx-6">
-      <header className="border-b border-border px-5 py-5 sm:px-6 sm:py-6">
+      <header className="border-b px-5 py-5 sm:px-6 sm:py-6">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-8">
           <h1 className="min-w-0 text-lg leading-tight font-medium tracking-tight wrap-break-word text-foreground sm:text-xl">
             {subject}

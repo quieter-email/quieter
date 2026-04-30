@@ -10,9 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SitePasswordRouteImport } from './routes/site-password'
-import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as LoginRouteImport } from './routes/login'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as GoogleScopeRepairRouteImport } from './routes/google-scope-repair'
 import { Route as AuthRouteImport } from './routes/auth'
@@ -26,19 +24,9 @@ const SitePasswordRoute = SitePasswordRouteImport.update({
   path: '/site-password',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SignupRoute = SignupRouteImport.update({
-  id: '/signup',
-  path: '/signup',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HomeRoute = HomeRouteImport.update({
@@ -82,9 +70,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/google-scope-repair': typeof GoogleScopeRepairRoute
   '/home': typeof HomeRoute
-  '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
-  '/signup': typeof SignupRoute
   '/site-password': typeof SitePasswordRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -95,9 +81,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/google-scope-repair': typeof GoogleScopeRepairRoute
   '/home': typeof HomeRoute
-  '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
-  '/signup': typeof SignupRoute
   '/site-password': typeof SitePasswordRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -109,9 +93,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/google-scope-repair': typeof GoogleScopeRepairRoute
   '/home': typeof HomeRoute
-  '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
-  '/signup': typeof SignupRoute
   '/site-password': typeof SitePasswordRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -124,9 +106,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/google-scope-repair'
     | '/home'
-    | '/login'
     | '/settings'
-    | '/signup'
     | '/site-password'
     | '/api/site-password'
     | '/api/auth/$'
@@ -137,9 +117,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/google-scope-repair'
     | '/home'
-    | '/login'
     | '/settings'
-    | '/signup'
     | '/site-password'
     | '/api/site-password'
     | '/api/auth/$'
@@ -150,9 +128,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/google-scope-repair'
     | '/home'
-    | '/login'
     | '/settings'
-    | '/signup'
     | '/site-password'
     | '/api/site-password'
     | '/api/auth/$'
@@ -164,9 +140,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   GoogleScopeRepairRoute: typeof GoogleScopeRepairRoute
   HomeRoute: typeof HomeRoute
-  LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRoute
-  SignupRoute: typeof SignupRoute
   SitePasswordRoute: typeof SitePasswordRoute
   ApiSitePasswordRoute: typeof ApiSitePasswordRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -182,25 +156,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SitePasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/signup': {
-      id: '/signup'
-      path: '/signup'
-      fullPath: '/signup'
-      preLoaderRoute: typeof SignupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/settings': {
       id: '/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/home': {
@@ -260,9 +220,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   GoogleScopeRepairRoute: GoogleScopeRepairRoute,
   HomeRoute: HomeRoute,
-  LoginRoute: LoginRoute,
   SettingsRoute: SettingsRoute,
-  SignupRoute: SignupRoute,
   SitePasswordRoute: SitePasswordRoute,
   ApiSitePasswordRoute: ApiSitePasswordRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

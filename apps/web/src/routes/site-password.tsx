@@ -2,16 +2,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { z } from "zod";
 
-const sitePasswordSearchSchema = z.object({
-  returnTo: z.string().catch("/"),
-  sitePasswordError: z
-    .union([z.literal("1"), z.literal("true")])
-    .optional()
-    .catch(undefined),
-});
-
 export const Route = createFileRoute("/site-password")({
-  validateSearch: zodValidator(sitePasswordSearchSchema),
+  validateSearch: zodValidator(
+    z.object({
+      returnTo: z.string().regex(/^\//).catch("/").default("/"),
+      sitePasswordError: z
+        .union([z.literal("1"), z.literal("true")])
+        .optional()
+        .catch(undefined),
+    }),
+  ),
   component: SitePasswordRouteComponent,
 });
 

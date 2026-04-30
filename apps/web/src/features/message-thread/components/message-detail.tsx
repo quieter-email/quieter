@@ -32,7 +32,7 @@ const MessageDetailLoadingSkeleton = () => (
         <div className="h-3.5 w-44 rounded-md bg-muted/70" />
       </div>
 
-      <div className="flex items-center gap-3 border-t border-border pt-8">
+      <div className="flex items-center gap-3 border-t pt-8">
         <div className="size-10 rounded-lg bg-muted/80" />
         <div className="min-w-0 flex-1 space-y-2">
           <div className="h-3.5 w-40 rounded-md bg-muted/80" />
