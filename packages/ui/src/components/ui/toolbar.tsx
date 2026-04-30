@@ -10,7 +10,7 @@ export const Toolbar = ({
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Root>) => (
   <ToolbarPrimitive.Root
     className={cn(
-      "squircle inline-flex min-h-10 items-center gap-1 rounded-lg border border-border bg-background-light p-1 shadow-sm",
+      "squircle inline-flex min-h-10 items-center gap-1 rounded-lg border bg-background-light p-1 shadow-sm",
       className,
     )}
     {...props}

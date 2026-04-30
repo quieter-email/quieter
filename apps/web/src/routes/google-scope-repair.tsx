@@ -7,31 +7,25 @@ import { authClient } from "~/lib/auth";
 import { getGoogleScopeRepairTarget, getSessionUser } from "~/lib/auth.functions";
 import { getErrorMessage } from "~/lib/errors";
 
-const googleScopeRepairSearchSchema = z.object({
-  from: z
-    .preprocess((value) => (typeof value === "string" ? value : undefined), z.string().optional())
-    .transform((value) => {
-      const normalizedValue = (value ?? "/").trim();
-      if (
-        !normalizedValue ||
-        !normalizedValue.startsWith("/") ||
-        normalizedValue.startsWith("//")
-      ) {
-        return "/";
-      }
-      return normalizedValue;
-    }),
-  returned: z.preprocess((value) => value === "1", z.boolean()),
-  targetAccountId: z
-    .preprocess((value) => (typeof value === "string" ? value : undefined), z.string().optional())
-    .transform((value) => {
-      const normalizedValue = value?.trim();
-      return normalizedValue || null;
-    }),
-});
-
 export const Route = createFileRoute("/google-scope-repair")({
-  validateSearch: zodValidator(googleScopeRepairSearchSchema),
+  validateSearch: zodValidator(
+    z.object({
+      from: z
+        .string()
+        .trim()
+        .transform((value) =>
+          value && value.startsWith("/") && !value.startsWith("//") ? value : "/",
+        )
+        .catch("/")
+        .default("/"),
+      returned: z.preprocess((value) => value === "1", z.boolean()),
+      targetAccountId: z
+        .string()
+        .trim()
+        .transform((value) => value || null)
+        .catch(null),
+    }),
+  ),
   loaderDeps: ({ search }) => ({
     from: search.from,
     targetAccountId: search.targetAccountId,
