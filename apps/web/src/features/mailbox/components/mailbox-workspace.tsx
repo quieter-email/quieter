@@ -122,8 +122,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     null;
   const selectedMailboxId = selectedMailbox?.id ?? null;
 
-  const unsubscribeMutationOptions = orpc.mail.unsubscribeFromMessage.mutationOptions();
-  const unsubscribeMutation = useMutation(unsubscribeMutationOptions);
+  const unsubscribeMutation = useMutation(orpc.mail.unsubscribeFromMessage.mutationOptions());
   const setDefaultMailboxMutation = useMutation({
     ...orpc.mail.setDefaultMailbox.mutationOptions(),
     onSuccess: async () => {

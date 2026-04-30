@@ -1,4 +1,4 @@
-export type GmailMessagePart = {
+type GmailMessagePart = {
   mimeType?: string;
   filename?: string;
   headers?: Array<{ name: string; value: string }>;
@@ -10,19 +10,19 @@ export type GmailMessagePart = {
   parts?: GmailMessagePart[];
 };
 
-export type ExtractedMessageContent = {
+type ExtractedMessageContent = {
   html?: string;
   text?: string;
 };
 
-export type ExtractedMessageAttachment = {
+type ExtractedMessageAttachment = {
   attachmentId: string;
   fileName: string;
   mimeType: string;
   size: number;
 };
 
-export type ExtractedInlineMessageAttachment = ExtractedMessageAttachment & {
+type ExtractedInlineMessageAttachment = ExtractedMessageAttachment & {
   contentId: string;
 };
 

@@ -27,11 +27,11 @@ import {
   cn,
   toast,
 } from "@quieter/ui";
-import { mutationOptions, useMutation } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { authClient } from "~/lib/auth";
 import { getErrorMessage, unwrapResultError } from "~/lib/errors";
 
-export type MailboxSwitcherMailbox = {
+type MailboxSwitcherMailbox = {
   displayName: string | null;
   emailAddress: string;
   id: string;
@@ -46,7 +46,6 @@ type WorkspaceSummary = {
 type MailboxSummaryProps = {
   action?: ReactNode;
   className?: string;
-  isActive?: boolean;
   mailbox: MailboxSwitcherMailbox;
 };
 
@@ -63,17 +62,10 @@ type MailboxSwitcherDropdownProps = {
   workspaceName: string;
 };
 
-const getMailboxTitle = (mailbox: MailboxSwitcherMailbox) => mailbox.emailAddress;
-
-const getMailboxSubtitle = () => null;
-
 const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => (
   <div className={cn("flex min-w-0 items-center justify-between gap-3 rounded-md", className)}>
     <div className="min-w-0">
-      <p className="truncate text-sm text-foreground">{getMailboxTitle(mailbox)}</p>
-      {getMailboxSubtitle() && (
-        <p className="truncate text-xs text-muted-foreground">{getMailboxSubtitle()}</p>
-      )}
+      <p className="truncate text-sm text-foreground">{mailbox.emailAddress}</p>
     </div>
 
     {action}
@@ -91,21 +83,19 @@ const useWorkspaceSwitcher = () => {
     })),
   ] satisfies WorkspaceSummary[];
   const workspaceId = toWorkspaceId(activeOrganizationState.data?.id);
-  const setWorkspaceMutation = useMutation(
-    mutationOptions({
-      mutationFn: async (nextWorkspaceId: WorkspaceId) =>
-        unwrapResultError(
-          await authClient.organization.setActive({
-            organizationId: toOrganizationId(nextWorkspaceId),
-          }),
-          "Could not switch workspace.",
-        ),
-      mutationKey: ["auth", "organization", "set-active"],
-    }),
-  );
+  const setWorkspaceMutation = useMutation({
+    mutationFn: async (nextWorkspaceId: WorkspaceId) =>
+      unwrapResultError(
+        await authClient.organization.setActive({
+          organizationId: toOrganizationId(nextWorkspaceId),
+        }),
+        "Could not switch workspace.",
+      ),
+    mutationKey: ["auth", "organization", "set-active"],
+  });
 
   const setWorkspace = async (nextWorkspaceId: WorkspaceId) => {
-    if (!nextWorkspaceId || nextWorkspaceId === workspaceId) {
+    if (nextWorkspaceId === workspaceId) {
       return;
     }
 
@@ -281,7 +271,6 @@ export const MailboxSwitcherDropdown = ({
                       </button>
                     }
                     className="w-full"
-                    isActive={isActive}
                     mailbox={mailbox}
                   />
                 </DropdownMenuItem>
@@ -296,11 +285,7 @@ export const MailboxSwitcherDropdown = ({
   );
 };
 
-export const MailboxSettingsRow = ({
-  action,
-  className,
-  mailbox,
-}: Omit<MailboxSummaryProps, "isActive">) => (
+export const MailboxSettingsRow = ({ action, className, mailbox }: MailboxSummaryProps) => (
   <div className={cn("flex items-center justify-between gap-3 py-3", className)}>
     <MailboxSummary className="min-w-0 flex-1" mailbox={mailbox} />
     {action && <div className="shrink-0">{action}</div>}

@@ -10,7 +10,7 @@ const extractSenderEmail = (value: string | undefined): string | undefined => {
   return match?.[1]?.trim().toLowerCase();
 };
 
-export const getParsedMessageDate = (message: MessageListItem) => {
+const getParsedMessageDate = (message: MessageListItem) => {
   const source = message.internalDate ?? message.date;
   if (!source) return null;
 

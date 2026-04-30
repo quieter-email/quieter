@@ -41,6 +41,7 @@ import {
   hasDistinctReplyAllRecipients,
 } from "~/features/compose";
 import {
+  hasRenderableMessageBody,
   isMessageUnread,
   type MailboxCategory,
   MAILBOX_LABELS,
@@ -95,12 +96,9 @@ const formatEnvelopeValue = (value?: string) => {
 const isDraftMessage = (message: MessageListItem) =>
   !!(message.draftId || message.labelIds?.includes(MAILBOX_LABELS.drafts));
 
-const hasRenderableBody = (message: MessageListItem) =>
-  !!(message.bodyHtml?.trim() || message.bodyText?.trim());
-
 const getMessagesMissingLoadedBody = (messages: readonly MessageListItem[]) =>
   messages.filter(
-    (threadMessage) => !!threadMessage.snippet?.trim() && !hasRenderableBody(threadMessage),
+    (threadMessage) => !!threadMessage.snippet?.trim() && !hasRenderableMessageBody(threadMessage),
   );
 
 const getMessageUnsubscribeAction = (
@@ -762,7 +760,7 @@ export const MessageView = ({
   pendingActions,
 }: MessageViewProps) => {
   const threadQuery = useQuery({
-    ...getThreadWithDetailsOptions(mailboxId, activeMailbox, message.threadId),
+    ...getThreadWithDetailsOptions(mailboxId, message.threadId),
     placeholderData: {
       threadId: message.threadId,
       snippet: message.snippet,

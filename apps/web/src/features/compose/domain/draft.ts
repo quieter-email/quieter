@@ -4,9 +4,9 @@ import { rpc } from "~/lib/orpc";
 const MAX_TOTAL_ATTACHMENT_BYTES = 24 * 1024 * 1024;
 const CONTENT_ID_PREFIX = "quieter-inline";
 
-export type ComposeSaveStatus = "idle" | "saving" | "saved" | "error" | "sending";
+type ComposeSaveStatus = "idle" | "saving" | "saved" | "error" | "sending";
 
-export type ComposeRecipientFields = {
+type ComposeRecipientFields = {
   to: string;
   cc: string;
   bcc: string;
@@ -26,11 +26,11 @@ type ComposeAssetBase = {
   gmailAttachmentId?: string;
 };
 
-export type ComposeAttachment = ComposeAssetBase & {
+type ComposeAttachment = ComposeAssetBase & {
   isInline: false;
 };
 
-export type ComposeInlineImage = ComposeAssetBase & {
+type ComposeInlineImage = ComposeAssetBase & {
   contentId: string;
   isInline: true;
 };
@@ -206,7 +206,7 @@ const htmlToText = (html: string): string => {
   return doc.body.textContent?.replace(/\s+\n/g, "\n").trim() ?? "";
 };
 
-const escapeHtml = (value: string) =>
+export const escapeComposeHtml = (value: string) =>
   value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -214,7 +214,7 @@ const escapeHtml = (value: string) =>
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 
-export const textToComposeBodyHtml = (value: string): string => {
+const textToComposeBodyHtml = (value: string): string => {
   const normalized = value.trim();
   if (!normalized) return "";
 
@@ -224,7 +224,7 @@ export const textToComposeBodyHtml = (value: string): string => {
       (paragraph) =>
         `<p>${paragraph
           .split(/\r?\n/g)
-          .map((line) => (line ? escapeHtml(line) : "<br>"))
+          .map((line) => (line ? escapeComposeHtml(line) : "<br>"))
           .join("<br>")}</p>`,
     )
     .join("");

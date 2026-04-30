@@ -40,13 +40,9 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useReducer, useState } from "react";
 import type { MailboxActions } from "~/features/mailbox/components/mailbox-action-handlers";
+import { getUserLabels } from "~/features/message-search/state/message-list-search-state";
 import { getErrorMessage } from "~/lib/errors";
-import {
-  type GmailLabelListItem,
-  isMessageUnread,
-  type MailboxCategory,
-  type MessageListItem,
-} from "~/lib/gmail/gmail";
+import { isMessageUnread, type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
 import { getMessageUnsubscribeTarget, openUnsubscribeUrl } from "./message-unsubscribe";
 
@@ -136,9 +132,6 @@ const areStringArraysEqual = (left: readonly string[], right: readonly string[])
 
   return true;
 };
-
-const getUserLabels = (labels: readonly GmailLabelListItem[]): GmailLabelListItem[] =>
-  labels.filter((label) => label.type === "user");
 
 const renderDropdownEntry = (entry: MenuEntry) => {
   if (entry.type === "separator") {

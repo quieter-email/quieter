@@ -83,16 +83,6 @@ export const refreshLoadedMessagesPages = async (
   return refreshedPages[0];
 };
 
-export const refreshMessagesFirstPage = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  mailbox: MailboxCategory,
-  searchQuery?: string | null,
-  signal?: AbortSignal,
-) => {
-  return await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, searchQuery, signal);
-};
-
 export const refreshCachedMailboxQueries = async (
   queryClient: QueryClient,
   mailboxId: string,

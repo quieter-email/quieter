@@ -28,14 +28,14 @@ import { resolveCname, resolveMx, resolveTxt } from "node:dns/promises";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-export type MailDomainCheck = MailDomainCheckResult["checks"][number];
+type MailDomainCheck = MailDomainCheckResult["checks"][number];
 
 type MxLookupRecord = {
   exchange: string;
   priority: number;
 };
 
-export type MailDomainDnsLookup = {
+type MailDomainDnsLookup = {
   resolveCname: (name: string) => Promise<string[]>;
   resolveMx: (name: string) => Promise<MxLookupRecord[]>;
   resolveTxt: (name: string) => Promise<string[][]>;

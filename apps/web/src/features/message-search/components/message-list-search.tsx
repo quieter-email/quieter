@@ -16,6 +16,7 @@ import { ArrowInteractionButton } from "~/components/arrow-interaction-button";
 import { SpinWhileActive } from "~/components/spin-while-active";
 import {
   getUserLabels,
+  normalizeSearchText,
   normalizeLabelSelectionKey,
   parseStructuredSearchFilterToken,
   parseStructuredSearchQuery,
@@ -27,7 +28,7 @@ import {
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
 import { MessageListSearchDropdown, searchFilterOptions } from "./message-list-search-dropdown";
 
-export type MessageListSearchProps = {
+type MessageListSearchProps = {
   isRefreshing: boolean;
   mailboxId: string;
   onRefresh: () => void | Promise<void>;
@@ -65,8 +66,6 @@ const parseDateFilterValue = (value: string) => {
 
   return date;
 };
-
-const normalizeSearchText = (value: string) => value.replace(/\s+/g, " ").trim();
 
 const serializeStructuredSearchState = (state: StructuredSearchState) =>
   [...state.filters.map(serializeStructuredSearchFilterToken), normalizeSearchText(state.text)]

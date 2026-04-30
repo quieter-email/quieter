@@ -93,9 +93,6 @@ export const composeFormValuesToDraft = (
   return syncedDraft;
 };
 
-export const canSaveComposeFormValues = (values: ComposeFormValues) =>
-  composeDraftFormValuesSchema.safeParse(values).success;
-
 export const shouldPersistComposeDraft = ({
   currentDraft,
   nextDraft,
@@ -105,7 +102,7 @@ export const shouldPersistComposeDraft = ({
   nextDraft: ComposeDraftState;
   values: ComposeFormValues;
 }) =>
-  canSaveComposeFormValues(values) &&
+  composeDraftFormValuesSchema.safeParse(values).success &&
   hasComposeDraftContent(nextDraft) &&
   (currentDraft.saveStatus === "error" ||
     !nextDraft.draftId ||

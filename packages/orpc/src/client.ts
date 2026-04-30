@@ -1,3 +1,4 @@
+import type { InferClientInputs, InferClientOutputs } from "@orpc/client";
 import type { RouterClient } from "@orpc/server";
 import { createORPCClient, ORPCError } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
@@ -8,6 +9,8 @@ type HeaderMap = Record<string, string>;
 type OrpcClientContext = ClientRetryPluginContext;
 
 export type AppRouterClient = RouterClient<AppRouter, OrpcClientContext>;
+export type RouterInputs = InferClientInputs<AppRouterClient>;
+export type RouterOutputs = InferClientOutputs<AppRouterClient>;
 const GET_METHOD_PATHS = new Set([
   "auth.getUserStatus",
   "mail.getAttachment",
@@ -67,4 +70,3 @@ export function createOrpcClient(options?: {
 }
 
 export type { AppRouter };
-export type { RouterInputs, RouterOutputs } from "./types";

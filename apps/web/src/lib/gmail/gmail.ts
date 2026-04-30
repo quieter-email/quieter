@@ -1,15 +1,15 @@
-import { MAILBOX_LABELS, type MailboxCategory } from "@quieter/orpc/gmail-service";
+import {
+  GMAIL_UNREAD_LABEL,
+  MAILBOX_LABELS,
+  type MailboxCategory,
+} from "@quieter/orpc/gmail-service";
 
 export {
-  GMAIL_UNREAD_LABEL,
-  type GmailMessagePart,
   MAILBOX_LABELS,
   type GmailLabelListItem,
   type ListMessagesPageResult,
   type MailboxCategory,
   type MessageAttachment,
-  type MessageHeader,
-  type MessageInspectorResult,
   type MessageListItem,
   type ThreadMessagesResult,
 } from "@quieter/orpc/gmail-service";
@@ -17,7 +17,7 @@ export {
 export const GMAIL_QUERY_STALE_TIME_MS = 1000 * 60 * 2;
 export const GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS = 1000 * 60;
 
-export const normalizeLabelIds = (labelIds: string[] | undefined): string[] | undefined => {
+const normalizeLabelIds = (labelIds: string[] | undefined): string[] | undefined => {
   if (!labelIds?.length) return undefined;
 
   const normalized = Array.from(new Set(labelIds.map((labelId) => labelId.trim()).filter(Boolean)));
@@ -25,10 +25,10 @@ export const normalizeLabelIds = (labelIds: string[] | undefined): string[] | un
 };
 
 export const removeUnreadLabel = (labelIds: string[] | undefined): string[] | undefined =>
-  normalizeLabelIds(labelIds?.filter((labelId) => labelId !== "UNREAD"));
+  normalizeLabelIds(labelIds?.filter((labelId) => labelId !== GMAIL_UNREAD_LABEL));
 
 export const addUnreadLabel = (labelIds: string[] | undefined): string[] | undefined =>
-  normalizeLabelIds([...(labelIds ?? []), "UNREAD"]);
+  normalizeLabelIds([...(labelIds ?? []), GMAIL_UNREAD_LABEL]);
 
 export const applyLabelIdChanges = (
   labelIds: readonly string[] | undefined,
@@ -53,8 +53,13 @@ export const applyLabelIdChanges = (
 };
 
 export const isMessageUnread = (message: { isUnread?: boolean; labelIds?: string[] }) => {
-  return message.isUnread ?? !!message.labelIds?.includes("UNREAD");
+  return message.isUnread ?? !!message.labelIds?.includes(GMAIL_UNREAD_LABEL);
 };
+
+export const hasRenderableMessageBody = (message: {
+  bodyHtml?: string | null;
+  bodyText?: string | null;
+}) => !!(message.bodyHtml?.trim() || message.bodyText?.trim());
 
 export const isMessageInMailbox = (message: { labelIds?: string[] }, mailbox: MailboxCategory) => {
   const labelIds = message.labelIds;

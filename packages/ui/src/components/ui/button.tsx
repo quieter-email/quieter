@@ -6,8 +6,8 @@ import { createLink, type LinkComponent } from "@tanstack/react-router";
 import { forwardRef } from "react";
 import { cn } from "../../lib/cn";
 
-export type ButtonVariant = "default" | "outline" | "ghost" | "destructive";
-export type ButtonSize = "sm" | "default" | "lg" | "icon-sm" | "icon" | "icon-lg";
+type ButtonVariant = "default" | "outline" | "ghost" | "destructive";
+type ButtonSize = "sm" | "default" | "lg" | "icon-sm" | "icon" | "icon-lg";
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   size?: ButtonSize;

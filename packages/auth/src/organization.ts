@@ -1,6 +1,6 @@
 import { db, invitation, member, organization, session, user } from "@quieter/database";
 import { APIError } from "better-auth/api";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 type AuthUser = typeof user.$inferSelect;
 
@@ -50,23 +50,6 @@ export const ensureUserOrganizationState = async (
     activeOrganizationId,
     organizationIds,
   };
-};
-
-export const ensureUsersHavePersonalOrganizations = async (userIds: string[]) => {
-  if (userIds.length === 0) {
-    return;
-  }
-
-  const users = await db
-    .select({
-      email: user.email,
-      id: user.id,
-      name: user.name,
-    })
-    .from(user)
-    .where(inArray(user.id, [...new Set(userIds)]));
-
-  await Promise.all(users.map((currentUser) => ensureUserOrganizationState(currentUser)));
 };
 
 export const getUserById = async (userId: string) => {

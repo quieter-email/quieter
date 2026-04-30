@@ -5,7 +5,6 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, Dialog, DialogContent, cn } from "@quieter/ui";
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { forwardRef, type ReactNode, useImperativeHandle } from "react";
-import { getFieldErrorMessage } from "~/lib/errors";
 import type { ComposeFormValues } from "../domain/compose-form";
 import { hasComposeDraftContent, type ComposeDraftState } from "../domain/draft";
 import { ComposeEditor } from "./compose-editor";
@@ -29,7 +28,7 @@ type ComposeTextFieldProps = {
   className?: string;
   disabled?: boolean;
   endAdornment?: ReactNode;
-  errorMessage?: string | null;
+  invalid?: boolean;
   onBlur: () => void;
   onChange: (value: string) => void;
   placeholder: string;
@@ -39,7 +38,7 @@ type ComposeTextFieldProps = {
 
 type ComposeFormTextFieldProps = Omit<
   ComposeTextFieldProps,
-  "errorMessage" | "onBlur" | "onChange" | "value"
+  "invalid" | "onBlur" | "onChange" | "value"
 > &
   Pick<ComposeDialogController, "clearActiveDraftError" | "form" | "scheduleAutosave"> & {
     name: keyof Pick<ComposeFormValues, "to" | "cc" | "bcc" | "subject">;
@@ -53,7 +52,7 @@ const ComposeTextField = ({
   className,
   disabled,
   endAdornment,
-  errorMessage,
+  invalid,
   onBlur,
   onChange,
   placeholder,
@@ -63,11 +62,11 @@ const ComposeTextField = ({
   <div className="space-y-2">
     <div
       className={cn(composeInputFrameClass, className, {
-        "bg-destructive/10": !!errorMessage,
+        "bg-destructive/10": invalid,
       })}
     >
       <input
-        aria-invalid={errorMessage ? true : undefined}
+        aria-invalid={invalid}
         aria-label={ariaLabel}
         autoComplete="off"
         className="min-w-0 flex-1 bg-transparent py-2.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/60"
@@ -81,8 +80,6 @@ const ComposeTextField = ({
       />
       {endAdornment}
     </div>
-
-    {errorMessage && <p className="pl-1 text-xs text-destructive">{errorMessage}</p>}
   </div>
 );
 
@@ -94,13 +91,11 @@ const ComposeFormTextField = ({
   ...textFieldProps
 }: ComposeFormTextFieldProps) => (
   <form.Field name={name}>
-    {(field) => {
-      const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
-
-      return (
+    {(field) => (
+      <div className="space-y-2">
         <ComposeTextField
           {...textFieldProps}
-          errorMessage={fieldError}
+          invalid={field.state.meta.errors.length > 0}
           onBlur={() => field.handleBlur()}
           onChange={(value) => {
             clearActiveDraftError();
@@ -109,8 +104,16 @@ const ComposeFormTextField = ({
           }}
           value={field.state.value}
         />
-      );
-    }}
+        {field.state.meta.errors.map((error) => (
+          <p
+            className="pl-1 text-xs text-destructive"
+            key={error?.message ?? "An unknown error occurred."}
+          >
+            {error?.message ?? "An unknown error occurred."}
+          </p>
+        ))}
+      </div>
+    )}
   </form.Field>
 );
 
