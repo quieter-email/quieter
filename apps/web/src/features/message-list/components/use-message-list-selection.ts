@@ -158,10 +158,10 @@ export const useMessageListSelection = ({
       ? threadedMessages.findIndex((thread) => thread.threadId === fallbackAnchorThreadId)
       : undefined;
 
-    if (targetIndex == null) return;
+    if (targetIndex < 0) return;
 
     setSelectedThreadIds((current) => {
-      if (anchorIndex == null) {
+      if (anchorIndex == null || anchorIndex < 0) {
         if (additive) {
           const next = new Set(current);
 

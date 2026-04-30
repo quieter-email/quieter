@@ -3,7 +3,7 @@ import {
   type AsyncStorage,
 } from "@tanstack/query-persist-client-core";
 
-const createBrowserQueryStorage = () => {
+const createBrowserQueryStorage = (): AsyncStorage<string> | undefined => {
   if (typeof window === "undefined") return undefined;
 
   return {
@@ -11,7 +11,7 @@ const createBrowserQueryStorage = () => {
     setItem: async (key, value) => window.localStorage.setItem(key, value),
     removeItem: async (key) => window.localStorage.removeItem(key),
     entries: async () => Object.entries(window.localStorage),
-  } satisfies AsyncStorage;
+  };
 };
 
 export const queryPersister = experimental_createQueryPersister({
