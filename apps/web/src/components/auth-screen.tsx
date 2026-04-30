@@ -4,7 +4,7 @@ import { Key02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, TextField, TextFieldInput } from "@quieter/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import { useState } from "react";
@@ -12,9 +12,10 @@ import { z } from "zod";
 import { AuthVisual } from "~/components/auth-visual";
 import { GoogleLogo } from "~/components/google-logo";
 import { authClient } from "~/lib/auth";
-import { orpc } from "~/lib/orpc";
 
 const authRouteApi = getRouteApi("/auth");
+const AUTHENTICATION_ERROR_MESSAGE =
+  "Unable to authenticate. Please check your credentials or try again.";
 
 type AuthNavigate = ReturnType<(typeof authRouteApi)["useNavigate"]>;
 
@@ -53,8 +54,6 @@ const AuthCredentials = ({
   mode: "login" | "signup";
   navigate: AuthNavigate;
 }) => {
-  const queryClient = useQueryClient();
-
   const [errors, setErrors] = useState<{
     google?: string;
     passkey?: string;
@@ -129,25 +128,6 @@ const AuthCredentials = ({
       onSubmitAsync: async ({ value }) => {
         const normalizedEmail = value.email.trim().toLowerCase();
 
-        const status = await queryClient.fetchQuery(
-          orpc.auth.getUserStatus.queryOptions({
-            input: { email: normalizedEmail },
-            staleTime: 0,
-          }),
-        );
-
-        if (isSignup && status.exists) {
-          return {
-            form: "Email already in use. Please log in instead or use a different email.",
-          };
-        }
-
-        if (!isSignup && !status.exists) {
-          return {
-            form: "Account not found. Please sign up first.",
-          };
-        }
-
         try {
           const response = await authClient.signIn.magicLink({
             callbackURL: "/",
@@ -159,12 +139,12 @@ const AuthCredentials = ({
 
           if (response.error) {
             return {
-              form: response.error.message ?? "Could not authenticate with email.",
+              form: AUTHENTICATION_ERROR_MESSAGE,
             };
           }
-        } catch (error) {
+        } catch {
           return {
-            form: (error as Error).message ?? "Could not authenticate with email.",
+            form: AUTHENTICATION_ERROR_MESSAGE,
           };
         }
       },
@@ -195,6 +175,7 @@ const AuthCredentials = ({
               return (
                 <TextField>
                   <TextFieldInput
+                    aria-label="Name"
                     aria-invalid={field.state.meta.errors.length > 0}
                     autoComplete="name"
                     name={field.name}
@@ -219,6 +200,7 @@ const AuthCredentials = ({
             return (
               <TextField>
                 <TextFieldInput
+                  aria-label="Email address"
                   aria-invalid={field.state.meta.errors.length > 0}
                   autoCapitalize="none"
                   autoComplete="email"
