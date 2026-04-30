@@ -148,25 +148,25 @@ const AuthCredentials = ({
           };
         }
 
-        await authClient.signIn
-          .magicLink({
+        try {
+          const response = await authClient.signIn.magicLink({
             callbackURL: "/",
             email: normalizedEmail,
             errorCallbackURL: errorCallbackHref,
             name: isSignup ? value.name.trim() : undefined,
             newUserCallbackURL: "/",
-          })
-          .then((response) => {
-            if (response.error)
-              return {
-                form: response.error.message ?? "Could not authenticate with email.",
-              };
-          })
-          .catch((error) => {
-            return {
-              form: (error as Error).message ?? "Could not authenticate with email.",
-            };
           });
+
+          if (response.error) {
+            return {
+              form: response.error.message ?? "Could not authenticate with email.",
+            };
+          }
+        } catch (error) {
+          return {
+            form: (error as Error).message ?? "Could not authenticate with email.",
+          };
+        }
       },
       onDynamic:
         mode === "signup"
@@ -275,7 +275,9 @@ const AuthCredentials = ({
         <form.Subscribe selector={(state) => ({ errorMap: state.errorMap })}>
           {({ errorMap }) =>
             errorMap.onSubmit && (
-              <p className="mt-4 text-sm text-destructive">{errorMap.onSubmit.form}</p>
+              <p aria-live="assertive" className="mt-4 text-sm text-destructive" role="status">
+                {errorMap.onSubmit.form}
+              </p>
             )
           }
         </form.Subscribe>
@@ -307,8 +309,16 @@ const AuthCredentials = ({
         Continue with passkey
       </Button>
 
-      {errors.google ? <p className="mt-4 text-sm text-destructive">{errors.google}</p> : null}
-      {errors.passkey ? <p className="mt-4 text-sm text-destructive">{errors.passkey}</p> : null}
+      {errors.google ? (
+        <p aria-live="assertive" className="mt-4 text-sm text-destructive" role="status">
+          {errors.google}
+        </p>
+      ) : null}
+      {errors.passkey ? (
+        <p aria-live="assertive" className="mt-4 text-sm text-destructive" role="status">
+          {errors.passkey}
+        </p>
+      ) : null}
     </>
   );
 };

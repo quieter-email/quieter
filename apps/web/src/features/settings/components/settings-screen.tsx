@@ -1,6 +1,6 @@
 "use client";
 
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { type SettingsTab } from "~/features/settings/domain/settings-tab";
 import { settingsRouteApi } from "~/lib/route-apis";
 import { AccountSettingsPanel } from "./account-settings-panel";
@@ -24,7 +24,6 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
   const navigate = useNavigate({
     from: "/settings",
   });
-  const router = useRouter();
   const { from, tab } = settingsRouteApi.useSearch();
 
   const setTab = (nextTab: SettingsTab) => {
@@ -43,7 +42,9 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
       <SettingsSidebar
         activeTab={tab}
         onBack={() => {
-          router.history.push(from);
+          void navigate({
+            to: from,
+          });
         }}
         onSelectTab={setTab}
       />
