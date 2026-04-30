@@ -13,8 +13,8 @@ export default $config({
   async run() {
     const mailBucket = new sst.aws.Bucket("MailBucket");
     const mailReceiptTopic = new sst.aws.SnsTopic("MailReceiptTopic");
-    const mailIngestToken = new sst.Secret("MailIngestToken", "dev-mail-ingest-token");
-    const mailSendToken = new sst.Secret("MailSendToken", "dev-mail-send-token");
+    const mailIngestToken = new sst.Secret("MailIngestToken");
+    const mailSendToken = new sst.Secret("MailSendToken");
     const mailReceiptRuleSetName = "quieter-mail";
 
     const mailReceiptRole = new aws.iam.Role("MailReceiptRole", {

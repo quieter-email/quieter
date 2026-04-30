@@ -1,6 +1,7 @@
 {
   "name": "quieter",
   "private": true,
+  "license": "MIT",
   "workspaces": {
     "packages": [
       "apps/*",
