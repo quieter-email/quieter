@@ -1,5 +1,5 @@
 import { passkey } from "@better-auth/passkey";
-import { db } from "@quieter/database";
+import { db, tables } from "@quieter/database";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
@@ -52,6 +52,7 @@ export const auth = betterAuth({
   trustedOrigins: [baseURL],
   database: drizzleAdapter(db, {
     provider: "pg",
+    schema: tables,
   }),
   hooks: {
     before: createAuthMiddleware(async (ctx) => {

@@ -202,7 +202,7 @@ export const MessageListSearchDropdown = ({
         <div aria-hidden className="absolute top-0 left-0 h-full w-2" />
         <div
           aria-label="Labels"
-          className="absolute top-0 left-2 w-72 rounded-lg border border-border bg-popover p-1 shadow-lg"
+          className="absolute top-0 left-2 w-72 rounded-lg border bg-popover p-1 shadow-lg"
           ref={labelsSubmenuRef}
           role="group"
         >
@@ -219,7 +219,7 @@ export const MessageListSearchDropdown = ({
   return (
     <div
       aria-label="Search filters"
-      className="absolute inset-x-0 top-full z-30 mt-2 rounded-lg border border-border bg-popover p-2 shadow-lg"
+      className="absolute inset-x-0 top-full z-30 mt-2 rounded-lg border bg-popover p-2 shadow-lg"
       data-search-dropdown-content
       onMouseDown={(event) => {
         event.preventDefault();

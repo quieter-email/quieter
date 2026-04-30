@@ -71,6 +71,10 @@ export const MailSidebar = ({
           <LinkButton
             aria-label="Settings"
             className="w-full justify-start"
+            search={{
+              from: "/",
+              tab: "general",
+            }}
             variant="ghost"
             to="/settings"
           >

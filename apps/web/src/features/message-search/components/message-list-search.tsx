@@ -852,7 +852,7 @@ export const MessageListSearch = ({
               activeDateFilterIndex !== null &&
               (activeDateFilter.type === "after" || activeDateFilter.type === "before") && (
                 <div
-                  className="absolute top-full z-40 mt-2 rounded-lg border border-border bg-popover p-2 shadow-lg"
+                  className="absolute top-full z-40 mt-2 rounded-lg border bg-popover p-2 shadow-lg"
                   style={{ left: datePopoverLeft }}
                 >
                   <Calendar

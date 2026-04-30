@@ -47,7 +47,7 @@ export const NumberFieldIncrement = ({
   ...props
 }: ComponentPropsWithoutRef<typeof NumberFieldPrimitive.Increment>) => (
   <NumberFieldPrimitive.Increment
-    className={cn(numberFieldButtonClassName, "border-l border-border", className)}
+    className={cn(numberFieldButtonClassName, "border-l", className)}
     {...props}
   >
     {children ?? <PlusIcon className="size-4" />}
@@ -60,7 +60,7 @@ export const NumberFieldDecrement = ({
   ...props
 }: ComponentPropsWithoutRef<typeof NumberFieldPrimitive.Decrement>) => (
   <NumberFieldPrimitive.Decrement
-    className={cn(numberFieldButtonClassName, "border-r border-border", className)}
+    className={cn(numberFieldButtonClassName, "border-r", className)}
     {...props}
   >
     {children ?? <MinusIcon className="size-4" />}

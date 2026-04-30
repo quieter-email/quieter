@@ -15,7 +15,7 @@ export const Avatar = ({
 }) => (
   <AvatarPrimitive.Root
     className={cn(
-      "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-foreground",
+      "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted text-foreground",
       {
         "size-8 text-xs": size === "sm",
         "size-10 text-sm": size === "default",
