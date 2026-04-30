@@ -34,6 +34,11 @@ export const Route = createFileRoute("/")({
 
 export type MailboxSearch = ReturnType<typeof Route.useSearch>;
 
+/**
+ * Renders the inbox page client using the user provided by the route loader.
+ *
+ * @returns A JSX element that renders <InboxPageClient /> with the loaded `user`.
+ */
 function InboxRouteComponent() {
   const { user } = Route.useLoaderData();
 

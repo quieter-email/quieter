@@ -13,6 +13,15 @@ export const Route = createFileRoute("/home")({
   component: HomePage,
 });
 
+/**
+ * Renders the public landing area with primary actions for authentication.
+ *
+ * The layout centers two buttons for "Log in" and "Sign up", each implemented as a router
+ * Link that navigates to `/auth` and supplies a `search` parameter (`mode: "login"` or
+ * `mode: "signup"`) to indicate the desired authentication flow.
+ *
+ * @returns A JSX element containing the centered authentication links.
+ */
 function HomePage() {
   return (
     <div className="grid min-h-dvh w-full place-items-center">

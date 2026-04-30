@@ -114,6 +114,15 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   );
 }
 
+/**
+ * Render a centered error screen that displays an error message and offers retry and navigation actions.
+ *
+ * If `error` is an `Error` with a non-empty `message`, that message is shown; otherwise a generic fallback message is displayed.
+ *
+ * @param error - The error to display information from, or `null` if none.
+ * @param reset - Callback invoked when the user clicks the "Retry" button.
+ * @returns A React element representing the full-page error UI with "Retry" and "Back to inbox" controls.
+ */
 function RootErrorComponent({ error, reset }: { error: Error | null; reset: () => void }) {
   const message =
     error instanceof Error && error.message
@@ -149,6 +158,14 @@ function RootErrorComponent({ error, reset }: { error: Error | null; reset: () =
   );
 }
 
+/**
+ * Render a centered "Page not found" UI for unknown routes.
+ *
+ * Displays a heading, explanatory text, and a primary link labeled "Go to inbox"
+ * that navigates to "/".
+ *
+ * @returns A JSX element containing the not-found UI.
+ */
 function RootNotFoundComponent() {
   return (
     <div className="grid min-h-dvh place-items-center bg-background px-6 py-10">

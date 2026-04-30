@@ -25,6 +25,11 @@ export const Route = createFileRoute("/auth")({
   component: AuthRouteComponent,
 });
 
+/**
+ * Render the authentication route UI.
+ *
+ * @returns A React element that renders the authentication screen (`AuthScreen`).
+ */
 function AuthRouteComponent() {
   return <AuthScreen />;
 }
