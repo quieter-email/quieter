@@ -5,9 +5,14 @@ import {
 } from "@quieter/orpc/compose";
 import type { MessageListItem } from "~/lib/gmail/gmail";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
-import { createEmptyComposeDraft, type ComposeDraftState, type ComposeReplyContext } from "./draft";
+import {
+  createEmptyComposeDraft,
+  escapeComposeHtml,
+  type ComposeDraftState,
+  type ComposeReplyContext,
+} from "./draft";
 
-export type ComposeActionType = "reply" | "reply-all" | "forward";
+type ComposeActionType = "reply" | "reply-all" | "forward";
 
 const dedupeAddresses = (values: readonly string[]): string[] => {
   const seen = new Set<string>();
@@ -45,18 +50,10 @@ const filterOutOwnedAddresses = (
   ownedAddressKeys: ReadonlySet<string>,
 ) => values.filter((value) => !ownedAddressKeys.has(getMailAddressKey(value)));
 
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-
 const textToHtml = (value: string) =>
   value
     .split(/\r?\n/g)
-    .map((line) => (line ? escapeHtml(line) : "<br>"))
+    .map((line) => (line ? escapeComposeHtml(line) : "<br>"))
     .join("<br>");
 
 const getMessageBodyHtml = (message: MessageListItem) => {
@@ -238,28 +235,6 @@ export const hasDistinctReplyAllRecipients = (
   );
 };
 
-export const getPreferredThreadActionMessage = (
-  messages: readonly MessageListItem[],
-  currentUserEmail: string | null | undefined,
-) => {
-  const ownedAddressKeys = buildOwnedAddressKeys(currentUserEmail);
-
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (!message) continue;
-    const senderEntries = dedupeAddresses(splitMailAddressList(message.from));
-    const isOwnedMessage = senderEntries.some((entry) =>
-      ownedAddressKeys.has(getMailAddressKey(entry)),
-    );
-
-    if (!isOwnedMessage) {
-      return message;
-    }
-  }
-
-  return messages[messages.length - 1] ?? null;
-};
-
 export const buildComposeDraftFromMessageAction = ({
   action,
   currentUserEmail,
@@ -301,12 +276,12 @@ export const buildComposeDraftFromMessageAction = ({
             .map((line) => {
               const separatorIndex = line.indexOf(":");
               if (separatorIndex === -1) {
-                return escapeHtml(line);
+                return escapeComposeHtml(line);
               }
 
               const label = line.slice(0, separatorIndex + 1);
               const value = line.slice(separatorIndex + 1).trim();
-              return `<strong>${escapeHtml(label)}</strong> ${escapeHtml(value)}`;
+              return `<strong>${escapeComposeHtml(label)}</strong> ${escapeComposeHtml(value)}`;
             })
             .join("<br>")}</p>`
         : "";
@@ -337,7 +312,7 @@ export const buildComposeDraftFromMessageAction = ({
     replyContext,
     recipients,
     subject: withSubjectPrefix(message.subject, "Re:", /^re:/i),
-    bodyHtml: `<p><br></p><p>${escapeHtml(lead)}</p><blockquote>${getMessageBodyHtml(message)}</blockquote>`,
+    bodyHtml: `<p><br></p><p>${escapeComposeHtml(lead)}</p><blockquote>${getMessageBodyHtml(message)}</blockquote>`,
     bodyText: ["", "", lead, quotePlainText(getMessageBodyText(message))].join("\n"),
   };
 };
@@ -374,7 +349,6 @@ export const findLinkedDraftForMessage = (
     return null;
   }
 
-  const sourceMessageHeaderId = sourceMessage.messageHeaderId?.trim();
   let linkedDraft: MessageListItem | null = null;
 
   for (const message of messages) {
@@ -385,12 +359,8 @@ export const findLinkedDraftForMessage = (
     const matchesByAnchor =
       message.draftAnchor?.sourceMessageId?.trim() === sourceMessage.id &&
       message.draftAnchor?.sourceThreadId?.trim() === sourceMessage.threadId;
-    const matchesByLegacyReply =
-      !message.draftAnchor &&
-      Boolean(sourceMessageHeaderId) &&
-      message.inReplyTo?.trim() === sourceMessageHeaderId;
 
-    if (!matchesByAnchor && !matchesByLegacyReply) {
+    if (!matchesByAnchor) {
       continue;
     }
 

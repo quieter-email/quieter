@@ -2,7 +2,7 @@
 
 import type { PropsWithChildren } from "react";
 import { LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 type SpinWhileActiveProps = PropsWithChildren<{
   active: boolean;
 }>;
@@ -10,13 +10,8 @@ type SpinWhileActiveProps = PropsWithChildren<{
 export const SpinWhileActive = ({ active, children }: SpinWhileActiveProps) => {
   const prefersReducedMotion = useReducedMotion();
   const shouldSpin = active && !prefersReducedMotion;
-  const activeRef = useRef(active);
-  const prefersReducedMotionRef = useRef(prefersReducedMotion);
   const [turn, setTurn] = useState(() => (shouldSpin ? 1 : 0));
   const [isSpinning, setIsSpinning] = useState(shouldSpin);
-
-  activeRef.current = active;
-  prefersReducedMotionRef.current = prefersReducedMotion;
 
   if (shouldSpin && !isSpinning) {
     setIsSpinning(true);
@@ -36,7 +31,7 @@ export const SpinWhileActive = ({ active, children }: SpinWhileActiveProps) => {
             return;
           }
 
-          if (activeRef.current && !prefersReducedMotionRef.current) {
+          if (active && !prefersReducedMotion) {
             setTurn((currentTurn) => currentTurn + 1);
             return;
           }

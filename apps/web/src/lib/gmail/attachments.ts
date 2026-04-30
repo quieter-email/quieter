@@ -1,6 +1,6 @@
 import { rpc } from "~/lib/orpc";
 
-export const loadAttachmentFromServer = async (
+const loadAttachmentFromServer = async (
   mailboxId: string,
   messageId: string,
   attachmentId: string,

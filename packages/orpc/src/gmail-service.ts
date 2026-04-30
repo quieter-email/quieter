@@ -228,6 +228,7 @@ export type MessageListItem = {
   bodyText?: string;
   attachments?: MessageAttachment[];
   unsubscribeMailto?: string;
+  unsubscribeUrl?: string;
   senderAvatarUrls?: { light: string; dark: string };
   labelIds?: string[];
   isUnread?: boolean;
@@ -334,10 +335,10 @@ const normalizeLabelIds = (labelIds: string[] | undefined): string[] | undefined
 };
 
 const hasUnreadLabel = (labelIds: string[] | undefined): boolean =>
-  Boolean(labelIds?.includes(GMAIL_UNREAD_LABEL));
+  !!labelIds?.includes(GMAIL_UNREAD_LABEL);
 
 const hasDraftLabel = (labelIds: string[] | undefined): boolean =>
-  Boolean(labelIds?.includes(MAILBOX_LABELS.drafts));
+  !!labelIds?.includes(MAILBOX_LABELS.drafts);
 
 const isKnownGmailRateLimit = (details: {
   googleReason?: string;
@@ -362,11 +363,11 @@ const isKnownGmailRateLimit = (details: {
   }
 
   const normalizedMessage = details.message?.trim().toLowerCase();
-  return Boolean(
+  return !!(
     normalizedMessage &&
     (normalizedMessage.includes("quota exceeded") ||
       normalizedMessage.includes("rate limit exceeded") ||
-      normalizedMessage.includes("resource exhausted")),
+      normalizedMessage.includes("resource exhausted"))
   );
 };
 
@@ -614,38 +615,45 @@ const decodeRawMessageText = (raw: string | undefined) => {
   return new TextDecoder().decode(decodeBase64UrlToBytes(raw));
 };
 
-export const extractListUnsubscribeMailto = (value: string | undefined) => {
+export const extractListUnsubscribeTargets = (value: string | undefined) => {
   const normalized = decodeMimeHeaderValue(value)?.trim();
-  if (!normalized) return undefined;
+  let mailto: string | undefined;
+  let url: string | undefined;
 
-  const entries = normalized.match(/<[^>]+>|[^,]+/g) ?? [];
-
-  for (const entry of entries) {
-    const candidate = entry.trim().replace(/^<|>$/g, "").trim();
-    if (!candidate || !candidate.toLowerCase().startsWith("mailto:")) {
+  for (const candidate of normalized
+    ?.match(/<[^>]+>|[^,]+/g)
+    ?.map((entry) => entry.trim().replace(/^<|>$/g, "").trim())
+    .filter(Boolean) ?? []) {
+    const normalizedCandidate = candidate.toLowerCase();
+    if (
+      !normalizedCandidate.startsWith("mailto:") &&
+      !normalizedCandidate.startsWith("http://") &&
+      !normalizedCandidate.startsWith("https://")
+    ) {
       continue;
     }
 
     try {
-      const url = new URL(candidate);
-      if (url.protocol !== "mailto:") {
-        continue;
+      const parsedUrl = new URL(candidate);
+
+      if (!mailto && parsedUrl.protocol === "mailto:") {
+        const pathname = decodeURIComponent(parsedUrl.pathname).trim();
+        const queryTo = parsedUrl.searchParams.get("to")?.trim();
+
+        if (pathname || queryTo) {
+          mailto = candidate;
+        }
       }
 
-      const pathname = decodeURIComponent(url.pathname).trim();
-      const queryTo = url.searchParams.get("to")?.trim();
-
-      if (!pathname && !queryTo) {
-        continue;
+      if (!url && (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:")) {
+        url = candidate;
       }
-
-      return candidate;
     } catch {
       continue;
     }
   }
 
-  return undefined;
+  return { mailto, url };
 };
 
 const resolveRenderablePartBody = async (
@@ -716,6 +724,7 @@ const toMessageListItem = async (
     ? await resolveMessageContent(accessToken, message, signal)
     : { html: undefined, text: undefined };
   const from = getHeader(message, "From");
+  const unsubscribeTargets = extractListUnsubscribeTargets(getHeader(message, "List-Unsubscribe"));
 
   return {
     id: message.id,
@@ -741,7 +750,8 @@ const toMessageListItem = async (
       includeBody || options.includeAttachmentMetadata
         ? extractMessageAttachments(message.payload)
         : undefined,
-    unsubscribeMailto: extractListUnsubscribeMailto(getHeader(message, "List-Unsubscribe")),
+    unsubscribeMailto: unsubscribeTargets.mailto,
+    unsubscribeUrl: unsubscribeTargets.url,
     senderAvatarUrls: await getSenderAvatarUrls(from),
     labelIds,
     isUnread: hasUnreadLabel(labelIds),
@@ -1122,12 +1132,12 @@ export const listMessagesWithDetails = async (
   ]);
   const detailsById = new Map(
     details
-      .filter((message): message is GmailMessage => Boolean(message))
+      .filter((message): message is GmailMessage => !!message)
       .map((message) => [message.id, message] as const),
   );
   const orderedDetails = list.messages
     .map((message) => detailsById.get(message.id))
-    .filter((message): message is GmailMessage => Boolean(message));
+    .filter((message): message is GmailMessage => !!message);
   const historyId =
     orderedDetails[0]?.historyId ?? (await getGmailProfile(accessToken, options?.signal)).historyId;
 
@@ -1169,11 +1179,22 @@ export const listDraftsWithDetails = async (
       },
     ];
   });
-  const [details, threadSummariesById] = await Promise.all([
-    getGmailMessagesMetadata(
-      accessToken,
-      draftRefs.map((draft) => draft.messageId),
-      options?.signal,
+  const [draftDetails, threadSummariesById] = await Promise.all([
+    Promise.all(
+      draftRefs.map(async (draft) => {
+        try {
+          return {
+            draftId: draft.draftId,
+            draft: await getDraft(accessToken, draft.draftId, options?.signal),
+          };
+        } catch (error) {
+          if (isErrorWithStatus(error) && error.status === 404) {
+            return null;
+          }
+
+          throw error;
+        }
+      }),
     ),
     getThreadListSummaries(
       accessToken,
@@ -1182,30 +1203,23 @@ export const listDraftsWithDetails = async (
       options?.signal,
     ),
   ]);
-  const detailsById = new Map(
-    details
-      .filter((message): message is GmailMessage => Boolean(message))
-      .map((message) => [message.id, message] as const),
-  );
-  const orderedDrafts = draftRefs.flatMap((draft) => {
-    const message = detailsById.get(draft.messageId);
-    if (!message) {
-      return [];
-    }
-
-    return [
-      {
-        draftId: draft.draftId,
-        message,
-      },
-    ];
+  const orderedDrafts = draftDetails.flatMap((draft) => {
+    const message = draft?.draft.message;
+    return message ? [{ draftId: draft.draftId, message }] : [];
   });
+
   return {
     messages: await Promise.all(
       orderedDrafts.map(async (draft) => ({
-        ...(await toMessageListItem(accessToken, draft.message, {
-          threadSummary: threadSummariesById.get(draft.message.threadId),
-        })),
+        ...(await toMessageListItem(
+          accessToken,
+          draft.message,
+          {
+            includeBody: true,
+            threadSummary: threadSummariesById.get(draft.message.threadId),
+          },
+          options?.signal,
+        )),
         draftId: draft.draftId,
       })),
     ),
@@ -1244,7 +1258,7 @@ export const getThreadWithDetails = async (
           .filter(
             (message) =>
               message.labelIds?.includes(MAILBOX_LABELS.drafts) &&
-              Boolean(message.messageHeaderId?.trim()),
+              !!message.messageHeaderId?.trim(),
           )
           .map(async (message) => [
             message.id,
@@ -1256,7 +1270,7 @@ export const getThreadWithDetails = async (
             ),
           ]),
       )
-    ).filter((entry): entry is [string, string] => Boolean(entry[1])),
+    ).filter((entry): entry is [string, string] => !!entry[1]),
   );
 
   const subject = messages.reduce<string | undefined>((resolved, message) => {

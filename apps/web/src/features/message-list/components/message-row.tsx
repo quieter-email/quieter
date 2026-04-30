@@ -5,11 +5,15 @@ import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { splitMailAddressList } from "@quieter/orpc/compose";
 import { cn } from "@quieter/ui";
 import { type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
-import type { MailboxCategory } from "~/lib/gmail/gmail";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import { SenderAvatar } from "~/components/sender-avatar";
-import { MessageActionsContextMenu } from "~/features/message-thread/components/message-actions";
+import {
+  createMailboxThreadMessageActionHandlers,
+  MessageActionsContextMenu,
+} from "~/features/message-thread/components/message-actions";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
+import type { MessageListProps } from "./message-list-types";
+import type { useMessageListSelection } from "./use-message-list-selection";
 
 type MessageRowSelectionGesture = {
   additive: boolean;
@@ -17,28 +21,11 @@ type MessageRowSelectionGesture = {
 };
 
 type MessageRowProps = {
-  activeMailbox: MailboxCategory;
-  mailboxId: string;
   isActive?: boolean;
   isSelected?: boolean;
   isSelectionMode?: boolean;
-  onDeleteDraft?: (message: ThreadListEntry["anchorMessage"]) => void | Promise<void>;
-  onMarkThreadAsRead?: (threadId: string) => void | Promise<void>;
-  onMarkThreadAsSpam?: (threadId: string) => void | Promise<void>;
-  onMarkThreadAsUnread?: (threadId: string) => void | Promise<void>;
-  onOpenDraft?: (message: ThreadListEntry["anchorMessage"]) => void | Promise<void>;
-  onUnsubscribe?: (messageId: string) => void | Promise<void>;
-  onUpdateThreadLabels?: (
-    threadId: string,
-    changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
-  ) => void | Promise<void>;
-  onMoveThreadToTrash?: (threadId: string) => void | Promise<void>;
-  onUntrashThread?: (threadId: string) => void | Promise<void>;
-  onUnmarkThreadAsSpam?: (threadId: string) => void | Promise<void>;
-  onDeleteThreadPermanently?: (threadId: string) => void | Promise<void>;
-  onPress?: (thread: ThreadListEntry, gesture: MessageRowSelectionGesture) => void;
-  onSelectionPress?: (thread: ThreadListEntry, gesture: MessageRowSelectionGesture) => void;
-  isActionPending?: boolean;
+  list: MessageListProps;
+  selection: ReturnType<typeof useMessageListSelection>;
   className?: string;
   style?: CSSProperties;
   rowRef?: (element: HTMLLIElement | null) => void;
@@ -67,30 +54,16 @@ const MessageRowMetaBadge = ({
 );
 
 const MessageRowContent = ({
-  activeMailbox,
-  isActionPending,
   isActive,
   isSelected,
   isSelectionMode,
-  onDeleteDraft,
-  onDeleteThreadPermanently,
-  onMarkThreadAsRead,
-  onMarkThreadAsSpam,
-  onMarkThreadAsUnread,
-  onMoveThreadToTrash,
-  onOpenDraft,
-  onPress,
-  onSelectionPress,
-  onUntrashThread,
-  onUnsubscribe,
-  onUnmarkThreadAsSpam,
-  onUpdateThreadLabels,
+  list,
+  selection,
   thread,
-  mailboxId,
 }: MessageRowContentProps) => {
   const anchorMessage = thread.anchorMessage;
   const subject = anchorMessage.subject || "(No subject)";
-  const isDraftMailbox = activeMailbox === "drafts";
+  const isDraftMailbox = list.activeMailbox === "drafts";
   const draftRecipient = splitMailAddressList(anchorMessage.to)[0] ?? anchorMessage.to ?? "";
   const sender = parseSender(isDraftMailbox ? draftRecipient : anchorMessage.from);
   const senderLabel = isDraftMailbox
@@ -102,7 +75,10 @@ const MessageRowContent = ({
   const unread = !isDraftMailbox && thread.unreadCount > 0;
   const threaded = thread.messageCount > 1;
   const attachmentCount = thread.attachmentCount;
-  const showSelectionControl = Boolean(isSelectionMode);
+  const showSelectionControl = !!isSelectionMode;
+  const isActionPending =
+    list.pendingActions.isMessageActionPending(anchorMessage.id) ||
+    list.pendingActions.isThreadActionPending(thread.threadId);
   const metaTextClassName = cn("text-xs tabular-nums", {
     "font-semibold text-foreground/90": unread,
     "text-muted-foreground": !unread,
@@ -124,7 +100,7 @@ const MessageRowContent = ({
 
     event.preventDefault();
     event.stopPropagation();
-    onSelectionPress?.(thread, getSelectionGesture(event));
+    selection.handleThreadSelectionPress(thread, getSelectionGesture(event));
   };
   const handleSelectionKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== " " && event.key !== "Enter") {
@@ -133,7 +109,7 @@ const MessageRowContent = ({
 
     event.preventDefault();
     event.stopPropagation();
-    onSelectionPress?.(thread, getSelectionGesture(event));
+    selection.handleThreadSelectionPress(thread, getSelectionGesture(event));
   };
   const handleRowMouseDown = (event: MouseEvent<HTMLButtonElement>) => {
     if (event.button !== 0) {
@@ -147,7 +123,7 @@ const MessageRowContent = ({
     }
 
     event.preventDefault();
-    onPress?.(thread, gesture);
+    selection.handleThreadPress(thread, gesture);
   };
   const handleRowClick = (event: MouseEvent<HTMLButtonElement>) => {
     const gesture = getSelectionGesture(event);
@@ -156,7 +132,7 @@ const MessageRowContent = ({
       return;
     }
 
-    onPress?.(thread, gesture);
+    selection.handleThreadPress(thread, gesture);
   };
 
   return (
@@ -171,16 +147,16 @@ const MessageRowContent = ({
         },
       )}
     >
-      {unread ? (
+      {unread && (
         <span
           aria-hidden
           className="pointer-events-none absolute top-1/2 left-0 h-9 w-[3px] -translate-y-1/2 rounded-r-full bg-primary"
         />
-      ) : null}
+      )}
       <div className="relative ml-3.5 flex h-full w-10 shrink-0 items-center justify-center">
         <button
           aria-label={selectionAriaLabel}
-          aria-pressed={Boolean(isSelected)}
+          aria-pressed={!!isSelected}
           className={cn(
             "absolute inset-0 flex items-center justify-center rounded-xl transition-[opacity,transform] duration-100 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
             {
@@ -203,7 +179,7 @@ const MessageRowContent = ({
 
         <button
           aria-label={selectionAriaLabel}
-          aria-pressed={Boolean(isSelected)}
+          aria-pressed={!!isSelected}
           className={cn(
             "absolute inset-0 flex items-center justify-center rounded-xl transition-[opacity,transform] duration-100 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
             {
@@ -242,39 +218,15 @@ const MessageRowContent = ({
       </div>
 
       <MessageActionsContextMenu
+        actions={createMailboxThreadMessageActionHandlers({
+          mailboxActions: list.mailboxActions,
+          onOpenDraft: list.onOpenDraft,
+          threadId: thread.threadId,
+        })}
         isPending={isActionPending}
-        mailboxId={mailboxId}
-        onDeleteDraft={onDeleteDraft}
-        mailbox={activeMailbox}
+        mailboxId={list.mailboxId}
+        mailbox={list.activeMailbox}
         message={anchorMessage}
-        onDeletePermanently={() => {
-          void onDeleteThreadPermanently?.(thread.threadId);
-        }}
-        onMarkAsRead={() => {
-          void onMarkThreadAsRead?.(thread.threadId);
-        }}
-        onMarkAsSpam={() => {
-          void onMarkThreadAsSpam?.(thread.threadId);
-        }}
-        onMarkAsUnread={() => {
-          void onMarkThreadAsUnread?.(thread.threadId);
-        }}
-        onMoveToTrash={() => {
-          void onMoveThreadToTrash?.(thread.threadId);
-        }}
-        onOpenDraft={onOpenDraft}
-        onUnmarkAsSpam={() => {
-          void onUnmarkThreadAsSpam?.(thread.threadId);
-        }}
-        onUntrash={() => {
-          void onUntrashThread?.(thread.threadId);
-        }}
-        onUnsubscribe={onUnsubscribe}
-        onUpdateLabels={
-          onUpdateThreadLabels
-            ? (_messageId, changes) => onUpdateThreadLabels(thread.threadId, changes)
-            : undefined
-        }
         triggerClassName="flex h-full min-w-0 flex-1 active:scale-100"
       >
         <button
@@ -295,19 +247,17 @@ const MessageRowContent = ({
             <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 overflow-hidden">
               <div className="flex w-full min-w-0 items-center justify-between gap-2">
                 <p className="min-w-0 truncate text-left text-sm text-foreground">
-                  {isDraftMailbox ? (
-                    <span className="font-medium text-muted-foreground">To </span>
-                  ) : null}
+                  {isDraftMailbox && <span className="font-medium text-muted-foreground">To </span>}
                   <span className={cn({ "font-semibold": unread, "font-medium": !unread })}>
                     {senderLabel}
                   </span>
-                  {senderEmail ? (
+                  {senderEmail && (
                     <span className="ml-2 text-xs text-muted-foreground">{senderEmail}</span>
-                  ) : null}
+                  )}
                 </p>
 
                 <div className="flex shrink-0 items-center gap-2">
-                  {attachmentCount > 0 ? (
+                  {attachmentCount > 0 && (
                     <MessageRowMetaBadge
                       icon={FileAttachmentIcon}
                       label={String(attachmentCount)}
@@ -317,8 +267,8 @@ const MessageRowContent = ({
                           : `This thread has ${attachmentCount} attachments.`
                       }
                     />
-                  ) : null}
-                  {threaded ? (
+                  )}
+                  {threaded && (
                     <MessageRowMetaBadge
                       icon={MessageMultiple01Icon}
                       label={String(thread.messageCount)}
@@ -328,7 +278,7 @@ const MessageRowContent = ({
                           : `This thread has ${thread.messageCount} messages.`
                       }
                     />
-                  ) : null}
+                  )}
                   <span className={metaTextClassName}>{date || "--"}</span>
                 </div>
               </div>
@@ -357,30 +307,16 @@ const MessageRowContent = ({
 };
 
 export const MessageRow = ({
-  activeMailbox,
   className,
   dataIndex,
-  isActionPending,
   isActive,
   isSelected,
   isSelectionMode,
-  onDeleteDraft,
-  onDeleteThreadPermanently,
-  onMarkThreadAsRead,
-  onMarkThreadAsSpam,
-  onMarkThreadAsUnread,
-  onMoveThreadToTrash,
-  onOpenDraft,
-  onPress,
-  onSelectionPress,
-  onUntrashThread,
-  onUnsubscribe,
-  onUnmarkThreadAsSpam,
-  onUpdateThreadLabels,
+  list,
+  selection,
   rowRef,
   style,
   thread,
-  mailboxId,
 }: MessageRowProps) => {
   return (
     <li
@@ -390,26 +326,12 @@ export const MessageRow = ({
       style={style}
     >
       <MessageRowContent
-        activeMailbox={activeMailbox}
-        isActionPending={isActionPending}
         isActive={isActive}
         isSelected={isSelected}
         isSelectionMode={isSelectionMode}
-        onDeleteDraft={onDeleteDraft}
-        onDeleteThreadPermanently={onDeleteThreadPermanently}
-        onMarkThreadAsRead={onMarkThreadAsRead}
-        onMarkThreadAsSpam={onMarkThreadAsSpam}
-        onMarkThreadAsUnread={onMarkThreadAsUnread}
-        onMoveThreadToTrash={onMoveThreadToTrash}
-        onOpenDraft={onOpenDraft}
-        onPress={onPress}
-        onSelectionPress={onSelectionPress}
-        onUntrashThread={onUntrashThread}
-        onUnsubscribe={onUnsubscribe}
-        onUnmarkThreadAsSpam={onUnmarkThreadAsSpam}
-        onUpdateThreadLabels={onUpdateThreadLabels}
+        list={list}
+        selection={selection}
         thread={thread}
-        mailboxId={mailboxId}
       />
     </li>
   );

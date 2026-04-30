@@ -46,7 +46,7 @@
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
-  --radius: 0.625rem;
+  --radius: 0.7rem;
   --shadow-x: 0px;
   --shadow-y: 1px;
   --shadow-blur: 2px;
@@ -160,6 +160,8 @@
   --radius-xl: calc(var(--radius) + 6px);
   --radius-2xl: calc(var(--radius) + 10px);
   --radius-3xl: calc(var(--radius) + 14px);
+  --radius-4xl: calc(var(--radius) + 18px);
+  --radius-5xl: calc(var(--radius) + 22px);
 
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
@@ -202,25 +204,31 @@
     }
 
     .squircle.rounded-xs {
-      border-radius: calc(var(--radius-xs) * 1.7);
+      border-radius: calc(var(--radius-xs) * 2.5) !important;
     }
     .squircle.rounded-sm {
-      border-radius: calc(var(--radius-sm) * 1.6);
+      border-radius: calc(var(--radius-sm) * 2.5) !important;
     }
     .squircle.rounded-md {
-      border-radius: calc(var(--radius-md) * 1.55);
+      border-radius: calc(var(--radius-md) * 2.5) !important;
     }
     .squircle.rounded-lg {
-      border-radius: calc(var(--radius-lg) * 1.5);
+      border-radius: calc(var(--radius-lg) * 2.5) !important;
     }
     .squircle.rounded-xl {
-      border-radius: calc(var(--radius-xl) * 1.45);
+      border-radius: calc(var(--radius-xl) * 2.5) !important;
     }
     .squircle.rounded-2xl {
-      border-radius: calc(var(--radius-2xl) * 1.4);
+      border-radius: calc(var(--radius-2xl) * 2.5) !important;
     }
     .squircle.rounded-3xl {
-      border-radius: calc(var(--radius-3xl) * 1.35);
+      border-radius: calc(var(--radius-3xl) * 2.5) !important;
+    }
+    .squircle.rounded-4xl {
+      border-radius: calc(var(--radius-4xl) * 2.5) !important;
+    }
+    .squircle.rounded-5xl {
+      border-radius: calc(var(--radius-5xl) * 2.5) !important;
     }
   }
 }

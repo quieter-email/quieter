@@ -10,7 +10,7 @@ const extractSenderEmail = (value: string | undefined): string | undefined => {
   return match?.[1]?.trim().toLowerCase();
 };
 
-export const getParsedMessageDate = (message: MessageListItem) => {
+const getParsedMessageDate = (message: MessageListItem) => {
   const source = message.internalDate ?? message.date;
   if (!source) return null;
 
@@ -23,12 +23,10 @@ export const formatMessageDate = (message: MessageListItem, format: "compact" | 
   const parsed = getParsedMessageDate(message);
   if (!parsed) return "";
 
-  return new Intl.DateTimeFormat(
-    undefined,
-    format === "compact"
-      ? { dateStyle: "medium", timeStyle: "short" }
-      : { dateStyle: "long", timeStyle: "short" },
-  ).format(parsed);
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: format === "compact" ? "medium" : "long",
+    timeStyle: "short",
+  }).format(parsed);
 };
 
 export const parseSender = (from?: string) => {

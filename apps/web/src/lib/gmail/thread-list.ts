@@ -1,7 +1,7 @@
 import { isMessageUnread, type MessageListItem } from "./gmail";
 import { parseSender } from "./message-utils";
 
-export type ThreadParticipant = {
+type ThreadParticipant = {
   label: string;
   email?: string;
   avatarUrlLight?: string;

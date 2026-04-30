@@ -58,14 +58,10 @@ export const organization = pgTable(
     slug: text("slug").notNull(),
     logo: text("logo"),
     metadata: text("metadata"),
-    personalOwnerUserId: text("personalOwnerUserId"),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt"),
   },
-  (table) => [
-    unique("organization_slug_unique").on(table.slug),
-    unique("organization_personal_owner_user_id_unique").on(table.personalOwnerUserId),
-  ],
+  (table) => [unique("organization_slug_unique").on(table.slug)],
 );
 
 export const session = pgTable("session", {

@@ -2,20 +2,36 @@ import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { authRelations, tables } from "./schema";
 
-const FALLBACK_DATABASE_URL = "postgresql://quieter:quieter@127.0.0.1:5432/quieter";
-const databaseUrl = process.env.DATABASE_URL?.trim() || FALLBACK_DATABASE_URL;
-
-export const assertDatabaseConfigured = () => {
-  if (!process.env.DATABASE_URL?.trim()) {
+const getDatabaseUrl = () => {
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (!databaseUrl) {
     throw new Error("DATABASE_URL environment variable is missing");
   }
+  return databaseUrl;
 };
 
-const sql = neon(databaseUrl);
-export const db = drizzle({
-  client: sql,
-  schema: tables,
-  relations: authRelations,
-});
+export const assertDatabaseConfigured = () => {
+  getDatabaseUrl();
+};
 
-export type DatabaseClient = typeof db;
+const createDatabaseClient = () => {
+  const sql = neon(getDatabaseUrl());
+  return drizzle({
+    client: sql,
+    schema: tables,
+    relations: authRelations,
+  });
+};
+
+export type DatabaseClient = ReturnType<typeof createDatabaseClient>;
+
+let databaseClient: DatabaseClient | undefined;
+
+const getDatabaseClient = () => {
+  databaseClient ??= createDatabaseClient();
+  return databaseClient;
+};
+
+export const db = new Proxy({} as DatabaseClient, {
+  get: (_target, property) => Reflect.get(getDatabaseClient(), property),
+});

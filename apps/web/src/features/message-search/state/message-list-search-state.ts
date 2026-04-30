@@ -2,7 +2,7 @@
 
 import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 
-export type SearchFilterType = "after" | "before" | "from" | "label" | "to";
+type SearchFilterType = "after" | "before" | "from" | "label" | "to";
 export type SearchFieldFilterType = Exclude<SearchFilterType, "label">;
 
 export type SearchFilterChip = {
@@ -15,7 +15,7 @@ export type StructuredSearchState = {
   text: string;
 };
 
-export type StructuredSearchQuerySegment =
+type StructuredSearchQuerySegment =
   | {
       end: number;
       start: number;
@@ -30,7 +30,7 @@ export type StructuredSearchQuerySegment =
       type: "filter";
     };
 
-const normalizeSearchText = (value: string) => value.replace(/\s+/g, " ").trim();
+export const normalizeSearchText = (value: string) => value.replace(/\s+/g, " ").trim();
 
 const parseQuotedValue = (value: string) => {
   if (!value.startsWith('"') || !value.endsWith('"')) {
@@ -171,7 +171,7 @@ export const serializeStructuredSearchFilterToken = ({ type, value }: SearchFilt
     : `${type}:${normalizedValue}`;
 };
 
-export const tokenizeStructuredSearchQuery = (query: string): StructuredSearchQuerySegment[] => {
+const tokenizeStructuredSearchQuery = (query: string): StructuredSearchQuerySegment[] => {
   const segments: StructuredSearchQuerySegment[] = [];
   let cursor = 0;
   let textStart = 0;
@@ -184,7 +184,7 @@ export const tokenizeStructuredSearchQuery = (query: string): StructuredSearchQu
     }
 
     const token = readStructuredToken(query, cursor);
-    const filter = token ? parseStructuredSearchFilterToken(token) : null;
+    const filter = token && parseStructuredSearchFilterToken(token);
     if (!filter || !token) {
       cursor += 1;
       continue;

@@ -142,7 +142,7 @@ export const buildMimeMessage = async (
         ].join("\r\n");
       }),
     )
-  ).filter((part): part is string => Boolean(part));
+  ).filter((part): part is string => !!part);
 
   const htmlBody = draft.bodyHtml || "<p></p>";
   const htmlPart =
@@ -189,7 +189,7 @@ export const buildMimeMessage = async (
           ].join("\r\n");
         }),
     )
-  ).filter((part): part is string => Boolean(part));
+  ).filter((part): part is string => !!part);
 
   if (attachments.length > 0) {
     body = [

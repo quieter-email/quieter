@@ -3,6 +3,7 @@
 import {
   ArrowDown01Icon,
   ArrowRightDoubleIcon,
+  ArrowUpRight01Icon,
   Edit01Icon,
   Loading03Icon,
   MailRemove01Icon,
@@ -22,11 +23,15 @@ import {
   DialogHeader,
   DialogTitle,
   IconButtonTooltip,
-  TooltipProvider,
+  TooltipGroup,
   cn,
 } from "@quieter/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import type {
+  MailboxActions,
+  MailboxPendingActions,
+} from "~/features/mailbox/components/mailbox-action-handlers";
 import { SenderAvatar } from "~/components/sender-avatar";
 import {
   type ComposeDraftState,
@@ -36,6 +41,7 @@ import {
   hasDistinctReplyAllRecipients,
 } from "~/features/compose";
 import {
+  hasRenderableMessageBody,
   isMessageUnread,
   type MailboxCategory,
   MAILBOX_LABELS,
@@ -44,40 +50,26 @@ import {
 import { getMessageInspectorOptions } from "~/lib/gmail/message-inspector-query";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
-import { MessageActionsDropdown } from "./message-actions";
+import {
+  createMailboxThreadMessageActionHandlers,
+  MessageActionsDropdown,
+} from "./message-actions";
 import { MessageAttachments } from "./message-attachments";
 import { MessageBody } from "./message-body";
+import {
+  getMessageUnsubscribeTarget,
+  openUnsubscribeUrl,
+  type MessageUnsubscribeTarget,
+} from "./message-unsubscribe";
 
 type MessageViewProps = {
   activeMailbox: MailboxCategory;
   currentUserEmail?: string | null;
   mailboxId: string;
+  mailboxActions: MailboxActions;
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
-  onMarkThreadAsRead?: (threadId: string) => void | Promise<void>;
-  onMarkThreadAsUnread?: (threadId: string) => void | Promise<void>;
-  onMarkAsRead?: (messageId: string) => void | Promise<void>;
-  onMarkAsSpam?: (messageId: string) => void | Promise<void>;
-  onMarkAsUnread?: (messageId: string) => void | Promise<void>;
-  onMarkThreadAsSpam?: (threadId: string) => void | Promise<void>;
-  onUpdateLabels?: (
-    messageId: string,
-    changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
-  ) => void | Promise<void>;
-  onUpdateThreadLabels?: (
-    threadId: string,
-    changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
-  ) => void | Promise<void>;
-  onMoveThreadToTrash?: (threadId: string) => void | Promise<void>;
-  onMoveToTrash?: (messageId: string) => void | Promise<void>;
-  onUntrashThread?: (threadId: string) => void | Promise<void>;
-  onUntrash?: (messageId: string) => void | Promise<void>;
-  onUnsubscribe?: (messageId: string) => void | Promise<void>;
-  onUnmarkThreadAsSpam?: (threadId: string) => void | Promise<void>;
-  onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
-  onDeleteThreadPermanently?: (threadId: string) => void | Promise<void>;
-  onDeletePermanently?: (messageId: string) => void | Promise<void>;
-  isActionPending?: boolean;
+  pendingActions: MailboxPendingActions;
 };
 
 type MessageHeaderContentProps = {
@@ -91,13 +83,51 @@ type MessageHeaderContentProps = {
   trailing?: ReactNode;
 };
 
+type MessageUnsubscribeAction = {
+  kind: MessageUnsubscribeTarget["kind"];
+  onClick: () => void;
+};
+
 const formatEnvelopeValue = (value?: string) => {
   const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
+  return trimmed || null;
 };
 
 const isDraftMessage = (message: MessageListItem) =>
-  Boolean(message.draftId || message.labelIds?.includes(MAILBOX_LABELS.drafts));
+  !!(message.draftId || message.labelIds?.includes(MAILBOX_LABELS.drafts));
+
+const getMessagesMissingLoadedBody = (messages: readonly MessageListItem[]) =>
+  messages.filter(
+    (threadMessage) => !!threadMessage.snippet?.trim() && !hasRenderableMessageBody(threadMessage),
+  );
+
+const getMessageUnsubscribeAction = (
+  message: MessageListItem,
+  onUnsubscribe?: (messageId: string) => void | Promise<void>,
+): MessageUnsubscribeAction | undefined => {
+  const target = getMessageUnsubscribeTarget(message);
+  if (!target) {
+    return undefined;
+  }
+
+  if (target.kind === "mailto") {
+    if (!onUnsubscribe) {
+      return undefined;
+    }
+
+    return {
+      kind: "mailto",
+      onClick: () => {
+        void onUnsubscribe(message.id);
+      },
+    };
+  }
+
+  return {
+    kind: "url",
+    onClick: () => openUnsubscribeUrl(target.url),
+  };
+};
 
 const MessageHeaderContent = ({
   className,
@@ -115,37 +145,37 @@ const MessageHeaderContent = ({
   const senderInitial = (senderName.trim().charAt(0) || "?").toUpperCase();
   const date = formatMessageDate(message, "full") || "--";
   const preview = previewMode === "collapsed" && !isExpanded ? message.snippet?.trim() || "" : "";
-  const participantRows = [{ label: "To", value: formatEnvelopeValue(message.to) }].filter((row) =>
-    Boolean(row.value),
+  const participantRows = [{ label: "To", value: formatEnvelopeValue(message.to) }].filter(
+    (row) => !!row.value,
   );
   const showParticipants =
-    participantRows.length > 0 && (previewMode !== "collapsed" || Boolean(isExpanded));
+    participantRows.length > 0 && (previewMode !== "collapsed" || !!isExpanded);
   const content = (
     <div className="min-w-0 flex-1">
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-        {isMessageUnread(message) ? (
+        {isMessageUnread(message) && (
           <span aria-hidden className="size-2 rounded-full bg-foreground/75" />
-        ) : null}
+        )}
 
         <span
           className={cn("truncate text-sm text-foreground sm:text-[15px]", senderNameClassName, {
-            "font-semibold text-foreground": Boolean(isExpanded) || isMessageUnread(message),
+            "font-semibold text-foreground": !!isExpanded || isMessageUnread(message),
             "font-medium": !isExpanded && !isMessageUnread(message),
           })}
         >
           {senderName}
         </span>
 
-        {senderEmail ? (
+        {senderEmail && (
           <span className="truncate text-xs text-muted-foreground sm:text-sm">{senderEmail}</span>
-        ) : null}
+        )}
 
         <span className="shrink-0 text-xs text-muted-foreground sm:text-sm">{date}</span>
       </div>
 
-      {preview ? <p className="mt-1 truncate text-sm text-foreground">{preview}</p> : null}
+      {preview && <p className="mt-1 truncate text-sm text-foreground">{preview}</p>}
 
-      {showParticipants ? (
+      {showParticipants && (
         <div className="mt-1.5 space-y-1">
           {participantRows.map((row) => (
             <div className="flex min-w-0 items-baseline gap-2 text-xs sm:text-sm" key={row.label}>
@@ -154,7 +184,7 @@ const MessageHeaderContent = ({
             </div>
           ))}
         </div>
-      ) : null}
+      )}
     </div>
   );
 
@@ -183,12 +213,12 @@ const MessageHeaderContent = ({
             content
           )}
 
-          <TooltipProvider>
+          <TooltipGroup>
             <div className="ml-auto flex shrink-0 items-center justify-end gap-1 pl-4">
               {headerActions}
               {trailing}
             </div>
-          </TooltipProvider>
+          </TooltipGroup>
         </div>
       </div>
     </div>
@@ -213,11 +243,11 @@ const MessageHeaderActions = ({
   onForward: () => void;
   onReply: () => void;
   onReplyAll: () => void;
-  onUnsubscribe?: () => void;
+  onUnsubscribe?: MessageUnsubscribeAction;
   showReplyAll?: boolean;
 }) => (
   <div className={cn("flex items-center justify-end gap-0.5", className)}>
-    {onContinueDraft ? (
+    {onContinueDraft && (
       <IconButtonTooltip label="Continue with draft">
         <Button
           aria-label="Continue with draft"
@@ -230,7 +260,7 @@ const MessageHeaderActions = ({
           <HugeiconsIcon aria-hidden icon={Edit01Icon} />
         </Button>
       </IconButtonTooltip>
-    ) : null}
+    )}
     <IconButtonTooltip label="Reply">
       <Button
         aria-label="Reply"
@@ -243,7 +273,7 @@ const MessageHeaderActions = ({
         <HugeiconsIcon aria-hidden icon={MailReply02Icon} />
       </Button>
     </IconButtonTooltip>
-    {showReplyAll ? (
+    {showReplyAll && (
       <IconButtonTooltip label="Reply all">
         <Button
           aria-label="Reply all"
@@ -256,7 +286,7 @@ const MessageHeaderActions = ({
           <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
         </Button>
       </IconButtonTooltip>
-    ) : null}
+    )}
     <IconButtonTooltip label="Forward">
       <Button
         aria-label="Forward"
@@ -269,21 +299,24 @@ const MessageHeaderActions = ({
         <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
       </Button>
     </IconButtonTooltip>
-    {onUnsubscribe ? (
+    {onUnsubscribe && (
       <IconButtonTooltip label="Unsubscribe">
         <Button
           aria-label="Unsubscribe"
           className="text-muted-foreground hover:text-foreground"
-          disabled={isPending}
-          onClick={onUnsubscribe}
+          disabled={isPending && onUnsubscribe.kind === "mailto"}
+          onClick={onUnsubscribe.onClick}
           size="icon-sm"
           type="button"
           variant="ghost"
         >
-          <HugeiconsIcon aria-hidden icon={MailRemove01Icon} />
+          <HugeiconsIcon
+            aria-hidden
+            icon={onUnsubscribe.kind === "mailto" ? MailRemove01Icon : ArrowUpRight01Icon}
+          />
         </Button>
       </IconButtonTooltip>
-    ) : null}
+    )}
     <IconButtonTooltip label="Details">
       <Button
         aria-label="Details"
@@ -334,66 +367,68 @@ const MessageInspectorPanel = ({
             <p className="text-sm text-destructive">
               {inspectorQuery.error.message || "Could not load message details."}
             </p>
-          ) : inspector ? (
-            <>
-              <section className="space-y-2">
-                <h3 className="text-sm font-semibold text-foreground">Summary</h3>
-                {[
-                  { label: "Message ID", value: inspector.messageHeaderId },
-                  { label: "Subject", value: inspector.subject },
-                  { label: "Date", value: inspector.date },
-                  { label: "Snippet", value: inspector.snippet },
-                ]
-                  .filter((row) => Boolean(row.value?.trim()))
-                  .map((row) => (
-                    <p className="text-sm text-foreground" key={row.label}>
-                      <span className="font-semibold text-foreground">{row.label}: </span>
-                      <span className="wrap-break-word">{row.value}</span>
+          ) : (
+            inspector && (
+              <>
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground">Summary</h3>
+                  {[
+                    { label: "Message ID", value: inspector.messageHeaderId },
+                    { label: "Subject", value: inspector.subject },
+                    { label: "Date", value: inspector.date },
+                    { label: "Snippet", value: inspector.snippet },
+                  ]
+                    .filter((row) => !!row.value?.trim())
+                    .map((row) => (
+                      <p className="text-sm text-foreground" key={row.label}>
+                        <span className="font-semibold text-foreground">{row.label}: </span>
+                        <span className="wrap-break-word">{row.value}</span>
+                      </p>
+                    ))}
+                </section>
+
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground">Headers</h3>
+                  {inspector.headers.map((header) => (
+                    <p
+                      className="text-sm text-foreground"
+                      key={`${inspector.messageHeaderId}-${header.name}-${header.value}`}
+                    >
+                      <span className="font-semibold text-foreground">{header.name}: </span>
+                      <span className="wrap-break-word">{header.value}</span>
                     </p>
                   ))}
-              </section>
-
-              <section className="space-y-2">
-                <h3 className="text-sm font-semibold text-foreground">Headers</h3>
-                {inspector.headers.map((header) => (
-                  <p
-                    className="text-sm text-foreground"
-                    key={`${inspector.messageHeaderId}-${header.name}-${header.value}`}
-                  >
-                    <span className="font-semibold text-foreground">{header.name}: </span>
-                    <span className="wrap-break-word">{header.value}</span>
-                  </p>
-                ))}
-              </section>
-
-              {inspector.rawText ? (
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Decoded source</h3>
-                  <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground">
-                    {inspector.rawText}
-                  </pre>
                 </section>
-              ) : null}
 
-              {inspector.raw ? (
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Raw Gmail payload</h3>
-                  <pre className="overflow-x-auto text-sm break-all whitespace-pre-wrap text-foreground">
-                    {inspector.raw}
-                  </pre>
-                </section>
-              ) : null}
+                {inspector.rawText && (
+                  <section className="space-y-2">
+                    <h3 className="text-sm font-semibold text-foreground">Decoded source</h3>
+                    <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground">
+                      {inspector.rawText}
+                    </pre>
+                  </section>
+                )}
 
-              {payloadText ? (
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Structured payload</h3>
-                  <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground">
-                    {payloadText}
-                  </pre>
-                </section>
-              ) : null}
-            </>
-          ) : null}
+                {inspector.raw && (
+                  <section className="space-y-2">
+                    <h3 className="text-sm font-semibold text-foreground">Raw Gmail payload</h3>
+                    <pre className="overflow-x-auto text-sm break-all whitespace-pre-wrap text-foreground">
+                      {inspector.raw}
+                    </pre>
+                  </section>
+                )}
+
+                {payloadText && (
+                  <section className="space-y-2">
+                    <h3 className="text-sm font-semibold text-foreground">Structured payload</h3>
+                    <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground">
+                      {payloadText}
+                    </pre>
+                  </section>
+                )}
+              </>
+            )
+          )}
         </DialogBody>
 
         <DialogFooter>
@@ -545,13 +580,7 @@ const ThreadMessageCard = ({
               isPending={isActionPending}
               onReply={() => openComposeAction("reply")}
               onReplyAll={() => openComposeAction("reply-all")}
-              onUnsubscribe={
-                message.unsubscribeMailto && onUnsubscribe
-                  ? () => {
-                      void onUnsubscribe(message.id);
-                    }
-                  : undefined
-              }
+              onUnsubscribe={getMessageUnsubscribeAction(message, onUnsubscribe)}
               showReplyAll={hasDistinctReplyAllRecipients(message, currentUserEmail)}
             />
           ) : null
@@ -641,13 +670,7 @@ const SingleMessageCard = ({
             isPending={isActionPending}
             onReply={() => openComposeAction("reply")}
             onReplyAll={() => openComposeAction("reply-all")}
-            onUnsubscribe={
-              message.unsubscribeMailto && onUnsubscribe
-                ? () => {
-                    void onUnsubscribe(message.id);
-                  }
-                : undefined
-            }
+            onUnsubscribe={getMessageUnsubscribeAction(message, onUnsubscribe)}
             showReplyAll={hasDistinctReplyAllRecipients(message, currentUserEmail)}
           />
         }
@@ -731,21 +754,13 @@ export const MessageView = ({
   activeMailbox,
   mailboxId,
   currentUserEmail,
-  isActionPending,
+  mailboxActions,
   message,
   onComposeDraftRequested,
-  onMarkThreadAsRead,
-  onMarkThreadAsSpam,
-  onMarkThreadAsUnread,
-  onMoveThreadToTrash,
-  onDeleteThreadPermanently,
-  onUntrashThread,
-  onUnsubscribe,
-  onUnmarkThreadAsSpam,
-  onUpdateThreadLabels,
+  pendingActions,
 }: MessageViewProps) => {
   const threadQuery = useQuery({
-    ...getThreadWithDetailsOptions(mailboxId, activeMailbox, message.threadId),
+    ...getThreadWithDetailsOptions(mailboxId, message.threadId),
     placeholderData: {
       threadId: message.threadId,
       snippet: message.snippet,
@@ -753,13 +768,24 @@ export const MessageView = ({
       messages: [message],
     },
   });
-  const isBodyRefreshPending = threadQuery.isPending || threadQuery.isFetching;
+  const {
+    isError: isThreadError,
+    isFetching: isThreadFetching,
+    isPending: isThreadPending,
+    refetch: refetchThread,
+  } = threadQuery;
 
   const threadMessages = threadQuery.data?.messages?.length
     ? [...threadQuery.data.messages].reverse()
     : [message];
   const messages = threadMessages.filter((threadMessage) => !isDraftMessage(threadMessage));
   const visibleMessages = messages.length > 0 ? messages : [message];
+  const messagesMissingLoadedBody = getMessagesMissingLoadedBody(visibleMessages);
+  const missingLoadedBodyKey = messagesMissingLoadedBody
+    .map((threadMessage) => threadMessage.id)
+    .join(":");
+  const hasMissingLoadedBody = messagesMissingLoadedBody.length > 0;
+  const isBodyRefreshPending = isThreadPending || isThreadFetching || hasMissingLoadedBody;
   const subject =
     visibleMessages.reduce<string | undefined>((resolvedSubject, threadMessage) => {
       if (!threadMessage.subject?.trim()) {
@@ -780,6 +806,38 @@ export const MessageView = ({
     })),
   );
   const autoMarkedThreadIdsRef = useRef<Set<string>>(new Set());
+  const bodyRefreshRequestKeyRef = useRef<string | null>(null);
+  const isActionPending =
+    pendingActions.isMessageActionPending(message.id) ||
+    pendingActions.isThreadActionPending(message.threadId);
+
+  useEffect(() => {
+    if (!hasMissingLoadedBody) {
+      bodyRefreshRequestKeyRef.current = null;
+      return;
+    }
+
+    if (isThreadError || isThreadFetching || isThreadPending) {
+      return;
+    }
+
+    const requestKey = `${mailboxId}:${message.threadId}:${missingLoadedBodyKey}`;
+    if (bodyRefreshRequestKeyRef.current === requestKey) {
+      return;
+    }
+
+    bodyRefreshRequestKeyRef.current = requestKey;
+    void refetchThread();
+  }, [
+    hasMissingLoadedBody,
+    isThreadError,
+    isThreadFetching,
+    isThreadPending,
+    mailboxId,
+    message.threadId,
+    missingLoadedBodyKey,
+    refetchThread,
+  ]);
 
   useEffect(() => {
     if (!threadIsUnread) {
@@ -787,20 +845,16 @@ export const MessageView = ({
       return;
     }
 
-    if (
-      isActionPending ||
-      !onMarkThreadAsRead ||
-      autoMarkedThreadIdsRef.current.has(message.threadId)
-    ) {
+    if (isActionPending || autoMarkedThreadIdsRef.current.has(message.threadId)) {
       return;
     }
 
     autoMarkedThreadIdsRef.current.add(message.threadId);
 
-    Promise.resolve(onMarkThreadAsRead(message.threadId)).catch(() => {
+    Promise.resolve(mailboxActions.markThreadAsRead(message.threadId)).catch(() => {
       autoMarkedThreadIdsRef.current.delete(message.threadId);
     });
-  }, [isActionPending, message.threadId, onMarkThreadAsRead, threadIsUnread]);
+  }, [isActionPending, mailboxActions, message.threadId, threadIsUnread]);
 
   return (
     <article className="-mx-4 w-auto sm:-mx-5 lg:-mx-6">
@@ -811,45 +865,23 @@ export const MessageView = ({
           </h1>
 
           <MessageActionsDropdown
+            actions={createMailboxThreadMessageActionHandlers({
+              mailboxActions,
+              threadId: message.threadId,
+            })}
             isPending={isActionPending}
             isUnread={threadIsUnread}
             mailbox={activeMailbox}
             mailboxId={mailboxId}
             message={message}
-            onMarkAsRead={() => {
-              void onMarkThreadAsRead?.(message.threadId);
-            }}
-            onMarkAsSpam={() => {
-              void onMarkThreadAsSpam?.(message.threadId);
-            }}
-            onMarkAsUnread={() => {
-              void onMarkThreadAsUnread?.(message.threadId);
-            }}
-            onMoveToTrash={() => {
-              void onMoveThreadToTrash?.(message.threadId);
-            }}
-            onUntrash={() => {
-              void onUntrashThread?.(message.threadId);
-            }}
-            onUnmarkAsSpam={() => {
-              void onUnmarkThreadAsSpam?.(message.threadId);
-            }}
-            onUpdateLabels={
-              onUpdateThreadLabels
-                ? (_messageId, changes) => onUpdateThreadLabels(message.threadId, changes)
-                : undefined
-            }
-            onDeletePermanently={() => {
-              void onDeleteThreadPermanently?.(message.threadId);
-            }}
           />
         </div>
 
-        {!isSingleMessageThread ? (
+        {!isSingleMessageThread && (
           <p className="mt-2 text-sm text-muted-foreground">
             {visibleMessages.length} {visibleMessages.length === 1 ? "message" : "messages"}
           </p>
-        ) : null}
+        )}
 
         <MessageAttachments
           attachments={threadAttachments}
@@ -868,7 +900,7 @@ export const MessageView = ({
           mailboxId={mailboxId}
           messages={visibleMessages}
           onComposeDraftRequested={onComposeDraftRequested}
-          onUnsubscribe={onUnsubscribe}
+          onUnsubscribe={mailboxActions.unsubscribeFromMessage}
         />
       ) : (
         visibleMessages.map((threadMessage) => (
@@ -881,7 +913,7 @@ export const MessageView = ({
             mailboxId={mailboxId}
             message={threadMessage}
             onComposeDraftRequested={onComposeDraftRequested}
-            onUnsubscribe={onUnsubscribe}
+            onUnsubscribe={mailboxActions.unsubscribeFromMessage}
           />
         ))
       )}

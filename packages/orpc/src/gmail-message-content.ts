@@ -1,4 +1,4 @@
-export type GmailMessagePart = {
+type GmailMessagePart = {
   mimeType?: string;
   filename?: string;
   headers?: Array<{ name: string; value: string }>;
@@ -10,19 +10,19 @@ export type GmailMessagePart = {
   parts?: GmailMessagePart[];
 };
 
-export type ExtractedMessageContent = {
+type ExtractedMessageContent = {
   html?: string;
   text?: string;
 };
 
-export type ExtractedMessageAttachment = {
+type ExtractedMessageAttachment = {
   attachmentId: string;
   fileName: string;
   mimeType: string;
   size: number;
 };
 
-export type ExtractedInlineMessageAttachment = ExtractedMessageAttachment & {
+type ExtractedInlineMessageAttachment = ExtractedMessageAttachment & {
   contentId: string;
 };
 
@@ -264,7 +264,7 @@ const isAttachmentPart = (part: GmailMessagePart): boolean => {
   if (part.filename?.trim()) return true;
 
   const contentDisposition = getContentDisposition(part);
-  return Boolean(contentDisposition?.startsWith("attachment"));
+  return !!contentDisposition?.startsWith("attachment");
 };
 
 const collectParts = (part: GmailMessagePart | undefined): GmailMessagePart[] => {
@@ -289,8 +289,8 @@ export const findRenderablePart = (
       normalizeMimeType(part.mimeType) === mimeType &&
       !isAttachmentPart(part) &&
       (options?.requireInlineData
-        ? Boolean(part.body?.data)
-        : Boolean(part.body?.data || part.body?.attachmentId)),
+        ? !!part.body?.data
+        : !!(part.body?.data || part.body?.attachmentId)),
   );
 
 const findRenderableInlinePart = (

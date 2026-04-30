@@ -35,7 +35,6 @@ const getBaseStyles = (): string => {
 };
 
 const LINK_TAG_REGEX = /<link\b[^>]*>/gi;
-const LEGACY_VIEWPORT_AT_RULE_REGEX = /@(?:-ms-)?viewport\s*{[\s\S]*?}/gi;
 const MALFORMED_VIEWPORT_DECLARATION_REGEX = /width\s*(?:=|\uFFFD)\s*(?:de)?vice-width/gi;
 const REPLACEMENT_CHARACTER_REGEX = /\uFFFD/g;
 const DOCUMENT_WRAPPER_REGEX = /<\/?(html|head)\b[^>]*>/gi;
@@ -105,7 +104,6 @@ const sanitizeHtml = (rawHtml: string): string => {
   return sanitized
     .replaceAll(STYLE_TAG_REGEX, "")
     .replaceAll(LINK_TAG_REGEX, "")
-    .replaceAll(LEGACY_VIEWPORT_AT_RULE_REGEX, "")
     .replaceAll(MALFORMED_VIEWPORT_DECLARATION_REGEX, "width: device-width")
     .replaceAll(REPLACEMENT_CHARACTER_REGEX, "");
 };
@@ -141,11 +139,11 @@ const MessageBodyLoadingSkeleton = () => (
   </div>
 );
 
-export const MessageBody = ({ compact, html, isLoading, text }: MessageBodyProps) => {
+export const MessageBody = ({ html, isLoading, text }: MessageBodyProps) => {
   const fallbackText = text?.trim();
 
   if (!html?.trim() && !fallbackText && isLoading) {
-    return <MessageBodyLoadingSkeleton compact={compact} />;
+    return <MessageBodyLoadingSkeleton />;
   }
 
   if (!html?.trim()) {
@@ -156,5 +154,5 @@ export const MessageBody = ({ compact, html, isLoading, text }: MessageBodyProps
     );
   }
 
-  return <HtmlMessageBody compact={compact} html={html} />;
+  return <HtmlMessageBody html={html} />;
 };

@@ -63,7 +63,7 @@ export const DrawerContent = ({
       )}
       {...props}
     >
-      {showHandle ? <DrawerHandle /> : null}
+      {showHandle && <DrawerHandle />}
       {children}
     </DrawerPrimitive.Content>
   </DrawerPortal>

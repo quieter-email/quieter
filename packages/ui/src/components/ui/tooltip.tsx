@@ -4,7 +4,7 @@ import type { ComponentPropsWithoutRef } from "react";
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import { cn } from "../../lib/cn";
 
-export const TooltipProvider = TooltipPrimitive.Provider;
+export const TooltipGroup = TooltipPrimitive.Provider;
 export const Tooltip = TooltipPrimitive.Root;
 export const TooltipTrigger = TooltipPrimitive.Trigger;
 export const TooltipPortal = TooltipPrimitive.Portal;

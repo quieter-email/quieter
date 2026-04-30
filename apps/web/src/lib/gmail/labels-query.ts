@@ -1,7 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
 
-export const getLabelsQueryKey = (mailboxId: string) => ["gmail-labels", mailboxId] as const;
+const getLabelsQueryKey = (mailboxId: string) => ["gmail-labels", mailboxId] as const;
 
 export const labelsQueryOptions = (mailboxId: string, enabled = true) =>
   queryOptions({

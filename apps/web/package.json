@@ -10,6 +10,7 @@
     "lint": "oxlint --config ../../oxlint.json .",
     "lint:fix": "oxlint --fix --config ../../oxlint.json .",
     "start": "bun --env-file=../../.env.local node .output/server/index.mjs",
+    "test": "bun test",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {

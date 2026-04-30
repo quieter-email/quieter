@@ -3,6 +3,7 @@ import { routeTree } from "./routeTree.gen";
 
 export function getRouter() {
   return createRouter({
+    defaultPendingMinMs: 0,
     parseSearch: parseSearchWith((value) => value),
     routeTree,
     scrollRestoration: true,

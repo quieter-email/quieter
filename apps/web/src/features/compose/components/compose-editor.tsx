@@ -11,7 +11,7 @@ import {
   TextUnderlineIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { cn, IconButtonTooltip } from "@quieter/ui";
+import { Button, cn, IconButtonTooltip, TooltipGroup } from "@quieter/ui";
 import FileHandler from "@tiptap/extension-file-handler";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
@@ -35,6 +35,7 @@ const ComposeImage = Image.extend({
 
 type ComposeEditorProps = {
   html: string;
+  className?: string;
   disabled?: boolean;
   onChange: (payload: { html: string; text: string }) => void;
   onBlur?: () => void;
@@ -42,6 +43,7 @@ type ComposeEditorProps = {
 };
 
 export const ComposeEditor = ({
+  className,
   disabled,
   html,
   onBlur,
@@ -122,7 +124,7 @@ export const ComposeEditor = ({
       id: "bold",
       label: "Bold",
       icon: TextBoldIcon,
-      active: Boolean(editor?.isActive("bold")),
+      active: !!editor?.isActive("bold"),
       disabled: !editor?.can().chain().focus().toggleBold().run(),
       onClick: () => editor?.chain().focus().toggleBold().run(),
     },
@@ -130,7 +132,7 @@ export const ComposeEditor = ({
       id: "italic",
       label: "Italic",
       icon: TextItalicIcon,
-      active: Boolean(editor?.isActive("italic")),
+      active: !!editor?.isActive("italic"),
       disabled: !editor?.can().chain().focus().toggleItalic().run(),
       onClick: () => editor?.chain().focus().toggleItalic().run(),
     },
@@ -138,7 +140,7 @@ export const ComposeEditor = ({
       id: "underline",
       label: "Underline",
       icon: TextUnderlineIcon,
-      active: Boolean(editor?.isActive("underline")),
+      active: !!editor?.isActive("underline"),
       disabled: !editor?.can().chain().focus().toggleUnderline().run(),
       onClick: () => editor?.chain().focus().toggleUnderline().run(),
     },
@@ -146,7 +148,7 @@ export const ComposeEditor = ({
       id: "bullet-list",
       label: "Bullet list",
       icon: LeftToRightListBulletIcon,
-      active: Boolean(editor?.isActive("bulletList")),
+      active: !!editor?.isActive("bulletList"),
       disabled: !editor?.can().chain().focus().toggleBulletList().run(),
       onClick: () => editor?.chain().focus().toggleBulletList().run(),
     },
@@ -154,7 +156,7 @@ export const ComposeEditor = ({
       id: "ordered-list",
       label: "Ordered list",
       icon: LeftToRightListNumberIcon,
-      active: Boolean(editor?.isActive("orderedList")),
+      active: !!editor?.isActive("orderedList"),
       disabled: !editor?.can().chain().focus().toggleOrderedList().run(),
       onClick: () => editor?.chain().focus().toggleOrderedList().run(),
     },
@@ -162,7 +164,7 @@ export const ComposeEditor = ({
       id: "quote",
       label: "Quote",
       icon: QuoteUpIcon,
-      active: Boolean(editor?.isActive("blockquote")),
+      active: !!editor?.isActive("blockquote"),
       disabled: !editor?.can().chain().focus().toggleBlockquote().run(),
       onClick: () => editor?.chain().focus().toggleBlockquote().run(),
     },
@@ -185,11 +187,12 @@ export const ComposeEditor = ({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-lg border border-input bg-background transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20",
+        "flex min-h-0 flex-col overflow-hidden rounded-lg border border-input bg-background transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20",
+        className,
         { "pointer-events-none opacity-80": disabled },
       )}
     >
-      <div className="px-4 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {editor ? (
           <EditorContent editor={editor} />
         ) : (
@@ -199,31 +202,32 @@ export const ComposeEditor = ({
         )}
       </div>
 
-      <div className="flex items-center gap-1 px-3 pb-3">
-        {toolbarActions.map((action) => {
-          const isDisabled = Boolean(disabled || action.disabled);
+      <div className="flex shrink-0 items-center gap-1 px-3 pb-3">
+        <TooltipGroup>
+          {toolbarActions.map((action) => {
+            const isDisabled = !!(disabled || action.disabled);
 
-          return (
-            <IconButtonTooltip key={action.id} label={action.label}>
-              <button
-                aria-label={action.label}
-                className={cn(
-                  "inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/55 hover:text-foreground focus-visible:outline-none",
-                  {
+            return (
+              <IconButtonTooltip key={action.id} label={action.label}>
+                <Button
+                  aria-label={action.label}
+                  aria-pressed={"active" in action ? action.active : undefined}
+                  className={cn("text-muted-foreground hover:bg-muted/55 hover:text-foreground", {
                     "bg-muted/75 text-foreground": action.active,
-                    "opacity-35 hover:bg-transparent hover:text-muted-foreground": isDisabled,
-                  },
-                )}
-                disabled={isDisabled}
-                onClick={() => action.onClick()}
-                onMouseDown={(event) => event.preventDefault()}
-                type="button"
-              >
-                <HugeiconsIcon className="size-4" icon={action.icon} />
-              </button>
-            </IconButtonTooltip>
-          );
-        })}
+                  })}
+                  disabled={isDisabled}
+                  onClick={() => action.onClick()}
+                  onMouseDown={(event) => event.preventDefault()}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <HugeiconsIcon className="size-4" icon={action.icon} />
+                </Button>
+              </IconButtonTooltip>
+            );
+          })}
+        </TooltipGroup>
       </div>
     </div>
   );

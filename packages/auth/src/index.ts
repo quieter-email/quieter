@@ -3,9 +3,8 @@ import { db } from "@quieter/database";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
-import { magicLink, organization } from "better-auth/plugins";
+import { magicLink, organization, lastLoginMethod } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
-import { storeAuthEmailPreview } from "./email-placeholder";
 import { REQUIRED_GOOGLE_SCOPES } from "./google-scopes";
 import {
   assertCanLeaveOrganization,
@@ -155,14 +154,8 @@ export const auth = betterAuth({
     },
   },
   emailVerification: {
-    sendVerificationEmail: async ({ token, url, user }) => {
-      storeAuthEmailPreview({
-        email: user.email,
-        token,
-        type: "verification",
-        url,
-      });
-      console.info(`[quieter auth placeholder] verification for ${user.email}: ${url}`);
+    sendVerificationEmail: async () => {
+      // TODO: Wire this to real auth email delivery.
     },
   },
   socialProviders: {
@@ -178,45 +171,20 @@ export const auth = betterAuth({
     passkey(),
     organization({
       organizationHooks: {
-        beforeDeleteOrganization: async ({ organization, user }) => {
-          if (organization.personalOwnerUserId)
-            throw new APIError("BAD_REQUEST", {
-              message: "Legacy personal organizations cannot be deleted here.",
-            });
-
+        beforeDeleteOrganization: async ({ user }) => {
           await ensureUserOrganizationState(user);
         },
-        beforeRemoveMember: async ({ organization, user }) => {
+        beforeRemoveMember: async ({ user }) => {
           await ensureUserOrganizationState(user);
-
-          if (organization.personalOwnerUserId)
-            throw new APIError("BAD_REQUEST", {
-              message: "Legacy personal organization memberships cannot be changed here.",
-            });
-        },
-      },
-      schema: {
-        organization: {
-          additionalFields: {
-            personalOwnerUserId: {
-              required: false,
-              type: "string",
-            },
-          },
         },
       },
     }),
     magicLink({
-      sendMagicLink: async ({ email, token, url }) => {
-        storeAuthEmailPreview({
-          email,
-          token,
-          type: "magic-link",
-          url,
-        });
-        console.info(`[quieter auth placeholder] magic link for ${email}: ${url}`);
+      sendMagicLink: async () => {
+        // TODO: Wire this to real auth email delivery.
       },
     }),
+    lastLoginMethod(),
     tanstackStartCookies(),
   ],
 });

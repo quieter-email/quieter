@@ -20,7 +20,7 @@ const inboundPayloadSchema = z
     recipients: z.array(z.string().trim().min(3)).min(1),
     subject: z.string().trim().min(1).nullish(),
   })
-  .refine((input) => Boolean(input.rawMime || input.rawMimeBase64), {
+  .refine((input) => !!(input.rawMime || input.rawMimeBase64), {
     message: "Either rawMime or rawMimeBase64 is required.",
     path: ["rawMime"],
   });

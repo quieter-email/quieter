@@ -85,17 +85,17 @@ export const MessageAttachments = ({
 
               <span className="max-w-[18rem] truncate">{attachment.fileName}</span>
 
-              {attachment.size > 0 ? (
+              {attachment.size > 0 && (
                 <span className="shrink-0 text-xs text-muted-foreground">
                   {formatAttachmentSize(attachment.size)}
                 </span>
-              ) : null}
+              )}
             </button>
           );
         })}
       </div>
 
-      {errorMessage ? <p className="text-xs text-destructive">{errorMessage}</p> : null}
+      {errorMessage && <p className="text-xs text-destructive">{errorMessage}</p>}
     </section>
   );
 };

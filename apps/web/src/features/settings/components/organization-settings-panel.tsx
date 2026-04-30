@@ -31,21 +31,15 @@ import {
   Tooltip,
   TooltipArrow,
   TooltipContent,
-  TooltipProvider,
+  TooltipGroup,
   TooltipTrigger,
 } from "@quieter/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
-import {
-  mutationOptions,
-  queryOptions,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
-import { getErrorMessage, getFieldErrorMessage, unwrapResultError } from "~/lib/errors";
+import { getErrorMessage, unwrapResultError } from "~/lib/errors";
 
 type ActiveOrganization = NonNullable<ReturnType<typeof authClient.useActiveOrganization>["data"]>;
 type ActiveMember = NonNullable<ReturnType<typeof authClient.useActiveMember>["data"]>;
@@ -73,12 +67,6 @@ type UserInvitation = {
 const organizationRoleOptions = ["owner", "admin", "member"] as const;
 const getUserInvitationsQueryKey = (userId: string) =>
   ["auth", userId, "organization", "list-user-invitations"] as const;
-
-type SettingsRowProps = {
-  action: ReactNode;
-  label: string;
-  value: ReactNode;
-};
 
 type OrganizationRoleOption = (typeof organizationRoleOptions)[number];
 
@@ -171,7 +159,15 @@ const userInvitationsQueryOptions = (userId: string, enabled = true) =>
     queryKey: getUserInvitationsQueryKey(userId),
   });
 
-const SettingsRow = ({ action, label, value }: SettingsRowProps) => (
+const SettingsRow = ({
+  action,
+  label,
+  value,
+}: {
+  action: ReactNode;
+  label: string;
+  value: ReactNode;
+}) => (
   <div className="flex flex-col items-start justify-between gap-4 border-b border-border/70 py-5 last:border-b-0 md:flex-row md:items-center">
     <div>
       <p className="text-sm font-medium text-foreground">{label}</p>
@@ -217,183 +213,34 @@ const MutedActionButton = ({
   </Tooltip>
 );
 
-const CreateOrganizationDialog = () => {
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-  const createOrganizationMutationOptions = mutationOptions({
-    mutationFn: async (input: { name: string; slug: string }) =>
-      unwrapResultError(await authClient.organization.create(input), "Could not create team."),
-    mutationKey: ["auth", "organization", "create"],
-  });
-  const createOrganizationMutation = useMutation(createOrganizationMutationOptions);
-  const form = useForm({
-    defaultValues: {
-      name: "",
-      slug: "",
-    },
-    onSubmit: async ({ value }) => {
-      setSubmitError(null);
-
-      const nextSlug = slugifyOrganizationName(value.slug || value.name);
-      if (nextSlug.length === 0) {
-        setSubmitError("Slug cannot be empty.");
-        return;
-      }
-
-      try {
-        await createOrganizationMutation.mutateAsync({
-          name: value.name.trim(),
-          slug: nextSlug,
-        });
-        handleOpenChange(false);
-      } catch (mutationError) {
-        setSubmitError(getErrorMessage(mutationError, "Could not create team."));
-      }
-    },
-    validationLogic: revalidateLogic(),
-    validators: {
-      onDynamic: z.object({
-        name: z.string().trim().min(1, "Name cannot be empty."),
-        slug: z
-          .string()
-          .trim()
-          .regex(/^$|^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens."),
-      }),
-    },
-  });
-
-  const openDialog = () => {
-    setSubmitError(null);
-    form.reset({
-      name: "",
-      slug: "",
-    });
-    setOpen(true);
-  };
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    setOpen(nextOpen);
-    if (!nextOpen) {
-      setSubmitError(null);
-      form.reset({
-        name: "",
-        slug: "",
-      });
-    }
-  };
-
-  return (
-    <>
-      <Button onClick={openDialog} size="sm" variant="outline">
-        <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
-        Create
-      </Button>
-
-      <Dialog onOpenChange={handleOpenChange} open={open}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create team</DialogTitle>
-          </DialogHeader>
-
-          <form
-            action={async () => {
-              await form.handleSubmit();
-            }}
-          >
-            <DialogBody className="space-y-3">
-              <form.Field name="name">
-                {(field) => {
-                  const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
-
-                  return (
-                    <TextField>
-                      <TextFieldInput
-                        aria-invalid={fieldError ? true : undefined}
-                        name={field.name}
-                        onBlur={() => field.handleBlur()}
-                        onChange={(event) => {
-                          setSubmitError(null);
-                          field.handleChange(event.target.value);
-                        }}
-                        placeholder="Team name"
-                        value={field.state.value}
-                      />
-                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
-                    </TextField>
-                  );
-                }}
-              </form.Field>
-
-              <form.Field name="slug">
-                {(field) => {
-                  const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
-
-                  return (
-                    <TextField>
-                      <TextFieldInput
-                        aria-invalid={fieldError ? true : undefined}
-                        name={field.name}
-                        onBlur={() => field.handleBlur()}
-                        onChange={(event) => {
-                          setSubmitError(null);
-                          field.handleChange(event.target.value);
-                        }}
-                        placeholder="team-slug"
-                        value={field.state.value}
-                      />
-                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
-                    </TextField>
-                  );
-                }}
-              </form.Field>
-
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
-            </DialogBody>
-
-            <DialogFooter>
-              <DialogCloseButton disabled={createOrganizationMutation.isPending}>
-                Cancel
-              </DialogCloseButton>
-              <Button disabled={createOrganizationMutation.isPending} size="sm" type="submit">
-                {createOrganizationMutation.isPending ? (
-                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-                ) : (
-                  <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
-                )}
-                Create
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-};
-
-const EditOrganizationDialog = ({
+const OrganizationFormDialog = ({
   activeOrganization,
 }: {
-  activeOrganization: ActiveOrganization;
+  activeOrganization?: ActiveOrganization;
 }) => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const updateOrganizationMutationOptions = mutationOptions({
+  const isEditing = !!activeOrganization;
+  const defaultValues = {
+    name: activeOrganization?.name ?? "",
+    slug: activeOrganization?.slug ?? "",
+  };
+  const errorMessage = isEditing ? "Could not update team." : "Could not create team.";
+  const organizationMutation = useMutation({
     mutationFn: async (input: { name: string; slug: string }) =>
-      unwrapResultError(
-        await authClient.organization.update({
-          data: input,
-          organizationId: activeOrganization.id,
-        }),
-        "Could not update team.",
-      ),
-    mutationKey: ["auth", "organization", "update"],
+      activeOrganization
+        ? unwrapResultError(
+            await authClient.organization.update({
+              data: input,
+              organizationId: activeOrganization.id,
+            }),
+            errorMessage,
+          )
+        : unwrapResultError(await authClient.organization.create(input), errorMessage),
+    mutationKey: ["auth", "organization", isEditing ? "update" : "create"],
   });
-  const updateOrganizationMutation = useMutation(updateOrganizationMutationOptions);
   const form = useForm({
-    defaultValues: {
-      name: activeOrganization.name,
-      slug: activeOrganization.slug,
-    },
+    defaultValues,
     onSubmit: async ({ value }) => {
       setSubmitError(null);
 
@@ -404,13 +251,14 @@ const EditOrganizationDialog = ({
       }
 
       try {
-        await updateOrganizationMutation.mutateAsync({
+        await organizationMutation.mutateAsync({
           name: value.name.trim(),
           slug: nextSlug,
         });
-        handleOpenChange(false);
+        setOpen(false);
+        resetDialog();
       } catch (mutationError) {
-        setSubmitError(getErrorMessage(mutationError, "Could not update team."));
+        setSubmitError(getErrorMessage(mutationError, errorMessage));
       }
     },
     validationLogic: revalidateLogic(),
@@ -424,38 +272,38 @@ const EditOrganizationDialog = ({
       }),
     },
   });
-
-  const openDialog = () => {
+  const resetDialog = () => {
     setSubmitError(null);
-    form.reset({
-      name: activeOrganization.name,
-      slug: activeOrganization.slug,
-    });
-    setOpen(true);
+    form.reset(defaultValues);
   };
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    setOpen(nextOpen);
-    if (!nextOpen) {
-      setSubmitError(null);
-      form.reset({
-        name: activeOrganization.name,
-        slug: activeOrganization.slug,
-      });
-    }
-  };
+  const triggerLabel = isEditing ? "Edit" : "Create";
+  const title = isEditing ? "Edit team" : "Create team";
+  const submitLabel = isEditing ? "Save" : "Create";
 
   return (
     <>
-      <Button onClick={openDialog} size="sm" variant="outline">
+      <Button
+        onClick={() => {
+          resetDialog();
+          setOpen(true);
+        }}
+        size="sm"
+        variant="outline"
+      >
         <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
-        Edit
+        {triggerLabel}
       </Button>
 
-      <Dialog onOpenChange={handleOpenChange} open={open}>
+      <Dialog
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+          if (!nextOpen) resetDialog();
+        }}
+        open={open}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit team</DialogTitle>
+            <DialogTitle>{title}</DialogTitle>
           </DialogHeader>
 
           <form
@@ -465,63 +313,65 @@ const EditOrganizationDialog = ({
           >
             <DialogBody className="space-y-3">
               <form.Field name="name">
-                {(field) => {
-                  const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
-
-                  return (
-                    <TextField>
-                      <TextFieldInput
-                        aria-invalid={fieldError ? true : undefined}
-                        name={field.name}
-                        onBlur={() => field.handleBlur()}
-                        onChange={(event) => {
-                          setSubmitError(null);
-                          field.handleChange(event.target.value);
-                        }}
-                        value={field.state.value}
-                      />
-                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
-                    </TextField>
-                  );
-                }}
+                {(field) => (
+                  <TextField>
+                    <TextFieldInput
+                      aria-invalid={field.state.meta.errors.length > 0}
+                      name={field.name}
+                      onBlur={() => field.handleBlur()}
+                      onChange={(event) => {
+                        setSubmitError(null);
+                        field.handleChange(event.target.value);
+                      }}
+                      placeholder="Team name"
+                      value={field.state.value}
+                    />
+                    {field.state.meta.errors.map((error) => (
+                      <p className="text-sm text-destructive" key={error?.message}>
+                        {error?.message}
+                      </p>
+                    ))}
+                  </TextField>
+                )}
               </form.Field>
 
               <form.Field name="slug">
-                {(field) => {
-                  const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
-
-                  return (
-                    <TextField>
-                      <TextFieldInput
-                        aria-invalid={fieldError ? true : undefined}
-                        name={field.name}
-                        onBlur={() => field.handleBlur()}
-                        onChange={(event) => {
-                          setSubmitError(null);
-                          field.handleChange(event.target.value);
-                        }}
-                        value={field.state.value}
-                      />
-                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
-                    </TextField>
-                  );
-                }}
+                {(field) => (
+                  <TextField>
+                    <TextFieldInput
+                      aria-invalid={field.state.meta.errors.length > 0}
+                      name={field.name}
+                      onBlur={() => field.handleBlur()}
+                      onChange={(event) => {
+                        setSubmitError(null);
+                        field.handleChange(event.target.value);
+                      }}
+                      placeholder="team-slug"
+                      value={field.state.value}
+                    />
+                    {field.state.meta.errors.map((error) => (
+                      <p className="text-sm text-destructive" key={error?.message}>
+                        {error?.message}
+                      </p>
+                    ))}
+                  </TextField>
+                )}
               </form.Field>
 
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
             </DialogBody>
 
             <DialogFooter>
-              <DialogCloseButton disabled={updateOrganizationMutation.isPending}>
+              <DialogCloseButton disabled={organizationMutation.isPending}>
                 Cancel
               </DialogCloseButton>
-              <Button disabled={updateOrganizationMutation.isPending} size="sm" type="submit">
-                {updateOrganizationMutation.isPending ? (
+              <Button disabled={organizationMutation.isPending} size="sm" type="submit">
+                {organizationMutation.isPending ? (
                   <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
                 ) : (
                   <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
                 )}
-                Save
+                {submitLabel}
               </Button>
             </DialogFooter>
           </form>
@@ -632,7 +482,7 @@ const ManagePeopleMemberRoleForm = ({
             )}
           </form.Subscribe>
 
-          {canRemoveMembers ? (
+          {canRemoveMembers && (
             <Button
               disabled={isSavingRole || isRemovingMember}
               onClick={() => void onRemoveMember(member.id)}
@@ -647,7 +497,7 @@ const ManagePeopleMemberRoleForm = ({
               )}
               Remove
             </Button>
-          ) : null}
+          )}
         </form>
       ) : (
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -656,7 +506,7 @@ const ManagePeopleMemberRoleForm = ({
             {isActiveMember ? " / You" : ""}
           </p>
 
-          {canRemoveMembers && !isActiveMember ? (
+          {canRemoveMembers && !isActiveMember && (
             <Button
               disabled={isRemovingMember}
               onClick={() => void onRemoveMember(member.id)}
@@ -670,7 +520,7 @@ const ManagePeopleMemberRoleForm = ({
               )}
               Remove
             </Button>
-          ) : null}
+          )}
         </div>
       )}
     </div>
@@ -717,7 +567,7 @@ const ManagePeoplePendingInvitations = ({
                 </p>
               </div>
 
-              {canCancelInvitations ? (
+              {canCancelInvitations && (
                 <Button
                   disabled={isCancelingInvitation}
                   onClick={() => void onCancelInvitation(invitation.id)}
@@ -735,7 +585,7 @@ const ManagePeoplePendingInvitations = ({
                   )}
                   Cancel
                 </Button>
-              ) : null}
+              )}
             </div>
           );
         })}
@@ -806,7 +656,7 @@ const ManagePeopleDialog = ({
   const [open, setOpen] = useState(false);
   const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(null);
   const [pendingMemberId, setPendingMemberId] = useState<string | null>(null);
-  const inviteMemberMutationOptions = mutationOptions({
+  const inviteMemberMutation = useMutation({
     mutationFn: async (input: { email: string; role: OrganizationRoleOption }) =>
       unwrapResultError(
         await authClient.organization.inviteMember({
@@ -818,8 +668,7 @@ const ManagePeopleDialog = ({
       ),
     mutationKey: ["auth", "organization", "invite-member"],
   });
-  const inviteMemberMutation = useMutation(inviteMemberMutationOptions);
-  const cancelInvitationMutationOptions = mutationOptions({
+  const cancelInvitationMutation = useMutation({
     mutationFn: async (invitationId: string) =>
       unwrapResultError(
         await authClient.organization.cancelInvitation({ invitationId }),
@@ -827,8 +676,7 @@ const ManagePeopleDialog = ({
       ),
     mutationKey: ["auth", "organization", "cancel-invitation"],
   });
-  const cancelInvitationMutation = useMutation(cancelInvitationMutationOptions);
-  const removeMemberMutationOptions = mutationOptions({
+  const removeMemberMutation = useMutation({
     mutationFn: async (memberId: string) =>
       unwrapResultError(
         await authClient.organization.removeMember({
@@ -839,8 +687,7 @@ const ManagePeopleDialog = ({
       ),
     mutationKey: ["auth", "organization", "remove-member"],
   });
-  const removeMemberMutation = useMutation(removeMemberMutationOptions);
-  const updateMemberRoleMutationOptions = mutationOptions({
+  const updateMemberRoleMutation = useMutation({
     mutationFn: async (input: { memberId: string; role: OrganizationRoleOption }) =>
       unwrapResultError(
         await authClient.organization.updateMemberRole({
@@ -852,7 +699,6 @@ const ManagePeopleDialog = ({
       ),
     mutationKey: ["auth", "organization", "update-member-role"],
   });
-  const updateMemberRoleMutation = useMutation(updateMemberRoleMutationOptions);
   const inviteForm = useForm({
     defaultValues: {
       email: "",
@@ -896,7 +742,7 @@ const ManagePeopleDialog = ({
     .filter((invitation) => invitation.status === "pending")
     .sort((left, right) => left.email.localeCompare(right.email));
 
-  const openDialog = () => {
+  const resetDialog = () => {
     setError(null);
     setPendingInvitationId(null);
     setPendingMemberId(null);
@@ -904,20 +750,6 @@ const ManagePeopleDialog = ({
       email: "",
       role: "member",
     });
-    setOpen(true);
-  };
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    setOpen(nextOpen);
-    if (!nextOpen) {
-      setError(null);
-      setPendingInvitationId(null);
-      setPendingMemberId(null);
-      inviteForm.reset({
-        email: "",
-        role: "member",
-      });
-    }
   };
 
   const handleCancelInvitation = async (invitationId: string) => {
@@ -962,19 +794,32 @@ const ManagePeopleDialog = ({
 
   return (
     <>
-      <Button onClick={openDialog} size="sm" variant="outline">
+      <Button
+        onClick={() => {
+          resetDialog();
+          setOpen(true);
+        }}
+        size="sm"
+        variant="outline"
+      >
         <HugeiconsIcon aria-hidden className="size-4" icon={UserGroupIcon} />
         Manage
       </Button>
 
-      <Dialog onOpenChange={handleOpenChange} open={open}>
+      <Dialog
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+          if (!nextOpen) resetDialog();
+        }}
+        open={open}
+      >
         <DialogContent className="w-[min(92vw,42rem)]">
           <DialogHeader>
             <DialogTitle>People</DialogTitle>
           </DialogHeader>
 
           <DialogBody className="max-h-[70vh] space-y-5 overflow-y-auto">
-            {canInviteMembers ? (
+            {canInviteMembers && (
               <form
                 className="space-y-3"
                 action={async () => {
@@ -983,31 +828,29 @@ const ManagePeopleDialog = ({
               >
                 <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem_auto] md:items-start">
                   <inviteForm.Field name="email">
-                    {(field) => {
-                      const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
-
-                      return (
-                        <div className="space-y-2">
-                          <TextField>
-                            <TextFieldInput
-                              aria-invalid={fieldError ? true : undefined}
-                              name={field.name}
-                              onBlur={() => field.handleBlur()}
-                              onChange={(event) => {
-                                setError(null);
-                                field.handleChange(event.target.value);
-                              }}
-                              placeholder="name@example.com"
-                              type="email"
-                              value={field.state.value}
-                            />
-                          </TextField>
-                          {fieldError ? (
-                            <p className="text-sm text-destructive">{fieldError}</p>
-                          ) : null}
-                        </div>
-                      );
-                    }}
+                    {(field) => (
+                      <div className="space-y-2">
+                        <TextField>
+                          <TextFieldInput
+                            aria-invalid={field.state.meta.errors.length > 0}
+                            name={field.name}
+                            onBlur={() => field.handleBlur()}
+                            onChange={(event) => {
+                              setError(null);
+                              field.handleChange(event.target.value);
+                            }}
+                            placeholder="name@example.com"
+                            type="email"
+                            value={field.state.value}
+                          />
+                        </TextField>
+                        {field.state.meta.errors.map((error) => (
+                          <p className="text-sm text-destructive" key={error?.message}>
+                            {error?.message}
+                          </p>
+                        ))}
+                      </div>
+                    )}
                   </inviteForm.Field>
 
                   <inviteForm.Field name="role">
@@ -1054,7 +897,7 @@ const ManagePeopleDialog = ({
                   </Button>
                 </div>
               </form>
-            ) : null}
+            )}
 
             <ManagePeopleMembersSection
               activeMember={activeMember}
@@ -1076,7 +919,7 @@ const ManagePeopleDialog = ({
               pendingInvitations={pendingInvitations}
             />
 
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {error && <p className="text-sm text-destructive">{error}</p>}
           </DialogBody>
 
           <DialogFooter>
@@ -1097,7 +940,7 @@ const LeaveOrganizationDialog = ({
 }) => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const leaveOrganizationMutationOptions = mutationOptions({
+  const leaveOrganizationMutation = useMutation({
     mutationFn: async () => {
       await unwrapResultError(
         await authClient.organization.leave({
@@ -1115,7 +958,6 @@ const LeaveOrganizationDialog = ({
     },
     mutationKey: ["auth", "organization", "leave"],
   });
-  const leaveOrganizationMutation = useMutation(leaveOrganizationMutationOptions);
   const form = useForm({
     defaultValues: {
       confirmation: "",
@@ -1125,7 +967,8 @@ const LeaveOrganizationDialog = ({
 
       try {
         await leaveOrganizationMutation.mutateAsync();
-        handleOpenChange(false);
+        setOpen(false);
+        resetDialog();
       } catch (mutationError) {
         setSubmitError(getErrorMessage(mutationError, "Could not leave team."));
       }
@@ -1141,29 +984,32 @@ const LeaveOrganizationDialog = ({
       }),
     },
   });
-
-  const openDialog = () => {
+  const resetDialog = () => {
     setSubmitError(null);
     form.reset({ confirmation: "" });
-    setOpen(true);
-  };
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    setOpen(nextOpen);
-    if (!nextOpen) {
-      setSubmitError(null);
-      form.reset({ confirmation: "" });
-    }
   };
 
   return (
     <>
-      <Button onClick={openDialog} size="sm" variant="outline">
+      <Button
+        onClick={() => {
+          resetDialog();
+          setOpen(true);
+        }}
+        size="sm"
+        variant="outline"
+      >
         <HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />
         Leave
       </Button>
 
-      <Dialog onOpenChange={handleOpenChange} open={open}>
+      <Dialog
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+          if (!nextOpen) resetDialog();
+        }}
+        open={open}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Leave team</DialogTitle>
@@ -1180,29 +1026,29 @@ const LeaveOrganizationDialog = ({
               </p>
 
               <form.Field name="confirmation">
-                {(field) => {
-                  const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
-
-                  return (
-                    <TextField>
-                      <TextFieldInput
-                        aria-invalid={fieldError ? true : undefined}
-                        name={field.name}
-                        onBlur={() => field.handleBlur()}
-                        onChange={(event) => {
-                          setSubmitError(null);
-                          field.handleChange(event.target.value);
-                        }}
-                        placeholder="leave team"
-                        value={field.state.value}
-                      />
-                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
-                    </TextField>
-                  );
-                }}
+                {(field) => (
+                  <TextField>
+                    <TextFieldInput
+                      aria-invalid={field.state.meta.errors.length > 0}
+                      name={field.name}
+                      onBlur={() => field.handleBlur()}
+                      onChange={(event) => {
+                        setSubmitError(null);
+                        field.handleChange(event.target.value);
+                      }}
+                      placeholder="leave team"
+                      value={field.state.value}
+                    />
+                    {field.state.meta.errors.map((error) => (
+                      <p className="text-sm text-destructive" key={error?.message}>
+                        {error?.message}
+                      </p>
+                    ))}
+                  </TextField>
+                )}
               </form.Field>
 
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
             </DialogBody>
 
             <DialogFooter>
@@ -1239,7 +1085,7 @@ const DeleteOrganizationDialog = ({
 }) => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const deleteOrganizationMutationOptions = mutationOptions({
+  const deleteOrganizationMutation = useMutation({
     mutationFn: async () => {
       await unwrapResultError(
         await authClient.organization.delete({
@@ -1257,7 +1103,6 @@ const DeleteOrganizationDialog = ({
     },
     mutationKey: ["auth", "organization", "delete"],
   });
-  const deleteOrganizationMutation = useMutation(deleteOrganizationMutationOptions);
   const form = useForm({
     defaultValues: {
       confirmation: "",
@@ -1267,7 +1112,8 @@ const DeleteOrganizationDialog = ({
 
       try {
         await deleteOrganizationMutation.mutateAsync();
-        handleOpenChange(false);
+        setOpen(false);
+        resetDialog();
       } catch (mutationError) {
         setSubmitError(getErrorMessage(mutationError, "Could not delete team."));
       }
@@ -1283,29 +1129,32 @@ const DeleteOrganizationDialog = ({
       }),
     },
   });
-
-  const openDialog = () => {
+  const resetDialog = () => {
     setSubmitError(null);
     form.reset({ confirmation: "" });
-    setOpen(true);
-  };
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    setOpen(nextOpen);
-    if (!nextOpen) {
-      setSubmitError(null);
-      form.reset({ confirmation: "" });
-    }
   };
 
   return (
     <>
-      <Button onClick={openDialog} size="sm" variant="destructive">
+      <Button
+        onClick={() => {
+          resetDialog();
+          setOpen(true);
+        }}
+        size="sm"
+        variant="destructive"
+      >
         <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
         Delete
       </Button>
 
-      <Dialog onOpenChange={handleOpenChange} open={open}>
+      <Dialog
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+          if (!nextOpen) resetDialog();
+        }}
+        open={open}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete team</DialogTitle>
@@ -1322,29 +1171,29 @@ const DeleteOrganizationDialog = ({
               </p>
 
               <form.Field name="confirmation">
-                {(field) => {
-                  const fieldError = getFieldErrorMessage(field.state.meta.errors[0]);
-
-                  return (
-                    <TextField>
-                      <TextFieldInput
-                        aria-invalid={fieldError ? true : undefined}
-                        name={field.name}
-                        onBlur={() => field.handleBlur()}
-                        onChange={(event) => {
-                          setSubmitError(null);
-                          field.handleChange(event.target.value);
-                        }}
-                        placeholder="delete team"
-                        value={field.state.value}
-                      />
-                      {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
-                    </TextField>
-                  );
-                }}
+                {(field) => (
+                  <TextField>
+                    <TextFieldInput
+                      aria-invalid={field.state.meta.errors.length > 0}
+                      name={field.name}
+                      onBlur={() => field.handleBlur()}
+                      onChange={(event) => {
+                        setSubmitError(null);
+                        field.handleChange(event.target.value);
+                      }}
+                      placeholder="delete team"
+                      value={field.state.value}
+                    />
+                    {field.state.meta.errors.map((error) => (
+                      <p className="text-sm text-destructive" key={error?.message}>
+                        {error?.message}
+                      </p>
+                    ))}
+                  </TextField>
+                )}
               </form.Field>
 
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
             </DialogBody>
 
             <DialogFooter>
@@ -1379,10 +1228,10 @@ const PendingInvitationsSection = () => {
   const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(null);
   const userId = sessionState.data?.user.id ?? "";
   const userInvitationsQuery = useQuery(
-    userInvitationsQueryOptions(userId, Boolean(sessionState.data?.user.email)),
+    userInvitationsQueryOptions(userId, !!sessionState.data?.user.email),
   );
 
-  const acceptInvitationMutationOptions = mutationOptions({
+  const acceptInvitationMutation = useMutation({
     mutationFn: async (invitationId: string) =>
       unwrapResultError(
         await authClient.organization.acceptInvitation({ invitationId }),
@@ -1393,8 +1242,7 @@ const PendingInvitationsSection = () => {
       await queryClient.invalidateQueries({ queryKey: getUserInvitationsQueryKey(userId) });
     },
   });
-  const acceptInvitationMutation = useMutation(acceptInvitationMutationOptions);
-  const rejectInvitationMutationOptions = mutationOptions({
+  const rejectInvitationMutation = useMutation({
     mutationFn: async (invitationId: string) =>
       unwrapResultError(
         await authClient.organization.rejectInvitation({ invitationId }),
@@ -1405,7 +1253,6 @@ const PendingInvitationsSection = () => {
       await queryClient.invalidateQueries({ queryKey: getUserInvitationsQueryKey(userId) });
     },
   });
-  const rejectInvitationMutation = useMutation(rejectInvitationMutationOptions);
 
   const invitations = [...(userInvitationsQuery.data ?? [])].sort((left, right) =>
     left.organizationName.localeCompare(right.organizationName),
@@ -1470,13 +1317,13 @@ const PendingInvitationsSection = () => {
                   onClick={() => void handleInvitationAction(invitation, "accept")}
                   size="sm"
                 >
-                  {isPendingAction && acceptInvitationMutation.isPending ? (
+                  {isPendingAction && acceptInvitationMutation.isPending && (
                     <HugeiconsIcon
                       aria-hidden
                       className="size-4 animate-spin"
                       icon={Loading03Icon}
                     />
-                  ) : null}
+                  )}
                   Accept
                 </Button>
 
@@ -1486,13 +1333,13 @@ const PendingInvitationsSection = () => {
                   size="sm"
                   variant="outline"
                 >
-                  {isPendingAction && rejectInvitationMutation.isPending ? (
+                  {isPendingAction && rejectInvitationMutation.isPending && (
                     <HugeiconsIcon
                       aria-hidden
                       className="size-4 animate-spin"
                       icon={Loading03Icon}
                     />
-                  ) : null}
+                  )}
                   Decline
                 </Button>
               </div>
@@ -1503,7 +1350,7 @@ const PendingInvitationsSection = () => {
           />
         );
       })}
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 };
@@ -1519,7 +1366,7 @@ const OrganizationList = ({
 }) => {
   const [error, setError] = useState<string | null>(null);
   const [pendingOrganizationId, setPendingOrganizationId] = useState<string | null>(null);
-  const setActiveOrganizationMutationOptions = mutationOptions({
+  const setActiveOrganizationMutation = useMutation({
     mutationFn: async (organizationId: string) =>
       unwrapResultError(
         await authClient.organization.setActive({ organizationId }),
@@ -1527,7 +1374,6 @@ const OrganizationList = ({
       ),
     mutationKey: ["auth", "organization", "set-active"],
   });
-  const setActiveOrganizationMutation = useMutation(setActiveOrganizationMutationOptions);
 
   const handleSetActiveOrganization = async (organizationId: string) => {
     if (organizationId === activeWorkspaceId) {
@@ -1584,14 +1430,14 @@ const OrganizationList = ({
             label={organization.name}
             value={[
               organization.slug,
-              isActive && activeRole ? `${formatRoleLabel(activeRole)} role` : null,
+              isActive && activeRole && `${formatRoleLabel(activeRole)} role`,
             ]
               .filter(Boolean)
               .join(" / ")}
           />
         );
       })}
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 };
@@ -1604,7 +1450,7 @@ export const OrganizationSettingsPanel = () => {
   const activeOrganization = activeOrganizationState.data ?? null;
   const activeWorkspaceId = toWorkspaceId(activeOrganization?.id);
   const organizations = organizationsState.data ?? [];
-  const activeRole = activeMember ? normalizeOrganizationRole(activeMember.role) : null;
+  const activeRole = activeMember && normalizeOrganizationRole(activeMember.role);
   const pendingInvitations =
     activeOrganization?.invitations.filter((invitation) => invitation.status === "pending") ?? [];
   const ownerCount =
@@ -1631,31 +1477,32 @@ export const OrganizationSettingsPanel = () => {
     organization: ["update"],
   });
   const updateOrganizationReason =
-    activeOrganization && !canUpdateOrganization
-      ? "Only admins and owners can edit team details."
-      : null;
+    (activeOrganization &&
+      !canUpdateOrganization &&
+      "Only admins and owners can edit team details.") ||
+    null;
   const leaveOrganizationReason =
-    activeOrganization && activeRole === "owner" && ownerCount <= 1
-      ? "Assign another owner before leaving."
-      : null;
+    (activeOrganization &&
+      activeRole === "owner" &&
+      ownerCount <= 1 &&
+      "Assign another owner before leaving.") ||
+    null;
   const deleteOrganizationReason =
-    activeOrganization && !canDeleteOrganization ? "Only owners can delete teams." : null;
-  const peopleSummary = activeOrganization
-    ? [
-        formatCount(activeOrganization.members.length, "member"),
-        pendingInvitations.length > 0
-          ? formatCount(pendingInvitations.length, "pending invitation")
-          : null,
-      ]
-        .filter(Boolean)
-        .join(", ")
-    : null;
+    (activeOrganization && !canDeleteOrganization && "Only owners can delete teams.") || null;
+  const peopleSummary =
+    activeOrganization &&
+    [
+      formatCount(activeOrganization.members.length, "member"),
+      pendingInvitations.length > 0 && formatCount(pendingInvitations.length, "pending invitation"),
+    ]
+      .filter(Boolean)
+      .join(", ");
 
   return (
-    <TooltipProvider>
+    <TooltipGroup>
       <div className="space-y-6">
         <div className="flex justify-end">
-          <CreateOrganizationDialog />
+          <OrganizationFormDialog />
         </div>
 
         <PendingInvitationsSection />
@@ -1683,7 +1530,7 @@ export const OrganizationSettingsPanel = () => {
                     reason={updateOrganizationReason}
                   />
                 ) : (
-                  <EditOrganizationDialog activeOrganization={activeOrganization} />
+                  <OrganizationFormDialog activeOrganization={activeOrganization} />
                 )
               }
               label="Team"
@@ -1754,6 +1601,6 @@ export const OrganizationSettingsPanel = () => {
           </p>
         )}
       </div>
-    </TooltipProvider>
+    </TooltipGroup>
   );
 };
