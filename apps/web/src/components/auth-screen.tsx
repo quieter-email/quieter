@@ -310,11 +310,11 @@ export const AuthScreen = () => {
   const navigate = authRouteApi.useNavigate();
 
   return (
-    <div className="grid min-h-dvh w-dvw bg-background md:grid-cols-2">
-      <div className="size-full border-r bg-background-light max-md:hidden">
+    <div className="grid h-dvh max-h-dvh w-full overflow-hidden bg-background md:grid-cols-2">
+      <div className="size-full min-h-0 border-r bg-background-light max-md:hidden">
         <AuthVisual />
       </div>
-      <div className="flex size-full items-center justify-center">
+      <div className="flex size-full min-h-0 items-center justify-center">
         <div className="w-full max-w-md">
           <h1 className="text-3xl font-medium tracking-tight text-foreground">
             {mode === "signup" ? "Sign up" : "Log in"}
