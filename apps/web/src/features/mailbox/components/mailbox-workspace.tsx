@@ -23,6 +23,7 @@ import {
 } from "~/lib/gmail/inbox-query";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
+import { queryPersister } from "~/lib/query-persister";
 import { inboxRouteApi } from "~/lib/route-apis";
 import { createMailboxActionHandlers, type MailboxPendingActions } from "./mailbox-action-handlers";
 
@@ -183,13 +184,16 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
           queryKey,
           reorderMailboxQueryData(previousData, order),
         );
+        await queryPersister.persistQueryByKey(queryKey, queryClient);
       }
 
       return { previousData };
     },
-    onError: (_error, _order, context) => {
+    onError: async (_error, _order, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(getMailboxesQueryKey(), context.previousData);
+        const queryKey = getMailboxesQueryKey();
+        queryClient.setQueryData(queryKey, context.previousData);
+        await queryPersister.persistQueryByKey(queryKey, queryClient);
       }
     },
     onSettled: async () => {

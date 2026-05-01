@@ -472,7 +472,6 @@ const MessageInspectorPanel = ({
 };
 
 const ThreadMessageBody = ({
-  compact,
   expanded,
   isLoading,
   message,
@@ -480,7 +479,6 @@ const ThreadMessageBody = ({
   expanded: boolean;
   isLoading?: boolean;
   message: MessageListItem;
-  compact?: boolean;
 }) => (
   <div
     aria-hidden={!expanded}
@@ -501,12 +499,7 @@ const ThreadMessageBody = ({
           },
         )}
       >
-        <MessageBody
-          compact={compact}
-          html={message.bodyHtml}
-          isLoading={isLoading}
-          text={message.bodyText}
-        />
+        <MessageBody html={message.bodyHtml} isLoading={isLoading} text={message.bodyText} />
       </div>
     </div>
   </div>
@@ -630,7 +623,7 @@ const ThreadMessageCard = ({
       />
 
       <div id={`message-body-${message.id}`}>
-        <ThreadMessageBody compact expanded={expanded} isLoading={isLoading} message={message} />
+        <ThreadMessageBody expanded={expanded} isLoading={isLoading} message={message} />
       </div>
 
       <MessageInspectorPanel
@@ -710,12 +703,7 @@ const SingleMessageCard = ({
       />
 
       <div className="px-4 pb-4 sm:px-5 sm:pb-5">
-        <MessageBody
-          compact
-          html={message.bodyHtml}
-          isLoading={isLoading}
-          text={message.bodyText}
-        />
+        <MessageBody html={message.bodyHtml} isLoading={isLoading} text={message.bodyText} />
       </div>
 
       <MessageInspectorPanel

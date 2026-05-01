@@ -43,25 +43,6 @@ import { getErrorMessage, unwrapResultError } from "~/lib/errors";
 type OrganizationSummary = NonNullable<
   ReturnType<typeof authClient.useListOrganizations>["data"]
 >[number];
-type OrganizationMember = {
-  id: string;
-  role: string;
-  user: {
-    email: string;
-    name: string;
-  };
-  userId: string;
-};
-type OrganizationInvitation = {
-  email: string;
-  id: string;
-  role: string;
-  status: string;
-};
-type FullOrganization = OrganizationSummary & {
-  invitations: OrganizationInvitation[];
-  members: OrganizationMember[];
-};
 type OrganizationPermissionCheck = Parameters<
   typeof authClient.organization.checkRolePermission
 >[0];
@@ -86,6 +67,35 @@ const getFullOrganizationQueryKey = (organizationId: string) =>
   ["auth", "organization", organizationId, "full"] as const;
 
 type OrganizationRoleOption = (typeof organizationRoleOptions)[number];
+
+const organizationMemberSchema = z.object({
+  id: z.string(),
+  role: z.string(),
+  user: z.object({
+    email: z.string(),
+    name: z.string(),
+  }),
+  userId: z.string(),
+});
+const organizationInvitationSchema = z.object({
+  email: z.string(),
+  id: z.string(),
+  role: z.string(),
+  status: z.string(),
+});
+const fullOrganizationSchema = z.object({
+  createdAt: z.coerce.date(),
+  id: z.string(),
+  invitations: z.array(organizationInvitationSchema),
+  logo: z.string().nullable().optional(),
+  members: z.array(organizationMemberSchema),
+  metadata: z.unknown().optional(),
+  name: z.string(),
+  slug: z.string(),
+});
+
+type OrganizationMember = z.infer<typeof organizationMemberSchema>;
+type FullOrganization = z.infer<typeof fullOrganizationSchema>;
 
 const formatCount = (count: number, singular: string, plural = `${singular}s`) =>
   count === 1 ? `1 ${singular}` : `${count} ${plural}`;
@@ -188,7 +198,7 @@ const loadFullOrganization = async (organizationId: string): Promise<FullOrganiz
     "Could not load team.",
   );
 
-  return (result.data as FullOrganization | null) ?? null;
+  return result.data ? fullOrganizationSchema.parse(result.data) : null;
 };
 
 const fullOrganizationQueryOptions = (organizationId: string) =>

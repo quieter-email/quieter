@@ -453,21 +453,34 @@ export const canonicalizeMailboxSwitcherOrder = (
 ): MailboxSwitcherOrder => {
   const groupIds = groups.map((group) => group.id);
   const groupIdSet = new Set(groupIds);
+  const seenGroupIds = new Set<string>();
   const orderedGroupIds = [
     ...(order?.groupIds.filter((groupId) => groupIdSet.has(groupId)) ?? []),
-    ...groupIds.filter((groupId) => !order?.groupIds.includes(groupId)),
-  ];
+    ...groupIds,
+  ].filter((groupId) => {
+    if (seenGroupIds.has(groupId) || !groupIdSet.has(groupId)) {
+      return false;
+    }
+
+    seenGroupIds.add(groupId);
+    return true;
+  });
   const mailboxIdsByGroupId: Record<string, string[]> = {};
 
   for (const group of groups) {
     const mailboxIds = group.mailboxes.map((mailboxRecord) => mailboxRecord.id);
     const mailboxIdSet = new Set(mailboxIds);
     const savedMailboxIds = order?.mailboxIdsByGroupId[group.id] ?? [];
+    const seenMailboxIds = new Set<string>();
 
-    mailboxIdsByGroupId[group.id] = [
-      ...savedMailboxIds.filter((mailboxId) => mailboxIdSet.has(mailboxId)),
-      ...mailboxIds.filter((mailboxId) => !savedMailboxIds.includes(mailboxId)),
-    ];
+    mailboxIdsByGroupId[group.id] = [...savedMailboxIds, ...mailboxIds].filter((mailboxId) => {
+      if (seenMailboxIds.has(mailboxId) || !mailboxIdSet.has(mailboxId)) {
+        return false;
+      }
+
+      seenMailboxIds.add(mailboxId);
+      return true;
+    });
   }
 
   return {

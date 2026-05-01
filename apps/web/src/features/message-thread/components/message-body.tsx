@@ -7,7 +7,6 @@ import { useEffect, useRef } from "react";
 type MessageBodyProps = {
   html?: string;
   text?: string;
-  compact?: boolean;
   isLoading?: boolean;
 };
 
@@ -125,7 +124,7 @@ const HtmlMessageBody = ({ html }: { html: string }) => {
     shadowRootRef.current.innerHTML = prepareShadowContent(html);
   }, [html]);
 
-  return <div className="p-4" ref={hostRef} />;
+  return <div ref={hostRef} />;
 };
 
 const MessageBodyLoadingSkeleton = () => (
@@ -143,16 +142,28 @@ export const MessageBody = ({ html, isLoading, text }: MessageBodyProps) => {
   const fallbackText = text?.trim();
 
   if (!html?.trim() && !fallbackText && isLoading) {
-    return <MessageBodyLoadingSkeleton />;
+    return (
+      <div className="p-4">
+        <MessageBodyLoadingSkeleton />
+      </div>
+    );
   }
 
   if (!html?.trim()) {
     return (
-      <p className={cn("text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground")}>
-        {fallbackText || "No content."}
-      </p>
+      <div className="p-4">
+        <p
+          className={cn("text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground")}
+        >
+          {fallbackText || "No content."}
+        </p>
+      </div>
     );
   }
 
-  return <HtmlMessageBody html={html} />;
+  return (
+    <div className="p-4">
+      <HtmlMessageBody html={html} />
+    </div>
+  );
 };

@@ -9,6 +9,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  Tooltip,
+  TooltipArrow,
+  TooltipContent,
+  TooltipTrigger,
   cn,
 } from "@quieter/ui";
 import { type ReactNode, useState } from "react";
@@ -187,7 +191,7 @@ export const MailboxSwitcherDropdown = ({
     mailboxes.find((mailbox) => mailbox.id === selectedMailboxId) ?? mailboxes[0] ?? null;
   const primaryLabel = selectedMailbox?.emailAddress ?? "no mailbox";
   const secondaryLabel = selectedMailbox?.groupName ?? "No team";
-  const canReorderGroups = groups.filter((group) => group.kind === "team").length > 1;
+  const canReorderGroups = groups.length > 1;
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<ReadonlySet<string>>(() => new Set());
   const [isReorderingGroups, setIsReorderingGroups] = useState(false);
   const toggleGroup = (groupId: string) => {
@@ -281,6 +285,9 @@ export const MailboxSwitcherDropdown = ({
                       group.mailboxes.map((mailbox, mailboxIndex) => {
                         const isActive = mailbox.id === selectedMailboxId;
                         const isDefault = mailbox.id === defaultMailboxId;
+                        const defaultMailboxLabel = isDefault
+                          ? "Unset default mailbox"
+                          : "Set as default mailbox";
 
                         return (
                           <SortableMailboxRow
@@ -298,30 +305,36 @@ export const MailboxSwitcherDropdown = ({
                             >
                               <MailboxSummary
                                 action={
-                                  <button
-                                    aria-label={
-                                      isDefault ? "Unset default mailbox" : "Set as default mailbox"
-                                    }
-                                    className={cn(
-                                      "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
-                                      {
-                                        "text-foreground": isDefault,
-                                        "text-muted-foreground/50 opacity-0 group-hover/item:opacity-100 hover:text-foreground":
-                                          !isDefault,
-                                      },
-                                    )}
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      onSetDefaultMailbox(isDefault ? null : mailbox.id);
-                                    }}
-                                    type="button"
-                                  >
-                                    <HugeiconsIcon
-                                      aria-hidden
-                                      className="size-3.5"
-                                      icon={isDefault ? PinIcon : PinOffIcon}
-                                    />
-                                  </button>
+                                  <Tooltip>
+                                    <TooltipTrigger className="inline-flex" render={<span />}>
+                                      <button
+                                        aria-label={defaultMailboxLabel}
+                                        className={cn(
+                                          "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
+                                          {
+                                            "text-foreground": isDefault,
+                                            "text-muted-foreground/50 opacity-0 group-hover/item:opacity-100 hover:text-foreground":
+                                              !isDefault,
+                                          },
+                                        )}
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          onSetDefaultMailbox(isDefault ? null : mailbox.id);
+                                        }}
+                                        type="button"
+                                      >
+                                        <HugeiconsIcon
+                                          aria-hidden
+                                          className="size-3.5"
+                                          icon={isDefault ? PinIcon : PinOffIcon}
+                                        />
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="px-2 py-1">
+                                      {defaultMailboxLabel}
+                                      <TooltipArrow />
+                                    </TooltipContent>
+                                  </Tooltip>
                                 }
                                 className="w-full"
                                 mailbox={mailbox}
