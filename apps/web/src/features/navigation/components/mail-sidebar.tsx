@@ -4,36 +4,45 @@ import { Edit01Icon, Settings01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, LinkButton } from "@quieter/ui";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
-import { MailboxSwitcherDropdown } from "~/features/navigation/components/mailbox-switcher";
+import {
+  type MailboxSwitcherOrder,
+  MailboxSwitcherDropdown,
+} from "~/features/navigation/components/mailbox-switcher";
 import { SidebarMailboxNav } from "~/features/navigation/components/sidebar-mailbox-nav";
 
 type MailSidebarProps = {
   defaultMailboxId: string | null;
-  mailboxes: Array<{
+  groups: Array<{
     id: string;
-    emailAddress: string;
-    displayName: string | null;
-    provider: string;
+    kind: "personal" | "team";
+    mailboxes: Array<{
+      id: string;
+      emailAddress: string;
+      displayName: string | null;
+      groupName: string;
+      provider: string;
+    }>;
+    name: string;
   }>;
   selectedMailboxId: string | null;
   selectedMailbox: MailboxCategory;
+  onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
   onSelectMailboxId: (mailboxId: string) => void;
   onSetDefaultMailbox: (mailboxId: string | null) => void;
   onComposeNewMail: () => void;
-  workspaceName: string;
 };
 
 export const MailSidebar = ({
   defaultMailboxId,
-  mailboxes,
+  groups,
   onComposeNewMail,
+  onReorderMailboxSwitcher,
   onSelectMailbox,
   onSelectMailboxId,
   onSetDefaultMailbox,
   selectedMailboxId,
   selectedMailbox,
-  workspaceName,
 }: MailSidebarProps) => {
   return (
     <aside
@@ -44,11 +53,11 @@ export const MailSidebar = ({
         <div className="min-w-0 rounded-md px-5">
           <MailboxSwitcherDropdown
             defaultMailboxId={defaultMailboxId}
-            mailboxes={mailboxes}
+            groups={groups}
+            onReorderMailboxSwitcher={onReorderMailboxSwitcher}
             onSelectMailboxId={onSelectMailboxId}
             onSetDefaultMailbox={onSetDefaultMailbox}
             selectedMailboxId={selectedMailboxId}
-            workspaceName={workspaceName}
           />
         </div>
 

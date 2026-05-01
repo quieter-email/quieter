@@ -1,9 +1,10 @@
 "use client";
 
-import { isPersonalWorkspaceId, toWorkspaceId } from "@quieter/auth/workspace";
+import type { RouterOutputs } from "@quieter/orpc";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { MailboxSwitcherOrder } from "~/features/navigation/components/mailbox-switcher";
 import type { MailboxSearch } from "~/routes/index";
 import { LoadingPage } from "~/components/loading-page";
 import { type ComposeDraftState, buildComposeDraftFromSavedDraftMessage } from "~/features/compose";
@@ -11,7 +12,6 @@ import { type ComposeDialogHandle, ComposeDialog } from "~/features/compose";
 import { MessageList } from "~/features/message-list/components/message-list";
 import { MessageDetail } from "~/features/message-thread/components/message-detail";
 import { MailSidebar } from "~/features/navigation/components/mail-sidebar";
-import { authClient } from "~/lib/auth";
 import { type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
 import {
   getLiveSyncQueryKey,
@@ -40,6 +40,8 @@ type MailboxSearchPatch = {
   messageId?: string | null;
   query?: string | null;
 };
+
+type MailboxesQueryData = RouterOutputs["mail"]["listMailboxes"];
 
 const mergeMailboxSearch = (previous: MailboxSearch, patch: MailboxSearchPatch): MailboxSearch => ({
   mailbox: patch.mailbox ?? previous.mailbox,
@@ -77,12 +79,52 @@ const updatePendingIds = (
   return next;
 };
 
+const reorderMailboxQueryData = (
+  data: MailboxesQueryData,
+  order: MailboxSwitcherOrder,
+): MailboxesQueryData => {
+  const groupsById = new Map(data.groups.map((group) => [group.id, group]));
+  const orderedGroupIds = [
+    ...order.groupIds.filter((groupId) => groupsById.has(groupId)),
+    ...data.groups.map((group) => group.id).filter((groupId) => !order.groupIds.includes(groupId)),
+  ];
+
+  return {
+    ...data,
+    groups: orderedGroupIds.flatMap((groupId) => {
+      const group = groupsById.get(groupId);
+      if (!group) {
+        return [];
+      }
+
+      const mailboxesById = new Map(group.mailboxes.map((mailbox) => [mailbox.id, mailbox]));
+      const orderedMailboxIds = [
+        ...(order.mailboxIdsByGroupId[group.id] ?? []).filter((mailboxId) =>
+          mailboxesById.has(mailboxId),
+        ),
+        ...group.mailboxes
+          .map((mailbox) => mailbox.id)
+          .filter((mailboxId) => !order.mailboxIdsByGroupId[group.id]?.includes(mailboxId)),
+      ];
+
+      return [
+        {
+          ...group,
+          mailboxes: orderedMailboxIds.flatMap((mailboxId) => {
+            const mailbox = mailboxesById.get(mailboxId);
+            return mailbox ? [mailbox] : [];
+          }),
+        },
+      ];
+    }),
+  };
+};
+
 export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const navigate = useNavigate({
     from: "/",
   });
   const queryClient = useQueryClient();
-  const activeOrganizationState = authClient.useActiveOrganization();
   const composeDialogRef = useRef<ComposeDialogHandle | null>(null);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const [isWindowActive, setIsWindowActive] = useState(false);
@@ -95,26 +137,24 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const pendingMessageActionIdsRef = useRef(pendingMessageActionIds);
   const pendingThreadActionIdsRef = useRef(pendingThreadActionIds);
   const { mailbox: activeMailbox, mailboxId, messageId, query } = inboxRouteApi.useSearch();
-  const workspaceId = toWorkspaceId(activeOrganizationState.data?.id);
-  const workspaceName = activeOrganizationState.data?.name ?? "Personal";
-  const isPersonalWorkspace = isPersonalWorkspaceId(workspaceId);
 
   pendingMessageActionIdsRef.current = pendingMessageActionIds;
   pendingThreadActionIdsRef.current = pendingThreadActionIds;
-  const mailboxesQuery = useQuery(mailboxesQueryOptions(workspaceId));
+  const mailboxesQuery = useQuery(mailboxesQueryOptions());
   const defaultMailboxId = mailboxesQuery.data?.defaultMailboxId ?? null;
-  const mailboxes = (mailboxesQuery.data?.mailboxes ?? [])
-    .map((mailbox) => ({
+  const mailboxGroups = (mailboxesQuery.data?.groups ?? []).map((group) => ({
+    id: group.id,
+    kind: group.kind,
+    name: group.name,
+    mailboxes: group.mailboxes.map((mailbox) => ({
       displayName: mailbox.displayName,
       emailAddress: mailbox.emailAddress,
+      groupName: mailbox.groupName,
       id: mailbox.id,
       provider: mailbox.provider,
-    }))
-    .sort((a, b) => {
-      if (a.id === defaultMailboxId) return -1;
-      if (b.id === defaultMailboxId) return 1;
-      return 0;
-    });
+    })),
+  }));
+  const mailboxes = mailboxGroups.flatMap((group) => group.mailboxes);
   const selectedMailbox =
     mailboxes.find((mailbox) => mailbox.id === mailboxId) ??
     mailboxes.find((mailbox) => mailbox.id === defaultMailboxId) ??
@@ -127,7 +167,34 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     ...orpc.mail.setDefaultMailbox.mutationOptions(),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: getMailboxesQueryKey(workspaceId),
+        queryKey: getMailboxesQueryKey(),
+      });
+    },
+  });
+  const updateMailboxSwitcherOrderMutation = useMutation({
+    ...orpc.mail.updateMailboxSwitcherOrder.mutationOptions(),
+    onMutate: async (order) => {
+      const queryKey = getMailboxesQueryKey();
+      await queryClient.cancelQueries({ queryKey });
+
+      const previousData = queryClient.getQueryData<MailboxesQueryData>(queryKey);
+      if (previousData) {
+        queryClient.setQueryData<MailboxesQueryData>(
+          queryKey,
+          reorderMailboxQueryData(previousData, order),
+        );
+      }
+
+      return { previousData };
+    },
+    onError: (_error, _order, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(getMailboxesQueryKey(), context.previousData);
+      }
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: getMailboxesQueryKey(),
       });
     },
   });
@@ -361,7 +428,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       <>
         <LoadingPage />
         <ComposeDialog
-          key={selectedMailboxId ?? `${workspaceId}:${user.id ?? "signed-out"}`}
+          key={selectedMailboxId ?? user.id ?? "signed-out"}
           mailboxId={selectedMailboxId}
           ref={composeDialogRef}
         />
@@ -381,8 +448,11 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
 
           <MailSidebar
             defaultMailboxId={defaultMailboxId}
-            mailboxes={mailboxes}
+            groups={mailboxGroups}
             onComposeNewMail={() => composeDialogRef.current?.openNewMail()}
+            onReorderMailboxSwitcher={(order) => {
+              updateMailboxSwitcherOrderMutation.mutate(order);
+            }}
             onSelectMailbox={selectMailbox}
             onSelectMailboxId={(nextMailboxId) => {
               if (nextMailboxId === selectedMailboxId) return;
@@ -393,7 +463,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
             }}
             selectedMailbox={activeMailbox}
             selectedMailboxId={selectedMailboxId}
-            workspaceName={workspaceName}
           />
 
           <div className="relative flex min-h-0 flex-1 flex-col gap-1 bg-background py-1 pr-1 lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
@@ -444,12 +513,10 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
               <section className="flex min-h-0 flex-1 items-center justify-center bg-background-light px-8">
                 <div className="max-w-md space-y-3 text-center">
                   <h1 className="text-lg font-semibold tracking-tight text-foreground">
-                    No mailboxes in {workspaceName}
+                    No mailboxes
                   </h1>
                   <p className="text-sm text-muted-foreground">
-                    {isPersonalWorkspace
-                      ? "Connect Gmail to use Personal mail."
-                      : "This team does not have a managed mailbox yet."}
+                    Connect Gmail or add a managed mailbox to a team.
                   </p>
                 </div>
               </section>
@@ -458,7 +525,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         </div>
       </main>
       <ComposeDialog
-        key={selectedMailboxId ?? `${workspaceId}:${user.id ?? "signed-out"}`}
+        key={selectedMailboxId ?? user.id ?? "signed-out"}
         mailboxId={selectedMailboxId}
         ref={composeDialogRef}
       />

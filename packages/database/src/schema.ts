@@ -39,6 +39,11 @@ export type MailDomainCheckResult = {
   checkedAt: string;
 };
 
+export type MailboxSwitcherOrder = {
+  groupIds: string[];
+  mailboxIdsByGroupId: Record<string, string[]>;
+};
+
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -46,6 +51,7 @@ export const user = pgTable("user", {
   emailVerified: boolean("emailVerified").notNull(),
   image: text("image"),
   defaultMailboxId: text("defaultMailboxId"),
+  mailboxSwitcherOrder: jsonb("mailboxSwitcherOrder").$type<MailboxSwitcherOrder>(),
   createdAt: timestamp("createdAt").notNull(),
   updatedAt: timestamp("updatedAt").notNull(),
 });
@@ -144,7 +150,6 @@ export const member = pgTable(
       .notNull()
       .references(() => user.id),
     role: text("role").notNull(),
-    defaultMailboxId: text("defaultMailboxId"),
     createdAt: timestamp("createdAt").notNull(),
   },
   (table) => [

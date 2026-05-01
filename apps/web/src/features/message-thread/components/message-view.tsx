@@ -129,6 +129,21 @@ const getMessageUnsubscribeAction = (
   };
 };
 
+const hasSelectionInElement = (element: HTMLElement) => {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+    return false;
+  }
+
+  for (let index = 0; index < selection.rangeCount; index++) {
+    if (selection.getRangeAt(index).intersectsNode(element)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const MessageHeaderContent = ({
   className,
   headerActions,
@@ -202,13 +217,30 @@ const MessageHeaderContent = ({
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-stretch justify-between gap-3">
           {onToggleExpanded ? (
-            <button
-              className="min-w-0 flex-1 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-              onClick={onToggleExpanded}
-              type="button"
+            <div
+              aria-controls={`message-body-${message.id}`}
+              aria-expanded={isExpanded}
+              className="min-w-0 flex-1 cursor-pointer rounded-sm text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              onClick={(event) => {
+                if (hasSelectionInElement(event.currentTarget)) {
+                  return;
+                }
+
+                onToggleExpanded();
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") {
+                  return;
+                }
+
+                event.preventDefault();
+                onToggleExpanded();
+              }}
+              role="button"
+              tabIndex={0}
             >
               {content}
-            </button>
+            </div>
           ) : (
             content
           )}

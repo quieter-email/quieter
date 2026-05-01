@@ -22,7 +22,7 @@
 
 - Quieter is an email client.
 - Gmail access is resolved through the selected Better Auth linked Google account in the built-in Personal workspace.
-- `user.defaultMailboxId` pins the Personal default mailbox. `member.defaultMailboxId` pins per-org default mailboxes. Invalid or missing `mailboxId` should resolve to the relevant default mailbox.
+- `user.defaultMailboxId` pins the global default mailbox across Personal and all teams. Invalid or missing `mailboxId` should resolve to that global default, then the first accessible mailbox.
 - Better Auth organization plugin is the source of truth for explicit orgs only. Users can have zero or more organizations. Personal is always available but is not a Better Auth organization. Gmail mailboxes are derived from linked Google accounts, not `mailbox` table rows.
 - Managed/non-Gmail mailboxes are the table-backed mailbox records.
 - Google auth must request `https://mail.google.com/` plus profile/email scopes. Missing scope goes to the dedicated repair flow for the exact broken Gmail account.
@@ -44,7 +44,7 @@
 - Prefer TanStack Query for app-owned async/server state.
 - Use TanStack Store for complex client-only workflow state.
 - Use named `queryOptions(...)` / `mutationOptions(...)` when config is reused or keys/cache behavior need one source of truth.
-- Keep Better Auth reactive hooks (`useSession`, `useActiveOrganization`, `useListOrganizations`, `useListPasskeys`) as the source of truth for auth state.
+- Keep Better Auth reactive hooks (`useSession`, `useListOrganizations`, `useListPasskeys`) as the source of truth for auth state. Do not use Better Auth active organization state for Quieter product context.
 - Compose state is mailbox-scoped. Persisted compose sessions and Gmail cache must stay isolated per mailbox.
 - Bulk mailbox actions and conversation spam/trash actions operate on the loaded row set for the current mailbox.
 - History-based live sync applies to unfiltered mailbox views; filtered search and Drafts refresh manually.

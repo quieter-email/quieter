@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@better-auth/passkey": "catalog:",
+    "@dnd-kit/react": "^0.4.0",
     "@hugeicons/core-free-icons": "catalog:",
     "@hugeicons/react": "catalog:",
     "@orpc/client": "catalog:",

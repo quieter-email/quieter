@@ -1,4 +1,4 @@
-import { db, invitation, member, organization, session, user } from "@quieter/database";
+import { db, invitation, member, organization, user } from "@quieter/database";
 import { APIError } from "better-auth/api";
 import { eq } from "drizzle-orm";
 
@@ -6,13 +6,7 @@ type AuthUser = typeof user.$inferSelect;
 
 type UserIdentity = Pick<AuthUser, "email" | "id" | "name">;
 
-type EnsureUserOrganizationStateOptions = {
-  activeOrganizationId?: string | null;
-  sessionToken?: string;
-};
-
 type EnsureUserOrganizationStateResult = {
-  activeOrganizationId: string | null;
   organizationIds: string[];
 };
 
@@ -28,26 +22,10 @@ const getUserOrganizationIds = async (userId: string) => {
 
 export const ensureUserOrganizationState = async (
   currentUser: UserIdentity,
-  options: EnsureUserOrganizationStateOptions = {},
 ): Promise<EnsureUserOrganizationStateResult> => {
   const organizationIds = await getUserOrganizationIds(currentUser.id);
-  const activeOrganizationId =
-    options.activeOrganizationId && organizationIds.includes(options.activeOrganizationId)
-      ? options.activeOrganizationId
-      : null;
-
-  if (options.sessionToken && activeOrganizationId !== options.activeOrganizationId) {
-    await db
-      .update(session)
-      .set({
-        activeOrganizationId,
-        updatedAt: new Date(),
-      })
-      .where(eq(session.token, options.sessionToken));
-  }
 
   return {
-    activeOrganizationId,
     organizationIds,
   };
 };

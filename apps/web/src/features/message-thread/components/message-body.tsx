@@ -125,7 +125,7 @@ const HtmlMessageBody = ({ html }: { html: string }) => {
     shadowRootRef.current.innerHTML = prepareShadowContent(html);
   }, [html]);
 
-  return <div ref={hostRef} />;
+  return <div className="p-4" ref={hostRef} />;
 };
 
 const MessageBodyLoadingSkeleton = () => (

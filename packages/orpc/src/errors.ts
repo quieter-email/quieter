@@ -11,10 +11,6 @@ export const mailboxScopeRepairRequiredErrorDataSchema = z.object({
   emailAddress: z.string().min(1),
 });
 
-export const personalOrganizationRequiredErrorDataSchema = z.object({
-  activeOrganizationId: z.string().min(1),
-});
-
 export const orpcErrorMap = {
   UNAUTHORIZED: {},
   FORBIDDEN: {},
@@ -27,16 +23,9 @@ export const orpcErrorMap = {
     data: mailboxScopeRepairRequiredErrorDataSchema,
     status: 409,
   },
-  PERSONAL_ORGANIZATION_REQUIRED: {
-    data: personalOrganizationRequiredErrorDataSchema,
-    status: 409,
-  },
 } as const;
 
 export type RateLimitedErrorData = z.infer<typeof rateLimitedErrorDataSchema>;
 export type MailboxScopeRepairRequiredErrorData = z.infer<
   typeof mailboxScopeRepairRequiredErrorDataSchema
->;
-export type PersonalOrganizationRequiredErrorData = z.infer<
-  typeof personalOrganizationRequiredErrorDataSchema
 >;

@@ -1,14 +1,12 @@
-import type { WorkspaceId } from "@quieter/auth/workspace";
 import { queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
 
-export const getMailboxesQueryKey = (workspaceId: WorkspaceId) =>
-  ["mailboxes", workspaceId] as const;
+export const getMailboxesQueryKey = () => ["mailboxes"] as const;
 
-export const mailboxesQueryOptions = (workspaceId: WorkspaceId, enabled = true) =>
+export const mailboxesQueryOptions = (enabled = true) =>
   queryOptions({
-    queryKey: getMailboxesQueryKey(workspaceId),
-    queryFn: ({ signal }) => rpc.mail.listMailboxesForActiveWorkspace(undefined, { signal }),
+    queryKey: getMailboxesQueryKey(),
+    queryFn: ({ signal }) => rpc.mail.listMailboxes(undefined, { signal }),
     enabled,
     staleTime: 0,
     refetchOnMount: "always",

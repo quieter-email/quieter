@@ -19,7 +19,7 @@ const GET_METHOD_PATHS = new Set([
   "mail.getMessageInspector",
   "mail.getThread",
   "mail.listLabels",
-  "mail.listMailboxesForActiveWorkspace",
+  "mail.listMailboxes",
   "mail.listMessages",
 ]);
 

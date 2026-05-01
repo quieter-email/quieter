@@ -6,11 +6,10 @@ import {
   Edit01Icon,
   Loading03Icon,
   Logout03Icon,
-  Mail01Icon,
+  UserAdd01Icon,
   UserGroupIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { toWorkspaceId } from "@quieter/auth/workspace";
 import {
   Button,
   Dialog,
@@ -41,16 +40,32 @@ import { z } from "zod";
 import { authClient } from "~/lib/auth";
 import { getErrorMessage, unwrapResultError } from "~/lib/errors";
 
-type ActiveOrganization = NonNullable<ReturnType<typeof authClient.useActiveOrganization>["data"]>;
-type ActiveMember = NonNullable<ReturnType<typeof authClient.useActiveMember>["data"]>;
+type OrganizationSummary = NonNullable<
+  ReturnType<typeof authClient.useListOrganizations>["data"]
+>[number];
+type OrganizationMember = {
+  id: string;
+  role: string;
+  user: {
+    email: string;
+    name: string;
+  };
+  userId: string;
+};
+type OrganizationInvitation = {
+  email: string;
+  id: string;
+  role: string;
+  status: string;
+};
+type FullOrganization = OrganizationSummary & {
+  invitations: OrganizationInvitation[];
+  members: OrganizationMember[];
+};
 type OrganizationPermissionCheck = Parameters<
   typeof authClient.organization.checkRolePermission
 >[0];
 type OrganizationPermissions = OrganizationPermissionCheck["permissions"];
-type OrganizationSummary = NonNullable<
-  ReturnType<typeof authClient.useListOrganizations>["data"]
->[number];
-type OrganizationMember = ActiveOrganization["members"][number];
 type UserInvitation = {
   createdAt: Date | string;
   email: string;
@@ -67,6 +82,8 @@ type UserInvitation = {
 const organizationRoleOptions = ["owner", "admin", "member"] as const;
 const getUserInvitationsQueryKey = (userId: string) =>
   ["auth", userId, "organization", "list-user-invitations"] as const;
+const getFullOrganizationQueryKey = (organizationId: string) =>
+  ["auth", "organization", organizationId, "full"] as const;
 
 type OrganizationRoleOption = (typeof organizationRoleOptions)[number];
 
@@ -91,6 +108,7 @@ const organizationRoleSelectItems = organizationRoleOptions.map((role) => ({
   label: formatRoleLabel(role),
   value: role,
 }));
+const dateFormatter = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
 
 const normalizeOrganizationRole = (value: string): OrganizationRoleOption => {
   const primaryRole = splitOrganizationRoles(value).find((part): part is OrganizationRoleOption =>
@@ -113,7 +131,7 @@ const formatDate = (value: Date | string) => {
     return "Unknown";
   }
 
-  return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(date);
+  return dateFormatter.format(date);
 };
 
 const hasOrganizationPermission = (
@@ -157,6 +175,26 @@ const userInvitationsQueryOptions = (userId: string, enabled = true) =>
     enabled,
     queryFn: loadUserInvitations,
     queryKey: getUserInvitationsQueryKey(userId),
+  });
+
+const loadFullOrganization = async (organizationId: string): Promise<FullOrganization | null> => {
+  const result = unwrapResultError(
+    await authClient.organization.getFullOrganization({
+      query: {
+        membersLimit: 100,
+        organizationId,
+      },
+    }),
+    "Could not load team.",
+  );
+
+  return (result.data as FullOrganization | null) ?? null;
+};
+
+const fullOrganizationQueryOptions = (organizationId: string) =>
+  queryOptions({
+    queryFn: () => loadFullOrganization(organizationId),
+    queryKey: getFullOrganizationQueryKey(organizationId),
   });
 
 const SettingsRow = ({
@@ -213,31 +251,41 @@ const MutedActionButton = ({
   </Tooltip>
 );
 
-const OrganizationFormDialog = ({
-  activeOrganization,
-}: {
-  activeOrganization?: ActiveOrganization;
-}) => {
+const OrganizationFormDialog = ({ organization }: { organization?: OrganizationSummary }) => {
+  const queryClient = useQueryClient();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const isEditing = !!activeOrganization;
+  const isEditing = !!organization;
   const defaultValues = {
-    name: activeOrganization?.name ?? "",
-    slug: activeOrganization?.slug ?? "",
+    name: organization?.name ?? "",
+    slug: organization?.slug ?? "",
   };
   const errorMessage = isEditing ? "Could not update team." : "Could not create team.";
   const organizationMutation = useMutation({
     mutationFn: async (input: { name: string; slug: string }) =>
-      activeOrganization
+      organization
         ? unwrapResultError(
             await authClient.organization.update({
               data: input,
-              organizationId: activeOrganization.id,
+              organizationId: organization.id,
             }),
             errorMessage,
           )
-        : unwrapResultError(await authClient.organization.create(input), errorMessage),
+        : unwrapResultError(
+            await authClient.organization.create({
+              ...input,
+              keepCurrentActiveOrganization: true,
+            }),
+            errorMessage,
+          ),
     mutationKey: ["auth", "organization", isEditing ? "update" : "create"],
+    onSuccess: async () => {
+      if (organization) {
+        await queryClient.invalidateQueries({
+          queryKey: getFullOrganizationQueryKey(organization.id),
+        });
+      }
+    },
   });
   const form = useForm({
     defaultValues,
@@ -276,7 +324,6 @@ const OrganizationFormDialog = ({
     setSubmitError(null);
     form.reset(defaultValues);
   };
-  const triggerLabel = isEditing ? "Edit" : "Create";
   const title = isEditing ? "Edit team" : "Create team";
   const submitLabel = isEditing ? "Save" : "Create";
 
@@ -288,10 +335,14 @@ const OrganizationFormDialog = ({
           setOpen(true);
         }}
         size="sm"
-        variant="outline"
+        variant={isEditing ? "outline" : "default"}
       >
-        <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
-        {triggerLabel}
+        <HugeiconsIcon
+          aria-hidden
+          className="size-4"
+          icon={isEditing ? Edit01Icon : UserGroupIcon}
+        />
+        {isEditing ? "Edit" : "Create"}
       </Button>
 
       <Dialog
@@ -381,168 +432,336 @@ const OrganizationFormDialog = ({
   );
 };
 
-const ManagePeopleMemberRoleForm = ({
-  activeMember,
-  canRemoveMembers,
-  canUpdateMemberRole,
-  member,
-  onRemoveMember,
-  onUpdateRole,
-  pendingMemberId,
-  removeMemberPending,
-  updateMemberRolePending,
+const InviteMemberForm = ({
+  canInviteMembers,
+  organization,
 }: {
-  activeMember: ActiveMember | null;
-  canRemoveMembers: boolean;
-  canUpdateMemberRole: boolean;
-  member: OrganizationMember;
-  onRemoveMember: (memberId: string) => Promise<void>;
-  onUpdateRole: (memberId: string, role: OrganizationRoleOption) => Promise<void>;
-  pendingMemberId: string | null;
-  removeMemberPending: boolean;
-  updateMemberRolePending: boolean;
+  canInviteMembers: boolean;
+  organization: FullOrganization;
 }) => {
-  const currentRole = normalizeOrganizationRole(member.role);
-  const isActiveMember = member.userId === activeMember?.userId;
-  const isSavingRole = pendingMemberId === member.id && updateMemberRolePending;
-  const isRemovingMember = pendingMemberId === member.id && removeMemberPending;
+  const queryClient = useQueryClient();
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const inviteMemberMutation = useMutation({
+    mutationFn: async (input: { email: string; role: OrganizationRoleOption }) =>
+      unwrapResultError(
+        await authClient.organization.inviteMember({
+          email: input.email,
+          organizationId: organization.id,
+          role: input.role,
+        }),
+        "Could not invite member.",
+      ),
+    mutationKey: ["auth", "organization", organization.id, "invite-member"],
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: getFullOrganizationQueryKey(organization.id),
+      });
+    },
+  });
   const form = useForm({
     defaultValues: {
-      role: currentRole,
+      email: "",
+      role: "member" as OrganizationRoleOption,
     },
     onSubmit: async ({ value }) => {
-      await onUpdateRole(member.id, value.role);
+      setSubmitError(null);
+
+      try {
+        await inviteMemberMutation.mutateAsync({
+          email: value.email.trim(),
+          role: value.role,
+        });
+        form.reset();
+      } catch (mutationError) {
+        setSubmitError(getErrorMessage(mutationError, "Could not invite member."));
+      }
     },
     validationLogic: revalidateLogic(),
     validators: {
       onDynamic: z.object({
+        email: z.string().trim().email("Enter a valid email."),
         role: z.enum(organizationRoleOptions),
       }),
     },
   });
 
+  if (!canInviteMembers) {
+    return null;
+  }
+
   return (
-    <div className="flex flex-col gap-3 py-3 md:flex-row md:items-center">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm text-foreground">{member.user.name}</p>
-        <p className="mt-1 truncate text-sm text-muted-foreground">{member.user.email}</p>
-      </div>
+    <form
+      className="flex flex-col gap-2 md:flex-row"
+      action={async () => {
+        await form.handleSubmit();
+      }}
+    >
+      <form.Field name="email">
+        {(field) => (
+          <TextField className="min-w-0 flex-1">
+            <TextFieldInput
+              aria-invalid={field.state.meta.errors.length > 0}
+              name={field.name}
+              onBlur={() => field.handleBlur()}
+              onChange={(event) => {
+                setSubmitError(null);
+                field.handleChange(event.target.value);
+              }}
+              placeholder="member@example.com"
+              value={field.state.value}
+            />
+          </TextField>
+        )}
+      </form.Field>
 
-      {canUpdateMemberRole && !isActiveMember ? (
-        <form
-          className="flex flex-wrap items-center justify-end gap-2"
-          action={async () => {
-            await form.handleSubmit();
-          }}
-        >
-          <form.Field name="role">
-            {(field) => (
-              <Select
-                items={organizationRoleSelectItems}
-                modal={false}
-                onValueChange={(value) => {
-                  if (value) {
-                    field.handleChange(normalizeOrganizationRole(value));
-                    field.handleBlur();
-                  }
-                }}
-                value={field.state.value}
-              >
-                <SelectTrigger className="w-28">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent positionerClassName="z-[60]">
-                  <SelectList>
-                    {organizationRoleOptions.map((role) => (
-                      <SelectItem key={role} value={role}>
-                        {formatRoleLabel(role)}
-                      </SelectItem>
-                    ))}
-                  </SelectList>
-                </SelectContent>
-              </Select>
-            )}
-          </form.Field>
+      <form.Field name="role">
+        {(field) => (
+          <Select
+            items={organizationRoleSelectItems}
+            modal={false}
+            onValueChange={(value) => {
+              if (value) {
+                field.handleChange(normalizeOrganizationRole(value));
+              }
+            }}
+            value={field.state.value}
+          >
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent positionerClassName="z-[60]">
+              <SelectList>
+                {organizationRoleOptions.map((role) => (
+                  <SelectItem key={role} value={role}>
+                    {formatRoleLabel(role)}
+                  </SelectItem>
+                ))}
+              </SelectList>
+            </SelectContent>
+          </Select>
+        )}
+      </form.Field>
 
-          <form.Subscribe<OrganizationRoleOption> selector={(state) => state.values.role}>
-            {(role) => (
-              <Button
-                disabled={role === currentRole || isSavingRole || isRemovingMember}
-                size="sm"
-                type="submit"
-                variant="outline"
-              >
-                {isSavingRole ? (
-                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+      <Button disabled={inviteMemberMutation.isPending} size="sm" type="submit">
+        {inviteMemberMutation.isPending ? (
+          <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+        ) : (
+          <HugeiconsIcon aria-hidden className="size-4" icon={UserAdd01Icon} />
+        )}
+        Invite
+      </Button>
+
+      {submitError && <p className="text-sm text-destructive md:basis-full">{submitError}</p>}
+    </form>
+  );
+};
+
+const TeamMembers = ({
+  activeMember,
+  canRemoveMembers,
+  canUpdateMemberRole,
+  members,
+  organizationId,
+}: {
+  activeMember: OrganizationMember | null;
+  canRemoveMembers: boolean;
+  canUpdateMemberRole: boolean;
+  members: OrganizationMember[];
+  organizationId: string;
+}) => {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [pendingMemberId, setPendingMemberId] = useState<string | null>(null);
+  const removeMemberMutation = useMutation({
+    mutationFn: async (memberId: string) =>
+      unwrapResultError(
+        await authClient.organization.removeMember({
+          memberIdOrEmail: memberId,
+          organizationId,
+        }),
+        "Could not remove member.",
+      ),
+    mutationKey: ["auth", "organization", organizationId, "remove-member"],
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: getFullOrganizationQueryKey(organizationId),
+      });
+    },
+  });
+  const updateMemberRoleMutation = useMutation({
+    mutationFn: async (input: { memberId: string; role: OrganizationRoleOption }) =>
+      unwrapResultError(
+        await authClient.organization.updateMemberRole({
+          memberId: input.memberId,
+          organizationId,
+          role: input.role,
+        }),
+        "Could not update role.",
+      ),
+    mutationKey: ["auth", "organization", organizationId, "update-member-role"],
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: getFullOrganizationQueryKey(organizationId),
+      });
+    },
+  });
+
+  const handleRemoveMember = async (memberId: string) => {
+    setError(null);
+
+    try {
+      setPendingMemberId(memberId);
+      await removeMemberMutation.mutateAsync(memberId);
+    } catch (mutationError) {
+      setError(getErrorMessage(mutationError, "Could not remove member."));
+    } finally {
+      setPendingMemberId(null);
+    }
+  };
+
+  const handleUpdateRole = async (memberId: string, role: OrganizationRoleOption) => {
+    setError(null);
+
+    try {
+      setPendingMemberId(memberId);
+      await updateMemberRoleMutation.mutateAsync({ memberId, role });
+    } catch (mutationError) {
+      setError(getErrorMessage(mutationError, "Could not update role."));
+    } finally {
+      setPendingMemberId(null);
+    }
+  };
+
+  return (
+    <div className="divide-y divide-border/70">
+      {[...members]
+        .sort((left, right) => {
+          const isLeftActive = left.userId === activeMember?.userId;
+          const isRightActive = right.userId === activeMember?.userId;
+          if (isLeftActive) return -1;
+          if (isRightActive) return 1;
+          return left.user.email.localeCompare(right.user.email);
+        })
+        .map((member) => {
+          const currentRole = normalizeOrganizationRole(member.role);
+          const isActiveMember = member.userId === activeMember?.userId;
+          const isPending =
+            pendingMemberId === member.id &&
+            (removeMemberMutation.isPending || updateMemberRoleMutation.isPending);
+
+          return (
+            <div className="flex flex-col gap-3 py-3 md:flex-row md:items-center" key={member.id}>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm text-foreground">{member.user.name}</p>
+                <p className="mt-1 truncate text-sm text-muted-foreground">{member.user.email}</p>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {canUpdateMemberRole && !isActiveMember ? (
+                  <Select
+                    items={organizationRoleSelectItems}
+                    modal={false}
+                    onValueChange={(value) => {
+                      if (value) {
+                        void handleUpdateRole(member.id, normalizeOrganizationRole(value));
+                      }
+                    }}
+                    value={currentRole}
+                  >
+                    <SelectTrigger className="w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent positionerClassName="z-[60]">
+                      <SelectList>
+                        {organizationRoleOptions.map((role) => (
+                          <SelectItem key={role} value={role}>
+                            {formatRoleLabel(role)}
+                          </SelectItem>
+                        ))}
+                      </SelectList>
+                    </SelectContent>
+                  </Select>
                 ) : (
-                  <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
+                  <p className="text-sm text-muted-foreground">
+                    {formatRoleLabel(member.role)}
+                    {isActiveMember ? " / You" : ""}
+                  </p>
                 )}
-                Save
-              </Button>
-            )}
-          </form.Subscribe>
 
-          {canRemoveMembers && (
-            <Button
-              disabled={isSavingRole || isRemovingMember}
-              onClick={() => void onRemoveMember(member.id)}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              {isRemovingMember ? (
-                <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-              ) : (
-                <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
-              )}
-              Remove
-            </Button>
-          )}
-        </form>
-      ) : (
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <p className="text-sm text-muted-foreground">
-            {formatRoleLabel(member.role)}
-            {isActiveMember ? " / You" : ""}
-          </p>
+                {canRemoveMembers && !isActiveMember && (
+                  <Button
+                    disabled={isPending}
+                    onClick={() => void handleRemoveMember(member.id)}
+                    size="sm"
+                    variant="outline"
+                  >
+                    {isPending ? (
+                      <HugeiconsIcon
+                        aria-hidden
+                        className="size-4 animate-spin"
+                        icon={Loading03Icon}
+                      />
+                    ) : (
+                      <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+                    )}
+                    Remove
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
 
-          {canRemoveMembers && !isActiveMember && (
-            <Button
-              disabled={isRemovingMember}
-              onClick={() => void onRemoveMember(member.id)}
-              size="sm"
-              variant="outline"
-            >
-              {isRemovingMember ? (
-                <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-              ) : (
-                <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
-              )}
-              Remove
-            </Button>
-          )}
-        </div>
-      )}
+      {error && <p className="py-3 text-sm text-destructive">{error}</p>}
     </div>
   );
 };
 
-const ManagePeoplePendingInvitations = ({
+const PendingTeamInvitations = ({
   canCancelInvitations,
-  isCancelInvitationPending,
-  onCancelInvitation,
-  pendingInvitationId,
-  pendingInvitations,
+  invitations,
+  organizationId,
 }: {
   canCancelInvitations: boolean;
-  isCancelInvitationPending: boolean;
-  onCancelInvitation: (invitationId: string) => Promise<void>;
-  pendingInvitationId: string | null;
-  pendingInvitations: ActiveOrganization["invitations"];
+  invitations: FullOrganization["invitations"];
+  organizationId: string;
 }) => {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(null);
+  const cancelInvitationMutation = useMutation({
+    mutationFn: async (invitationId: string) =>
+      unwrapResultError(
+        await authClient.organization.cancelInvitation({ invitationId }),
+        "Could not cancel invitation.",
+      ),
+    mutationKey: ["auth", "organization", organizationId, "cancel-invitation"],
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: getFullOrganizationQueryKey(organizationId),
+      });
+    },
+  });
+  const pendingInvitations = invitations
+    .filter((invitation) => invitation.status === "pending")
+    .sort((left, right) => left.email.localeCompare(right.email));
+
   if (pendingInvitations.length === 0) {
     return null;
   }
+
+  const handleCancelInvitation = async (invitationId: string) => {
+    setError(null);
+
+    try {
+      setPendingInvitationId(invitationId);
+      await cancelInvitationMutation.mutateAsync(invitationId);
+    } catch (mutationError) {
+      setError(getErrorMessage(mutationError, "Could not cancel invitation."));
+    } finally {
+      setPendingInvitationId(null);
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -552,8 +771,8 @@ const ManagePeoplePendingInvitations = ({
 
       <div className="divide-y divide-border/70">
         {pendingInvitations.map((invitation) => {
-          const isCancelingInvitation =
-            pendingInvitationId === invitation.id && isCancelInvitationPending;
+          const isPending =
+            pendingInvitationId === invitation.id && cancelInvitationMutation.isPending;
 
           return (
             <div
@@ -569,12 +788,12 @@ const ManagePeoplePendingInvitations = ({
 
               {canCancelInvitations && (
                 <Button
-                  disabled={isCancelingInvitation}
-                  onClick={() => void onCancelInvitation(invitation.id)}
+                  disabled={isPending}
+                  onClick={() => void handleCancelInvitation(invitation.id)}
                   size="sm"
                   variant="outline"
                 >
-                  {isCancelingInvitation ? (
+                  {isPending ? (
                     <HugeiconsIcon
                       aria-hidden
                       className="size-4 animate-spin"
@@ -590,373 +809,83 @@ const ManagePeoplePendingInvitations = ({
           );
         })}
       </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 };
 
-const ManagePeopleMembersSection = ({
-  activeMember,
-  canRemoveMembers,
-  canUpdateMemberRole,
-  members,
-  onRemoveMember,
-  onUpdateRole,
-  pendingMemberId,
-  removeMemberPending,
-  updateMemberRolePending,
-}: {
-  activeMember: ActiveMember | null;
-  canRemoveMembers: boolean;
-  canUpdateMemberRole: boolean;
-  members: OrganizationMember[];
-  onRemoveMember: (memberId: string) => Promise<void>;
-  onUpdateRole: (memberId: string, role: OrganizationRoleOption) => Promise<void>;
-  pendingMemberId: string | null;
-  removeMemberPending: boolean;
-  updateMemberRolePending: boolean;
-}) => (
-  <div className="space-y-3">
-    <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">Members</p>
-
-    <div className="divide-y divide-border/70">
-      {members.map((member) => (
-        <ManagePeopleMemberRoleForm
-          activeMember={activeMember}
-          canRemoveMembers={canRemoveMembers}
-          canUpdateMemberRole={canUpdateMemberRole}
-          key={`${member.id}:${member.role}`}
-          member={member}
-          onRemoveMember={onRemoveMember}
-          onUpdateRole={onUpdateRole}
-          pendingMemberId={pendingMemberId}
-          removeMemberPending={removeMemberPending}
-          updateMemberRolePending={updateMemberRolePending}
-        />
-      ))}
-    </div>
-  </div>
-);
-
 const ManagePeopleDialog = ({
   activeMember,
-  activeOrganization,
   canCancelInvitations,
   canInviteMembers,
   canRemoveMembers,
   canUpdateMemberRole,
+  organization,
 }: {
-  activeMember: ActiveMember | null;
-  activeOrganization: ActiveOrganization;
+  activeMember: OrganizationMember | null;
   canCancelInvitations: boolean;
   canInviteMembers: boolean;
   canRemoveMembers: boolean;
   canUpdateMemberRole: boolean;
+  organization: FullOrganization;
 }) => {
-  const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(null);
-  const [pendingMemberId, setPendingMemberId] = useState<string | null>(null);
-  const inviteMemberMutation = useMutation({
-    mutationFn: async (input: { email: string; role: OrganizationRoleOption }) =>
-      unwrapResultError(
-        await authClient.organization.inviteMember({
-          email: input.email,
-          organizationId: activeOrganization.id,
-          role: input.role,
-        }),
-        "Could not invite member.",
-      ),
-    mutationKey: ["auth", "organization", "invite-member"],
-  });
-  const cancelInvitationMutation = useMutation({
-    mutationFn: async (invitationId: string) =>
-      unwrapResultError(
-        await authClient.organization.cancelInvitation({ invitationId }),
-        "Could not cancel invitation.",
-      ),
-    mutationKey: ["auth", "organization", "cancel-invitation"],
-  });
-  const removeMemberMutation = useMutation({
-    mutationFn: async (memberId: string) =>
-      unwrapResultError(
-        await authClient.organization.removeMember({
-          memberIdOrEmail: memberId,
-          organizationId: activeOrganization.id,
-        }),
-        "Could not remove member.",
-      ),
-    mutationKey: ["auth", "organization", "remove-member"],
-  });
-  const updateMemberRoleMutation = useMutation({
-    mutationFn: async (input: { memberId: string; role: OrganizationRoleOption }) =>
-      unwrapResultError(
-        await authClient.organization.updateMemberRole({
-          memberId: input.memberId,
-          organizationId: activeOrganization.id,
-          role: input.role,
-        }),
-        "Could not update member role.",
-      ),
-    mutationKey: ["auth", "organization", "update-member-role"],
-  });
-  const inviteForm = useForm({
-    defaultValues: {
-      email: "",
-      role: "member" as OrganizationRoleOption,
-    },
-    onSubmit: async ({ value }) => {
-      setError(null);
-
-      try {
-        await inviteMemberMutation.mutateAsync({
-          email: value.email.trim().toLowerCase(),
-          role: value.role,
-        });
-        inviteForm.reset({
-          email: "",
-          role: "member",
-        });
-      } catch (mutationError) {
-        setError(getErrorMessage(mutationError, "Could not invite member."));
-      }
-    },
-    validationLogic: revalidateLogic(),
-    validators: {
-      onDynamic: z.object({
-        email: z.string().trim().min(1, "Email is required.").email("Enter a valid email."),
-        role: z.enum(organizationRoleOptions),
-      }),
-    },
-  });
-
-  const members = [...activeOrganization.members].sort((left, right) => {
-    const isLeftActiveMember = left.userId === activeMember?.userId;
-    const isRightActiveMember = right.userId === activeMember?.userId;
-
-    if (isLeftActiveMember && !isRightActiveMember) return -1;
-    if (!isLeftActiveMember && isRightActiveMember) return 1;
-
-    return left.user.name.localeCompare(right.user.name);
-  });
-  const pendingInvitations = [...activeOrganization.invitations]
-    .filter((invitation) => invitation.status === "pending")
-    .sort((left, right) => left.email.localeCompare(right.email));
-
-  const resetDialog = () => {
-    setError(null);
-    setPendingInvitationId(null);
-    setPendingMemberId(null);
-    inviteForm.reset({
-      email: "",
-      role: "member",
-    });
-  };
-
-  const handleCancelInvitation = async (invitationId: string) => {
-    setError(null);
-    try {
-      setPendingInvitationId(invitationId);
-      await cancelInvitationMutation.mutateAsync(invitationId);
-    } catch (mutationError) {
-      setError(getErrorMessage(mutationError, "Could not cancel invitation."));
-    } finally {
-      setPendingInvitationId(null);
-    }
-  };
-
-  const handleRemoveMember = async (memberId: string) => {
-    setError(null);
-    try {
-      setPendingMemberId(memberId);
-      await removeMemberMutation.mutateAsync(memberId);
-    } catch (mutationError) {
-      setError(getErrorMessage(mutationError, "Could not remove member."));
-    } finally {
-      setPendingMemberId(null);
-    }
-  };
-
-  const handleRoleChange = async (memberId: string, role: OrganizationRoleOption) => {
-    setError(null);
-
-    try {
-      setPendingMemberId(memberId);
-      await updateMemberRoleMutation.mutateAsync({
-        memberId,
-        role,
-      });
-    } catch (mutationError) {
-      setError(getErrorMessage(mutationError, "Could not update member role."));
-    } finally {
-      setPendingMemberId(null);
-    }
-  };
 
   return (
     <>
-      <Button
-        onClick={() => {
-          resetDialog();
-          setOpen(true);
-        }}
-        size="sm"
-        variant="outline"
-      >
+      <Button onClick={() => setOpen(true)} size="sm" variant="outline">
         <HugeiconsIcon aria-hidden className="size-4" icon={UserGroupIcon} />
         Manage
       </Button>
 
-      <Dialog
-        onOpenChange={(nextOpen) => {
-          setOpen(nextOpen);
-          if (!nextOpen) resetDialog();
-        }}
-        open={open}
-      >
-        <DialogContent className="w-[min(92vw,42rem)]">
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>People</DialogTitle>
           </DialogHeader>
 
-          <DialogBody className="max-h-[70vh] space-y-5 overflow-y-auto">
-            {canInviteMembers && (
-              <form
-                className="space-y-3"
-                action={async () => {
-                  await inviteForm.handleSubmit();
-                }}
-              >
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem_auto] md:items-start">
-                  <inviteForm.Field name="email">
-                    {(field) => (
-                      <div className="space-y-2">
-                        <TextField>
-                          <TextFieldInput
-                            aria-invalid={field.state.meta.errors.length > 0}
-                            name={field.name}
-                            onBlur={() => field.handleBlur()}
-                            onChange={(event) => {
-                              setError(null);
-                              field.handleChange(event.target.value);
-                            }}
-                            placeholder="name@example.com"
-                            type="email"
-                            value={field.state.value}
-                          />
-                        </TextField>
-                        {field.state.meta.errors.map((error) => (
-                          <p className="text-sm text-destructive" key={error?.message}>
-                            {error?.message}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-                  </inviteForm.Field>
+          <DialogBody className="space-y-6">
+            <InviteMemberForm canInviteMembers={canInviteMembers} organization={organization} />
 
-                  <inviteForm.Field name="role">
-                    {(field) => (
-                      <Select
-                        items={organizationRoleSelectItems}
-                        modal={false}
-                        onValueChange={(value) => {
-                          if (value) {
-                            setError(null);
-                            field.handleChange(normalizeOrganizationRole(value));
-                            field.handleBlur();
-                          }
-                        }}
-                        value={field.state.value}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent positionerClassName="z-[60]">
-                          <SelectList>
-                            {organizationRoleOptions.map((role) => (
-                              <SelectItem key={role} value={role}>
-                                {formatRoleLabel(role)}
-                              </SelectItem>
-                            ))}
-                          </SelectList>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </inviteForm.Field>
-
-                  <Button disabled={inviteMemberMutation.isPending} size="sm" type="submit">
-                    {inviteMemberMutation.isPending ? (
-                      <HugeiconsIcon
-                        aria-hidden
-                        className="size-4 animate-spin"
-                        icon={Loading03Icon}
-                      />
-                    ) : (
-                      <HugeiconsIcon aria-hidden className="size-4" icon={Mail01Icon} />
-                    )}
-                    Invite
-                  </Button>
-                </div>
-              </form>
-            )}
-
-            <ManagePeopleMembersSection
+            <TeamMembers
               activeMember={activeMember}
               canRemoveMembers={canRemoveMembers}
               canUpdateMemberRole={canUpdateMemberRole}
-              members={members}
-              onRemoveMember={handleRemoveMember}
-              onUpdateRole={handleRoleChange}
-              pendingMemberId={pendingMemberId}
-              removeMemberPending={removeMemberMutation.isPending}
-              updateMemberRolePending={updateMemberRoleMutation.isPending}
+              members={organization.members}
+              organizationId={organization.id}
             />
 
-            <ManagePeoplePendingInvitations
+            <PendingTeamInvitations
               canCancelInvitations={canCancelInvitations}
-              isCancelInvitationPending={cancelInvitationMutation.isPending}
-              onCancelInvitation={handleCancelInvitation}
-              pendingInvitationId={pendingInvitationId}
-              pendingInvitations={pendingInvitations}
+              invitations={organization.invitations}
+              organizationId={organization.id}
             />
-
-            {error && <p className="text-sm text-destructive">{error}</p>}
           </DialogBody>
-
-          <DialogFooter>
-            <DialogCloseButton>Close</DialogCloseButton>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
   );
 };
 
-const LeaveOrganizationDialog = ({
-  activeOrganization,
-  nextOrganizationId,
-}: {
-  activeOrganization: ActiveOrganization;
-  nextOrganizationId: string | null;
-}) => {
+const LeaveOrganizationDialog = ({ organization }: { organization: FullOrganization }) => {
+  const queryClient = useQueryClient();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const leaveOrganizationMutation = useMutation({
-    mutationFn: async () => {
-      await unwrapResultError(
+    mutationFn: async () =>
+      unwrapResultError(
         await authClient.organization.leave({
-          organizationId: activeOrganization.id,
+          organizationId: organization.id,
         }),
         "Could not leave team.",
-      );
-
-      if (nextOrganizationId) {
-        await unwrapResultError(
-          await authClient.organization.setActive({ organizationId: nextOrganizationId }),
-          "Could not switch team.",
-        );
-      }
+      ),
+    mutationKey: ["auth", "organization", organization.id, "leave"],
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: getFullOrganizationQueryKey(organization.id),
+      });
     },
-    mutationKey: ["auth", "organization", "leave"],
   });
   const form = useForm({
     defaultValues: {
@@ -1076,32 +1005,24 @@ const LeaveOrganizationDialog = ({
   );
 };
 
-const DeleteOrganizationDialog = ({
-  activeOrganization,
-  nextOrganizationId,
-}: {
-  activeOrganization: ActiveOrganization;
-  nextOrganizationId: string | null;
-}) => {
+const DeleteOrganizationDialog = ({ organization }: { organization: FullOrganization }) => {
+  const queryClient = useQueryClient();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const deleteOrganizationMutation = useMutation({
-    mutationFn: async () => {
-      await unwrapResultError(
+    mutationFn: async () =>
+      unwrapResultError(
         await authClient.organization.delete({
-          organizationId: activeOrganization.id,
+          organizationId: organization.id,
         }),
         "Could not delete team.",
-      );
-
-      if (nextOrganizationId) {
-        await unwrapResultError(
-          await authClient.organization.setActive({ organizationId: nextOrganizationId }),
-          "Could not switch team.",
-        );
-      }
+      ),
+    mutationKey: ["auth", "organization", organization.id, "delete"],
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: getFullOrganizationQueryKey(organization.id),
+      });
     },
-    mutationKey: ["auth", "organization", "delete"],
   });
   const form = useForm({
     defaultValues: {
@@ -1230,7 +1151,6 @@ const PendingInvitationsSection = () => {
   const userInvitationsQuery = useQuery(
     userInvitationsQueryOptions(userId, !!sessionState.data?.user.email),
   );
-
   const acceptInvitationMutation = useMutation({
     mutationFn: async (invitationId: string) =>
       unwrapResultError(
@@ -1253,7 +1173,6 @@ const PendingInvitationsSection = () => {
       await queryClient.invalidateQueries({ queryKey: getUserInvitationsQueryKey(userId) });
     },
   });
-
   const invitations = [...(userInvitationsQuery.data ?? [])].sort((left, right) =>
     left.organizationName.localeCompare(right.organizationName),
   );
@@ -1304,7 +1223,7 @@ const PendingInvitationsSection = () => {
   return (
     <div>
       {invitations.map((invitation) => {
-        const isPendingAction =
+        const isPending =
           pendingInvitationId === invitation.id &&
           (acceptInvitationMutation.isPending || rejectInvitationMutation.isPending);
 
@@ -1313,11 +1232,11 @@ const PendingInvitationsSection = () => {
             action={
               <div className="flex flex-wrap items-center gap-2">
                 <Button
-                  disabled={isPendingAction}
+                  disabled={isPending}
                   onClick={() => void handleInvitationAction(invitation, "accept")}
                   size="sm"
                 >
-                  {isPendingAction && acceptInvitationMutation.isPending && (
+                  {isPending && acceptInvitationMutation.isPending && (
                     <HugeiconsIcon
                       aria-hidden
                       className="size-4 animate-spin"
@@ -1328,12 +1247,12 @@ const PendingInvitationsSection = () => {
                 </Button>
 
                 <Button
-                  disabled={isPendingAction}
+                  disabled={isPending}
                   onClick={() => void handleInvitationAction(invitation, "reject")}
                   size="sm"
                   variant="outline"
                 >
-                  {isPendingAction && rejectInvitationMutation.isPending && (
+                  {isPending && rejectInvitationMutation.isPending && (
                     <HugeiconsIcon
                       aria-hidden
                       className="size-4 animate-spin"
@@ -1355,109 +1274,22 @@ const PendingInvitationsSection = () => {
   );
 };
 
-const OrganizationList = ({
-  activeWorkspaceId,
-  activeRole,
-  organizations,
+const TeamSection = ({
+  organization,
+  userId,
 }: {
-  activeWorkspaceId: string;
-  activeRole: OrganizationRoleOption | null;
-  organizations: OrganizationSummary[];
+  organization: OrganizationSummary;
+  userId: string;
 }) => {
-  const [error, setError] = useState<string | null>(null);
-  const [pendingOrganizationId, setPendingOrganizationId] = useState<string | null>(null);
-  const setActiveOrganizationMutation = useMutation({
-    mutationFn: async (organizationId: string) =>
-      unwrapResultError(
-        await authClient.organization.setActive({ organizationId }),
-        "Could not switch team.",
-      ),
-    mutationKey: ["auth", "organization", "set-active"],
-  });
-
-  const handleSetActiveOrganization = async (organizationId: string) => {
-    if (organizationId === activeWorkspaceId) {
-      return;
-    }
-
-    setError(null);
-
-    try {
-      setPendingOrganizationId(organizationId);
-      await setActiveOrganizationMutation.mutateAsync(organizationId);
-    } catch (mutationError) {
-      setError(getErrorMessage(mutationError, "Could not switch team."));
-    } finally {
-      setPendingOrganizationId(null);
-    }
-  };
-
-  return (
-    <div>
-      {organizations.map((organization) => {
-        const isActive = organization.id === activeWorkspaceId;
-        const isPending =
-          pendingOrganizationId === organization.id && setActiveOrganizationMutation.isPending;
-
-        return (
-          <SettingsRow
-            action={
-              isActive ? (
-                <span className="inline-flex h-8 items-center rounded-md border border-border/70 px-3 text-xs font-medium text-foreground">
-                  Active
-                </span>
-              ) : (
-                <Button
-                  disabled={isPending}
-                  onClick={() => void handleSetActiveOrganization(organization.id)}
-                  size="sm"
-                  variant="outline"
-                >
-                  {isPending ? (
-                    <HugeiconsIcon
-                      aria-hidden
-                      className="size-4 animate-spin"
-                      icon={Loading03Icon}
-                    />
-                  ) : (
-                    <HugeiconsIcon aria-hidden className="size-4" icon={UserGroupIcon} />
-                  )}
-                  Open team
-                </Button>
-              )
-            }
-            key={organization.id}
-            label={organization.name}
-            value={[
-              organization.slug,
-              isActive && activeRole && `${formatRoleLabel(activeRole)} role`,
-            ]
-              .filter(Boolean)
-              .join(" / ")}
-          />
-        );
-      })}
-      {error && <p className="text-sm text-destructive">{error}</p>}
-    </div>
-  );
-};
-
-export const OrganizationSettingsPanel = () => {
-  const activeMemberState = authClient.useActiveMember();
-  const activeOrganizationState = authClient.useActiveOrganization();
-  const organizationsState = authClient.useListOrganizations();
-  const activeMember = activeMemberState.data ?? null;
-  const activeOrganization = activeOrganizationState.data ?? null;
-  const activeWorkspaceId = toWorkspaceId(activeOrganization?.id);
-  const organizations = organizationsState.data ?? [];
+  const fullOrganizationQuery = useQuery(fullOrganizationQueryOptions(organization.id));
+  const fullOrganization = fullOrganizationQuery.data;
+  const activeMember = fullOrganization?.members.find((member) => member.userId === userId) ?? null;
   const activeRole = activeMember && normalizeOrganizationRole(activeMember.role);
   const pendingInvitations =
-    activeOrganization?.invitations.filter((invitation) => invitation.status === "pending") ?? [];
+    fullOrganization?.invitations.filter((invitation) => invitation.status === "pending") ?? [];
   const ownerCount =
-    activeOrganization?.members.filter((member) => hasOrganizationRole(member.role, "owner"))
+    fullOrganization?.members.filter((member) => hasOrganizationRole(member.role, "owner"))
       .length ?? 0;
-  const nextOrganizationId =
-    organizations.find((organization) => organization.id !== activeOrganization?.id)?.id ?? null;
   const canCancelInvitations = hasOrganizationPermission(activeRole, {
     invitation: ["cancel"],
   });
@@ -1477,26 +1309,115 @@ export const OrganizationSettingsPanel = () => {
     organization: ["update"],
   });
   const updateOrganizationReason =
-    (activeOrganization &&
+    (fullOrganization &&
       !canUpdateOrganization &&
       "Only admins and owners can edit team details.") ||
     null;
   const leaveOrganizationReason =
-    (activeOrganization &&
+    (fullOrganization &&
       activeRole === "owner" &&
       ownerCount <= 1 &&
       "Assign another owner before leaving.") ||
     null;
   const deleteOrganizationReason =
-    (activeOrganization && !canDeleteOrganization && "Only owners can delete teams.") || null;
+    (fullOrganization && !canDeleteOrganization && "Only owners can delete teams.") || null;
   const peopleSummary =
-    activeOrganization &&
+    fullOrganization &&
     [
-      formatCount(activeOrganization.members.length, "member"),
+      formatCount(fullOrganization.members.length, "member"),
       pendingInvitations.length > 0 && formatCount(pendingInvitations.length, "pending invitation"),
     ]
       .filter(Boolean)
       .join(", ");
+
+  return (
+    <section className="border-t border-border/70 pt-5 first:border-t-0 first:pt-0">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">{organization.name}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{organization.slug}</p>
+        </div>
+
+        {updateOrganizationReason ? (
+          <MutedActionButton
+            icon={<HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />}
+            label="Edit"
+            reason={updateOrganizationReason}
+          />
+        ) : (
+          <OrganizationFormDialog organization={organization} />
+        )}
+      </div>
+
+      {fullOrganizationQuery.isPending ? (
+        <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+          <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+          Loading team...
+        </div>
+      ) : fullOrganizationQuery.isError ? (
+        <p className="mt-4 text-sm text-destructive">
+          {getErrorMessage(fullOrganizationQuery.error, "Could not load team.")}
+        </p>
+      ) : fullOrganization ? (
+        <div className="mt-2">
+          <SettingsRow
+            action={
+              <ManagePeopleDialog
+                activeMember={activeMember}
+                canCancelInvitations={canCancelInvitations}
+                canInviteMembers={canInviteMembers}
+                canRemoveMembers={canRemoveMembers}
+                canUpdateMemberRole={canUpdateMemberRole}
+                organization={fullOrganization}
+              />
+            }
+            label="People"
+            value={peopleSummary ?? formatCount(fullOrganization.members.length, "member")}
+          />
+
+          <SettingsRow
+            action={
+              leaveOrganizationReason ? (
+                <MutedActionButton
+                  icon={<HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />}
+                  label="Leave"
+                  reason={leaveOrganizationReason}
+                />
+              ) : (
+                <LeaveOrganizationDialog organization={fullOrganization} />
+              )
+            }
+            label="Membership"
+            value={activeRole ? formatRoleLabel(activeRole) : "Team member"}
+          />
+
+          <SettingsRow
+            action={
+              deleteOrganizationReason ? (
+                <MutedActionButton
+                  buttonClassName="pointer-events-none border-destructive/25 bg-destructive/10 text-destructive/80 opacity-100 hover:bg-destructive/10 hover:text-destructive/80"
+                  icon={<HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />}
+                  label="Delete"
+                  reason={deleteOrganizationReason}
+                />
+              ) : (
+                <DeleteOrganizationDialog organization={fullOrganization} />
+              )
+            }
+            label="Delete team"
+            value="Permanent"
+          />
+        </div>
+      ) : null}
+    </section>
+  );
+};
+
+export const OrganizationSettingsPanel = () => {
+  const sessionState = authClient.useSession();
+  const organizationsState = authClient.useListOrganizations();
+  const organizations = organizationsState.data ?? [];
+  const userId = sessionState.data?.user.id ?? "";
 
   return (
     <TooltipGroup>
@@ -1507,98 +1428,16 @@ export const OrganizationSettingsPanel = () => {
 
         <PendingInvitationsSection />
 
-        {organizationsState.isPending ? (
+        {organizationsState.isPending || sessionState.isPending ? (
           <p className="text-sm text-muted-foreground">Loading teams...</p>
         ) : organizations.length > 0 ? (
-          <OrganizationList
-            activeWorkspaceId={activeWorkspaceId}
-            activeRole={activeRole}
-            organizations={organizations}
-          />
+          <div className="space-y-6">
+            {organizations.map((organization) => (
+              <TeamSection key={organization.id} organization={organization} userId={userId} />
+            ))}
+          </div>
         ) : (
           <p className="text-sm text-muted-foreground">No teams yet.</p>
-        )}
-
-        {activeOrganization ? (
-          <div>
-            <SettingsRow
-              action={
-                updateOrganizationReason ? (
-                  <MutedActionButton
-                    icon={<HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />}
-                    label="Edit"
-                    reason={updateOrganizationReason}
-                  />
-                ) : (
-                  <OrganizationFormDialog activeOrganization={activeOrganization} />
-                )
-              }
-              label="Team"
-              value={[activeOrganization.name, activeOrganization.slug].filter(Boolean).join(" / ")}
-            />
-
-            <SettingsRow
-              action={
-                <ManagePeopleDialog
-                  activeMember={activeMember}
-                  activeOrganization={activeOrganization}
-                  canCancelInvitations={canCancelInvitations}
-                  canInviteMembers={canInviteMembers}
-                  canRemoveMembers={canRemoveMembers}
-                  canUpdateMemberRole={canUpdateMemberRole}
-                />
-              }
-              label="People"
-              value={peopleSummary ?? formatCount(activeOrganization.members.length, "member")}
-            />
-
-            <SettingsRow
-              action={
-                leaveOrganizationReason ? (
-                  <MutedActionButton
-                    icon={<HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />}
-                    label="Leave"
-                    reason={leaveOrganizationReason}
-                  />
-                ) : (
-                  <LeaveOrganizationDialog
-                    activeOrganization={activeOrganization}
-                    nextOrganizationId={nextOrganizationId}
-                  />
-                )
-              }
-              label="Membership"
-              value={activeRole ? formatRoleLabel(activeRole) : "Current team"}
-            />
-
-            <SettingsRow
-              action={
-                deleteOrganizationReason ? (
-                  <MutedActionButton
-                    buttonClassName="pointer-events-none border-destructive/25 bg-destructive/10 text-destructive/80 opacity-100 hover:bg-destructive/10 hover:text-destructive/80"
-                    icon={<HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />}
-                    label="Delete"
-                    reason={deleteOrganizationReason}
-                  />
-                ) : (
-                  <DeleteOrganizationDialog
-                    activeOrganization={activeOrganization}
-                    nextOrganizationId={nextOrganizationId}
-                  />
-                )
-              }
-              label="Delete team"
-              value="Permanent"
-            />
-          </div>
-        ) : organizations.length > 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Personal is selected. Team management applies to teams.
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Personal is selected. Create a team to manage members and managed mailboxes.
-          </p>
         )}
       </div>
     </TooltipGroup>
