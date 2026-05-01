@@ -1,6 +1,9 @@
 "use client";
 
-import { type DragEndEvent, type DragStartEvent, DragDropProvider } from "@dnd-kit/react";
+import { Modifier } from "@dnd-kit/abstract";
+import { PointerActivationConstraints, PointerSensor } from "@dnd-kit/dom";
+import { SortableKeyboardPlugin } from "@dnd-kit/dom/sortable";
+import { type DragEndEvent, DragDropProvider } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import { ArrowDown01Icon, ArrowRight01Icon, PinIcon, PinOffIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -15,7 +18,8 @@ import {
   TooltipTrigger,
   cn,
 } from "@quieter/ui";
-import { type ReactNode, useState } from "react";
+import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
+import { type ReactNode, useRef, useState } from "react";
 
 type MailboxSwitcherMailbox = {
   displayName: string | null;
@@ -69,8 +73,23 @@ type SortableMailboxRowProps = {
   mailbox: MailboxSwitcherMailbox;
 };
 
+const GROUP_DRAG_SENSORS = [
+  PointerSensor.configure({
+    activationConstraints: [new PointerActivationConstraints.Distance({ value: 5 })],
+  }),
+];
+
+class RestrictToVerticalAxis extends Modifier {
+  override apply({ transform }: Parameters<Modifier["apply"]>[0]) {
+    return { x: 0, y: transform.y };
+  }
+}
+
+const VERTICAL_AXIS_MODIFIERS = [RestrictToVerticalAxis];
+
 const GROUP_SORTABLE_TYPE = "mailbox-switcher-group";
-const getGroupSortableId = (groupId: string) => `group:${groupId}`;
+const GROUP_SORTABLE_ID_PREFIX = "group:";
+const getGroupSortableId = (groupId: string) => `${GROUP_SORTABLE_ID_PREFIX}${groupId}`;
 const getMailboxSortableId = (groupId: string, mailboxId: string) =>
   `mailbox:${groupId}:${mailboxId}`;
 const getMailboxSortableType = (groupId: string) => `mailbox-switcher-mailbox:${groupId}`;
@@ -109,42 +128,63 @@ const SortableGroup = ({
   index,
   onToggle,
 }: SortableGroupProps) => {
-  const { isDragSource, sourceRef, targetRef } = useSortable({
+  const sectionRef = useRef<HTMLElement>(null);
+  const headerRef = useRef<HTMLButtonElement>(null);
+  const { isDragSource } = useSortable({
     accept: GROUP_SORTABLE_TYPE,
     disabled,
+    element: sectionRef,
+    handle: headerRef,
     id: getGroupSortableId(group.id),
     index,
+    modifiers: VERTICAL_AXIS_MODIFIERS,
+    plugins: [SortableKeyboardPlugin],
+    sensors: GROUP_DRAG_SENSORS,
+    target: headerRef,
+    transition: null,
     type: GROUP_SORTABLE_TYPE,
   });
-
   return (
-    <section
-      className={cn("space-y-1", {
-        "opacity-70": isDragSource,
-      })}
-      ref={targetRef}
-    >
-      <button
-        aria-expanded={!collapsed}
-        className={cn(
-          "squircle flex min-h-7 w-full cursor-pointer items-center gap-2 rounded-xs px-2 py-1 text-left transition-colors hover:bg-muted/40",
-          {
-            "cursor-grab active:cursor-grabbing": !disabled,
-          },
-        )}
-        onClick={() => onToggle(group.id)}
-        ref={sourceRef}
-        type="button"
+    <LazyMotion features={domAnimation}>
+      <m.section
+        className={cn("space-y-1", {
+          "opacity-70": isDragSource,
+        })}
+        ref={sectionRef}
       >
-        <HugeiconsIcon
-          aria-hidden
-          className="size-3 shrink-0 text-muted-foreground/70"
-          icon={collapsed ? ArrowRight01Icon : ArrowDown01Icon}
-        />
-        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{group.name}</span>
-      </button>
-      {!collapsed && children}
-    </section>
+        <button
+          aria-expanded={!collapsed}
+          className={cn(
+            "squircle flex min-h-7 w-full items-center gap-2 rounded-xs px-2 py-1 text-left transition-colors hover:bg-muted/40",
+          )}
+          onClick={() => onToggle(group.id)}
+          ref={headerRef}
+          type="button"
+        >
+          <HugeiconsIcon
+            aria-hidden
+            className="size-3 shrink-0 text-muted-foreground/70"
+            icon={collapsed ? ArrowRight01Icon : ArrowDown01Icon}
+          />
+          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+            {group.name}
+          </span>
+        </button>
+
+        <AnimatePresence>
+          {!collapsed && (
+            <m.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              {children}
+            </m.div>
+          )}
+        </AnimatePresence>
+      </m.section>
+    </LazyMotion>
   );
 };
 
@@ -162,13 +202,13 @@ const SortableMailboxRow = ({
     group: groupId,
     id: getMailboxSortableId(groupId, mailbox.id),
     index,
+    modifiers: VERTICAL_AXIS_MODIFIERS,
     type: mailboxSortableType,
   });
 
   return (
     <div
       className={cn("rounded-xs", {
-        "cursor-grab active:cursor-grabbing": !disabled,
         "opacity-70": isDragSource,
       })}
       ref={ref}
@@ -193,7 +233,6 @@ export const MailboxSwitcherDropdown = ({
   const secondaryLabel = selectedMailbox?.groupName ?? "No team";
   const canReorderGroups = groups.length > 1;
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<ReadonlySet<string>>(() => new Set());
-  const [isReorderingGroups, setIsReorderingGroups] = useState(false);
   const toggleGroup = (groupId: string) => {
     setCollapsedGroupIds((current) => {
       const next = new Set(current);
@@ -205,15 +244,7 @@ export const MailboxSwitcherDropdown = ({
       return next;
     });
   };
-  const handleDragStart = (event: DragStartEvent) => {
-    const { source } = event.operation;
-    if (source?.type === GROUP_SORTABLE_TYPE) {
-      setIsReorderingGroups(true);
-    }
-  };
   const handleDragEnd = (event: DragEndEvent) => {
-    setIsReorderingGroups(false);
-
     if (event.canceled || !isSortableOperation(event.operation)) {
       return;
     }
@@ -265,11 +296,11 @@ export const MailboxSwitcherDropdown = ({
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="start" className="w-80" side="right" sideOffset={10}>
-        <DragDropProvider onDragEnd={handleDragEnd} onDragStart={handleDragStart}>
+        <DragDropProvider onDragEnd={handleDragEnd}>
           <div className="flex max-h-96 flex-col gap-3 overflow-y-auto p-1">
             {mailboxes.length > 0 ? (
               groups.map((group, groupIndex) => {
-                const isCollapsed = isReorderingGroups || collapsedGroupIds.has(group.id);
+                const isCollapsed = collapsedGroupIds.has(group.id);
                 const canReorderMailboxes = group.mailboxes.length > 1;
 
                 return (

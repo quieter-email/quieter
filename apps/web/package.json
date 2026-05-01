@@ -15,6 +15,8 @@
   },
   "dependencies": {
     "@better-auth/passkey": "catalog:",
+    "@dnd-kit/abstract": "^0.4.0",
+    "@dnd-kit/dom": "^0.4.0",
     "@dnd-kit/react": "^0.4.0",
     "@hugeicons/core-free-icons": "catalog:",
     "@hugeicons/react": "catalog:",
@@ -55,13 +57,17 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.0",
     "@quieter/config": "workspace:*",
+    "@rolldown/plugin-babel": "^0.2.3",
     "@tailwindcss/vite": "catalog:",
+    "@types/babel__core": "^7.20.5",
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@typescript/native-preview": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "babel-plugin-react-compiler": "^1.0.0",
     "nitro": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",

@@ -32,9 +32,7 @@ export const searchFilterOptions: ReadonlyArray<{
 ];
 
 const SearchDropdownSectionLabel = ({ children }: { children: string }) => (
-  <p className="px-2.5 pb-1 text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
-    {children}
-  </p>
+  <p className="px-2.5 pb-1 text-xs text-muted-foreground">{children}</p>
 );
 
 const SearchDropdownRow = ({

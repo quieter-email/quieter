@@ -124,11 +124,11 @@ const HtmlMessageBody = ({ html }: { html: string }) => {
     shadowRootRef.current.innerHTML = prepareShadowContent(html);
   }, [html]);
 
-  return <div ref={hostRef} />;
+  return <div className="p-4" ref={hostRef} />;
 };
 
 const MessageBodyLoadingSkeleton = () => (
-  <div aria-label="Loading message content" className="space-y-3" role="status">
+  <div aria-label="Loading message content" className="space-y-3 p-4" role="status">
     <div aria-hidden="true" className="animate-pulse space-y-3">
       <div className="h-3.5 w-full rounded-md bg-muted/75" />
       <div className="h-3.5 w-11/12 rounded-md bg-muted/70" />
@@ -147,7 +147,11 @@ export const MessageBody = ({ html, isLoading, text }: MessageBodyProps) => {
 
   if (!html?.trim()) {
     return (
-      <p className={cn("text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground")}>
+      <p
+        className={cn(
+          "p-4 text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground",
+        )}
+      >
         {fallbackText || "No content."}
       </p>
     );

@@ -194,9 +194,7 @@ export const MailboxesSettingsPanel = () => {
 
       {groups.map((group) => (
         <section className="space-y-2" key={group.id}>
-          <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
-            {group.name}
-          </p>
+          <p className="text-xs text-muted-foreground">{group.name}</p>
 
           {group.mailboxes.length > 0 ? (
             <div className="divide-y divide-border/70">

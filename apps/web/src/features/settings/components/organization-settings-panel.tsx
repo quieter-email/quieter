@@ -775,9 +775,7 @@ const PendingTeamInvitations = ({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
-        Pending
-      </p>
+      <p className="text-xs text-muted-foreground">Pending invitations</p>
 
       <div className="divide-y divide-border/70">
         {pendingInvitations.map((invitation) => {
