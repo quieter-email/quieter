@@ -880,6 +880,7 @@ const ManagePeopleDialog = ({
 
 const LeaveOrganizationDialog = ({ organization }: { organization: FullOrganization }) => {
   const queryClient = useQueryClient();
+  const organizationsState = authClient.useListOrganizations();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const leaveOrganizationMutation = useMutation({
@@ -892,9 +893,10 @@ const LeaveOrganizationDialog = ({ organization }: { organization: FullOrganizat
       ),
     mutationKey: ["auth", "organization", organization.id, "leave"],
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
+      queryClient.removeQueries({
         queryKey: getFullOrganizationQueryKey(organization.id),
       });
+      await organizationsState.refetch();
     },
   });
   const form = useForm({
@@ -1028,8 +1030,8 @@ const DeleteOrganizationDialog = ({ organization }: { organization: FullOrganiza
         "Could not delete team.",
       ),
     mutationKey: ["auth", "organization", organization.id, "delete"],
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
+    onSuccess: () => {
+      queryClient.removeQueries({
         queryKey: getFullOrganizationQueryKey(organization.id),
       });
     },
@@ -1428,6 +1430,7 @@ export const OrganizationSettingsPanel = () => {
   const organizationsState = authClient.useListOrganizations();
   const organizations = organizationsState.data ?? [];
   const userId = sessionState.data?.user.id ?? "";
+  const loadError = organizationsState.error ?? sessionState.error;
 
   return (
     <TooltipGroup>
@@ -1440,6 +1443,10 @@ export const OrganizationSettingsPanel = () => {
 
         {organizationsState.isPending || sessionState.isPending ? (
           <p className="text-sm text-muted-foreground">Loading teams...</p>
+        ) : loadError ? (
+          <p className="text-sm text-destructive">
+            {getErrorMessage(loadError, "Could not load teams.")}
+          </p>
         ) : organizations.length > 0 ? (
           <div className="space-y-6">
             {organizations.map((organization) => (

@@ -142,28 +142,16 @@ export const MessageBody = ({ html, isLoading, text }: MessageBodyProps) => {
   const fallbackText = text?.trim();
 
   if (!html?.trim() && !fallbackText && isLoading) {
-    return (
-      <div className="p-4">
-        <MessageBodyLoadingSkeleton />
-      </div>
-    );
+    return <MessageBodyLoadingSkeleton />;
   }
 
   if (!html?.trim()) {
     return (
-      <div className="p-4">
-        <p
-          className={cn("text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground")}
-        >
-          {fallbackText || "No content."}
-        </p>
-      </div>
+      <p className={cn("text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground")}>
+        {fallbackText || "No content."}
+      </p>
     );
   }
 
-  return (
-    <div className="p-4">
-      <HtmlMessageBody html={html} />
-    </div>
-  );
+  return <HtmlMessageBody html={html} />;
 };
