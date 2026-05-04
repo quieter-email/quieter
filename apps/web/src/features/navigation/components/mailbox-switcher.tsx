@@ -2,7 +2,6 @@
 
 import { Modifier } from "@dnd-kit/abstract";
 import { PointerActivationConstraints, PointerSensor } from "@dnd-kit/dom";
-import { SortableKeyboardPlugin } from "@dnd-kit/dom/sortable";
 import { type DragEndEvent, DragDropProvider } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import { ArrowDown01Icon, ArrowRight01Icon, PinIcon, PinOffIcon } from "@hugeicons/core-free-icons";
@@ -73,6 +72,13 @@ type SortableMailboxRowProps = {
   mailbox: MailboxSwitcherMailbox;
 };
 
+type MailboxRowsProps = {
+  children: (mailbox: MailboxSwitcherMailbox, mailboxIndex: number) => ReactNode;
+  group: MailboxSwitcherGroup;
+  onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
+  groups: MailboxSwitcherGroup[];
+};
+
 const GROUP_DRAG_SENSORS = [
   PointerSensor.configure({
     activationConstraints: [new PointerActivationConstraints.Distance({ value: 5 })],
@@ -138,12 +144,12 @@ const SortableGroup = ({
     id: getGroupSortableId(group.id),
     index,
     modifiers: VERTICAL_AXIS_MODIFIERS,
-    plugins: [SortableKeyboardPlugin],
     sensors: GROUP_DRAG_SENSORS,
-    target: headerRef,
+    target: sectionRef,
     transition: null,
     type: GROUP_SORTABLE_TYPE,
   });
+
   return (
     <LazyMotion features={domAnimation}>
       <m.section
@@ -185,6 +191,43 @@ const SortableGroup = ({
         </AnimatePresence>
       </m.section>
     </LazyMotion>
+  );
+};
+
+const MailboxRows = ({ children, group, groups, onReorderMailboxSwitcher }: MailboxRowsProps) => {
+  const handleMailboxDragEnd = (event: DragEndEvent) => {
+    if (event.canceled || !isSortableOperation(event.operation)) {
+      return;
+    }
+
+    const { source, target } = event.operation;
+    if (
+      !source ||
+      !target ||
+      source.id === target.id ||
+      source.group !== group.id ||
+      target.group !== group.id ||
+      source.type !== target.type
+    ) {
+      return;
+    }
+
+    const nextGroups = groups.map((candidate) =>
+      candidate.id === group.id
+        ? {
+            ...candidate,
+            mailboxes: moveItem(candidate.mailboxes, source.index, target.index),
+          }
+        : candidate,
+    );
+
+    onReorderMailboxSwitcher(getMailboxSwitcherOrder(nextGroups));
+  };
+
+  return (
+    <DragDropProvider onDragEnd={handleMailboxDragEnd}>
+      {group.mailboxes.map((mailbox, mailboxIndex) => children(mailbox, mailboxIndex))}
+    </DragDropProvider>
   );
 };
 
@@ -244,7 +287,7 @@ export const MailboxSwitcherDropdown = ({
       return next;
     });
   };
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleGroupDragEnd = (event: DragEndEvent) => {
     if (event.canceled || !isSortableOperation(event.operation)) {
       return;
     }
@@ -254,31 +297,11 @@ export const MailboxSwitcherDropdown = ({
       return;
     }
 
-    if (source.type === GROUP_SORTABLE_TYPE && target.type === GROUP_SORTABLE_TYPE) {
-      onReorderMailboxSwitcher(
-        getMailboxSwitcherOrder(moveItem(groups, source.index, target.index)),
-      );
+    if (source.type !== GROUP_SORTABLE_TYPE || target.type !== GROUP_SORTABLE_TYPE) {
       return;
     }
 
-    if (
-      source.group !== target.group ||
-      source.type !== target.type ||
-      typeof source.group !== "string"
-    ) {
-      return;
-    }
-
-    const nextGroups = groups.map((group) =>
-      group.id === source.group
-        ? {
-            ...group,
-            mailboxes: moveItem(group.mailboxes, source.index, target.index),
-          }
-        : group,
-    );
-
-    onReorderMailboxSwitcher(getMailboxSwitcherOrder(nextGroups));
+    onReorderMailboxSwitcher(getMailboxSwitcherOrder(moveItem(groups, source.index, target.index)));
   };
 
   return (
@@ -296,7 +319,7 @@ export const MailboxSwitcherDropdown = ({
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="start" className="w-80" side="right" sideOffset={10}>
-        <DragDropProvider onDragEnd={handleDragEnd}>
+        <DragDropProvider onDragEnd={handleGroupDragEnd}>
           <div className="flex max-h-96 flex-col gap-3 overflow-y-auto p-1">
             {mailboxes.length > 0 ? (
               groups.map((group, groupIndex) => {
@@ -313,67 +336,73 @@ export const MailboxSwitcherDropdown = ({
                     onToggle={toggleGroup}
                   >
                     {group.mailboxes.length > 0 ? (
-                      group.mailboxes.map((mailbox, mailboxIndex) => {
-                        const isActive = mailbox.id === selectedMailboxId;
-                        const isDefault = mailbox.id === defaultMailboxId;
-                        const defaultMailboxLabel = isDefault
-                          ? "Unset default mailbox"
-                          : "Set as default mailbox";
+                      <MailboxRows
+                        group={group}
+                        groups={groups}
+                        onReorderMailboxSwitcher={onReorderMailboxSwitcher}
+                      >
+                        {(mailbox, mailboxIndex) => {
+                          const isActive = mailbox.id === selectedMailboxId;
+                          const isDefault = mailbox.id === defaultMailboxId;
+                          const defaultMailboxLabel = isDefault
+                            ? "Unset default mailbox"
+                            : "Set as default mailbox";
 
-                        return (
-                          <SortableMailboxRow
-                            disabled={!canReorderMailboxes}
-                            groupId={group.id}
-                            index={mailboxIndex}
-                            key={mailbox.id}
-                            mailbox={mailbox}
-                          >
-                            <DropdownMenuItem
-                              className={cn("group/item rounded-xs px-2", {
-                                "bg-muted/70": isActive,
-                              })}
-                              onSelect={() => onSelectMailboxId(mailbox.id)}
+                          return (
+                            <SortableMailboxRow
+                              disabled={!canReorderMailboxes}
+                              groupId={group.id}
+                              index={mailboxIndex}
+                              key={mailbox.id}
+                              mailbox={mailbox}
                             >
-                              <MailboxSummary
-                                action={
-                                  <Tooltip>
-                                    <TooltipTrigger className="inline-flex" render={<span />}>
-                                      <button
-                                        aria-label={defaultMailboxLabel}
-                                        className={cn(
-                                          "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
-                                          {
-                                            "text-foreground": isDefault,
-                                            "text-muted-foreground/50 opacity-0 group-hover/item:opacity-100 hover:text-foreground":
-                                              !isDefault,
-                                          },
-                                        )}
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          onSetDefaultMailbox(isDefault ? null : mailbox.id);
-                                        }}
-                                        type="button"
-                                      >
-                                        <HugeiconsIcon
-                                          aria-hidden
-                                          className="size-3.5"
-                                          icon={isDefault ? PinIcon : PinOffIcon}
-                                        />
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="px-2 py-1">
-                                      {defaultMailboxLabel}
-                                      <TooltipArrow />
-                                    </TooltipContent>
-                                  </Tooltip>
-                                }
-                                className="w-full"
-                                mailbox={mailbox}
-                              />
-                            </DropdownMenuItem>
-                          </SortableMailboxRow>
-                        );
-                      })
+                              <DropdownMenuItem
+                                className={cn("group/item rounded-xs px-2", {
+                                  "bg-muted/70": isActive,
+                                })}
+                                onSelect={() => onSelectMailboxId(mailbox.id)}
+                              >
+                                <MailboxSummary
+                                  action={
+                                    <Tooltip>
+                                      <TooltipTrigger className="inline-flex" render={<span />}>
+                                        <button
+                                          aria-label={defaultMailboxLabel}
+                                          className={cn(
+                                            "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
+                                            {
+                                              "text-foreground": isDefault,
+                                              "text-muted-foreground/50 opacity-0 group-hover/item:opacity-100 hover:text-foreground":
+                                                !isDefault,
+                                            },
+                                          )}
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            onSetDefaultMailbox(isDefault ? null : mailbox.id);
+                                          }}
+                                          type="button"
+                                        >
+                                          <HugeiconsIcon
+                                            aria-hidden
+                                            className="size-3.5"
+                                            icon={isDefault ? PinIcon : PinOffIcon}
+                                          />
+                                        </button>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="px-2 py-1">
+                                        {defaultMailboxLabel}
+                                        <TooltipArrow />
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  }
+                                  className="w-full"
+                                  mailbox={mailbox}
+                                />
+                              </DropdownMenuItem>
+                            </SortableMailboxRow>
+                          );
+                        }}
+                      </MailboxRows>
                     ) : (
                       <p className="px-2 py-1 text-sm text-muted-foreground">no mailbox</p>
                     )}
