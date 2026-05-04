@@ -166,15 +166,15 @@ const MessageHeaderContent = ({
   const showParticipants =
     participantRows.length > 0 && (previewMode !== "collapsed" || !!isExpanded);
   const content = (
-    <div className="min-w-0 flex-1">
-      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 overflow-hidden">
+    <div className="w-full min-w-0 flex-1">
+      <div className="flex w-full min-w-0 flex-wrap items-baseline justify-start gap-x-2 gap-y-1">
         {isMessageUnread(message) && (
-          <span aria-hidden className="size-2 rounded-full bg-foreground/75" />
+          <span aria-hidden className="size-2 shrink-0 rounded-full bg-foreground/75" />
         )}
 
         <span
           className={cn(
-            "min-w-0 flex-1 truncate text-sm text-foreground sm:text-[15px]",
+            "max-w-full min-w-0 shrink truncate text-sm text-foreground sm:text-[15px]",
             senderNameClassName,
             {
               "font-semibold text-foreground": !!isExpanded || isMessageUnread(message),
@@ -186,12 +186,14 @@ const MessageHeaderContent = ({
         </span>
 
         {senderEmail && (
-          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground sm:text-sm">
+          <span className="max-w-full min-w-0 shrink truncate text-xs text-muted-foreground sm:text-sm">
             {senderEmail}
           </span>
         )}
 
-        <span className="shrink-0 text-xs text-muted-foreground sm:text-sm">{date}</span>
+        <span className="shrink-0 basis-full text-xs whitespace-nowrap text-muted-foreground sm:basis-auto sm:text-sm">
+          {date}
+        </span>
       </div>
 
       {preview && <p className="mt-1 truncate text-sm text-foreground">{preview}</p>}
@@ -199,9 +201,9 @@ const MessageHeaderContent = ({
       {showParticipants && (
         <div className="mt-1.5 space-y-1">
           {participantRows.map((row) => (
-            <div className="flex min-w-0 items-baseline gap-2 text-xs sm:text-sm" key={row.label}>
+            <div className="flex min-w-0 items-start gap-2 text-xs sm:text-sm" key={row.label}>
               <span className="shrink-0 text-muted-foreground">{row.label}</span>
-              <span className="min-w-0 truncate text-foreground">{row.value}</span>
+              <span className="min-w-0 wrap-break-word text-foreground">{row.value}</span>
             </div>
           ))}
         </div>
@@ -221,12 +223,12 @@ const MessageHeaderContent = ({
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-stretch justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
           {onToggleExpanded ? (
             <div
               aria-controls={`message-body-${message.id}`}
               aria-expanded={isExpanded}
-              className="min-w-0 flex-1 cursor-pointer rounded-sm text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              className="w-full min-w-0 cursor-pointer rounded-sm text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60 sm:flex-1"
               onClick={(event) => {
                 if (hasSelectionInElement(event.currentTarget)) {
                   return;
@@ -248,11 +250,11 @@ const MessageHeaderContent = ({
               {content}
             </div>
           ) : (
-            content
+            <div className="w-full min-w-0 sm:flex-1">{content}</div>
           )}
 
           <TooltipGroup>
-            <div className="ml-auto flex shrink-0 items-center justify-end gap-1 pl-4">
+            <div className="flex min-w-0 flex-wrap items-center gap-1 gap-y-2 max-sm:justify-start sm:w-auto sm:justify-end sm:pl-4">
               {headerActions}
               {trailing}
             </div>
@@ -284,7 +286,12 @@ const MessageHeaderActions = ({
   onUnsubscribe?: MessageUnsubscribeAction;
   showReplyAll?: boolean;
 }) => (
-  <div className={cn("flex items-center justify-end gap-0.5", className)}>
+  <div
+    className={cn(
+      "flex flex-wrap items-center gap-0.5 max-sm:justify-start sm:justify-end",
+      className,
+    )}
+  >
     {onContinueDraft && (
       <IconButtonTooltip label="Continue with draft">
         <Button
@@ -882,24 +889,26 @@ export const MessageView = ({
   }, [isActionPending, mailboxActions, message.threadId, threadIsUnread]);
 
   return (
-    <article className="-mx-4 w-full min-w-0 sm:-mx-5 lg:-mx-6">
-      <header className="min-w-0 border-b px-5 py-5 sm:px-6 sm:py-6">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:gap-8">
+    <article className="w-full">
+      <header className="w-full border-b px-5 py-5 sm:px-6 sm:py-6">
+        <div className="flex min-w-0 flex-col items-start gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-8">
           <h1 className="min-w-0 text-lg leading-tight font-medium tracking-tight wrap-break-word text-foreground sm:text-xl">
             {subject}
           </h1>
 
-          <MessageActionsDropdown
-            actions={createMailboxThreadMessageActionHandlers({
-              mailboxActions,
-              threadId: message.threadId,
-            })}
-            isPending={isActionPending}
-            isUnread={threadIsUnread}
-            mailbox={activeMailbox}
-            mailboxId={mailboxId}
-            message={message}
-          />
+          <div className="shrink-0 sm:justify-self-end">
+            <MessageActionsDropdown
+              actions={createMailboxThreadMessageActionHandlers({
+                mailboxActions,
+                threadId: message.threadId,
+              })}
+              isPending={isActionPending}
+              isUnread={threadIsUnread}
+              mailbox={activeMailbox}
+              mailboxId={mailboxId}
+              message={message}
+            />
+          </div>
         </div>
 
         {!isSingleMessageThread && (

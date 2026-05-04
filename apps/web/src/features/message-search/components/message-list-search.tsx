@@ -706,9 +706,9 @@ export const MessageListSearch = ({
   }, [activeDateFilterIndex, currentState.filters]);
 
   return (
-    <div className="bg-background-light px-4 py-3" role="search">
+    <div className="bg-background-light p-4" role="search">
       <div className="relative">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2 lg:-ml-2">
           {onOpenSidebar && (
             <IconButtonTooltip label="Open sidebar">
               <Button

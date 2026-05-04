@@ -91,10 +91,7 @@ export const MessageDetail = ({
         </div>
       )}
 
-      <div
-        className="min-h-0 flex-1 overflow-y-auto px-4 sm:px-5 lg:px-6"
-        data-message-detail-scroll-container
-      >
+      <div className="min-h-0 flex-1 overflow-y-auto" data-message-detail-scroll-container>
         {isPending && !selectedMessage ? (
           <MessageDetailLoadingSkeleton />
         ) : selectedMessage ? (

@@ -71,7 +71,7 @@ export const MessageListSelectionToolbar = ({
   onToggleAll: (selected: boolean) => void;
   selectedCount: number;
 }) => (
-  <div className="bg-background-light px-4 py-3">
+  <div className="bg-background-light p-4">
     <div className="flex min-w-0 items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-2.5">
         <IconButtonTooltip label="Select all">
