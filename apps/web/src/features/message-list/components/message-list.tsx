@@ -171,6 +171,7 @@ export const MessageList = (props: MessageListProps) => {
         <MessageListSearch
           isRefreshing={props.isRefreshing}
           mailboxId={props.mailboxId}
+          onOpenSidebar={props.onOpenSidebar}
           onRefresh={props.onRefresh}
           onScrollToTop={selection.scrollListToTop}
           onSearch={props.onSearch}

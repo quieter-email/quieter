@@ -53,6 +53,7 @@ type MailboxSwitcherDropdownProps = {
   onSelectMailboxId: (mailboxId: string) => void;
   onSetDefaultMailbox: (mailboxId: string | null) => void;
   selectedMailboxId: string | null;
+  side?: "bottom" | "right";
 };
 
 type SortableGroupProps = {
@@ -268,6 +269,7 @@ export const MailboxSwitcherDropdown = ({
   onSelectMailboxId,
   onSetDefaultMailbox,
   selectedMailboxId,
+  side = "right",
 }: MailboxSwitcherDropdownProps) => {
   const mailboxes = groups.flatMap((group) => group.mailboxes);
   const selectedMailbox =
@@ -318,7 +320,12 @@ export const MailboxSwitcherDropdown = ({
         </div>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="start" className="w-80" side="right" sideOffset={10}>
+      <DropdownMenuContent
+        align="start"
+        className="w-[min(20rem,calc(100vw-2rem))]"
+        side={side}
+        sideOffset={10}
+      >
         <DragDropProvider onDragEnd={handleGroupDragEnd}>
           <div className="flex max-h-96 flex-col gap-3 overflow-y-auto p-1">
             {mailboxes.length > 0 ? (

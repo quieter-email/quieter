@@ -18,7 +18,7 @@ type SettingsSidebarProps = {
 };
 
 export const SettingsSidebar = ({ activeTab, onBack, onSelectTab }: SettingsSidebarProps) => (
-  <aside className="mr-20 border-r pr-20">
+  <aside className="border-b pb-4 md:mr-20 md:border-r md:border-b-0 md:pr-20 md:pb-0">
     <button
       className="inline-flex h-8 w-fit shrink-0 items-center justify-center gap-2 rounded-md border border-transparent bg-transparent px-3 text-xs leading-none font-medium whitespace-nowrap text-muted-foreground outline-none select-none hover:border-border/80 hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:bg-muted/80 disabled:pointer-events-none disabled:opacity-50"
       onClick={onBack}
@@ -28,7 +28,7 @@ export const SettingsSidebar = ({ activeTab, onBack, onSelectTab }: SettingsSide
       <span>Back</span>
     </button>
 
-    <div className="flex flex-col gap-2 pt-12">
+    <div className="flex flex-wrap gap-2 pt-6 md:flex-col md:pt-12">
       <Button
         className="flex w-fit items-center gap-2"
         onClick={() => onSelectTab("general")}

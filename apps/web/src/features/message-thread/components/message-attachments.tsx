@@ -57,8 +57,8 @@ export const MessageAttachments = ({
   };
 
   return (
-    <section aria-label="Attachments" className={className}>
-      <div className="flex flex-wrap gap-2">
+    <section aria-label="Attachments" className={cn("w-full min-w-0", className)}>
+      <div className="flex min-w-0 flex-wrap gap-2">
         {attachments.map((attachment) => {
           const attachmentKey = `${attachment.messageId}:${attachment.attachmentId}`;
           const isDownloading = activeAttachmentKey === attachmentKey;
@@ -66,7 +66,7 @@ export const MessageAttachments = ({
           return (
             <button
               aria-busy={isDownloading}
-              className="inline-flex max-w-full items-center gap-2 rounded-full border border-border/70 bg-background px-3 py-1.5 text-left text-sm font-medium text-foreground hover:bg-muted/40 disabled:cursor-progress disabled:opacity-70"
+              className="inline-flex max-w-full min-w-0 items-center gap-2 overflow-hidden rounded-full border border-border/70 bg-background px-3 py-1.5 text-left text-sm font-medium text-foreground hover:bg-muted/40 disabled:cursor-progress disabled:opacity-70"
               disabled={isDownloading}
               key={attachmentKey}
               onClick={() => {
@@ -83,7 +83,7 @@ export const MessageAttachments = ({
                 />
               </span>
 
-              <span className="max-w-[18rem] truncate">{attachment.fileName}</span>
+              <span className="min-w-0 shrink truncate">{attachment.fileName}</span>
 
               {attachment.size > 0 && (
                 <span className="shrink-0 text-xs text-muted-foreground">

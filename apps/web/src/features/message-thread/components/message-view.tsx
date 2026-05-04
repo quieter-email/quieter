@@ -167,22 +167,28 @@ const MessageHeaderContent = ({
     participantRows.length > 0 && (previewMode !== "collapsed" || !!isExpanded);
   const content = (
     <div className="min-w-0 flex-1">
-      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 overflow-hidden">
         {isMessageUnread(message) && (
           <span aria-hidden className="size-2 rounded-full bg-foreground/75" />
         )}
 
         <span
-          className={cn("truncate text-sm text-foreground sm:text-[15px]", senderNameClassName, {
-            "font-semibold text-foreground": !!isExpanded || isMessageUnread(message),
-            "font-medium": !isExpanded && !isMessageUnread(message),
-          })}
+          className={cn(
+            "min-w-0 flex-1 truncate text-sm text-foreground sm:text-[15px]",
+            senderNameClassName,
+            {
+              "font-semibold text-foreground": !!isExpanded || isMessageUnread(message),
+              "font-medium": !isExpanded && !isMessageUnread(message),
+            },
+          )}
         >
           {senderName}
         </span>
 
         {senderEmail && (
-          <span className="truncate text-xs text-muted-foreground sm:text-sm">{senderEmail}</span>
+          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground sm:text-sm">
+            {senderEmail}
+          </span>
         )}
 
         <span className="shrink-0 text-xs text-muted-foreground sm:text-sm">{date}</span>
@@ -876,9 +882,9 @@ export const MessageView = ({
   }, [isActionPending, mailboxActions, message.threadId, threadIsUnread]);
 
   return (
-    <article className="-mx-4 w-auto sm:-mx-5 lg:-mx-6">
-      <header className="border-b px-5 py-5 sm:px-6 sm:py-6">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-8">
+    <article className="-mx-4 w-full min-w-0 sm:-mx-5 lg:-mx-6">
+      <header className="min-w-0 border-b px-5 py-5 sm:px-6 sm:py-6">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:gap-8">
           <h1 className="min-w-0 text-lg leading-tight font-medium tracking-tight wrap-break-word text-foreground sm:text-xl">
             {subject}
           </h1>

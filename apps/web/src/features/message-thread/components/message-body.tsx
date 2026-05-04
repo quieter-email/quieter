@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@quieter/ui";
+import { useColorMode, type ColorMode } from "@quieter/ui";
 import DOMPurify from "isomorphic-dompurify";
 import { useEffect, useRef } from "react";
 
@@ -10,36 +10,95 @@ type MessageBodyProps = {
   isLoading?: boolean;
 };
 
-const getBaseStyles = (): string => {
-  return `<style>
+const getLightMessageStyles = (): string => {
+  return `
   :host {
+    all: initial;
     display: block;
-    color-scheme: light;
-    background: #ffffff;
-    color: #18181b;
-    overflow-wrap: break-word;
-    word-break: break-word;
+    color-scheme: light !important;
+    background: var(--background-light, #ffffff);
+    color: var(--foreground, #18181b);
+    font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
   }
   :where(html, body) {
     margin: 0;
     padding: 0;
-    background: #ffffff;
-    color: #18181b;
+    background: var(--background-light, #ffffff);
+    color: var(--foreground, #18181b);
+    font-family: inherit;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+  :where(table),
+  :where(table) :where(*) {
+    overflow-wrap: normal;
+    word-break: normal;
+    word-spacing: normal;
   }
   :where(img, picture, svg) { max-width: 100%; height: auto; }
   :where(a) { color: inherit; text-decoration: underline; }
   :where(hr) { border-color: #e4e4e7; }
   :where(blockquote) { border-left: 3px solid #e4e4e7; padding-left: 12px; }
-</style>`;
+`;
+};
+
+const getDarkMessageStyles = (): string => {
+  return `
+  :host {
+    all: initial;
+    display: block;
+    color-scheme: dark !important;
+    background: var(--background-light, transparent);
+    color: var(--foreground, #e4e4e7);
+    font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
+  }
+  :where(html, body) {
+    margin: 0;
+    padding: 0;
+    background: var(--background-light, transparent);
+    color: var(--foreground, #e4e4e7);
+    font-family: inherit;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+  :where(table),
+  :where(table) :where(*) {
+    overflow-wrap: normal;
+    word-break: normal;
+    word-spacing: normal;
+  }
+  :where(img, picture, svg) { max-width: 100%; height: auto; }
+  :where(a) { color: inherit; text-decoration: underline; }
+  :where(hr) { border-color: var(--border, #3f3f46); }
+  :where(blockquote) {
+    border-left: 3px solid var(--border, #3f3f46);
+    padding-left: 12px;
+  }
+  :where(pre) { overflow-x: auto; white-space: pre-wrap; }
+  :where(code, pre) { font-family: var(--font-mono, monospace); }
+`;
+};
+
+const getBaseStyles = (mode: ColorMode): string => {
+  return `<style>${mode === "dark" ? getDarkMessageStyles() : getLightMessageStyles()}</style>`;
 };
 
 const LINK_TAG_REGEX = /<link\b[^>]*>/gi;
-const MALFORMED_VIEWPORT_DECLARATION_REGEX = /width\s*(?:=|\uFFFD)\s*(?:de)?vice-width/gi;
 const REPLACEMENT_CHARACTER_REGEX = /\uFFFD/g;
 const DOCUMENT_WRAPPER_REGEX = /<\/?(html|head)\b[^>]*>/gi;
-const STYLE_TAG_REGEX = /<style\b[^>]*>[\s\S]*?<\/style\s*>/gi;
-
-const EMAIL_ADD_TAGS = ["html", "head", "body", "img", "picture", "source", "center", "font"];
+const EMAIL_ADD_TAGS = [
+  "html",
+  "head",
+  "body",
+  "img",
+  "picture",
+  "source",
+  "center",
+  "font",
+  "style",
+  "meta",
+  "title",
+];
 const EMAIL_ADD_ATTR = [
   "target",
   "align",
@@ -52,6 +111,13 @@ const EMAIL_ADD_ATTR = [
   "sizes",
   "decoding",
   "referrerpolicy",
+  "http-equiv",
+  "content",
+  "name",
+  "charset",
+  "scope",
+  "role",
+  "class",
 ];
 
 const mergeRelValues = (value: string | undefined): string => {
@@ -65,6 +131,7 @@ const mergeRelValues = (value: string | undefined): string => {
 
 const EMAIL_SANITIZE_CONFIG = {
   USE_PROFILES: { html: true },
+  WHOLE_DOCUMENT: true,
   ADD_TAGS: EMAIL_ADD_TAGS,
   ADD_ATTR: EMAIL_ADD_ATTR,
   ADD_DATA_URI_TAGS: ["img", "source"] as string[],
@@ -98,22 +165,31 @@ const registerEmailSanitizeHooks = () => {
 
 registerEmailSanitizeHooks();
 
-const sanitizeHtml = (rawHtml: string): string => {
-  const sanitized = String(DOMPurify.sanitize(rawHtml, EMAIL_SANITIZE_CONFIG));
-  return sanitized
-    .replaceAll(STYLE_TAG_REGEX, "")
-    .replaceAll(LINK_TAG_REGEX, "")
-    .replaceAll(MALFORMED_VIEWPORT_DECLARATION_REGEX, "width: device-width")
-    .replaceAll(REPLACEMENT_CHARACTER_REGEX, "");
+/** DOMPurify drops leading `<style>` on bare fragments unless wrapped in `<body>`. */
+const coerceEmailHtmlForSanitize = (rawHtml: string): string => {
+  const trimmedStart = rawHtml.trimStart();
+
+  if (/^<!DOCTYPE\b/i.test(trimmedStart) || /^<html\b/i.test(trimmedStart)) {
+    return rawHtml;
+  }
+
+  return `<body>${rawHtml}</body>`;
 };
 
-const prepareShadowContent = (rawHtml: string): string => {
+const sanitizeHtml = (rawHtml: string): string => {
+  const sanitized = String(
+    DOMPurify.sanitize(coerceEmailHtmlForSanitize(rawHtml), EMAIL_SANITIZE_CONFIG),
+  );
+  return sanitized.replaceAll(LINK_TAG_REGEX, "").replaceAll(REPLACEMENT_CHARACTER_REGEX, "");
+};
+
+const prepareShadowContent = (rawHtml: string, colorMode: ColorMode): string => {
   const sanitized = sanitizeHtml(rawHtml);
   const content = sanitized.trim().replaceAll(DOCUMENT_WRAPPER_REGEX, "");
-  return `${getBaseStyles()}${content}`;
+  return `${getBaseStyles(colorMode)}${content}`;
 };
 
-const HtmlMessageBody = ({ html }: { html: string }) => {
+const HtmlMessageBody = ({ colorMode, html }: { colorMode: ColorMode; html: string }) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const shadowRootRef = useRef<ShadowRoot | null>(null);
 
@@ -121,8 +197,8 @@ const HtmlMessageBody = ({ html }: { html: string }) => {
     if (!hostRef.current) return;
 
     shadowRootRef.current ??= hostRef.current.attachShadow({ mode: "open" });
-    shadowRootRef.current.innerHTML = prepareShadowContent(html);
-  }, [html]);
+    shadowRootRef.current.innerHTML = prepareShadowContent(html, colorMode);
+  }, [colorMode, html]);
 
   return <div className="p-4" ref={hostRef} />;
 };
@@ -139,23 +215,21 @@ const MessageBodyLoadingSkeleton = () => (
 );
 
 export const MessageBody = ({ html, isLoading, text }: MessageBodyProps) => {
+  const { colorMode } = useColorMode();
   const fallbackText = text?.trim();
+  const htmlBody = html?.trim();
 
-  if (!html?.trim() && !fallbackText && isLoading) {
+  if (!htmlBody && !fallbackText && isLoading) {
     return <MessageBodyLoadingSkeleton />;
   }
 
-  if (!html?.trim()) {
+  if (!htmlBody) {
     return (
-      <p
-        className={cn(
-          "p-4 text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground",
-        )}
-      >
+      <p className="bg-background-light p-4 text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground">
         {fallbackText || "No content."}
       </p>
     );
   }
 
-  return <HtmlMessageBody html={html} />;
+  return <HtmlMessageBody colorMode={colorMode} html={htmlBody} />;
 };

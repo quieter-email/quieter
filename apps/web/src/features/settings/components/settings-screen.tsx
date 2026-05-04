@@ -38,7 +38,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
   };
 
   return (
-    <div className="mx-auto grid h-dvh max-w-4xl grid-cols-[auto_1fr] py-20">
+    <div className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col px-4 py-6 sm:px-6 md:grid md:h-dvh md:grid-cols-[auto_1fr] md:py-20">
       <SettingsSidebar
         activeTab={tab}
         onBack={() => {
@@ -49,7 +49,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
         onSelectTab={setTab}
       />
 
-      <main className="h-full overflow-y-auto pt-20 pr-6">
+      <main className="min-h-0 flex-1 overflow-y-auto pt-8 md:h-full md:pt-20 md:pr-6">
         {tab === "general" && <GeneralSettingsPanel />}
         {tab === "account" && <AccountSettingsPanel initialUser={initialUser} />}
         {tab === "mailboxes" && <MailboxesSettingsPanel />}

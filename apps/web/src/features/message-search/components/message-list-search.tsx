@@ -1,6 +1,6 @@
 "use client";
 
-import { Refresh01Icon, Search01Icon } from "@hugeicons/core-free-icons";
+import { Refresh01Icon, Search01Icon, SidebarLeftIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, Calendar, IconButtonTooltip, cn } from "@quieter/ui";
 import { useQuery } from "@tanstack/react-query";
@@ -32,6 +32,7 @@ type MessageListSearchProps = {
   isRefreshing: boolean;
   mailboxId: string;
   onRefresh: () => void | Promise<void>;
+  onOpenSidebar?: () => void;
   onScrollToTop: () => boolean | Promise<boolean> | void | Promise<void>;
   onSearch: (query: string) => void;
   searchQuery: string;
@@ -117,6 +118,7 @@ const upsertFilter = (filters: readonly SearchFilterChip[], nextFilter: SearchFi
 export const MessageListSearch = ({
   isRefreshing,
   mailboxId,
+  onOpenSidebar,
   onRefresh,
   onScrollToTop,
   onSearch,
@@ -707,6 +709,20 @@ export const MessageListSearch = ({
     <div className="bg-background-light px-4 py-3" role="search">
       <div className="relative">
         <div className="flex min-w-0 items-center gap-2">
+          {onOpenSidebar && (
+            <IconButtonTooltip label="Open sidebar">
+              <Button
+                aria-label="Open sidebar"
+                className="lg:hidden"
+                onClick={onOpenSidebar}
+                size="icon-sm"
+                variant="outline"
+              >
+                <HugeiconsIcon icon={SidebarLeftIcon} />
+              </Button>
+            </IconButtonTooltip>
+          )}
+
           <IconButtonTooltip label="Refresh list">
             <Button
               aria-label="Refresh list"

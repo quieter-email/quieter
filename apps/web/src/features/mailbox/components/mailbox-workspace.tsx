@@ -1,6 +1,7 @@
 "use client";
 
 import type { RouterOutputs } from "@quieter/orpc";
+import { cn } from "@quieter/ui";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -128,6 +129,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const queryClient = useQueryClient();
   const composeDialogRef = useRef<ComposeDialogHandle | null>(null);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isWindowActive, setIsWindowActive] = useState(false);
   const [pendingMessageActionIds, setPendingMessageActionIds] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -262,9 +264,12 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     }
   }
 
-  const setMailboxSearch = (patch: MailboxSearchPatch) => {
+  const setMailboxSearch = (
+    patch: MailboxSearchPatch,
+    { replace = true }: { replace?: boolean } = {},
+  ) => {
     return navigate({
-      replace: true,
+      replace,
       resetScroll: false,
       search: (previous) => mergeMailboxSearch(previous, patch),
       to: ".",
@@ -377,16 +382,18 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     openComposeDraft(buildComposeDraftFromSavedDraftMessage(message));
   };
 
-  const activateMessage = (messageId: string) => {
+  const activateMessage = (nextMessageId: string) => {
     if (activeMailbox === "drafts") {
-      const draftMessage = flattenedMessages.find((message) => message.id === messageId);
+      const draftMessage = flattenedMessages.find((message) => message.id === nextMessageId);
       if (draftMessage) {
         openDraft(draftMessage);
       }
       return;
     }
 
-    void setMailboxSearch({ messageId });
+    const shouldPushMobileHistory =
+      !messageId && window.matchMedia("(max-width: 1023.98px)").matches;
+    void setMailboxSearch({ messageId: nextMessageId }, { replace: !shouldPushMobileHistory });
   };
 
   const loadMoreMessages = () => {
@@ -426,6 +433,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     isManualRefreshing ||
     syncQuery.isFetching ||
     (messagesQuery.isRefetching && !messagesQuery.isFetchingNextPage);
+  const isMessageRouteOpen = activeMailbox !== "drafts" && !!messageId;
 
   if (mailboxesQuery.isPending) {
     return (
@@ -446,7 +454,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
 
   return (
     <>
-      <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-background text-foreground">
+      <main className="flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground">
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
           <div className="pointer-events-none absolute inset-0" />
 
@@ -467,12 +475,22 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
             }}
             selectedMailbox={activeMailbox}
             selectedMailboxId={selectedMailboxId}
+            isMobileOpen={isMobileSidebarOpen}
+            onMobileOpenChange={setIsMobileSidebarOpen}
           />
 
-          <div className="relative flex min-h-0 flex-1 flex-col gap-1 bg-background py-1 pr-1 lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+          <div className="relative flex min-h-0 flex-1 flex-col bg-background lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-1 lg:py-1 lg:pr-1">
             {selectedMailboxId ? (
               <>
-                <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-background-light">
+                <section
+                  className={cn(
+                    "min-h-0 min-w-0 flex-col overflow-hidden bg-background-light lg:flex lg:rounded-lg",
+                    {
+                      "flex flex-1": !isMessageRouteOpen,
+                      hidden: isMessageRouteOpen,
+                    },
+                  )}
+                >
                   <MessageList
                     activeMailbox={activeMailbox}
                     activeMessageId={messageId ?? null}
@@ -488,6 +506,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
                     onActivateMessage={activateMessage}
                     onLoadMore={loadMoreMessages}
                     onOpenDraft={openDraft}
+                    onOpenSidebar={() => setIsMobileSidebarOpen(true)}
                     onRefresh={() => {
                       void refreshMessages();
                     }}
@@ -497,7 +516,15 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
                   />
                 </section>
 
-                <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-background-light">
+                <div
+                  className={cn(
+                    "min-h-0 min-w-0 flex-col overflow-hidden bg-background-light lg:flex lg:rounded-lg",
+                    {
+                      "flex flex-1": isMessageRouteOpen,
+                      hidden: !isMessageRouteOpen,
+                    },
+                  )}
+                >
                   <MessageDetail
                     activeMailbox={activeMailbox}
                     currentUserEmail={
@@ -509,6 +536,9 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
                     onComposeDraftRequested={openComposeDraft}
                     pendingActions={pendingActions}
                     isPending={isLoadingEmptyMessages}
+                    onBackToList={() => {
+                      void setMailboxSearch({ messageId: null });
+                    }}
                     selectedMessage={selectedMessage}
                   />
                 </div>

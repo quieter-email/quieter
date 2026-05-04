@@ -24,6 +24,7 @@ export type MessageListProps = {
   messages: ListMessagesPageResult[];
   onActivateMessage: (messageId: string) => void;
   onLoadMore: () => void;
+  onOpenSidebar?: () => void;
   onOpenDraft: (message: MessageListItem) => void;
   onRefresh: () => void;
   onSearch: (query: string) => void;
