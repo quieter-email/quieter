@@ -1,6 +1,7 @@
 "use client";
 
 import type { ComponentProps } from "react";
+import { cva } from "class-variance-authority";
 import { format } from "date-fns";
 import { DayPicker, getDefaultClassNames, type ChevronProps } from "react-day-picker";
 import { cn } from "../../lib/cn";
@@ -8,17 +9,23 @@ import { ChevronDownIcon } from "./icons";
 
 const defaultClassNames = getDefaultClassNames();
 
+const calendarChevronVariants = cva("size-4", {
+  variants: {
+    orientation: {
+      left: "rotate-90",
+      right: "-rotate-90",
+      down: "",
+      up: "rotate-180",
+    },
+  },
+  defaultVariants: {
+    orientation: "left",
+  },
+});
+
 const CalendarChevron = ({ className, orientation = "left" }: ChevronProps) => (
   <ChevronDownIcon
-    className={cn(
-      "size-4",
-      {
-        "rotate-90": orientation === "left",
-        "-rotate-90": orientation === "right",
-        "rotate-180": orientation === "up",
-      },
-      className,
-    )}
+    className={cn(calendarChevronVariants({ orientation: orientation ?? "left" }), className)}
   />
 );
 

@@ -2,6 +2,7 @@
 
 import { Delete01Icon, Delete02Icon, Mail01Icon, MailOpen02Icon } from "@hugeicons/core-free-icons";
 import { toast } from "@quieter/ui";
+import { useMemo } from "react";
 import type { MessageListItem } from "~/lib/gmail/gmail";
 import { MessageListSearch } from "~/features/message-search/components/message-list-search";
 import { getErrorMessage } from "~/lib/errors";
@@ -24,20 +25,24 @@ const buildDraftListEntry = (message: MessageListItem): ThreadListEntry => ({
 });
 
 export const MessageList = (props: MessageListProps) => {
-  const flattenedMessages = props.messages.flatMap((page) => page.messages);
-  const threadedMessages =
-    props.activeMailbox === "drafts"
-      ? flattenedMessages.map((message) => buildDraftListEntry(message))
-      : buildThreadListEntries(flattenedMessages);
-  const messageThreadIds = new Map(
-    flattenedMessages.map((message) => {
-      return [message.id, message.threadId] as const;
-    }),
+  const flattenedMessages = useMemo(
+    () => props.messages.flatMap((page) => page.messages),
+    [props.messages],
   );
-  const activeThreadId =
-    props.activeMailbox === "drafts" || !props.activeMessageId
-      ? null
-      : (messageThreadIds.get(props.activeMessageId) ?? null);
+  const threadedMessages = useMemo(
+    () =>
+      props.activeMailbox === "drafts"
+        ? flattenedMessages.map((message) => buildDraftListEntry(message))
+        : buildThreadListEntries(flattenedMessages),
+    [flattenedMessages, props.activeMailbox],
+  );
+  const activeThreadId = useMemo(() => {
+    if (props.activeMailbox === "drafts" || !props.activeMessageId) return null;
+
+    return (
+      flattenedMessages.find((message) => message.id === props.activeMessageId)?.threadId ?? null
+    );
+  }, [flattenedMessages, props.activeMailbox, props.activeMessageId]);
   const selection = useMessageListSelection({
     activeMailbox: props.activeMailbox,
     activeThreadId,

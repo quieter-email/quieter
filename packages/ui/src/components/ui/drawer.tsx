@@ -1,6 +1,7 @@
 "use client";
 
 import type { ComponentPropsWithoutRef } from "react";
+import { cva } from "class-variance-authority";
 import { Drawer as DrawerPrimitive } from "vaul";
 import type { ButtonProps } from "./button";
 import { cn } from "../../lib/cn";
@@ -104,6 +105,27 @@ export const DrawerDescription = ({
   />
 );
 
+const drawerCloseButtonVariants = cva(
+  "squircle inline-flex min-w-20 shrink-0 items-center justify-center gap-2 rounded-md px-3.5 text-[13px] leading-none font-medium whitespace-nowrap transition-transform duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+  {
+    variants: {
+      variant: {
+        default:
+          "h-8 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/85",
+        outline:
+          "h-8 border border-input bg-background text-foreground shadow-sm hover:bg-muted/60 active:bg-muted/80",
+        ghost:
+          "h-8 bg-transparent text-foreground hover:bg-muted/60 hover:text-foreground active:bg-muted/80",
+        destructive:
+          "h-8 bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
+      },
+    },
+    defaultVariants: {
+      variant: "outline",
+    },
+  },
+);
+
 export const DrawerCloseButton = ({
   className,
   variant = "outline",
@@ -112,18 +134,7 @@ export const DrawerCloseButton = ({
   variant?: ButtonProps["variant"];
 }) => (
   <DrawerPrimitive.Close
-    className={cn(
-      "squircle inline-flex min-w-20 shrink-0 items-center justify-center gap-2 rounded-md px-3.5 text-[13px] leading-none font-medium whitespace-nowrap transition-transform duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
-      variant === "default" &&
-        "h-8 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/85",
-      variant === "outline" &&
-        "h-8 border border-input bg-background text-foreground shadow-sm hover:bg-muted/60 active:bg-muted/80",
-      variant === "ghost" &&
-        "h-8 bg-transparent text-foreground hover:bg-muted/60 hover:text-foreground active:bg-muted/80",
-      variant === "destructive" &&
-        "h-8 bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
-      className,
-    )}
+    className={cn(drawerCloseButtonVariants({ variant }), className)}
     {...props}
   />
 );

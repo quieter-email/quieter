@@ -71,6 +71,7 @@
 
 ## Style Rules
 
+- Primary cleanup priority: before finishing any implementation, make the code the cleanest minimal shape and remove obsolete paths in the same change.
 - Never couple app code directly to the DB; go through `@quieter/orpc`.
 - Keep types strict. Avoid `any` and unnecessary casts.
 - Use object syntax for conditional classes inside `cn(...)`.

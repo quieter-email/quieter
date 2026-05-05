@@ -3,7 +3,7 @@
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useMemo } from "react";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import { getErrorMessage } from "~/lib/errors";
 import type { MessageListProps } from "./message-list-types";
@@ -57,7 +57,10 @@ export const MessageListScrollPane = ({
   selection,
   threadedMessages,
 }: MessageListScrollPaneProps) => {
-  const flattenedMessages = list.messages.flatMap((page) => page.messages);
+  const flattenedMessages = useMemo(
+    () => list.messages.flatMap((page) => page.messages),
+    [list.messages],
+  );
   const activeThreadId =
     flattenedMessages.find((message) => message.id === list.activeMessageId)?.threadId ?? null;
   const isLoadingEmptyMessages =

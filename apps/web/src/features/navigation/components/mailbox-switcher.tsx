@@ -205,9 +205,9 @@ const MailboxRows = ({ children, group, groups, onReorderMailboxSwitcher }: Mail
     if (
       !source ||
       !target ||
-      source.id === target.id ||
+      source.initialIndex === source.index ||
+      source.initialGroup !== group.id ||
       source.group !== group.id ||
-      target.group !== group.id ||
       source.type !== target.type
     ) {
       return;
@@ -217,7 +217,7 @@ const MailboxRows = ({ children, group, groups, onReorderMailboxSwitcher }: Mail
       candidate.id === group.id
         ? {
             ...candidate,
-            mailboxes: moveItem(candidate.mailboxes, source.index, target.index),
+            mailboxes: moveItem(candidate.mailboxes, source.initialIndex, source.index),
           }
         : candidate,
     );
@@ -295,7 +295,7 @@ export const MailboxSwitcherDropdown = ({
     }
 
     const { source, target } = event.operation;
-    if (!source || !target || source.id === target.id) {
+    if (!source || !target || source.initialIndex === source.index) {
       return;
     }
 
@@ -303,7 +303,9 @@ export const MailboxSwitcherDropdown = ({
       return;
     }
 
-    onReorderMailboxSwitcher(getMailboxSwitcherOrder(moveItem(groups, source.index, target.index)));
+    onReorderMailboxSwitcher(
+      getMailboxSwitcherOrder(moveItem(groups, source.initialIndex, source.index)),
+    );
   };
 
   return (

@@ -1,10 +1,17 @@
 "use client";
 
-import { Refresh01Icon, Search01Icon, SidebarLeftIcon } from "@hugeicons/core-free-icons";
+import {
+  Cancel01Icon,
+  Refresh01Icon,
+  Search01Icon,
+  SidebarLeftIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, Calendar, IconButtonTooltip, cn } from "@quieter/ui";
 import { useQuery } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "motion/react";
 import {
+  type ComponentPropsWithoutRef,
   type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
@@ -844,6 +851,38 @@ export const MessageListSearch = ({
                 />
               </div>
 
+              <AnimatePresence>
+                {(currentState.text.length > 0 || currentState.filters.length > 0) && (
+                  <IconButtonTooltip key="clear-search" label="Clear search">
+                    <Button
+                      aria-label="Clear search"
+                      className="-mr-1 size-6 shrink-0 text-muted-foreground hover:text-foreground"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        commitState({ filters: [], text: "" }, true);
+                        focusTextInput({ toEnd: true });
+                      }}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                      }}
+                      size="icon-sm"
+                      type="button"
+                      variant="ghost"
+                      render={(props) => (
+                        <motion.button
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          transition={{ duration: 0.15 }}
+                          {...(props as ComponentPropsWithoutRef<typeof motion.button>)}
+                        />
+                      )}
+                    >
+                      <HugeiconsIcon className="size-4" icon={Cancel01Icon} />
+                    </Button>
+                  </IconButtonTooltip>
+                )}
+              </AnimatePresence>
               <IconButtonTooltip label="Run search">
                 <Button
                   aria-label="Run search"
