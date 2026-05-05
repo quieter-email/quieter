@@ -10,7 +10,7 @@ import type { MessageListProps } from "./message-list-types";
 import type { useMessageListSelection } from "./use-message-list-selection";
 import { MessageRow } from "./message-row";
 
-const MESSAGE_ROW_HEIGHT_PX = 72;
+const MESSAGE_ROW_HEIGHT_PX = 68;
 const MESSAGE_ROW_GAP_PX = 0;
 const MESSAGE_LIST_OVERSCAN = 12;
 const MESSAGE_LIST_SKELETON_ROW_IDS = [
@@ -31,21 +31,21 @@ type MessageListScrollPaneProps = {
 };
 
 const MessageListLoadingSkeleton = () => (
-  <div className="space-y-1" role="status">
+  <div className="space-y-0.5" role="status">
     <span className="sr-only">Loading messages...</span>
     {MESSAGE_LIST_SKELETON_ROW_IDS.map((rowId) => (
       <div
         aria-hidden="true"
-        className="flex h-[72px] animate-pulse items-center gap-3.5 rounded-xl px-3.5"
+        className="flex h-[68px] animate-pulse items-center gap-3 rounded-xl px-3"
         key={rowId}
       >
-        <div className="size-10 shrink-0 rounded-lg bg-muted/80" />
-        <div className="min-w-0 flex-1 space-y-2.5">
+        <div className="size-[38px] shrink-0 rounded-lg bg-muted/80" />
+        <div className="min-w-0 flex-1 space-y-2">
           <div className="flex items-center justify-between gap-4">
-            <div className="h-3.5 w-32 rounded-md bg-muted/80" />
+            <div className="h-3 w-32 rounded-md bg-muted/80" />
             <div className="h-3 w-12 rounded-md bg-muted/70" />
           </div>
-          <div className="h-3.5 w-3/4 rounded-md bg-muted/70" />
+          <div className="h-3 w-3/4 rounded-md bg-muted/70" />
         </div>
       </div>
     ))}
@@ -98,7 +98,7 @@ export const MessageListScrollPane = ({
 
   return (
     <div
-      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pt-2 pb-4 contain-strict"
+      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 pt-1.5 pb-3 contain-strict"
       onScroll={() => {
         if (selection.isProgrammaticScrollToTopRef.current) return;
         maybeLoadMore();

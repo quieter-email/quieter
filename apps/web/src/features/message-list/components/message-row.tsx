@@ -11,7 +11,7 @@ import {
   createMailboxThreadMessageActionHandlers,
   MessageActionsContextMenu,
 } from "~/features/message-thread/components/message-actions";
-import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
+import { formatMessageListDate, parseSender } from "~/lib/gmail/message-utils";
 import type { MessageListProps } from "./message-list-types";
 import type { useMessageListSelection } from "./use-message-list-selection";
 
@@ -45,10 +45,10 @@ const MessageRowMetaBadge = ({
   title: string;
 }) => (
   <span
-    className="squircle inline-flex h-5 shrink-0 items-center gap-1 rounded-md border border-border/70 bg-background/75 px-1.5 text-[11px] leading-none font-medium text-muted-foreground tabular-nums shadow-xs"
+    className="squircle inline-flex h-[18px] shrink-0 items-center gap-1 rounded-md border border-border/70 bg-background/75 px-1 text-[10.5px] leading-none font-medium text-muted-foreground tabular-nums shadow-xs"
     title={title}
   >
-    <HugeiconsIcon aria-hidden className="size-3.5" icon={icon} />
+    <HugeiconsIcon aria-hidden className="size-3" icon={icon} />
     <span>{label}</span>
   </span>
 );
@@ -71,7 +71,7 @@ const MessageRowContent = ({
     : sender.name || sender.email || sender.display;
   const senderEmail = sender.name ? sender.email : "";
   const senderInitial = (senderLabel.trim().charAt(0) || "?").toUpperCase();
-  const date = formatMessageDate(anchorMessage, "compact");
+  const date = formatMessageListDate(anchorMessage);
   const unread = !isDraftMailbox && thread.unreadCount > 0;
   const threaded = thread.messageCount > 1;
   const attachmentCount = thread.attachmentCount;
@@ -79,11 +79,6 @@ const MessageRowContent = ({
   const isActionPending =
     list.pendingActions.isMessageActionPending(anchorMessage.id) ||
     list.pendingActions.isThreadActionPending(thread.threadId);
-  const metaTextClassName = cn("text-xs tabular-nums", {
-    "font-semibold text-foreground/90": unread,
-    "text-muted-foreground": !unread,
-    "text-foreground/75": isActive && !unread,
-  });
   const selectionAriaLabel = isDraftMailbox ? "Select draft" : "Select conversation";
   const getSelectionGesture = (event: {
     ctrlKey: boolean;
@@ -138,7 +133,7 @@ const MessageRowContent = ({
   return (
     <div
       className={cn(
-        "relative flex h-[72px] items-stretch overflow-hidden rounded-xl transition-transform duration-100 ease-out motion-safe:has-[button:active]:scale-[0.98]",
+        "relative flex h-[68px] items-stretch overflow-hidden rounded-xl transition-transform duration-100 ease-out motion-safe:has-[button:active]:scale-[0.98]",
         {
           "bg-muted/80 ring-1 ring-border/80 ring-inset": isSelected,
           "bg-muted": isActive && !isSelected,
@@ -150,10 +145,10 @@ const MessageRowContent = ({
       {unread && (
         <span
           aria-hidden
-          className="pointer-events-none absolute top-1/2 left-0 h-9 w-[3px] -translate-y-1/2 rounded-r-full bg-primary"
+          className="pointer-events-none absolute top-1/2 left-0 h-8 w-[3px] -translate-y-1/2 rounded-r-full bg-primary"
         />
       )}
-      <div className="relative ml-3.5 flex h-full w-10 shrink-0 items-center justify-center">
+      <div className="relative ml-3 flex h-full w-[38px] shrink-0 items-center justify-center">
         <button
           aria-label={selectionAriaLabel}
           aria-pressed={!!isSelected}
@@ -172,7 +167,7 @@ const MessageRowContent = ({
           <SenderAvatar
             avatarUrlDark={anchorMessage.senderAvatarUrls?.dark}
             avatarUrlLight={anchorMessage.senderAvatarUrls?.light}
-            className="size-10 rounded-lg"
+            className="size-[38px] rounded-lg"
             fallbackLabel={senderInitial}
           />
         </button>
@@ -243,16 +238,16 @@ const MessageRowContent = ({
             )}
           />
 
-          <div className="relative z-10 flex min-w-0 flex-1 items-center gap-3.5 px-3.5">
-            <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 overflow-hidden">
+          <div className="relative z-10 flex min-w-0 flex-1 items-center gap-3 px-3">
+            <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden">
               <div className="flex w-full min-w-0 items-center justify-between gap-2">
-                <p className="min-w-0 truncate text-left text-sm text-foreground">
+                <p className="min-w-0 truncate text-left text-[13px] leading-[18px] text-foreground">
                   {isDraftMailbox && <span className="font-medium text-muted-foreground">To </span>}
                   <span className={cn({ "font-semibold": unread, "font-medium": !unread })}>
                     {senderLabel}
                   </span>
                   {senderEmail && (
-                    <span className="ml-2 text-xs text-muted-foreground">{senderEmail}</span>
+                    <span className="ml-2 text-[11px] text-muted-foreground">{senderEmail}</span>
                   )}
                 </p>
 
@@ -279,12 +274,21 @@ const MessageRowContent = ({
                       }
                     />
                   )}
-                  <span className={metaTextClassName}>{date || "--"}</span>
+                  <span
+                    className={cn("text-xs font-medium tabular-nums", {
+                      "font-semibold text-foreground/90": unread,
+                      "text-muted-foreground": !unread,
+                      "text-foreground/75": isActive && !unread,
+                    })}
+                    suppressHydrationWarning
+                  >
+                    {date || "--"}
+                  </span>
                 </div>
               </div>
 
               <p
-                className={cn("w-full min-w-0 truncate text-left text-sm", {
+                className={cn("w-full min-w-0 truncate text-left text-[13px] leading-[18px]", {
                   "font-medium text-foreground": unread,
                   "text-muted-foreground": !unread,
                 })}
