@@ -1,4 +1,5 @@
 import { CssSanitizer } from "@barkleapp/css-sanitizer";
+import Color from "color";
 import sanitizeHtml, { type IOptions } from "sanitize-html";
 
 const REPLACEMENT_CHARACTER_REGEX = /\uFFFD/g;
@@ -25,6 +26,58 @@ export type ProcessedMailHtml = {
 };
 
 export type MailRenderTheme = "dark" | "light";
+
+export const fixNonReadableColors = (
+  rootElement: ParentNode,
+  options?: { minContrast?: number; defaultBackground?: string },
+) => {
+  const { defaultBackground = "#ffffff", minContrast = 3.5 } = options || {};
+  const elements = Array.from<HTMLElement>(rootElement.querySelectorAll("*"));
+  if (rootElement instanceof HTMLElement) {
+    elements.unshift(rootElement);
+  }
+
+  for (const element of elements) {
+    const style = getComputedStyle(element);
+    if (style.display === "none" || style.visibility === "hidden") continue;
+
+    if (
+      style.color.startsWith("var(") ||
+      style.color === "transparent" ||
+      style.color === "inherit"
+    ) {
+      continue;
+    }
+
+    try {
+      const textColor = Color(style.color);
+      const effectiveBackground = getEffectiveBackgroundColor(element, defaultBackground);
+      const blendedText =
+        textColor.alpha() < 1
+          ? effectiveBackground.mix(textColor, effectiveBackground.alpha())
+          : textColor;
+      const contrast = blendedText.contrast(effectiveBackground);
+
+      if (contrast < minContrast) {
+        const blackContrast = Color("#000000").contrast(effectiveBackground);
+        const whiteContrast = Color("#ffffff").contrast(effectiveBackground);
+        element.style.color = blackContrast >= whiteContrast ? "#000000" : "#ffffff";
+      }
+    } catch (error) {
+      console.error("Error fixing non-readable colors:", error);
+    }
+  }
+};
+
+const getEffectiveBackgroundColor = (element: HTMLElement, defaultBackground: string) => {
+  let current: HTMLElement | null = element;
+  while (current) {
+    const background = Color(getComputedStyle(current).backgroundColor);
+    if (background.alpha() >= 1) return background.rgb();
+    current = current.parentElement;
+  }
+  return Color(defaultBackground);
+};
 
 const mergeRelValues = (value: string | undefined): string => {
   const values = new Set(["noopener", "noreferrer"]);

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { ListMessagesPageResult, MessageListItem } from "../gmail";
-import { mergeRefreshedMailboxPagesIntoQueryData, type MessagesQueryData } from "./data";
+import type { ListMessagesPageResult, MessageListItem, ThreadMessagesResult } from "../gmail";
+import {
+  mergeRefreshedMailboxPagesIntoQueryData,
+  upsertMessageInThreadData,
+  type MessagesQueryData,
+} from "./data";
 
 const message = (id: string, extras: Partial<MessageListItem> = {}): MessageListItem => ({
   id,
@@ -57,5 +61,48 @@ describe("mergeRefreshedMailboxPagesIntoQueryData", () => {
       ["a"],
     ]);
     expect(next.pageParams).toEqual([undefined]);
+  });
+});
+
+describe("upsertMessageInThreadData", () => {
+  test("adds a newly synced message to an already cached thread", () => {
+    const previous: ThreadMessagesResult = {
+      threadId: "thread-a",
+      messages: [
+        message("a", { threadId: "thread-a", internalDate: "1000" }),
+        message("c", { threadId: "thread-a", internalDate: "3000" }),
+      ],
+    };
+
+    const next = upsertMessageInThreadData(
+      previous,
+      message("b", { threadId: "thread-a", internalDate: "2000" }),
+    );
+
+    expect(next?.messages.map((item) => item.id)).toEqual(["a", "b", "c"]);
+  });
+
+  test("preserves loaded body details when refreshing an existing thread message", () => {
+    const previous: ThreadMessagesResult = {
+      threadId: "thread-a",
+      messages: [
+        message("a", {
+          bodyHtml: "<p>loaded</p>",
+          isUnread: true,
+          threadId: "thread-a",
+        }),
+      ],
+    };
+
+    const next = upsertMessageInThreadData(
+      previous,
+      message("a", { isUnread: false, threadId: "thread-a" }),
+    );
+
+    expect(next?.messages[0]).toMatchObject({
+      bodyHtml: "<p>loaded</p>",
+      id: "a",
+      isUnread: false,
+    });
   });
 });

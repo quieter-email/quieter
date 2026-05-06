@@ -26,6 +26,7 @@ import {
   markThreadAsUnread,
   moveMessageToTrash,
   moveThreadToTrash,
+  refreshMailboxMessages,
   sendDraft as sendGmailDraft,
   sendRawMessage,
   untrashMessage,
@@ -362,6 +363,24 @@ export const appRouter = {
             mailbox: input.category,
             signal,
             startHistoryId: input.startHistoryId,
+          });
+        });
+      }),
+    refreshMessages: protectedProcedure
+      .route({ method: "GET" })
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          category: historySyncMailboxCategorySchema,
+          messageIds: z.array(z.string().trim().min(1)).min(1).max(25),
+        }),
+      )
+      .handler(async ({ context, input }) => {
+        return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
+          return await refreshMailboxMessages(accessToken, {
+            mailbox: input.category,
+            messageIds: input.messageIds,
+            signal,
           });
         });
       }),

@@ -13,11 +13,10 @@ import {
 import { getThreadQueryKey } from "../thread-query";
 import {
   applySyncDeltaToQueryData,
-  mergeMessagePreservingLoadedDetails,
   mergeRefreshedMailboxPagesIntoQueryData,
   removeMessagesFromThreadData,
   updateFirstPageHistoryId,
-  updateMessageInThreadData,
+  upsertMessageInThreadData,
   type MessagesQueryData,
 } from "./data";
 import {
@@ -26,7 +25,7 @@ import {
   normalizeSearchQuery,
   parsePageToken,
 } from "./keys";
-import { getCachedMessagesQueries } from "./query-cache";
+import { applyVisibleMailboxMessagesRefreshToCache, getCachedMessagesQueries } from "./query-cache";
 
 // Keep full-refresh fallbacks bounded after an infinite query restores a deep persisted list.
 const GMAIL_MAILBOX_REFRESH_PAGE_LIMIT = 3;
@@ -34,6 +33,14 @@ const GMAIL_MAILBOX_REFRESH_PAGE_LIMIT = 3;
 type RefreshLoadedMessagesPagesOptions = {
   maxPageCount?: number;
   preserveUnrefreshedPages?: boolean;
+  signal?: AbortSignal;
+};
+
+type RefreshVisibleMessagesArgs = {
+  mailboxId: string;
+  mailbox: MailboxCategory;
+  messageIds: readonly string[];
+  searchQuery?: string | null;
   signal?: AbortSignal;
 };
 
@@ -119,6 +126,28 @@ export const refreshCachedMailboxQueries = async (
   );
 };
 
+export const refreshVisibleMailboxMessages = async (
+  queryClient: QueryClient,
+  args: RefreshVisibleMessagesArgs,
+) => {
+  if (args.mailbox === "drafts" || args.messageIds.length === 0) return;
+
+  const messageIds = Array.from(new Set(args.messageIds.map((messageId) => messageId.trim())))
+    .filter(Boolean)
+    .slice(0, 25);
+  if (messageIds.length === 0) return;
+
+  const result = await rpc.mail.refreshMessages(
+    {
+      mailboxId: args.mailboxId,
+      category: args.mailbox,
+      messageIds,
+    },
+    { signal: args.signal },
+  );
+  await applyVisibleMailboxMessagesRefreshToCache(queryClient, args, result);
+};
+
 const applyMailboxSyncDelta = async (
   queryClient: QueryClient,
   mailboxId: string,
@@ -161,9 +190,7 @@ const applyMailboxSyncDelta = async (
     const threadQueryKey = getThreadQueryKey(mailboxId, updatedMessage.threadId);
     touchedThreadQueryKeys.set(threadQueryKey.join("::"), threadQueryKey);
     queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
-      updateMessageInThreadData(currentData, updatedMessage.id, (message) =>
-        mergeMessagePreservingLoadedDetails(message, updatedMessage),
-      ),
+      upsertMessageInThreadData(currentData, updatedMessage),
     );
   }
 

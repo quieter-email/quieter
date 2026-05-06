@@ -226,6 +226,32 @@ export const updateMessagesInThreadData = (
   return hasChanges ? { ...data, messages } : data;
 };
 
+export const upsertMessageInThreadData = (
+  data: ThreadMessagesResult | undefined,
+  nextMessage: MessageListItem,
+): ThreadMessagesResult | undefined => {
+  if (!data || data.threadId !== nextMessage.threadId) return data;
+
+  const currentIndex = data.messages.findIndex((message) => message.id === nextMessage.id);
+  if (currentIndex >= 0) {
+    return updateMessageInThreadData(data, nextMessage.id, (message) =>
+      mergeMessagePreservingLoadedDetails(message, nextMessage),
+    );
+  }
+
+  const messageOrder = new Map(data.messages.map((message, index) => [message.id, index]));
+  const messages = [...data.messages, nextMessage].sort((left, right) => {
+    const timestampDifference = getMessageSortTimestamp(left) - getMessageSortTimestamp(right);
+    if (timestampDifference !== 0) return timestampDifference;
+
+    const leftOrder = messageOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = messageOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+    return leftOrder - rightOrder;
+  });
+
+  return { ...data, messages };
+};
+
 export const removeMessagesFromThreadData = (
   data: ThreadMessagesResult | undefined,
   predicate: (message: MessageListItem) => boolean,

@@ -4,7 +4,7 @@ import type { RouterOutputs } from "@quieter/orpc";
 import { cn } from "@quieter/ui";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MailboxSwitcherOrder } from "~/features/navigation/components/mailbox-switcher";
 import type { MailboxSearch } from "~/routes/index";
 import { LoadingPage } from "~/components/loading-page";
@@ -20,6 +20,7 @@ import {
   liveSyncQueryOptions,
   messagesQueryOptions,
   refreshLoadedMessagesPages,
+  refreshVisibleMailboxMessages,
   syncMessages,
 } from "~/lib/gmail/inbox-query";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
@@ -27,6 +28,10 @@ import { orpc } from "~/lib/orpc";
 import { queryPersister } from "~/lib/query-persister";
 import { inboxRouteApi } from "~/lib/route-apis";
 import { createMailboxActionHandlers, type MailboxPendingActions } from "./mailbox-action-handlers";
+import {
+  collectVisibleMessageRefreshBatch,
+  queueVisibleMessageRefreshIds,
+} from "./visible-message-refresh";
 
 type MailboxWorkspaceProps = {
   user: {
@@ -44,6 +49,19 @@ type MailboxSearchPatch = {
 };
 
 type MailboxesQueryData = RouterOutputs["mail"]["listMailboxes"];
+
+const VISIBLE_MESSAGE_REFRESH_DEBOUNCE_MS = 250;
+const VISIBLE_MESSAGE_REFRESH_COOLDOWN_MS = 1000 * 60 * 5;
+const VISIBLE_MESSAGE_REFRESH_MAX_BATCH_SIZE = 25;
+const VISIBLE_MESSAGE_REFRESH_PREFIX_PAGE_SKIP = 3;
+
+const getPrefixMessageIds = (pages: readonly { messages: readonly MessageListItem[] }[]) => {
+  return new Set(
+    pages
+      .slice(0, VISIBLE_MESSAGE_REFRESH_PREFIX_PAGE_SKIP)
+      .flatMap((page) => page.messages.map((message) => message.id)),
+  );
+};
 
 const mergeMailboxSearch = (previous: MailboxSearch, patch: MailboxSearchPatch): MailboxSearch => ({
   mailbox: patch.mailbox ?? previous.mailbox,
@@ -139,6 +157,12 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   );
   const pendingMessageActionIdsRef = useRef(pendingMessageActionIds);
   const pendingThreadActionIdsRef = useRef(pendingThreadActionIds);
+  const visibleMessageRefreshQueueRef = useRef<Set<string>>(new Set());
+  const visibleMessageRefreshRecentAttemptsRef = useRef<Map<string, number>>(new Map());
+  const visibleMessageRefreshInFlightIdsRef = useRef<Set<string>>(new Set());
+  const visibleMessageRefreshInFlightRef = useRef(false);
+  const visibleMessageRefreshTimeoutRef = useRef<number | null>(null);
+  const flushVisibleMessageRefreshQueueRef = useRef<() => void>(() => {});
   const { mailbox: activeMailbox, mailboxId, messageId, query } = inboxRouteApi.useSearch();
 
   pendingMessageActionIdsRef.current = pendingMessageActionIds;
@@ -208,6 +232,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const messagesQuery = useInfiniteQuery(
     messagesQueryOptions(selectedMailboxId ?? "", activeMailbox, query.trim(), !!selectedMailboxId),
   );
+  const messages = messagesQuery.data?.pages ?? [];
   const hasLoadedMessages = !!messagesQuery.data?.pages.length;
   const isLiveSyncEnabled =
     !!selectedMailboxId &&
@@ -225,10 +250,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       isLiveSyncEnabled,
     ),
   );
-  const flattenedMessages = useMemo(
-    () => messagesQuery.data?.pages.flatMap((page) => page.messages) ?? [],
-    [messagesQuery.data],
-  );
+  const flattenedMessages = useMemo(() => messages.flatMap((page) => page.messages), [messages]);
 
   const refreshMessages = async () => {
     if (!selectedMailboxId) {
@@ -253,6 +275,83 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     if (!selectedMailboxId || query.trim().length === 0) return;
     await refreshLoadedMessagesPages(queryClient, selectedMailboxId, activeMailbox, query.trim());
   };
+
+  const scheduleVisibleMessageRefresh = useCallback(
+    (delayMs = VISIBLE_MESSAGE_REFRESH_DEBOUNCE_MS) => {
+      if (visibleMessageRefreshTimeoutRef.current) return;
+
+      visibleMessageRefreshTimeoutRef.current = window.setTimeout(() => {
+        visibleMessageRefreshTimeoutRef.current = null;
+        flushVisibleMessageRefreshQueueRef.current();
+      }, delayMs);
+    },
+    [],
+  );
+
+  flushVisibleMessageRefreshQueueRef.current = () => {
+    if (visibleMessageRefreshInFlightRef.current) return;
+
+    if (!selectedMailboxId || activeMailbox === "drafts") {
+      visibleMessageRefreshQueueRef.current.clear();
+      return;
+    }
+
+    const now = Date.now();
+    const skipMessageIds = getPrefixMessageIds(messages);
+    const messageIds = collectVisibleMessageRefreshBatch({
+      cooldownMs: VISIBLE_MESSAGE_REFRESH_COOLDOWN_MS,
+      inFlightMessageIds: visibleMessageRefreshInFlightIdsRef.current,
+      maxBatchSize: VISIBLE_MESSAGE_REFRESH_MAX_BATCH_SIZE,
+      now,
+      queuedMessageIds: visibleMessageRefreshQueueRef.current,
+      recentAttemptByMessageId: visibleMessageRefreshRecentAttemptsRef.current,
+      skipMessageIds,
+    });
+
+    if (messageIds.length === 0) {
+      if (visibleMessageRefreshQueueRef.current.size > 0) {
+        scheduleVisibleMessageRefresh(0);
+      }
+      return;
+    }
+
+    visibleMessageRefreshInFlightRef.current = true;
+    void refreshVisibleMailboxMessages(queryClient, {
+      mailboxId: selectedMailboxId,
+      mailbox: activeMailbox,
+      messageIds,
+      searchQuery: query.trim(),
+    })
+      .catch(() => {})
+      .finally(() => {
+        for (const messageId of messageIds) {
+          visibleMessageRefreshInFlightIdsRef.current.delete(messageId);
+        }
+
+        visibleMessageRefreshInFlightRef.current = false;
+        if (visibleMessageRefreshQueueRef.current.size > 0) {
+          scheduleVisibleMessageRefresh(0);
+        }
+      });
+  };
+
+  const handleVisibleMessageIdsChange = useCallback(
+    (messageIds: readonly string[]) => {
+      if (!selectedMailboxId || activeMailbox === "drafts" || messageIds.length === 0) return;
+
+      const skipMessageIds = getPrefixMessageIds(messages);
+      const hasQueuedMessage = queueVisibleMessageRefreshIds(
+        visibleMessageRefreshQueueRef.current,
+        messageIds,
+        skipMessageIds,
+      );
+
+      if (hasQueuedMessage) {
+        scheduleVisibleMessageRefresh();
+      }
+    },
+    [activeMailbox, messages, scheduleVisibleMessageRefresh, selectedMailboxId],
+  );
 
   let selectedMessage: MessageListItem | null = null;
   if (activeMailbox !== "drafts" && messageId) {
@@ -292,6 +391,20 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       document.removeEventListener("visibilitychange", updateWindowActivity);
     };
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (visibleMessageRefreshTimeoutRef.current) {
+        window.clearTimeout(visibleMessageRefreshTimeoutRef.current);
+        visibleMessageRefreshTimeoutRef.current = null;
+      }
+
+      visibleMessageRefreshQueueRef.current.clear();
+      visibleMessageRefreshRecentAttemptsRef.current.clear();
+      visibleMessageRefreshInFlightIdsRef.current.clear();
+      visibleMessageRefreshInFlightRef.current = false;
+    };
+  }, [activeMailbox, query, selectedMailboxId]);
 
   useLayoutEffect(() => {
     if (mailboxesQuery.isPending) {
@@ -448,7 +561,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     );
   }
 
-  const messages = messagesQuery.data?.pages ?? [];
   const isLoadingEmptyMessages =
     !messages.some((page) => page.messages.length > 0) && (messagesQuery.isPending || isRefreshing);
 
@@ -511,6 +623,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
                       void refreshMessages();
                     }}
                     onSearch={applySearch}
+                    onVisibleMessageIdsChange={handleVisibleMessageIdsChange}
                     pendingActions={pendingActions}
                     searchQuery={query.trim()}
                   />

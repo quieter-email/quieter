@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useExternalImagesEnabled } from "~/features/settings/domain/external-images-setting";
 import {
   applyEmailPreferences,
+  fixNonReadableColors,
   preprocessEmailHtml,
   type ProcessedMailHtml,
 } from "../domain/mail-html";
@@ -68,7 +69,10 @@ const HtmlMessageBody = ({
     }
 
     shadowRootRef.current.innerHTML = processedMail.processedHtml;
-  }, [processedMail]);
+    fixNonReadableColors(shadowRootRef.current, {
+      defaultBackground: colorMode === "dark" ? "#1A1A1A" : "#ffffff",
+    });
+  }, [colorMode, processedMail]);
 
   const handleImageError = useCallback(
     (event: Event) => {

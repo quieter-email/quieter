@@ -18,6 +18,7 @@ import {
   updateMessageInQueryData,
   updateMessagesInQueryData,
   updateMessagesInThreadData,
+  upsertMessageInThreadData,
   type MessagesQueryData,
   type ThreadMetadataMutationResult,
 } from "./data";
@@ -36,6 +37,17 @@ export type ThreadQuerySnapshot = {
 type CachedMessagesQuery = MessagesQuerySnapshot & {
   mailbox: MailboxCategory;
   searchQuery?: string;
+};
+
+type VisibleMessagesRefreshArgs = {
+  mailboxId: string;
+  mailbox: MailboxCategory;
+  searchQuery?: string | null;
+};
+
+type VisibleMessagesRefreshResult = {
+  removedMessageIds: readonly string[];
+  updatedMessages: readonly MessageListItem[];
 };
 
 const isMailboxCategory = (value: unknown): value is MailboxCategory =>
@@ -228,6 +240,42 @@ export const removeMessagesFromCachedMailboxQueries = (
   }
 
   return touchedQueryKeys;
+};
+
+export const applyVisibleMailboxMessagesRefreshToCache = async (
+  queryClient: QueryClient,
+  args: VisibleMessagesRefreshArgs,
+  result: VisibleMessagesRefreshResult,
+) => {
+  const touchedQueryKeys: Array<readonly unknown[]> = [];
+
+  for (const updatedMessage of result.updatedMessages) {
+    touchedQueryKeys.push(
+      ...applyMessageToCachedMailboxQueries(queryClient, args.mailboxId, updatedMessage),
+    );
+
+    const threadQueryKey = getThreadQueryKey(args.mailboxId, updatedMessage.threadId);
+    queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
+      upsertMessageInThreadData(currentData, updatedMessage),
+    );
+    touchedQueryKeys.push(threadQueryKey);
+  }
+
+  if (result.removedMessageIds.length > 0) {
+    const removedMessageIds = new Set(result.removedMessageIds);
+    const messagesQueryKey = getMessagesQueryKey(args.mailboxId, args.mailbox, args.searchQuery);
+    const previousData = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
+    const nextData = removeMessagesFromQueryData(previousData, (message) =>
+      removedMessageIds.has(message.id),
+    );
+
+    if (nextData !== previousData) {
+      queryClient.setQueryData(messagesQueryKey, nextData);
+      touchedQueryKeys.push(messagesQueryKey);
+    }
+  }
+
+  await persistQueryKeys(queryClient, touchedQueryKeys);
 };
 
 export const applyResolvedThreadMetadataToCaches = async (

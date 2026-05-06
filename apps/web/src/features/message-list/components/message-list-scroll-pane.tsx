@@ -74,6 +74,12 @@ export const MessageListScrollPane = ({
     getScrollElement: () => selection.scrollRef.current,
     overscan: MESSAGE_LIST_OVERSCAN,
   });
+  const virtualItems = messageVirtualizer.getVirtualItems();
+  const visibleMessageIds = virtualItems.flatMap(
+    (virtualItem) =>
+      threadedMessages[virtualItem.index]?.messages.map((message) => message.id) ?? [],
+  );
+  const visibleMessageIdsKey = visibleMessageIds.join(":");
 
   const shouldPrefetch = (element: HTMLDivElement) => {
     const distanceToBottom = element.scrollHeight - (element.scrollTop + element.clientHeight);
@@ -99,6 +105,10 @@ export const MessageListScrollPane = ({
     maybeLoadMore();
   }, [threadedMessages.length]);
 
+  useLayoutEffect(() => {
+    list.onVisibleMessageIdsChange?.(visibleMessageIds);
+  }, [list.onVisibleMessageIdsChange, visibleMessageIdsKey]);
+
   return (
     <div
       className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 pt-1.5 pb-3 contain-strict"
@@ -123,7 +133,7 @@ export const MessageListScrollPane = ({
             height: `${messageVirtualizer.getTotalSize()}px`,
           }}
         >
-          {messageVirtualizer.getVirtualItems().map((virtualItem) => {
+          {virtualItems.map((virtualItem) => {
             const thread = threadedMessages[virtualItem.index];
 
             return (
