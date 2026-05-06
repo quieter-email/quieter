@@ -5,7 +5,6 @@ import { toast } from "@quieter/ui";
 import { useMemo } from "react";
 import type { MessageListItem } from "~/lib/gmail/gmail";
 import { MessageListSearch } from "~/features/message-search/components/message-list-search";
-import { getErrorMessage } from "~/lib/errors";
 import { buildThreadListEntries, type ThreadListEntry } from "~/lib/gmail/thread-list";
 import type { MessageListBulkAction, MessageListProps } from "./message-list-types";
 import { MessageListScrollPane } from "./message-list-scroll-pane";
@@ -56,16 +55,13 @@ export const MessageList = (props: MessageListProps) => {
       props.pendingActions.isThreadActionPending(thread.threadId),
   );
 
-  const runBulkAction = async (
-    action: (threads: ThreadListEntry[]) => void | Promise<void>,
-    fallbackMessage: string,
-  ) => {
+  const runBulkAction = async (action: (threads: ThreadListEntry[]) => void | Promise<void>) => {
     if (selection.selectedThreads.length === 0) return;
 
     try {
       await action(selection.selectedThreads);
     } catch (error) {
-      toast.error(getErrorMessage(error, fallbackMessage));
+      toast.error((error as { message?: string })?.message ?? "Could not update messages.");
     }
   };
 
@@ -78,10 +74,7 @@ export const MessageList = (props: MessageListProps) => {
             id: "delete-drafts",
             label: "Delete drafts",
             onSelect: async () => {
-              await runBulkAction(
-                props.mailboxActions.deleteDrafts,
-                "Could not delete those drafts.",
-              );
+              await runBulkAction(props.mailboxActions.deleteDrafts);
             },
           },
         ]
@@ -91,10 +84,7 @@ export const MessageList = (props: MessageListProps) => {
             id: "mark-threads-read",
             label: "Mark as Read",
             onSelect: async () => {
-              await runBulkAction(
-                props.mailboxActions.markThreadsAsRead,
-                "Could not mark those conversations as read.",
-              );
+              await runBulkAction(props.mailboxActions.markThreadsAsRead);
             },
           },
           {
@@ -102,10 +92,7 @@ export const MessageList = (props: MessageListProps) => {
             id: "mark-threads-unread",
             label: "Mark as Unread",
             onSelect: async () => {
-              await runBulkAction(
-                props.mailboxActions.markThreadsAsUnread,
-                "Could not mark those conversations as unread.",
-              );
+              await runBulkAction(props.mailboxActions.markThreadsAsUnread);
             },
           },
           ...(props.activeMailbox === "inbox"
@@ -116,10 +103,7 @@ export const MessageList = (props: MessageListProps) => {
                   id: "mark-threads-spam",
                   label: "Mark as Spam",
                   onSelect: async () => {
-                    await runBulkAction(
-                      props.mailboxActions.markThreadsAsSpam,
-                      "Could not move those conversations to spam.",
-                    );
+                    await runBulkAction(props.mailboxActions.markThreadsAsSpam);
                   },
                 } satisfies MessageListBulkAction,
               ]
@@ -131,10 +115,7 @@ export const MessageList = (props: MessageListProps) => {
                   id: "unmark-threads-spam",
                   label: "Unmark as Spam",
                   onSelect: async () => {
-                    await runBulkAction(
-                      props.mailboxActions.unmarkThreadsAsSpam,
-                      "Could not remove those conversations from spam.",
-                    );
+                    await runBulkAction(props.mailboxActions.unmarkThreadsAsSpam);
                   },
                 } satisfies MessageListBulkAction,
               ]
@@ -149,9 +130,6 @@ export const MessageList = (props: MessageListProps) => {
                 props.activeMailbox === "trash"
                   ? props.mailboxActions.deleteThreadsPermanently
                   : props.mailboxActions.moveThreadsToTrash,
-                props.activeMailbox === "trash"
-                  ? "Could not delete those conversations."
-                  : "Could not move those conversations to trash.",
               );
             },
           },

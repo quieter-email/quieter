@@ -5,7 +5,6 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useLayoutEffect, useMemo } from "react";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
-import { getErrorMessage } from "~/lib/errors";
 import type { MessageListProps } from "./message-list-types";
 import type { useMessageListSelection } from "./use-message-list-selection";
 import { MessageRow } from "./message-row";
@@ -122,7 +121,7 @@ export const MessageListScrollPane = ({
 
       {list.isError && (
         <p className="px-2 py-8 text-sm text-destructive">
-          {getErrorMessage(list.error, "Could not load messages.")}
+          {(list.error as { message?: string })?.message ?? "Could not load messages."}
         </p>
       )}
 

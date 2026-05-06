@@ -14,7 +14,6 @@ import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { cn } from "@quieter/ui";
 import { useState } from "react";
 import type { MessageAttachment } from "~/lib/gmail/gmail";
-import { getErrorMessage } from "~/lib/errors";
 import { downloadAttachmentFromServer } from "~/lib/gmail/attachments";
 
 type ThreadAttachment = MessageAttachment & {
@@ -147,7 +146,9 @@ export const MessageAttachments = ({
         attachment.mimeType,
       );
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, `Could not download ${attachment.fileName}.`));
+      setErrorMessage(
+        (error as { message?: string })?.message ?? `Could not download ${attachment.fileName}.`,
+      );
     } finally {
       setActiveAttachmentKey((current) => (current === attachmentKey ? null : current));
     }

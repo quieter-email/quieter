@@ -28,7 +28,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
-import { getErrorMessage, unwrapResultError } from "~/lib/errors";
 import { orpc } from "~/lib/orpc";
 import { queryPersister } from "~/lib/query-persister";
 
@@ -78,8 +77,13 @@ const EditNameDialog = ({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const updateUserMutation = useMutation({
-    mutationFn: async (input: { name: string }) =>
-      unwrapResultError(await authClient.updateUser(input), "Could not update name."),
+    mutationFn: async (input: { name: string }) => {
+      const response = await authClient.updateUser(input);
+      if (response.error) {
+        throw new Error(response.error.message ?? "Could not update name.");
+      }
+      return response;
+    },
     mutationKey: ["auth", "update-user"],
   });
   const form = useForm({
@@ -95,7 +99,9 @@ const EditNameDialog = ({
         setOpen(false);
         resetDialog();
       } catch (mutationError) {
-        setSubmitError(getErrorMessage(mutationError, "Could not update name."));
+        setSubmitError(
+          (mutationError as { message?: string })?.message ?? "Could not update name.",
+        );
       }
     },
     validationLogic: revalidateLogic(),
@@ -202,7 +208,11 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
         throw new Error("That email already has an account.");
       }
 
-      unwrapResultError(await authClient.changeEmail(input), "Could not start email change.");
+      const response = await authClient.changeEmail(input);
+      if (response.error) {
+        throw new Error(response.error.message ?? "Could not start email change.");
+      }
+      return response;
     },
   });
   const form = useForm({
@@ -218,7 +228,9 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
           newEmail: value.email.trim().toLowerCase(),
         });
       } catch (mutationError) {
-        setSubmitError(getErrorMessage(mutationError, "Could not start email change."));
+        setSubmitError(
+          (mutationError as { message?: string })?.message ?? "Could not start email change.",
+        );
       }
     },
     validationLogic: revalidateLogic(),
@@ -333,24 +345,29 @@ const PasskeysDialog = ({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const addPasskeyMutation = useMutation({
-    mutationFn: async (name: string) =>
-      unwrapResultError(
-        await authClient.passkey.addPasskey({
-          name: name.trim() || undefined,
-        }),
-        "Could not create a passkey.",
-      ),
+    mutationFn: async (name: string) => {
+      const response = await authClient.passkey.addPasskey({
+        name: name.trim() || undefined,
+      });
+      if (response?.error) {
+        throw new Error(response.error.message ?? "Could not create a passkey.");
+      }
+      return response;
+    },
     mutationKey: ["auth", "passkeys", "add"],
   });
   const deletePasskeyMutation = useMutation({
     mutationFn: async (input: { id: string }) => {
-      const response = await authClient.$fetch("/passkey/delete-passkey", {
+      const response = (await authClient.$fetch("/passkey/delete-passkey", {
         body: input,
         method: "POST",
         throw: false,
-      });
+      })) as { error?: { message?: string } };
 
-      return unwrapResultError(response, "Could not remove the passkey.");
+      if (response.error) {
+        throw new Error(response.error.message ?? "Could not remove the passkey.");
+      }
+      return response;
     },
     mutationKey: ["auth", "passkeys", "delete"],
   });
@@ -376,7 +393,9 @@ const PasskeysDialog = ({
         await addPasskeyMutation.mutateAsync(value.label);
         form.reset({ label: "" });
       } catch (mutationError) {
-        setSubmitError(getErrorMessage(mutationError, "Could not create a passkey."));
+        setSubmitError(
+          (mutationError as { message?: string })?.message ?? "Could not create a passkey.",
+        );
       }
     },
     validationLogic: revalidateLogic(),
@@ -398,7 +417,9 @@ const PasskeysDialog = ({
       setRemovingPasskeyId(passkeyId);
       await deletePasskeyMutation.mutateAsync({ id: passkeyId });
     } catch (mutationError) {
-      setSubmitError(getErrorMessage(mutationError, "Could not remove the passkey."));
+      setSubmitError(
+        (mutationError as { message?: string })?.message ?? "Could not remove the passkey.",
+      );
     } finally {
       setRemovingPasskeyId(null);
     }
@@ -525,13 +546,15 @@ const DeleteAccountDialog = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const deleteAccountMutation = useMutation({
-    mutationFn: async () =>
-      unwrapResultError(
-        await authClient.deleteUser({
-          callbackURL: "/home",
-        }),
-        "Could not delete the account.",
-      ),
+    mutationFn: async () => {
+      const response = await authClient.deleteUser({
+        callbackURL: "/home",
+      });
+      if (response.error) {
+        throw new Error(response.error.message ?? "Could not delete the account.");
+      }
+      return response;
+    },
     mutationKey: ["auth", "delete-user"],
     onSuccess: async () => {
       queryClient.clear();
@@ -551,7 +574,9 @@ const DeleteAccountDialog = () => {
       try {
         await deleteAccountMutation.mutateAsync();
       } catch (mutationError) {
-        setSubmitError(getErrorMessage(mutationError, "Could not delete the account."));
+        setSubmitError(
+          (mutationError as { message?: string })?.message ?? "Could not delete the account.",
+        );
       }
     },
     validationLogic: revalidateLogic(),
@@ -670,7 +695,13 @@ export const AccountSettingsPanel = ({ initialUser }: AccountSettingsPanelProps)
   };
   const passkeys = passkeysState.data ?? [];
   const signOutMutation = useMutation({
-    mutationFn: async () => unwrapResultError(await authClient.signOut(), "Could not sign out."),
+    mutationFn: async () => {
+      const response = await authClient.signOut();
+      if (response.error) {
+        throw new Error(response.error.message ?? "Could not sign out.");
+      }
+      return response;
+    },
     mutationKey: ["auth", "sign-out"],
     onSuccess: async () => {
       queryClient.clear();
@@ -686,7 +717,7 @@ export const AccountSettingsPanel = ({ initialUser }: AccountSettingsPanelProps)
     try {
       await signOutMutation.mutateAsync();
     } catch (mutationError) {
-      setSessionError(getErrorMessage(mutationError, "Could not sign out."));
+      setSessionError((mutationError as { message?: string })?.message ?? "Could not sign out.");
     }
   };
 

@@ -13,7 +13,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { MailboxSettingsRow } from "~/features/navigation/components/mailbox-switcher";
 import { authClient } from "~/lib/auth";
-import { getErrorMessage } from "~/lib/errors";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 
@@ -142,7 +141,9 @@ export const MailboxesSettingsPanel = () => {
     } catch (error) {
       writePendingGmailLink(null);
       setPendingGmailLink(null);
-      setConnectError(getErrorMessage(error, "Could not start Google account linking."));
+      setConnectError(
+        (error as { message?: string })?.message ?? "Could not start Google account linking.",
+      );
     }
   };
 
@@ -177,7 +178,7 @@ export const MailboxesSettingsPanel = () => {
 
       {mailboxesQuery.isError && (
         <p className="text-sm text-destructive">
-          {getErrorMessage(mailboxesQuery.error, "Could not load mailboxes.")}
+          {mailboxesQuery.error.message ?? "Could not load mailboxes."}
         </p>
       )}
 
@@ -268,7 +269,7 @@ export const MailboxesSettingsPanel = () => {
 
       {disconnectMailboxMutation.isError && (
         <p className="text-sm text-destructive">
-          {getErrorMessage(disconnectMailboxMutation.error, "Could not disconnect that mailbox.")}
+          {disconnectMailboxMutation.error.message ?? "Could not disconnect that mailbox."}
         </p>
       )}
     </div>

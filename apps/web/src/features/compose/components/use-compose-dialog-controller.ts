@@ -4,7 +4,6 @@ import { composeDraftFormValuesSchema, composeSendFormValuesSchema } from "@quie
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { getErrorMessage } from "~/lib/errors";
 import { deleteDemoDraft, saveDemoDraft, sendDemoDraft } from "~/lib/gmail/demo-mail";
 import { refreshCachedMailboxQueries, removeDraftMessageFromCaches } from "~/lib/gmail/inbox-query";
 import { getThreadQueryKey } from "~/lib/gmail/thread-query";
@@ -299,7 +298,7 @@ export const useComposeDialogController = ({
     } catch (error) {
       setDraft({
         ...activeDraftRef.current,
-        errorMessage: getErrorMessage(error, "Could not send message."),
+        errorMessage: (error as { message?: string })?.message ?? "Could not send message.",
         saveStatus: "error",
       });
     }
@@ -382,7 +381,7 @@ export const useComposeDialogController = ({
     } catch (error) {
       setDraft({
         ...activeDraftRef.current,
-        errorMessage: getErrorMessage(error, "Could not add those images."),
+        errorMessage: (error as { message?: string })?.message ?? "Could not add those images.",
         saveStatus: "error",
       });
     }

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { LoadingPage } from "~/components/loading-page";
 import { SettingsScreen } from "~/features/settings/components/settings-screen";
 import { SETTINGS_TABS } from "~/features/settings/domain/settings-tab";
+import { TEAM_SETTINGS_VIEWS } from "~/features/settings/domain/team-settings-view";
 import { getSessionUser } from "~/lib/auth.functions";
 
 export const Route = createFileRoute("/settings")({
@@ -18,6 +19,13 @@ export const Route = createFileRoute("/settings")({
         .catch("/")
         .default("/"),
       tab: z.string().trim().pipe(z.enum(SETTINGS_TABS)).catch("general").default("general"),
+      teamId: z.string().trim().catch("").default(""),
+      teamView: z
+        .string()
+        .trim()
+        .pipe(z.enum(TEAM_SETTINGS_VIEWS))
+        .catch("overview")
+        .default("overview"),
     }),
   ),
   ssr: "data-only",
