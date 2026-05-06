@@ -1,8 +1,13 @@
 "use client";
 
-import { ComputerIcon, Image01Icon, Moon01Icon, Sun01Icon } from "@hugeicons/core-free-icons";
+import { ComputerIcon, Moon01Icon, Sun01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, Switch, SwitchThumb, useColorMode } from "@quieter/ui";
+import {
+  isDemoModeAvailable,
+  setDemoModeEnabled,
+  useDemoModeEnabled,
+} from "~/features/settings/domain/demo-mode-setting";
 import {
   setExternalImagesEnabled,
   useExternalImagesEnabled,
@@ -10,6 +15,7 @@ import {
 
 export const GeneralSettingsPanel = () => {
   const { configColorMode, cycleColorMode, isMounted } = useColorMode();
+  const demoModeEnabled = useDemoModeEnabled();
   const externalImagesEnabled = useExternalImagesEnabled();
 
   return (
@@ -44,12 +50,6 @@ export const GeneralSettingsPanel = () => {
       <section className="border-t border-border/70 pt-6">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div
-              aria-hidden
-              className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
-            >
-              <HugeiconsIcon className="size-4" icon={Image01Icon} />
-            </div>
             <div className="min-w-0">
               <label
                 className="text-sm font-medium text-foreground"
@@ -73,6 +73,32 @@ export const GeneralSettingsPanel = () => {
           </Switch>
         </div>
       </section>
+
+      {isDemoModeAvailable() && (
+        <section className="border-t border-border/70 pt-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="min-w-0">
+                <label className="text-sm font-medium text-foreground" htmlFor="demo-mode-toggle">
+                  Demo mailbox
+                </label>
+                <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+                  Replace real mailbox data with local demo messages while developing.
+                </p>
+              </div>
+            </div>
+
+            <Switch
+              checked={demoModeEnabled}
+              className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
+              id="demo-mode-toggle"
+              onCheckedChange={setDemoModeEnabled}
+            >
+              <SwitchThumb className="size-4 bg-background-light data-checked:translate-x-4 data-checked:bg-primary-foreground" />
+            </Switch>
+          </div>
+        </section>
+      )}
     </div>
   );
 };

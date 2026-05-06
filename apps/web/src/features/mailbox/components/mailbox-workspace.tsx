@@ -13,6 +13,8 @@ import { type ComposeDialogHandle, ComposeDialog } from "~/features/compose";
 import { MessageList } from "~/features/message-list/components/message-list";
 import { MessageDetail } from "~/features/message-thread/components/message-detail";
 import { MailSidebar } from "~/features/navigation/components/mail-sidebar";
+import { useDemoModeEnabled } from "~/features/settings/domain/demo-mode-setting";
+import { createDemoMailboxActions, DEMO_MAILBOX_ID, getDemoMailboxes } from "~/lib/gmail/demo-mail";
 import { type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
 import {
   getLiveSyncQueryKey,
@@ -164,12 +166,14 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const visibleMessageRefreshTimeoutRef = useRef<number | null>(null);
   const flushVisibleMessageRefreshQueueRef = useRef<() => void>(() => {});
   const { mailbox: activeMailbox, mailboxId, messageId, query } = inboxRouteApi.useSearch();
+  const isDemoMode = useDemoModeEnabled();
 
   pendingMessageActionIdsRef.current = pendingMessageActionIds;
   pendingThreadActionIdsRef.current = pendingThreadActionIds;
-  const mailboxesQuery = useQuery(mailboxesQueryOptions());
-  const defaultMailboxId = mailboxesQuery.data?.defaultMailboxId ?? null;
-  const mailboxGroups = (mailboxesQuery.data?.groups ?? []).map((group) => ({
+  const mailboxesQuery = useQuery(mailboxesQueryOptions(!isDemoMode));
+  const mailboxesData = isDemoMode ? getDemoMailboxes() : mailboxesQuery.data;
+  const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
+  const mailboxGroups = (mailboxesData?.groups ?? []).map((group) => ({
     id: group.id,
     kind: group.kind,
     name: group.name,
@@ -236,6 +240,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const hasLoadedMessages = !!messagesQuery.data?.pages.length;
   const isLiveSyncEnabled =
     !!selectedMailboxId &&
+    !isDemoMode &&
     activeMailbox !== "drafts" &&
     query.trim().length === 0 &&
     isWindowActive &&
@@ -291,7 +296,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   flushVisibleMessageRefreshQueueRef.current = () => {
     if (visibleMessageRefreshInFlightRef.current) return;
 
-    if (!selectedMailboxId || activeMailbox === "drafts") {
+    if (!selectedMailboxId || selectedMailboxId === DEMO_MAILBOX_ID || activeMailbox === "drafts") {
       visibleMessageRefreshQueueRef.current.clear();
       return;
     }
@@ -337,7 +342,14 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
 
   const handleVisibleMessageIdsChange = useCallback(
     (messageIds: readonly string[]) => {
-      if (!selectedMailboxId || activeMailbox === "drafts" || messageIds.length === 0) return;
+      if (
+        !selectedMailboxId ||
+        selectedMailboxId === DEMO_MAILBOX_ID ||
+        activeMailbox === "drafts" ||
+        messageIds.length === 0
+      ) {
+        return;
+      }
 
       const skipMessageIds = getPrefixMessageIds(messages);
       const hasQueuedMessage = queueVisibleMessageRefreshIds(
@@ -407,7 +419,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   }, [activeMailbox, query, selectedMailboxId]);
 
   useLayoutEffect(() => {
-    if (mailboxesQuery.isPending) {
+    if (!isDemoMode && mailboxesQuery.isPending) {
       return;
     }
 
@@ -420,7 +432,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       mailboxId: selectedMailboxId,
       messageId: null,
     });
-  }, [mailboxId, mailboxesQuery.isPending, selectedMailboxId]);
+  }, [isDemoMode, mailboxId, mailboxesQuery.isPending, selectedMailboxId]);
 
   useLayoutEffect(() => {
     if (
@@ -461,26 +473,28 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     });
   };
 
-  const mailboxActions = createMailboxActionHandlers({
-    activeMailbox,
-    activeSearchQuery: query.trim(),
-    queryClient,
-    refreshSearchResultsIfNeeded,
-    isMessageActionPending: (id) => (id ? pendingMessageActionIdsRef.current.has(id) : false),
-    isThreadActionPending: (id) => (id ? pendingThreadActionIdsRef.current.has(id) : false),
-    setMessageActionPending: (id, pending) => setMessageActionsPending([id], pending),
-    setMessageActionsPending,
-    setThreadActionPending: (id, pending) => setThreadActionsPending([id], pending),
-    setThreadActionsPending,
-    unsubscribeFromMessageMutation: async (messageId) => {
-      if (!selectedMailboxId) {
-        return;
-      }
+  const mailboxActions = isDemoMode
+    ? createDemoMailboxActions(queryClient)
+    : createMailboxActionHandlers({
+        activeMailbox,
+        activeSearchQuery: query.trim(),
+        queryClient,
+        refreshSearchResultsIfNeeded,
+        isMessageActionPending: (id) => (id ? pendingMessageActionIdsRef.current.has(id) : false),
+        isThreadActionPending: (id) => (id ? pendingThreadActionIdsRef.current.has(id) : false),
+        setMessageActionPending: (id, pending) => setMessageActionsPending([id], pending),
+        setMessageActionsPending,
+        setThreadActionPending: (id, pending) => setThreadActionsPending([id], pending),
+        setThreadActionsPending,
+        unsubscribeFromMessageMutation: async (messageId) => {
+          if (!selectedMailboxId) {
+            return;
+          }
 
-      await unsubscribeMutation.mutateAsync({ mailboxId: selectedMailboxId, messageId });
-    },
-    mailboxId: selectedMailboxId ?? "",
-  });
+          await unsubscribeMutation.mutateAsync({ mailboxId: selectedMailboxId, messageId });
+        },
+        mailboxId: selectedMailboxId ?? "",
+      });
 
   const openComposeDraft = (draft: ComposeDraftState) => {
     composeDialogRef.current?.openDraft(draft);
@@ -548,12 +562,13 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     (messagesQuery.isRefetching && !messagesQuery.isFetchingNextPage);
   const isMessageRouteOpen = activeMailbox !== "drafts" && !!messageId;
 
-  if (mailboxesQuery.isPending) {
+  if (!isDemoMode && mailboxesQuery.isPending) {
     return (
       <>
         <LoadingPage />
         <ComposeDialog
           key={selectedMailboxId ?? user.id ?? "signed-out"}
+          demoMode={isDemoMode}
           mailboxId={selectedMailboxId}
           ref={composeDialogRef}
         />
@@ -673,6 +688,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       </main>
       <ComposeDialog
         key={selectedMailboxId ?? user.id ?? "signed-out"}
+        demoMode={isDemoMode}
         mailboxId={selectedMailboxId}
         ref={composeDialogRef}
       />

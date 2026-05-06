@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
 import { queryPersister } from "~/lib/query-persister";
+import { DEMO_MAILBOX_ID, listDemoMessages } from "../demo-mail";
 import {
   GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
   GMAIL_QUERY_STALE_TIME_MS,
@@ -51,6 +52,15 @@ const fetchMessagesPage = async (
   searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
+  if (mailboxId === DEMO_MAILBOX_ID) {
+    return listDemoMessages({
+      category: mailbox,
+      pageToken,
+      maxResults: pageToken ? 25 : 50,
+      query: normalizeSearchQuery(searchQuery),
+    });
+  }
+
   return await rpc.mail.listMessages(
     {
       mailboxId,
@@ -130,6 +140,10 @@ export const refreshVisibleMailboxMessages = async (
   queryClient: QueryClient,
   args: RefreshVisibleMessagesArgs,
 ) => {
+  if (args.mailboxId === DEMO_MAILBOX_ID) {
+    return;
+  }
+
   if (args.mailbox === "drafts" || args.messageIds.length === 0) return;
 
   const messageIds = Array.from(new Set(args.messageIds.map((messageId) => messageId.trim())))
@@ -217,6 +231,12 @@ export const syncMessages = async (
   searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
+  if (mailboxId === DEMO_MAILBOX_ID) {
+    return await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, searchQuery, {
+      signal,
+    });
+  }
+
   if (mailbox === "drafts" || normalizeSearchQuery(searchQuery)) {
     return await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, searchQuery, {
       signal,

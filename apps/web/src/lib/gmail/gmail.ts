@@ -10,6 +10,7 @@ export {
   type ListMessagesPageResult,
   type MailboxCategory,
   type MessageAttachment,
+  type MessageInspectorResult,
   type MessageListItem,
   type ThreadMessagesResult,
 } from "@quieter/orpc/gmail-service";
