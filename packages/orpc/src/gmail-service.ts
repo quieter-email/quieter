@@ -12,6 +12,7 @@ import { getSenderAvatarUrls } from "./sender-avatar";
 
 export const MAILBOX_LABELS = {
   inbox: "INBOX",
+  unread: "UNREAD",
   spam: "SPAM",
   sent: "SENT",
   trash: "TRASH",
@@ -20,7 +21,7 @@ export const MAILBOX_LABELS = {
 
 export type MailboxCategory = keyof typeof MAILBOX_LABELS;
 
-export const GMAIL_UNREAD_LABEL = "UNREAD";
+export const GMAIL_UNREAD_LABEL = MAILBOX_LABELS.unread;
 
 const headerSchema = z.object({
   name: z.string(),

@@ -71,8 +71,8 @@ const SidebarContent = ({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col px-3 pt-6 pb-4">
-      <div className="flex min-w-0 items-start gap-2 rounded-md px-5">
+    <div className="flex min-h-0 flex-1 flex-col p-3">
+      <div className="flex min-w-0 items-start gap-2 rounded-md">
         <MailboxSwitcherDropdown
           defaultMailboxId={defaultMailboxId}
           groups={groups}
@@ -99,7 +99,7 @@ const SidebarContent = ({
         )}
       </div>
 
-      <div className="mt-4 p-1">
+      <div className="mt-3 p-1">
         <Button
           className="w-full justify-start rounded-md px-4"
           disabled={!selectedMailboxId}

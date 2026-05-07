@@ -52,6 +52,7 @@ type VisibleMessagesRefreshResult = {
 
 const isMailboxCategory = (value: unknown): value is MailboxCategory =>
   value === "inbox" ||
+  value === "unread" ||
   value === "spam" ||
   value === "sent" ||
   value === "trash" ||

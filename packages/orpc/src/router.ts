@@ -64,13 +64,14 @@ const publicProcedure = base;
 
 const mailboxCategorySchema = z.enum([
   "inbox",
+  "unread",
   "spam",
   "sent",
   "trash",
   "drafts",
 ] satisfies readonly MailboxCategory[]);
 
-const historySyncMailboxCategorySchema = z.enum(["inbox", "spam", "sent", "trash"]);
+const historySyncMailboxCategorySchema = z.enum(["inbox", "unread", "spam", "sent", "trash"]);
 const mailboxIdSchema = z.string().trim().min(1);
 const mailboxSwitcherOrderSchema = z.object({
   groupIds: z.array(z.string().trim().min(1)),

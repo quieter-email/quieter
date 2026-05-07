@@ -663,7 +663,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
                     mailboxActions={mailboxActions}
                     onComposeDraftRequested={openComposeDraft}
                     pendingActions={pendingActions}
-                    isPending={isLoadingEmptyMessages}
+                    isPending={isMessageRouteOpen && isLoadingEmptyMessages}
                     onBackToList={() => {
                       void setMailboxSearch({ messageId: null });
                     }}

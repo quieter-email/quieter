@@ -65,10 +65,7 @@ export const MessageDetail = ({
 }: MessageDetailProps) => {
   const emptyState =
     activeMailbox === "drafts" ? (
-      <EmptyMessageState
-        description="Open a draft from the list to continue editing it."
-        title="Drafts stay editable"
-      />
+      <EmptyMessageState description="Choose a draft from the list." title="Select a draft" />
     ) : (
       <EmptyMessageState />
     );

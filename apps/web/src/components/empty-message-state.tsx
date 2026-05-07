@@ -1,11 +1,12 @@
 import { LazyMotion, domAnimation, m } from "motion/react";
+import { VerticalSlot } from "~/components/vertical-slot";
 
 export const EmptyMessageState = ({
   description = "Select an email to view.",
   title = "Nothing here yet",
 }: {
-  description?: string;
-  title?: string;
+  description?: string | null;
+  title?: string | null;
 }) => (
   <LazyMotion features={domAnimation}>
     <div className="grid h-full min-h-56 place-items-center">
@@ -20,10 +21,14 @@ export const EmptyMessageState = ({
             opacity: { ease: "easeIn", duration: 0.5 },
           }}
         />
-        <div className="relative z-10 text-center">
-          <p className="text-sm font-semibold tracking-tight text-foreground">{title}</p>
-          <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>
-        </div>
+        <VerticalSlot className="relative z-10 text-center">
+          <div>
+            {title && (
+              <p className="text-sm font-semibold tracking-tight text-foreground">{title}</p>
+            )}
+            {description && <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>}
+          </div>
+        </VerticalSlot>
       </div>
     </div>
   </LazyMotion>

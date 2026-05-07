@@ -19,6 +19,7 @@ import {
 } from "@quieter/ui";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
 import { type ReactNode, useRef, useState } from "react";
+import { VerticalSlot } from "~/components/vertical-slot";
 
 type MailboxSwitcherMailbox = {
   displayName: string | null;
@@ -312,14 +313,16 @@ export const MailboxSwitcherDropdown = ({
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Switch mailbox"
-        className="min-w-0 flex-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="squircle w-full min-w-0 flex-1 rounded-md px-4 py-3 text-left outline-none hover:bg-secondary/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-100"
       >
-        <div className="min-w-0">
-          <p className="truncate text-[13px] leading-5 font-medium tracking-tight text-foreground">
-            {primaryLabel}
-          </p>
-          <p className="mt-1 truncate text-xs text-muted-foreground">{secondaryLabel}</p>
-        </div>
+        <VerticalSlot className="min-w-0">
+          <div>
+            <p className="truncate text-[13px] leading-5 font-medium tracking-tight text-foreground">
+              {primaryLabel}
+            </p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">{secondaryLabel}</p>
+          </div>
+        </VerticalSlot>
       </DropdownMenuTrigger>
 
       <DropdownMenuContent
