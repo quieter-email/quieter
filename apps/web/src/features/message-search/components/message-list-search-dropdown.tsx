@@ -1,11 +1,14 @@
 "use client";
 
 import {
-  Calendar01Icon,
   ArrowRight01Icon,
+  Calendar01Icon,
   Calendar03Icon,
+  FileAttachmentIcon,
+  FileEditIcon,
   MailAtSign01Icon,
   MailAtSign02Icon,
+  MailOpen02Icon,
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
@@ -15,21 +18,97 @@ import { createPortal } from "react-dom";
 import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 import {
   normalizeLabelSelectionKey,
-  type SearchFieldFilterType,
+  type SearchFilterChip,
   type StructuredSearchState,
 } from "~/features/message-search/state/message-list-search-state";
 
 export const searchFilterOptions: ReadonlyArray<{
+  filter: SearchFilterChip;
   hint: string;
   icon: IconSvgElement;
   label: string;
-  type: SearchFieldFilterType;
 }> = [
-  { hint: "before:", icon: Calendar01Icon, label: "Before", type: "before" },
-  { hint: "after:", icon: Calendar03Icon, label: "After", type: "after" },
-  { hint: "from:", icon: MailAtSign01Icon, label: "From", type: "from" },
-  { hint: "to:", icon: MailAtSign02Icon, label: "To", type: "to" },
+  { filter: { type: "before", value: "" }, hint: "before:", icon: Calendar01Icon, label: "Before" },
+  { filter: { type: "after", value: "" }, hint: "after:", icon: Calendar03Icon, label: "After" },
+  {
+    filter: { type: "older_than", value: "" },
+    hint: "older_than:",
+    icon: Calendar01Icon,
+    label: "Older than",
+  },
+  {
+    filter: { type: "newer_than", value: "" },
+    hint: "newer_than:",
+    icon: Calendar03Icon,
+    label: "Newer than",
+  },
+  { filter: { type: "from", value: "" }, hint: "from:", icon: MailAtSign01Icon, label: "From" },
+  { filter: { type: "to", value: "" }, hint: "to:", icon: MailAtSign02Icon, label: "To" },
+  { filter: { type: "cc", value: "" }, hint: "cc:", icon: MailAtSign02Icon, label: "Cc" },
+  { filter: { type: "bcc", value: "" }, hint: "bcc:", icon: MailAtSign02Icon, label: "Bcc" },
+  {
+    filter: { type: "filename", value: "" },
+    hint: "filename:",
+    icon: FileEditIcon,
+    label: "Filename",
+  },
+  {
+    filter: { type: "has", value: "attachment" },
+    hint: "has:attachment",
+    icon: FileAttachmentIcon,
+    label: "Has attachment",
+  },
+  {
+    filter: { type: "is", value: "unread" },
+    hint: "is:unread",
+    icon: MailAtSign01Icon,
+    label: "Unread",
+  },
+  {
+    filter: { type: "is", value: "read" },
+    hint: "is:read",
+    icon: MailOpen02Icon,
+    label: "Read",
+  },
 ];
+
+const searchFilterSections: ReadonlyArray<{
+  label: string;
+  options: typeof searchFilterOptions;
+}> = [
+  {
+    label: "Status",
+    options: searchFilterOptions.filter((option) => option.filter.type === "is"),
+  },
+  {
+    label: "Date",
+    options: searchFilterOptions.filter((option) =>
+      ["after", "before", "newer_than", "older_than"].includes(option.filter.type),
+    ),
+  },
+  {
+    label: "People",
+    options: searchFilterOptions.filter((option) =>
+      ["bcc", "cc", "from", "to"].includes(option.filter.type),
+    ),
+  },
+  {
+    label: "Content",
+    options: searchFilterOptions.filter((option) =>
+      ["filename", "has"].includes(option.filter.type),
+    ),
+  },
+];
+
+const isSearchFilterOptionActive = (
+  filters: readonly SearchFilterChip[],
+  optionFilter: SearchFilterChip,
+) =>
+  filters.some(
+    (filter) =>
+      filter.type === optionFilter.type &&
+      (optionFilter.value.length === 0 || filter.value === optionFilter.value),
+  );
 
 const SearchDropdownSectionLabel = ({ children }: { children: string }) => (
   <p className="px-2.5 pb-1 text-xs text-muted-foreground">{children}</p>
@@ -82,7 +161,7 @@ export const MessageListSearchDropdown = ({
   isOpen: boolean;
   isLoadingLabels: boolean;
   labelsErrorMessage: string | null;
-  onSelectFilter: (type: SearchFieldFilterType) => void;
+  onSelectFilter: (filter: SearchFilterChip) => void;
   onToggleLabel: (labelName: string) => void;
   userLabels: readonly GmailLabelListItem[];
 }) => {
@@ -225,20 +304,24 @@ export const MessageListSearchDropdown = ({
       role="group"
     >
       <div className="flex flex-col gap-3">
-        <div className="flex flex-col gap-1">
-          <SearchDropdownSectionLabel>Filters</SearchDropdownSectionLabel>
-          {searchFilterOptions.map((option) => (
-            <SearchDropdownRow
-              active={draftSearchState.filters.some((filter) => filter.type === option.type)}
-              highlighted={highlightedItemKey === `filter:${option.type}`}
-              hint={option.hint}
-              icon={option.icon}
-              key={option.type}
-              label={option.label}
-              onClick={() => onSelectFilter(option.type)}
-            />
-          ))}
-        </div>
+        {searchFilterSections.map((section) => (
+          <div className="flex flex-col gap-1" key={section.label}>
+            <SearchDropdownSectionLabel>{section.label}</SearchDropdownSectionLabel>
+            {section.options.map((option) => (
+              <SearchDropdownRow
+                active={isSearchFilterOptionActive(draftSearchState.filters, option.filter)}
+                highlighted={
+                  highlightedItemKey === `filter:${option.filter.type}:${option.filter.value}`
+                }
+                hint={option.hint}
+                icon={option.icon}
+                key={`${option.filter.type}:${option.filter.value}`}
+                label={option.label}
+                onClick={() => onSelectFilter(option.filter)}
+              />
+            ))}
+          </div>
+        ))}
 
         <div className="flex flex-col gap-1">
           <SearchDropdownSectionLabel>More</SearchDropdownSectionLabel>

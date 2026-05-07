@@ -28,7 +28,6 @@ import {
   parseStructuredSearchFilterToken,
   parseStructuredSearchQuery,
   serializeStructuredSearchFilterToken,
-  type SearchFieldFilterType,
   type SearchFilterChip,
   type StructuredSearchState,
 } from "~/features/message-search/state/message-list-search-state";
@@ -88,6 +87,11 @@ const getDropdownDirection = (key: string): DropdownDirection | null =>
   key === "ArrowDown" ? "next" : key === "ArrowUp" ? "previous" : null;
 
 const isDateFilter = ({ type }: SearchFilterChip) => type === "after" || type === "before";
+
+const isFixedValueFilter = ({ type }: SearchFilterChip) => type === "has" || type === "is";
+
+const shouldFocusFilterValueEnd = (filter: SearchFilterChip | undefined) =>
+  !!filter && filter.type !== "label" && !isFixedValueFilter(filter);
 
 const isCaretAtStart = (input: HTMLInputElement) =>
   input.selectionStart === 0 && input.selectionEnd === 0;
@@ -286,7 +290,7 @@ export const MessageListSearch = ({
 
     const previousFilter = currentState.filters[index - 1];
     focusSegment(index - 1, {
-      toEnd: previousFilter?.type !== "label",
+      toEnd: shouldFocusFilterValueEnd(previousFilter),
     });
   };
 
@@ -342,15 +346,21 @@ export const MessageListSearch = ({
     }
   };
 
-  const handleFilterSelection = (type: SearchFieldFilterType) => {
-    const { filters, index } = upsertFilter(currentState.filters, { type, value: "" });
+  const handleFilterSelection = (filter: SearchFilterChip) => {
+    const { filters, index } = upsertFilter(currentState.filters, filter);
     stageState({
       ...currentState,
       filters,
     });
 
+    if (isFixedValueFilter(filter)) {
+      openDropdown(true);
+      pendingFocusRef.current = { kind: "text", toEnd: true };
+      return;
+    }
+
     closeDropdown();
-    setActiveDateFilterIndex(type === "after" || type === "before" ? index : null);
+    setActiveDateFilterIndex(isDateFilter(filter) ? index : null);
     pendingFocusRef.current = { index, kind: "segment", selectAll: true };
   };
 
@@ -372,8 +382,8 @@ export const MessageListSearch = ({
 
   const dropdownItems = [
     ...searchFilterOptions.map((option) => ({
-      key: `filter:${option.type}`,
-      onSelect: () => handleFilterSelection(option.type),
+      key: `filter:${option.filter.type}:${option.filter.value}`,
+      onSelect: () => handleFilterSelection(option.filter),
     })),
     ...(labelsQuery.isPending || labelsQuery.error
       ? []
@@ -464,8 +474,34 @@ export const MessageListSearch = ({
       : {
           index: index - 1,
           kind: "segment",
-          toEnd: currentState.filters[index - 1]?.type !== "label",
+          toEnd: shouldFocusFilterValueEnd(currentState.filters[index - 1]),
         };
+
+  const handleFixedValueTokenKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) => {
+    if (handleDropdownKey(event)) {
+      return;
+    }
+
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      focusPreviousSegment(index);
+      return;
+    }
+
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      moveOutOfSegment(index, "next");
+      return;
+    }
+
+    if (event.key === "Backspace" || event.key === "Delete" || event.key === "Enter") {
+      event.preventDefault();
+      removeFilterAtIndex(index);
+    }
+  };
 
   const handleLabelTokenKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
     if (handleDropdownKey(event)) {
@@ -582,7 +618,7 @@ export const MessageListSearch = ({
     ) {
       event.preventDefault();
       focusSegment(currentState.filters.length - 1, {
-        toEnd: currentState.filters.at(-1)?.type !== "label",
+        toEnd: shouldFocusFilterValueEnd(currentState.filters.at(-1)),
       });
     }
   };
@@ -622,7 +658,7 @@ export const MessageListSearch = ({
 
     openSearchDropdown();
     pendingFocusRef.current =
-      parsedToken.type === "label"
+      parsedToken.type === "label" || isFixedValueFilter(parsedToken)
         ? { kind: "text", toEnd: true }
         : { index, kind: "segment", selectAll: true };
     return true;
@@ -783,6 +819,25 @@ export const MessageListSearch = ({
                         type="button"
                       >
                         {filter.value}
+                      </button>
+                    );
+                  }
+
+                  if (isFixedValueFilter(filter)) {
+                    return (
+                      <button
+                        className={cn(
+                          filterChipClassName,
+                          "squircle rounded-xs px-2 outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20",
+                        )}
+                        key={`${filter.type}:${filter.value}`}
+                        onClick={() => removeFilterAtIndex(index)}
+                        onFocus={openSearchDropdown}
+                        onKeyDown={(event) => handleFixedValueTokenKeyDown(event, index)}
+                        ref={(node) => setSegmentRef(index, node)}
+                        type="button"
+                      >
+                        {`${filter.type}:${filter.value}`}
                       </button>
                     );
                   }

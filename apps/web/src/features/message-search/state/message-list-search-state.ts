@@ -2,8 +2,19 @@
 
 import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 
-type SearchFilterType = "after" | "before" | "from" | "label" | "to";
-export type SearchFieldFilterType = Exclude<SearchFilterType, "label">;
+type SearchFilterType =
+  | "after"
+  | "bcc"
+  | "before"
+  | "cc"
+  | "filename"
+  | "from"
+  | "has"
+  | "is"
+  | "label"
+  | "newer_than"
+  | "older_than"
+  | "to";
 
 export type SearchFilterChip = {
   type: SearchFilterType;
@@ -55,9 +66,16 @@ const parseQuotedValue = (value: string) => {
 const parseFilterType = (value: string): SearchFilterType | null => {
   switch (value.toLocaleLowerCase()) {
     case "after":
+    case "bcc":
     case "before":
+    case "cc":
+    case "filename":
     case "from":
+    case "has":
+    case "is":
     case "label":
+    case "newer_than":
+    case "older_than":
     case "to":
       return value.toLocaleLowerCase() as SearchFilterType;
     default:
@@ -92,7 +110,7 @@ const mergeStructuredSearchFilter = (filters: SearchFilterChip[], filter: Search
 
 const readStructuredToken = (query: string, start: number) => {
   let cursor = start;
-  while (cursor < query.length && /[a-z]/i.test(query[cursor] ?? "")) {
+  while (cursor < query.length && /[a-z_]/i.test(query[cursor] ?? "")) {
     cursor += 1;
   }
 
@@ -148,12 +166,23 @@ export const parseStructuredSearchFilterToken = (token: string): SearchFilterChi
 
   const rawValue = token.slice(separatorIndex + 1);
   if (rawValue.length === 0) {
-    return type === "label" ? null : { type, value: "" };
+    return type === "has" || type === "is" || type === "label" ? null : { type, value: "" };
   }
 
   const value = parseQuotedValue(rawValue).trim();
   if (!value) {
     return null;
+  }
+
+  if (type === "has") {
+    return value.toLocaleLowerCase() === "attachment" ? { type, value: "attachment" } : null;
+  }
+
+  if (type === "is") {
+    const normalizedValue = value.toLocaleLowerCase();
+    return normalizedValue === "read" || normalizedValue === "unread"
+      ? { type, value: normalizedValue }
+      : null;
   }
 
   return { type, value };

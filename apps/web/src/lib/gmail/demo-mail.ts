@@ -1,10 +1,12 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { ComposeDraftState } from "~/features/compose";
+import { parseStructuredSearchQuery } from "~/features/message-search/state/message-list-search-state";
 import { getMailboxesQueryKey } from "~/lib/mailboxes-query";
 import type { ThreadListEntry } from "./thread-list";
 import {
   addUnreadLabel,
   applyLabelIdChanges,
+  isMessageUnread,
   isMessageInMailbox,
   MAILBOX_LABELS,
   removeUnreadLabel,
@@ -449,14 +451,91 @@ const getSortedMessages = () =>
       Number(new Date(left.internalDate ?? left.date ?? 0)),
   );
 
+const textMatchesQuery = (value: string | null | undefined, query: string) =>
+  value?.toLocaleLowerCase().includes(query.toLocaleLowerCase()) ?? false;
+
+const parseRelativeSearchDuration = (value: string) => {
+  const match = /^(\d+)([dmy])$/.exec(value.trim().toLocaleLowerCase());
+  if (!match) return null;
+
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount)) return null;
+
+  const unit = match[2];
+  const days = unit === "d" ? amount : unit === "m" ? amount * 30 : amount * 365;
+  return days * 24 * 60 * 60 * 1000;
+};
+
+const getMessageTime = (message: MessageListItem) =>
+  new Date(message.internalDate ?? message.date ?? 0).getTime();
+
 const messageMatchesQuery = (message: MessageListItem, query: string | undefined) => {
   if (!query) return true;
+
+  const structuredQuery = parseStructuredSearchQuery(query);
+  for (const filter of structuredQuery.filters) {
+    if (filter.type === "after" || filter.type === "before") {
+      const filterTime = new Date(filter.value).getTime();
+      if (Number.isNaN(filterTime)) return false;
+
+      const messageTime = getMessageTime(message);
+      if (filter.type === "after" ? messageTime <= filterTime : messageTime >= filterTime) {
+        return false;
+      }
+      continue;
+    }
+
+    if (filter.type === "older_than" || filter.type === "newer_than") {
+      const duration = parseRelativeSearchDuration(filter.value);
+      if (duration === null) return false;
+
+      const isOlder = Date.now() - getMessageTime(message) > duration;
+      if (filter.type === "older_than" ? !isOlder : isOlder) {
+        return false;
+      }
+      continue;
+    }
+
+    if (filter.type === "has") {
+      if ((message.attachments?.length ?? 0) === 0) return false;
+      continue;
+    }
+
+    if (filter.type === "is") {
+      if (filter.value === "unread" ? !isMessageUnread(message) : isMessageUnread(message)) {
+        return false;
+      }
+      continue;
+    }
+
+    if (filter.type === "label") {
+      const labelId = `Label_${filter.value}`;
+      if (!message.labelIds?.some((id) => id.toLocaleLowerCase() === labelId.toLocaleLowerCase())) {
+        return false;
+      }
+      continue;
+    }
+
+    const filterTargets = {
+      bcc: [message.bcc],
+      cc: [message.cc],
+      filename: message.attachments?.map((attachment) => attachment.fileName) ?? [],
+      from: [message.from],
+      to: [message.to],
+    } satisfies Partial<Record<typeof filter.type, Array<string | null | undefined>>>;
+    const targets = filterTargets[filter.type];
+    if (targets && !targets.some((target) => textMatchesQuery(target, filter.value))) {
+      return false;
+    }
+  }
+
+  if (!structuredQuery.text) return true;
 
   const haystack = [message.subject, message.from, message.to, message.snippet, message.bodyText]
     .join(" ")
     .toLowerCase();
 
-  return haystack.includes(query.toLowerCase());
+  return haystack.includes(structuredQuery.text.toLowerCase());
 };
 
 export const getDemoMailboxes = () => ({
