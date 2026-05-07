@@ -1,7 +1,13 @@
 "use client";
 
 import { cn } from "@quieter/ui";
-import { Children, isValidElement, type PropsWithChildren, type ReactNode } from "react";
+import {
+  Children,
+  isValidElement,
+  type PropsWithChildren,
+  type ReactNode,
+  type TransitionEvent,
+} from "react";
 import { useLayoutEffect, useMemo, useState } from "react";
 
 type SlotItem = {
@@ -84,8 +90,8 @@ export const VerticalSlot = ({
             },
           )}
           key={item.key}
-          onTransitionEnd={() => {
-            if (item.phase === "exit") {
+          onTransitionEnd={(event: TransitionEvent<HTMLDivElement>) => {
+            if (event.currentTarget === event.target && item.phase === "exit") {
               setItems((current) => current.filter((currentItem) => currentItem.key !== item.key));
             }
           }}

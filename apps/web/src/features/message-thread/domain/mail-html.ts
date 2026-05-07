@@ -54,9 +54,7 @@ export const fixNonReadableColors = (
       const textColor = Color(style.color);
       const effectiveBackground = getEffectiveBackgroundColor(element, defaultBackground);
       const blendedText =
-        textColor.alpha() < 1
-          ? effectiveBackground.mix(textColor, effectiveBackground.alpha())
-          : textColor;
+        textColor.alpha() < 1 ? effectiveBackground.mix(textColor, textColor.alpha()) : textColor;
       const contrast = blendedText.contrast(effectiveBackground);
 
       if (contrast < minContrast) {
@@ -115,7 +113,7 @@ const EMAIL_SANITIZE_CONFIG: IOptions = {
     a: ["href", "name", "target", "rel", "class", "style"],
     img: ["src", "alt", "width", "height", "class", "style"],
   },
-  allowedSchemes: ["http", "https", "mailto", "tel", "data", "cid"],
+  allowedSchemes: ["http", "https", "mailto", "tel"],
   allowedSchemesByTag: {
     img: ["http", "https", "data", "cid"],
   },
