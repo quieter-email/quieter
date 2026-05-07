@@ -1,0 +1,62 @@
+
+   • Packages in scope: @quieter/auth, @quieter/aws, @quieter/config, @quieter/database, @quieter/orpc, @quieter/ui, @quieter/web
+   • Running dev in 7 packages
+   • Remote caching enabled
+
+@quieter/web:dev: cache bypass, force executing 195bcd526a29deff
+@quieter/aws:dev: cache bypass, force executing 397a52b22b5452ac
+@quieter/web:dev: $ bun --env-file=../../.env.local vite dev --port 3000
+@quieter/aws:dev: $ bun ../../scripts/sst.ts dev
+@quieter/aws:dev: [Function] Function Logs
+@quieter/aws:dev: [Function] 
+@quieter/aws:dev: [Function] Waiting for invocations...
+@quieter/aws:dev: [Function] 
+@quieter/aws:dev: [SST] SST 4.13.1 ready!
+@quieter/aws:dev: [SST] 
+@quieter/aws:dev: [SST] ➜  App:        quieter
+@quieter/aws:dev: [SST]    Stage:      mail-dev
+@quieter/aws:dev: [SST] 
+@quieter/aws:dev: [SST] ~  Deploy
+@quieter/aws:dev: [SST] 
+@quieter/web:dev: Port 3000 is in use, trying another one...
+@quieter/web:dev: 
+@quieter/web:dev:   [32m[1mVITE[22m v8.0.10[39m  [2mready in [0m[1m1863[22m[2m[0m ms[22m
+@quieter/web:dev: 
+@quieter/web:dev:   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m3001[22m/[39m
+@quieter/web:dev: [2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+@quieter/aws:dev: [Function] 
+@quieter/aws:dev: [Function] ✓  No changes
+@quieter/aws:dev: [Function]    MailIngress: https://7il4bt6uvzhzg5s4g6d6f7xqd40oaick.lambda-url.eu-central-1.on.aws/
+@quieter/aws:dev: [Function]    MailOutbound: https://jmevehfxhqyrcmg7iwvlxq424m0saxxs.lambda-url.eu-central-1.on.aws/
+@quieter/aws:dev: [Function]    ---
+@quieter/aws:dev: [Function]    mailReceiptTopicArn: arn:aws:sns:eu-central-1:637423642161:quieter-mail-dev-MailReceiptTopicTopic-fmubzraw
+@quieter/aws:dev: [Function]    mailBucket: quieter-mail-dev-mailbucketbucket-fvhrsuno
+@quieter/aws:dev: [Function]    mailIngestTokenSecretName: MailIngestToken
+@quieter/aws:dev: [Function]    mailIngressUrl: https://7il4bt6uvzhzg5s4g6d6f7xqd40oaick.lambda-url.eu-central-1.on.aws/
+@quieter/aws:dev: [Function]    mailSendTokenSecretName: MailSendToken
+@quieter/aws:dev: [Function]    stage: mail-dev
+@quieter/aws:dev: [Function]    mailOutboundUrl: https://jmevehfxhqyrcmg7iwvlxq424m0saxxs.lambda-url.eu-central-1.on.aws/
+@quieter/aws:dev: [Function]    mailReceiptRoleArn: arn:aws:iam::637423642161:role/MailReceiptRole-c0af0e0
+@quieter/aws:dev: [Function]    mailReceiptRuleSetName: quieter-mail
+@quieter/aws:dev: [Function] 
+@quieter/aws:dev: [SST] ✓  Complete    
+@quieter/aws:dev: [SST]    MailIngress: https://7il4bt6uvzhzg5s4g6d6f7xqd40oaick.lambda-url.eu-central-1.on.aws/
+@quieter/aws:dev: [SST]    MailOutbound: https://jmevehfxhqyrcmg7iwvlxq424m0saxxs.lambda-url.eu-central-1.on.aws/
+@quieter/aws:dev: [SST]    ---
+@quieter/aws:dev: [SST]    mailReceiptRuleSetName: quieter-mail
+@quieter/aws:dev: [SST]    mailOutboundUrl: https://jmevehfxhqyrcmg7iwvlxq424m0saxxs.lambda-url.eu-central-1.on.aws/
+@quieter/aws:dev: [SST]    mailReceiptTopicArn: arn:aws:sns:eu-central-1:637423642161:quieter-mail-dev-MailReceiptTopicTopic-fmubzraw
+@quieter/aws:dev: [SST]    mailSendTokenSecretName: MailSendToken
+@quieter/aws:dev: [SST]    stage: mail-dev
+@quieter/aws:dev: [SST]    mailBucket: quieter-mail-dev-mailbucketbucket-fvhrsuno
+@quieter/aws:dev: [SST]    mailIngestTokenSecretName: MailIngestToken
+@quieter/aws:dev: [SST]    mailIngressUrl: https://7il4bt6uvzhzg5s4g6d6f7xqd40oaick.lambda-url.eu-central-1.on.aws/
+@quieter/aws:dev: [SST]    mailReceiptRoleArn: arn:aws:iam::637423642161:role/MailReceiptRole-c0af0e0
+@quieter/aws:dev: [SST] 
+@quieter/web:dev: error: script "dev" exited with code 255
+
+ Tasks:    0 successful, 2 total
+Cached:    0 cached, 2 total
+  Time:    1m14.793s 
+Failed:    @quieter/web#dev
+

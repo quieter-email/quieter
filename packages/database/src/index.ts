@@ -15,4 +15,5 @@ export {
   type MailDomainCheckResult,
   type MailDomainDnsRecord,
   type MailDomainStatus,
+  type MailboxSwitcherOrder,
 } from "./schema";

@@ -1,135 +1,170 @@
 "use client";
 
-import { cn } from "@quieter/ui";
-import DOMPurify from "isomorphic-dompurify";
-import { useEffect, useRef } from "react";
+import { Image01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Button, cn, useColorMode } from "@quieter/ui";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useExternalImagesEnabled } from "~/features/settings/domain/external-images-setting";
+import {
+  applyEmailPreferences,
+  fixNonReadableColors,
+  preprocessEmailHtml,
+  type ProcessedMailHtml,
+} from "../domain/mail-html";
 
 type MessageBodyProps = {
   html?: string;
   text?: string;
-  compact?: boolean;
   isLoading?: boolean;
+  loadExternalImages?: boolean;
 };
 
-const getBaseStyles = (): string => {
-  return `<style>
-  :host {
-    display: block;
-    color-scheme: light;
-    background: #ffffff;
-    color: #18181b;
-    overflow-wrap: break-word;
-    word-break: break-word;
-  }
-  :where(html, body) {
-    margin: 0;
-    padding: 0;
-    background: #ffffff;
-    color: #18181b;
-  }
-  :where(img, picture, svg) { max-width: 100%; height: auto; }
-  :where(a) { color: inherit; text-decoration: underline; }
-  :where(hr) { border-color: #e4e4e7; }
-  :where(blockquote) { border-left: 3px solid #e4e4e7; padding-left: 12px; }
-</style>`;
-};
+const REMOTE_IMAGE_REGEX = /^https?:\/\//i;
 
-const LINK_TAG_REGEX = /<link\b[^>]*>/gi;
-const MALFORMED_VIEWPORT_DECLARATION_REGEX = /width\s*(?:=|\uFFFD)\s*(?:de)?vice-width/gi;
-const REPLACEMENT_CHARACTER_REGEX = /\uFFFD/g;
-const DOCUMENT_WRAPPER_REGEX = /<\/?(html|head)\b[^>]*>/gi;
-const STYLE_TAG_REGEX = /<style\b[^>]*>[\s\S]*?<\/style\s*>/gi;
-
-const EMAIL_ADD_TAGS = ["html", "head", "body", "img", "picture", "source", "center", "font"];
-const EMAIL_ADD_ATTR = [
-  "target",
-  "align",
-  "valign",
-  "bgcolor",
-  "cellpadding",
-  "cellspacing",
-  "colspan",
-  "rowspan",
-  "sizes",
-  "decoding",
-  "referrerpolicy",
-];
-
-const mergeRelValues = (value: string | undefined): string => {
-  const values = new Set(["noopener", "noreferrer"]);
-  for (const token of value?.split(/\s+/) ?? []) {
-    const normalized = token.trim().toLowerCase();
-    if (normalized) values.add(normalized);
-  }
-  return Array.from(values).join(" ");
-};
-
-const EMAIL_SANITIZE_CONFIG = {
-  USE_PROFILES: { html: true },
-  ADD_TAGS: EMAIL_ADD_TAGS,
-  ADD_ATTR: EMAIL_ADD_ATTR,
-  ADD_DATA_URI_TAGS: ["img", "source"] as string[],
-  ALLOWED_URI_REGEXP:
-    /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|data):|[^a-z]|[a-z+.-]+(?:[^a-z+.:-]|$))/i,
-  RETURN_TRUSTED_TYPE: false,
-};
-
-let emailSanitizeHooksRegistered = false;
-
-const registerEmailSanitizeHooks = () => {
-  if (emailSanitizeHooksRegistered || !DOMPurify.isSupported) return;
-  emailSanitizeHooksRegistered = true;
-
-  DOMPurify.addHook("afterSanitizeAttributes", (node) => {
-    if (node.tagName === "A") {
-      node.setAttribute("target", "_blank");
-      const rel = node.getAttribute("rel");
-      node.setAttribute("rel", mergeRelValues(rel ?? undefined));
-    }
-
-    if (node.tagName === "IMG") {
-      if (!node.hasAttribute("loading")) {
-        node.setAttribute("loading", "lazy");
-      }
-      node.setAttribute("decoding", "async");
-      node.setAttribute("referrerpolicy", "no-referrer");
-    }
-  });
-};
-
-registerEmailSanitizeHooks();
-
-const sanitizeHtml = (rawHtml: string): string => {
-  const sanitized = String(DOMPurify.sanitize(rawHtml, EMAIL_SANITIZE_CONFIG));
-  return sanitized
-    .replaceAll(STYLE_TAG_REGEX, "")
-    .replaceAll(LINK_TAG_REGEX, "")
-    .replaceAll(MALFORMED_VIEWPORT_DECLARATION_REGEX, "width: device-width")
-    .replaceAll(REPLACEMENT_CHARACTER_REGEX, "");
-};
-
-const prepareShadowContent = (rawHtml: string): string => {
-  const sanitized = sanitizeHtml(rawHtml);
-  const content = sanitized.trim().replaceAll(DOCUMENT_WRAPPER_REGEX, "");
-  return `${getBaseStyles()}${content}`;
-};
-
-const HtmlMessageBody = ({ html }: { html: string }) => {
+const HtmlMessageBody = ({
+  html,
+  loadExternalImages,
+}: {
+  html: string;
+  loadExternalImages?: boolean;
+}) => {
+  const { colorMode } = useColorMode();
+  const externalImagesEnabled = useExternalImagesEnabled();
+  const [cspViolation, setCspViolation] = useState(false);
+  const [processedMail, setProcessedMail] = useState<ProcessedMailHtml | null>(null);
+  const [preprocessedHtml, setPreprocessedHtml] = useState<string | null>(null);
+  const [remoteImagesPresent, setRemoteImagesPresent] = useState(false);
+  const [temporaryImagesEnabled, setTemporaryImagesEnabled] = useState(false);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const shadowRootRef = useRef<ShadowRoot | null>(null);
+  const shouldLoadImages = (loadExternalImages ?? externalImagesEnabled) || temporaryImagesEnabled;
+
+  useEffect(() => {
+    setCspViolation(false);
+    setProcessedMail(null);
+    setRemoteImagesPresent(false);
+    setTemporaryImagesEnabled(false);
+    setPreprocessedHtml(preprocessEmailHtml(html));
+  }, [html]);
+
+  useEffect(() => {
+    if (!preprocessedHtml) return;
+
+    const processed = applyEmailPreferences(preprocessedHtml, shouldLoadImages, colorMode);
+    setProcessedMail(processed);
+
+    if (!shouldLoadImages) {
+      setRemoteImagesPresent(processed.hasBlockedImages);
+    }
+  }, [colorMode, preprocessedHtml, shouldLoadImages]);
 
   useEffect(() => {
     if (!hostRef.current) return;
 
     shadowRootRef.current ??= hostRef.current.attachShadow({ mode: "open" });
-    shadowRootRef.current.innerHTML = prepareShadowContent(html);
-  }, [html]);
 
-  return <div ref={hostRef} />;
+    if (!processedMail) {
+      shadowRootRef.current.innerHTML = "";
+      return;
+    }
+
+    shadowRootRef.current.innerHTML = processedMail.processedHtml;
+    fixNonReadableColors(shadowRootRef.current, {
+      defaultBackground: colorMode === "dark" ? "#1A1A1A" : "#ffffff",
+    });
+  }, [colorMode, processedMail]);
+
+  const handleImageError = useCallback(
+    (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLImageElement)) return;
+
+      if (!shouldLoadImages && REMOTE_IMAGE_REGEX.test(target.currentSrc || target.src)) {
+        setCspViolation(true);
+      }
+      target.style.display = "none";
+    },
+    [shouldLoadImages],
+  );
+
+  useEffect(() => {
+    const root = shadowRootRef.current;
+    if (!root) return;
+
+    root.addEventListener("error", handleImageError, true);
+
+    const handleClick = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+
+      const link = target.closest("a");
+      if (!link) return;
+
+      event.preventDefault();
+      const href = link.getAttribute("href");
+      if (href?.startsWith("http://") || href?.startsWith("https://")) {
+        window.open(href, "_blank", "noopener,noreferrer");
+      } else if (href?.startsWith("mailto:")) {
+        window.location.href = href;
+      }
+    };
+
+    root.addEventListener("click", handleClick);
+
+    return () => {
+      root.removeEventListener("error", handleImageError, true);
+      root.removeEventListener("click", handleClick);
+    };
+  }, [handleImageError, html, shouldLoadImages]);
+
+  useEffect(() => {
+    if (shouldLoadImages) {
+      setCspViolation(false);
+    }
+  }, [shouldLoadImages]);
+
+  return (
+    <>
+      {!shouldLoadImages && (remoteImagesPresent || cspViolation) && (
+        <div
+          aria-label="Remote images"
+          className={cn(
+            "flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/80 bg-muted/35 px-3 py-2",
+          )}
+          role="region"
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <div
+              aria-hidden
+              className="flex size-8 shrink-0 items-center justify-center rounded-md bg-background/90 text-muted-foreground shadow-xs ring-1 ring-border/55"
+            >
+              <HugeiconsIcon className="size-4 shrink-0" icon={Image01Icon} />
+            </div>
+            <p className="min-w-0 text-sm leading-snug text-muted-foreground">
+              Remote images are hidden for security reasons.
+            </p>
+          </div>
+          <Button
+            className="w-fit shrink-0 sm:ml-auto"
+            onClick={() => setTemporaryImagesEnabled(true)}
+            size="sm"
+            type="button"
+            variant="default"
+          >
+            Show images
+          </Button>
+        </div>
+      )}
+      <div
+        className="mail-content no-scrollbar w-full flex-1 overflow-scroll bg-background-light text-foreground"
+        ref={hostRef}
+      />
+    </>
+  );
 };
 
 const MessageBodyLoadingSkeleton = () => (
-  <div aria-label="Loading message content" className="space-y-3" role="status">
+  <div aria-label="Loading message content" className="space-y-3 p-4" role="status">
     <div aria-hidden="true" className="animate-pulse space-y-3">
       <div className="h-3.5 w-full rounded-md bg-muted/75" />
       <div className="h-3.5 w-11/12 rounded-md bg-muted/70" />
@@ -139,20 +174,21 @@ const MessageBodyLoadingSkeleton = () => (
   </div>
 );
 
-export const MessageBody = ({ html, isLoading, text }: MessageBodyProps) => {
+export const MessageBody = ({ html, isLoading, loadExternalImages, text }: MessageBodyProps) => {
   const fallbackText = text?.trim();
+  const htmlBody = html?.trim();
 
-  if (!html?.trim() && !fallbackText && isLoading) {
+  if (!htmlBody && !fallbackText && isLoading) {
     return <MessageBodyLoadingSkeleton />;
   }
 
-  if (!html?.trim()) {
+  if (!htmlBody) {
     return (
-      <p className={cn("text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground")}>
+      <p className="bg-background-light p-4 text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground">
         {fallbackText || "No content."}
       </p>
     );
   }
 
-  return <HtmlMessageBody html={html} />;
+  return <HtmlMessageBody html={htmlBody} loadExternalImages={loadExternalImages} />;
 };

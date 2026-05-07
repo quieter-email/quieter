@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
 import { queryPersister } from "~/lib/query-persister";
+import { DEMO_MAILBOX_ID, listDemoMessages } from "../demo-mail";
 import {
   GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
   GMAIL_QUERY_STALE_TIME_MS,
@@ -13,11 +14,10 @@ import {
 import { getThreadQueryKey } from "../thread-query";
 import {
   applySyncDeltaToQueryData,
-  mergeMessagePreservingLoadedDetails,
   mergeRefreshedMailboxPagesIntoQueryData,
   removeMessagesFromThreadData,
   updateFirstPageHistoryId,
-  updateMessageInThreadData,
+  upsertMessageInThreadData,
   type MessagesQueryData,
 } from "./data";
 import {
@@ -26,7 +26,24 @@ import {
   normalizeSearchQuery,
   parsePageToken,
 } from "./keys";
-import { getCachedMessagesQueries } from "./query-cache";
+import { applyVisibleMailboxMessagesRefreshToCache, getCachedMessagesQueries } from "./query-cache";
+
+// Keep full-refresh fallbacks bounded after an infinite query restores a deep persisted list.
+const GMAIL_MAILBOX_REFRESH_PAGE_LIMIT = 3;
+
+type RefreshLoadedMessagesPagesOptions = {
+  maxPageCount?: number;
+  preserveUnrefreshedPages?: boolean;
+  signal?: AbortSignal;
+};
+
+type RefreshVisibleMessagesArgs = {
+  mailboxId: string;
+  mailbox: MailboxCategory;
+  messageIds: readonly string[];
+  searchQuery?: string | null;
+  signal?: AbortSignal;
+};
 
 const fetchMessagesPage = async (
   mailboxId: string,
@@ -35,6 +52,15 @@ const fetchMessagesPage = async (
   searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
+  if (mailboxId === DEMO_MAILBOX_ID) {
+    return listDemoMessages({
+      category: mailbox,
+      pageToken,
+      maxResults: pageToken ? 25 : 50,
+      query: normalizeSearchQuery(searchQuery),
+    });
+  }
+
   return await rpc.mail.listMessages(
     {
       mailboxId,
@@ -52,23 +78,25 @@ export const refreshLoadedMessagesPages = async (
   mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery?: string | null,
-  signal?: AbortSignal,
+  options: RefreshLoadedMessagesPagesOptions = {},
 ) => {
   const messagesQueryKey = getMessagesQueryKey(mailboxId, mailbox, searchQuery);
   const currentMessages = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
   const loadedPageCount = Math.max(currentMessages?.pages.length ?? 0, 1);
+  const maxPageCount = Math.max(1, options.maxPageCount ?? GMAIL_MAILBOX_REFRESH_PAGE_LIMIT);
+  const refreshedPageCount = Math.min(loadedPageCount, maxPageCount);
   const refreshedPages: ListMessagesPageResult[] = [];
   const refreshedPageParams: Array<string | undefined> = [];
   let pageToken: string | undefined;
 
-  for (let pageIndex = 0; pageIndex < loadedPageCount; pageIndex += 1) {
+  for (let pageIndex = 0; pageIndex < refreshedPageCount; pageIndex += 1) {
     refreshedPageParams.push(pageToken);
     const refreshedPage = await fetchMessagesPage(
       mailboxId,
       mailbox,
       pageToken,
       searchQuery,
-      signal,
+      options.signal,
     );
 
     refreshedPages.push(refreshedPage);
@@ -77,7 +105,10 @@ export const refreshLoadedMessagesPages = async (
   }
 
   queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
-    mergeRefreshedMailboxPagesIntoQueryData(data, refreshedPages, refreshedPageParams),
+    mergeRefreshedMailboxPagesIntoQueryData(data, refreshedPages, refreshedPageParams, {
+      preserveUnrefreshedPages:
+        options.preserveUnrefreshedPages ?? refreshedPageCount < loadedPageCount,
+    }),
   );
   await queryPersister.persistQueryByKey(messagesQueryKey, queryClient);
   return refreshedPages[0];
@@ -103,6 +134,32 @@ export const refreshCachedMailboxQueries = async (
         await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, cachedQuery.searchQuery),
     ),
   );
+};
+
+export const refreshVisibleMailboxMessages = async (
+  queryClient: QueryClient,
+  args: RefreshVisibleMessagesArgs,
+) => {
+  if (args.mailboxId === DEMO_MAILBOX_ID) {
+    return;
+  }
+
+  if (args.mailbox === "drafts" || args.messageIds.length === 0) return;
+
+  const messageIds = Array.from(new Set(args.messageIds.map((messageId) => messageId.trim())))
+    .filter(Boolean)
+    .slice(0, 25);
+  if (messageIds.length === 0) return;
+
+  const result = await rpc.mail.refreshMessages(
+    {
+      mailboxId: args.mailboxId,
+      category: args.mailbox,
+      messageIds,
+    },
+    { signal: args.signal },
+  );
+  await applyVisibleMailboxMessagesRefreshToCache(queryClient, args, result);
 };
 
 const applyMailboxSyncDelta = async (
@@ -147,9 +204,7 @@ const applyMailboxSyncDelta = async (
     const threadQueryKey = getThreadQueryKey(mailboxId, updatedMessage.threadId);
     touchedThreadQueryKeys.set(threadQueryKey.join("::"), threadQueryKey);
     queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
-      updateMessageInThreadData(currentData, updatedMessage.id, (message) =>
-        mergeMessagePreservingLoadedDetails(message, updatedMessage),
-      ),
+      upsertMessageInThreadData(currentData, updatedMessage),
     );
   }
 
@@ -176,8 +231,16 @@ export const syncMessages = async (
   searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
+  if (mailboxId === DEMO_MAILBOX_ID) {
+    return await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, searchQuery, {
+      signal,
+    });
+  }
+
   if (mailbox === "drafts" || normalizeSearchQuery(searchQuery)) {
-    return await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, searchQuery, signal);
+    return await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, searchQuery, {
+      signal,
+    });
   }
 
   const messagesQueryKey = getMessagesQueryKey(mailboxId, mailbox, searchQuery);
@@ -185,7 +248,9 @@ export const syncMessages = async (
   const startHistoryId = currentMessages?.pages[0]?.historyId;
 
   if (!currentMessages?.pages.length || !startHistoryId) {
-    return await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, searchQuery, signal);
+    return await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, searchQuery, {
+      signal,
+    });
   }
 
   const syncDelta = await rpc.mail.getMailboxSyncDelta(
@@ -198,7 +263,9 @@ export const syncMessages = async (
   );
 
   if (syncDelta.requiresFullRefresh) {
-    return await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, searchQuery, signal);
+    return await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, searchQuery, {
+      signal,
+    });
   }
 
   await applyMailboxSyncDelta(

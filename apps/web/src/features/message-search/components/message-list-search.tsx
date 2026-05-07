@@ -1,10 +1,17 @@
 "use client";
 
-import { Refresh01Icon, Search01Icon } from "@hugeicons/core-free-icons";
+import {
+  Cancel01Icon,
+  Refresh01Icon,
+  Search01Icon,
+  SidebarLeftIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, Calendar, IconButtonTooltip, cn } from "@quieter/ui";
 import { useQuery } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "motion/react";
 import {
+  type ComponentPropsWithoutRef,
   type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
@@ -21,7 +28,6 @@ import {
   parseStructuredSearchFilterToken,
   parseStructuredSearchQuery,
   serializeStructuredSearchFilterToken,
-  type SearchFieldFilterType,
   type SearchFilterChip,
   type StructuredSearchState,
 } from "~/features/message-search/state/message-list-search-state";
@@ -32,6 +38,7 @@ type MessageListSearchProps = {
   isRefreshing: boolean;
   mailboxId: string;
   onRefresh: () => void | Promise<void>;
+  onOpenSidebar?: () => void;
   onScrollToTop: () => boolean | Promise<boolean> | void | Promise<void>;
   onSearch: (query: string) => void;
   searchQuery: string;
@@ -81,6 +88,11 @@ const getDropdownDirection = (key: string): DropdownDirection | null =>
 
 const isDateFilter = ({ type }: SearchFilterChip) => type === "after" || type === "before";
 
+const isFixedValueFilter = ({ type }: SearchFilterChip) => type === "has" || type === "is";
+
+const shouldFocusFilterValueEnd = (filter: SearchFilterChip | undefined) =>
+  !!filter && filter.type !== "label" && !isFixedValueFilter(filter);
+
 const isCaretAtStart = (input: HTMLInputElement) =>
   input.selectionStart === 0 && input.selectionEnd === 0;
 
@@ -117,6 +129,7 @@ const upsertFilter = (filters: readonly SearchFilterChip[], nextFilter: SearchFi
 export const MessageListSearch = ({
   isRefreshing,
   mailboxId,
+  onOpenSidebar,
   onRefresh,
   onScrollToTop,
   onSearch,
@@ -277,7 +290,7 @@ export const MessageListSearch = ({
 
     const previousFilter = currentState.filters[index - 1];
     focusSegment(index - 1, {
-      toEnd: previousFilter?.type !== "label",
+      toEnd: shouldFocusFilterValueEnd(previousFilter),
     });
   };
 
@@ -333,15 +346,21 @@ export const MessageListSearch = ({
     }
   };
 
-  const handleFilterSelection = (type: SearchFieldFilterType) => {
-    const { filters, index } = upsertFilter(currentState.filters, { type, value: "" });
+  const handleFilterSelection = (filter: SearchFilterChip) => {
+    const { filters, index } = upsertFilter(currentState.filters, filter);
     stageState({
       ...currentState,
       filters,
     });
 
+    if (isFixedValueFilter(filter)) {
+      openDropdown(true);
+      pendingFocusRef.current = { kind: "text", toEnd: true };
+      return;
+    }
+
     closeDropdown();
-    setActiveDateFilterIndex(type === "after" || type === "before" ? index : null);
+    setActiveDateFilterIndex(isDateFilter(filter) ? index : null);
     pendingFocusRef.current = { index, kind: "segment", selectAll: true };
   };
 
@@ -363,8 +382,8 @@ export const MessageListSearch = ({
 
   const dropdownItems = [
     ...searchFilterOptions.map((option) => ({
-      key: `filter:${option.type}`,
-      onSelect: () => handleFilterSelection(option.type),
+      key: `filter:${option.filter.type}:${option.filter.value}`,
+      onSelect: () => handleFilterSelection(option.filter),
     })),
     ...(labelsQuery.isPending || labelsQuery.error
       ? []
@@ -455,10 +474,14 @@ export const MessageListSearch = ({
       : {
           index: index - 1,
           kind: "segment",
-          toEnd: currentState.filters[index - 1]?.type !== "label",
+          toEnd: shouldFocusFilterValueEnd(currentState.filters[index - 1]),
         };
 
-  const handleLabelTokenKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
+  const handleTokenKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    index: number,
+    { removeOnSpace = false }: { removeOnSpace?: boolean } = {},
+  ) => {
     if (handleDropdownKey(event)) {
       return;
     }
@@ -479,7 +502,7 @@ export const MessageListSearch = ({
       event.key === "Backspace" ||
       event.key === "Delete" ||
       event.key === "Enter" ||
-      event.key === " "
+      (removeOnSpace && event.key === " ")
     ) {
       event.preventDefault();
       removeFilterAtIndex(index);
@@ -573,7 +596,7 @@ export const MessageListSearch = ({
     ) {
       event.preventDefault();
       focusSegment(currentState.filters.length - 1, {
-        toEnd: currentState.filters.at(-1)?.type !== "label",
+        toEnd: shouldFocusFilterValueEnd(currentState.filters.at(-1)),
       });
     }
   };
@@ -613,7 +636,7 @@ export const MessageListSearch = ({
 
     openSearchDropdown();
     pendingFocusRef.current =
-      parsedToken.type === "label"
+      parsedToken.type === "label" || isFixedValueFilter(parsedToken)
         ? { kind: "text", toEnd: true }
         : { index, kind: "segment", selectAll: true };
     return true;
@@ -704,9 +727,23 @@ export const MessageListSearch = ({
   }, [activeDateFilterIndex, currentState.filters]);
 
   return (
-    <div className="bg-background-light px-4 py-3" role="search">
+    <div className="bg-background-light p-4" role="search">
       <div className="relative">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2 lg:-ml-2">
+          {onOpenSidebar && (
+            <IconButtonTooltip label="Open sidebar">
+              <Button
+                aria-label="Open sidebar"
+                className="lg:hidden"
+                onClick={onOpenSidebar}
+                size="icon-sm"
+                variant="outline"
+              >
+                <HugeiconsIcon icon={SidebarLeftIcon} />
+              </Button>
+            </IconButtonTooltip>
+          )}
+
           <IconButtonTooltip label="Refresh list">
             <Button
               aria-label="Refresh list"
@@ -755,11 +792,32 @@ export const MessageListSearch = ({
                         key={`label:${normalizeLabelSelectionKey(filter.value)}`}
                         onClick={() => removeFilterAtIndex(index)}
                         onFocus={openSearchDropdown}
-                        onKeyDown={(event) => handleLabelTokenKeyDown(event, index)}
+                        onKeyDown={(event) =>
+                          handleTokenKeyDown(event, index, { removeOnSpace: true })
+                        }
                         ref={(node) => setSegmentRef(index, node)}
                         type="button"
                       >
                         {filter.value}
+                      </button>
+                    );
+                  }
+
+                  if (isFixedValueFilter(filter)) {
+                    return (
+                      <button
+                        className={cn(
+                          filterChipClassName,
+                          "squircle rounded-xs px-2 outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20",
+                        )}
+                        key={`${filter.type}:${filter.value}`}
+                        onClick={() => removeFilterAtIndex(index)}
+                        onFocus={openSearchDropdown}
+                        onKeyDown={(event) => handleTokenKeyDown(event, index)}
+                        ref={(node) => setSegmentRef(index, node)}
+                        type="button"
+                      >
+                        {`${filter.type}:${filter.value}`}
                       </button>
                     );
                   }
@@ -828,6 +886,38 @@ export const MessageListSearch = ({
                 />
               </div>
 
+              <AnimatePresence>
+                {(currentState.text.length > 0 || currentState.filters.length > 0) && (
+                  <IconButtonTooltip key="clear-search" label="Clear search">
+                    <Button
+                      aria-label="Clear search"
+                      className="-mr-1 size-6 shrink-0 text-muted-foreground hover:text-foreground"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        commitState({ filters: [], text: "" }, true);
+                        focusTextInput({ toEnd: true });
+                      }}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                      }}
+                      size="icon-sm"
+                      type="button"
+                      variant="ghost"
+                      render={(props) => (
+                        <motion.button
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          transition={{ duration: 0.15 }}
+                          {...(props as ComponentPropsWithoutRef<typeof motion.button>)}
+                        />
+                      )}
+                    >
+                      <HugeiconsIcon className="size-4" icon={Cancel01Icon} />
+                    </Button>
+                  </IconButtonTooltip>
+                )}
+              </AnimatePresence>
               <IconButtonTooltip label="Run search">
                 <Button
                   aria-label="Run search"

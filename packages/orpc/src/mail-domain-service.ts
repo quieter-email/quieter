@@ -18,6 +18,7 @@ import { ORPCError } from "@orpc/server";
 import {
   db,
   mailDomain,
+  member,
   type MailDomainCheckResult,
   type MailDomainDnsRecord,
   type MailDomainStatus,
@@ -202,14 +203,18 @@ export const createMailDomainDnsRecords = (input: {
 export const aggregateMailDomainStatus = (checks: MailDomainCheck[]): MailDomainStatus =>
   checks.every((check) => check.ok) ? MAIL_DOMAIN_STATUS_VERIFIED : MAIL_DOMAIN_STATUS_FAILED;
 
-const ensureExplicitOrganization = (organizationId: string | null) => {
-  if (!organizationId) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "Managed mail domains belong to a team.",
+const assertUserOrganizationMember = async (input: { organizationId: string; userId: string }) => {
+  const [membership] = await db
+    .select({ id: member.id })
+    .from(member)
+    .where(and(eq(member.organizationId, input.organizationId), eq(member.userId, input.userId)))
+    .limit(1);
+
+  if (!membership) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Team not found.",
     });
   }
-
-  return organizationId;
 };
 
 const getEmailIdentity = async (domain: string) =>
@@ -481,10 +486,15 @@ const createSesMailFromCheck = (identity: GetEmailIdentityCommandOutput): MailDo
 };
 
 export const createMailDomainSetup = async (input: {
-  activeOrganizationId: string | null;
   domain: string;
+  organizationId: string;
+  userId: string;
 }) => {
-  const organizationId = ensureExplicitOrganization(input.activeOrganizationId);
+  await assertUserOrganizationMember({
+    organizationId: input.organizationId,
+    userId: input.userId,
+  });
+
   const domain = normalizeMailDomain(input.domain);
   const region = getAwsRegion();
   const mailFromDomain = `${MAIL_FROM_PREFIX}.${domain}`;
@@ -509,7 +519,7 @@ export const createMailDomainSetup = async (input: {
   const [existingDomain] = await db
     .select({ id: mailDomain.id, createdAt: mailDomain.createdAt })
     .from(mailDomain)
-    .where(and(eq(mailDomain.organizationId, organizationId), eq(mailDomain.domain, domain)))
+    .where(and(eq(mailDomain.organizationId, input.organizationId), eq(mailDomain.domain, domain)))
     .limit(1);
 
   if (existingDomain) {
@@ -545,7 +555,7 @@ export const createMailDomainSetup = async (input: {
       id,
       lastCheckResult: null,
       mailFromDomain,
-      organizationId,
+      organizationId: input.organizationId,
       requiredDnsRecords: records,
       status,
       updatedAt: now,
@@ -565,11 +575,16 @@ export const createMailDomainSetup = async (input: {
 };
 
 export const checkMailDomainSetup = async (input: {
-  activeOrganizationId: string | null;
   dnsLookup?: MailDomainDnsLookup;
   domain: string;
+  organizationId: string;
+  userId: string;
 }) => {
-  const organizationId = ensureExplicitOrganization(input.activeOrganizationId);
+  await assertUserOrganizationMember({
+    organizationId: input.organizationId,
+    userId: input.userId,
+  });
+
   const domain = normalizeMailDomain(input.domain);
   const [storedDomain] = await db
     .select({
@@ -578,7 +593,7 @@ export const checkMailDomainSetup = async (input: {
       verifiedAt: mailDomain.verifiedAt,
     })
     .from(mailDomain)
-    .where(and(eq(mailDomain.organizationId, organizationId), eq(mailDomain.domain, domain)))
+    .where(and(eq(mailDomain.organizationId, input.organizationId), eq(mailDomain.domain, domain)))
     .limit(1);
 
   if (!storedDomain) {

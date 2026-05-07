@@ -5,7 +5,6 @@ import { useState } from "react";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
 import { getGoogleScopeRepairTarget, getSessionUser } from "~/lib/auth.functions";
-import { getErrorMessage } from "~/lib/errors";
 
 export const Route = createFileRoute("/google-scope-repair")({
   validateSearch: zodValidator(
@@ -99,7 +98,7 @@ function GoogleScopeRepairRouteComponent() {
       });
 
       if (response.error) {
-        setRepairError(getErrorMessage(response.error, "Could not start Google reconnect."));
+        setRepairError(response.error.message ?? "Could not start Google reconnect.");
         setIsStartingRepair(false);
         return;
       }
@@ -115,7 +114,11 @@ function GoogleScopeRepairRouteComponent() {
       providerUrl.searchParams.set("prompt", "consent select_account");
       window.location.assign(providerUrl.toString());
     } catch (error) {
-      setRepairError(getErrorMessage(error, "Could not start Google reconnect."));
+      setRepairError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Could not start Google reconnect.",
+      );
       setIsStartingRepair(false);
     }
   };

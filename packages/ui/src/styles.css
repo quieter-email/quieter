@@ -204,31 +204,31 @@
     }
 
     .squircle.rounded-xs {
-      border-radius: calc(var(--radius-xs) * 3) !important;
+      border-radius: calc(var(--radius-xs) * 2) !important;
     }
     .squircle.rounded-sm {
-      border-radius: calc(var(--radius-sm) * 3) !important;
+      border-radius: calc(var(--radius-sm) * 2) !important;
     }
     .squircle.rounded-md {
-      border-radius: calc(var(--radius-md) * 3) !important;
+      border-radius: calc(var(--radius-md) * 2) !important;
     }
     .squircle.rounded-lg {
-      border-radius: calc(var(--radius-lg) * 3) !important;
+      border-radius: calc(var(--radius-lg) * 2) !important;
     }
     .squircle.rounded-xl {
-      border-radius: calc(var(--radius-xl) * 3) !important;
+      border-radius: calc(var(--radius-xl) * 2) !important;
     }
     .squircle.rounded-2xl {
-      border-radius: calc(var(--radius-2xl) * 3) !important;
+      border-radius: calc(var(--radius-2xl) * 2) !important;
     }
     .squircle.rounded-3xl {
-      border-radius: calc(var(--radius-3xl) * 3) !important;
+      border-radius: calc(var(--radius-3xl) * 2) !important;
     }
     .squircle.rounded-4xl {
-      border-radius: calc(var(--radius-4xl) * 3) !important;
+      border-radius: calc(var(--radius-4xl) * 2) !important;
     }
     .squircle.rounded-5xl {
-      border-radius: calc(var(--radius-5xl) * 3) !important;
+      border-radius: calc(var(--radius-5xl) * 2) !important;
     }
   }
 }

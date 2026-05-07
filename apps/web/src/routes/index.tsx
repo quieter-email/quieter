@@ -8,7 +8,10 @@ import { getSessionUser } from "~/lib/auth.functions";
 export const Route = createFileRoute("/")({
   validateSearch: zodValidator(
     z.object({
-      mailbox: z.enum(["inbox", "spam", "sent", "trash", "drafts"]).catch("inbox").default("inbox"),
+      mailbox: z
+        .enum(["inbox", "unread", "spam", "sent", "trash", "drafts"])
+        .catch("inbox")
+        .default("inbox"),
       mailboxId: z.string().trim().min(1).optional().catch(undefined),
       messageId: z.string().trim().min(1).optional().catch(undefined),
       query: z.string().trim().catch("").default(""),

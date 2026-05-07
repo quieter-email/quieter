@@ -12,6 +12,7 @@ import { getSenderAvatarUrls } from "./sender-avatar";
 
 export const MAILBOX_LABELS = {
   inbox: "INBOX",
+  unread: "UNREAD",
   spam: "SPAM",
   sent: "SENT",
   trash: "TRASH",
@@ -20,7 +21,7 @@ export const MAILBOX_LABELS = {
 
 export type MailboxCategory = keyof typeof MAILBOX_LABELS;
 
-export const GMAIL_UNREAD_LABEL = "UNREAD";
+export const GMAIL_UNREAD_LABEL = MAILBOX_LABELS.unread;
 
 const headerSchema = z.object({
   name: z.string(),
@@ -291,6 +292,10 @@ export type MailboxSyncDelta = {
   refreshFirstPage: boolean;
   removedMessageIds: string[];
   requiresFullRefresh: boolean;
+  updatedMessages: MessageListItem[];
+};
+export type MailboxMessagesRefreshResult = {
+  removedMessageIds: string[];
   updatedMessages: MessageListItem[];
 };
 export { decodeMimeHeaderValue, extractMessageContent };
@@ -1501,6 +1506,64 @@ export const getMailboxSyncDelta = async (
     refreshFirstPage,
     removedMessageIds: Array.from(removedMessageIds),
     requiresFullRefresh: false,
+    updatedMessages,
+  };
+};
+
+export const refreshMailboxMessages = async (
+  accessToken: string,
+  options: {
+    mailbox: Exclude<MailboxCategory, "drafts">;
+    messageIds: readonly string[];
+    signal?: AbortSignal;
+  },
+): Promise<MailboxMessagesRefreshResult> => {
+  const messageIds = Array.from(
+    new Set(options.messageIds.map((messageId) => messageId.trim()).filter(Boolean)),
+  ).slice(0, GMAIL_BATCH_MESSAGE_CHUNK_SIZE);
+  const mailboxLabel = MAILBOX_LABELS[options.mailbox];
+  const removedMessageIds = new Set<string>();
+  const updatedMessages: MessageListItem[] = [];
+
+  if (messageIds.length === 0) {
+    return {
+      removedMessageIds: [],
+      updatedMessages: [],
+    };
+  }
+
+  const messages = await getGmailMessagesMetadata(accessToken, messageIds, options.signal);
+  const activeMessages = messages.flatMap((message, index) => {
+    if (!message) {
+      removedMessageIds.add(messageIds[index]);
+      return [];
+    }
+
+    const labelIds = normalizeLabelIds(message.labelIds);
+    if (!labelIds?.includes(mailboxLabel)) {
+      removedMessageIds.add(message.id);
+      return [];
+    }
+
+    return [message];
+  });
+  const threadSummariesById = await getThreadListSummaries(
+    accessToken,
+    activeMessages.map((message) => message.threadId),
+    { includeDrafts: false },
+    options.signal,
+  );
+
+  for (const message of activeMessages) {
+    updatedMessages.push(
+      await toMessageListItem(accessToken, message, {
+        threadSummary: threadSummariesById.get(message.threadId),
+      }),
+    );
+  }
+
+  return {
+    removedMessageIds: Array.from(removedMessageIds),
     updatedMessages,
   };
 };

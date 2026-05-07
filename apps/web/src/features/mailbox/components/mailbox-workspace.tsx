@@ -1,9 +1,11 @@
 "use client";
 
-import { isPersonalWorkspaceId, toWorkspaceId } from "@quieter/auth/workspace";
+import type { RouterOutputs } from "@quieter/orpc";
+import { cn } from "@quieter/ui";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { MailboxSwitcherOrder } from "~/features/navigation/components/mailbox-switcher";
 import type { MailboxSearch } from "~/routes/index";
 import { LoadingPage } from "~/components/loading-page";
 import { type ComposeDraftState, buildComposeDraftFromSavedDraftMessage } from "~/features/compose";
@@ -11,7 +13,8 @@ import { type ComposeDialogHandle, ComposeDialog } from "~/features/compose";
 import { MessageList } from "~/features/message-list/components/message-list";
 import { MessageDetail } from "~/features/message-thread/components/message-detail";
 import { MailSidebar } from "~/features/navigation/components/mail-sidebar";
-import { authClient } from "~/lib/auth";
+import { useDemoModeEnabled } from "~/features/settings/domain/demo-mode-setting";
+import { createDemoMailboxActions, DEMO_MAILBOX_ID, getDemoMailboxes } from "~/lib/gmail/demo-mail";
 import { type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
 import {
   getLiveSyncQueryKey,
@@ -19,12 +22,18 @@ import {
   liveSyncQueryOptions,
   messagesQueryOptions,
   refreshLoadedMessagesPages,
+  refreshVisibleMailboxMessages,
   syncMessages,
 } from "~/lib/gmail/inbox-query";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
+import { queryPersister } from "~/lib/query-persister";
 import { inboxRouteApi } from "~/lib/route-apis";
 import { createMailboxActionHandlers, type MailboxPendingActions } from "./mailbox-action-handlers";
+import {
+  collectVisibleMessageRefreshBatch,
+  queueVisibleMessageRefreshIds,
+} from "./visible-message-refresh";
 
 type MailboxWorkspaceProps = {
   user: {
@@ -39,6 +48,21 @@ type MailboxSearchPatch = {
   mailboxId?: string | null;
   messageId?: string | null;
   query?: string | null;
+};
+
+type MailboxesQueryData = RouterOutputs["mail"]["listMailboxes"];
+
+const VISIBLE_MESSAGE_REFRESH_DEBOUNCE_MS = 250;
+const VISIBLE_MESSAGE_REFRESH_COOLDOWN_MS = 1000 * 60 * 5;
+const VISIBLE_MESSAGE_REFRESH_MAX_BATCH_SIZE = 25;
+const VISIBLE_MESSAGE_REFRESH_PREFIX_PAGE_SKIP = 3;
+
+const getPrefixMessageIds = (pages: readonly { messages: readonly MessageListItem[] }[]) => {
+  return new Set(
+    pages
+      .slice(0, VISIBLE_MESSAGE_REFRESH_PREFIX_PAGE_SKIP)
+      .flatMap((page) => page.messages.map((message) => message.id)),
+  );
 };
 
 const mergeMailboxSearch = (previous: MailboxSearch, patch: MailboxSearchPatch): MailboxSearch => ({
@@ -77,14 +101,55 @@ const updatePendingIds = (
   return next;
 };
 
+const reorderMailboxQueryData = (
+  data: MailboxesQueryData,
+  order: MailboxSwitcherOrder,
+): MailboxesQueryData => {
+  const groupsById = new Map(data.groups.map((group) => [group.id, group]));
+  const orderedGroupIds = [
+    ...order.groupIds.filter((groupId) => groupsById.has(groupId)),
+    ...data.groups.map((group) => group.id).filter((groupId) => !order.groupIds.includes(groupId)),
+  ];
+
+  return {
+    ...data,
+    groups: orderedGroupIds.flatMap((groupId) => {
+      const group = groupsById.get(groupId);
+      if (!group) {
+        return [];
+      }
+
+      const mailboxesById = new Map(group.mailboxes.map((mailbox) => [mailbox.id, mailbox]));
+      const orderedMailboxIds = [
+        ...(order.mailboxIdsByGroupId[group.id] ?? []).filter((mailboxId) =>
+          mailboxesById.has(mailboxId),
+        ),
+        ...group.mailboxes
+          .map((mailbox) => mailbox.id)
+          .filter((mailboxId) => !order.mailboxIdsByGroupId[group.id]?.includes(mailboxId)),
+      ];
+
+      return [
+        {
+          ...group,
+          mailboxes: orderedMailboxIds.flatMap((mailboxId) => {
+            const mailbox = mailboxesById.get(mailboxId);
+            return mailbox ? [mailbox] : [];
+          }),
+        },
+      ];
+    }),
+  };
+};
+
 export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const navigate = useNavigate({
     from: "/",
   });
   const queryClient = useQueryClient();
-  const activeOrganizationState = authClient.useActiveOrganization();
   const composeDialogRef = useRef<ComposeDialogHandle | null>(null);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isWindowActive, setIsWindowActive] = useState(false);
   const [pendingMessageActionIds, setPendingMessageActionIds] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -94,27 +159,33 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   );
   const pendingMessageActionIdsRef = useRef(pendingMessageActionIds);
   const pendingThreadActionIdsRef = useRef(pendingThreadActionIds);
+  const visibleMessageRefreshQueueRef = useRef<Set<string>>(new Set());
+  const visibleMessageRefreshRecentAttemptsRef = useRef<Map<string, number>>(new Map());
+  const visibleMessageRefreshInFlightIdsRef = useRef<Set<string>>(new Set());
+  const visibleMessageRefreshInFlightRef = useRef(false);
+  const visibleMessageRefreshTimeoutRef = useRef<number | null>(null);
+  const flushVisibleMessageRefreshQueueRef = useRef<() => void>(() => {});
   const { mailbox: activeMailbox, mailboxId, messageId, query } = inboxRouteApi.useSearch();
-  const workspaceId = toWorkspaceId(activeOrganizationState.data?.id);
-  const workspaceName = activeOrganizationState.data?.name ?? "Personal";
-  const isPersonalWorkspace = isPersonalWorkspaceId(workspaceId);
+  const isDemoMode = useDemoModeEnabled();
 
   pendingMessageActionIdsRef.current = pendingMessageActionIds;
   pendingThreadActionIdsRef.current = pendingThreadActionIds;
-  const mailboxesQuery = useQuery(mailboxesQueryOptions(workspaceId));
-  const defaultMailboxId = mailboxesQuery.data?.defaultMailboxId ?? null;
-  const mailboxes = (mailboxesQuery.data?.mailboxes ?? [])
-    .map((mailbox) => ({
+  const mailboxesQuery = useQuery(mailboxesQueryOptions(!isDemoMode));
+  const mailboxesData = isDemoMode ? getDemoMailboxes() : mailboxesQuery.data;
+  const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
+  const mailboxGroups = (mailboxesData?.groups ?? []).map((group) => ({
+    id: group.id,
+    kind: group.kind,
+    name: group.name,
+    mailboxes: group.mailboxes.map((mailbox) => ({
       displayName: mailbox.displayName,
       emailAddress: mailbox.emailAddress,
+      groupName: mailbox.groupName,
       id: mailbox.id,
       provider: mailbox.provider,
-    }))
-    .sort((a, b) => {
-      if (a.id === defaultMailboxId) return -1;
-      if (b.id === defaultMailboxId) return 1;
-      return 0;
-    });
+    })),
+  }));
+  const mailboxes = mailboxGroups.flatMap((group) => group.mailboxes);
   const selectedMailbox =
     mailboxes.find((mailbox) => mailbox.id === mailboxId) ??
     mailboxes.find((mailbox) => mailbox.id === defaultMailboxId) ??
@@ -127,7 +198,37 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     ...orpc.mail.setDefaultMailbox.mutationOptions(),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: getMailboxesQueryKey(workspaceId),
+        queryKey: getMailboxesQueryKey(),
+      });
+    },
+  });
+  const updateMailboxSwitcherOrderMutation = useMutation({
+    ...orpc.mail.updateMailboxSwitcherOrder.mutationOptions(),
+    onMutate: async (order) => {
+      const queryKey = getMailboxesQueryKey();
+      await queryClient.cancelQueries({ queryKey });
+
+      const previousData = queryClient.getQueryData<MailboxesQueryData>(queryKey);
+      if (previousData) {
+        queryClient.setQueryData<MailboxesQueryData>(
+          queryKey,
+          reorderMailboxQueryData(previousData, order),
+        );
+        await queryPersister.persistQueryByKey(queryKey, queryClient);
+      }
+
+      return { previousData };
+    },
+    onError: async (_error, _order, context) => {
+      if (context?.previousData) {
+        const queryKey = getMailboxesQueryKey();
+        queryClient.setQueryData(queryKey, context.previousData);
+        await queryPersister.persistQueryByKey(queryKey, queryClient);
+      }
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: getMailboxesQueryKey(),
       });
     },
   });
@@ -135,9 +236,11 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const messagesQuery = useInfiniteQuery(
     messagesQueryOptions(selectedMailboxId ?? "", activeMailbox, query.trim(), !!selectedMailboxId),
   );
+  const messages = messagesQuery.data?.pages ?? [];
   const hasLoadedMessages = !!messagesQuery.data?.pages.length;
   const isLiveSyncEnabled =
     !!selectedMailboxId &&
+    !isDemoMode &&
     activeMailbox !== "drafts" &&
     query.trim().length === 0 &&
     isWindowActive &&
@@ -152,10 +255,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       isLiveSyncEnabled,
     ),
   );
-  const flattenedMessages = useMemo(
-    () => messagesQuery.data?.pages.flatMap((page) => page.messages) ?? [],
-    [messagesQuery.data],
-  );
+  const flattenedMessages = useMemo(() => messages.flatMap((page) => page.messages), [messages]);
 
   const refreshMessages = async () => {
     if (!selectedMailboxId) {
@@ -181,6 +281,90 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     await refreshLoadedMessagesPages(queryClient, selectedMailboxId, activeMailbox, query.trim());
   };
 
+  const scheduleVisibleMessageRefresh = useCallback(
+    (delayMs = VISIBLE_MESSAGE_REFRESH_DEBOUNCE_MS) => {
+      if (visibleMessageRefreshTimeoutRef.current) return;
+
+      visibleMessageRefreshTimeoutRef.current = window.setTimeout(() => {
+        visibleMessageRefreshTimeoutRef.current = null;
+        flushVisibleMessageRefreshQueueRef.current();
+      }, delayMs);
+    },
+    [],
+  );
+
+  flushVisibleMessageRefreshQueueRef.current = () => {
+    if (visibleMessageRefreshInFlightRef.current) return;
+
+    if (!selectedMailboxId || selectedMailboxId === DEMO_MAILBOX_ID || activeMailbox === "drafts") {
+      visibleMessageRefreshQueueRef.current.clear();
+      return;
+    }
+
+    const now = Date.now();
+    const skipMessageIds = getPrefixMessageIds(messages);
+    const messageIds = collectVisibleMessageRefreshBatch({
+      cooldownMs: VISIBLE_MESSAGE_REFRESH_COOLDOWN_MS,
+      inFlightMessageIds: visibleMessageRefreshInFlightIdsRef.current,
+      maxBatchSize: VISIBLE_MESSAGE_REFRESH_MAX_BATCH_SIZE,
+      now,
+      queuedMessageIds: visibleMessageRefreshQueueRef.current,
+      recentAttemptByMessageId: visibleMessageRefreshRecentAttemptsRef.current,
+      skipMessageIds,
+    });
+
+    if (messageIds.length === 0) {
+      if (visibleMessageRefreshQueueRef.current.size > 0) {
+        scheduleVisibleMessageRefresh(0);
+      }
+      return;
+    }
+
+    visibleMessageRefreshInFlightRef.current = true;
+    void refreshVisibleMailboxMessages(queryClient, {
+      mailboxId: selectedMailboxId,
+      mailbox: activeMailbox,
+      messageIds,
+      searchQuery: query.trim(),
+    })
+      .catch(() => {})
+      .finally(() => {
+        for (const messageId of messageIds) {
+          visibleMessageRefreshInFlightIdsRef.current.delete(messageId);
+        }
+
+        visibleMessageRefreshInFlightRef.current = false;
+        if (visibleMessageRefreshQueueRef.current.size > 0) {
+          scheduleVisibleMessageRefresh(0);
+        }
+      });
+  };
+
+  const handleVisibleMessageIdsChange = useCallback(
+    (messageIds: readonly string[]) => {
+      if (
+        !selectedMailboxId ||
+        selectedMailboxId === DEMO_MAILBOX_ID ||
+        activeMailbox === "drafts" ||
+        messageIds.length === 0
+      ) {
+        return;
+      }
+
+      const skipMessageIds = getPrefixMessageIds(messages);
+      const hasQueuedMessage = queueVisibleMessageRefreshIds(
+        visibleMessageRefreshQueueRef.current,
+        messageIds,
+        skipMessageIds,
+      );
+
+      if (hasQueuedMessage) {
+        scheduleVisibleMessageRefresh();
+      }
+    },
+    [activeMailbox, messages, scheduleVisibleMessageRefresh, selectedMailboxId],
+  );
+
   let selectedMessage: MessageListItem | null = null;
   if (activeMailbox !== "drafts" && messageId) {
     for (const message of flattenedMessages) {
@@ -191,9 +375,12 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     }
   }
 
-  const setMailboxSearch = (patch: MailboxSearchPatch) => {
+  const setMailboxSearch = (
+    patch: MailboxSearchPatch,
+    { replace = true }: { replace?: boolean } = {},
+  ) => {
     return navigate({
-      replace: true,
+      replace,
       resetScroll: false,
       search: (previous) => mergeMailboxSearch(previous, patch),
       to: ".",
@@ -217,8 +404,22 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (visibleMessageRefreshTimeoutRef.current) {
+        window.clearTimeout(visibleMessageRefreshTimeoutRef.current);
+        visibleMessageRefreshTimeoutRef.current = null;
+      }
+
+      visibleMessageRefreshQueueRef.current.clear();
+      visibleMessageRefreshRecentAttemptsRef.current.clear();
+      visibleMessageRefreshInFlightIdsRef.current.clear();
+      visibleMessageRefreshInFlightRef.current = false;
+    };
+  }, [activeMailbox, query, selectedMailboxId]);
+
   useLayoutEffect(() => {
-    if (mailboxesQuery.isPending) {
+    if (!isDemoMode && mailboxesQuery.isPending) {
       return;
     }
 
@@ -231,7 +432,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       mailboxId: selectedMailboxId,
       messageId: null,
     });
-  }, [mailboxId, mailboxesQuery.isPending, selectedMailboxId]);
+  }, [isDemoMode, mailboxId, mailboxesQuery.isPending, selectedMailboxId]);
 
   useLayoutEffect(() => {
     if (
@@ -272,26 +473,28 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     });
   };
 
-  const mailboxActions = createMailboxActionHandlers({
-    activeMailbox,
-    activeSearchQuery: query.trim(),
-    queryClient,
-    refreshSearchResultsIfNeeded,
-    isMessageActionPending: (id) => (id ? pendingMessageActionIdsRef.current.has(id) : false),
-    isThreadActionPending: (id) => (id ? pendingThreadActionIdsRef.current.has(id) : false),
-    setMessageActionPending: (id, pending) => setMessageActionsPending([id], pending),
-    setMessageActionsPending,
-    setThreadActionPending: (id, pending) => setThreadActionsPending([id], pending),
-    setThreadActionsPending,
-    unsubscribeFromMessageMutation: async (messageId) => {
-      if (!selectedMailboxId) {
-        return;
-      }
+  const mailboxActions = isDemoMode
+    ? createDemoMailboxActions(queryClient)
+    : createMailboxActionHandlers({
+        activeMailbox,
+        activeSearchQuery: query.trim(),
+        queryClient,
+        refreshSearchResultsIfNeeded,
+        isMessageActionPending: (id) => (id ? pendingMessageActionIdsRef.current.has(id) : false),
+        isThreadActionPending: (id) => (id ? pendingThreadActionIdsRef.current.has(id) : false),
+        setMessageActionPending: (id, pending) => setMessageActionsPending([id], pending),
+        setMessageActionsPending,
+        setThreadActionPending: (id, pending) => setThreadActionsPending([id], pending),
+        setThreadActionsPending,
+        unsubscribeFromMessageMutation: async (messageId) => {
+          if (!selectedMailboxId) {
+            return;
+          }
 
-      await unsubscribeMutation.mutateAsync({ mailboxId: selectedMailboxId, messageId });
-    },
-    mailboxId: selectedMailboxId ?? "",
-  });
+          await unsubscribeMutation.mutateAsync({ mailboxId: selectedMailboxId, messageId });
+        },
+        mailboxId: selectedMailboxId ?? "",
+      });
 
   const openComposeDraft = (draft: ComposeDraftState) => {
     composeDialogRef.current?.openDraft(draft);
@@ -306,16 +509,18 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     openComposeDraft(buildComposeDraftFromSavedDraftMessage(message));
   };
 
-  const activateMessage = (messageId: string) => {
+  const activateMessage = (nextMessageId: string) => {
     if (activeMailbox === "drafts") {
-      const draftMessage = flattenedMessages.find((message) => message.id === messageId);
+      const draftMessage = flattenedMessages.find((message) => message.id === nextMessageId);
       if (draftMessage) {
         openDraft(draftMessage);
       }
       return;
     }
 
-    void setMailboxSearch({ messageId });
+    const shouldPushMobileHistory =
+      !messageId && window.matchMedia("(max-width: 1023.98px)").matches;
+    void setMailboxSearch({ messageId: nextMessageId }, { replace: !shouldPushMobileHistory });
   };
 
   const loadMoreMessages = () => {
@@ -355,13 +560,15 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     isManualRefreshing ||
     syncQuery.isFetching ||
     (messagesQuery.isRefetching && !messagesQuery.isFetchingNextPage);
+  const isMessageRouteOpen = activeMailbox !== "drafts" && !!messageId;
 
-  if (mailboxesQuery.isPending) {
+  if (!isDemoMode && mailboxesQuery.isPending) {
     return (
       <>
         <LoadingPage />
         <ComposeDialog
-          key={selectedMailboxId ?? `${workspaceId}:${user.id ?? "signed-out"}`}
+          key={selectedMailboxId ?? user.id ?? "signed-out"}
+          demoMode={isDemoMode}
           mailboxId={selectedMailboxId}
           ref={composeDialogRef}
         />
@@ -369,20 +576,22 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     );
   }
 
-  const messages = messagesQuery.data?.pages ?? [];
   const isLoadingEmptyMessages =
     !messages.some((page) => page.messages.length > 0) && (messagesQuery.isPending || isRefreshing);
 
   return (
     <>
-      <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-background text-foreground">
+      <main className="flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground">
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
           <div className="pointer-events-none absolute inset-0" />
 
           <MailSidebar
             defaultMailboxId={defaultMailboxId}
-            mailboxes={mailboxes}
+            groups={mailboxGroups}
             onComposeNewMail={() => composeDialogRef.current?.openNewMail()}
+            onReorderMailboxSwitcher={(order) => {
+              updateMailboxSwitcherOrderMutation.mutate(order);
+            }}
             onSelectMailbox={selectMailbox}
             onSelectMailboxId={(nextMailboxId) => {
               if (nextMailboxId === selectedMailboxId) return;
@@ -393,13 +602,22 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
             }}
             selectedMailbox={activeMailbox}
             selectedMailboxId={selectedMailboxId}
-            workspaceName={workspaceName}
+            isMobileOpen={isMobileSidebarOpen}
+            onMobileOpenChange={setIsMobileSidebarOpen}
           />
 
-          <div className="relative flex min-h-0 flex-1 flex-col gap-1 bg-background py-1 pr-1 lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+          <div className="relative flex min-h-0 flex-1 flex-col bg-background lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-1 lg:py-1 lg:pr-1">
             {selectedMailboxId ? (
               <>
-                <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-background-light">
+                <section
+                  className={cn(
+                    "min-h-0 min-w-0 flex-col overflow-hidden bg-background-light lg:flex lg:rounded-lg",
+                    {
+                      "flex flex-1": !isMessageRouteOpen,
+                      hidden: isMessageRouteOpen,
+                    },
+                  )}
+                >
                   <MessageList
                     activeMailbox={activeMailbox}
                     activeMessageId={messageId ?? null}
@@ -415,16 +633,26 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
                     onActivateMessage={activateMessage}
                     onLoadMore={loadMoreMessages}
                     onOpenDraft={openDraft}
+                    onOpenSidebar={() => setIsMobileSidebarOpen(true)}
                     onRefresh={() => {
                       void refreshMessages();
                     }}
                     onSearch={applySearch}
+                    onVisibleMessageIdsChange={handleVisibleMessageIdsChange}
                     pendingActions={pendingActions}
                     searchQuery={query.trim()}
                   />
                 </section>
 
-                <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-background-light">
+                <div
+                  className={cn(
+                    "min-h-0 min-w-0 flex-col overflow-hidden bg-background-light lg:flex lg:rounded-lg",
+                    {
+                      "flex flex-1": isMessageRouteOpen,
+                      hidden: !isMessageRouteOpen,
+                    },
+                  )}
+                >
                   <MessageDetail
                     activeMailbox={activeMailbox}
                     currentUserEmail={
@@ -435,7 +663,10 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
                     mailboxActions={mailboxActions}
                     onComposeDraftRequested={openComposeDraft}
                     pendingActions={pendingActions}
-                    isPending={isLoadingEmptyMessages}
+                    isPending={isMessageRouteOpen && isLoadingEmptyMessages}
+                    onBackToList={() => {
+                      void setMailboxSearch({ messageId: null });
+                    }}
                     selectedMessage={selectedMessage}
                   />
                 </div>
@@ -444,12 +675,10 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
               <section className="flex min-h-0 flex-1 items-center justify-center bg-background-light px-8">
                 <div className="max-w-md space-y-3 text-center">
                   <h1 className="text-lg font-semibold tracking-tight text-foreground">
-                    No mailboxes in {workspaceName}
+                    No mailboxes
                   </h1>
                   <p className="text-sm text-muted-foreground">
-                    {isPersonalWorkspace
-                      ? "Connect Gmail to use Personal mail."
-                      : "This team does not have a managed mailbox yet."}
+                    Connect Gmail or add a managed mailbox to a team.
                   </p>
                 </div>
               </section>
@@ -458,7 +687,8 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         </div>
       </main>
       <ComposeDialog
-        key={selectedMailboxId ?? `${workspaceId}:${user.id ?? "signed-out"}`}
+        key={selectedMailboxId ?? user.id ?? "signed-out"}
+        demoMode={isDemoMode}
         mailboxId={selectedMailboxId}
         ref={composeDialogRef}
       />

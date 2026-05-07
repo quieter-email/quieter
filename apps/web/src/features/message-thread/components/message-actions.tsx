@@ -41,7 +41,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useReducer, useState } from "react";
 import type { MailboxActions } from "~/features/mailbox/components/mailbox-action-handlers";
 import { getUserLabels } from "~/features/message-search/state/message-list-search-state";
-import { getErrorMessage } from "~/lib/errors";
 import { isMessageUnread, type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
 import { getMessageUnsubscribeTarget, openUnsubscribeUrl } from "./message-unsubscribe";
@@ -346,7 +345,7 @@ const MessageActionsDialogs = ({
     } catch (error) {
       dispatch({
         type: "labels/error",
-        value: getErrorMessage(error, "Could not update labels."),
+        value: error instanceof Error && error.message ? error.message : "Could not update labels.",
       });
     } finally {
       dispatch({
@@ -374,7 +373,10 @@ const MessageActionsDialogs = ({
     } catch (error) {
       dispatch({
         type: "delete/error",
-        value: getErrorMessage(error, "Could not delete this message."),
+        value:
+          error instanceof Error && error.message
+            ? error.message
+            : "Could not delete this message.",
       });
     } finally {
       dispatch({

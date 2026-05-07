@@ -1,0 +1,5 @@
+$ turbo run dev
+• turbo 2.9.9
+ ERROR  @quieter/web#dev: command (E:\Coding\quieter\apps\web) C:\Users\leand\.bun\bin\bun.exe run dev exited (255)
+ ERROR  run failed: command  exited (255)
+error: script "dev" exited with code 255

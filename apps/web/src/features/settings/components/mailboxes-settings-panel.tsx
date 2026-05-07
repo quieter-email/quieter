@@ -8,16 +8,11 @@ import {
   PinOffIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { isPersonalWorkspaceId, toWorkspaceId } from "@quieter/auth/workspace";
 import { Button, cn, toast } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import {
-  MailboxSettingsRow,
-  WorkspaceSwitcherSelect,
-} from "~/features/navigation/components/mailbox-switcher";
+import { MailboxSettingsRow } from "~/features/navigation/components/mailbox-switcher";
 import { authClient } from "~/lib/auth";
-import { getErrorMessage } from "~/lib/errors";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 
@@ -26,7 +21,6 @@ const PENDING_GMAIL_LINK_STORAGE_KEY = "quieter:pending-gmail-link";
 type PendingGmailLinkState = {
   mailboxCount: number;
   startedAt: number;
-  workspaceId: string;
 };
 
 const readPendingGmailLink = (): PendingGmailLinkState | null => {
@@ -45,8 +39,7 @@ const readPendingGmailLink = (): PendingGmailLinkState | null => {
       typeof parsedValue !== "object" ||
       parsedValue === null ||
       typeof parsedValue.mailboxCount !== "number" ||
-      typeof parsedValue.startedAt !== "number" ||
-      typeof parsedValue.workspaceId !== "string"
+      typeof parsedValue.startedAt !== "number"
     ) {
       return null;
     }
@@ -72,27 +65,22 @@ const writePendingGmailLink = (value: PendingGmailLinkState | null) => {
 
 export const MailboxesSettingsPanel = () => {
   const queryClient = useQueryClient();
-  const sessionState = authClient.useSession();
-  const activeOrganizationState = authClient.useActiveOrganization();
   const [connectError, setConnectError] = useState<string | null>(null);
   const [pendingGmailLink, setPendingGmailLink] = useState<PendingGmailLinkState | null>(() =>
     readPendingGmailLink(),
   );
-  const workspaceId = toWorkspaceId(activeOrganizationState.data?.id);
-  const isPersonalWorkspace = isPersonalWorkspaceId(workspaceId);
-  const mailboxesQuery = useQuery(mailboxesQueryOptions(workspaceId));
-  const mailboxes = mailboxesQuery.data?.mailboxes ?? [];
-  const pendingGmailLinkMatchesWorkspace =
-    pendingGmailLink != null && pendingGmailLink.workspaceId === workspaceId;
+  const mailboxesQuery = useQuery(mailboxesQueryOptions());
+  const groups = mailboxesQuery.data?.groups ?? [];
+  const mailboxes = groups.flatMap((group) => group.mailboxes);
   const isGmailConnecting =
-    pendingGmailLinkMatchesWorkspace && (mailboxesQuery.isPending || mailboxesQuery.isFetching);
+    pendingGmailLink != null && (mailboxesQuery.isPending || mailboxesQuery.isFetching);
   const defaultMailboxId = mailboxesQuery.data?.defaultMailboxId ?? null;
   const disconnectMailboxMutation = useMutation({
     ...orpc.mail.disconnectMailbox.mutationOptions(),
     mutationKey: ["mail", "disconnect-mailbox"],
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: getMailboxesQueryKey(workspaceId),
+        queryKey: getMailboxesQueryKey(),
       });
     },
   });
@@ -101,17 +89,13 @@ export const MailboxesSettingsPanel = () => {
     mutationKey: ["mail", "set-default-mailbox"],
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: getMailboxesQueryKey(workspaceId),
+        queryKey: getMailboxesQueryKey(),
       });
     },
   });
 
   useEffect(() => {
-    setPendingGmailLink(readPendingGmailLink());
-  }, [workspaceId]);
-
-  useEffect(() => {
-    if (!pendingGmailLink || pendingGmailLink.workspaceId !== workspaceId) {
+    if (!pendingGmailLink) {
       return;
     }
 
@@ -136,20 +120,14 @@ export const MailboxesSettingsPanel = () => {
     mailboxesQuery.isFetching,
     mailboxesQuery.isPending,
     pendingGmailLink,
-    workspaceId,
   ]);
 
   const handleConnectGmail = async () => {
-    if (!isPersonalWorkspace) {
-      return;
-    }
-
     setConnectError(null);
 
     const nextPendingGmailLink = {
       mailboxCount: mailboxes.length,
       startedAt: Date.now(),
-      workspaceId,
     } satisfies PendingGmailLinkState;
 
     writePendingGmailLink(nextPendingGmailLink);
@@ -163,38 +141,30 @@ export const MailboxesSettingsPanel = () => {
     } catch (error) {
       writePendingGmailLink(null);
       setPendingGmailLink(null);
-      setConnectError(getErrorMessage(error, "Could not start Google account linking."));
+      setConnectError(
+        (error as { message?: string })?.message ?? "Could not start Google account linking.",
+      );
     }
   };
-
-  if (activeOrganizationState.isPending || sessionState.isPending) {
-    return <p className="text-sm text-muted-foreground">loading workspace...</p>;
-  }
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="">
-          <WorkspaceSwitcherSelect />
-        </div>
-
-        {isPersonalWorkspace && (
-          <Button
-            disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
-            onClick={() => {
-              void handleConnectGmail();
-            }}
-            size="sm"
-            type="button"
-          >
-            <HugeiconsIcon
-              aria-hidden
-              className={isGmailConnecting ? "size-4 animate-spin" : "size-4"}
-              icon={isGmailConnecting ? Loading03Icon : Mail01Icon}
-            />
-            {isGmailConnecting ? "Connecting Gmail" : "Add Gmail"}
-          </Button>
-        )}
+        <Button
+          disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
+          onClick={() => {
+            void handleConnectGmail();
+          }}
+          size="sm"
+          type="button"
+        >
+          <HugeiconsIcon
+            aria-hidden
+            className={isGmailConnecting ? "size-4 animate-spin" : "size-4"}
+            icon={isGmailConnecting ? Loading03Icon : Mail01Icon}
+          />
+          {isGmailConnecting ? "Connecting Gmail" : "Add Gmail"}
+        </Button>
       </div>
 
       {isGmailConnecting && (
@@ -208,7 +178,7 @@ export const MailboxesSettingsPanel = () => {
 
       {mailboxesQuery.isError && (
         <p className="text-sm text-destructive">
-          {getErrorMessage(mailboxesQuery.error, "Could not load mailboxes.")}
+          {mailboxesQuery.error.message ?? "Could not load mailboxes."}
         </p>
       )}
 
@@ -220,77 +190,86 @@ export const MailboxesSettingsPanel = () => {
       )}
 
       {!mailboxesQuery.isPending && !mailboxesQuery.isError && mailboxes.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          {isPersonalWorkspace ? "No Gmail accounts connected yet." : "No mailboxes in this team."}
-        </p>
+        <p className="text-sm text-muted-foreground">No mailboxes connected yet.</p>
       )}
 
-      {mailboxes.length > 0 && (
-        <div className="divide-y divide-border/70">
-          {mailboxes.map((mailbox) => {
-            const isDisconnecting = disconnectMailboxMutation.variables?.mailboxId === mailbox.id;
-            const isDefault = mailbox.id === defaultMailboxId;
-            const isGmailMailbox = mailbox.provider === "gmail";
+      {groups.map((group) => (
+        <section className="space-y-2" key={group.id}>
+          <p className="text-xs text-muted-foreground">{group.name}</p>
 
-            return (
-              <MailboxSettingsRow
-                action={
-                  <div className="flex items-center gap-1">
-                    <Button
-                      aria-label={isDefault ? "Unset default mailbox" : "Set as default mailbox"}
-                      className={cn({
-                        "text-foreground": isDefault,
-                        "text-muted-foreground": !isDefault,
-                      })}
-                      disabled={setDefaultMailboxMutation.isPending}
-                      onClick={() => {
-                        void setDefaultMailboxMutation.mutateAsync({
-                          mailboxId: isDefault ? null : mailbox.id,
-                        });
-                      }}
-                      size="sm"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <HugeiconsIcon
-                        aria-hidden
-                        className="size-4"
-                        icon={isDefault ? PinIcon : PinOffIcon}
-                      />
-                      {isDefault ? "Default" : "Set default"}
-                    </Button>
+          {group.mailboxes.length > 0 ? (
+            <div className="divide-y divide-border/70">
+              {group.mailboxes.map((mailbox) => {
+                const isDisconnecting =
+                  disconnectMailboxMutation.variables?.mailboxId === mailbox.id;
+                const isDefault = mailbox.id === defaultMailboxId;
+                const isGmailMailbox = mailbox.provider === "gmail";
 
-                    {isPersonalWorkspace && isGmailMailbox && (
-                      <Button
-                        disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
-                        onClick={() => {
-                          void disconnectMailboxMutation.mutateAsync({ mailboxId: mailbox.id });
-                        }}
-                        size="sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <HugeiconsIcon
-                          aria-hidden
-                          className={cn("size-4", { "animate-spin": isDisconnecting })}
-                          icon={isDisconnecting ? Loading03Icon : Delete02Icon}
-                        />
-                        Remove
-                      </Button>
-                    )}
-                  </div>
-                }
-                key={mailbox.id}
-                mailbox={mailbox}
-              />
-            );
-          })}
-        </div>
-      )}
+                return (
+                  <MailboxSettingsRow
+                    action={
+                      <div className="flex items-center gap-1">
+                        <Button
+                          aria-label={
+                            isDefault ? "Unset default mailbox" : "Set as default mailbox"
+                          }
+                          className={cn({
+                            "text-foreground": isDefault,
+                            "text-muted-foreground": !isDefault,
+                          })}
+                          disabled={setDefaultMailboxMutation.isPending}
+                          onClick={() => {
+                            void setDefaultMailboxMutation.mutateAsync({
+                              mailboxId: isDefault ? null : mailbox.id,
+                            });
+                          }}
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <HugeiconsIcon
+                            aria-hidden
+                            className="size-4"
+                            icon={isDefault ? PinIcon : PinOffIcon}
+                          />
+                          {isDefault ? "Default" : "Set default"}
+                        </Button>
+
+                        {isGmailMailbox && (
+                          <Button
+                            disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
+                            onClick={() => {
+                              void disconnectMailboxMutation.mutateAsync({ mailboxId: mailbox.id });
+                            }}
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <HugeiconsIcon
+                              aria-hidden
+                              className={cn("size-4", { "animate-spin": isDisconnecting })}
+                              icon={isDisconnecting ? Loading03Icon : Delete02Icon}
+                            />
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                    }
+                    key={mailbox.id}
+                    mailbox={mailbox}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No mailboxes in this group.</p>
+          )}
+        </section>
+      ))}
 
       {disconnectMailboxMutation.isError && (
         <p className="text-sm text-destructive">
-          {getErrorMessage(disconnectMailboxMutation.error, "Could not disconnect that mailbox.")}
+          {disconnectMailboxMutation.error.message ?? "Could not disconnect that mailbox."}
         </p>
       )}
     </div>

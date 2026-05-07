@@ -15,9 +15,8 @@ export const DropdownMenuTrigger = ({
 }: ComponentPropsWithoutRef<typeof MenuPrimitive.Trigger>) => (
   <MenuPrimitive.Trigger
     className={cn(
-      "squircle",
-      className,
       "transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      className,
     )}
     {...props}
   />

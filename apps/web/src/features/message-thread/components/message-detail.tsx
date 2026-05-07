@@ -1,7 +1,8 @@
 "use client";
 
-import { Loading03Icon } from "@hugeicons/core-free-icons";
+import { ArrowLeft01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Button, IconButtonTooltip } from "@quieter/ui";
 import { Suspense } from "react";
 import type { ComposeDraftState } from "~/features/compose";
 import type {
@@ -18,6 +19,7 @@ type MessageDetailProps = {
   isPending?: boolean;
   mailboxActions: MailboxActions;
   mailboxId: string;
+  onBackToList?: () => void;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   pendingActions: MailboxPendingActions;
   selectedMessage: MessageListItem | null;
@@ -55,6 +57,7 @@ export const MessageDetail = ({
   currentUserEmail,
   isPending,
   mailboxActions,
+  onBackToList,
   onComposeDraftRequested,
   pendingActions,
   selectedMessage,
@@ -62,20 +65,30 @@ export const MessageDetail = ({
 }: MessageDetailProps) => {
   const emptyState =
     activeMailbox === "drafts" ? (
-      <EmptyMessageState
-        description="Open a draft from the list to continue editing it."
-        title="Drafts stay editable"
-      />
+      <EmptyMessageState description="Choose a draft from the list." title="Select a draft" />
     ) : (
       <EmptyMessageState />
     );
 
   return (
-    <section className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background-light">
-      <div
-        className="h-full overflow-y-auto px-4 sm:px-5 lg:px-6"
-        data-message-detail-scroll-container
-      >
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background-light">
+      {onBackToList && (
+        <div className="flex h-12 shrink-0 items-center border-b px-3 lg:hidden">
+          <IconButtonTooltip label="Back to list">
+            <Button
+              aria-label="Back to list"
+              onClick={onBackToList}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
+            </Button>
+          </IconButtonTooltip>
+        </div>
+      )}
+
+      <div className="min-h-0 flex-1 overflow-y-auto" data-message-detail-scroll-container>
         {isPending && !selectedMessage ? (
           <MessageDetailLoadingSkeleton />
         ) : selectedMessage ? (

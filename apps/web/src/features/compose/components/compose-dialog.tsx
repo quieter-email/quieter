@@ -20,6 +20,7 @@ export type ComposeDialogHandle = {
 };
 
 type ComposeDialogProps = {
+  demoMode?: boolean;
   mailboxId: string | null;
 };
 
@@ -151,8 +152,8 @@ const AnimatedRecipientField = ({
 };
 
 export const ComposeDialog = forwardRef<ComposeDialogHandle, ComposeDialogProps>(
-  function ComposeDialog({ mailboxId }, ref) {
-    const compose = useComposeDialogController({ mailboxId });
+  function ComposeDialog({ demoMode = false, mailboxId }, ref) {
+    const compose = useComposeDialogController({ demoMode, mailboxId });
     const {
       state,
       addInlineImageFiles,

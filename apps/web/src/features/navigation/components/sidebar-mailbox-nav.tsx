@@ -5,6 +5,7 @@ import {
   Delete02Icon,
   Edit01Icon,
   InboxIcon,
+  Mail01Icon,
   MailSend02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
@@ -17,6 +18,7 @@ const SIDEBAR_MAILBOX_ITEMS: ReadonlyArray<{
   label: string;
 }> = [
   { id: "inbox", label: "Inbox", icon: InboxIcon },
+  { id: "unread", label: "Unread", icon: Mail01Icon },
   { id: "sent", label: "Sent", icon: MailSend02Icon },
   { id: "drafts", label: "Drafts", icon: Edit01Icon },
   { id: "trash", label: "Trash", icon: Delete01Icon },

@@ -149,10 +149,7 @@ export const SelectGroupLabel = ({
   ...props
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.GroupLabel>) => (
   <SelectPrimitive.GroupLabel
-    className={cn(
-      "px-2.5 py-1 text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase",
-      className,
-    )}
+    className={cn("px-2.5 py-1 text-xs text-muted-foreground", className)}
     {...props}
   />
 );

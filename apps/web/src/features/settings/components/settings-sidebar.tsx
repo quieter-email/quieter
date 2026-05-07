@@ -17,57 +17,42 @@ type SettingsSidebarProps = {
   onSelectTab: (tab: SettingsTab) => void;
 };
 
+const SETTINGS_SIDEBAR_NAV = [
+  { tab: "general", label: "General", icon: Settings01Icon },
+  { tab: "account", label: "Account", icon: UserIcon },
+  { tab: "mailboxes", label: "Mailboxes", icon: Mail01Icon },
+  { tab: "organization", label: "Teams", icon: UserGroupIcon },
+] as const satisfies ReadonlyArray<{
+  tab: SettingsTab;
+  label: string;
+  icon: typeof Settings01Icon;
+}>;
+
 export const SettingsSidebar = ({ activeTab, onBack, onSelectTab }: SettingsSidebarProps) => (
-  <aside className="mr-20 border-r pr-20">
-    <button
-      className="inline-flex h-8 w-fit shrink-0 items-center justify-center gap-2 rounded-md border border-transparent bg-transparent px-3 text-xs leading-none font-medium whitespace-nowrap text-muted-foreground outline-none select-none hover:border-border/80 hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:bg-muted/80 disabled:pointer-events-none disabled:opacity-50"
+  <aside className="border-b pb-4 md:mr-20 md:border-r md:border-b-0 md:pr-20 md:pb-0">
+    <Button
+      className="w-fit text-muted-foreground hover:text-foreground"
       onClick={onBack}
-      type="button"
+      size="sm"
+      variant="ghost"
     >
       <HugeiconsIcon className="size-4" icon={ArrowLeft01Icon} />
       <span>Back</span>
-    </button>
+    </Button>
 
-    <div className="flex flex-col gap-2 pt-12">
-      <Button
-        className="flex w-fit items-center gap-2"
-        onClick={() => onSelectTab("general")}
-        size="sm"
-        variant={activeTab === "general" ? "default" : "ghost"}
-      >
-        <HugeiconsIcon className="size-4" icon={Settings01Icon} />
-        General
-      </Button>
-
-      <Button
-        className="flex w-fit items-center gap-2"
-        onClick={() => onSelectTab("account")}
-        size="sm"
-        variant={activeTab === "account" ? "default" : "ghost"}
-      >
-        <HugeiconsIcon className="size-4" icon={UserIcon} />
-        Account
-      </Button>
-
-      <Button
-        className="flex w-fit items-center gap-2"
-        onClick={() => onSelectTab("mailboxes")}
-        size="sm"
-        variant={activeTab === "mailboxes" ? "default" : "ghost"}
-      >
-        <HugeiconsIcon className="size-4" icon={Mail01Icon} />
-        Mailboxes
-      </Button>
-
-      <Button
-        className="flex w-fit items-center gap-2"
-        onClick={() => onSelectTab("organization")}
-        size="sm"
-        variant={activeTab === "organization" ? "default" : "ghost"}
-      >
-        <HugeiconsIcon className="size-4" icon={UserGroupIcon} />
-        Teams
-      </Button>
+    <div className="flex flex-wrap gap-2 pt-6 md:flex-col md:pt-12">
+      {SETTINGS_SIDEBAR_NAV.map(({ tab, label, icon }) => (
+        <Button
+          className="flex w-full items-center justify-start gap-2"
+          key={tab}
+          onClick={() => onSelectTab(tab)}
+          size="sm"
+          variant={activeTab === tab ? "default" : "ghost"}
+        >
+          <HugeiconsIcon className="size-4" icon={icon} />
+          {label}
+        </Button>
+      ))}
     </div>
   </aside>
 );

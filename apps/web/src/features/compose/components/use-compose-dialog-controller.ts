@@ -4,7 +4,7 @@ import { composeDraftFormValuesSchema, composeSendFormValuesSchema } from "@quie
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { getErrorMessage } from "~/lib/errors";
+import { deleteDemoDraft, saveDemoDraft, sendDemoDraft } from "~/lib/gmail/demo-mail";
 import { refreshCachedMailboxQueries, removeDraftMessageFromCaches } from "~/lib/gmail/inbox-query";
 import { getThreadQueryKey } from "~/lib/gmail/thread-query";
 import {
@@ -51,7 +51,13 @@ export const getDraftStatusMessage = (draft: ComposeDraftState) => {
   return "Drafts save automatically";
 };
 
-export const useComposeDialogController = ({ mailboxId }: { mailboxId: string | null }) => {
+export const useComposeDialogController = ({
+  demoMode = false,
+  mailboxId,
+}: {
+  demoMode?: boolean;
+  mailboxId: string | null;
+}) => {
   const queryClient = useQueryClient();
   const [state, setState] = useState(createDialogState);
   const activeDraftRef = useRef(state.draft);
@@ -171,7 +177,9 @@ export const useComposeDialogController = ({ mailboxId }: { mailboxId: string | 
           setDraft({ ...activeDraftRef.current, saveStatus: "saving", errorMessage: null });
         }
 
-        const savedDraft = await saveComposeDraft(mailboxId, draft);
+        const savedDraft = demoMode
+          ? await saveDemoDraft(draft)
+          : await saveComposeDraft(mailboxId, draft);
         savedDraftByLocalIdRef.current.set(draft.localId, savedDraft);
 
         if (
@@ -275,7 +283,11 @@ export const useComposeDialogController = ({ mailboxId }: { mailboxId: string | 
     try {
       const savedDraft = await saveDraft(draft);
       setDraft({ ...savedDraft, saveStatus: "sending" });
-      await sendComposeDraft(mailboxId, savedDraft);
+      if (demoMode) {
+        await sendDemoDraft(savedDraft);
+      } else {
+        await sendComposeDraft(mailboxId, savedDraft);
+      }
       closeDialog();
       clearComposeDraftRuntimeFiles(savedDraft);
       await Promise.all([
@@ -286,7 +298,7 @@ export const useComposeDialogController = ({ mailboxId }: { mailboxId: string | 
     } catch (error) {
       setDraft({
         ...activeDraftRef.current,
-        errorMessage: getErrorMessage(error, "Could not send message."),
+        errorMessage: (error as { message?: string })?.message ?? "Could not send message.",
         saveStatus: "error",
       });
     }
@@ -319,7 +331,11 @@ export const useComposeDialogController = ({ mailboxId }: { mailboxId: string | 
       }
 
       if (savedDraft.draftId) {
-        await deleteComposeDraft(mailboxId, savedDraft);
+        if (demoMode) {
+          await deleteDemoDraft(savedDraft);
+        } else {
+          await deleteComposeDraft(mailboxId, savedDraft);
+        }
         if (!savedDraft.messageId) {
           await refreshCachedMailboxQueries(queryClient, mailboxId, "drafts");
         }
@@ -365,7 +381,7 @@ export const useComposeDialogController = ({ mailboxId }: { mailboxId: string | 
     } catch (error) {
       setDraft({
         ...activeDraftRef.current,
-        errorMessage: getErrorMessage(error, "Could not add those images."),
+        errorMessage: (error as { message?: string })?.message ?? "Could not add those images.",
         saveStatus: "error",
       });
     }

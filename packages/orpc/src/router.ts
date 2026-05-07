@@ -1,5 +1,5 @@
 import { ORPCError, os } from "@orpc/server";
-import { auth, ensureUserOrganizationState } from "@quieter/auth";
+import { auth } from "@quieter/auth";
 import { getAuthUserStatus } from "@quieter/auth/user-status";
 import { z } from "zod";
 import { getRequestHeaders, type OrpcContext } from "./context";
@@ -26,6 +26,7 @@ import {
   markThreadAsUnread,
   moveMessageToTrash,
   moveThreadToTrash,
+  refreshMailboxMessages,
   sendDraft as sendGmailDraft,
   sendRawMessage,
   untrashMessage,
@@ -51,10 +52,11 @@ import {
   disconnectPersonalGmailMailbox,
   getAuthorizedGmailMailbox,
   getGoogleScopeRepairTarget,
-  listMailboxesForActiveWorkspace,
+  listMailboxes,
   refreshAuthorizedGmailAccessToken,
   setDefaultMailbox,
   syncPersonalGmailMailboxes,
+  updateMailboxSwitcherOrder,
 } from "./mailbox-service";
 
 const base = os.errors(orpcErrorMap).$context<OrpcContext>();
@@ -62,17 +64,21 @@ const publicProcedure = base;
 
 const mailboxCategorySchema = z.enum([
   "inbox",
+  "unread",
   "spam",
   "sent",
   "trash",
   "drafts",
 ] satisfies readonly MailboxCategory[]);
 
-const historySyncMailboxCategorySchema = z.enum(["inbox", "spam", "sent", "trash"]);
+const historySyncMailboxCategorySchema = z.enum(["inbox", "unread", "spam", "sent", "trash"]);
 const mailboxIdSchema = z.string().trim().min(1);
+const mailboxSwitcherOrderSchema = z.object({
+  groupIds: z.array(z.string().trim().min(1)),
+  mailboxIdsByGroupId: z.record(z.string().trim().min(1), z.array(z.string().trim().min(1))),
+});
 
 type ProtectedContext = OrpcContext & {
-  activeOrganizationId: string | null;
   userId: string;
 };
 
@@ -121,15 +127,9 @@ const protectedProcedure = base.use(async ({ context, errors, next }) => {
     throw errors.UNAUTHORIZED();
   }
 
-  const organizationState = await ensureUserOrganizationState(session.user, {
-    activeOrganizationId: session.session.activeOrganizationId ?? null,
-    sessionToken: session.session.token,
-  });
-
   return next({
     context: {
       ...context,
-      activeOrganizationId: organizationState.activeOrganizationId,
       userId: session.user.id,
     },
   });
@@ -181,7 +181,6 @@ const callGmail = async <TValue>(
 ): Promise<TValue> => {
   const headers = getRequestHeaders(context);
   const { accessToken, mailbox } = await getAuthorizedGmailMailbox({
-    activeOrganizationId: context.activeOrganizationId,
     headers,
     mailboxId,
     userId: context.userId,
@@ -228,24 +227,28 @@ export const appRouter = {
       .input(
         z.object({
           domain: z.string().trim().min(1),
+          organizationId: z.string().trim().min(1),
         }),
       )
       .handler(async ({ context, input }) => {
         return await createMailDomainSetup({
-          activeOrganizationId: context.activeOrganizationId,
           domain: input.domain,
+          organizationId: input.organizationId,
+          userId: context.userId,
         });
       }),
     checkSetup: protectedProcedure
       .input(
         z.object({
           domain: z.string().trim().min(1),
+          organizationId: z.string().trim().min(1),
         }),
       )
       .handler(async ({ context, input }) => {
         return await checkMailDomainSetup({
-          activeOrganizationId: context.activeOrganizationId,
           domain: input.domain,
+          organizationId: input.organizationId,
+          userId: context.userId,
         });
       }),
   },
@@ -261,7 +264,6 @@ export const appRouter = {
       .handler(async ({ context, input }) => {
         return await callWithRateLimitHandling(context, async () => {
           return await getGoogleScopeRepairTarget({
-            activeOrganizationId: context.activeOrganizationId,
             headers: getRequestHeaders(context),
             preferredMailboxId: input.preferredMailboxId ?? null,
             targetAccountId: input.targetAccountId ?? null,
@@ -269,19 +271,15 @@ export const appRouter = {
           });
         });
       }),
-    listMailboxesForActiveWorkspace: protectedProcedure
-      .route({ method: "GET" })
-      .handler(async ({ context }) => {
-        return await listMailboxesForActiveWorkspace({
-          activeOrganizationId: context.activeOrganizationId,
-          headers: getRequestHeaders(context),
-          userId: context.userId,
-        });
-      }),
+    listMailboxes: protectedProcedure.route({ method: "GET" }).handler(async ({ context }) => {
+      return await listMailboxes({
+        headers: getRequestHeaders(context),
+        userId: context.userId,
+      });
+    }),
     syncPersonalMailboxes: protectedProcedure.handler(async ({ context }) => {
       return await callWithRateLimitHandling(context, async () => {
         return await syncPersonalGmailMailboxes({
-          activeOrganizationId: context.activeOrganizationId,
           headers: getRequestHeaders(context),
           userId: context.userId,
         });
@@ -295,7 +293,6 @@ export const appRouter = {
       )
       .handler(async ({ context, input }) => {
         return await disconnectPersonalGmailMailbox({
-          activeOrganizationId: context.activeOrganizationId,
           headers: getRequestHeaders(context),
           mailboxId: input.mailboxId,
           userId: context.userId,
@@ -309,9 +306,17 @@ export const appRouter = {
       )
       .handler(async ({ context, input }) => {
         return await setDefaultMailbox({
-          activeOrganizationId: context.activeOrganizationId,
           headers: getRequestHeaders(context),
           mailboxId: input.mailboxId,
+          userId: context.userId,
+        });
+      }),
+    updateMailboxSwitcherOrder: protectedProcedure
+      .input(mailboxSwitcherOrderSchema)
+      .handler(async ({ context, input }) => {
+        return await updateMailboxSwitcherOrder({
+          headers: getRequestHeaders(context),
+          order: input,
           userId: context.userId,
         });
       }),
@@ -359,6 +364,24 @@ export const appRouter = {
             mailbox: input.category,
             signal,
             startHistoryId: input.startHistoryId,
+          });
+        });
+      }),
+    refreshMessages: protectedProcedure
+      .route({ method: "GET" })
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          category: historySyncMailboxCategorySchema,
+          messageIds: z.array(z.string().trim().min(1)).min(1).max(25),
+        }),
+      )
+      .handler(async ({ context, input }) => {
+        return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
+          return await refreshMailboxMessages(accessToken, {
+            mailbox: input.category,
+            messageIds: input.messageIds,
+            signal,
           });
         });
       }),

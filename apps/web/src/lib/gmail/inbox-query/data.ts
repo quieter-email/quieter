@@ -13,6 +13,10 @@ export type MessagesQueryData = {
   pageParams: Array<string | undefined>;
 };
 
+type MergeRefreshedMailboxPagesOptions = {
+  preserveUnrefreshedPages?: boolean;
+};
+
 export type MessageMetadataMutationResult = {
   id: string;
   labelIds?: string[];
@@ -37,10 +41,13 @@ export const isMessagesQueryData = (value: unknown): value is MessagesQueryData 
   return Array.isArray(pages) && Array.isArray(pageParams);
 };
 
-const buildCachedMessageLookup = (data: MessagesQueryData | undefined) => {
+const buildCachedMessageLookup = (
+  data: MessagesQueryData | undefined,
+  pageCount = data?.pages.length ?? 0,
+) => {
   const messagesById = new Map<string, MessageListItem>();
 
-  for (const page of data?.pages ?? []) {
+  for (const page of data?.pages.slice(0, pageCount) ?? []) {
     for (const message of page.messages) {
       messagesById.set(message.id, message);
     }
@@ -71,23 +78,48 @@ export const mergeRefreshedMailboxPagesIntoQueryData = (
   previous: MessagesQueryData | undefined,
   refreshedPages: ListMessagesPageResult[],
   refreshedPageParams: Array<string | undefined>,
+  options: MergeRefreshedMailboxPagesOptions = {},
 ): MessagesQueryData => {
   if (!previous?.pages.length) {
     return { pages: refreshedPages, pageParams: refreshedPageParams };
   }
 
-  const cachedById = buildCachedMessageLookup(previous);
+  const cachedById = buildCachedMessageLookup(
+    previous,
+    options.preserveUnrefreshedPages
+      ? Math.min(previous.pages.length, refreshedPages.length + 1)
+      : previous.pages.length,
+  );
+  const pages = refreshedPages.map((page) => ({
+    ...page,
+    messages: page.messages.map((message) => {
+      const previousMessage = cachedById.get(message.id);
+      return previousMessage
+        ? mergeMessagePreservingLoadedDetails(previousMessage, message)
+        : message;
+    }),
+  }));
+  const lastRefreshedPage = refreshedPages[refreshedPages.length - 1];
+
+  if (
+    !options.preserveUnrefreshedPages ||
+    !lastRefreshedPage?.nextPageToken ||
+    refreshedPages.length >= previous.pages.length
+  ) {
+    return { pages, pageParams: refreshedPageParams };
+  }
+
+  const refreshedMessageIds = new Set(
+    pages.flatMap((page) => page.messages.map((message) => message.id)),
+  );
+  const preservedPages = previous.pages.slice(refreshedPages.length).map((page) => ({
+    ...page,
+    messages: page.messages.filter((message) => !refreshedMessageIds.has(message.id)),
+  }));
+
   return {
-    pages: refreshedPages.map((page) => ({
-      ...page,
-      messages: page.messages.map((message) => {
-        const previousMessage = cachedById.get(message.id);
-        return previousMessage
-          ? mergeMessagePreservingLoadedDetails(previousMessage, message)
-          : message;
-      }),
-    })),
-    pageParams: refreshedPageParams,
+    pages: [...pages, ...preservedPages],
+    pageParams: [...refreshedPageParams, ...previous.pageParams.slice(refreshedPageParams.length)],
   };
 };
 
@@ -192,6 +224,32 @@ export const updateMessagesInThreadData = (
   });
 
   return hasChanges ? { ...data, messages } : data;
+};
+
+export const upsertMessageInThreadData = (
+  data: ThreadMessagesResult | undefined,
+  nextMessage: MessageListItem,
+): ThreadMessagesResult | undefined => {
+  if (!data || data.threadId !== nextMessage.threadId) return data;
+
+  const currentIndex = data.messages.findIndex((message) => message.id === nextMessage.id);
+  if (currentIndex >= 0) {
+    return updateMessageInThreadData(data, nextMessage.id, (message) =>
+      mergeMessagePreservingLoadedDetails(message, nextMessage),
+    );
+  }
+
+  const messageOrder = new Map(data.messages.map((message, index) => [message.id, index]));
+  const messages = [...data.messages, nextMessage].sort((left, right) => {
+    const timestampDifference = getMessageSortTimestamp(left) - getMessageSortTimestamp(right);
+    if (timestampDifference !== 0) return timestampDifference;
+
+    const leftOrder = messageOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = messageOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+    return leftOrder - rightOrder;
+  });
+
+  return { ...data, messages };
 };
 
 export const removeMessagesFromThreadData = (

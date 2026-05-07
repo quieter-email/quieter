@@ -29,6 +29,27 @@ export const formatMessageDate = (message: MessageListItem, format: "compact" | 
   }).format(parsed);
 };
 
+export const formatMessageListDate = (message: MessageListItem, referenceDate = new Date()) => {
+  const parsed = getParsedMessageDate(message);
+  if (!parsed) return "";
+
+  const isCurrentYear = parsed.getFullYear() === referenceDate.getFullYear();
+  const isToday =
+    isCurrentYear &&
+    parsed.getMonth() === referenceDate.getMonth() &&
+    parsed.getDate() === referenceDate.getDate();
+
+  if (isToday) {
+    return new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(parsed);
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    month: "short",
+    ...(isCurrentYear ? {} : { year: "numeric" }),
+  }).format(parsed);
+};
+
 export const parseSender = (from?: string) => {
   if (!from) return { name: "", email: "", display: "" };
 
