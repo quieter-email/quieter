@@ -31,6 +31,7 @@ export const OrganizationFormDialog = ({
   organization?: OrganizationSummary;
 }) => {
   const queryClient = useQueryClient();
+  const organizationsState = authClient.useListOrganizations();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const isEditing = !!organization;
@@ -59,6 +60,7 @@ export const OrganizationFormDialog = ({
     },
     mutationKey: ["auth", "organization", isEditing ? "update" : "create"],
     onSuccess: async () => {
+      await organizationsState.refetch();
       if (organization) {
         await queryClient.invalidateQueries({
           queryKey: getFullOrganizationQueryKey(organization.id),

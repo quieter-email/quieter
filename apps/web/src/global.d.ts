@@ -1,7 +1,7 @@
 declare module "*.css";
 declare module "*.css?url";
 declare module "@barkleapp/css-sanitizer" {
-  type CssSanitizerOptions = {
+  export type CssSanitizerOptions = {
     allowedAtRules?: Iterable<string>;
     allowedProperties?: Iterable<string>;
     allowedPseudoClasses?: Iterable<string>;

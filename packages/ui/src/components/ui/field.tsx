@@ -70,10 +70,7 @@ export const FieldControl = ({
 }: Omit<ComponentPropsWithoutRef<typeof FieldPrimitive.Control>, "size"> &
   VariantProps<typeof fieldControlVariants>) => (
   <FieldPrimitive.Control
-    className={cn(
-      fieldControlVariants({ chrome: chrome ?? "default", size: size ?? "default" }),
-      className,
-    )}
+    className={cn(fieldControlVariants({ chrome, size }), className)}
     {...props}
   />
 );

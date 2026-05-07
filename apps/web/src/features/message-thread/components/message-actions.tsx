@@ -345,7 +345,7 @@ const MessageActionsDialogs = ({
     } catch (error) {
       dispatch({
         type: "labels/error",
-        value: (error as { message?: string })?.message ?? "Could not update labels.",
+        value: error instanceof Error && error.message ? error.message : "Could not update labels.",
       });
     } finally {
       dispatch({
@@ -373,7 +373,10 @@ const MessageActionsDialogs = ({
     } catch (error) {
       dispatch({
         type: "delete/error",
-        value: (error as { message?: string })?.message ?? "Could not delete this message.",
+        value:
+          error instanceof Error && error.message
+            ? error.message
+            : "Could not delete this message.",
       });
     } finally {
       dispatch({

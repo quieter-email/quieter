@@ -477,33 +477,11 @@ export const MessageListSearch = ({
           toEnd: shouldFocusFilterValueEnd(currentState.filters[index - 1]),
         };
 
-  const handleFixedValueTokenKeyDown = (
+  const handleTokenKeyDown = (
     event: ReactKeyboardEvent<HTMLButtonElement>,
     index: number,
+    { removeOnSpace = false }: { removeOnSpace?: boolean } = {},
   ) => {
-    if (handleDropdownKey(event)) {
-      return;
-    }
-
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      focusPreviousSegment(index);
-      return;
-    }
-
-    if (event.key === "ArrowRight") {
-      event.preventDefault();
-      moveOutOfSegment(index, "next");
-      return;
-    }
-
-    if (event.key === "Backspace" || event.key === "Delete" || event.key === "Enter") {
-      event.preventDefault();
-      removeFilterAtIndex(index);
-    }
-  };
-
-  const handleLabelTokenKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
     if (handleDropdownKey(event)) {
       return;
     }
@@ -524,7 +502,7 @@ export const MessageListSearch = ({
       event.key === "Backspace" ||
       event.key === "Delete" ||
       event.key === "Enter" ||
-      event.key === " "
+      (removeOnSpace && event.key === " ")
     ) {
       event.preventDefault();
       removeFilterAtIndex(index);
@@ -814,7 +792,9 @@ export const MessageListSearch = ({
                         key={`label:${normalizeLabelSelectionKey(filter.value)}`}
                         onClick={() => removeFilterAtIndex(index)}
                         onFocus={openSearchDropdown}
-                        onKeyDown={(event) => handleLabelTokenKeyDown(event, index)}
+                        onKeyDown={(event) =>
+                          handleTokenKeyDown(event, index, { removeOnSpace: true })
+                        }
                         ref={(node) => setSegmentRef(index, node)}
                         type="button"
                       >
@@ -833,7 +813,7 @@ export const MessageListSearch = ({
                         key={`${filter.type}:${filter.value}`}
                         onClick={() => removeFilterAtIndex(index)}
                         onFocus={openSearchDropdown}
-                        onKeyDown={(event) => handleFixedValueTokenKeyDown(event, index)}
+                        onKeyDown={(event) => handleTokenKeyDown(event, index)}
                         ref={(node) => setSegmentRef(index, node)}
                         type="button"
                       >

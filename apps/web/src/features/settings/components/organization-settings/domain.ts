@@ -112,16 +112,35 @@ export const hasOrganizationPermission = (
   permissions: OrganizationPermissions,
 ) => (role ? authClient.organization.checkRolePermission({ permissions, role }) : false);
 
-const isUserInvitation = (value: unknown): value is UserInvitation =>
-  typeof value === "object" &&
-  value !== null &&
-  "id" in value &&
-  typeof value.id === "string" &&
-  "organizationName" in value &&
-  typeof value.organizationName === "string" &&
-  "role" in value &&
-  typeof value.role === "string" &&
-  "expiresAt" in value;
+const invitationStatuses = new Set(["pending", "accepted", "rejected", "canceled"]);
+
+const isInvitationDate = (value: unknown): value is Date | string =>
+  value instanceof Date
+    ? !Number.isNaN(value.getTime())
+    : typeof value === "string" && !Number.isNaN(new Date(value).getTime());
+
+const isUserInvitation = (value: unknown): value is UserInvitation => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const invitation = value as Record<string, unknown>;
+  return (
+    typeof invitation.id === "string" &&
+    typeof invitation.email === "string" &&
+    typeof invitation.inviterId === "string" &&
+    typeof invitation.organizationId === "string" &&
+    typeof invitation.organizationName === "string" &&
+    typeof invitation.role === "string" &&
+    typeof invitation.status === "string" &&
+    invitationStatuses.has(invitation.status) &&
+    isInvitationDate(invitation.createdAt) &&
+    isInvitationDate(invitation.expiresAt) &&
+    (invitation.teamId === undefined ||
+      invitation.teamId === null ||
+      typeof invitation.teamId === "string")
+  );
+};
 
 const normalizeUserInvitations = (value: unknown): UserInvitation[] => {
   if (Array.isArray(value)) {

@@ -21,6 +21,7 @@ import {
   type OrganizationRoleOption,
   formatRoleLabel,
   getFullOrganizationQueryKey,
+  hasOrganizationRole,
   organizationRoleOptions,
 } from "./domain";
 
@@ -80,7 +81,7 @@ export const MemberActions = ({
   const isPending = removeMemberMutation.isPending || updateMemberRoleMutation.isPending;
   const unavailableReason = isActiveMember ? "Unavailable for yourself" : "No permission";
   const getRoleDisabledReason = (role: OrganizationRoleOption) =>
-    role === member.role ? "Current role" : unavailableReason;
+    hasOrganizationRole(member.role, role) ? "Current role" : unavailableReason;
 
   const handleRemoveMember = async () => {
     setError(null);
@@ -138,7 +139,8 @@ export const MemberActions = ({
 
           <DropdownMenuContent align="end">
             {organizationRoleOptions.map((role) => {
-              const isDisabled = isActiveMember || !canUpdateMemberRole || role === member.role;
+              const isDisabled =
+                isActiveMember || !canUpdateMemberRole || hasOrganizationRole(member.role, role);
               const item = (
                 <DropdownMenuItem
                   closeOnSelect={!isDisabled}

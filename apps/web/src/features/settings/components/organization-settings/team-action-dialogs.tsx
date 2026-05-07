@@ -177,6 +177,7 @@ export const DeleteOrganizationDialog = ({
   organization: FullOrganization;
 }) => {
   const queryClient = useQueryClient();
+  const organizationsState = authClient.useListOrganizations();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const deleteOrganizationMutation = useMutation({
@@ -190,10 +191,11 @@ export const DeleteOrganizationDialog = ({
       return response;
     },
     mutationKey: ["auth", "organization", organization.id, "delete"],
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.removeQueries({
         queryKey: getFullOrganizationQueryKey(organization.id),
       });
+      await organizationsState.refetch();
       onDeleted?.();
     },
   });

@@ -24,9 +24,7 @@ const calendarChevronVariants = cva("size-4", {
 });
 
 const CalendarChevron = ({ className, orientation = "left" }: ChevronProps) => (
-  <ChevronDownIcon
-    className={cn(calendarChevronVariants({ orientation: orientation ?? "left" }), className)}
-  />
+  <ChevronDownIcon className={cn(calendarChevronVariants({ orientation }), className)} />
 );
 
 export type CalendarProps = ComponentProps<typeof DayPicker>;

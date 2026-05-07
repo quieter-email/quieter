@@ -115,7 +115,9 @@ function GoogleScopeRepairRouteComponent() {
       window.location.assign(providerUrl.toString());
     } catch (error) {
       setRepairError(
-        (error as { message?: string })?.message ?? "Could not start Google reconnect.",
+        error instanceof Error && error.message
+          ? error.message
+          : "Could not start Google reconnect.",
       );
       setIsStartingRepair(false);
     }

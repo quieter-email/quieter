@@ -77,9 +77,11 @@ export const VerticalSlot = ({
         <div
           className={cn(
             "absolute inset-0 transition-[translate,opacity] ease-out will-change-transform",
-            item.phase === "enter" && "-translate-y-full opacity-0",
-            item.phase === "active" && "translate-y-0 opacity-100",
-            item.phase === "exit" && "translate-y-full opacity-0",
+            {
+              "-translate-y-full opacity-0": item.phase === "enter",
+              "translate-y-0 opacity-100": item.phase === "active",
+              "translate-y-full opacity-0": item.phase === "exit",
+            },
           )}
           key={item.key}
           onTransitionEnd={() => {

@@ -129,21 +129,6 @@ const getMessageUnsubscribeAction = (
   };
 };
 
-const hasSelectionInElement = (element: HTMLElement) => {
-  const selection = window.getSelection();
-  if (!selection || selection.isCollapsed || !selection.toString().trim()) {
-    return false;
-  }
-
-  for (let index = 0; index < selection.rangeCount; index++) {
-    if (selection.getRangeAt(index).intersectsNode(element)) {
-      return true;
-    }
-  }
-
-  return false;
-};
-
 const MessageHeaderContent = ({
   className,
   headerActions,
@@ -230,8 +215,13 @@ const MessageHeaderContent = ({
               aria-expanded={isExpanded}
               className="w-full min-w-0 cursor-pointer rounded-sm text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60 sm:flex-1"
               onClick={(event) => {
-                if (hasSelectionInElement(event.currentTarget)) {
-                  return;
+                const selection = window.getSelection();
+                if (selection && !selection.isCollapsed && selection.toString().trim()) {
+                  for (let index = 0; index < selection.rangeCount; index++) {
+                    if (selection.getRangeAt(index).intersectsNode(event.currentTarget)) {
+                      return;
+                    }
+                  }
                 }
 
                 onToggleExpanded();

@@ -5,7 +5,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, cn, TextField, TextFieldInput } from "@quieter/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
 import { type FullOrganization, getFullOrganizationQueryKey } from "./domain";
@@ -20,6 +20,7 @@ export const InviteMemberForm = ({
   organization: FullOrganization;
 }) => {
   const queryClient = useQueryClient();
+  const emailErrorId = useId();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const inviteMemberMutation = useMutation({
     mutationFn: async (email: string) => {
@@ -77,21 +78,35 @@ export const InviteMemberForm = ({
     >
       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
         <form.Field name="email">
-          {(field) => (
-            <TextField className="min-w-0">
-              <TextFieldInput
-                aria-invalid={field.state.meta.errors.length > 0}
-                name={field.name}
-                onBlur={() => field.handleBlur()}
-                onChange={(event) => {
-                  setSubmitError(null);
-                  field.handleChange(event.target.value);
-                }}
-                placeholder="member@example.com"
-                value={field.state.value}
-              />
-            </TextField>
-          )}
+          {(field) => {
+            const hasErrors = field.state.meta.errors.length > 0;
+
+            return (
+              <TextField className="min-w-0">
+                <TextFieldInput
+                  aria-describedby={hasErrors ? emailErrorId : undefined}
+                  aria-invalid={hasErrors}
+                  name={field.name}
+                  onBlur={() => field.handleBlur()}
+                  onChange={(event) => {
+                    setSubmitError(null);
+                    field.handleChange(event.target.value);
+                  }}
+                  placeholder="member@example.com"
+                  value={field.state.value}
+                />
+                {hasErrors && (
+                  <div id={emailErrorId} role="alert">
+                    {field.state.meta.errors.map((error) => (
+                      <p className="text-sm text-destructive" key={error?.message}>
+                        {error?.message}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </TextField>
+            );
+          }}
         </form.Field>
 
         <Button className="sm:w-24" disabled={inviteMemberMutation.isPending} type="submit">

@@ -28,6 +28,18 @@ export const searchFilterOptions: ReadonlyArray<{
   icon: IconSvgElement;
   label: string;
 }> = [
+  {
+    filter: { type: "is", value: "unread" },
+    hint: "is:unread",
+    icon: MailAtSign01Icon,
+    label: "Unread",
+  },
+  {
+    filter: { type: "is", value: "read" },
+    hint: "is:read",
+    icon: MailOpen02Icon,
+    label: "Read",
+  },
   { filter: { type: "before", value: "" }, hint: "before:", icon: Calendar01Icon, label: "Before" },
   { filter: { type: "after", value: "" }, hint: "after:", icon: Calendar03Icon, label: "After" },
   {
@@ -58,18 +70,6 @@ export const searchFilterOptions: ReadonlyArray<{
     icon: FileAttachmentIcon,
     label: "Has attachment",
   },
-  {
-    filter: { type: "is", value: "unread" },
-    hint: "is:unread",
-    icon: MailAtSign01Icon,
-    label: "Unread",
-  },
-  {
-    filter: { type: "is", value: "read" },
-    hint: "is:read",
-    icon: MailOpen02Icon,
-    label: "Read",
-  },
 ];
 
 const searchFilterSections: ReadonlyArray<{
@@ -99,6 +99,31 @@ const searchFilterSections: ReadonlyArray<{
     ),
   },
 ];
+
+if (import.meta.env.MODE !== "production") {
+  const sectionOptionCounts = new Map<string, number>();
+  for (const section of searchFilterSections) {
+    for (const option of section.options) {
+      const key = `${option.filter.type}:${option.filter.value}`;
+      sectionOptionCounts.set(key, (sectionOptionCounts.get(key) ?? 0) + 1);
+    }
+  }
+
+  const missingOptions = searchFilterOptions
+    .map((option) => `${option.filter.type}:${option.filter.value}`)
+    .filter((key) => !sectionOptionCounts.has(key));
+  const duplicatedOptions = Array.from(sectionOptionCounts.entries())
+    .filter(([, count]) => count > 1)
+    .map(([key]) => key);
+
+  if (missingOptions.length > 0 || duplicatedOptions.length > 0) {
+    throw new Error(
+      `searchFilterSections must include each searchFilterOptions entry exactly once. Missing: ${
+        missingOptions.join(", ") || "none"
+      }. Duplicated: ${duplicatedOptions.join(", ") || "none"}.`,
+    );
+  }
+}
 
 const isSearchFilterOptionActive = (
   filters: readonly SearchFilterChip[],

@@ -27,6 +27,7 @@ export type ProcessedMailHtml = {
 
 export type MailRenderTheme = "dark" | "light";
 
+// Runs after processed mail is mounted because readable color fixes need computed DOM styles.
 export const fixNonReadableColors = (
   rootElement: ParentNode,
   options?: { minContrast?: number; defaultBackground?: string },

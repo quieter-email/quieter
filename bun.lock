@@ -195,7 +195,7 @@
   "overrides": {
     "@better-auth/core": "1.5.0",
     "@better-auth/utils": "0.3.1",
-    "@tanstack/query-core": "5.100.6",
+    "@tanstack/query-core": "5.100.9",
     "better-call": "1.3.2",
   },
   "catalog": {
@@ -1051,7 +1051,7 @@
 
     "@tanstack/pacer-lite": ["@tanstack/pacer-lite@0.1.1", "", {}, "sha512-y/xtNPNt/YeyoVxE/JCx+T7yjEzpezmbb+toK8DDD1P4m7Kzs5YR956+7OKexG3f8aXgC3rLZl7b1V+yNUSy5w=="],
 
-    "@tanstack/query-core": ["@tanstack/query-core@5.100.6", "", {}, "sha512-Os2CPUr98to98RYm+D4qGqGkiffn7MGSyl2547a4MljVkHE30AMJRqTiyCqBfMwzAx/I91vCkAxp5tHSla6Twg=="],
+    "@tanstack/query-core": ["@tanstack/query-core@5.100.9", "", {}, "sha512-SJSFw1S8+kQ0+knv/XGfrbocWoAlT7vDKsSImtLx3ZPQmEcR46hkDjLSvynSy25N8Ms4tIEini1FuBd5k7IscQ=="],
 
     "@tanstack/query-persist-client-core": ["@tanstack/query-persist-client-core@5.100.9", "", { "dependencies": { "@tanstack/query-core": "5.100.9" } }, "sha512-sCPZZp3D9sOeqcA4SDxjUIm4wVq8PwHebH4ouFZetwjT4xvGjT/cLBQ4Sst+BFcFuk745pCPkf3T4MFliLHECQ=="],
 

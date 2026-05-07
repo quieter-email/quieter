@@ -61,7 +61,9 @@ export const MessageList = (props: MessageListProps) => {
     try {
       await action(selection.selectedThreads);
     } catch (error) {
-      toast.error((error as { message?: string })?.message ?? "Could not update messages.");
+      toast.error(
+        error instanceof Error && error.message ? error.message : "Could not update messages.",
+      );
     }
   };
 

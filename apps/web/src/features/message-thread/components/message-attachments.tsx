@@ -34,17 +34,11 @@ const formatAttachmentSize = (size: number) => {
   return `${megabytes >= 10 ? Math.round(megabytes) : megabytes.toFixed(1)} MB`;
 };
 
-const primaryMime = (mimeType: string) => mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
-
-const extensionOf = (fileName: string): string => {
-  const base = fileName.trim().split(/[/\\]/).pop() ?? "";
-  const dot = base.lastIndexOf(".");
-  return dot >= 0 ? base.slice(dot + 1).toLowerCase() : "";
-};
-
 const getAttachmentTypeIcon = (mimeType: string, fileName: string): IconSvgElement => {
-  const mime = primaryMime(mimeType);
-  const ext = extensionOf(fileName);
+  const mime = mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
+  const baseName = fileName.trim().split(/[/\\]/).pop() ?? "";
+  const dotIndex = baseName.lastIndexOf(".");
+  const ext = dotIndex >= 0 ? baseName.slice(dotIndex + 1).toLowerCase() : "";
 
   if (mime === "application/pdf" || ext === "pdf") {
     return Pdf01Icon;
