@@ -106,7 +106,7 @@ const SidebarContent = ({
 
       <div className="mt-3 p-1">
         <Button
-          className="w-full justify-start rounded-md px-4"
+          className="w-full justify-start rounded-md px-4 transition-[font-weight,scale] hover:font-bold active:font-bold"
           disabled={!selectedMailboxId}
           onClick={handleComposeNewMail}
           type="button"
@@ -133,7 +133,7 @@ const SidebarContent = ({
       <div className="mt-auto p-2">
         <LinkButton
           aria-label="Settings"
-          className="group w-full justify-start"
+          className="group w-full justify-start transition-[font-weight,scale] hover:font-bold active:font-bold"
           onClick={onRequestClose}
           search={{
             from: "/",

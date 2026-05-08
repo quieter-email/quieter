@@ -39,9 +39,10 @@ export const SidebarMailboxNav = ({ onSelectMailbox, selectedMailbox }: SidebarM
         <Button
           aria-current={isActive ? "page" : undefined}
           className={cn(
-            "group relative w-full justify-start gap-3 rounded-md border border-transparent px-3 text-left text-sm font-medium",
+            "group relative w-full justify-start gap-3 rounded-md border border-transparent px-3 text-left text-sm font-medium transition-[font-weight,scale] hover:font-bold",
             {
-              "border-primary/20 bg-primary/10 text-foreground hover:bg-primary/15": isActive,
+              "border-primary/20 bg-primary/10 font-bold text-foreground hover:bg-primary/15":
+                isActive,
             },
           )}
           key={item.id}
@@ -50,7 +51,7 @@ export const SidebarMailboxNav = ({ onSelectMailbox, selectedMailbox }: SidebarM
           variant="ghost"
         >
           <HugeiconsIcon
-            strokeWidth={isActive ? 2.5 : 1.5}
+            strokeWidth={isActive ? 3 : 1.5}
             className={cn("size-4 shrink-0", {
               "text-foreground": isActive,
               "text-foreground-light": !isActive,

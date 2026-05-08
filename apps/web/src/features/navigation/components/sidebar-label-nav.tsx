@@ -255,9 +255,10 @@ export const SidebarLabelNav = ({ mailboxId, onSearch, searchQuery }: SidebarLab
               <Button
                 aria-pressed={isActive}
                 className={cn(
-                  "squircle h-7 min-w-0 justify-start gap-2 rounded-md border border-transparent px-2.5 text-left text-xs font-normal",
+                  "squircle h-7 min-w-0 justify-start gap-2 rounded-md border border-transparent px-2.5 text-left text-xs font-normal transition-[font-weight,scale] hover:font-bold",
                   {
-                    "border-primary/20 bg-primary/10 text-foreground hover:bg-primary/15": isActive,
+                    "border-primary/20 bg-primary/10 font-bold text-foreground hover:bg-primary/15":
+                      isActive,
                     "text-foreground-light hover:bg-muted/70 hover:text-foreground": !isActive,
                   },
                 )}
@@ -273,7 +274,7 @@ export const SidebarLabelNav = ({ mailboxId, onSearch, searchQuery }: SidebarLab
                     "text-muted-foreground": !isActive,
                   })}
                   icon={Tag01Icon}
-                  strokeWidth={isActive ? 2.4 : 1.5}
+                  strokeWidth={isActive ? 3 : 1.5}
                 />
                 <span className="min-w-0 truncate">{label.name}</span>
               </Button>

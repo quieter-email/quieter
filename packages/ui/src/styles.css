@@ -40,12 +40,9 @@
   --chart-3: oklch(0.52 0 0);
   --chart-4: oklch(0.62 0 0);
   --chart-5: oklch(0.72 0 0);
-  --font-sans:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Geist", ui-sans-serif, sans-serif;
   --font-serif: "Times New Roman", Georgia, ui-serif, serif;
-  --font-mono:
-    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
   --radius: 0.625rem;
   --shadow-x: 0px;
   --shadow-y: 1px;
@@ -173,6 +170,7 @@
   --shadow-2xl: var(--shadow-2xl);
   --shadow-elevation: var(--shadow-elevation);
   --shadow-elevation-sm: var(--shadow-elevation-sm);
+  --shadow-primary: var(--shadow-primary);
 }
 
 @layer base {
@@ -193,7 +191,8 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background font-sans text-foreground antialiased;
+    font-optical-sizing: auto;
   }
 }
 
