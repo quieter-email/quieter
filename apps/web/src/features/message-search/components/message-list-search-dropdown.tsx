@@ -13,6 +13,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { cn } from "@quieter/ui";
+import { LazyMotion, domAnimation, AnimatePresence, m } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { GmailLabelListItem } from "~/lib/gmail/gmail";
@@ -334,103 +335,114 @@ export const MessageListSearchDropdown = ({
       document.body,
     );
 
-  if (!isOpen) {
-    return null;
-  }
-
   return (
-    <div
-      aria-label="Search filters"
-      className="absolute inset-x-0 top-full z-30 mt-2 rounded-lg border bg-popover p-2 shadow-lg"
-      data-search-dropdown-content
-      onMouseDown={(event) => {
-        event.preventDefault();
-      }}
-      role="group"
-    >
-      <div className="flex flex-col gap-3">
-        {searchFilterSections.map((section) => (
-          <div className="flex flex-col gap-1" key={section.label}>
-            <SearchDropdownSectionLabel>{section.label}</SearchDropdownSectionLabel>
-            {section.options.map((option) => (
-              <SearchDropdownRow
-                active={isSearchFilterOptionActive(draftSearchState.filters, option.filter)}
-                highlighted={
-                  highlightedItemKey === `filter:${option.filter.type}:${option.filter.value}`
-                }
-                hint={option.hint}
-                icon={option.icon}
-                key={`${option.filter.type}:${option.filter.value}`}
-                label={option.label}
-                onClick={() => onSelectFilter(option.filter)}
-              />
-            ))}
-          </div>
-        ))}
-
-        <div className="flex flex-col gap-1">
-          <SearchDropdownSectionLabel>More</SearchDropdownSectionLabel>
-          <div
-            className="relative"
-            onPointerEnter={() => {
-              cancelCloseLabelsSubmenu();
-              setIsLabelsSubmenuOpen(true);
+    <LazyMotion features={domAnimation}>
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <m.div
+            animate={{ scale: 1, transformOrigin: "top", opacity: 1, y: 0 }}
+            exit={{
+              scale: 0.95,
+              transformOrigin: "top",
+              opacity: 0,
+              y: -10,
             }}
-            onPointerLeave={() => {
-              scheduleCloseLabelsSubmenu();
+            initial={{ scale: 0.95, transformOrigin: "top", opacity: 0, y: -10 }}
+            transition={{ duration: 0.1, ease: "easeOut" }}
+            aria-label="Search filters"
+            className="absolute inset-x-0 top-full z-30 mt-2 rounded-lg border bg-popover p-2 shadow-lg will-change-transform"
+            data-search-dropdown-content
+            onMouseDown={(event) => {
+              event.preventDefault();
             }}
+            role="group"
           >
-            <button
-              aria-expanded={showLabelsSubmenu}
-              aria-haspopup="true"
-              className={cn(
-                "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground outline-none hover:bg-muted focus-visible:bg-muted",
-                {
-                  "bg-muted": isLabelHighlighted,
-                  "bg-muted/80 ring-1 ring-border ring-inset": selectedUserLabelKeys.size > 0,
-                },
-              )}
-              onClick={() => {
-                setIsLabelsSubmenuOpen((open) => !open);
-              }}
-              ref={labelsTriggerRef}
-              type="button"
-            >
-              <HugeiconsIcon
-                aria-hidden
-                className="size-3.5 shrink-0 text-muted-foreground"
-                icon={Tag01Icon}
-              />
-              <span className="min-w-0 flex-1 truncate">Labels</span>
-              <HugeiconsIcon
-                aria-hidden
-                className="size-3.5 shrink-0 text-muted-foreground"
-                icon={ArrowRight01Icon}
-              />
-            </button>
+            <div className="flex flex-col gap-3">
+              {searchFilterSections.map((section) => (
+                <div className="flex flex-col gap-1" key={section.label}>
+                  <SearchDropdownSectionLabel>{section.label}</SearchDropdownSectionLabel>
+                  {section.options.map((option) => (
+                    <SearchDropdownRow
+                      active={isSearchFilterOptionActive(draftSearchState.filters, option.filter)}
+                      highlighted={
+                        highlightedItemKey === `filter:${option.filter.type}:${option.filter.value}`
+                      }
+                      hint={option.hint}
+                      icon={option.icon}
+                      key={`${option.filter.type}:${option.filter.value}`}
+                      label={option.label}
+                      onClick={() => onSelectFilter(option.filter)}
+                    />
+                  ))}
+                </div>
+              ))}
 
-            {showLabelsSubmenu && (
-              <>
-                <svg
-                  aria-hidden
-                  className="pointer-events-none absolute top-0 left-0 z-40"
-                  height={labelsLayout.height}
-                  viewBox={`0 0 ${labelsLayout.coneWidth} ${labelsLayout.height}`}
-                  width={labelsLayout.coneWidth}
+              <div className="flex flex-col gap-1">
+                <SearchDropdownSectionLabel>More</SearchDropdownSectionLabel>
+                <div
+                  className="relative"
+                  onPointerEnter={() => {
+                    cancelCloseLabelsSubmenu();
+                    setIsLabelsSubmenuOpen(true);
+                  }}
+                  onPointerLeave={() => {
+                    scheduleCloseLabelsSubmenu();
+                  }}
                 >
-                  <polygon
-                    className="pointer-events-auto"
-                    fill="transparent"
-                    points={`0 ${labelsLayout.coneOriginY} ${labelsLayout.coneWidth} 0 ${labelsLayout.coneWidth} ${labelsLayout.height}`}
-                    pointerEvents="all"
-                  />
-                </svg>
-                {labelsSubmenu}
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+                  <button
+                    aria-expanded={showLabelsSubmenu}
+                    aria-haspopup="true"
+                    className={cn(
+                      "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground outline-none hover:bg-muted focus-visible:bg-muted",
+                      {
+                        "bg-muted": isLabelHighlighted,
+                        "bg-muted/80 ring-1 ring-border ring-inset": selectedUserLabelKeys.size > 0,
+                      },
+                    )}
+                    onClick={() => {
+                      setIsLabelsSubmenuOpen((open) => !open);
+                    }}
+                    ref={labelsTriggerRef}
+                    type="button"
+                  >
+                    <HugeiconsIcon
+                      aria-hidden
+                      className="size-3.5 shrink-0 text-muted-foreground"
+                      icon={Tag01Icon}
+                    />
+                    <span className="min-w-0 flex-1 truncate">Labels</span>
+                    <HugeiconsIcon
+                      aria-hidden
+                      className="size-3.5 shrink-0 text-muted-foreground"
+                      icon={ArrowRight01Icon}
+                    />
+                  </button>
+
+                  {showLabelsSubmenu && (
+                    <>
+                      <svg
+                        aria-hidden
+                        className="pointer-events-none absolute top-0 left-0 z-40"
+                        height={labelsLayout.height}
+                        viewBox={`0 0 ${labelsLayout.coneWidth} ${labelsLayout.height}`}
+                        width={labelsLayout.coneWidth}
+                      >
+                        <polygon
+                          className="pointer-events-auto"
+                          fill="transparent"
+                          points={`0 ${labelsLayout.coneOriginY} ${labelsLayout.coneWidth} 0 ${labelsLayout.coneWidth} ${labelsLayout.height}`}
+                          pointerEvents="all"
+                        />
+                      </svg>
+                      {labelsSubmenu}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </m.div>
+        )}
+      </AnimatePresence>
+    </LazyMotion>
   );
 };

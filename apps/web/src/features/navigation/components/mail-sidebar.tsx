@@ -133,7 +133,7 @@ const SidebarContent = ({
       <div className="mt-auto p-2">
         <LinkButton
           aria-label="Settings"
-          className="w-full justify-start"
+          className="group w-full justify-start"
           onClick={onRequestClose}
           search={{
             from: "/",
@@ -142,7 +142,10 @@ const SidebarContent = ({
           variant="ghost"
           to="/settings"
         >
-          <HugeiconsIcon className="size-4 shrink-0" icon={Settings01Icon} />
+          <HugeiconsIcon
+            className="size-4 shrink-0 rotate-0 transition-transform duration-1000 ease-in-out group-hover:rotate-360"
+            icon={Settings01Icon}
+          />
           Settings
         </LinkButton>
       </div>
