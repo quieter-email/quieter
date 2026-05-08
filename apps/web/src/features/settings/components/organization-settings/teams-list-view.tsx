@@ -52,7 +52,7 @@ const PendingInvitationsSection = () => {
       await queryClient.invalidateQueries({ queryKey: getUserInvitationsQueryKey(userId) });
     },
   });
-  const invitations = [...(userInvitationsQuery.data ?? [])].sort((left, right) =>
+  const invitations = (userInvitationsQuery.data ?? []).toSorted((left, right) =>
     left.organizationName.localeCompare(right.organizationName),
   );
 
@@ -82,7 +82,7 @@ const PendingInvitationsSection = () => {
   };
 
   if (userInvitationsQuery.isPending) {
-    return <p className="text-sm text-muted-foreground">Loading invitations...</p>;
+    return <p className="text-sm text-muted-foreground">Loading invitations…</p>;
   }
 
   if (userInvitationsQuery.error) {
@@ -168,8 +168,8 @@ export const TeamsListView = ({
 
     {organizations.length > 0 ? (
       <div className="space-y-2">
-        {[...organizations]
-          .sort((left, right) => left.name.localeCompare(right.name))
+        {organizations
+          .toSorted((left, right) => left.name.localeCompare(right.name))
           .map((organization) => (
             <Button
               variant="ghost"

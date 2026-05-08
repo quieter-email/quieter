@@ -73,7 +73,7 @@ export const ComposeEditor = ({
         defaultProtocol: "https",
       }),
       Placeholder.configure({
-        placeholder: "Write your message...",
+        placeholder: "Write your message…",
       }),
       ComposeImage.configure({
         inline: false,
@@ -192,12 +192,12 @@ export const ComposeEditor = ({
         { "pointer-events-none opacity-80": disabled },
       )}
     >
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {editor ? (
           <EditorContent editor={editor} />
         ) : (
           <div aria-hidden className="min-h-72 text-[15px] leading-[1.75] text-muted-foreground/75">
-            Write your message...
+            Write your message…
           </div>
         )}
       </div>

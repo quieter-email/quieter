@@ -99,13 +99,13 @@ const areReplyContextsEqual = (
 ) => {
   if (!left && !right) return true;
   if (!left || !right) return false;
+  if (left.references.length !== right.references.length) return false;
 
-  return (
-    left.threadId === right.threadId &&
-    left.messageHeaderId === right.messageHeaderId &&
-    left.references.length === right.references.length &&
-    left.references.every((reference, index) => reference === right.references[index])
-  );
+  for (const [index, reference] of left.references.entries()) {
+    if (reference !== right.references[index]) return false;
+  }
+
+  return left.threadId === right.threadId && left.messageHeaderId === right.messageHeaderId;
 };
 
 const areDraftAnchorsEqual = (
@@ -129,11 +129,11 @@ const areComposeAssetsEqual = (
 ) => {
   if (left.length !== right.length) return false;
 
-  return left.every((attachment, index) => {
+  for (const [index, attachment] of left.entries()) {
     const other = right[index];
     if (!other) return false;
 
-    return (
+    if (
       attachment.id === other.id &&
       attachment.name === other.name &&
       attachment.mimeType === other.mimeType &&
@@ -143,8 +143,14 @@ const areComposeAssetsEqual = (
       ("contentId" in attachment
         ? "contentId" in other && attachment.contentId === other.contentId
         : !("contentId" in other))
-    );
-  });
+    ) {
+      continue;
+    }
+
+    return false;
+  }
+
+  return true;
 };
 
 export const haveComposeDraftPersistedFieldsChanged = (

@@ -26,9 +26,10 @@ export const useMessageListSelection = ({
   const isProgrammaticScrollToTopRef = useRef(false);
   const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(new Set());
   const [selectionAnchorThreadId, setSelectionAnchorThreadId] = useState<string | null>(null);
-  const selectedThreads = Array.from(selectedThreadIds)
-    .map((threadId) => threadedMessages.find((thread) => thread.threadId === threadId))
-    .filter((thread): thread is ThreadListEntry => !!thread);
+  const selectedThreads = Array.from(selectedThreadIds).flatMap((threadId) => {
+    const thread = threadedMessages.find((entry) => entry.threadId === threadId);
+    return thread ? [thread] : [];
+  });
   const allSelected =
     threadedMessages.length > 0 && selectedThreadIds.size === threadedMessages.length;
   const selectionIndeterminate = selectedThreadIds.size > 0 && !allSelected;

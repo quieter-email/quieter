@@ -7,7 +7,7 @@ const DEMO_MODE_CHANGE_EVENT = "quieter:demo-mode-enabled-change";
 
 export const isDemoModeAvailable = () => import.meta.env.DEV;
 
-export const readDemoModeEnabled = () => {
+const readDemoModeEnabled = () => {
   if (!isDemoModeAvailable() || typeof window === "undefined") return false;
   return window.localStorage.getItem(DEMO_MODE_STORAGE_KEY) === "true";
 };

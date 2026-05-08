@@ -4,7 +4,7 @@ import { Key02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, TextField, TextFieldInput } from "@quieter/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import { useState } from "react";
@@ -54,6 +54,7 @@ const AuthCredentials = ({
   mode: "login" | "signup";
   navigate: AuthNavigate;
 }) => {
+  const queryClient = useQueryClient();
   const [errors, setErrors] = useState<{
     google?: string;
     passkey?: string;
@@ -68,53 +69,53 @@ const AuthCredentials = ({
 
   const googleMutation = useMutation({
     mutationFn: async () => {
+      const response = await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/",
+      });
+      if (response.error) {
+        throw new Error(response.error.message ?? "Could not start Google sign-in.");
+      }
+      return response;
+    },
+    mutationKey: ["auth", "sign-in", "google"],
+    onError: (error) => {
+      setErrors((prev) => ({
+        ...prev,
+        google: error.message || "Could not start Google sign-in.",
+      }));
+    },
+    onMutate: () => {
       setErrors((prev) => ({ ...prev, google: undefined }));
-
-      await authClient.signIn
-        .social({
-          provider: "google",
-          callbackURL: "/",
-        })
-        .then((response) => {
-          if (response.error)
-            setErrors((prev) => ({
-              ...prev,
-              google: response.error.message ?? "Could not start Google sign-in.",
-            }));
-        })
-        .catch((error) => {
-          setErrors((prev) => ({
-            ...prev,
-            google: (error as Error).message ?? "Could not start Google sign-in.",
-          }));
-        });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
     },
   });
 
   const passkeyMutation = useMutation({
     mutationFn: async () => {
-      setErrors((prev) => ({ ...prev, passkey: undefined }));
-
-      try {
-        const response = await authClient.signIn.passkey();
-
-        if (response.error) {
-          setErrors((prev) => ({
-            ...prev,
-            passkey: response.error.message ?? "Could not sign in with a passkey.",
-          }));
-          return;
-        }
-
-        await navigate({
-          to: "/",
-        });
-      } catch (error) {
-        setErrors((prev) => ({
-          ...prev,
-          passkey: (error as Error).message ?? "Could not sign in with a passkey.",
-        }));
+      const response = await authClient.signIn.passkey();
+      if (response.error) {
+        throw new Error(response.error.message ?? "Could not sign in with a passkey.");
       }
+      return response;
+    },
+    mutationKey: ["auth", "sign-in", "passkey"],
+    onError: (error) => {
+      setErrors((prev) => ({
+        ...prev,
+        passkey: error.message || "Could not sign in with a passkey.",
+      }));
+    },
+    onMutate: () => {
+      setErrors((prev) => ({ ...prev, passkey: undefined }));
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+      await navigate({
+        to: "/",
+      });
     },
   });
 
@@ -184,8 +185,8 @@ const AuthCredentials = ({
                     placeholder="Name"
                     value={field.state.value}
                   />
-                  {field.state.meta.errors.map((error, i) => (
-                    <p className="text-xs text-destructive" key={i}>
+                  {field.state.meta.errors.map((error) => (
+                    <p className="text-xs text-destructive" key={error?.message}>
                       {error?.message ?? "An unknown error occurred."}
                     </p>
                   ))}
@@ -212,8 +213,8 @@ const AuthCredentials = ({
                   type="email"
                   value={field.state.value}
                 />
-                {field.state.meta.errors.map((error, i) => (
-                  <p className="text-xs text-destructive" key={i}>
+                {field.state.meta.errors.map((error) => (
+                  <p className="text-xs text-destructive" key={error?.message}>
                     {error?.message ?? "An unknown error occurred."}
                   </p>
                 ))}
@@ -238,7 +239,7 @@ const AuthCredentials = ({
             >
               {authClient.isLastUsedLoginMethod("magic-link") && <AuthLastUsedHint />}
               {isSubmitting ? (
-                "Sending..."
+                "Sending…"
               ) : isSubmitted ? (
                 <>
                   <HugeiconsIcon className="size-4 shrink-0" icon={Mail01Icon} />

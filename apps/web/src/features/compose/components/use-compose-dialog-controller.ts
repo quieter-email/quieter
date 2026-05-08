@@ -33,6 +33,7 @@ type ComposeDialogState = {
   showBcc: boolean;
   showCc: boolean;
 };
+type ComposeDraftUpdate = ComposeDraftState | ((current: ComposeDraftState) => ComposeDraftState);
 
 const AUTOSAVE_DELAY_MS = 1000;
 
@@ -44,8 +45,8 @@ const createDialogState = (): ComposeDialogState => ({
 });
 
 export const getDraftStatusMessage = (draft: ComposeDraftState) => {
-  if (draft.saveStatus === "sending") return "Sending message...";
-  if (draft.saveStatus === "saving") return "Saving draft...";
+  if (draft.saveStatus === "sending") return "Sending message…";
+  if (draft.saveStatus === "saving") return "Saving draft…";
   if (draft.saveStatus === "error") return "Draft needs attention";
   if (draft.lastSavedAt) return "Draft saved";
   return "Drafts save automatically";
@@ -83,7 +84,8 @@ export const useComposeDialogController = ({
     autosaveTimerRef.current = undefined;
   };
 
-  const setDraft = (draft: ComposeDraftState) => {
+  const setDraft = (update: ComposeDraftUpdate) => {
+    const draft = typeof update === "function" ? update(activeDraftRef.current) : update;
     activeDraftRef.current = draft;
     setState((current) => ({ ...current, draft }));
   };
@@ -210,11 +212,11 @@ export const useComposeDialogController = ({
     const draft = activeDraftRef.current;
     if (!draft.errorMessage && draft.saveStatus !== "error") return;
 
-    setDraft({
-      ...draft,
+    setDraft((current) => ({
+      ...current,
       errorMessage: null,
-      saveStatus: draft.saveStatus === "error" ? "idle" : draft.saveStatus,
-    });
+      saveStatus: current.saveStatus === "error" ? "idle" : current.saveStatus,
+    }));
   };
 
   const openComposeDraft = (nextDraft: ComposeDraftState | null) => {
@@ -264,7 +266,7 @@ export const useComposeDialogController = ({
     if (!shouldSaveDraft(draft, values)) return;
 
     if (activeDraftRef.current.saveStatus === "saved") {
-      setDraft({ ...activeDraftRef.current, saveStatus: "idle" });
+      setDraft((current) => ({ ...current, saveStatus: "idle" }));
     }
 
     const openId = openIdRef.current;
@@ -278,11 +280,11 @@ export const useComposeDialogController = ({
 
     clearAutosaveTimer();
     const draft = buildDraftFromForm(values);
-    setDraft({ ...draft, saveStatus: "sending", errorMessage: null });
+    setDraft(() => ({ ...draft, saveStatus: "sending", errorMessage: null }));
 
     try {
       const savedDraft = await saveDraft(draft);
-      setDraft({ ...savedDraft, saveStatus: "sending" });
+      setDraft(() => ({ ...savedDraft, saveStatus: "sending" }));
       if (demoMode) {
         await sendDemoDraft(savedDraft);
       } else {

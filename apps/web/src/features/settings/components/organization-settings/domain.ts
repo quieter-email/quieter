@@ -76,11 +76,6 @@ export const formatRoleLabel = (value: string) =>
 export const hasOrganizationRole = (value: string, role: OrganizationRoleOption) =>
   splitOrganizationRoles(value).includes(role);
 
-export const organizationRoleSelectItems = organizationRoleOptions.map((role) => ({
-  label: formatRoleLabel(role),
-  value: role,
-}));
-
 const dateFormatter = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
 
 export const normalizeOrganizationRole = (value: string): OrganizationRoleOption => {

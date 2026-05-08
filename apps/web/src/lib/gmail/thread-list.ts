@@ -74,12 +74,14 @@ export const buildThreadListEntries = (messages: readonly MessageListItem[]): Th
       message.threadAttachmentCount ??
       existingThread.attachmentCount + (message.attachments?.length ?? 0);
 
-    if (!existingThread.preview && message.snippet?.trim()) {
-      existingThread.preview = message.snippet.trim();
+    const snippet = message.snippet?.trim();
+    if (!existingThread.preview && snippet) {
+      existingThread.preview = snippet;
     }
 
-    if (existingThread.subject === "(No subject)" && message.subject?.trim()) {
-      existingThread.subject = message.subject.trim();
+    const subject = message.subject?.trim();
+    if (existingThread.subject === "(No subject)" && subject) {
+      existingThread.subject = subject;
     }
 
     if (isMessageUnread(message)) {

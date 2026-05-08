@@ -57,7 +57,7 @@ export const TeamView = ({
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-        Loading team...
+        Loading team…
       </div>
     );
   }
@@ -78,10 +78,12 @@ export const TeamView = ({
     return (
       <MembersView
         activeMember={activeMember}
-        canCancelInvitations={canCancelInvitations}
-        canInviteMembers={canInviteMembers}
-        canRemoveMembers={canRemoveMembers}
-        canUpdateMemberRole={canUpdateMemberRole}
+        permissions={{
+          canCancelInvitations,
+          canInviteMembers,
+          canRemoveMembers,
+          canUpdateMemberRole,
+        }}
         onBack={onBackToTeam}
         organization={fullOrganization}
       />

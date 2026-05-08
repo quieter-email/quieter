@@ -170,7 +170,7 @@ export const MailboxesSettingsPanel = () => {
       {isGmailConnecting && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-          <span>syncing Gmail...</span>
+          <span>Syncing Gmail…</span>
         </div>
       )}
 
@@ -185,7 +185,7 @@ export const MailboxesSettingsPanel = () => {
       {!mailboxesQuery.isError && !isGmailConnecting && mailboxesQuery.isPending && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-          <span>loading mailboxes...</span>
+          <span>Loading mailboxes…</span>
         </div>
       )}
 

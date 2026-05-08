@@ -19,7 +19,7 @@ import {
 } from "./gmail";
 
 export const DEMO_MAILBOX_ID = "demo:mailbox";
-export const DEMO_EMAIL_ADDRESS = "demo@quieter.email";
+const DEMO_EMAIL_ADDRESS = "demo@quieter.email";
 
 const DEMO_MAIL_STORAGE_KEY = "quieter:demo-mail-state";
 const DEMO_MAIL_STATE_VERSION = 3;
@@ -445,7 +445,7 @@ const invalidateDemoMail = async (queryClient: QueryClient) => {
 };
 
 const getSortedMessages = () =>
-  [...readDemoState().messages].sort(
+  readDemoState().messages.toSorted(
     (left, right) =>
       Number(new Date(right.internalDate ?? right.date ?? 0)) -
       Number(new Date(left.internalDate ?? left.date ?? 0)),
@@ -782,7 +782,7 @@ export const createDemoMailboxActions = (queryClient: QueryClient) => ({
   },
 });
 
-export const markDemoThreadReadState = async (
+const markDemoThreadReadState = async (
   queryClient: QueryClient,
   threadId: string,
   unread: boolean,
@@ -798,7 +798,7 @@ export const markDemoThreadReadState = async (
   await invalidateDemoMail(queryClient);
 };
 
-export const updateDemoThreadLabels = async (
+const updateDemoThreadLabels = async (
   queryClient: QueryClient,
   threadId: string,
   changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
@@ -810,7 +810,7 @@ export const updateDemoThreadLabels = async (
   await invalidateDemoMail(queryClient);
 };
 
-export const removeDemoThread = async (queryClient: QueryClient, threadId: string) => {
+const removeDemoThread = async (queryClient: QueryClient, threadId: string) => {
   removeMessages((message) => message.threadId === threadId);
   await invalidateDemoMail(queryClient);
 };

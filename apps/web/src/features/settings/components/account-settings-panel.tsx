@@ -58,13 +58,15 @@ const SettingsRow = ({
   </div>
 );
 
+const passkeyDateFormatter = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
+
 const formatPasskeyDate = (value: AuthPasskey["createdAt"]) => {
   if (!value) return "Recently added";
 
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "Recently added";
 
-  return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(date);
+  return passkeyDateFormatter.format(date);
 };
 
 const EditNameDialog = ({
@@ -76,6 +78,7 @@ const EditNameDialog = ({
 }) => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
   const updateUserMutation = useMutation({
     mutationFn: async (input: { name: string }) => {
       const response = await authClient.updateUser(input);
@@ -85,6 +88,10 @@ const EditNameDialog = ({
       return response;
     },
     mutationKey: ["auth", "update-user"],
+    onSuccess: async () => {
+      await onSessionRefresh();
+      await queryClient.invalidateQueries();
+    },
   });
   const form = useForm({
     defaultValues: {
@@ -95,7 +102,6 @@ const EditNameDialog = ({
 
       try {
         await updateUserMutation.mutateAsync({ name: value.name.trim() });
-        await onSessionRefresh();
         setOpen(false);
         resetDialog();
       } catch (mutationError) {
@@ -213,6 +219,9 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
         throw new Error(response.error.message ?? "Could not start email change.");
       }
       return response;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
     },
   });
   const form = useForm({
@@ -344,6 +353,7 @@ const PasskeysDialog = ({
   const [removingPasskeyId, setRemovingPasskeyId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
   const addPasskeyMutation = useMutation({
     mutationFn: async (name: string) => {
       const response = await authClient.passkey.addPasskey({
@@ -355,6 +365,9 @@ const PasskeysDialog = ({
       return response;
     },
     mutationKey: ["auth", "passkeys", "add"],
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+    },
   });
   const deletePasskeyMutation = useMutation({
     mutationFn: async (input: { id: string }) => {
@@ -370,6 +383,9 @@ const PasskeysDialog = ({
       return response;
     },
     mutationKey: ["auth", "passkeys", "delete"],
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+    },
   });
 
   const supportsPasskeys =
@@ -491,7 +507,7 @@ const PasskeysDialog = ({
 
             <div className="space-y-3">
               {isPasskeysPending ? (
-                <p className="text-sm text-muted-foreground">Loading passkeys...</p>
+                <p className="text-sm text-muted-foreground">Loading passkeys…</p>
               ) : passkeys.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No passkeys.</p>
               ) : (

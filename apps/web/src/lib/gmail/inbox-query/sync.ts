@@ -87,9 +87,10 @@ export const refreshLoadedMessagesPages = async (
   const refreshedPageCount = Math.min(loadedPageCount, maxPageCount);
   const refreshedPages: ListMessagesPageResult[] = [];
   const refreshedPageParams: Array<string | undefined> = [];
-  let pageToken: string | undefined;
 
-  for (let pageIndex = 0; pageIndex < refreshedPageCount; pageIndex += 1) {
+  const refreshNextPage = async (pageIndex: number, pageToken: string | undefined) => {
+    if (pageIndex >= refreshedPageCount) return;
+
     refreshedPageParams.push(pageToken);
     const refreshedPage = await fetchMessagesPage(
       mailboxId,
@@ -100,9 +101,11 @@ export const refreshLoadedMessagesPages = async (
     );
 
     refreshedPages.push(refreshedPage);
-    if (!refreshedPage.nextPageToken) break;
-    pageToken = refreshedPage.nextPageToken;
-  }
+    if (!refreshedPage.nextPageToken) return;
+    await refreshNextPage(pageIndex + 1, refreshedPage.nextPageToken);
+  };
+
+  await refreshNextPage(0, undefined);
 
   queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
     mergeRefreshedMailboxPagesIntoQueryData(data, refreshedPages, refreshedPageParams, {
@@ -173,12 +176,16 @@ const applyMailboxSyncDelta = async (
 ) => {
   const currentMessages = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
   const removedMessageThreadIds = new Map<string, string>();
+  const currentMessagesById = new Map<string, MessageListItem>();
+
+  for (const page of currentMessages?.pages ?? []) {
+    for (const message of page.messages) {
+      currentMessagesById.set(message.id, message);
+    }
+  }
 
   for (const removedMessageId of removedMessageIds) {
-    const removedMessage = currentMessages?.pages
-      .flatMap((page) => page.messages)
-      .find((message) => message.id === removedMessageId);
-
+    const removedMessage = currentMessagesById.get(removedMessageId);
     if (removedMessage) {
       removedMessageThreadIds.set(removedMessageId, removedMessage.threadId);
     }
@@ -219,9 +226,11 @@ const applyMailboxSyncDelta = async (
     );
   }
 
-  for (const threadQueryKey of touchedThreadQueryKeys.values()) {
-    await queryPersister.persistQueryByKey(threadQueryKey, queryClient);
-  }
+  await Promise.all(
+    Array.from(touchedThreadQueryKeys.values(), (threadQueryKey) =>
+      queryPersister.persistQueryByKey(threadQueryKey, queryClient),
+    ),
+  );
 };
 
 export const syncMessages = async (

@@ -356,12 +356,13 @@ export const applySyncDeltaToQueryData = (
     ? getMessageSortTimestamp(oldestLoadedMessage)
     : Number.NEGATIVE_INFINITY;
 
-  const nextMessages = currentMessages
-    .filter((message) => !removedMessageIdsSet.has(message.id))
-    .map((message) => {
-      const synced = updatedMessagesById.get(message.id);
-      return synced ? mergeMessagePreservingLoadedDetails(message, synced) : message;
-    });
+  const nextMessages: MessageListItem[] = [];
+  for (const message of currentMessages) {
+    if (removedMessageIdsSet.has(message.id)) continue;
+
+    const synced = updatedMessagesById.get(message.id);
+    nextMessages.push(synced ? mergeMessagePreservingLoadedDetails(message, synced) : message);
+  }
   const nextMessageIds = new Set(nextMessages.map((message) => message.id));
 
   for (const updatedMessage of updatedMessages) {

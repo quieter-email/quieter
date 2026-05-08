@@ -30,7 +30,6 @@ function SitePasswordRouteComponent() {
           <input name="returnTo" type="hidden" value={returnTo} />
           <input
             autoComplete="current-password"
-            autoFocus
             className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20"
             name="password"
             placeholder="Password"
@@ -44,7 +43,7 @@ function SitePasswordRouteComponent() {
             className="inline-flex h-10 items-center justify-center rounded-md border border-primary bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
             type="submit"
           >
-            Continue
+            Unlock site
           </button>
         </form>
       </div>

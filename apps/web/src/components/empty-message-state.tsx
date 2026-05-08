@@ -10,7 +10,7 @@ export const EmptyMessageState = ({
 }) => (
   <LazyMotion features={domAnimation}>
     <div className="grid h-full min-h-56 place-items-center">
-      <div className="relative max-w-sm px-8 py-8">
+      <div className="relative max-w-sm p-8">
         <m.div
           aria-hidden
           className="squircle pointer-events-none absolute top-1/2 left-1/2 size-52 -translate-x-1/2 -translate-y-1/2 rounded-5xl border"

@@ -119,13 +119,17 @@ export const createMailboxActionHandlers = ({
     if (actionableIds.length === 0) return;
 
     setPending(actionableIds, true);
-    let actionError: unknown = null;
+    let actionError: unknown;
     let shouldRefreshSearchResults = false;
 
     try {
-      for (const id of actionableIds) {
-        await action(id);
-        shouldRefreshSearchResults = true;
+      const results = await Promise.allSettled(actionableIds.map((id) => action(id)));
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          shouldRefreshSearchResults = true;
+        } else {
+          actionError ??= result.reason;
+        }
       }
     } catch (error) {
       actionError = error;
@@ -137,7 +141,7 @@ export const createMailboxActionHandlers = ({
       try {
         await refreshSearchResultsIfNeeded();
       } catch (refreshError) {
-        if (!actionError) {
+        if (actionError === undefined) {
           throw refreshError;
         }
       }

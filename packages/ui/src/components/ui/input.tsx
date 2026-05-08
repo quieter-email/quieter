@@ -1,8 +1,8 @@
 "use client";
 
+import type { ComponentPropsWithoutRef, ComponentRef, Ref } from "react";
 import { Input as InputPrimitive } from "@base-ui/react/input";
 import { cva, type VariantProps } from "class-variance-authority";
-import { forwardRef, type ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/cn";
 
 const inputVariants = cva(
@@ -29,16 +29,16 @@ const inputVariants = cva(
 );
 
 type InputProps = Omit<ComponentPropsWithoutRef<typeof InputPrimitive>, "size"> &
-  VariantProps<typeof inputVariants>;
+  VariantProps<typeof inputVariants> & {
+    ref?: Ref<ComponentRef<typeof InputPrimitive>>;
+  };
 
-export const Input = forwardRef<HTMLElement, InputProps>(
-  ({ chrome = "default", className, size = "default", ...props }, ref) => (
-    <InputPrimitive
-      ref={ref}
-      className={cn(inputVariants({ chrome, size }), className)}
-      {...props}
-    />
-  ),
+export const Input = ({
+  chrome = "default",
+  className,
+  ref,
+  size = "default",
+  ...props
+}: InputProps) => (
+  <InputPrimitive ref={ref} className={cn(inputVariants({ chrome, size }), className)} {...props} />
 );
-
-Input.displayName = "Input";

@@ -3,7 +3,7 @@
 import { Image01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, cn, useColorMode } from "@quieter/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useExternalImagesEnabled } from "~/features/settings/domain/external-images-setting";
 import {
   applyEmailPreferences,
@@ -21,7 +21,7 @@ type MessageBodyProps = {
 
 const REMOTE_IMAGE_REGEX = /^https?:\/\//i;
 
-const HtmlMessageBody = ({
+const HtmlMessageBodyContent = ({
   html,
   loadExternalImages,
 }: {
@@ -31,42 +31,22 @@ const HtmlMessageBody = ({
   const { colorMode } = useColorMode();
   const externalImagesEnabled = useExternalImagesEnabled();
   const [cspViolation, setCspViolation] = useState(false);
-  const [processedMail, setProcessedMail] = useState<ProcessedMailHtml | null>(null);
-  const [preprocessedHtml, setPreprocessedHtml] = useState<string | null>(null);
-  const [remoteImagesPresent, setRemoteImagesPresent] = useState(false);
   const [temporaryImagesEnabled, setTemporaryImagesEnabled] = useState(false);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const shadowRootRef = useRef<ShadowRoot | null>(null);
   const shouldLoadImages = (loadExternalImages ?? externalImagesEnabled) || temporaryImagesEnabled;
-
-  useEffect(() => {
-    setCspViolation(false);
-    setProcessedMail(null);
-    setRemoteImagesPresent(false);
-    setTemporaryImagesEnabled(false);
-    setPreprocessedHtml(preprocessEmailHtml(html));
-  }, [html]);
-
-  useEffect(() => {
-    if (!preprocessedHtml) return;
-
-    const processed = applyEmailPreferences(preprocessedHtml, shouldLoadImages, colorMode);
-    setProcessedMail(processed);
-
-    if (!shouldLoadImages) {
-      setRemoteImagesPresent(processed.hasBlockedImages);
-    }
-  }, [colorMode, preprocessedHtml, shouldLoadImages]);
+  const preprocessedHtml = useMemo(() => preprocessEmailHtml(html), [html]);
+  const processedMail = useMemo<ProcessedMailHtml>(
+    () => applyEmailPreferences(preprocessedHtml, shouldLoadImages, colorMode),
+    [colorMode, preprocessedHtml, shouldLoadImages],
+  );
+  const remoteImagesPresent = !shouldLoadImages && processedMail.hasBlockedImages;
+  const handleImageErrorRef = useRef<(event: Event) => void>(() => {});
 
   useEffect(() => {
     if (!hostRef.current) return;
 
     shadowRootRef.current ??= hostRef.current.attachShadow({ mode: "open" });
-
-    if (!processedMail) {
-      shadowRootRef.current.innerHTML = "";
-      return;
-    }
 
     shadowRootRef.current.innerHTML = processedMail.processedHtml;
     fixNonReadableColors(shadowRootRef.current, {
@@ -74,23 +54,21 @@ const HtmlMessageBody = ({
     });
   }, [colorMode, processedMail]);
 
-  const handleImageError = useCallback(
-    (event: Event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLImageElement)) return;
+  handleImageErrorRef.current = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLImageElement)) return;
 
-      if (!shouldLoadImages && REMOTE_IMAGE_REGEX.test(target.currentSrc || target.src)) {
-        setCspViolation(true);
-      }
-      target.style.display = "none";
-    },
-    [shouldLoadImages],
-  );
+    if (!shouldLoadImages && REMOTE_IMAGE_REGEX.test(target.currentSrc || target.src)) {
+      setCspViolation(true);
+    }
+    target.style.display = "none";
+  };
 
   useEffect(() => {
     const root = shadowRootRef.current;
     if (!root) return;
 
+    const handleImageError = (event: Event) => handleImageErrorRef.current(event);
     root.addEventListener("error", handleImageError, true);
 
     const handleClick = (event: Event) => {
@@ -115,13 +93,7 @@ const HtmlMessageBody = ({
       root.removeEventListener("error", handleImageError, true);
       root.removeEventListener("click", handleClick);
     };
-  }, [handleImageError, html, shouldLoadImages]);
-
-  useEffect(() => {
-    if (shouldLoadImages) {
-      setCspViolation(false);
-    }
-  }, [shouldLoadImages]);
+  }, []);
 
   return (
     <>
@@ -162,6 +134,10 @@ const HtmlMessageBody = ({
     </>
   );
 };
+
+const HtmlMessageBody = (props: { html: string; loadExternalImages?: boolean }) => (
+  <HtmlMessageBodyContent key={props.html} {...props} />
+);
 
 const MessageBodyLoadingSkeleton = () => (
   <div aria-label="Loading message content" className="space-y-3 p-4" role="status">

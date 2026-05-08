@@ -1,13 +1,12 @@
 "use client";
 
-import type { ComponentRef } from "react";
+import type { ComponentRef, Ref } from "react";
 import {
   Button as ButtonPrimitive,
   type ButtonProps as BaseUIButtonProps,
 } from "@base-ui/react/button";
 import { createLink, type LinkComponent } from "@tanstack/react-router";
 import { cva, type VariantProps } from "class-variance-authority";
-import { forwardRef } from "react";
 import { cn } from "../../lib/cn";
 
 const buttonVariants = cva(
@@ -40,24 +39,30 @@ const buttonVariants = cva(
   },
 );
 
-export type ButtonProps = BaseUIButtonProps & VariantProps<typeof buttonVariants>;
+export type ButtonProps = BaseUIButtonProps &
+  VariantProps<typeof buttonVariants> & {
+    ref?: Ref<ComponentRef<typeof ButtonPrimitive>>;
+  };
 
-export const Button = forwardRef<ComponentRef<typeof ButtonPrimitive>, ButtonProps>(
-  ({ className, size = "default", type = "button", variant = "default", ...props }, ref) => (
-    <ButtonPrimitive
-      ref={ref}
-      className={
-        typeof className === "function"
-          ? (state) => cn(buttonVariants({ size, variant }), className(state))
-          : cn(buttonVariants({ size, variant }), className)
-      }
-      type={type}
-      {...props}
-    />
-  ),
+export const Button = ({
+  className,
+  ref,
+  size = "default",
+  type = "button",
+  variant = "default",
+  ...props
+}: ButtonProps) => (
+  <ButtonPrimitive
+    ref={ref}
+    className={
+      typeof className === "function"
+        ? (state) => cn(buttonVariants({ size, variant }), className(state))
+        : cn(buttonVariants({ size, variant }), className)
+    }
+    type={type}
+    {...props}
+  />
 );
-
-Button.displayName = "Button";
 
 const LinkButtonComponent = createLink(Button);
 

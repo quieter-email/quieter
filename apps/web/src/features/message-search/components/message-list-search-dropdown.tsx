@@ -109,12 +109,20 @@ if (import.meta.env.MODE !== "production") {
     }
   }
 
-  const missingOptions = searchFilterOptions
-    .map((option) => `${option.filter.type}:${option.filter.value}`)
-    .filter((key) => !sectionOptionCounts.has(key));
-  const duplicatedOptions = Array.from(sectionOptionCounts.entries())
-    .filter(([, count]) => count > 1)
-    .map(([key]) => key);
+  const missingOptions: string[] = [];
+  for (const option of searchFilterOptions) {
+    const key = `${option.filter.type}:${option.filter.value}`;
+    if (!sectionOptionCounts.has(key)) {
+      missingOptions.push(key);
+    }
+  }
+
+  const duplicatedOptions: string[] = [];
+  for (const [key, count] of sectionOptionCounts) {
+    if (count > 1) {
+      duplicatedOptions.push(key);
+    }
+  }
 
   if (missingOptions.length > 0 || duplicatedOptions.length > 0) {
     throw new Error(
@@ -171,6 +179,24 @@ const SearchDropdownRow = ({
   </button>
 );
 
+type LabelsSubmenuLayout = {
+  coneWidth: number;
+  coneOriginY: number;
+  height: number;
+  left: number;
+  top: number;
+  triggerHeight: number;
+};
+
+const initialLabelsSubmenuLayout: LabelsSubmenuLayout = {
+  coneWidth: 320,
+  coneOriginY: 32,
+  height: 224,
+  left: 0,
+  top: 0,
+  triggerHeight: 32,
+};
+
 export const MessageListSearchDropdown = ({
   draftSearchState,
   highlightedItemKey,
@@ -191,22 +217,16 @@ export const MessageListSearchDropdown = ({
   userLabels: readonly GmailLabelListItem[];
 }) => {
   const [isLabelsSubmenuOpen, setIsLabelsSubmenuOpen] = useState(false);
-  const [labelsConeWidth, setLabelsConeWidth] = useState(320);
-  const [labelsConeOriginY, setLabelsConeOriginY] = useState(32);
-  const [labelsSubmenuHeight, setLabelsSubmenuHeight] = useState(224);
-  const [labelsSubmenuPosition, setLabelsSubmenuPosition] = useState({
-    left: 0,
-    top: 0,
-    triggerHeight: 32,
-  });
+  const [labelsLayout, setLabelsLayout] = useState<LabelsSubmenuLayout>(initialLabelsSubmenuLayout);
   const closeLabelsSubmenuTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const labelsSubmenuRef = useRef<HTMLDivElement>(null);
   const labelsTriggerRef = useRef<HTMLButtonElement>(null);
-  const selectedUserLabelKeys = new Set(
-    draftSearchState.filters
-      .filter((filter) => filter.type === "label")
-      .map((filter) => normalizeLabelSelectionKey(filter.value)),
-  );
+  const selectedUserLabelKeys = new Set<string>();
+  for (const filter of draftSearchState.filters) {
+    if (filter.type === "label") {
+      selectedUserLabelKeys.add(normalizeLabelSelectionKey(filter.value));
+    }
+  }
   const isLabelHighlighted = highlightedItemKey?.startsWith("label:") ?? false;
   const showLabelsSubmenu = isLabelsSubmenuOpen || isLabelHighlighted;
 
@@ -244,14 +264,14 @@ export const MessageListSearchDropdown = ({
       return;
     }
 
-    setLabelsConeWidth(trigger.offsetWidth + 8);
-    setLabelsConeOriginY(trigger.offsetHeight);
-    setLabelsSubmenuHeight(submenu.offsetHeight);
     const triggerRect = trigger.getBoundingClientRect();
     const submenuWidth = submenu.offsetWidth;
     const submenuHeight = submenu.offsetHeight;
     const viewportGap = 8;
-    setLabelsSubmenuPosition({
+    setLabelsLayout({
+      coneWidth: trigger.offsetWidth + 8,
+      coneOriginY: trigger.offsetHeight,
+      height: submenu.offsetHeight,
       left: Math.min(
         triggerRect.right + viewportGap,
         Math.max(viewportGap, window.innerWidth - submenuWidth - viewportGap),
@@ -267,7 +287,7 @@ export const MessageListSearchDropdown = ({
   const labelsContent = labelsErrorMessage ? (
     <div className="px-2.5 py-2 text-[13px] text-foreground">{labelsErrorMessage}</div>
   ) : isLoadingLabels ? (
-    <div className="px-2.5 py-2 text-[13px] text-muted-foreground">Loading labels...</div>
+    <div className="px-2.5 py-2 text-[13px] text-muted-foreground">Loading labels…</div>
   ) : userLabels.length > 0 ? (
     <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">
       {userLabels.map((label) => (
@@ -295,9 +315,9 @@ export const MessageListSearchDropdown = ({
         onPointerEnter={cancelCloseLabelsSubmenu}
         onPointerLeave={scheduleCloseLabelsSubmenu}
         style={{
-          height: Math.max(labelsSubmenuHeight, labelsSubmenuPosition.triggerHeight),
-          left: labelsSubmenuPosition.left - 8,
-          top: labelsSubmenuPosition.top,
+          height: Math.max(labelsLayout.height, labelsLayout.triggerHeight),
+          left: labelsLayout.left - 8,
+          top: labelsLayout.top,
           width: 296,
         }}
       >
@@ -394,14 +414,14 @@ export const MessageListSearchDropdown = ({
                 <svg
                   aria-hidden
                   className="pointer-events-none absolute top-0 left-0 z-40"
-                  height={labelsSubmenuHeight}
-                  viewBox={`0 0 ${labelsConeWidth} ${labelsSubmenuHeight}`}
-                  width={labelsConeWidth}
+                  height={labelsLayout.height}
+                  viewBox={`0 0 ${labelsLayout.coneWidth} ${labelsLayout.height}`}
+                  width={labelsLayout.coneWidth}
                 >
                   <polygon
                     className="pointer-events-auto"
                     fill="transparent"
-                    points={`0 ${labelsConeOriginY} ${labelsConeWidth} 0 ${labelsConeWidth} ${labelsSubmenuHeight}`}
+                    points={`0 ${labelsLayout.coneOriginY} ${labelsLayout.coneWidth} 0 ${labelsLayout.coneWidth} ${labelsLayout.height}`}
                     pointerEvents="all"
                   />
                 </svg>

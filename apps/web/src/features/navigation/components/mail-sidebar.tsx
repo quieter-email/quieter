@@ -4,7 +4,7 @@ import { Cancel01Icon, Edit01Icon, Settings01Icon } from "@hugeicons/core-free-i
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, IconButtonTooltip, LinkButton } from "@quieter/ui";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 import {
   type MailboxSwitcherOrder,
@@ -142,6 +142,10 @@ export const MailSidebar = ({
   onMobileOpenChange,
   ...sidebarProps
 }: MailSidebarProps) => {
+  const closeMobileSidebar = useEffectEvent(() => {
+    onMobileOpenChange(false);
+  });
+
   useEffect(() => {
     if (!isMobileOpen) {
       return;
@@ -149,7 +153,7 @@ export const MailSidebar = ({
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onMobileOpenChange(false);
+        closeMobileSidebar();
       }
     };
 
@@ -157,7 +161,7 @@ export const MailSidebar = ({
     return () => {
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [isMobileOpen, onMobileOpenChange]);
+  }, [isMobileOpen]);
 
   return (
     <>

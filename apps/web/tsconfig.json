@@ -2,7 +2,7 @@
   "extends": "@quieter/config/tsconfig/base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": ["bun", "vite/client"],
     "paths": {
       "~/*": ["./src/*"]
