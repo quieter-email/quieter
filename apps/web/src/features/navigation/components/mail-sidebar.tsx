@@ -10,6 +10,7 @@ import {
   type MailboxSwitcherOrder,
   MailboxSwitcherDropdown,
 } from "~/features/navigation/components/mailbox-switcher";
+import { SidebarLabelNav } from "~/features/navigation/components/sidebar-label-nav";
 import { SidebarMailboxNav } from "~/features/navigation/components/sidebar-mailbox-nav";
 
 type MailSidebarProps = {
@@ -32,7 +33,9 @@ type MailSidebarProps = {
   onSelectMailbox: (mailbox: MailboxCategory) => void;
   onSelectMailboxId: (mailboxId: string) => void;
   onSetDefaultMailbox: (mailboxId: string | null) => void;
+  onSearch: (query: string) => void;
   onComposeNewMail: () => void;
+  searchQuery: string;
   isMobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
 };
@@ -51,6 +54,8 @@ const SidebarContent = ({
   onSelectMailbox,
   onSelectMailboxId,
   onSetDefaultMailbox,
+  onSearch,
+  searchQuery,
   selectedMailboxId,
   selectedMailbox,
   switcherSide = "right",
@@ -115,6 +120,14 @@ const SidebarContent = ({
         <SidebarMailboxNav
           onSelectMailbox={handleSelectMailbox}
           selectedMailbox={selectedMailbox}
+        />
+        <SidebarLabelNav
+          mailboxId={selectedMailboxId}
+          onSearch={(query) => {
+            onSearch(query);
+            onRequestClose?.();
+          }}
+          searchQuery={searchQuery}
         />
       </div>
       <div className="mt-auto p-2">

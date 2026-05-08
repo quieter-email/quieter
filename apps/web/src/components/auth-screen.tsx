@@ -40,7 +40,7 @@ const AuthLastUsedHint = () => (
         }}
         transition={{ duration: 5, ease: "linear", repeat: Infinity }}
       />
-      <span className="squircle relative block rounded-[inherit] bg-background px-2 py-1 text-[0.625rem] leading-none font-medium tracking-wide text-muted-foreground">
+      <span className="squircle relative block rounded-[inherit] bg-background px-2 py-1 text-[0.625rem] font-medium tracking-wide text-muted-foreground">
         Last used
       </span>
     </span>

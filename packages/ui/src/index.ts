@@ -1,4 +1,5 @@
 export { Button, type ButtonProps, LinkButton } from "./components/ui/button";
+export { EyeIcon, EyeOffIcon, PlusIcon } from "./components/ui/icons";
 export {
   Accordion,
   AccordionHeader,

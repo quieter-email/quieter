@@ -97,7 +97,7 @@ export const ArrowInteractionButton = ({ className, onClick, ...props }: ButtonP
         <HugeiconsIcon icon={ArrowUp01Icon} />
       </span>
       <LazyMotion features={domAnimation}>
-        <span className="pointer-events-none absolute inset-0 inline-grid place-items-center overflow-hidden leading-none">
+        <span className="pointer-events-none absolute inset-0 inline-grid place-items-center overflow-hidden">
           <span aria-hidden="true" className="pointer-events-none opacity-0">
             <HugeiconsIcon icon={ArrowUp01Icon} />
           </span>

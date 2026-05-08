@@ -6,7 +6,9 @@ import { getRequestHeaders, type OrpcContext } from "./context";
 import { orpcErrorMap } from "./errors";
 import {
   createDraft,
+  createLabel,
   deleteDraft,
+  deleteLabel,
   deleteMessagePermanently,
   deleteThreadPermanently,
   extractListUnsubscribeTargets,
@@ -32,6 +34,7 @@ import {
   untrashMessage,
   untrashThread,
   updateDraft,
+  updateLabel,
   updateMessageLabels,
   updateThreadLabels,
   type MailboxCategory,
@@ -73,6 +76,7 @@ const mailboxCategorySchema = z.enum([
 
 const historySyncMailboxCategorySchema = z.enum(["inbox", "unread", "spam", "sent", "trash"]);
 const mailboxIdSchema = z.string().trim().min(1);
+const gmailUserLabelNameSchema = z.string().trim().min(1).max(225);
 const mailboxSwitcherOrderSchema = z.object({
   groupIds: z.array(z.string().trim().min(1)),
   mailboxIdsByGroupId: z.record(z.string().trim().min(1), z.array(z.string().trim().min(1))),
@@ -421,6 +425,43 @@ export const appRouter = {
       .handler(async ({ context, input }) => {
         return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
           return await listLabels(accessToken, signal);
+        });
+      }),
+    createLabel: protectedProcedure
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          name: gmailUserLabelNameSchema,
+        }),
+      )
+      .handler(async ({ context, input }) => {
+        return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
+          return await createLabel(accessToken, input.name, signal);
+        });
+      }),
+    updateLabel: protectedProcedure
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          labelId: z.string().trim().min(1),
+          name: gmailUserLabelNameSchema,
+        }),
+      )
+      .handler(async ({ context, input }) => {
+        return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
+          return await updateLabel(accessToken, input.labelId, input.name, signal);
+        });
+      }),
+    deleteLabel: protectedProcedure
+      .input(
+        z.object({
+          mailboxId: mailboxIdSchema,
+          labelId: z.string().trim().min(1),
+        }),
+      )
+      .handler(async ({ context, input }) => {
+        return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
+          return await deleteLabel(accessToken, input.labelId, signal);
         });
       }),
     markMessageAsRead: protectedProcedure
