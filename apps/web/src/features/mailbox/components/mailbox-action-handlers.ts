@@ -22,6 +22,7 @@ import {
   updateMessageLabelsInMailbox,
   updateThreadLabelsInMailbox,
 } from "~/lib/gmail/inbox-query";
+import { redirectToGoogleScopeRepair } from "~/lib/orpc-errors";
 
 type LabelChangeSet = {
   addLabelIds?: string[];
@@ -87,6 +88,9 @@ export const createMailboxActionHandlers = ({
     try {
       await action();
       await refreshSearchResultsIfNeeded();
+    } catch (error) {
+      redirectToGoogleScopeRepair(error);
+      throw error;
     } finally {
       setMessageActionPending(messageId, false);
     }
@@ -99,6 +103,9 @@ export const createMailboxActionHandlers = ({
     try {
       await action();
       await refreshSearchResultsIfNeeded();
+    } catch (error) {
+      redirectToGoogleScopeRepair(error);
+      throw error;
     } finally {
       setThreadActionPending(threadId, false);
     }
@@ -142,12 +149,14 @@ export const createMailboxActionHandlers = ({
         await refreshSearchResultsIfNeeded();
       } catch (refreshError) {
         if (actionError === undefined) {
+          redirectToGoogleScopeRepair(refreshError);
           throw refreshError;
         }
       }
     }
 
     if (actionError) {
+      redirectToGoogleScopeRepair(actionError);
       throw actionError;
     }
   };

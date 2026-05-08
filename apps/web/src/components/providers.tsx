@@ -1,19 +1,28 @@
 "use client";
 
 import { ColorModeProvider, Toaster } from "@quieter/ui";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "motion/react";
 import { type PropsWithChildren, useState } from "react";
-import { queryPersister } from "~/lib/query-persister";
+import { redirectToGoogleScopeRepair, shouldRetryOrpcError } from "~/lib/orpc-errors";
 
 export const Providers = ({ children }: PropsWithChildren) => {
   const [queryClient] = useState(
     () =>
       new QueryClient({
+        mutationCache: new MutationCache({
+          onError: redirectToGoogleScopeRepair,
+        }),
+        queryCache: new QueryCache({
+          onError: redirectToGoogleScopeRepair,
+        }),
         defaultOptions: {
           queries: {
             gcTime: 1000 * 60 * 30,
-            persister: queryPersister.persisterFn,
+            retry: shouldRetryOrpcError,
+          },
+          mutations: {
+            retry: shouldRetryOrpcError,
           },
         },
       }),

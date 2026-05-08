@@ -13,7 +13,7 @@ import type { MailboxActions, MailboxPendingActions } from "../mailbox-action-ha
 type MailboxSidebarGroups = ComponentProps<typeof MailSidebar>["groups"];
 
 type MailboxWorkspaceListState = {
-  error: Error | null;
+  error: unknown;
   hasNextPage: boolean;
   isError: boolean;
   isFetchingNextPage: boolean;

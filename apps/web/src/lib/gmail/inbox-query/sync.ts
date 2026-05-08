@@ -1,6 +1,7 @@
-import type { QueryClient } from "@tanstack/react-query";
+import type { QueryClient, QueryPersister } from "@tanstack/react-query";
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
+import { shouldRetryOrpcError } from "~/lib/orpc-errors";
 import { queryPersister } from "~/lib/query-persister";
 import { DEMO_MAILBOX_ID, listDemoMessages } from "../demo-mail";
 import {
@@ -44,6 +45,14 @@ type RefreshVisibleMessagesArgs = {
   searchQuery?: string | null;
   signal?: AbortSignal;
 };
+
+type MessagesQueryPersister = QueryPersister<
+  ListMessagesPageResult,
+  ReturnType<typeof getMessagesQueryKey>,
+  string | undefined
+>;
+
+const messagesQueryPersister = queryPersister.persisterFn as unknown as MessagesQueryPersister;
 
 const fetchMessagesPage = async (
   mailboxId: string,
@@ -314,7 +323,8 @@ export const messagesQueryOptions = (
     getNextPageParam: (lastPage: ListMessagesPageResult) => lastPage.nextPageToken ?? undefined,
     staleTime: GMAIL_QUERY_STALE_TIME_MS,
     enabled,
-    retry: 3,
+    persister: messagesQueryPersister,
+    retry: shouldRetryOrpcError,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -335,8 +345,7 @@ export const liveSyncQueryOptions = (
       queryClient.getQueryData<MessagesQueryData>(
         getMessagesQueryKey(mailboxId, mailbox, searchQuery),
       )?.pages[0],
-    persister: undefined,
-    retry: 3,
+    retry: shouldRetryOrpcError,
     staleTime: 0,
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",

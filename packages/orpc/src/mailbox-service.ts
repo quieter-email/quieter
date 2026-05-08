@@ -2,7 +2,7 @@ import type { MailboxSwitcherOrder } from "@quieter/database";
 import { ORPCError } from "@orpc/server";
 import { auth } from "@quieter/auth";
 import { hasRequiredGoogleScopes } from "@quieter/auth/google-scopes";
-import { db, mailbox, member, organization, user } from "@quieter/database";
+import { account, db, mailbox, member, organization, user } from "@quieter/database";
 import { and, asc, eq, ne } from "drizzle-orm";
 import { getGmailProfile, isGmailServiceError } from "./gmail-service";
 
@@ -71,6 +71,41 @@ const parseGmailProviderAccountId = (mailboxId: string) => {
 
 const getGoogleAccountFallbackLabel = (providerAccountId: string) =>
   `Google account ${providerAccountId}`;
+
+const decodeGoogleIdTokenEmail = (idToken: string | null | undefined) => {
+  const payload = idToken?.split(".")[1];
+  if (!payload) {
+    return null;
+  }
+
+  try {
+    const decodedPayload: unknown = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (
+      decodedPayload &&
+      typeof decodedPayload === "object" &&
+      "email" in decodedPayload &&
+      typeof decodedPayload.email === "string"
+    ) {
+      return decodedPayload.email.trim().toLowerCase() || null;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+const getStoredGoogleAccountEmail = async (providerAccountId: string) => {
+  const [storedAccount] = await db
+    .select({
+      idToken: account.idToken,
+    })
+    .from(account)
+    .where(and(eq(account.providerId, "google"), eq(account.accountId, providerAccountId)))
+    .limit(1);
+
+  return decodeGoogleIdTokenEmail(storedAccount?.idToken);
+};
 
 const listUserOrganizations = async (userId: string) =>
   await db
@@ -641,10 +676,13 @@ export const getAuthorizedGmailMailbox = async (input: {
     });
   }
 
+  const emailAddress =
+    (await getStoredGoogleAccountEmail(providerAccountId)) ??
+    getGoogleAccountFallbackLabel(providerAccountId);
   const selectedMailbox = {
     connectedUserId: input.userId,
     displayName: null,
-    emailAddress: getGoogleAccountFallbackLabel(providerAccountId),
+    emailAddress,
     groupId: PERSONAL_GROUP_ID,
     groupKind: "personal",
     groupName: PERSONAL_GROUP_NAME,

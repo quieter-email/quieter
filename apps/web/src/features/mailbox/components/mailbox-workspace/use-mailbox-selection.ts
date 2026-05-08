@@ -7,7 +7,6 @@ import type { MailboxSwitcherOrder } from "~/features/navigation/components/mail
 import { getDemoMailboxes } from "~/lib/gmail/demo-mail";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
-import { queryPersister } from "~/lib/query-persister";
 
 type MailboxesQueryData = RouterOutputs["mail"]["listMailboxes"];
 
@@ -108,7 +107,6 @@ export const useMailboxSelection = ({
           queryKey,
           reorderMailboxQueryData(previousData, order),
         );
-        await queryPersister.persistQueryByKey(queryKey, queryClient);
       }
 
       return { previousData };
@@ -117,7 +115,6 @@ export const useMailboxSelection = ({
       if (context?.previousData) {
         const queryKey = getMailboxesQueryKey();
         queryClient.setQueryData(queryKey, context.previousData);
-        await queryPersister.persistQueryByKey(queryKey, queryClient);
       }
     },
     onSettled: async () => {

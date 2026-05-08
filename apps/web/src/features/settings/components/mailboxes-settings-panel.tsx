@@ -8,6 +8,7 @@ import {
   PinOffIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { REQUIRED_GOOGLE_SCOPES } from "@quieter/auth/google-scopes";
 import { Button, cn, toast } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -93,34 +94,43 @@ export const MailboxesSettingsPanel = () => {
       });
     },
   });
+  const finishGmailLinkMutation = useMutation({
+    mutationFn: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: getMailboxesQueryKey(),
+      });
+
+      const result = await mailboxesQuery.refetch({
+        cancelRefetch: true,
+      });
+      return result;
+    },
+  });
 
   useEffect(() => {
     if (!pendingGmailLink) {
       return;
     }
 
-    if (mailboxesQuery.isPending || mailboxesQuery.isFetching) {
+    if (finishGmailLinkMutation.isPending) {
       return;
     }
 
-    writePendingGmailLink(null);
-    setPendingGmailLink(null);
+    void finishGmailLinkMutation.mutateAsync().then((result) => {
+      writePendingGmailLink(null);
+      setPendingGmailLink(null);
 
-    if (mailboxesQuery.isError) {
-      toast.error("Could not finish Gmail connection.");
-      return;
-    }
+      if (result.isError) {
+        toast.error("Could not finish Gmail connection.");
+        return;
+      }
 
-    if (mailboxes.length > pendingGmailLink.mailboxCount) {
-      toast.success("Gmail connected.");
-    }
-  }, [
-    mailboxes.length,
-    mailboxesQuery.isError,
-    mailboxesQuery.isFetching,
-    mailboxesQuery.isPending,
-    pendingGmailLink,
-  ]);
+      const nextMailboxCount = result.data?.groups.flatMap((group) => group.mailboxes).length ?? 0;
+      if (nextMailboxCount > pendingGmailLink.mailboxCount) {
+        toast.success("Gmail connected.");
+      }
+    });
+  }, [finishGmailLinkMutation, mailboxesQuery, pendingGmailLink, queryClient]);
 
   const handleConnectGmail = async () => {
     setConnectError(null);
@@ -134,10 +144,25 @@ export const MailboxesSettingsPanel = () => {
     setPendingGmailLink(nextPendingGmailLink);
 
     try {
-      await authClient.linkSocial({
+      const response = await authClient.linkSocial({
         callbackURL: "/settings?tab=mailboxes",
+        disableRedirect: true,
+        errorCallbackURL: "/settings?tab=mailboxes",
         provider: "google",
+        scopes: [...REQUIRED_GOOGLE_SCOPES],
       });
+
+      if (response.error) {
+        throw new Error(response.error.message ?? "Could not start Google account linking.");
+      }
+
+      if (!response.data?.url) {
+        throw new Error("Could not start Google account linking.");
+      }
+
+      const providerUrl = new URL(response.data.url);
+      providerUrl.searchParams.set("prompt", "consent select_account");
+      window.location.assign(providerUrl.toString());
     } catch (error) {
       writePendingGmailLink(null);
       setPendingGmailLink(null);
