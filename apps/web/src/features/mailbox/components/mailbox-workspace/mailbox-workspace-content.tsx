@@ -132,6 +132,7 @@ export const MailboxWorkspaceContent = ({
                 mailboxActions={mailboxActions}
                 messages={listState.messages}
                 onActivateMessage={onActivateMessage}
+                onDeactivateActiveMessage={onBackToList}
                 onLoadMore={onLoadMore}
                 onOpenDraft={onOpenDraft}
                 onOpenSidebar={onOpenSidebar}

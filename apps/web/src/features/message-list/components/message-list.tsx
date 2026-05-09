@@ -46,6 +46,7 @@ export const MessageList = (props: MessageListProps) => {
     activeMailbox: props.activeMailbox,
     activeThreadId,
     onActivateMessage: props.onActivateMessage,
+    onDeactivateActiveMessage: props.onDeactivateActiveMessage,
     searchQuery: props.searchQuery,
     threadedMessages,
   });

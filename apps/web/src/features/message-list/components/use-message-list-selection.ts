@@ -13,12 +13,14 @@ export const useMessageListSelection = ({
   activeMailbox,
   activeThreadId,
   onActivateMessage,
+  onDeactivateActiveMessage,
   searchQuery,
   threadedMessages,
 }: {
   activeMailbox: MailboxCategory;
   activeThreadId: string | null;
   onActivateMessage: (messageId: string) => void;
+  onDeactivateActiveMessage: () => void;
   searchQuery: string;
   threadedMessages: ThreadListEntry[];
 }) => {
@@ -244,6 +246,12 @@ export const useMessageListSelection = ({
     }
 
     setSelectionAnchorThreadId(thread.threadId);
+
+    if (activeThreadId !== null && activeThreadId === thread.threadId) {
+      onDeactivateActiveMessage();
+      return;
+    }
+
     onActivateMessage(thread.anchorMessage.id);
   };
 
