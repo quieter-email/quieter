@@ -9,6 +9,7 @@ export type ColorMode = "light" | "dark";
 export type ConfigColorMode = ColorMode | "system";
 
 export type ColorModeProviderProps = PropsWithChildren<{
+  forcedTheme?: ColorMode;
   initialColorMode?: ConfigColorMode;
 }>;
 
@@ -18,6 +19,7 @@ const getServerHydrationSnapshot = () => false;
 
 export const ColorModeProvider = ({
   children,
+  forcedTheme,
   initialColorMode = "system",
 }: ColorModeProviderProps) => {
   return (
@@ -27,6 +29,7 @@ export const ColorModeProvider = ({
       disableTransitionOnChange
       enableColorScheme
       enableSystem
+      forcedTheme={forcedTheme}
       storageKey={COLOR_MODE_STORAGE_KEY}
     >
       {children}
@@ -35,7 +38,7 @@ export const ColorModeProvider = ({
 };
 
 export const useColorMode = () => {
-  const { resolvedTheme, setTheme, theme } = useTheme();
+  const { forcedTheme, resolvedTheme, setTheme, theme } = useTheme();
   const isMounted = useSyncExternalStore(
     subscribeToHydration,
     getClientHydrationSnapshot,
@@ -63,6 +66,7 @@ export const useColorMode = () => {
     colorMode,
     configColorMode,
     cycleColorMode,
+    forcedTheme,
     isMounted,
     setColorMode,
   };

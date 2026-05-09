@@ -1,5 +1,6 @@
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
 import { getSessionUser } from "~/lib/auth.functions";
+
 export const Route = createFileRoute("/home")({
   loader: async () => {
     const user = await getSessionUser();

@@ -4,7 +4,7 @@ import { routeTree } from "./routeTree.gen";
 export function getRouter() {
   return createRouter({
     defaultPendingMinMs: 0,
-    parseSearch: parseSearchWith((value) => value),
+    parseSearch: parseSearchWith(JSON.parse),
     routeTree,
     scrollRestoration: true,
     stringifySearch: stringifySearchWith(JSON.stringify),

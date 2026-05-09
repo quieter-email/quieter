@@ -4,8 +4,11 @@ import { useEffect, useRef } from "react";
 
 const maximumPulseCount = 6;
 const pulseDuration = 1450;
-const cursorEase = 0.28;
-const cursorSettleDistance = 0.05;
+/** Cap framebuffer area; shader cost scales with pixels (extreme 8K+DPR still downscales). */
+const maxShaderPixels = 1_400_000;
+/** Cap longest buffer side so pathological layouts do not allocate huge framebuffers. */
+const maxBufferLongEdge = 1600;
+const maxDevicePixelRatio = 2;
 
 type Pulse = {
   startedAt: number;
@@ -35,7 +38,6 @@ precision highp float;
 
 #define MAX_PULSES 6
 #define FIELD_SEARCH_RADIUS 6
-#define REST_SEARCH_RADIUS 3
 
 in vec2 vUv;
 out vec4 outColor;
@@ -61,15 +63,6 @@ float cursorPush(float unit) {
   return clamp(unit * 0.13, 9.0, 15.0);
 }
 
-int searchRadiusFor(vec2 point) {
-  if (uHasCursor <= 0.5) return REST_SEARCH_RADIUS;
-
-  float unit = min(uResolution.x, uResolution.y) / 10.0;
-  float distanceValue = length(point - uCursor);
-
-  return distanceValue < cursorFalloffRadius(unit) ? FIELD_SEARCH_RADIUS : REST_SEARCH_RADIUS;
-}
-
 float squircleRadius(vec2 point, float scale) {
   vec2 center = uResolution * 0.5;
   vec2 offset = point - center;
@@ -81,9 +74,9 @@ float squircleRadius(vec2 point, float scale) {
   ) / scale;
   float unit = min(uResolution.x, uResolution.y) / 10.0;
   float radius = pow(2.0, 0.25) * unit * 2.0;
-  float distanceValue = pow(abs(local.x) / radius, 4.0) + pow(abs(local.y) / radius, 4.0);
+  float distanceValue = pow(abs(local.x) / radius, 3.25) + pow(abs(local.y) / radius, 3.25);
 
-  return pow(distanceValue, 0.25);
+  return pow(distanceValue, 1.0 / 3.25);
 }
 
 vec2 displacementFor(vec2 point) {
@@ -99,7 +92,7 @@ vec2 displacementFor(vec2 point) {
       float angle = hash(point) * 6.28318530718;
       vec2 direction = distanceValue > 0.001 ? offset / distanceValue : vec2(cos(angle), sin(angle));
       float falloffProgress = distanceValue / falloffRadius;
-      float force = 1.0 - falloffProgress;
+      float force = pow(1.0 - falloffProgress, 2.2) * (1.0 - smoothstep(0.82, 1.0, falloffProgress));
 
       displacement += direction * force * cursorPush(unit);
     }
@@ -153,19 +146,16 @@ float addAlpha(float baseAlpha, float nextAlpha) {
 float noiseAlpha(vec2 point) {
   float dotGap = 4.0;
   vec2 baseCell = floor(point / dotGap);
-  int searchRadius = searchRadiusFor(point);
   float alpha = 0.0;
 
   for (int y = -FIELD_SEARCH_RADIUS; y <= FIELD_SEARCH_RADIUS; y += 1) {
     for (int x = -FIELD_SEARCH_RADIUS; x <= FIELD_SEARCH_RADIUS; x += 1) {
-      if (abs(x) > searchRadius || abs(y) > searchRadius) continue;
-
       vec2 cell = baseCell + vec2(float(x), float(y));
       vec2 jitter = vec2(hash(cell + 53.0), hash(cell + 193.0)) - 0.5;
       vec2 center = (cell + 0.5) * dotGap + jitter * dotGap;
       float outerRadius = squircleRadius(center, 1.0);
       float nearestRadius = min(
-        min(squircleRadius(center, 1.0), squircleRadius(center, 0.9)),
+        min(outerRadius, squircleRadius(center, 0.9)),
         min(squircleRadius(center, 0.8), squircleRadius(center, 0.7))
       );
       float insideOuter = 1.0 - smoothstep(0.94, 1.08, outerRadius);
@@ -215,7 +205,6 @@ float ringAlpha(vec2 point) {
   float radius = pow(2.0, 0.25) * unit * 2.0;
   float halfRingWidth = (unit * 0.22 * 2.0) / radius / 2.0;
   vec2 baseCell = floor(point / dotGap);
-  int searchRadius = searchRadiusFor(point);
   float alpha = 0.0;
 
   for (int layerIndex = 0; layerIndex < 4; layerIndex += 1) {
@@ -224,8 +213,6 @@ float ringAlpha(vec2 point) {
 
     for (int y = -FIELD_SEARCH_RADIUS; y <= FIELD_SEARCH_RADIUS; y += 1) {
       for (int x = -FIELD_SEARCH_RADIUS; x <= FIELD_SEARCH_RADIUS; x += 1) {
-        if (abs(x) > searchRadius || abs(y) > searchRadius) continue;
-
         vec2 cell = baseCell + vec2(float(x), float(y));
         vec2 seed = cell + vec2(float(layerIndex) * 101.0, float(layerIndex) * 211.0);
         vec2 jitter = vec2(hash(seed), hash(seed.yx)) - 0.5;
@@ -337,13 +324,22 @@ export const AuthVisual = () => {
     if (!canvasRef.current) return;
 
     const canvas = canvasRef.current;
-    const gl = canvas.getContext("webgl2", {
-      alpha: true,
-      antialias: false,
-      depth: false,
-      powerPreference: "high-performance",
-      stencil: false,
-    });
+    const gl =
+      canvas.getContext("webgl2", {
+        alpha: true,
+        antialias: false,
+        depth: false,
+        desynchronized: true,
+        powerPreference: "high-performance",
+        stencil: false,
+      }) ??
+      canvas.getContext("webgl2", {
+        alpha: true,
+        antialias: false,
+        depth: false,
+        powerPreference: "high-performance",
+        stencil: false,
+      });
     if (!gl) return;
 
     const program = createProgram(gl);
@@ -383,8 +379,10 @@ export const AuthVisual = () => {
     gl.clearColor(0, 0, 0, 1);
 
     let animationFrame = 0;
-    let width = 0;
-    let height = 0;
+    let bufferWidth = 0;
+    let bufferHeight = 0;
+    let cssWidth = 1;
+    let cssHeight = 1;
     let colors = {
       background: getCssColor(
         canvas,
@@ -412,22 +410,41 @@ export const AuthVisual = () => {
     const syncTargetCursor = () => {
       if (!lastClientPoint) return;
 
+      const xCss = lastClientPoint.x - canvasRect.left;
+      const yCss = lastClientPoint.y - canvasRect.top;
       targetCursor = {
-        x: lastClientPoint.x - canvasRect.left,
-        y: lastClientPoint.y - canvasRect.top,
+        x: (xCss * bufferWidth) / cssWidth,
+        y: (yCss * bufferHeight) / cssHeight,
       };
     };
 
     const resize = () => {
       canvasRect = canvas.getBoundingClientRect();
-      const dpr = Math.min(globalThis.window.devicePixelRatio || 1, 1.5);
-      const nextWidth = Math.max(1, canvasRect.width);
-      const nextHeight = Math.max(1, canvasRect.height);
-      const pixelWidth = Math.max(1, Math.round(nextWidth * dpr));
-      const pixelHeight = Math.max(1, Math.round(nextHeight * dpr));
+      const dpr = Math.min(globalThis.window.devicePixelRatio || 1, maxDevicePixelRatio);
+      const nextCssWidth = Math.max(1, canvasRect.width);
+      const nextCssHeight = Math.max(1, canvasRect.height);
+      let pixelWidth = Math.max(1, Math.round(nextCssWidth * dpr));
+      let pixelHeight = Math.max(1, Math.round(nextCssHeight * dpr));
+      const longEdge = Math.max(pixelWidth, pixelHeight);
 
-      width = nextWidth;
-      height = nextHeight;
+      if (longEdge > maxBufferLongEdge) {
+        const edgeScale = maxBufferLongEdge / longEdge;
+        pixelWidth = Math.max(1, Math.round(pixelWidth * edgeScale));
+        pixelHeight = Math.max(1, Math.round(pixelHeight * edgeScale));
+      }
+
+      let pixels = pixelWidth * pixelHeight;
+
+      if (pixels > maxShaderPixels) {
+        const scale = Math.sqrt(maxShaderPixels / pixels);
+        pixelWidth = Math.max(1, Math.round(pixelWidth * scale));
+        pixelHeight = Math.max(1, Math.round(pixelHeight * scale));
+      }
+
+      cssWidth = nextCssWidth;
+      cssHeight = nextCssHeight;
+      bufferWidth = pixelWidth;
+      bufferHeight = pixelHeight;
 
       if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
         canvas.width = pixelWidth;
@@ -438,7 +455,6 @@ export const AuthVisual = () => {
 
     const render = () => {
       const now = globalThis.performance.now();
-      let shouldContinue = false;
 
       pulsesRef.current = pulsesRef.current.filter(
         (pulse) => now - pulse.startedAt <= pulseDuration,
@@ -446,26 +462,12 @@ export const AuthVisual = () => {
       pulseData.fill(0);
 
       for (const [index, pulse] of pulsesRef.current.slice(0, maximumPulseCount).entries()) {
-        pulseData[index * 3] = pulse.x;
-        pulseData[index * 3 + 1] = pulse.y;
+        pulseData[index * 3] = (pulse.x * bufferWidth) / cssWidth;
+        pulseData[index * 3 + 1] = (pulse.y * bufferHeight) / cssHeight;
         pulseData[index * 3 + 2] = pulse.startedAt;
       }
 
-      if (targetCursor) {
-        if (cursorRef.current) {
-          const deltaX = targetCursor.x - cursorRef.current.x;
-          const deltaY = targetCursor.y - cursorRef.current.y;
-
-          cursorRef.current = {
-            x: cursorRef.current.x + deltaX * cursorEase,
-            y: cursorRef.current.y + deltaY * cursorEase,
-          };
-          shouldContinue ||=
-            Math.abs(deltaX) > cursorSettleDistance || Math.abs(deltaY) > cursorSettleDistance;
-        } else {
-          cursorRef.current = targetCursor;
-        }
-      }
+      if (targetCursor) cursorRef.current = targetCursor;
 
       const cursor = cursorRef.current;
       const color = colors.primary;
@@ -474,7 +476,7 @@ export const AuthVisual = () => {
       gl.clearColor(background[0], background[1], background[2], 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.useProgram(program);
-      gl.uniform2f(resolutionUniform, width, height);
+      gl.uniform2f(resolutionUniform, bufferWidth, bufferHeight);
       gl.uniform3f(colorUniform, color[0], color[1], color[2]);
       gl.uniform3f(backgroundColorUniform, background[0], background[1], background[2]);
       gl.uniform2f(cursorUniform, cursor?.x ?? 0, cursor?.y ?? 0);
@@ -484,7 +486,7 @@ export const AuthVisual = () => {
       gl.uniform3fv(pulsesUniform, pulseData);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-      return shouldContinue || pulsesRef.current.length > 0;
+      return pulsesRef.current.length > 0;
     };
 
     const animate = () => {
@@ -516,14 +518,9 @@ export const AuthVisual = () => {
         y: event.clientY,
       };
       syncTargetCursor();
-      const point = targetCursor ?? {
+      pulsesRef.current.push({
         x: event.clientX - canvasRect.left,
         y: event.clientY - canvasRect.top,
-      };
-
-      targetCursor = point;
-      pulsesRef.current.push({
-        ...point,
         startedAt: globalThis.performance.now(),
       });
 

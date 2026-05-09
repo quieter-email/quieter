@@ -2,6 +2,7 @@
 
 import { ColorModeProvider, Toaster } from "@quieter/ui";
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useLocation } from "@tanstack/react-router";
 import { MotionConfig } from "motion/react";
 import { type PropsWithChildren, useState } from "react";
 import { redirectToGoogleScopeRepair, shouldRetryOrpcError } from "~/lib/orpc-errors";
@@ -28,8 +29,15 @@ export const Providers = ({ children }: PropsWithChildren) => {
       }),
   );
 
+  const pathname = useLocation({
+    select: (location) => location.pathname,
+  });
+
   return (
-    <ColorModeProvider initialColorMode="system">
+    <ColorModeProvider
+      forcedTheme={pathname === "/home" ? "light" : undefined}
+      initialColorMode="system"
+    >
       <MotionConfig reducedMotion="user">
         <QueryClientProvider client={queryClient}>
           {children}
