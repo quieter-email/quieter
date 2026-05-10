@@ -740,14 +740,14 @@ const ThreadMessageList = ({
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
 }) => {
-  const [expandedMessageId, setExpandedMessageId] = useState<string | null>(
-    messages[0]?.id ?? null,
+  const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>(
+    messages.length ? [messages[0].id] : [],
   );
 
   return (
     <div>
       {messages.map((threadMessage) => {
-        const isExpanded = expandedMessageId === threadMessage.id;
+        const isExpanded = expandedMessageIds.includes(threadMessage.id);
         const linkedDraftMessage = findLinkedDraftForMessage(allThreadMessages, threadMessage);
 
         return (
@@ -763,8 +763,10 @@ const ThreadMessageList = ({
             onComposeDraftRequested={onComposeDraftRequested}
             onUnsubscribe={onUnsubscribe}
             onToggleExpanded={() => {
-              setExpandedMessageId((current) =>
-                current === threadMessage.id ? null : threadMessage.id,
+              setExpandedMessageIds((current) =>
+                isExpanded
+                  ? current.filter((id) => id !== threadMessage.id)
+                  : [...current, threadMessage.id],
               );
             }}
           />

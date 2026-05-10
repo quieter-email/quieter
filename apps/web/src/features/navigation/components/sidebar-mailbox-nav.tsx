@@ -39,15 +39,16 @@ export const SidebarMailboxNav = ({ onSelectMailbox, selectedMailbox }: SidebarM
         <Button
           aria-current={isActive ? "page" : undefined}
           className={cn(
-            "group relative w-full justify-start gap-3 rounded-md border border-transparent px-3 text-left text-sm font-medium transition-[font-weight,scale] hover:font-bold",
+            "group relative w-full justify-start gap-3 rounded-md border border-transparent px-3 text-left text-sm font-medium transition-[font-weight,scale] hover:font-extrabold",
             {
-              "border-primary/20 bg-primary/10 font-bold text-foreground hover:bg-primary/15":
+              "border-primary/20 bg-primary/10 font-extrabold text-foreground hover:bg-primary/15":
                 isActive,
             },
           )}
           key={item.id}
           onClick={() => onSelectMailbox(item.id)}
           type="button"
+          size="sm"
           variant="ghost"
         >
           <HugeiconsIcon

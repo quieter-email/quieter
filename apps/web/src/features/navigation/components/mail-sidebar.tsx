@@ -133,7 +133,7 @@ const SidebarContent = ({
       <div className="mt-auto p-2">
         <LinkButton
           aria-label="Settings"
-          className="group w-full justify-start transition-[font-weight,scale] hover:font-bold active:font-bold"
+          className="group w-full justify-start transition-[font-weight,scale] hover:font-extrabold active:font-extrabold"
           onClick={onRequestClose}
           search={{
             from: "/",

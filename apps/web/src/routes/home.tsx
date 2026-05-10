@@ -1,4 +1,6 @@
-import { Link, createFileRoute, redirect } from "@tanstack/react-router";
+import { LinkButton } from "@quieter/ui";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { domAnimation, LazyMotion, m } from "motion/react";
 import { getSessionUser } from "~/lib/auth.functions";
 
 export const Route = createFileRoute("/home")({
@@ -16,23 +18,60 @@ export const Route = createFileRoute("/home")({
 
 function HomePage() {
   return (
-    <div className="grid min-h-dvh w-full place-items-center">
-      <div className="flex gap-3">
-        <Link
-          className="inline-flex h-10 items-center justify-center rounded-md border border-primary bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
-          search={{ mode: "login" }}
-          to="/auth"
-        >
-          Log in
-        </Link>
-        <Link
-          className="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground shadow-sm hover:bg-muted/60"
-          search={{ mode: "signup" }}
-          to="/auth"
-        >
-          Sign up
-        </Link>
+    <LazyMotion features={domAnimation}>
+      <div className="relative isolate min-h-dvh w-full">
+        <div className="relative z-10 grid min-h-dvh w-full place-items-center">
+          <div className="flex h-[90vh] w-2/3 flex-col items-center gap-y-10">
+            <h1 className="mt-[15vh] max-w-xl text-center text-6xl font-semibold text-balance">
+              <m.p
+                initial={{ opacity: 0, y: 20, filter: "blur(20px)" }}
+                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                transition={{ delay: 0, duration: 0.8, ease: [0.1, 0.5, 0.3, 1] }}
+                className="will-change-[transform,opacity,filter]"
+              >
+                Your inbox just got
+              </m.p>
+              <m.p
+                initial={{ opacity: 0, y: 20, filter: "blur(20px)" }}
+                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                transition={{ delay: 0.15, duration: 0.8, ease: "easeOut" }}
+                className="will-change-[transform,opacity,filter]"
+              >
+                a whole lot{" "}
+                <m.span
+                  className="relative inline-block bg-transparent"
+                  animate={{
+                    color: [
+                      "oklch(0.6 0.15 0)",
+                      "oklch(0.6 0.15 120)",
+                      "oklch(0.6 0.15 240)",
+                      "oklch(0.6 0.15 360)",
+                    ],
+                  }}
+                  transition={{ duration: 10, repeat: Infinity }}
+                >
+                  quieter
+                </m.span>
+              </m.p>
+            </h1>
+            <m.h2
+              initial={{ opacity: 0, y: 20, filter: "blur(20px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              transition={{ delay: 0.3, duration: 0.8, ease: "easeOut" }}
+              className="font-muted text-center text-base font-light text-balance text-muted-foreground will-change-[transform,opacity,filter]"
+            >
+              Just want a modern email client? Or need to manage your whole companies support inbox?
+              We&apos;ve got you covered.
+            </m.h2>
+            <LinkButton to="/auth" search={{ mode: "signup" }}>
+              Get Started
+            </LinkButton>
+          </div>
+        </div>
+        <div className="fixed top-0 left-0 h-dvh w-dvw">
+          <div className="absolute inset-0 z-0 bg-[radial-gradient(125%_125%_at_50%_10%,#fff_40%,#475569_100%)]" />
+        </div>
       </div>
-    </div>
+    </LazyMotion>
   );
 }
