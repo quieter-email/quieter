@@ -4,7 +4,7 @@ import {
   checkMailDomainDnsRecords,
   createMailDomainDnsRecords,
   normalizeMailDomain,
-} from "../src/mail-domain-service";
+} from "../src/mail-domain";
 
 describe("normalizeMailDomain", () => {
   test("normalizes domains from plain domains and URLs", () => {

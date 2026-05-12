@@ -5,7 +5,7 @@ import {
   resolveDefaultMailboxId,
   type MailboxGroup,
   type MailboxListItem,
-} from "../src/mailbox-service";
+} from "../src/mailbox";
 
 const gmailMailbox = (id: string, emailAddress: string): MailboxListItem => ({
   connectedUserId: "user_1",

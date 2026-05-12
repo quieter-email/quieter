@@ -1,6 +1,6 @@
 import { createRouterClient } from "@orpc/server";
 import { createOrpcContext } from "./context";
-import { appRouter } from "./router";
+import { appRouter } from "./routers/index";
 
 type HeaderSource = HeadersInit | (() => HeadersInit | Promise<HeadersInit>);
 

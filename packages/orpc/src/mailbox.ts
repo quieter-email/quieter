@@ -62,7 +62,7 @@ export type GoogleScopeRepairTarget = {
 const createGmailMailboxId = (providerAccountId: string) =>
   `${GMAIL_MAILBOX_ID_PREFIX}${providerAccountId}`;
 
-const parseGmailProviderAccountId = (mailboxId: string) => {
+export const parseGmailProviderAccountId = (mailboxId: string) => {
   const normalizedMailboxId = mailboxId.trim();
   return normalizedMailboxId.startsWith(GMAIL_MAILBOX_ID_PREFIX)
     ? normalizedMailboxId.slice(GMAIL_MAILBOX_ID_PREFIX.length)
@@ -152,7 +152,7 @@ const listManagedMailboxesForUser = async (userId: string): Promise<ManagedMailb
   }));
 };
 
-const listLinkedGoogleAccounts = async (headers: Headers) => {
+export const listLinkedGoogleAccounts = async (headers: Headers) => {
   const linkedAccounts = await auth.api.listUserAccounts({
     headers,
   });
@@ -325,7 +325,7 @@ const createGmailMailboxFromAccount = async (input: {
   }
 };
 
-const listPersonalGmailMailboxes = async (input: {
+export const listPersonalGmailMailboxes = async (input: {
   headers: Headers;
   includeRepairTargets?: boolean;
   userId: string;
@@ -354,7 +354,7 @@ const listPersonalGmailMailboxes = async (input: {
   };
 };
 
-const resolveGoogleScopeRepairTarget = (input: {
+export const resolveGoogleScopeRepairTarget = (input: {
   preferredMailboxId?: string | null;
   repairTargets: GoogleScopeRepairTarget[];
   targetAccountId?: string | null;
@@ -425,40 +425,7 @@ export const refreshAuthorizedGmailAccessToken = async (input: {
   }
 };
 
-export const syncPersonalGmailMailboxes = async (input: { headers: Headers; userId: string }) => {
-  const gmailState = await listPersonalGmailMailboxes({
-    headers: input.headers,
-    userId: input.userId,
-  });
-
-  return {
-    googleScopeRepairTarget: resolveGoogleScopeRepairTarget({
-      repairTargets: gmailState.repairTargets,
-    }),
-    mailboxes: gmailState.mailboxes,
-  };
-};
-
-export const getGoogleScopeRepairTarget = async (input: {
-  headers: Headers;
-  preferredMailboxId?: string | null;
-  targetAccountId?: string | null;
-  userId: string;
-}) => {
-  const gmailState = await listPersonalGmailMailboxes({
-    headers: input.headers,
-    includeRepairTargets: true,
-    userId: input.userId,
-  });
-
-  return resolveGoogleScopeRepairTarget({
-    preferredMailboxId: input.preferredMailboxId,
-    repairTargets: gmailState.repairTargets,
-    targetAccountId: input.targetAccountId,
-  });
-};
-
-const getUserMailboxPreferences = async (userId: string) => {
+export const getUserMailboxPreferences = async (userId: string) => {
   const [row] = await db
     .select({
       defaultMailboxId: user.defaultMailboxId,
@@ -558,7 +525,7 @@ export const applyMailboxSwitcherOrder = (
   });
 };
 
-const listAccessibleMailboxState = async (input: { headers: Headers; userId: string }) => {
+export const listAccessibleMailboxState = async (input: { headers: Headers; userId: string }) => {
   const [organizations, managedMailboxes, gmailState] = await Promise.all([
     listUserOrganizations(input.userId),
     listManagedMailboxesForUser(input.userId),
@@ -588,66 +555,6 @@ const listAccessibleMailboxState = async (input: { headers: Headers; userId: str
   ];
 
   return { gmailState, groups };
-};
-
-export const listMailboxes = async (input: { headers: Headers; userId: string }) => {
-  const [mailboxPreferences, mailboxState] = await Promise.all([
-    getUserMailboxPreferences(input.userId),
-    listAccessibleMailboxState(input),
-  ]);
-  const { gmailState, groups } = mailboxState;
-  const orderedGroups = applyMailboxSwitcherOrder(groups, mailboxPreferences.mailboxSwitcherOrder);
-  const allMailboxes: MailboxListItem[] = orderedGroups.flatMap((group) => group.mailboxes);
-
-  return {
-    defaultMailboxId: resolveDefaultMailboxId(allMailboxes, mailboxPreferences.defaultMailboxId),
-    groups: orderedGroups,
-    googleScopeRepairTarget: resolveGoogleScopeRepairTarget({
-      repairTargets: gmailState.repairTargets,
-    }),
-  };
-};
-
-export const updateMailboxSwitcherOrder = async (input: {
-  headers: Headers;
-  order: MailboxSwitcherOrder;
-  userId: string;
-}) => {
-  const mailboxState = await listAccessibleMailboxState(input);
-  const canonicalOrder = canonicalizeMailboxSwitcherOrder(mailboxState.groups, input.order);
-
-  await db
-    .update(user)
-    .set({ mailboxSwitcherOrder: canonicalOrder, updatedAt: new Date() })
-    .where(eq(user.id, input.userId));
-
-  return { mailboxSwitcherOrder: canonicalOrder };
-};
-
-const getAuthorizedManagedMailbox = async (input: { mailboxId: string; userId: string }) => {
-  const [selectedMailbox] = await db
-    .select({
-      id: mailbox.id,
-      organizationId: mailbox.organizationId,
-      provider: mailbox.provider,
-      emailAddress: mailbox.emailAddress,
-      displayName: mailbox.displayName,
-    })
-    .from(mailbox)
-    .innerJoin(
-      member,
-      and(eq(member.organizationId, mailbox.organizationId), eq(member.userId, input.userId)),
-    )
-    .where(eq(mailbox.id, input.mailboxId))
-    .limit(1);
-
-  if (!selectedMailbox) {
-    throw new ORPCError("NOT_FOUND", {
-      message: "Mailbox not found.",
-    });
-  }
-
-  return selectedMailbox;
 };
 
 export const getAuthorizedGmailMailbox = async (input: {
@@ -717,68 +624,28 @@ export const getAuthorizedGmailMailbox = async (input: {
   throw getGoogleMailboxRepairRequiredError(selectedMailbox);
 };
 
-export const setDefaultMailbox = async (input: {
-  headers: Headers;
-  mailboxId: string | null;
-  userId: string;
-}) => {
-  if (input.mailboxId) {
-    const providerAccountId = parseGmailProviderAccountId(input.mailboxId);
+export const getAuthorizedManagedMailbox = async (input: { mailboxId: string; userId: string }) => {
+  const [selectedMailbox] = await db
+    .select({
+      id: mailbox.id,
+      organizationId: mailbox.organizationId,
+      provider: mailbox.provider,
+      emailAddress: mailbox.emailAddress,
+      displayName: mailbox.displayName,
+    })
+    .from(mailbox)
+    .innerJoin(
+      member,
+      and(eq(member.organizationId, mailbox.organizationId), eq(member.userId, input.userId)),
+    )
+    .where(eq(mailbox.id, input.mailboxId))
+    .limit(1);
 
-    if (providerAccountId) {
-      const linkedGoogleAccount = (await listLinkedGoogleAccounts(input.headers)).find(
-        (account) => account.accountId === providerAccountId,
-      );
-
-      if (!linkedGoogleAccount) {
-        throw new ORPCError("NOT_FOUND", {
-          message: "Google account not found for this user.",
-        });
-      }
-    } else {
-      await getAuthorizedManagedMailbox({
-        mailboxId: input.mailboxId,
-        userId: input.userId,
-      });
-    }
-  }
-
-  await db
-    .update(user)
-    .set({ defaultMailboxId: input.mailboxId, updatedAt: new Date() })
-    .where(eq(user.id, input.userId));
-
-  return { defaultMailboxId: input.mailboxId };
-};
-
-export const disconnectPersonalGmailMailbox = async (input: {
-  headers: Headers;
-  mailboxId: string;
-  userId: string;
-}) => {
-  const providerAccountId = parseGmailProviderAccountId(input.mailboxId);
-
-  if (!providerAccountId) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "Only Gmail accounts can be disconnected here.",
+  if (!selectedMailbox) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Mailbox not found.",
     });
   }
 
-  await auth.api.unlinkAccount({
-    body: {
-      providerId: "google",
-      accountId: providerAccountId,
-    },
-    headers: input.headers,
-  });
-
-  await db
-    .update(user)
-    .set({ defaultMailboxId: null, updatedAt: new Date() })
-    .where(and(eq(user.id, input.userId), eq(user.defaultMailboxId, input.mailboxId)));
-
-  return {
-    disconnected: true,
-    mailboxId: input.mailboxId,
-  };
+  return selectedMailbox;
 };

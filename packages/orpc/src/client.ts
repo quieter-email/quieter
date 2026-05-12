@@ -3,7 +3,7 @@ import type { RouterClient } from "@orpc/server";
 import { createORPCClient, ORPCError } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import { ClientRetryPlugin, type ClientRetryPluginContext } from "@orpc/client/plugins";
-import type { AppRouter } from "./router";
+import type { AppRouter } from "./routers/index";
 
 type HeaderMap = Record<string, string>;
 type OrpcClientContext = ClientRetryPluginContext;

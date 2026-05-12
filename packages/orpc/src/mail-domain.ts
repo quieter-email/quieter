@@ -17,7 +17,6 @@ import {
 import { ORPCError } from "@orpc/server";
 import {
   db,
-  mailDomain,
   member,
   type MailDomainCheckResult,
   type MailDomainDnsRecord,
@@ -29,14 +28,14 @@ import { resolveCname, resolveMx, resolveTxt } from "node:dns/promises";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-type MailDomainCheck = MailDomainCheckResult["checks"][number];
+export type MailDomainCheck = MailDomainCheckResult["checks"][number];
 
 type MxLookupRecord = {
   exchange: string;
   priority: number;
 };
 
-type MailDomainDnsLookup = {
+export type MailDomainDnsLookup = {
   resolveCname: (name: string) => Promise<string[]>;
   resolveMx: (name: string) => Promise<MxLookupRecord[]>;
   resolveTxt: (name: string) => Promise<string[][]>;
@@ -56,8 +55,7 @@ type SstOutputs = {
   mailReceiptTopicArn?: string;
 };
 
-const MAIL_DOMAIN_STATUS_PENDING = "pending_dns" satisfies MailDomainStatus;
-const MAIL_DOMAIN_STATUS_VERIFIED = "verified" satisfies MailDomainStatus;
+export const MAIL_DOMAIN_STATUS_VERIFIED = "verified" satisfies MailDomainStatus;
 const MAIL_DOMAIN_STATUS_FAILED = "failed" satisfies MailDomainStatus;
 const MAIL_FROM_PREFIX = "bounce";
 const MAIL_OBJECT_KEY_PREFIX = "mail/inbound/";
@@ -68,13 +66,13 @@ let sesClient: SESClient | null = null;
 let sesv2Client: SESv2Client | null = null;
 let sstOutputs: SstOutputs | null | undefined;
 
-const defaultDnsLookup = {
+export const defaultDnsLookup = {
   resolveCname,
   resolveMx,
   resolveTxt,
 } satisfies MailDomainDnsLookup;
 
-const getAwsRegion = () => {
+export const getAwsRegion = () => {
   const region = process.env.AWS_REGION?.trim() || process.env.AWS_DEFAULT_REGION?.trim();
 
   if (!region) {
@@ -203,7 +201,10 @@ export const createMailDomainDnsRecords = (input: {
 export const aggregateMailDomainStatus = (checks: MailDomainCheck[]): MailDomainStatus =>
   checks.every((check) => check.ok) ? MAIL_DOMAIN_STATUS_VERIFIED : MAIL_DOMAIN_STATUS_FAILED;
 
-const assertUserOrganizationMember = async (input: { organizationId: string; userId: string }) => {
+export const assertUserOrganizationMember = async (input: {
+  organizationId: string;
+  userId: string;
+}) => {
   const [membership] = await db
     .select({ id: member.id })
     .from(member)
@@ -217,10 +218,10 @@ const assertUserOrganizationMember = async (input: { organizationId: string; use
   }
 };
 
-const getEmailIdentity = async (domain: string) =>
+export const getEmailIdentity = async (domain: string) =>
   await getSesv2Client().send(new GetEmailIdentityCommand({ EmailIdentity: domain }));
 
-const createOrLoadEmailIdentity = async (domain: string) => {
+export const createOrLoadEmailIdentity = async (domain: string) => {
   try {
     return await getSesv2Client().send(new CreateEmailIdentityCommand({ EmailIdentity: domain }));
   } catch (error) {
@@ -232,7 +233,7 @@ const createOrLoadEmailIdentity = async (domain: string) => {
   }
 };
 
-const ensureMailFromDomain = async (input: { domain: string; mailFromDomain: string }) => {
+export const ensureMailFromDomain = async (input: { domain: string; mailFromDomain: string }) => {
   await getSesv2Client().send(
     new PutEmailIdentityMailFromAttributesCommand({
       BehaviorOnMxFailure: "REJECT_MESSAGE",
@@ -242,7 +243,7 @@ const ensureMailFromDomain = async (input: { domain: string; mailFromDomain: str
   );
 };
 
-const getDkimTokens = (identity: GetEmailIdentityCommandOutput) => {
+export const getDkimTokens = (identity: GetEmailIdentityCommandOutput) => {
   const tokens = identity.DkimAttributes?.Tokens?.filter(Boolean) ?? [];
 
   if (tokens.length === 0) {
@@ -254,7 +255,7 @@ const getDkimTokens = (identity: GetEmailIdentityCommandOutput) => {
   return tokens;
 };
 
-const isSesIdentityVerified = (identity: GetEmailIdentityCommandOutput) =>
+export const isSesIdentityVerified = (identity: GetEmailIdentityCommandOutput) =>
   identity.VerifiedForSendingStatus === true && identity.DkimAttributes?.Status === "SUCCESS";
 
 const loadSstOutputs = async (): Promise<SstOutputs | null> => {
@@ -305,7 +306,7 @@ const createReceiptRuleName = (domain: string) => {
   return `quieter-${slug.slice(0, 40)}-${hash}`;
 };
 
-const ensureReceiptRule = async (domain: string) => {
+export const ensureReceiptRule = async (domain: string) => {
   const config = await getReceiptRuleConfig();
   const rule = {
     Actions: [
@@ -456,7 +457,9 @@ export const checkMailDomainDnsRecords = async (
     }),
   );
 
-const createSesIdentityCheck = (identity: GetEmailIdentityCommandOutput): MailDomainCheck => {
+export const createSesIdentityCheck = (
+  identity: GetEmailIdentityCommandOutput,
+): MailDomainCheck => {
   const verified = isSesIdentityVerified(identity);
   const status = identity.DkimAttributes?.Status ?? "UNKNOWN";
 
@@ -472,7 +475,9 @@ const createSesIdentityCheck = (identity: GetEmailIdentityCommandOutput): MailDo
   };
 };
 
-const createSesMailFromCheck = (identity: GetEmailIdentityCommandOutput): MailDomainCheck => {
+export const createSesMailFromCheck = (
+  identity: GetEmailIdentityCommandOutput,
+): MailDomainCheck => {
   const status = identity.MailFromAttributes?.MailFromDomainStatus ?? "UNKNOWN";
   const ok = status === "SUCCESS";
 
@@ -482,170 +487,5 @@ const createSesMailFromCheck = (identity: GetEmailIdentityCommandOutput): MailDo
     message: ok ? "SES custom MAIL FROM is verified." : "SES custom MAIL FROM is not verified yet.",
     ok,
     purpose: "ses_mail_from",
-  };
-};
-
-export const createMailDomainSetup = async (input: {
-  domain: string;
-  organizationId: string;
-  userId: string;
-}) => {
-  await assertUserOrganizationMember({
-    organizationId: input.organizationId,
-    userId: input.userId,
-  });
-
-  const domain = normalizeMailDomain(input.domain);
-  const region = getAwsRegion();
-  const mailFromDomain = `${MAIL_FROM_PREFIX}.${domain}`;
-  const createdIdentity = await createOrLoadEmailIdentity(domain);
-
-  await ensureMailFromDomain({ domain, mailFromDomain });
-
-  const identity =
-    (createdIdentity.DkimAttributes?.Tokens?.length ?? 0) === 0
-      ? await getEmailIdentity(domain)
-      : createdIdentity;
-  const records = createMailDomainDnsRecords({
-    dkimTokens: getDkimTokens(identity),
-    domain,
-    region,
-  });
-  const status = isSesIdentityVerified(identity)
-    ? MAIL_DOMAIN_STATUS_VERIFIED
-    : MAIL_DOMAIN_STATUS_PENDING;
-  const now = new Date();
-  const verifiedAt = (status === MAIL_DOMAIN_STATUS_VERIFIED && now) || null;
-  const [existingDomain] = await db
-    .select({ id: mailDomain.id, createdAt: mailDomain.createdAt })
-    .from(mailDomain)
-    .where(and(eq(mailDomain.organizationId, input.organizationId), eq(mailDomain.domain, domain)))
-    .limit(1);
-
-  if (existingDomain) {
-    const [updatedDomain] = await db
-      .update(mailDomain)
-      .set({
-        mailFromDomain,
-        requiredDnsRecords: records,
-        status,
-        updatedAt: now,
-        verifiedAt,
-      })
-      .where(eq(mailDomain.id, existingDomain.id))
-      .returning({
-        id: mailDomain.id,
-        status: mailDomain.status,
-      });
-
-    return {
-      domain,
-      domainId: updatedDomain?.id ?? existingDomain.id,
-      records,
-      status: updatedDomain?.status ?? status,
-    };
-  }
-
-  const id = crypto.randomUUID();
-  const [createdDomain] = await db
-    .insert(mailDomain)
-    .values({
-      createdAt: now,
-      domain,
-      id,
-      lastCheckResult: null,
-      mailFromDomain,
-      organizationId: input.organizationId,
-      requiredDnsRecords: records,
-      status,
-      updatedAt: now,
-      verifiedAt,
-    })
-    .returning({
-      id: mailDomain.id,
-      status: mailDomain.status,
-    });
-
-  return {
-    domain,
-    domainId: createdDomain?.id ?? id,
-    records,
-    status: createdDomain?.status ?? status,
-  };
-};
-
-export const checkMailDomainSetup = async (input: {
-  dnsLookup?: MailDomainDnsLookup;
-  domain: string;
-  organizationId: string;
-  userId: string;
-}) => {
-  await assertUserOrganizationMember({
-    organizationId: input.organizationId,
-    userId: input.userId,
-  });
-
-  const domain = normalizeMailDomain(input.domain);
-  const [storedDomain] = await db
-    .select({
-      id: mailDomain.id,
-      requiredDnsRecords: mailDomain.requiredDnsRecords,
-      verifiedAt: mailDomain.verifiedAt,
-    })
-    .from(mailDomain)
-    .where(and(eq(mailDomain.organizationId, input.organizationId), eq(mailDomain.domain, domain)))
-    .limit(1);
-
-  if (!storedDomain) {
-    throw new ORPCError("NOT_FOUND", {
-      message: "Mail domain setup was not found in the active team.",
-    });
-  }
-
-  let identity: GetEmailIdentityCommandOutput;
-
-  try {
-    identity = await getEmailIdentity(domain);
-  } catch {
-    identity = { $metadata: {} };
-  }
-
-  const checks = [
-    createSesIdentityCheck(identity),
-    createSesMailFromCheck(identity),
-    ...(await checkMailDomainDnsRecords(
-      input.dnsLookup ?? defaultDnsLookup,
-      storedDomain.requiredDnsRecords,
-    )),
-  ];
-  const status = aggregateMailDomainStatus(checks);
-  const now = new Date();
-  const verifiedAt =
-    (status === MAIL_DOMAIN_STATUS_VERIFIED && (storedDomain.verifiedAt ?? now)) || null;
-  const lastCheckResult = {
-    checkedAt: now.toISOString(),
-    checks,
-  } satisfies MailDomainCheckResult;
-
-  if (status === MAIL_DOMAIN_STATUS_VERIFIED) {
-    await ensureReceiptRule(domain);
-  }
-
-  await db
-    .update(mailDomain)
-    .set({
-      lastCheckResult,
-      status,
-      updatedAt: now,
-      verifiedAt,
-    })
-    .where(eq(mailDomain.id, storedDomain.id));
-
-  return {
-    checks,
-    domain,
-    domainId: storedDomain.id,
-    status,
-    verifiedAt,
   };
 };

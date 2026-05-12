@@ -7,12 +7,12 @@
     "./compose": "./src/gmail/compose/schema.ts",
     "./context": "./src/context.ts",
     "./errors": "./src/errors.ts",
-    "./mailbox-service": "./src/mailbox-service.ts",
+    "./mailbox": "./src/mailbox.ts",
+    "./mail-domain": "./src/mail-domain.ts",
     "./server": "./src/server.ts",
     "./server-client": "./src/server-client.ts",
-    "./router": "./src/router.ts",
-    "./gmail-service": "./src/gmail-service.ts",
-    "./sender-avatar": "./src/sender-avatar.ts"
+    "./router": "./src/routers/index.ts",
+    "./gmail-service": "./src/gmail-service.ts"
   },
   "scripts": {
     "fmt": "oxfmt --config ../../oxfmt.json .",
