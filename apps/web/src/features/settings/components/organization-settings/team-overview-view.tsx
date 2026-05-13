@@ -5,10 +5,15 @@ import {
   ArrowRight01Icon,
   Delete02Icon,
   Edit01Icon,
+  Globe02Icon,
+  Key02Icon,
   Logout03Icon,
+  UserGroupIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui";
+import { useQuery } from "@tanstack/react-query";
+import { teamApiKeysQueryOptions } from "./api-keys";
 import {
   type FullOrganization,
   type OrganizationRoleOption,
@@ -17,6 +22,7 @@ import {
   formatRoleLabel,
   hasOrganizationRole,
 } from "./domain";
+import { teamMailDomainsQueryOptions } from "./mail-domains";
 import { OrganizationFormDialog } from "./organization-form-dialog";
 import { MutedActionButton, SettingsRow } from "./settings-row";
 import { DeleteOrganizationDialog, LeaveOrganizationDialog } from "./team-action-dialogs";
@@ -26,6 +32,8 @@ export const TeamOverviewView = ({
   canDeleteOrganization,
   canUpdateOrganization,
   onBackToList,
+  onOpenApiKeys,
+  onOpenDomains,
   onOpenMembers,
   organization,
   pendingInvitationsCount,
@@ -35,11 +43,15 @@ export const TeamOverviewView = ({
   canDeleteOrganization: boolean;
   canUpdateOrganization: boolean;
   onBackToList: () => void;
+  onOpenApiKeys: () => void;
+  onOpenDomains: () => void;
   onOpenMembers: () => void;
   organization: OrganizationSummary;
   pendingInvitationsCount: number;
   fullOrganization: FullOrganization;
 }) => {
+  const apiKeysQuery = useQuery(teamApiKeysQueryOptions(organization.id));
+  const domainsQuery = useQuery(teamMailDomainsQueryOptions(organization.id));
   const ownerCount = fullOrganization.members.filter((member) =>
     hasOrganizationRole(member.role, "owner"),
   ).length;
@@ -50,11 +62,21 @@ export const TeamOverviewView = ({
   const deleteOrganizationReason =
     (!canDeleteOrganization && "Only owners can delete teams.") || null;
   const peopleSummary = [
-    formatCount(fullOrganization.members.length, "member"),
+    formatCount(fullOrganization.members.length, "Member", "Members"),
     pendingInvitationsCount > 0 && formatCount(pendingInvitationsCount, "pending invitation"),
   ]
     .filter(Boolean)
     .join(", ");
+  const domainsSummary = domainsQuery.isPending
+    ? "Loading domains…"
+    : domainsQuery.isError
+      ? "Could not load domains."
+      : formatCount(domainsQuery.data.domains.length, "Domain", "Domains");
+  const apiKeysSummary = apiKeysQuery.isPending
+    ? "Loading API keys…"
+    : apiKeysQuery.isError
+      ? "Could not load API keys."
+      : formatCount(apiKeysQuery.data.apiKeys.length, "API Key", "API Keys");
 
   return (
     <section className="space-y-6">
@@ -94,7 +116,44 @@ export const TeamOverviewView = ({
             </Button>
           }
           label="Members"
-          value={peopleSummary}
+          value={
+            <span className="inline-flex items-center gap-1.5">
+              <HugeiconsIcon aria-hidden className="size-4" icon={UserGroupIcon} />
+              {peopleSummary}
+            </span>
+          }
+        />
+
+        <SettingsRow
+          action={
+            <Button onClick={onOpenDomains} size="sm" variant="outline">
+              <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
+              Open
+            </Button>
+          }
+          label="Domains"
+          value={
+            <span className="inline-flex items-center gap-1.5">
+              <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
+              {domainsSummary}
+            </span>
+          }
+        />
+
+        <SettingsRow
+          action={
+            <Button onClick={onOpenApiKeys} size="sm" variant="outline">
+              <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
+              Open
+            </Button>
+          }
+          label="API keys"
+          value={
+            <span className="inline-flex items-center gap-1.5">
+              <HugeiconsIcon aria-hidden className="size-4" icon={Key02Icon} />
+              {apiKeysSummary}
+            </span>
+          }
         />
 
         <SettingsRow

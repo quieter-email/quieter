@@ -11,17 +11,54 @@ export default $config({
     };
   },
   async run() {
-    const mailBucket = new sst.aws.Bucket("MailBucket");
+    const callerIdentity = await aws.getCallerIdentity({});
+    const region = await aws.getRegion({});
+    const mailObjectKeyPrefix = "mail/inbound/";
+    const mailReceiptRuleSetName = "quieter-mail";
+    const mailReceiptRuleSourceArn = `arn:aws:ses:${region.region}:${callerIdentity.accountId}:receipt-rule-set/${mailReceiptRuleSetName}:receipt-rule/*`;
+    const mailBucket = new sst.aws.Bucket("MailBucket", {
+      policy: [
+        {
+          actions: ["s3:PutObject"],
+          conditions: [
+            {
+              test: "StringEquals",
+              values: [callerIdentity.accountId],
+              variable: "aws:SourceAccount",
+            },
+            {
+              test: "ArnLike",
+              values: [mailReceiptRuleSourceArn],
+              variable: "aws:SourceArn",
+            },
+          ],
+          paths: [`${mailObjectKeyPrefix}*`],
+          principals: [
+            {
+              identifiers: ["ses.amazonaws.com"],
+              type: "service",
+            },
+          ],
+        },
+      ],
+    });
     const mailReceiptTopic = new sst.aws.SnsTopic("MailReceiptTopic");
     const mailIngestToken = new sst.Secret("MailIngestToken");
     const mailSendToken = new sst.Secret("MailSendToken");
-    const mailReceiptRuleSetName = "quieter-mail";
 
     const mailReceiptRole = new aws.iam.Role("MailReceiptRole", {
       assumeRolePolicy: $jsonStringify({
         Statement: [
           {
             Action: "sts:AssumeRole",
+            Condition: {
+              ArnLike: {
+                "aws:SourceArn": mailReceiptRuleSourceArn,
+              },
+              StringEquals: {
+                "aws:SourceAccount": callerIdentity.accountId,
+              },
+            },
             Effect: "Allow",
             Principal: {
               Service: "ses.amazonaws.com",
@@ -38,7 +75,7 @@ export default $config({
           {
             Action: ["s3:PutObject"],
             Effect: "Allow",
-            Resource: [mailBucket.arn.apply((arn) => `${arn}/*`)],
+            Resource: [mailBucket.arn.apply((arn) => `${arn}/${mailObjectKeyPrefix}*`)],
           },
           {
             Action: ["sns:Publish"],

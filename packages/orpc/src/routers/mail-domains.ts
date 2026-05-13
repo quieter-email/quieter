@@ -2,33 +2,36 @@ import type { GetEmailIdentityCommandOutput } from "@aws-sdk/client-sesv2";
 import type { MailDomainCheckResult } from "@quieter/database";
 import { ORPCError } from "@orpc/server";
 import { db, mailDomain } from "@quieter/database";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   aggregateMailDomainStatus,
+  assertUserCanManageMailDomains,
   assertUserOrganizationMember,
   checkMailDomainDnsRecords,
   createMailDomainDnsRecords,
+  createMailDomainOwnershipToken,
   createOrLoadEmailIdentity,
   createSesIdentityCheck,
   createSesMailFromCheck,
   defaultDnsLookup,
+  deleteMailDomainAwsResources,
   ensureMailFromDomain,
   ensureReceiptRule,
   getAwsRegion,
   getDkimTokens,
   getEmailIdentity,
-  isSesIdentityVerified,
   MAIL_DOMAIN_STATUS_VERIFIED,
+  getMailDomainOwnershipToken,
   normalizeMailDomain,
 } from "../mail-domain";
 import { protectedProcedure } from "./base";
 
 export const mailDomainsRouter = {
-  createSetup: protectedProcedure
+  list: protectedProcedure
+    .route({ method: "GET" })
     .input(
       z.object({
-        domain: z.string().trim().min(1),
         organizationId: z.string().trim().min(1),
       }),
     )
@@ -38,7 +41,57 @@ export const mailDomainsRouter = {
         userId: context.userId,
       });
 
+      const domains = await db
+        .select({
+          createdAt: mailDomain.createdAt,
+          domain: mailDomain.domain,
+          id: mailDomain.id,
+          lastCheckResult: mailDomain.lastCheckResult,
+          mailFromDomain: mailDomain.mailFromDomain,
+          requiredDnsRecords: mailDomain.requiredDnsRecords,
+          status: mailDomain.status,
+          updatedAt: mailDomain.updatedAt,
+          verifiedAt: mailDomain.verifiedAt,
+        })
+        .from(mailDomain)
+        .where(eq(mailDomain.organizationId, input.organizationId))
+        .orderBy(desc(mailDomain.createdAt));
+
+      return { domains };
+    }),
+
+  createSetup: protectedProcedure
+    .input(
+      z.object({
+        domain: z.string().trim().min(1),
+        organizationId: z.string().trim().min(1),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      await assertUserCanManageMailDomains({
+        organizationId: input.organizationId,
+        userId: context.userId,
+      });
+
       const domain = normalizeMailDomain(input.domain);
+      const [existingDomain] = await db
+        .select({
+          id: mailDomain.id,
+          organizationId: mailDomain.organizationId,
+          requiredDnsRecords: mailDomain.requiredDnsRecords,
+          status: mailDomain.status,
+          verifiedAt: mailDomain.verifiedAt,
+        })
+        .from(mailDomain)
+        .where(eq(mailDomain.domain, domain))
+        .limit(1);
+
+      if (existingDomain && existingDomain.organizationId !== input.organizationId) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "This domain is already registered to another team.",
+        });
+      }
+
       const region = getAwsRegion();
       const mailFromDomain = `bounce.${domain}`;
       const createdIdentity = await createOrLoadEmailIdentity(domain);
@@ -52,22 +105,16 @@ export const mailDomainsRouter = {
       const records = createMailDomainDnsRecords({
         dkimTokens: getDkimTokens(identity),
         domain,
+        ownershipToken:
+          getMailDomainOwnershipToken(existingDomain?.requiredDnsRecords ?? []) ??
+          createMailDomainOwnershipToken(),
         region,
       });
-      const status: "pending_dns" | "verified" = isSesIdentityVerified(identity)
-        ? "verified"
-        : "pending_dns";
       const now = new Date();
-      const verifiedAt = (status === MAIL_DOMAIN_STATUS_VERIFIED && now) || null;
-      const [existingDomain] = await db
-        .select({ id: mailDomain.id, createdAt: mailDomain.createdAt })
-        .from(mailDomain)
-        .where(
-          and(eq(mailDomain.organizationId, input.organizationId), eq(mailDomain.domain, domain)),
-        )
-        .limit(1);
 
       if (existingDomain) {
+        const hasOwnershipRecord = getMailDomainOwnershipToken(existingDomain.requiredDnsRecords);
+        const status = hasOwnershipRecord ? existingDomain.status : "pending_dns";
         const [updatedDomain] = await db
           .update(mailDomain)
           .set({
@@ -75,7 +122,7 @@ export const mailDomainsRouter = {
             requiredDnsRecords: records,
             status,
             updatedAt: now,
-            verifiedAt,
+            verifiedAt: hasOwnershipRecord ? existingDomain.verifiedAt : null,
           })
           .where(eq(mailDomain.id, existingDomain.id))
           .returning({
@@ -102,9 +149,9 @@ export const mailDomainsRouter = {
           mailFromDomain,
           organizationId: input.organizationId,
           requiredDnsRecords: records,
-          status,
+          status: "pending_dns",
           updatedAt: now,
-          verifiedAt,
+          verifiedAt: null,
         })
         .returning({
           id: mailDomain.id,
@@ -115,7 +162,7 @@ export const mailDomainsRouter = {
         domain,
         domainId: createdDomain?.id ?? id,
         records,
-        status: createdDomain?.status ?? status,
+        status: createdDomain?.status ?? "pending_dns",
       };
     }),
 
@@ -127,7 +174,7 @@ export const mailDomainsRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
-      await assertUserOrganizationMember({
+      await assertUserCanManageMailDomains({
         organizationId: input.organizationId,
         userId: context.userId,
       });
@@ -159,10 +206,19 @@ export const mailDomainsRouter = {
         identity = { $metadata: {} };
       }
 
+      const requiredDnsRecords =
+        getMailDomainOwnershipToken(storedDomain.requiredDnsRecords) == null
+          ? createMailDomainDnsRecords({
+              dkimTokens: getDkimTokens(identity),
+              domain,
+              ownershipToken: createMailDomainOwnershipToken(),
+              region: getAwsRegion(),
+            })
+          : storedDomain.requiredDnsRecords;
       const checks = [
         createSesIdentityCheck(identity),
         createSesMailFromCheck(identity),
-        ...(await checkMailDomainDnsRecords(defaultDnsLookup, storedDomain.requiredDnsRecords)),
+        ...(await checkMailDomainDnsRecords(defaultDnsLookup, requiredDnsRecords)),
       ];
       const status = aggregateMailDomainStatus(checks);
       const now = new Date();
@@ -181,6 +237,7 @@ export const mailDomainsRouter = {
         .update(mailDomain)
         .set({
           lastCheckResult,
+          requiredDnsRecords,
           status,
           updatedAt: now,
           verifiedAt,
@@ -193,6 +250,50 @@ export const mailDomainsRouter = {
         domainId: storedDomain.id,
         status,
         verifiedAt,
+      };
+    }),
+
+  remove: protectedProcedure
+    .input(
+      z.object({
+        domainId: z.string().trim().min(1),
+        organizationId: z.string().trim().min(1),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      await assertUserCanManageMailDomains({
+        organizationId: input.organizationId,
+        userId: context.userId,
+      });
+
+      const [storedDomain] = await db
+        .select({
+          domain: mailDomain.domain,
+          id: mailDomain.id,
+        })
+        .from(mailDomain)
+        .where(
+          and(
+            eq(mailDomain.id, input.domainId),
+            eq(mailDomain.organizationId, input.organizationId),
+          ),
+        )
+        .limit(1);
+
+      if (!storedDomain) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "Mail domain was not found in the active team.",
+        });
+      }
+
+      await db.delete(mailDomain).where(eq(mailDomain.id, storedDomain.id));
+      const awsCleanupCompleted = await deleteMailDomainAwsResources(storedDomain.domain);
+
+      return {
+        awsCleanupCompleted,
+        domain: storedDomain.domain,
+        domainId: storedDomain.id,
+        removed: true,
       };
     }),
 };

@@ -13,8 +13,6 @@ export const Toaster = ({ className, toastOptions, ...props }: ToasterProps) => 
   return (
     <SonnerToaster
       className={cn("toaster group", className)}
-      closeButton
-      expand
       offset={16}
       position="bottom-right"
       richColors

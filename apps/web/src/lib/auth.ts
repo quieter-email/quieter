@@ -1,5 +1,6 @@
 "use client";
 
+import { apiKeyClient } from "@better-auth/api-key/client";
 import { passkeyClient } from "@better-auth/passkey/client";
 import {
   lastLoginMethodClient,
@@ -9,5 +10,11 @@ import {
 import { createAuthClient } from "better-auth/react";
 
 export const authClient = createAuthClient({
-  plugins: [passkeyClient(), organizationClient(), lastLoginMethodClient(), magicLinkClient()],
+  plugins: [
+    passkeyClient(),
+    organizationClient(),
+    apiKeyClient(),
+    lastLoginMethodClient(),
+    magicLinkClient(),
+  ],
 });

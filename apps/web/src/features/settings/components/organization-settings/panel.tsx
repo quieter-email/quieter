@@ -52,6 +52,26 @@ export const OrganizationSettingsPanel = () => {
     });
   };
 
+  const navigateToDomains = () => {
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        teamView: "domains",
+      }),
+      to: ".",
+    });
+  };
+
+  const navigateToApiKeys = () => {
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        teamView: "api-keys",
+      }),
+      to: ".",
+    });
+  };
+
   const navigateToTeamOverview = () => {
     void navigate({
       search: (previous) => ({
@@ -72,8 +92,10 @@ export const OrganizationSettingsPanel = () => {
         ) : selectedOrganization ? (
           <TeamView
             key={selectedOrganization.id}
+            onOpenApiKeys={navigateToApiKeys}
             onBackToList={navigateToTeams}
             onBackToTeam={navigateToTeamOverview}
+            onOpenDomains={navigateToDomains}
             onOpenMembers={navigateToMembers}
             organization={selectedOrganization}
             userId={userId}

@@ -2,6 +2,7 @@ import {
   AlreadyExistsException as SesAlreadyExistsException,
   CreateReceiptRuleCommand,
   CreateReceiptRuleSetCommand,
+  DeleteReceiptRuleCommand,
   SESClient,
   SetActiveReceiptRuleSetCommand,
   UpdateReceiptRuleCommand,
@@ -9,6 +10,7 @@ import {
 import {
   AlreadyExistsException as SesV2AlreadyExistsException,
   CreateEmailIdentityCommand,
+  DeleteEmailIdentityCommand,
   GetEmailIdentityCommand,
   PutEmailIdentityMailFromAttributesCommand,
   SESv2Client,
@@ -23,10 +25,11 @@ import {
   type MailDomainStatus,
 } from "@quieter/database";
 import { and, eq } from "drizzle-orm";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { resolveCname, resolveMx, resolveTxt } from "node:dns/promises";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export type MailDomainCheck = MailDomainCheckResult["checks"][number];
 
@@ -59,6 +62,7 @@ export const MAIL_DOMAIN_STATUS_VERIFIED = "verified" satisfies MailDomainStatus
 const MAIL_DOMAIN_STATUS_FAILED = "failed" satisfies MailDomainStatus;
 const MAIL_FROM_PREFIX = "bounce";
 const MAIL_OBJECT_KEY_PREFIX = "mail/inbound/";
+const OWNERSHIP_RECORD_PREFIX = "quieter-domain-verification=";
 const DEFAULT_RECEIPT_RULE_SET_NAME = "quieter-mail";
 const DMARC_RECORD_PREFIX = "v=DMARC1; p=none";
 
@@ -84,13 +88,46 @@ export const getAwsRegion = () => {
   return region;
 };
 
+const getAwsStaticCredentials = () => {
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
+
+  if (!accessKeyId && !secretAccessKey) {
+    return undefined;
+  }
+
+  if (!accessKeyId || !secretAccessKey) {
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message:
+        "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must both be set for mail domain setup.",
+    });
+  }
+
+  const sessionToken = process.env.AWS_SESSION_TOKEN?.trim();
+
+  return {
+    accessKeyId,
+    secretAccessKey,
+    ...(sessionToken ? { sessionToken } : {}),
+  };
+};
+
+const getAwsClientConfig = () => {
+  const credentials = getAwsStaticCredentials();
+
+  return {
+    region: getAwsRegion(),
+    ...(credentials ? { credentials } : {}),
+  };
+};
+
 const getSesClient = () => {
-  sesClient ??= new SESClient({ region: getAwsRegion() });
+  sesClient ??= new SESClient(getAwsClientConfig());
   return sesClient;
 };
 
 const getSesv2Client = () => {
-  sesv2Client ??= new SESv2Client({ region: getAwsRegion() });
+  sesv2Client ??= new SESv2Client(getAwsClientConfig());
   return sesv2Client;
 };
 
@@ -105,6 +142,14 @@ const isAwsAlreadyExistsError = (error: unknown) =>
     error != null &&
     "name" in error &&
     (error.name === "AlreadyExistsException" || error.name === "AlreadyExists"));
+
+const isAwsNotFoundError = (error: unknown) =>
+  typeof error === "object" &&
+  error != null &&
+  "name" in error &&
+  (error.name === "NotFoundException" ||
+    error.name === "NotFound" ||
+    error.name === "RuleDoesNotExist");
 
 export const normalizeMailDomain = (input: string) => {
   const trimmed = input.trim();
@@ -153,11 +198,19 @@ export const normalizeMailDomain = (input: string) => {
 export const createMailDomainDnsRecords = (input: {
   dkimTokens: string[];
   domain: string;
+  ownershipToken: string;
   region: string;
 }): MailDomainDnsRecord[] => {
   const mailFromDomain = `${MAIL_FROM_PREFIX}.${input.domain}`;
 
   return [
+    {
+      name: `_quieter-verify.${input.domain}`,
+      purpose: "ownership",
+      required: true,
+      type: "TXT",
+      value: `${OWNERSHIP_RECORD_PREFIX}${input.ownershipToken}`,
+    },
     ...input.dkimTokens.map((token) => ({
       name: `${token}._domainkey.${input.domain}`,
       purpose: "dkim" as const,
@@ -198,6 +251,17 @@ export const createMailDomainDnsRecords = (input: {
   ];
 };
 
+export const createMailDomainOwnershipToken = () => randomBytes(24).toString("base64url");
+
+export const getMailDomainOwnershipToken = (records: MailDomainDnsRecord[]) => {
+  const record = records.find(
+    (candidate) =>
+      candidate.purpose === "ownership" && candidate.value.startsWith(OWNERSHIP_RECORD_PREFIX),
+  );
+
+  return record?.value.slice(OWNERSHIP_RECORD_PREFIX.length) ?? null;
+};
+
 export const aggregateMailDomainStatus = (checks: MailDomainCheck[]): MailDomainStatus =>
   checks.every((check) => check.ok) ? MAIL_DOMAIN_STATUS_VERIFIED : MAIL_DOMAIN_STATUS_FAILED;
 
@@ -206,7 +270,7 @@ export const assertUserOrganizationMember = async (input: {
   userId: string;
 }) => {
   const [membership] = await db
-    .select({ id: member.id })
+    .select({ id: member.id, role: member.role })
     .from(member)
     .where(and(eq(member.organizationId, input.organizationId), eq(member.userId, input.userId)))
     .limit(1);
@@ -214,6 +278,27 @@ export const assertUserOrganizationMember = async (input: {
   if (!membership) {
     throw new ORPCError("NOT_FOUND", {
       message: "Team not found.",
+    });
+  }
+
+  return membership;
+};
+
+const hasOrganizationManagerRole = (role: string) =>
+  role
+    .split(",")
+    .map((part) => part.trim().toLowerCase())
+    .some((part) => part === "admin" || part === "owner");
+
+export const assertUserCanManageMailDomains = async (input: {
+  organizationId: string;
+  userId: string;
+}) => {
+  const membership = await assertUserOrganizationMember(input);
+
+  if (!hasOrganizationManagerRole(membership.role)) {
+    throw new ORPCError("FORBIDDEN", {
+      message: "Only admins and owners can manage team domains.",
     });
   }
 };
@@ -258,18 +343,33 @@ export const getDkimTokens = (identity: GetEmailIdentityCommandOutput) => {
 export const isSesIdentityVerified = (identity: GetEmailIdentityCommandOutput) =>
   identity.VerifiedForSendingStatus === true && identity.DkimAttributes?.Status === "SUCCESS";
 
+const getSstOutputPaths = () =>
+  Array.from(
+    new Set(
+      [
+        join(process.cwd(), ".sst", "outputs.json"),
+        join(process.cwd(), "..", "..", ".sst", "outputs.json"),
+        join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", ".sst", "outputs.json"),
+      ].map((path) => resolve(path)),
+    ),
+  );
+
 const loadSstOutputs = async (): Promise<SstOutputs | null> => {
   if (sstOutputs !== undefined) {
     return sstOutputs;
   }
 
-  try {
-    const raw = await readFile(join(process.cwd(), ".sst", "outputs.json"), "utf8");
-    sstOutputs = JSON.parse(raw) as SstOutputs;
-  } catch {
-    sstOutputs = null;
+  for (const path of getSstOutputPaths()) {
+    try {
+      const raw = await readFile(path, "utf8");
+      sstOutputs = JSON.parse(raw) as SstOutputs;
+      return sstOutputs;
+    } catch {
+      continue;
+    }
   }
 
+  sstOutputs = null;
   return sstOutputs;
 };
 
@@ -359,6 +459,31 @@ export const ensureReceiptRule = async (domain: string) => {
   }
 };
 
+export const deleteMailDomainAwsResources = async (domain: string) => {
+  let cleanupSucceeded = true;
+
+  try {
+    const config = await getReceiptRuleConfig();
+
+    await getSesClient().send(
+      new DeleteReceiptRuleCommand({
+        RuleName: createReceiptRuleName(domain),
+        RuleSetName: config.ruleSetName,
+      }),
+    );
+  } catch (error) {
+    cleanupSucceeded = cleanupSucceeded && isAwsNotFoundError(error);
+  }
+
+  try {
+    await getSesv2Client().send(new DeleteEmailIdentityCommand({ EmailIdentity: domain }));
+  } catch (error) {
+    cleanupSucceeded = cleanupSucceeded && isAwsNotFoundError(error);
+  }
+
+  return cleanupSucceeded;
+};
+
 const checkCnameRecord = async (
   dns: MailDomainDnsLookup,
   record: MailDomainDnsRecord,
@@ -429,11 +554,12 @@ const checkTxtRecord = async (
     record.purpose === "dmarc"
       ? found.some((value) => value.startsWith(DMARC_RECORD_PREFIX.toLowerCase()))
       : found.some((value) => expected.includes(value));
+  const recordLabel = record.purpose === "ownership" ? "Ownership TXT" : "TXT";
 
   return {
     expected,
     found,
-    message: ok ? "TXT record is present." : "TXT record is missing.",
+    message: ok ? `${recordLabel} record is present.` : `${recordLabel} record is missing.`,
     ok,
     purpose: record.purpose,
   };
