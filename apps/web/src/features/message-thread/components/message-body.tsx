@@ -8,6 +8,7 @@ import { useExternalImagesEnabled } from "~/features/settings/domain/external-im
 import {
   applyEmailPreferences,
   fixNonReadableColors,
+  linkifyText,
   preprocessEmailHtml,
   type ProcessedMailHtml,
 } from "../domain/mail-html";
@@ -150,6 +151,26 @@ const MessageBodyLoadingSkeleton = () => (
   </div>
 );
 
+const PlainTextMessageBody = ({ text }: { text: string }) => (
+  <p className="bg-background-light p-4 text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground">
+    {linkifyText(text).map((segment, index) =>
+      segment.kind === "link" ? (
+        <a
+          className="text-primary underline decoration-border underline-offset-2 hover:decoration-current"
+          href={segment.href}
+          key={`${segment.href}-${index}`}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          {segment.value}
+        </a>
+      ) : (
+        <span key={`${segment.value}-${index}`}>{segment.value}</span>
+      ),
+    )}
+  </p>
+);
+
 export const MessageBody = ({ html, isLoading, loadExternalImages, text }: MessageBodyProps) => {
   const fallbackText = text?.trim();
   const htmlBody = html?.trim();
@@ -159,11 +180,7 @@ export const MessageBody = ({ html, isLoading, loadExternalImages, text }: Messa
   }
 
   if (!htmlBody) {
-    return (
-      <p className="bg-background-light p-4 text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground">
-        {fallbackText || "No content."}
-      </p>
-    );
+    return <PlainTextMessageBody text={fallbackText || "No content."} />;
   }
 
   return <HtmlMessageBody html={htmlBody} loadExternalImages={loadExternalImages} />;

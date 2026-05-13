@@ -43,7 +43,9 @@ export const SidebarMailboxNav = ({ onSelectMailbox, selectedMailbox }: SidebarM
             {
               "border-primary/20 bg-primary/10 font-extrabold text-foreground hover:bg-primary/15":
                 isActive,
+              "hover:[&_svg_*]:[stroke-width:3]": !isActive,
             },
+            "[&_svg_*]:transition-[stroke-width]",
           )}
           key={item.id}
           onClick={() => onSelectMailbox(item.id)}

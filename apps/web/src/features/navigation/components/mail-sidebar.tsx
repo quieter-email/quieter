@@ -106,12 +106,12 @@ const SidebarContent = ({
 
       <div className="mt-3 p-1">
         <Button
-          className="w-full justify-start rounded-md px-4 transition-[font-weight,scale] hover:font-bold active:font-bold"
+          className="w-full justify-start rounded-md px-4 transition-[font-weight,scale] hover:font-bold active:font-bold [&_svg_*]:transition-[stroke-width] hover:[&_svg_*]:[stroke-width:3] active:[&_svg_*]:[stroke-width:3]"
           disabled={!selectedMailboxId}
           onClick={handleComposeNewMail}
           type="button"
         >
-          <HugeiconsIcon className="size-4 shrink-0" icon={Edit01Icon} />
+          <HugeiconsIcon className="size-4 shrink-0" icon={Edit01Icon} strokeWidth={1.5} />
           Compose
         </Button>
       </div>
@@ -133,7 +133,7 @@ const SidebarContent = ({
       <div className="mt-auto p-2">
         <LinkButton
           aria-label="Settings"
-          className="group w-full justify-start transition-[font-weight,scale] hover:font-extrabold active:font-extrabold"
+          className="group w-full justify-start transition-[font-weight,scale] hover:font-extrabold active:font-extrabold [&_svg_*]:transition-[stroke-width] hover:[&_svg_*]:[stroke-width:3] active:[&_svg_*]:[stroke-width:3]"
           onClick={onRequestClose}
           search={{
             from: "/",
@@ -145,6 +145,7 @@ const SidebarContent = ({
           <HugeiconsIcon
             className="size-4 shrink-0 rotate-0 transition-transform duration-1000 ease-in-out group-hover:rotate-360"
             icon={Settings01Icon}
+            strokeWidth={1.5}
           />
           Settings
         </LinkButton>

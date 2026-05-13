@@ -260,7 +260,9 @@ export const SidebarLabelNav = ({ mailboxId, onSearch, searchQuery }: SidebarLab
                     "border-primary/20 bg-primary/10 font-bold text-foreground hover:bg-primary/15":
                       isActive,
                     "text-foreground-light hover:bg-muted/70 hover:text-foreground": !isActive,
+                    "hover:[&_svg_*]:[stroke-width:3]": !isActive,
                   },
+                  "[&_svg_*]:transition-[stroke-width]",
                 )}
                 key={label.id}
                 onClick={() => onSearch(updateLabelFilter(searchQuery, label.name, !isActive))}
