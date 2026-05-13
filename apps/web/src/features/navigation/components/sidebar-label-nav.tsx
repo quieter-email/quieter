@@ -23,6 +23,7 @@ import {
   toast,
 } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { m } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 import { serializeStructuredSearchState } from "~/features/message-search/components/message-list-search/message-list-search-utils";
@@ -47,6 +48,8 @@ type EditingLabel =
 
 const MAX_VISIBLE_SIDEBAR_LABELS = 10;
 const SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY = "quieter:sidebar-label-visibility";
+
+const getSidebarEntranceDelay = (step: number) => step * 0.1;
 
 const updateLabelFilter = (searchQuery: string, labelName: string, enabled: boolean) => {
   const state = parseStructuredSearchQuery(searchQuery);
@@ -222,7 +225,12 @@ export const SidebarLabelNav = ({ mailboxId, onSearch, searchQuery }: SidebarLab
 
   return (
     <section className="mt-4">
-      <div className="mb-1 flex items-center justify-between px-2">
+      <m.div
+        className="mb-1 flex items-center justify-between px-2 will-change-[transform,opacity,filter]"
+        initial={{ opacity: 0, x: -20, filter: "blur(20px)" }}
+        animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+        transition={{ delay: getSidebarEntranceDelay(8), duration: 0.5, ease: "easeOut" }}
+      >
         <p className="text-xs font-medium text-muted-foreground">Labels</p>
         <IconButtonTooltip label="Edit labels">
           <Button
@@ -239,47 +247,79 @@ export const SidebarLabelNav = ({ mailboxId, onSearch, searchQuery }: SidebarLab
             <HugeiconsIcon aria-hidden className="size-3.5" icon={Edit01Icon} />
           </Button>
         </IconButtonTooltip>
-      </div>
+      </m.div>
 
       <nav aria-label="Labels" className="flex flex-col gap-1">
         {labelsQuery.isPending ? (
-          <p className="px-2 py-1 text-xs text-muted-foreground">Loading labels...</p>
+          <m.p
+            className="px-2 py-1 text-xs text-muted-foreground will-change-[transform,opacity,filter]"
+            initial={{ opacity: 0, x: -20, filter: "blur(20px)" }}
+            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+            transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
+          >
+            Loading labels...
+          </m.p>
         ) : labelsQuery.isError ? (
-          <p className="px-2 py-1 text-xs text-destructive">Could not load labels.</p>
+          <m.p
+            className="px-2 py-1 text-xs text-destructive will-change-[transform,opacity,filter]"
+            initial={{ opacity: 0, x: -20, filter: "blur(20px)" }}
+            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+            transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
+          >
+            Could not load labels.
+          </m.p>
         ) : visibleUserLabels.length === 0 ? (
-          <p className="px-2 py-1 text-xs text-muted-foreground">No labels shown.</p>
+          <m.p
+            className="px-2 py-1 text-xs text-muted-foreground will-change-[transform,opacity,filter]"
+            initial={{ opacity: 0, x: -20, filter: "blur(20px)" }}
+            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+            transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
+          >
+            No labels shown.
+          </m.p>
         ) : (
-          visibleUserLabels.map((label) => {
+          visibleUserLabels.map((label, index) => {
             const isActive = selectedLabelKeys.has(normalizeLabelSelectionKey(label.name));
             return (
-              <Button
-                aria-pressed={isActive}
-                className={cn(
-                  "squircle h-7 min-w-0 justify-start gap-2 rounded-md border border-transparent px-2.5 text-left text-xs font-normal transition-[font-weight,scale] hover:font-bold",
-                  {
-                    "border-primary/20 bg-primary/10 font-bold text-foreground hover:bg-primary/15":
-                      isActive,
-                    "text-foreground-light hover:bg-muted/70 hover:text-foreground": !isActive,
-                    "hover:[&_svg_*]:[stroke-width:3]": !isActive,
-                  },
-                  "[&_svg_*]:transition-[stroke-width]",
-                )}
+              <m.div
                 key={label.id}
-                onClick={() => onSearch(updateLabelFilter(searchQuery, label.name, !isActive))}
-                type="button"
-                variant="ghost"
+                className="w-full will-change-[transform,opacity,filter]"
+                initial={{ opacity: 0, x: -20, filter: "blur(20px)" }}
+                animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                transition={{
+                  delay: getSidebarEntranceDelay(index + 9),
+                  duration: 0.5,
+                  ease: "easeOut",
+                }}
               >
-                <HugeiconsIcon
-                  aria-hidden
-                  className={cn("size-3.5 shrink-0", {
-                    "text-primary": isActive,
-                    "text-muted-foreground": !isActive,
-                  })}
-                  icon={Tag01Icon}
-                  strokeWidth={isActive ? 3 : 1.5}
-                />
-                <span className="min-w-0 truncate">{label.name}</span>
-              </Button>
+                <Button
+                  aria-pressed={isActive}
+                  className={cn(
+                    "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md border border-transparent px-2.5 text-left text-xs font-normal transition-[font-weight,scale] hover:font-bold",
+                    {
+                      "border-primary/20 bg-primary/10 font-bold text-foreground hover:bg-primary/15":
+                        isActive,
+                      "text-foreground-light hover:bg-muted/70 hover:text-foreground": !isActive,
+                      "hover:[&_svg_*]:[stroke-width:3]": !isActive,
+                    },
+                    "[&_svg_*]:transition-[stroke-width]",
+                  )}
+                  onClick={() => onSearch(updateLabelFilter(searchQuery, label.name, !isActive))}
+                  type="button"
+                  variant="ghost"
+                >
+                  <HugeiconsIcon
+                    aria-hidden
+                    className={cn("size-3.5 shrink-0", {
+                      "text-primary": isActive,
+                      "text-muted-foreground": !isActive,
+                    })}
+                    icon={Tag01Icon}
+                    strokeWidth={isActive ? 3 : 1.5}
+                  />
+                  <span className="min-w-0 truncate">{label.name}</span>
+                </Button>
+              </m.div>
             );
           })
         )}

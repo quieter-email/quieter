@@ -45,6 +45,8 @@ type SidebarContentProps = Omit<MailSidebarProps, "isMobileOpen" | "onMobileOpen
   switcherSide?: "bottom" | "right";
 };
 
+const getSidebarEntranceDelay = (step: number) => step * 0.1;
+
 const SidebarContent = ({
   defaultMailboxId,
   groups,
@@ -77,7 +79,12 @@ const SidebarContent = ({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col p-3">
-      <div className="flex min-w-0 items-start gap-2 rounded-md">
+      <m.div
+        className="flex min-w-0 items-start gap-2 rounded-md will-change-[transform,opacity,filter]"
+        initial={{ opacity: 0, x: -20, filter: "blur(20px)" }}
+        animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+        transition={{ delay: getSidebarEntranceDelay(0), duration: 0.5, ease: "easeOut" }}
+      >
         <MailboxSwitcherDropdown
           defaultMailboxId={defaultMailboxId}
           groups={groups}
@@ -102,9 +109,14 @@ const SidebarContent = ({
             </Button>
           </IconButtonTooltip>
         )}
-      </div>
+      </m.div>
 
-      <div className="mt-3 p-1">
+      <m.div
+        className="mt-3 p-1 will-change-[transform,opacity,filter]"
+        initial={{ opacity: 0, x: -20, filter: "blur(20px)" }}
+        animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+        transition={{ delay: getSidebarEntranceDelay(1), duration: 0.5, ease: "easeOut" }}
+      >
         <Button
           className="w-full justify-start rounded-md px-4 transition-[font-weight,scale] hover:font-bold active:font-bold [&_svg_*]:transition-[stroke-width] hover:[&_svg_*]:[stroke-width:3] active:[&_svg_*]:[stroke-width:3]"
           disabled={!selectedMailboxId}
@@ -114,7 +126,7 @@ const SidebarContent = ({
           <HugeiconsIcon className="size-4 shrink-0" icon={Edit01Icon} strokeWidth={1.5} />
           Compose
         </Button>
-      </div>
+      </m.div>
 
       <div className="mt-4 min-h-0 flex-1 p-1">
         <SidebarMailboxNav
@@ -130,7 +142,12 @@ const SidebarContent = ({
           searchQuery={searchQuery}
         />
       </div>
-      <div className="mt-auto p-2">
+      <m.div
+        className="mt-auto p-2 will-change-[transform,opacity,filter]"
+        initial={{ opacity: 0, x: -20, filter: "blur(20px)" }}
+        animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+        transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
+      >
         <LinkButton
           aria-label="Settings"
           className="group w-full justify-start transition-[font-weight,scale] hover:font-extrabold active:font-extrabold [&_svg_*]:transition-[stroke-width] hover:[&_svg_*]:[stroke-width:3] active:[&_svg_*]:[stroke-width:3]"
@@ -149,7 +166,7 @@ const SidebarContent = ({
           />
           Settings
         </LinkButton>
-      </div>
+      </m.div>
     </div>
   );
 };
@@ -181,15 +198,15 @@ export const MailSidebar = ({
   }, [isMobileOpen]);
 
   return (
-    <>
-      <aside
-        className="relative hidden h-full shrink-0 bg-background text-foreground lg:flex lg:flex-col"
-        style={{ width: "248px" }}
-      >
-        <SidebarContent {...sidebarProps} />
-      </aside>
+    <LazyMotion features={domAnimation}>
+      <>
+        <aside
+          className="relative hidden h-full shrink-0 bg-background text-foreground lg:flex lg:flex-col"
+          style={{ width: "248px" }}
+        >
+          <SidebarContent {...sidebarProps} />
+        </aside>
 
-      <LazyMotion features={domAnimation}>
         <AnimatePresence initial={false}>
           {isMobileOpen && (
             <>
@@ -219,7 +236,7 @@ export const MailSidebar = ({
             </>
           )}
         </AnimatePresence>
-      </LazyMotion>
-    </>
+      </>
+    </LazyMotion>
   );
 };
