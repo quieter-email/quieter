@@ -1,6 +1,7 @@
 import { LinkButton } from "@quieter/ui";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { domAnimation, LazyMotion, m } from "motion/react";
+import { ContourLines } from "~/components/contour-lines";
 import { getSessionUser } from "~/lib/auth.functions";
 
 export const Route = createFileRoute("/home")({
@@ -26,7 +27,7 @@ function HomePage() {
               <m.p
                 initial={{ opacity: 0, y: 20, filter: "blur(20px)" }}
                 animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                transition={{ delay: 0, duration: 0.8, ease: [0.1, 0.5, 0.3, 1] }}
+                transition={{ delay: 0, duration: 0.8, ease: "easeOut" }}
                 className="will-change-[transform,opacity,filter]"
               >
                 Your inbox just got
@@ -34,7 +35,7 @@ function HomePage() {
               <m.p
                 initial={{ opacity: 0, y: 20, filter: "blur(20px)" }}
                 animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                transition={{ delay: 0.15, duration: 0.8, ease: "easeOut" }}
+                transition={{ delay: 0.3, duration: 0.8, ease: "easeOut" }}
                 className="will-change-[transform,opacity,filter]"
               >
                 a whole lot{" "}
@@ -48,7 +49,10 @@ function HomePage() {
                       "oklch(0.6 0.15 360)",
                     ],
                   }}
-                  transition={{ duration: 10, repeat: Infinity }}
+                  transition={{
+                    duration: 10,
+                    repeat: Infinity,
+                  }}
                 >
                   quieter
                 </m.span>
@@ -57,20 +61,33 @@ function HomePage() {
             <m.h2
               initial={{ opacity: 0, y: 20, filter: "blur(20px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              transition={{ delay: 0.3, duration: 0.8, ease: "easeOut" }}
-              className="font-muted text-center text-base font-light text-balance text-muted-foreground will-change-[transform,opacity,filter]"
+              transition={{ delay: 0.6, duration: 0.8, ease: "easeOut" }}
+              className="text-center text-base font-light text-balance will-change-[transform,opacity,filter]"
             >
               Just want a modern email client? Or need to manage your whole companies support inbox?
               We&apos;ve got you covered.
             </m.h2>
-            <LinkButton to="/auth" search={{ mode: "signup" }}>
-              Get Started
-            </LinkButton>
+            <m.div
+              initial={{ opacity: 0, y: 20, filter: "blur(20px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              transition={{ delay: 0.9, duration: 0.8, ease: "easeOut" }}
+              className="will-change-[transform,opacity,filter]"
+            >
+              <LinkButton to="/auth" search={{ mode: "signup" }}>
+                Get Started
+              </LinkButton>
+            </m.div>
           </div>
         </div>
-        <div className="fixed top-0 left-0 h-dvh w-dvw">
-          <div className="absolute inset-0 z-0 bg-[radial-gradient(125%_125%_at_50%_10%,#fff_40%,#475569_100%)]" />
-        </div>
+        <m.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 1, ease: "easeOut" }}
+          className="fixed top-0 left-0 h-dvh w-dvw"
+        >
+          <ContourLines />
+          <div className="absolute inset-0 z-0 bg-[radial-gradient(125%_125%_at_50%_10%,transparent_40%,#475569_100%)]" />
+        </m.div>
       </div>
     </LazyMotion>
   );
