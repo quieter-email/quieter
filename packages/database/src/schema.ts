@@ -227,6 +227,11 @@ export const mailDomain = pgTable(
   ],
 );
 
+export const waitlistSignup = pgTable("waitlistSignup", {
+  email: text("email").primaryKey(),
+  createdAt: timestamp("createdAt").notNull(),
+});
+
 export const apikey = pgTable(
   "apikey",
   {
@@ -272,6 +277,7 @@ export const tables = {
   invitation,
   mailbox,
   mailDomain,
+  waitlistSignup,
 };
 
 export const authRelations = defineRelations(tables, (r) => ({

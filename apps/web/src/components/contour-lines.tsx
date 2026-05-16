@@ -339,7 +339,7 @@ export const ContourLines = () => {
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="absolute inset-0 z-0 size-full bg-transparent"
+      className="absolute inset-0 z-0 size-full bg-transparent opacity-50"
     />
   );
 };

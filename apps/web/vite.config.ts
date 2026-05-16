@@ -16,6 +16,7 @@ export default defineConfig({
     nitro({ preset: "vercel" }),
   ],
   resolve: {
+    dedupe: ["@tanstack/react-router", "react", "react-dom"],
     tsconfigPaths: true,
   },
   server: {

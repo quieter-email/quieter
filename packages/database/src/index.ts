@@ -13,6 +13,7 @@ export {
   tables,
   user,
   verification,
+  waitlistSignup,
   type MailDomainCheckResult,
   type MailDomainDnsRecord,
   type MailDomainStatus,

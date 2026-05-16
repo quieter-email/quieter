@@ -112,7 +112,7 @@ export const MailboxWorkspaceContent = ({
           <>
             <section
               className={cn(
-                "min-h-0 min-w-0 flex-col overflow-hidden bg-background-light lg:flex lg:rounded-lg",
+                "min-h-0 min-w-0 flex-col overflow-hidden border border-border/60 bg-background-light lg:flex lg:rounded-lg",
                 {
                   "flex flex-1": !layoutState.isMessageRouteOpen,
                   hidden: layoutState.isMessageRouteOpen,
@@ -146,7 +146,7 @@ export const MailboxWorkspaceContent = ({
 
             <div
               className={cn(
-                "min-h-0 min-w-0 flex-col overflow-hidden bg-background-light lg:flex lg:rounded-lg",
+                "min-h-0 min-w-0 flex-col overflow-hidden border border-border/60 bg-background-light lg:flex lg:rounded-lg",
                 {
                   "flex flex-1": layoutState.isMessageRouteOpen,
                   hidden: !layoutState.isMessageRouteOpen,

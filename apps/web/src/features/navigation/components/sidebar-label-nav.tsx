@@ -295,7 +295,7 @@ export const SidebarLabelNav = ({ mailboxId, onSearch, searchQuery }: SidebarLab
                 <Button
                   aria-pressed={isActive}
                   className={cn(
-                    "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md border border-transparent px-2.5 text-left text-xs font-normal transition-[font-weight,scale] hover:font-bold",
+                    "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md border border-transparent px-2.5 text-left text-xs font-normal transition-[font-weight,scale] hover:font-bold [&_svg]:size-3.5",
                     {
                       "border-primary/20 bg-primary/10 font-bold text-foreground hover:bg-primary/15":
                         isActive,
@@ -310,7 +310,7 @@ export const SidebarLabelNav = ({ mailboxId, onSearch, searchQuery }: SidebarLab
                 >
                   <HugeiconsIcon
                     aria-hidden
-                    className={cn("size-3.5 shrink-0", {
+                    className={cn("shrink-0", {
                       "text-primary": isActive,
                       "text-muted-foreground": !isActive,
                     })}

@@ -2,26 +2,21 @@
 
 import { useEffect, useRef } from "react";
 
-const maximumPulseCount = 6;
-const maximumCursorTrailCount = 32;
-const pulseDuration = 1450;
-const cursorTrailDuration = 950;
-const cursorTrailMinDistance = 0.75;
+const cursorTrailDuration = 1160;
+const cursorTrailMinDistance = 3;
+const cursorTrailSampleLimit = 44;
 const dotGap = 4;
 const maxDevicePixelRatio = 2;
 const dotStrideBytes = 4 * Float32Array.BYTES_PER_ELEMENT;
 
-type Pulse = {
-  startedAt: number;
+type Point = {
   x: number;
   y: number;
 };
 
-type CursorTrailPoint = Pulse;
-
-type Point = {
-  x: number;
-  y: number;
+type TrailSample = Point & {
+  speed: number;
+  startedAt: number;
 };
 
 type Rgb = [number, number, number];
@@ -34,8 +29,7 @@ type Dot = {
 };
 
 const vertexShaderSource = `#version 300 es
-#define MAX_PULSES 6
-#define MAX_CURSOR_TRAIL 32
+#define MAX_TRAIL_SAMPLES 44
 
 in vec2 aCenter;
 in float aRadius;
@@ -48,125 +42,76 @@ out float vRadius;
 uniform vec2 uResolution;
 uniform vec2 uCursor;
 uniform float uHasCursor;
+uniform float uCursorSpeed;
 uniform float uTime;
-uniform int uCursorTrailCount;
-uniform vec3 uCursorTrail[MAX_CURSOR_TRAIL];
-uniform int uPulseCount;
-uniform vec3 uPulses[MAX_PULSES];
+uniform int uTrailSampleCount;
+uniform vec4 uTrailSamples[MAX_TRAIL_SAMPLES];
 
-float hash(vec2 value) {
-  return fract(sin(dot(value, vec2(127.1, 311.7))) * 43758.5453123);
-}
-
-float cursorFalloffRadius(float unit) {
-  return clamp(unit * 8.4, 640.0, 1120.0);
-}
-
-float cursorPush(float unit) {
-  return clamp(unit * 0.13, 9.0, 15.0);
-}
-
-float cursorTrailFalloffRadius(float unit) {
-  return clamp(unit * 1.65, 125.0, 230.0);
-}
-
-vec2 displacementFor(vec2 point) {
+vec2 trailDisplacementFor(vec2 point) {
   float unit = min(uResolution.x, uResolution.y) / 10.0;
-  vec2 displacement = vec2(0.0);
+  float falloffRadius = clamp(unit * 0.26, 28.0, 58.0);
+  float pushDistance = clamp(unit * 0.2, 16.0, 34.0);
+  float force = 0.0;
+  vec2 directionSum = vec2(0.0);
 
   if (uHasCursor > 0.5) {
-    vec2 offset = point - uCursor;
-    float distanceValue = length(offset);
-    float falloffRadius = cursorFalloffRadius(unit);
+    vec2 cursorOffset = point - uCursor;
+    float cursorDistance = length(cursorOffset);
+    float cursorFalloffRadius = falloffRadius * mix(1.55, 0.46, uCursorSpeed);
+    float normalizedCursorDistance = cursorDistance / cursorFalloffRadius;
+    float cursorForce = exp(-normalizedCursorDistance * normalizedCursorDistance * 0.82);
+    vec2 cursorDirection = cursorDistance > 0.001 ? cursorOffset / cursorDistance : vec2(1.0, 0.0);
 
-    if (distanceValue < falloffRadius) {
-      float angle = hash(point) * 6.28318530718;
-      vec2 direction = distanceValue > 0.001 ? offset / distanceValue : vec2(cos(angle), sin(angle));
-      float falloffProgress = distanceValue / falloffRadius;
-      float force = pow(1.0 - falloffProgress, 2.2) * (1.0 - smoothstep(0.82, 1.0, falloffProgress));
-
-      displacement += direction * force * cursorPush(unit);
-    }
+    force = cursorForce;
+    directionSum = cursorDirection * cursorForce * cursorForce * cursorForce;
   }
 
-  float trailEffect = 0.0;
-  vec2 trailDirection = vec2(0.0);
-  float trailBaseRadius = cursorTrailFalloffRadius(unit);
+  for (int index = 0; index < MAX_TRAIL_SAMPLES - 1; index += 1) {
+    if (index >= uTrailSampleCount - 1) break;
 
-  for (int index = 0; index < MAX_CURSOR_TRAIL - 1; index += 1) {
-    if (index >= uCursorTrailCount - 1) break;
-
-    vec3 startPoint = uCursorTrail[index];
-    vec3 endPoint = uCursorTrail[index + 1];
-    vec2 segment = endPoint.xy - startPoint.xy;
+    vec4 startSample = uTrailSamples[index];
+    vec4 endSample = uTrailSamples[index + 1];
+    vec2 segment = endSample.xy - startSample.xy;
     float segmentLengthSquared = dot(segment, segment);
     float segmentProgress = segmentLengthSquared > 0.001
-      ? clamp(dot(point - startPoint.xy, segment) / segmentLengthSquared, 0.0, 1.0)
+      ? clamp(dot(point - startSample.xy, segment) / segmentLengthSquared, 0.0, 1.0)
       : 0.0;
-    vec2 closestPoint = mix(startPoint.xy, endPoint.xy, segmentProgress);
-    float closestTime = mix(startPoint.z, endPoint.z, segmentProgress);
-    float pathProgress = (float(index) + segmentProgress) / max(float(uCursorTrailCount - 1), 1.0);
-    float pathStrength = pow(smoothstep(0.0, 1.0, pathProgress), 0.58);
-    float ageStrength = 1.0 - smoothstep(0.0, 950.0, uTime - closestTime);
-    float trailStrength = pathStrength * ageStrength;
-    float trailRadius = trailBaseRadius * mix(0.42, 1.24, pathStrength);
+    vec2 closestPoint = mix(startSample.xy, endSample.xy, segmentProgress);
+    float sampleTime = mix(startSample.z, endSample.z, segmentProgress);
+    float sampleSpeed = mix(startSample.w, endSample.w, segmentProgress);
+    float age = uTime - sampleTime;
+    float sampleDuration = mix(620.0, 1160.0, sampleSpeed);
+
+    if (age < 0.0 || age > sampleDuration) continue;
+
     vec2 offset = point - closestPoint;
     float distanceValue = length(offset);
 
-    if (trailStrength > 0.0 && distanceValue < trailRadius) {
-      float angle = hash(point) * 6.28318530718;
-      vec2 direction = distanceValue > 0.001 ? offset / distanceValue : vec2(cos(angle), sin(angle));
-      float falloffProgress = distanceValue / trailRadius;
-      float force =
-        pow(1.0 - falloffProgress, 2.45) *
-        (1.0 - smoothstep(0.76, 1.0, falloffProgress)) *
-        trailStrength;
-      float effect = force * trailRadius;
+    float sampleFalloffRadius = falloffRadius * mix(1.45, 0.38, sampleSpeed);
+    float ageStrength = 1.0 - smoothstep(0.0, sampleDuration, age);
+    float newestStrength = smoothstep(0.0, 1.0, (float(index) + segmentProgress) / max(float(uTrailSampleCount - 1), 1.0));
+    vec2 fallbackDirection = normalize(vec2(-segment.y, segment.x) + vec2(0.001, 0.0));
+    vec2 direction = distanceValue > 0.001 ? offset / distanceValue : fallbackDirection;
+    float normalizedDistance = distanceValue / sampleFalloffRadius;
+    float gravity = exp(-normalizedDistance * normalizedDistance * 0.82);
+    float sampleForce = gravity * ageStrength * mix(0.35, 1.0, newestStrength);
+    float directionWeight = sampleForce * sampleForce * sampleForce;
 
-      if (effect > trailEffect) {
-        trailEffect = effect;
-        trailDirection = direction;
-      }
-    }
+    force = max(force, sampleForce);
+    directionSum += direction * directionWeight;
   }
 
-  displacement += trailDirection * trailEffect / trailBaseRadius * cursorPush(unit) * 0.92;
+  float directionLength = length(directionSum);
 
-  float pulseWidth = unit * 0.82;
-  float pulseMaxRadius = min(length(uResolution) * 0.62, unit * 9.0) + pulseWidth;
-
-  for (int index = 0; index < MAX_PULSES; index += 1) {
-    if (index >= uPulseCount) break;
-
-    vec3 pulse = uPulses[index];
-    float progress = (uTime - pulse.z) / 1450.0;
-
-    if (progress < 0.0 || progress > 1.0) continue;
-
-    vec2 offset = point - pulse.xy;
-    float distanceValue = length(offset);
-    float waveRadius = mix(pulseWidth * 1.7, pulseMaxRadius, progress);
-    float distanceToWave = abs(distanceValue - waveRadius);
-
-    if (distanceToWave > pulseWidth) continue;
-
-    float wavePosition = (distanceValue - waveRadius) / pulseWidth;
-    float waveEnvelope = 1.0 - smoothstep(0.72, 1.0, abs(wavePosition));
-    float waveShape = -sin(wavePosition * 3.14159265359) * waveEnvelope;
-    float waveFade = 1.0 - smoothstep(0.0, 1.0, progress);
-    float wave = waveShape * waveFade;
-    vec2 direction = distanceValue > 0.001
-      ? offset / distanceValue
-      : vec2(cos(hash(point + pulse.xy) * 6.28318530718), sin(hash(point + pulse.xy) * 6.28318530718));
-
-    displacement += direction * wave * unit * 0.076;
+  if (force <= 0.0001 || directionLength <= 0.0001) {
+    return vec2(0.0);
   }
 
-  return displacement;
+  return directionSum / directionLength * force * pushDistance;
 }
 
 void main() {
-  vec2 center = aCenter + displacementFor(aCenter);
+  vec2 center = aCenter + trailDisplacementFor(aCenter);
 
   vOpacity = aOpacity;
   vRadius = aRadius;
@@ -212,6 +157,9 @@ const smoothstep = (edge0: number, edge1: number, value: number) => {
 
 const distanceBetween = (first: Point, second: Point) =>
   Math.hypot(first.x - second.x, first.y - second.y);
+
+const speedForDistance = (distance: number, elapsedMs: number) =>
+  clamp(distance / Math.max(elapsedMs, 16) / 2.1, 0, 1);
 
 const oklchGrayToSrgb = (lightness: number) => {
   const linear = lightness ** 3;
@@ -406,9 +354,6 @@ const createProgram = (gl: WebGL2RenderingContext) => {
 
 export const AuthVisual = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const cursorRef = useRef<Point | null>(null);
-  const cursorTrailRef = useRef<CursorTrailPoint[]>([]);
-  const pulsesRef = useRef<Pulse[]>([]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -442,11 +387,10 @@ export const AuthVisual = () => {
     const colorUniform = gl.getUniformLocation(program, "uColor");
     const cursorUniform = gl.getUniformLocation(program, "uCursor");
     const hasCursorUniform = gl.getUniformLocation(program, "uHasCursor");
+    const cursorSpeedUniform = gl.getUniformLocation(program, "uCursorSpeed");
     const timeUniform = gl.getUniformLocation(program, "uTime");
-    const cursorTrailCountUniform = gl.getUniformLocation(program, "uCursorTrailCount");
-    const cursorTrailUniform = gl.getUniformLocation(program, "uCursorTrail[0]");
-    const pulseCountUniform = gl.getUniformLocation(program, "uPulseCount");
-    const pulsesUniform = gl.getUniformLocation(program, "uPulses[0]");
+    const trailSampleCountUniform = gl.getUniformLocation(program, "uTrailSampleCount");
+    const trailSamplesUniform = gl.getUniformLocation(program, "uTrailSamples[0]");
 
     if (
       centerAttribute < 0 ||
@@ -456,11 +400,10 @@ export const AuthVisual = () => {
       !colorUniform ||
       !cursorUniform ||
       !hasCursorUniform ||
+      !cursorSpeedUniform ||
       !timeUniform ||
-      !cursorTrailCountUniform ||
-      !cursorTrailUniform ||
-      !pulseCountUniform ||
-      !pulsesUniform
+      !trailSampleCountUniform ||
+      !trailSamplesUniform
     )
       return;
 
@@ -501,6 +444,18 @@ export const AuthVisual = () => {
     let cssWidth = 1;
     let cssHeight = 1;
     let dotCount = 0;
+    let canvasRect = canvas.getBoundingClientRect();
+    let cursorTrail: TrailSample[] = [];
+    let cursor: Point | null = null;
+    let trailHead: TrailSample | null = null;
+    let trailTarget: Point | null = null;
+    let lastClientPoint: Point | null = null;
+    let lastRenderTime = 0;
+    let wasPointerInside = false;
+    const canAnimateCursorTrail =
+      globalThis.window.matchMedia("(hover: hover) and (pointer: fine)").matches &&
+      !globalThis.window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const cursorTrailData = new Float32Array(cursorTrailSampleLimit * 4);
     let colors = {
       background: getCssColor(
         canvas,
@@ -509,11 +464,6 @@ export const AuthVisual = () => {
       ),
       primary: getCssColor(canvas, "--primary", [0.25, 0.25, 0.25]),
     };
-    let targetCursor: Point | null = null;
-    let lastClientPoint: Point | null = null;
-    let canvasRect = canvas.getBoundingClientRect();
-    const cursorTrailData = new Float32Array(maximumCursorTrailCount * 3);
-    const pulseData = new Float32Array(maximumPulseCount * 3);
 
     const refreshColors = () => {
       colors = {
@@ -526,28 +476,58 @@ export const AuthVisual = () => {
       };
     };
 
-    const pushCursorTrailPoint = (point: Point) => {
-      const now = globalThis.performance.now();
-      const lastPoint = cursorTrailRef.current.at(-1);
+    const toCanvasPoint = (clientPoint: Point, requireInside: boolean) => {
+      const xCss = clientPoint.x - canvasRect.left;
+      const yCss = clientPoint.y - canvasRect.top;
+      const isInside = xCss >= 0 && xCss <= cssWidth && yCss >= 0 && yCss <= cssHeight;
 
-      if (lastPoint && distanceBetween(lastPoint, point) < cursorTrailMinDistance) return;
+      if (requireInside && !isInside) return null;
 
-      cursorTrailRef.current = [...cursorTrailRef.current, { ...point, startedAt: now }].slice(
-        -maximumCursorTrailCount,
-      );
-    };
-
-    const syncTargetCursor = (recordTrail = false) => {
-      if (!lastClientPoint) return;
-
-      const xCss = lastClientPoint.x - canvasRect.left;
-      const yCss = lastClientPoint.y - canvasRect.top;
-      targetCursor = {
+      return {
         x: (xCss * bufferWidth) / cssWidth,
         y: (yCss * bufferHeight) / cssHeight,
       };
+    };
 
-      if (recordTrail) pushCursorTrailPoint(targetCursor);
+    const pushCursorTrailPoint = (sample: TrailSample) => {
+      const lastPoint = cursorTrail.at(-1);
+
+      if (lastPoint && distanceBetween(lastPoint, sample) < cursorTrailMinDistance) {
+        lastPoint.speed = sample.speed;
+        lastPoint.startedAt = sample.startedAt;
+        return;
+      }
+
+      cursorTrail = [...cursorTrail, sample].slice(-cursorTrailSampleLimit);
+    };
+
+    const syncTrailHead = (now: number) => {
+      if (!trailTarget) return false;
+
+      if (!trailHead) {
+        trailHead = { ...trailTarget, speed: 0, startedAt: now };
+        pushCursorTrailPoint(trailHead);
+        return false;
+      }
+
+      const elapsedMs = clamp(now - lastRenderTime, 8, 48);
+      const catchup = 1 - Math.exp((-elapsedMs / 1000) * 18);
+      const nextPoint = {
+        x: mix(trailHead.x, trailTarget.x, catchup),
+        y: mix(trailHead.y, trailTarget.y, catchup),
+      };
+      const movedDistance = distanceBetween(trailHead, nextPoint);
+      const remainingDistance = distanceBetween(nextPoint, trailTarget);
+
+      trailHead = {
+        ...nextPoint,
+        speed: mix(trailHead.speed, speedForDistance(movedDistance, elapsedMs), 0.45),
+        startedAt: now,
+      };
+
+      if (movedDistance >= 0.2) pushCursorTrailPoint(trailHead);
+
+      return remainingDistance > 0.35 || movedDistance > 0.05;
     };
 
     const syncDots = () => {
@@ -581,6 +561,9 @@ export const AuthVisual = () => {
 
       bufferWidth = pixelWidth;
       bufferHeight = pixelHeight;
+      cursorTrail = [];
+      trailHead = null;
+      trailTarget = null;
       canvas.width = pixelWidth;
       canvas.height = pixelHeight;
       gl.viewport(0, 0, pixelWidth, pixelHeight);
@@ -589,52 +572,41 @@ export const AuthVisual = () => {
 
     const render = () => {
       const now = globalThis.performance.now();
-
-      pulsesRef.current = pulsesRef.current.filter(
-        (pulse) => now - pulse.startedAt <= pulseDuration,
-      );
-      cursorTrailRef.current = cursorTrailRef.current.filter(
-        (point) => now - point.startedAt <= cursorTrailDuration,
-      );
-      cursorTrailData.fill(0);
-      pulseData.fill(0);
-
-      for (const [index, point] of cursorTrailRef.current.entries()) {
-        cursorTrailData[index * 3] = point.x;
-        cursorTrailData[index * 3 + 1] = point.y;
-        cursorTrailData[index * 3 + 2] = point.startedAt;
-      }
-
-      for (const [index, pulse] of pulsesRef.current.slice(0, maximumPulseCount).entries()) {
-        pulseData[index * 3] = (pulse.x * bufferWidth) / cssWidth;
-        pulseData[index * 3 + 1] = (pulse.y * bufferHeight) / cssHeight;
-        pulseData[index * 3 + 2] = pulse.startedAt;
-      }
-
-      if (targetCursor) cursorRef.current = targetCursor;
-
-      const cursor = cursorRef.current;
       const color = colors.primary;
       const background = colors.background;
+      const isTrailHeadMoving = syncTrailHead(now);
+
+      cursorTrail = cursorTrail.filter((point) => now - point.startedAt <= cursorTrailDuration);
+      cursorTrailData.fill(0);
+
+      if (!wasPointerInside && !isTrailHeadMoving) {
+        trailHead = null;
+        trailTarget = null;
+      }
+
+      for (const [index, point] of cursorTrail.entries()) {
+        cursorTrailData[index * 4] = point.x;
+        cursorTrailData[index * 4 + 1] = point.y;
+        cursorTrailData[index * 4 + 2] = point.startedAt;
+        cursorTrailData[index * 4 + 3] = point.speed;
+      }
 
       gl.clearColor(background[0], background[1], background[2], 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.useProgram(program);
       gl.uniform2f(resolutionUniform, bufferWidth, bufferHeight);
       gl.uniform3f(colorUniform, color[0], color[1], color[2]);
-      gl.uniform2f(cursorUniform, cursor?.x ?? 0, cursor?.y ?? 0);
-      gl.uniform1f(hasCursorUniform, cursor ? 1 : 0);
+      gl.uniform2f(cursorUniform, trailHead?.x ?? 0, trailHead?.y ?? 0);
+      gl.uniform1f(hasCursorUniform, wasPointerInside && trailHead ? 1 : 0);
+      gl.uniform1f(cursorSpeedUniform, wasPointerInside && trailHead ? trailHead.speed : 0);
       gl.uniform1f(timeUniform, now);
-      gl.uniform1i(
-        cursorTrailCountUniform,
-        Math.min(cursorTrailRef.current.length, maximumCursorTrailCount),
-      );
-      gl.uniform3fv(cursorTrailUniform, cursorTrailData);
-      gl.uniform1i(pulseCountUniform, Math.min(pulsesRef.current.length, maximumPulseCount));
-      gl.uniform3fv(pulsesUniform, pulseData);
+      gl.uniform1i(trailSampleCountUniform, Math.min(cursorTrail.length, cursorTrailSampleLimit));
+      gl.uniform4fv(trailSamplesUniform, cursorTrailData);
       gl.drawArraysInstanced(gl.POINTS, 0, 1, dotCount);
 
-      return pulsesRef.current.length > 0 || cursorTrailRef.current.length > 0;
+      lastRenderTime = now;
+
+      return cursorTrail.length > 0 || isTrailHeadMoving;
     };
 
     const animate = () => {
@@ -644,39 +616,61 @@ export const AuthVisual = () => {
         animationFrame = 0;
       }
     };
+
     const queueRender = () => {
       if (animationFrame) return;
 
       animationFrame = globalThis.requestAnimationFrame(animate);
     };
-    const handlePointerMove = (event: PointerEvent) => {
-      lastClientPoint = {
-        x: event.clientX,
-        y: event.clientY,
-      };
-      syncTargetCursor(true);
-      queueRender();
-    };
-    const handlePointerRawUpdate = (event: Event) => {
-      if (event instanceof PointerEvent) handlePointerMove(event);
-    };
-    const handlePointerDown = (event: PointerEvent) => {
-      lastClientPoint = {
-        x: event.clientX,
-        y: event.clientY,
-      };
-      syncTargetCursor(true);
-      pulsesRef.current.push({
-        x: event.clientX - canvasRect.left,
-        y: event.clientY - canvasRect.top,
-        startedAt: globalThis.performance.now(),
-      });
 
-      if (pulsesRef.current.length > maximumPulseCount) {
-        pulsesRef.current = pulsesRef.current.slice(-maximumPulseCount);
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse" && event.pointerType !== "pen") return;
+
+      let shouldRender = false;
+      const pointerEvents = event.getCoalescedEvents();
+
+      for (const pointerEvent of pointerEvents.length ? pointerEvents : [event]) {
+        const clientPoint = {
+          x: pointerEvent.clientX,
+          y: pointerEvent.clientY,
+        };
+        const canvasPoint = toCanvasPoint(clientPoint, true);
+
+        if (canvasPoint) {
+          const now = globalThis.performance.now();
+
+          cursor = canvasPoint;
+          trailTarget = canvasPoint;
+          shouldRender = true;
+
+          if (!wasPointerInside && lastClientPoint) {
+            const entryPoint = toCanvasPoint(lastClientPoint, false) ?? canvasPoint;
+
+            trailHead = {
+              ...entryPoint,
+              speed: 0,
+              startedAt: now,
+            };
+            pushCursorTrailPoint(trailHead);
+          }
+
+          wasPointerInside = true;
+        } else {
+          if (cursor) shouldRender = true;
+
+          cursor = null;
+          trailTarget = toCanvasPoint(clientPoint, false);
+          wasPointerInside = false;
+        }
+
+        lastClientPoint = clientPoint;
       }
 
-      queueRender();
+      if (shouldRender) queueRender();
+    };
+
+    const handlePointerRawUpdate = (event: Event) => {
+      if (event instanceof PointerEvent) handlePointerMove(event);
     };
 
     resize();
@@ -684,7 +678,6 @@ export const AuthVisual = () => {
 
     const handleLayoutChange = () => {
       resize();
-      syncTargetCursor();
       queueRender();
     };
     const resizeObserver = new ResizeObserver(handleLayoutChange);
@@ -697,17 +690,19 @@ export const AuthVisual = () => {
       attributeFilter: ["class", "style"],
       attributes: true,
     });
-    globalThis.window.addEventListener("pointermove", handlePointerMove, { passive: true });
-    canvas.addEventListener("pointerrawupdate", handlePointerRawUpdate, { passive: true });
-    canvas.addEventListener("pointerdown", handlePointerDown);
+    if (canAnimateCursorTrail) {
+      globalThis.window.addEventListener("pointermove", handlePointerMove, { passive: true });
+      canvas.addEventListener("pointerrawupdate", handlePointerRawUpdate, { passive: true });
+    }
 
     return () => {
       if (animationFrame) globalThis.cancelAnimationFrame(animationFrame);
       resizeObserver.disconnect();
       mutationObserver.disconnect();
-      globalThis.window.removeEventListener("pointermove", handlePointerMove);
-      canvas.removeEventListener("pointerrawupdate", handlePointerRawUpdate);
-      canvas.removeEventListener("pointerdown", handlePointerDown);
+      if (canAnimateCursorTrail) {
+        globalThis.window.removeEventListener("pointermove", handlePointerMove);
+        canvas.removeEventListener("pointerrawupdate", handlePointerRawUpdate);
+      }
       gl.deleteBuffer(dotBuffer);
       gl.deleteProgram(program);
     };

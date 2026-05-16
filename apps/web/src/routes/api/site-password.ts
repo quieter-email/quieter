@@ -12,7 +12,7 @@ export const Route = createFileRoute("/api/site-password")({
       POST: async ({ request }) => {
         const formData = await request.formData();
         const password = formData.get("password");
-        const returnTo = getSafeReturnTo(formData.get("returnTo"), request.url);
+        const returnTo = getSafeReturnTo(formData.get("returnTo"), request);
         const token = getSitePasswordToken();
 
         if (typeof password !== "string" || !token || !isCorrectSitePassword(password)) {
@@ -31,12 +31,17 @@ export const Route = createFileRoute("/api/site-password")({
   },
 });
 
-const getSafeReturnTo = (value: FormDataEntryValue | null, requestUrl: string) => {
-  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) {
+const getSafeReturnTo = (value: FormDataEntryValue | null, request: Request) => {
+  const returnTo =
+    typeof value === "string"
+      ? value
+      : new URL(request.headers.get("referer") ?? request.url).searchParams.get("returnTo");
+
+  if (!returnTo || !returnTo.startsWith("/") || returnTo.startsWith("//")) {
     return "/";
   }
 
-  const url = new URL(value, requestUrl);
+  const url = new URL(returnTo, request.url);
 
   return `${url.pathname}${url.search}${url.hash}`;
 };

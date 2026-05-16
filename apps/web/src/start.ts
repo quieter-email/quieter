@@ -6,23 +6,34 @@ import {
   sitePasswordCookieName,
 } from "~/lib/site-password.server";
 
-const sitePasswordPaths = new Set(["/api/site-password"]);
+const sitePasswordPaths = new Set(["/api/site-password", "/api/waitlist"]);
 const sitePasswordPagePath = "/site-password";
+const homePagePath = "/home";
 const publicPathPrefixes = ["/_build/", "/assets/"];
 
 const sitePasswordMiddleware = createMiddleware().server(async ({ next, request }) => {
-  if (!shouldGateRequest(request)) {
+  if (!isSitePasswordGateEnabled() || !hasSitePasswordConfigured()) {
     return next();
   }
 
+  const requestUrl = new URL(request.url);
   const cookies = parseCookieHeader(request.headers.get("cookie"));
+  const hasValidSitePassword = isValidSitePasswordToken(cookies[sitePasswordCookieName]);
 
-  if (isValidSitePasswordToken(cookies[sitePasswordCookieName])) {
+  if (requestUrl.pathname === sitePasswordPagePath && hasValidSitePassword) {
+    return Response.redirect(getSafeReturnToUrl(requestUrl), 302);
+  }
+
+  if (!shouldGatePath(requestUrl.pathname)) {
     return next();
   }
 
-  if (shouldRedirectToPasswordPage(request)) {
-    return Response.redirect(getPasswordPageUrl(request), 302);
+  if (hasValidSitePassword) {
+    return next();
+  }
+
+  if (shouldRedirectToHomePage(request)) {
+    return Response.redirect(getHomePageUrl(request), 302);
   }
 
   return new Response("Password required", { status: 401 });
@@ -32,22 +43,20 @@ export const startInstance = createStart(() => ({
   requestMiddleware: [sitePasswordMiddleware],
 }));
 
-const shouldGateRequest = (request: Request) => {
-  if (!isSitePasswordGateEnabled() || !hasSitePasswordConfigured()) {
+const shouldGatePath = (pathname: string) => {
+  if (sitePasswordPaths.has(pathname)) {
     return false;
   }
 
-  const requestUrl = new URL(request.url);
-
-  if (sitePasswordPaths.has(requestUrl.pathname)) {
+  if (pathname === sitePasswordPagePath) {
     return false;
   }
 
-  if (requestUrl.pathname === sitePasswordPagePath) {
+  if (pathname === homePagePath) {
     return false;
   }
 
-  return !publicPathPrefixes.some((pathPrefix) => requestUrl.pathname.startsWith(pathPrefix));
+  return !publicPathPrefixes.some((pathPrefix) => pathname.startsWith(pathPrefix));
 };
 
 const parseCookieHeader = (cookieHeader: string | null) => {
@@ -71,14 +80,22 @@ const parseCookieHeader = (cookieHeader: string | null) => {
   return cookies;
 };
 
-const shouldRedirectToPasswordPage = (request: Request) =>
+const shouldRedirectToHomePage = (request: Request) =>
   request.method === "GET" && (request.headers.get("accept") ?? "").includes("text/html");
 
-const getPasswordPageUrl = (request: Request) => {
+const getHomePageUrl = (request: Request) => {
   const requestUrl = new URL(request.url);
-  const passwordPageUrl = new URL(sitePasswordPagePath, requestUrl);
+  const homePageUrl = new URL(homePagePath, requestUrl);
 
-  passwordPageUrl.searchParams.set("returnTo", `${requestUrl.pathname}${requestUrl.search}`);
+  return homePageUrl;
+};
 
-  return passwordPageUrl;
+const getSafeReturnToUrl = (requestUrl: URL) => {
+  const returnTo = requestUrl.searchParams.get("returnTo");
+
+  if (!returnTo || !returnTo.startsWith("/") || returnTo.startsWith("//")) {
+    return new URL("/", requestUrl);
+  }
+
+  return new URL(returnTo, requestUrl);
 };

@@ -1,23 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { zodValidator } from "@tanstack/zod-adapter";
-import { z } from "zod";
 
 export const Route = createFileRoute("/site-password")({
-  validateSearch: zodValidator(
-    z.object({
-      returnTo: z.string().regex(/^\//).catch("/").default("/"),
-      sitePasswordError: z
-        .union([z.literal("1"), z.literal("true")])
-        .optional()
-        .catch(undefined),
-    }),
-  ),
   component: SitePasswordRouteComponent,
 });
 
 function SitePasswordRouteComponent() {
-  const { returnTo, sitePasswordError } = Route.useSearch();
-
   return (
     <main className="grid min-h-dvh place-items-center bg-background px-6 py-10">
       <div className="w-full max-w-sm">
@@ -27,7 +14,6 @@ function SitePasswordRouteComponent() {
         </p>
 
         <form action="/api/site-password" className="mt-6 grid gap-3" method="post">
-          <input name="returnTo" type="hidden" value={returnTo} />
           <input
             autoComplete="current-password"
             className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20"
@@ -36,7 +22,7 @@ function SitePasswordRouteComponent() {
             required
             type="password"
           />
-          {sitePasswordError && (
+          {globalThis.location?.search.includes("sitePasswordError=1") && (
             <p className="text-sm text-destructive">That password did not work.</p>
           )}
           <button
