@@ -1,0 +1,17 @@
+- Pricing and checkout with Polar
+- Landing page with waitlist form
+- AI integration
+- Pub/Sub gmail
+  - Auto-labeling with AI
+  - Notifications
+  - In-App tracking (things like packages, events, etc.) with AI
+  - Add to calendar
+- Suggest actions for emails with AI
+- Chat with inbox (AI assistant)
+- Templates for emails with AI tab completion
+- Quieter inboxes
+  - Feature-parity with Gmail
+  - AI auto reply (drafts)
+  - AI priority inbox
+  - Semantic search
+  -

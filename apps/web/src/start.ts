@@ -1,4 +1,4 @@
-import { createMiddleware, createStart } from "@tanstack/react-start";
+import { createCsrfMiddleware, createMiddleware, createStart } from "@tanstack/react-start";
 import {
   hasSitePasswordConfigured,
   isSitePasswordGateEnabled,
@@ -10,6 +10,10 @@ const sitePasswordPaths = new Set(["/api/site-password", "/api/waitlist"]);
 const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
 const publicPathPrefixes = ["/_build/", "/assets/"];
+
+const csrfMiddleware = createCsrfMiddleware({
+  filter: (ctx) => ctx.handlerType === "serverFn",
+});
 
 const sitePasswordMiddleware = createMiddleware().server(async ({ next, request }) => {
   if (!isSitePasswordGateEnabled() || !hasSitePasswordConfigured()) {
@@ -40,7 +44,7 @@ const sitePasswordMiddleware = createMiddleware().server(async ({ next, request 
 });
 
 export const startInstance = createStart(() => ({
-  requestMiddleware: [sitePasswordMiddleware],
+  requestMiddleware: [csrfMiddleware, sitePasswordMiddleware],
 }));
 
 const shouldGatePath = (pathname: string) => {
