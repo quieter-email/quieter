@@ -64,16 +64,33 @@ export const sendAuthMail = async (input: AuthMailInput) => {
   });
 
   if (!response.ok) {
-    let errorMessage = "Could not send auth email.";
+    throw new Error(await getMailApiErrorMessage(response));
+  }
+};
 
-    try {
-      const body = (await response.json()) as { error?: string };
-      errorMessage = body.error ?? errorMessage;
-    } catch {
-      // Keep the generic send error when the endpoint returns a non-JSON response.
-    }
+const getMailApiErrorMessage = async (response: Response) => {
+  const detail = await getMailApiErrorDetail(response);
+  return [
+    `Could not send auth email. Mail API returned ${response.status}`,
+    response.statusText,
+    detail,
+  ]
+    .filter(Boolean)
+    .join(": ");
+};
 
-    throw new Error(errorMessage);
+const getMailApiErrorDetail = async (response: Response) => {
+  const body = await response.text();
+
+  if (!body) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(body) as { error?: unknown };
+    return typeof parsed.error === "string" ? parsed.error : body;
+  } catch {
+    return body;
   }
 };
 

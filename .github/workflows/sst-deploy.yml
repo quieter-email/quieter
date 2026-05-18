@@ -51,3 +51,85 @@ jobs:
 
       - name: Deploy SST
         run: bunx sst deploy --config sst.config.ts --stage "$SST_STAGE"
+
+      - name: Sync mail stack outputs to Vercel
+        if: ${{ env.SST_STAGE == 'production' }}
+        env:
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID || secrets.VERCEL_TEAM_ID || vars.VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${VERCEL_PROJECT_ID}" ] || [ -z "${VERCEL_TEAM_ID}" ] || [ -z "${VERCEL_TOKEN}" ]; then
+            echo "VERCEL_PROJECT_ID, VERCEL_TEAM_ID, and VERCEL_TOKEN are required to sync Vercel env vars." >&2
+            exit 1
+          fi
+
+          bun <<'EOF'
+          const outputs = await Bun.file(".sst/outputs.json").json();
+          const values = [
+            ["MAIL_BUCKET", outputs.mailBucket],
+            ["MAIL_RECEIPT_TOPIC_ARN", outputs.mailReceiptTopicArn],
+            ["MAIL_RECEIPT_ROLE_ARN", outputs.mailReceiptRoleArn],
+            ["MAIL_RECEIPT_RULE_SET_NAME", outputs.mailReceiptRuleSetName],
+          ];
+          const missing = values.filter(([, value]) => !value).map(([key]) => key);
+
+          if (missing.length > 0) {
+            throw new Error(`Missing SST outputs: ${missing.join(", ")}`);
+          }
+
+          const projectId = process.env.VERCEL_PROJECT_ID;
+          const teamId = process.env.VERCEL_TEAM_ID;
+          const token = process.env.VERCEL_TOKEN;
+          const url = new URL(`https://api.vercel.com/v10/projects/${projectId}/env`);
+
+          url.searchParams.set("teamId", teamId);
+          url.searchParams.set("upsert", "true");
+
+          const response = await fetch(url, {
+            body: JSON.stringify(
+              values.map(([key, value]) => ({
+                key,
+                value,
+                type: "sensitive",
+                target: ["production"],
+                comment: "Synced from SST mail stack production outputs.",
+              })),
+            ),
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            method: "POST",
+          });
+          const body = await response.text();
+
+          if (!response.ok) {
+            throw new Error(`Vercel env sync failed with ${response.status}: ${body}`);
+          }
+
+          const result = body ? JSON.parse(body) : {};
+          const failed = Array.isArray(result.failed) ? result.failed : [];
+
+          if (failed.length > 0) {
+            throw new Error(`Vercel env sync failed: ${JSON.stringify(failed)}`);
+          }
+
+          console.log("Synced SST mail outputs to Vercel production sensitive env vars.");
+          EOF
+
+      - name: Trigger Vercel production deploy
+        if: ${{ env.SST_STAGE == 'production' }}
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${VERCEL_DEPLOY_HOOK_URL}" ]; then
+            echo "VERCEL_DEPLOY_HOOK_URL is required to trigger the Vercel production deploy." >&2
+            exit 1
+          fi
+
+          curl --fail --show-error --silent --request POST "$VERCEL_DEPLOY_HOOK_URL"

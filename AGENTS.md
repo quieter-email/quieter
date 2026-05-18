@@ -61,6 +61,7 @@
 - Mail ingress/outbound auth tokens come from SST linked secrets.
 - Inbound mail is stored under the fixed `mail/inbound/...` key prefix.
 - `AWS_REGION` or `AWS_DEFAULT_REGION` is required for the mail S3 uploader.
+- Production SST deploys sync `MAIL_BUCKET`, `MAIL_RECEIPT_TOPIC_ARN`, `MAIL_RECEIPT_ROLE_ARN`, and `MAIL_RECEIPT_RULE_SET_NAME` into Vercel as production-only sensitive env vars from `.sst/outputs.json`, then trigger a Vercel production Deploy Hook from `.github/workflows/sst-deploy.yml`. The GitHub environment must provide `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID`, and `VERCEL_DEPLOY_HOOK_URL`.
 - Run the combined local dev session with `bun run dev`; Turbo runs the web app and SST mail stack side by side. Run direct SST commands through `bun run sst ...`; the wrapper defaults to `sst.config.ts` and the `mail-dev` stage, and loads AWS credentials from `.env.local`.
 
 ## Schema + Generated Files

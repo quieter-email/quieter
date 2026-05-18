@@ -6,7 +6,7 @@ import {
   sitePasswordCookieName,
 } from "~/lib/site-password.server";
 
-const sitePasswordPaths = new Set(["/api/site-password", "/api/waitlist"]);
+const sitePasswordPaths = new Set(["/api/messages", "/api/site-password", "/api/waitlist"]);
 const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
 const publicPathPrefixes = ["/_build/", "/assets/"];

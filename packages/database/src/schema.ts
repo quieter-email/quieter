@@ -35,6 +35,7 @@ export type MailDomainCheckResult = {
       | "mail_from_mx"
       | "mail_from_spf"
       | "ownership"
+      | "receipt_rule"
       | "ses_identity"
       | "ses_mail_from";
   }>;

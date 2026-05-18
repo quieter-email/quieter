@@ -32,6 +32,7 @@ export const Toaster = ({ className, toastOptions, ...props }: ToasterProps) => 
           default: "border-border/80 bg-popover text-popover-foreground",
           description: "text-sm text-current/75",
           error: "border-destructive bg-destructive text-destructive-foreground",
+          icon: "relative flex size-4 shrink-0 items-center justify-center [&_svg]:size-5 [&_svg]:shrink-0",
           info: "border-primary/20",
           loading: "border-border/80 bg-popover text-popover-foreground",
           success: "border-success bg-success text-success-foreground",

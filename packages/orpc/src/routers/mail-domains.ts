@@ -215,23 +215,51 @@ export const mailDomainsRouter = {
               region: getAwsRegion(),
             })
           : storedDomain.requiredDnsRecords;
-      const checks = [
+      let checks = [
         createSesIdentityCheck(identity),
         createSesMailFromCheck(identity),
         ...(await checkMailDomainDnsRecords(defaultDnsLookup, requiredDnsRecords)),
       ];
-      const status = aggregateMailDomainStatus(checks);
       const now = new Date();
+      let status = aggregateMailDomainStatus(checks);
+
+      if (status === MAIL_DOMAIN_STATUS_VERIFIED) {
+        try {
+          await ensureReceiptRule(domain);
+          checks = [
+            ...checks,
+            {
+              expected: ["Mail receipt rule configured"],
+              found: ["Mail receipt rule configured"],
+              message: "Mail receipt rule is configured.",
+              ok: true,
+              purpose: "receipt_rule",
+            },
+          ];
+        } catch (error) {
+          checks = [
+            ...checks,
+            {
+              expected: ["Mail receipt rule configured"],
+              found: [],
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Mail receipt rule could not be configured.",
+              ok: false,
+              purpose: "receipt_rule",
+            },
+          ];
+          status = aggregateMailDomainStatus(checks);
+        }
+      }
+
       const verifiedAt =
         (status === MAIL_DOMAIN_STATUS_VERIFIED && (storedDomain.verifiedAt ?? now)) || null;
       const lastCheckResult = {
         checkedAt: now.toISOString(),
         checks,
       } satisfies MailDomainCheckResult;
-
-      if (status === MAIL_DOMAIN_STATUS_VERIFIED) {
-        await ensureReceiptRule(domain);
-      }
 
       await db
         .update(mailDomain)

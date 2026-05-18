@@ -13,7 +13,7 @@ export default defineConfig({
       presets: [reactCompilerPreset()],
     }),
     tailwindcss(),
-    nitro({ preset: "vercel" }),
+    nitro({ preset: "vercel", traceDeps: ["react"] }),
   ],
   resolve: {
     dedupe: ["@tanstack/react-router", "react", "react-dom"],

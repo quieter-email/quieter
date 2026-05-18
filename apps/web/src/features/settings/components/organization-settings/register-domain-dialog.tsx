@@ -47,7 +47,14 @@ const steps = [
   { id: "success", label: "Done" },
 ] satisfies Array<{ id: RegisterDomainStep; label: string }>;
 
-const sesCheckPurposes = new Set(["ses_identity", "ses_mail_from"]);
+const dnsRecordPurposes = new Set([
+  "dkim",
+  "dmarc",
+  "inbound_mx",
+  "mail_from_mx",
+  "mail_from_spf",
+  "ownership",
+]);
 
 const copyText = async (value: string, message: string) => {
   try {
@@ -189,7 +196,10 @@ const DnsRecordRow = ({
 );
 
 const getDnsChecks = (lastCheck: DomainCheck | null) =>
-  lastCheck?.checks.filter((check) => !sesCheckPurposes.has(check.purpose)) ?? [];
+  lastCheck?.checks.filter((check) => dnsRecordPurposes.has(check.purpose)) ?? [];
+
+const getSetupChecks = (lastCheck: DomainCheck | null) =>
+  lastCheck?.checks.filter((check) => !dnsRecordPurposes.has(check.purpose)) ?? [];
 
 export const RegisterDomainDialog = ({
   children,
@@ -254,6 +264,7 @@ export const RegisterDomainDialog = ({
   const passingChecks = lastCheck?.checks.filter((check) => check.ok).length ?? 0;
   const totalChecks = lastCheck?.checks.length ?? 0;
   const dnsChecks = getDnsChecks(lastCheck);
+  const setupChecks = getSetupChecks(lastCheck);
 
   const resetDialog = () => {
     setStep(domain ? "records" : "input");
@@ -281,7 +292,8 @@ export const RegisterDomainDialog = ({
           if (result.status === "verified") {
             toast.success("Domain verified.");
           } else {
-            toast.error("DNS records are not verified yet.");
+            const failedSetupCheck = getSetupChecks(result).find((check) => !check.ok);
+            toast.error(failedSetupCheck?.message ?? "DNS records are not verified yet.");
           }
         }
       } catch (error) {
@@ -437,6 +449,27 @@ export const RegisterDomainDialog = ({
                     "Waiting for the first DNS check."
                   )}
                 </div>
+
+                {setupChecks.length > 0 && (
+                  <div className="space-y-2 rounded-md border border-border/70 px-3 py-2">
+                    {setupChecks.map((check) => (
+                      <div
+                        className="grid grid-cols-[1rem_minmax(0,1fr)] gap-2 text-sm"
+                        key={check.purpose}
+                      >
+                        <DnsStatusIcon check={check} />
+                        <div className="min-w-0">
+                          <p className="font-medium text-foreground">
+                            {check.purpose.replaceAll("_", " ")}
+                          </p>
+                          <p className="mt-0.5 break-words text-muted-foreground">
+                            {check.message}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 <DialogFooter className="px-0 pb-0">
                   <DialogCloseButton disabled={checkSetupMutation.isPending}>
