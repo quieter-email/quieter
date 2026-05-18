@@ -152,7 +152,7 @@ function GoogleScopeRepairRouteComponent() {
             }}
             type="button"
           >
-            {isStartingRepair ? "Opening Google..." : "Continue to Google"}
+            {isStartingRepair ? "Opening Google…" : "Continue to Google"}
           </button>
           {repairError && (
             <div

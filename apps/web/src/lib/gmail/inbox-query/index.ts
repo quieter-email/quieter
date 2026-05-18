@@ -9,8 +9,6 @@ export {
   syncMessages,
 } from "./sync";
 
-export { applyVisibleMailboxMessagesRefreshToCache } from "./query-cache";
-
 export {
   deleteDraftInMailbox,
   deleteMessagePermanentlyInMailbox,

@@ -16,23 +16,22 @@ import { PendingTeamInvitations } from "./pending-team-invitations";
 
 export const MembersView = ({
   activeMember,
-  canCancelInvitations,
-  canInviteMembers,
-  canRemoveMembers,
-  canUpdateMemberRole,
   onBack,
   organization,
+  permissions,
 }: {
   activeMember: OrganizationMember | null;
-  canCancelInvitations: boolean;
-  canInviteMembers: boolean;
-  canRemoveMembers: boolean;
-  canUpdateMemberRole: boolean;
   onBack: () => void;
   organization: FullOrganization;
+  permissions: {
+    canCancelInvitations: boolean;
+    canInviteMembers: boolean;
+    canRemoveMembers: boolean;
+    canUpdateMemberRole: boolean;
+  };
 }) => {
   const [memberSearch, setMemberSearch] = useState("");
-  const sortedMembers = [...organization.members].sort((left, right) => {
+  const sortedMembers = organization.members.toSorted((left, right) => {
     const isLeftActive = left.userId === activeMember?.userId;
     const isRightActive = right.userId === activeMember?.userId;
     if (isLeftActive) return -1;
@@ -67,9 +66,12 @@ export const MembersView = ({
         </p>
       </div>
 
-      {canInviteMembers && (
+      {permissions.canInviteMembers && (
         <>
-          <InviteMemberForm canInviteMembers organization={organization} />
+          <InviteMemberForm
+            canInviteMembers={permissions.canInviteMembers}
+            organization={organization}
+          />
           <Separator />
         </>
       )}
@@ -94,8 +96,8 @@ export const MembersView = ({
           return (
             <MemberActions
               activeMember={activeMember}
-              canRemoveMembers={canRemoveMembers}
-              canUpdateMemberRole={canUpdateMemberRole}
+              canRemoveMembers={permissions.canRemoveMembers}
+              canUpdateMemberRole={permissions.canUpdateMemberRole}
               key={member.id}
               member={member}
               organizationId={organization.id}
@@ -109,7 +111,7 @@ export const MembersView = ({
       </div>
 
       <PendingTeamInvitations
-        canCancelInvitations={canCancelInvitations}
+        canCancelInvitations={permissions.canCancelInvitations}
         invitations={organization.invitations}
         organizationId={organization.id}
       />

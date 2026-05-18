@@ -31,7 +31,7 @@ type MessageListScrollPaneProps = {
 
 const MessageListLoadingSkeleton = () => (
   <div className="space-y-0.5" role="status">
-    <span className="sr-only">Loading messages...</span>
+    <span className="sr-only">Loading messages…</span>
     {MESSAGE_LIST_SKELETON_ROW_IDS.map((rowId) => (
       <div
         aria-hidden="true"

@@ -15,7 +15,7 @@ const createBrowserQueryStorage = (): AsyncStorage<string> | undefined => {
 };
 
 export const queryPersister = experimental_createQueryPersister({
-  buster: "v2",
+  buster: "v3",
   storage: createBrowserQueryStorage(),
   refetchOnRestore: false,
   maxAge: 1000 * 60 * 60 * 24 * 7,

@@ -23,7 +23,7 @@ export const Route = createFileRoute("/")({
 
     if (!user) {
       throw redirect({
-        to: "/home",
+        to: "/auth",
       });
     }
 

@@ -4,12 +4,13 @@ import { Cancel01Icon, Edit01Icon, Settings01Icon } from "@hugeicons/core-free-i
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, IconButtonTooltip, LinkButton } from "@quieter/ui";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 import {
   type MailboxSwitcherOrder,
   MailboxSwitcherDropdown,
 } from "~/features/navigation/components/mailbox-switcher";
+import { SidebarLabelNav } from "~/features/navigation/components/sidebar-label-nav";
 import { SidebarMailboxNav } from "~/features/navigation/components/sidebar-mailbox-nav";
 
 type MailSidebarProps = {
@@ -32,7 +33,9 @@ type MailSidebarProps = {
   onSelectMailbox: (mailbox: MailboxCategory) => void;
   onSelectMailboxId: (mailboxId: string) => void;
   onSetDefaultMailbox: (mailboxId: string | null) => void;
+  onSearch: (query: string) => void;
   onComposeNewMail: () => void;
+  searchQuery: string;
   isMobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
 };
@@ -41,6 +44,8 @@ type SidebarContentProps = Omit<MailSidebarProps, "isMobileOpen" | "onMobileOpen
   onRequestClose?: () => void;
   switcherSide?: "bottom" | "right";
 };
+
+const getSidebarEntranceDelay = (step: number) => step * 0.1;
 
 const SidebarContent = ({
   defaultMailboxId,
@@ -51,6 +56,8 @@ const SidebarContent = ({
   onSelectMailbox,
   onSelectMailboxId,
   onSetDefaultMailbox,
+  onSearch,
+  searchQuery,
   selectedMailboxId,
   selectedMailbox,
   switcherSide = "right",
@@ -72,7 +79,12 @@ const SidebarContent = ({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col p-3">
-      <div className="flex min-w-0 items-start gap-2 rounded-md">
+      <m.div
+        className="flex min-w-0 items-start gap-2 rounded-md will-change-[transform,opacity,filter]"
+        initial={{ opacity: 0, x: -20, filter: "blur(20px)" }}
+        animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+        transition={{ delay: getSidebarEntranceDelay(0), duration: 0.5, ease: "easeOut" }}
+      >
         <MailboxSwitcherDropdown
           defaultMailboxId={defaultMailboxId}
           groups={groups}
@@ -97,30 +109,48 @@ const SidebarContent = ({
             </Button>
           </IconButtonTooltip>
         )}
-      </div>
+      </m.div>
 
-      <div className="mt-3 p-1">
+      <m.div
+        className="mt-3 p-1 will-change-[transform,opacity,filter]"
+        initial={{ opacity: 0, x: -20, filter: "blur(20px)" }}
+        animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+        transition={{ delay: getSidebarEntranceDelay(1), duration: 0.5, ease: "easeOut" }}
+      >
         <Button
-          className="w-full justify-start rounded-md px-4"
+          className="w-full justify-start rounded-md px-4 transition-[font-weight,scale] hover:font-bold active:font-bold [&_svg_*]:transition-[stroke-width] hover:[&_svg_*]:[stroke-width:3] active:[&_svg_*]:[stroke-width:3]"
           disabled={!selectedMailboxId}
           onClick={handleComposeNewMail}
           type="button"
         >
-          <HugeiconsIcon className="size-4 shrink-0" icon={Edit01Icon} />
+          <HugeiconsIcon className="size-4 shrink-0" icon={Edit01Icon} strokeWidth={1.5} />
           Compose
         </Button>
-      </div>
+      </m.div>
 
       <div className="mt-4 min-h-0 flex-1 p-1">
         <SidebarMailboxNav
           onSelectMailbox={handleSelectMailbox}
           selectedMailbox={selectedMailbox}
         />
+        <SidebarLabelNav
+          mailboxId={selectedMailboxId}
+          onSearch={(query) => {
+            onSearch(query);
+            onRequestClose?.();
+          }}
+          searchQuery={searchQuery}
+        />
       </div>
-      <div className="mt-auto p-2">
+      <m.div
+        className="mt-auto p-2 will-change-[transform,opacity,filter]"
+        initial={{ opacity: 0, x: -20, filter: "blur(20px)" }}
+        animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+        transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
+      >
         <LinkButton
           aria-label="Settings"
-          className="w-full justify-start"
+          className="group w-full justify-start transition-[font-weight,scale] hover:font-extrabold active:font-extrabold [&_svg_*]:transition-[stroke-width] hover:[&_svg_*]:[stroke-width:3] active:[&_svg_*]:[stroke-width:3]"
           onClick={onRequestClose}
           search={{
             from: "/",
@@ -129,10 +159,14 @@ const SidebarContent = ({
           variant="ghost"
           to="/settings"
         >
-          <HugeiconsIcon className="size-4 shrink-0" icon={Settings01Icon} />
+          <HugeiconsIcon
+            className="size-4 shrink-0 rotate-0 transition-transform duration-1000 ease-in-out group-hover:rotate-360"
+            icon={Settings01Icon}
+            strokeWidth={1.5}
+          />
           Settings
         </LinkButton>
-      </div>
+      </m.div>
     </div>
   );
 };
@@ -142,6 +176,10 @@ export const MailSidebar = ({
   onMobileOpenChange,
   ...sidebarProps
 }: MailSidebarProps) => {
+  const closeMobileSidebar = useEffectEvent(() => {
+    onMobileOpenChange(false);
+  });
+
   useEffect(() => {
     if (!isMobileOpen) {
       return;
@@ -149,7 +187,7 @@ export const MailSidebar = ({
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onMobileOpenChange(false);
+        closeMobileSidebar();
       }
     };
 
@@ -157,18 +195,18 @@ export const MailSidebar = ({
     return () => {
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [isMobileOpen, onMobileOpenChange]);
+  }, [isMobileOpen]);
 
   return (
-    <>
-      <aside
-        className="relative hidden h-full shrink-0 bg-background text-foreground lg:flex lg:flex-col"
-        style={{ width: "248px" }}
-      >
-        <SidebarContent {...sidebarProps} />
-      </aside>
+    <LazyMotion features={domAnimation}>
+      <>
+        <aside
+          className="relative hidden h-full shrink-0 bg-background text-foreground lg:flex lg:flex-col"
+          style={{ width: "248px" }}
+        >
+          <SidebarContent {...sidebarProps} />
+        </aside>
 
-      <LazyMotion features={domAnimation}>
         <AnimatePresence initial={false}>
           {isMobileOpen && (
             <>
@@ -198,7 +236,7 @@ export const MailSidebar = ({
             </>
           )}
         </AnimatePresence>
-      </LazyMotion>
-    </>
+      </>
+    </LazyMotion>
   );
 };

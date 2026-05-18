@@ -52,6 +52,26 @@ export const OrganizationSettingsPanel = () => {
     });
   };
 
+  const navigateToDomains = () => {
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        teamView: "domains",
+      }),
+      to: ".",
+    });
+  };
+
+  const navigateToApiKeys = () => {
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        teamView: "api-keys",
+      }),
+      to: ".",
+    });
+  };
+
   const navigateToTeamOverview = () => {
     void navigate({
       search: (previous) => ({
@@ -66,14 +86,16 @@ export const OrganizationSettingsPanel = () => {
     <TooltipGroup>
       <div className="space-y-6">
         {organizationsState.isPending || sessionState.isPending ? (
-          <p className="text-sm text-muted-foreground">Loading teams...</p>
+          <p className="text-sm text-muted-foreground">Loading teams…</p>
         ) : loadError ? (
           <p className="text-sm text-destructive">{loadError.message ?? "Could not load teams."}</p>
         ) : selectedOrganization ? (
           <TeamView
             key={selectedOrganization.id}
+            onOpenApiKeys={navigateToApiKeys}
             onBackToList={navigateToTeams}
             onBackToTeam={navigateToTeamOverview}
+            onOpenDomains={navigateToDomains}
             onOpenMembers={navigateToMembers}
             organization={selectedOrganization}
             userId={userId}

@@ -1,17 +1,16 @@
 "use client";
 
-import type { ComponentRef } from "react";
+import type { ComponentRef, Ref } from "react";
 import {
   Button as ButtonPrimitive,
   type ButtonProps as BaseUIButtonProps,
 } from "@base-ui/react/button";
 import { createLink, type LinkComponent } from "@tanstack/react-router";
 import { cva, type VariantProps } from "class-variance-authority";
-import { forwardRef } from "react";
 import { cn } from "../../lib/cn";
 
 const buttonVariants = cva(
-  "squircle inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm leading-none font-medium whitespace-nowrap transition-transform duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "squircle inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-transform duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -40,24 +39,30 @@ const buttonVariants = cva(
   },
 );
 
-export type ButtonProps = BaseUIButtonProps & VariantProps<typeof buttonVariants>;
+export type ButtonProps = BaseUIButtonProps &
+  VariantProps<typeof buttonVariants> & {
+    ref?: Ref<ComponentRef<typeof ButtonPrimitive>>;
+  };
 
-export const Button = forwardRef<ComponentRef<typeof ButtonPrimitive>, ButtonProps>(
-  ({ className, size = "default", type = "button", variant = "default", ...props }, ref) => (
-    <ButtonPrimitive
-      ref={ref}
-      className={
-        typeof className === "function"
-          ? (state) => cn(buttonVariants({ size, variant }), className(state))
-          : cn(buttonVariants({ size, variant }), className)
-      }
-      type={type}
-      {...props}
-    />
-  ),
+export const Button = ({
+  className,
+  ref,
+  size = "default",
+  type = "button",
+  variant = "default",
+  ...props
+}: ButtonProps) => (
+  <ButtonPrimitive
+    ref={ref}
+    className={
+      typeof className === "function"
+        ? (state) => cn(buttonVariants({ size, variant }), className(state))
+        : cn(buttonVariants({ size, variant }), className)
+    }
+    type={type}
+    {...props}
+  />
 );
-
-Button.displayName = "Button";
 
 const LinkButtonComponent = createLink(Button);
 

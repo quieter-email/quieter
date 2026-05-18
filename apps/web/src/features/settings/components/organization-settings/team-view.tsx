@@ -4,18 +4,22 @@ import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useQuery } from "@tanstack/react-query";
 import type { TeamSettingsView } from "~/features/settings/domain/team-settings-view";
+import { ApiKeysView } from "./api-keys-view";
 import {
   type OrganizationSummary,
   fullOrganizationQueryOptions,
   hasOrganizationPermission,
   normalizeOrganizationRole,
 } from "./domain";
+import { DomainsView } from "./domains-view";
 import { MembersView } from "./members-view";
 import { TeamOverviewView } from "./team-overview-view";
 
 export const TeamView = ({
   onBackToList,
   onBackToTeam,
+  onOpenApiKeys,
+  onOpenDomains,
   onOpenMembers,
   organization,
   userId,
@@ -23,6 +27,8 @@ export const TeamView = ({
 }: {
   onBackToList: () => void;
   onBackToTeam: () => void;
+  onOpenApiKeys: () => void;
+  onOpenDomains: () => void;
   onOpenMembers: () => void;
   organization: OrganizationSummary;
   userId: string;
@@ -57,7 +63,7 @@ export const TeamView = ({
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-        Loading team...
+        Loading team…
       </div>
     );
   }
@@ -78,10 +84,32 @@ export const TeamView = ({
     return (
       <MembersView
         activeMember={activeMember}
-        canCancelInvitations={canCancelInvitations}
-        canInviteMembers={canInviteMembers}
-        canRemoveMembers={canRemoveMembers}
-        canUpdateMemberRole={canUpdateMemberRole}
+        permissions={{
+          canCancelInvitations,
+          canInviteMembers,
+          canRemoveMembers,
+          canUpdateMemberRole,
+        }}
+        onBack={onBackToTeam}
+        organization={fullOrganization}
+      />
+    );
+  }
+
+  if (view === "domains") {
+    return (
+      <DomainsView
+        canManageDomains={canUpdateOrganization}
+        onBack={onBackToTeam}
+        organization={fullOrganization}
+      />
+    );
+  }
+
+  if (view === "api-keys") {
+    return (
+      <ApiKeysView
+        canManageApiKeys={canUpdateOrganization}
         onBack={onBackToTeam}
         organization={fullOrganization}
       />
@@ -95,6 +123,8 @@ export const TeamView = ({
       canUpdateOrganization={canUpdateOrganization}
       fullOrganization={fullOrganization}
       onBackToList={onBackToList}
+      onOpenApiKeys={onOpenApiKeys}
+      onOpenDomains={onOpenDomains}
       onOpenMembers={onOpenMembers}
       organization={organization}
       pendingInvitationsCount={pendingInvitations.length}

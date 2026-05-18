@@ -121,14 +121,19 @@ export const persistQueryKeys = async (
   queryKeys: ReadonlyArray<readonly unknown[]>,
 ) => {
   const seenQueryKeys = new Set<string>();
+  const uniqueQueryKeys: Array<readonly unknown[]> = [];
 
   for (const queryKey of queryKeys) {
     const queryKeyId = JSON.stringify(queryKey);
     if (seenQueryKeys.has(queryKeyId)) continue;
 
     seenQueryKeys.add(queryKeyId);
-    await queryPersister.persistQueryByKey(queryKey, queryClient);
+    uniqueQueryKeys.push(queryKey);
   }
+
+  await Promise.all(
+    uniqueQueryKeys.map((queryKey) => queryPersister.persistQueryByKey(queryKey, queryClient)),
+  );
 };
 
 export const findMessageInCachedMailboxQueries = (

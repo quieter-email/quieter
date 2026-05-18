@@ -1,6 +1,7 @@
 export { assertDatabaseConfigured, db, type DatabaseClient } from "./client";
 export {
   account,
+  apikey,
   authRelations,
   invitation,
   mailbox,
@@ -12,6 +13,7 @@ export {
   tables,
   user,
   verification,
+  waitlistSignup,
   type MailDomainCheckResult,
   type MailDomainDnsRecord,
   type MailDomainStatus,

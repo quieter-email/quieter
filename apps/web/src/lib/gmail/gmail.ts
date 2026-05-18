@@ -21,7 +21,14 @@ export const GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS = 1000 * 60;
 const normalizeLabelIds = (labelIds: string[] | undefined): string[] | undefined => {
   if (!labelIds?.length) return undefined;
 
-  const normalized = Array.from(new Set(labelIds.map((labelId) => labelId.trim()).filter(Boolean)));
+  const normalized = Array.from(
+    new Set(
+      labelIds.flatMap((labelId) => {
+        const normalizedLabelId = labelId.trim();
+        return normalizedLabelId ? [normalizedLabelId] : [];
+      }),
+    ),
+  );
   return normalized.length > 0 ? normalized : undefined;
 };
 

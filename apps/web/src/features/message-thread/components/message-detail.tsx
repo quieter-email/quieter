@@ -27,7 +27,7 @@ type MessageDetailProps = {
 
 const MessageDetailLoadingSkeleton = () => (
   <div className="mx-auto w-full max-w-3xl space-y-6 py-6" role="status">
-    <span className="sr-only">Loading message...</span>
+    <span className="sr-only">Loading message…</span>
     <div aria-hidden="true" className="animate-pulse space-y-8">
       <div className="space-y-2">
         <div className="h-5 w-2/3 rounded-md bg-muted/80" />

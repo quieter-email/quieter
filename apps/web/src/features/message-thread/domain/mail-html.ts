@@ -1,9 +1,11 @@
 import { CssSanitizer } from "@barkleapp/css-sanitizer";
-import Color from "color";
-import sanitizeHtml, { type IOptions } from "sanitize-html";
+import Color, { type ColorInstance } from "color";
+import DOMPurify, { type Config } from "dompurify";
 
 const REPLACEMENT_CHARACTER_REGEX = /\uFFFD/g;
 const TRACKING_PIXEL_SIZE = new Set(["0", "1"]);
+const TEXT_URL_REGEX = /\bhttps?:\/\/[^\s<>"']+/gi;
+const OKLCH_COLOR_REGEX = /^oklch\(\s*(?<value>.+?)\s*\)$/i;
 const SAFE_STYLE_OPTIONS = {
   allowedProperties: [
     "color",
@@ -26,6 +28,17 @@ export type ProcessedMailHtml = {
 };
 
 export type MailRenderTheme = "dark" | "light";
+
+export type LinkifiedTextSegment =
+  | {
+      kind: "text";
+      value: string;
+    }
+  | {
+      kind: "link";
+      href: string;
+      value: string;
+    };
 
 // Runs after processed mail is mounted because readable color fixes need computed DOM styles.
 export const fixNonReadableColors = (
@@ -50,20 +63,18 @@ export const fixNonReadableColors = (
       continue;
     }
 
-    try {
-      const textColor = Color(style.color);
-      const effectiveBackground = getEffectiveBackgroundColor(element, defaultBackground);
-      const blendedText =
-        textColor.alpha() < 1 ? effectiveBackground.mix(textColor, textColor.alpha()) : textColor;
-      const contrast = blendedText.contrast(effectiveBackground);
+    const textColor = parseCssColor(style.color);
+    if (!textColor) continue;
 
-      if (contrast < minContrast) {
-        const blackContrast = Color("#000000").contrast(effectiveBackground);
-        const whiteContrast = Color("#ffffff").contrast(effectiveBackground);
-        element.style.color = blackContrast >= whiteContrast ? "#000000" : "#ffffff";
-      }
-    } catch (error) {
-      console.error("Error fixing non-readable colors:", error);
+    const effectiveBackground = getEffectiveBackgroundColor(element, defaultBackground);
+    const blendedText =
+      textColor.alpha() < 1 ? effectiveBackground.mix(textColor, textColor.alpha()) : textColor;
+    const contrast = blendedText.contrast(effectiveBackground);
+
+    if (contrast < minContrast) {
+      const blackContrast = Color("#000000").contrast(effectiveBackground);
+      const whiteContrast = Color("#ffffff").contrast(effectiveBackground);
+      element.style.color = blackContrast >= whiteContrast ? "#000000" : "#ffffff";
     }
   }
 };
@@ -71,12 +82,97 @@ export const fixNonReadableColors = (
 const getEffectiveBackgroundColor = (element: HTMLElement, defaultBackground: string) => {
   let current: HTMLElement | null = element;
   while (current) {
-    const background = Color(getComputedStyle(current).backgroundColor);
-    if (background.alpha() >= 1) return background.rgb();
+    const background = parseCssColor(getComputedStyle(current).backgroundColor);
+    if (background && background.alpha() >= 1) return background.rgb();
     current = current.parentElement;
   }
   return Color(defaultBackground);
 };
+
+const parseCssColor = (value: string): ColorInstance | undefined => {
+  const color = value.trim();
+  if (!color || color.startsWith("var(") || color === "inherit") return undefined;
+
+  try {
+    return Color(color);
+  } catch {
+    return parseOklchColor(color);
+  }
+};
+
+const parseOklchColor = (value: string): ColorInstance | undefined => {
+  const match = OKLCH_COLOR_REGEX.exec(value);
+  const rawValue = match?.groups?.value;
+  if (!rawValue) return undefined;
+
+  const [rawChannels, rawAlpha] = rawValue.split("/");
+  if (!rawChannels) return undefined;
+
+  const [rawLightness, rawChroma, rawHue] = rawChannels
+    .trim()
+    .split(/[\s,]+/)
+    .filter(Boolean);
+  if (!rawLightness || !rawChroma || !rawHue) return undefined;
+
+  const lightness = parseCssColorNumber(rawLightness);
+  const chroma = parseCssColorNumber(rawChroma);
+  const hue = parseCssHue(rawHue);
+  const alpha = rawAlpha ? parseCssColorNumber(rawAlpha.trim()) : 1;
+  if (lightness === undefined || chroma === undefined || hue === undefined || alpha === undefined) {
+    return undefined;
+  }
+
+  const a = chroma * Math.cos(hue);
+  const b = chroma * Math.sin(hue);
+  const l = lightness + 0.3963377774 * a + 0.2158037573 * b;
+  const m = lightness - 0.1055613458 * a - 0.0638541728 * b;
+  const s = lightness - 0.0894841775 * a - 1.291485548 * b;
+  const l3 = l ** 3;
+  const m3 = m ** 3;
+  const s3 = s ** 3;
+
+  return Color.rgb(
+    linearSrgbToRgb(4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3),
+    linearSrgbToRgb(-1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3),
+    linearSrgbToRgb(-0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3),
+  ).alpha(clamp(alpha, 0, 1));
+};
+
+const parseCssColorNumber = (value: string): number | undefined => {
+  if (value === "none") return undefined;
+
+  if (value.endsWith("%")) {
+    const percentage = Number(value.slice(0, -1));
+    return Number.isFinite(percentage) ? percentage / 100 : undefined;
+  }
+
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+};
+
+const parseCssHue = (value: string): number | undefined => {
+  if (value === "none") return undefined;
+
+  const number = Number.parseFloat(value);
+  if (!Number.isFinite(number)) return undefined;
+
+  if (value.endsWith("rad")) return number;
+  if (value.endsWith("turn")) return number * 2 * Math.PI;
+  if (value.endsWith("grad")) return (number / 200) * Math.PI;
+
+  return (number * Math.PI) / 180;
+};
+
+const linearSrgbToRgb = (value: number): number => {
+  const channel =
+    value <= 0.0031308
+      ? 12.92 * value
+      : 1.055 * Math.abs(value) ** (1 / 2.4) * Math.sign(value) - 0.055;
+  return Math.round(clamp(channel, 0, 1) * 255);
+};
+
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
 
 const mergeRelValues = (value: string | undefined): string => {
   const values = new Set(["noopener", "noreferrer"]);
@@ -87,46 +183,21 @@ const mergeRelValues = (value: string | undefined): string => {
   return Array.from(values).join(" ");
 };
 
-const EMAIL_SANITIZE_CONFIG: IOptions = {
-  allowedTags: sanitizeHtml.defaults.allowedTags.concat([
-    "img",
-    "title",
-    "details",
-    "summary",
-    "style",
-  ]),
-  allowedAttributes: {
-    "*": [
-      "class",
-      "style",
-      "align",
-      "valign",
-      "width",
-      "height",
-      "cellpadding",
-      "cellspacing",
-      "border",
-      "bgcolor",
-      "colspan",
-      "rowspan",
-    ],
-    a: ["href", "name", "target", "rel", "class", "style"],
-    img: ["src", "alt", "width", "height", "class", "style"],
-  },
-  allowedSchemes: ["http", "https", "mailto", "tel"],
-  allowedSchemesByTag: {
-    img: ["http", "https", "data", "cid"],
-  },
-  transformTags: {
-    a: (tagName, attribs) => ({
-      tagName,
-      attribs: {
-        ...attribs,
-        target: attribs.target || "_blank",
-        rel: mergeRelValues(attribs.rel),
-      },
-    }),
-  },
+const EMAIL_SANITIZE_CONFIG: Config = {
+  ADD_ATTR: [
+    "align",
+    "bgcolor",
+    "border",
+    "cellpadding",
+    "cellspacing",
+    "colspan",
+    "height",
+    "rowspan",
+    "target",
+    "valign",
+    "width",
+  ],
+  ADD_TAGS: ["details", "summary", "style"],
 };
 
 const createMailRenderStyles = (theme: MailRenderTheme): string => {
@@ -153,7 +224,10 @@ const createMailRenderStyles = (theme: MailRenderTheme): string => {
       a {
         cursor: pointer;
         color: ${isDarkTheme ? "#60a5fa" : "#2563eb"};
-        text-decoration: underline;
+        overflow-wrap: anywhere;
+        text-decoration-line: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 0.14em;
       }
 
       table {
@@ -190,13 +264,76 @@ const createMailRenderStyles = (theme: MailRenderTheme): string => {
 };
 
 const sanitizeEmailHtml = (rawHtml: string): string => {
-  const sanitized = sanitizeHtml(rawHtml, EMAIL_SANITIZE_CONFIG);
+  const sanitized = DOMPurify.sanitize(rawHtml, EMAIL_SANITIZE_CONFIG);
   return sanitized.replaceAll(REPLACEMENT_CHARACTER_REGEX, "");
 };
 
 const createDocument = (html: string): Document => {
   const parser = new DOMParser();
   return parser.parseFromString(html, "text/html");
+};
+
+export const linkifyText = (text: string): LinkifiedTextSegment[] => {
+  const segments: LinkifiedTextSegment[] = [];
+  let cursor = 0;
+
+  TEXT_URL_REGEX.lastIndex = 0;
+  for (const match of text.matchAll(TEXT_URL_REGEX)) {
+    const matchedText = match[0];
+    const index = match.index ?? 0;
+    const url = matchedText.replace(/[.,;:!?]+$/, "");
+    const trailing = matchedText.slice(url.length);
+
+    if (index > cursor) {
+      segments.push({ kind: "text", value: text.slice(cursor, index) });
+    }
+
+    segments.push({ kind: "link", href: url, value: url });
+    if (trailing) {
+      segments.push({ kind: "text", value: trailing });
+    }
+
+    cursor = index + matchedText.length;
+  }
+
+  if (cursor < text.length) {
+    segments.push({ kind: "text", value: text.slice(cursor) });
+  }
+
+  return segments.length ? segments : [{ kind: "text", value: text }];
+};
+
+const linkifyBareUrls = (document: Document) => {
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const nodes: Text[] = [];
+
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const textNode = node as Text;
+    TEXT_URL_REGEX.lastIndex = 0;
+    if (!TEXT_URL_REGEX.test(textNode.data)) continue;
+    if (textNode.parentElement?.closest("a, style, script, textarea, title")) continue;
+    nodes.push(textNode);
+  }
+
+  for (const node of nodes) {
+    const fragment = document.createDocumentFragment();
+
+    for (const segment of linkifyText(node.data)) {
+      if (segment.kind === "text") {
+        fragment.append(segment.value);
+        continue;
+      }
+
+      const link = document.createElement("a");
+      link.href = segment.href;
+      link.textContent = segment.value;
+      link.target = "_blank";
+      link.rel = mergeRelValues(undefined);
+      fragment.append(link);
+    }
+
+    node.replaceWith(fragment);
+  }
 };
 
 const removePreheaderContent = (document: Document) => {
@@ -307,6 +444,7 @@ export const preprocessEmailHtml = (html: string): string => {
   document.querySelectorAll("title").forEach((element) => element.remove());
   removeTrackingPixels(document);
   removePreheaderContent(document);
+  linkifyBareUrls(document);
 
   return document.documentElement.outerHTML;
 };

@@ -404,7 +404,7 @@ const MessageActionsDialogs = ({
             {labelsQuery.isPending ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <HugeiconsIcon aria-hidden className="animate-spin" icon={Loading03Icon} />
-                <span>Loading labels...</span>
+                <span>Loading labels…</span>
               </div>
             ) : labelsQuery.isError ? (
               <p className="text-sm text-destructive">

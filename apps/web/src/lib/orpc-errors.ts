@@ -1,0 +1,48 @@
+import type { MailboxScopeRepairRequiredErrorData } from "@quieter/orpc/errors";
+
+type OrpcErrorLike = {
+  code?: unknown;
+  data?: unknown;
+};
+
+export const isMailboxScopeRepairRequiredError = (
+  error: unknown,
+): error is Error & { data: MailboxScopeRepairRequiredErrorData } => {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as OrpcErrorLike;
+  if (candidate.code !== "MAILBOX_SCOPE_REPAIR_REQUIRED") {
+    return false;
+  }
+
+  const data = candidate.data;
+  return (
+    !!data &&
+    typeof data === "object" &&
+    typeof (data as Partial<MailboxScopeRepairRequiredErrorData>).mailboxId === "string" &&
+    typeof (data as Partial<MailboxScopeRepairRequiredErrorData>).providerAccountId === "string" &&
+    typeof (data as Partial<MailboxScopeRepairRequiredErrorData>).emailAddress === "string"
+  );
+};
+
+export const shouldRetryOrpcError = (failureCount: number, error: unknown) =>
+  !isMailboxScopeRepairRequiredError(error) && failureCount < 3;
+
+export const redirectToGoogleScopeRepair = (error: unknown) => {
+  if (
+    !isMailboxScopeRepairRequiredError(error) ||
+    window.location.pathname === "/google-scope-repair"
+  ) {
+    return;
+  }
+
+  const from = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const params = new URLSearchParams({
+    from,
+    targetAccountId: error.data.providerAccountId,
+  });
+
+  window.location.assign(`/google-scope-repair?${params.toString()}`);
+};

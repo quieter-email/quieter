@@ -1,8 +1,8 @@
 "use client";
 
+import type { ComponentPropsWithoutRef, ComponentRef, Ref } from "react";
 import { Input as InputPrimitive } from "@base-ui/react/input";
 import { cva, type VariantProps } from "class-variance-authority";
-import { forwardRef, type ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/cn";
 
 const inputVariants = cva(
@@ -14,6 +14,8 @@ const inputVariants = cva(
           "squircle rounded-md border border-input bg-background shadow-sm read-only:cursor-default read-only:bg-muted/30 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20",
         ghost:
           "border-0 bg-transparent shadow-none read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0",
+        primary:
+          "squircle rounded-md border border-primary bg-primary text-primary-foreground shadow-sm placeholder:text-primary-foreground/60 read-only:cursor-default focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
       },
       size: {
         sm: "h-8 px-3 text-[13px]",
@@ -29,16 +31,16 @@ const inputVariants = cva(
 );
 
 type InputProps = Omit<ComponentPropsWithoutRef<typeof InputPrimitive>, "size"> &
-  VariantProps<typeof inputVariants>;
+  VariantProps<typeof inputVariants> & {
+    ref?: Ref<ComponentRef<typeof InputPrimitive>>;
+  };
 
-export const Input = forwardRef<HTMLElement, InputProps>(
-  ({ chrome = "default", className, size = "default", ...props }, ref) => (
-    <InputPrimitive
-      ref={ref}
-      className={cn(inputVariants({ chrome, size }), className)}
-      {...props}
-    />
-  ),
+export const Input = ({
+  chrome = "default",
+  className,
+  ref,
+  size = "default",
+  ...props
+}: InputProps) => (
+  <InputPrimitive ref={ref} className={cn(inputVariants({ chrome, size }), className)} {...props} />
 );
-
-Input.displayName = "Input";

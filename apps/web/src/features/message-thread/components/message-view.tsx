@@ -396,7 +396,7 @@ const MessageInspectorPanel = ({
           {inspectorQuery.isPending ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <HugeiconsIcon aria-hidden className="animate-spin" icon={Loading03Icon} />
-              <span>Loading message details...</span>
+              <span>Loading message details…</span>
             </div>
           ) : inspectorQuery.isError ? (
             <p className="text-sm text-destructive">
@@ -412,14 +412,16 @@ const MessageInspectorPanel = ({
                     { label: "Subject", value: inspector.subject },
                     { label: "Date", value: inspector.date },
                     { label: "Snippet", value: inspector.snippet },
-                  ]
-                    .filter((row) => !!row.value?.trim())
-                    .map((row) => (
-                      <p className="text-sm text-foreground" key={row.label}>
-                        <span className="font-semibold text-foreground">{row.label}: </span>
-                        <span className="wrap-break-word">{row.value}</span>
-                      </p>
-                    ))}
+                  ].flatMap((row) =>
+                    row.value?.trim()
+                      ? [
+                          <p className="text-sm text-foreground" key={row.label}>
+                            <span className="font-semibold text-foreground">{row.label}: </span>
+                            <span className="wrap-break-word">{row.value}</span>
+                          </p>,
+                        ]
+                      : [],
+                  )}
                 </section>
 
                 <section className="space-y-2">
@@ -738,14 +740,14 @@ const ThreadMessageList = ({
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
 }) => {
-  const [expandedMessageId, setExpandedMessageId] = useState<string | null>(
-    messages[0]?.id ?? null,
+  const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>(
+    messages.length ? [messages[0].id] : [],
   );
 
   return (
     <div>
       {messages.map((threadMessage) => {
-        const isExpanded = expandedMessageId === threadMessage.id;
+        const isExpanded = expandedMessageIds.includes(threadMessage.id);
         const linkedDraftMessage = findLinkedDraftForMessage(allThreadMessages, threadMessage);
 
         return (
@@ -761,8 +763,10 @@ const ThreadMessageList = ({
             onComposeDraftRequested={onComposeDraftRequested}
             onUnsubscribe={onUnsubscribe}
             onToggleExpanded={() => {
-              setExpandedMessageId((current) =>
-                current === threadMessage.id ? null : threadMessage.id,
+              setExpandedMessageIds((current) =>
+                isExpanded
+                  ? current.filter((id) => id !== threadMessage.id)
+                  : [...current, threadMessage.id],
               );
             }}
           />

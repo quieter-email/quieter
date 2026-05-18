@@ -15,7 +15,10 @@ import { Route as HomeRouteImport } from './routes/home'
 import { Route as GoogleScopeRepairRouteImport } from './routes/google-scope-repair'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
 import { Route as ApiSitePasswordRouteImport } from './routes/api/site-password'
+import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
+import { Route as ApiMessagesRouteImport } from './routes/api/messages'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 
@@ -49,9 +52,24 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiWaitlistRoute = ApiWaitlistRouteImport.update({
+  id: '/api/waitlist',
+  path: '/api/waitlist',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSitePasswordRoute = ApiSitePasswordRouteImport.update({
   id: '/api/site-password',
   path: '/api/site-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOpenapiRoute = ApiOpenapiRouteImport.update({
+  id: '/api/openapi',
+  path: '/api/openapi',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMessagesRoute = ApiMessagesRouteImport.update({
+  id: '/api/messages',
+  path: '/api/messages',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiOrpcSplatRoute = ApiOrpcSplatRouteImport.update({
@@ -72,7 +90,10 @@ export interface FileRoutesByFullPath {
   '/home': typeof HomeRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
+  '/api/messages': typeof ApiMessagesRoute
+  '/api/openapi': typeof ApiOpenapiRoute
   '/api/site-password': typeof ApiSitePasswordRoute
+  '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
 }
@@ -83,7 +104,10 @@ export interface FileRoutesByTo {
   '/home': typeof HomeRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
+  '/api/messages': typeof ApiMessagesRoute
+  '/api/openapi': typeof ApiOpenapiRoute
   '/api/site-password': typeof ApiSitePasswordRoute
+  '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
 }
@@ -95,7 +119,10 @@ export interface FileRoutesById {
   '/home': typeof HomeRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
+  '/api/messages': typeof ApiMessagesRoute
+  '/api/openapi': typeof ApiOpenapiRoute
   '/api/site-password': typeof ApiSitePasswordRoute
+  '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
 }
@@ -108,7 +135,10 @@ export interface FileRouteTypes {
     | '/home'
     | '/settings'
     | '/site-password'
+    | '/api/messages'
+    | '/api/openapi'
     | '/api/site-password'
+    | '/api/waitlist'
     | '/api/auth/$'
     | '/api/orpc/$'
   fileRoutesByTo: FileRoutesByTo
@@ -119,7 +149,10 @@ export interface FileRouteTypes {
     | '/home'
     | '/settings'
     | '/site-password'
+    | '/api/messages'
+    | '/api/openapi'
     | '/api/site-password'
+    | '/api/waitlist'
     | '/api/auth/$'
     | '/api/orpc/$'
   id:
@@ -130,7 +163,10 @@ export interface FileRouteTypes {
     | '/home'
     | '/settings'
     | '/site-password'
+    | '/api/messages'
+    | '/api/openapi'
     | '/api/site-password'
+    | '/api/waitlist'
     | '/api/auth/$'
     | '/api/orpc/$'
   fileRoutesById: FileRoutesById
@@ -142,7 +178,10 @@ export interface RootRouteChildren {
   HomeRoute: typeof HomeRoute
   SettingsRoute: typeof SettingsRoute
   SitePasswordRoute: typeof SitePasswordRoute
+  ApiMessagesRoute: typeof ApiMessagesRoute
+  ApiOpenapiRoute: typeof ApiOpenapiRoute
   ApiSitePasswordRoute: typeof ApiSitePasswordRoute
+  ApiWaitlistRoute: typeof ApiWaitlistRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
 }
@@ -191,11 +230,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/waitlist': {
+      id: '/api/waitlist'
+      path: '/api/waitlist'
+      fullPath: '/api/waitlist'
+      preLoaderRoute: typeof ApiWaitlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/site-password': {
       id: '/api/site-password'
       path: '/api/site-password'
       fullPath: '/api/site-password'
       preLoaderRoute: typeof ApiSitePasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/openapi': {
+      id: '/api/openapi'
+      path: '/api/openapi'
+      fullPath: '/api/openapi'
+      preLoaderRoute: typeof ApiOpenapiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/messages': {
+      id: '/api/messages'
+      path: '/api/messages'
+      fullPath: '/api/messages'
+      preLoaderRoute: typeof ApiMessagesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/orpc/$': {
@@ -222,7 +282,10 @@ const rootRouteChildren: RootRouteChildren = {
   HomeRoute: HomeRoute,
   SettingsRoute: SettingsRoute,
   SitePasswordRoute: SitePasswordRoute,
+  ApiMessagesRoute: ApiMessagesRoute,
+  ApiOpenapiRoute: ApiOpenapiRoute,
   ApiSitePasswordRoute: ApiSitePasswordRoute,
+  ApiWaitlistRoute: ApiWaitlistRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiOrpcSplatRoute: ApiOrpcSplatRoute,
 }

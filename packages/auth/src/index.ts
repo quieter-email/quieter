@@ -1,14 +1,39 @@
+import { apiKey } from "@better-auth/api-key";
 import { passkey } from "@better-auth/passkey";
 import { db, tables } from "@quieter/database";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
-import { magicLink, organization, lastLoginMethod } from "better-auth/plugins";
+import { createAccessControl, magicLink, organization, lastLoginMethod } from "better-auth/plugins";
+import {
+  adminAc,
+  defaultStatements,
+  memberAc,
+  ownerAc,
+} from "better-auth/plugins/organization/access";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
+import { sendMagicLinkEmail, sendVerificationEmail } from "./email";
 import { REQUIRED_GOOGLE_SCOPES } from "./google-scopes";
 import { assertCanLeaveOrganization, cleanupOrganizationsForDeletedUser } from "./organization";
 
 const appName = process.env.BETTER_AUTH_APP_NAME ?? "quieter";
+const teamApiKeyConfigId = "team";
+const organizationAccessControl = createAccessControl({
+  ...defaultStatements,
+  apiKey: ["create", "read", "update", "delete"],
+});
+const ownerRole = organizationAccessControl.newRole({
+  ...ownerAc.statements,
+  apiKey: ["create", "read", "update", "delete"],
+});
+const adminRole = organizationAccessControl.newRole({
+  ...adminAc.statements,
+  apiKey: ["create", "read", "update", "delete"],
+});
+const memberRole = organizationAccessControl.newRole({
+  ...memberAc.statements,
+  apiKey: ["read"],
+});
 
 const baseURL =
   process.env.BETTER_AUTH_URL ||
@@ -82,8 +107,11 @@ export const auth = betterAuth({
     },
   },
   emailVerification: {
-    sendVerificationEmail: async () => {
-      // TODO: Wire this to real auth email delivery.
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendVerificationEmail({
+        email: user.email,
+        url,
+      });
     },
   },
   socialProviders: {
@@ -91,16 +119,30 @@ export const auth = betterAuth({
       clientId: process.env.GOOGLE_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
       accessType: "offline",
-      prompt: "consent",
       scope: [...REQUIRED_GOOGLE_SCOPES],
     },
   },
   plugins: [
     passkey(),
-    organization(),
+    organization({
+      ac: organizationAccessControl,
+      roles: {
+        admin: adminRole,
+        member: memberRole,
+        owner: ownerRole,
+      },
+    }),
+    apiKey({
+      configId: teamApiKeyConfigId,
+      defaultPrefix: "quieter_",
+      references: "organization",
+    }),
     magicLink({
-      sendMagicLink: async () => {
-        // TODO: Wire this to real auth email delivery.
+      sendMagicLink: async ({ email, url }) => {
+        await sendMagicLinkEmail({
+          email,
+          url,
+        });
       },
     }),
     lastLoginMethod(),

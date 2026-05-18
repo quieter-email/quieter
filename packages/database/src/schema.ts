@@ -2,6 +2,7 @@ import {
   bigint,
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -15,7 +16,7 @@ export type MailDomainStatus = "failed" | "pending_dns" | "verified";
 export type MailDomainDnsRecord = {
   name: string;
   priority?: number;
-  purpose: "dkim" | "dmarc" | "inbound_mx" | "mail_from_mx" | "mail_from_spf";
+  purpose: "dkim" | "dmarc" | "inbound_mx" | "mail_from_mx" | "mail_from_spf" | "ownership";
   required: true;
   type: "CNAME" | "MX" | "TXT";
   value: string;
@@ -33,6 +34,7 @@ export type MailDomainCheckResult = {
       | "inbound_mx"
       | "mail_from_mx"
       | "mail_from_spf"
+      | "ownership"
       | "ses_identity"
       | "ses_mail_from";
   }>;
@@ -221,11 +223,50 @@ export const mailDomain = pgTable(
   },
   (table) => [
     index("mail_domain_organization_id_idx").on(table.organizationId),
-    unique("mail_domain_organization_id_domain_unique").on(table.organizationId, table.domain),
+    unique("mail_domain_domain_unique").on(table.domain),
+  ],
+);
+
+export const waitlistSignup = pgTable("waitlistSignup", {
+  email: text("email").primaryKey(),
+  createdAt: timestamp("createdAt").notNull(),
+});
+
+export const apikey = pgTable(
+  "apikey",
+  {
+    id: text("id").primaryKey(),
+    configId: text("configId").notNull().default("default"),
+    name: text("name"),
+    start: text("start"),
+    prefix: text("prefix"),
+    key: text("key").notNull(),
+    referenceId: text("referenceId").notNull(),
+    refillInterval: integer("refillInterval"),
+    refillAmount: integer("refillAmount"),
+    lastRefillAt: timestamp("lastRefillAt"),
+    enabled: boolean("enabled").default(true),
+    rateLimitEnabled: boolean("rateLimitEnabled").default(true),
+    rateLimitTimeWindow: integer("rateLimitTimeWindow"),
+    rateLimitMax: integer("rateLimitMax"),
+    requestCount: integer("requestCount").default(0),
+    remaining: integer("remaining"),
+    lastRequest: timestamp("lastRequest"),
+    expiresAt: timestamp("expiresAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+    permissions: text("permissions"),
+    metadata: text("metadata"),
+  },
+  (table) => [
+    index("apikey_config_id_idx").on(table.configId),
+    index("apikey_reference_id_idx").on(table.referenceId),
+    index("apikey_key_idx").on(table.key),
   ],
 );
 
 export const tables = {
+  apikey,
   user,
   organization,
   session,
@@ -236,6 +277,7 @@ export const tables = {
   invitation,
   mailbox,
   mailDomain,
+  waitlistSignup,
 };
 
 export const authRelations = defineRelations(tables, (r) => ({

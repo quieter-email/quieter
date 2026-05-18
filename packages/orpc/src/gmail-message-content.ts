@@ -202,14 +202,6 @@ const decodeBytesAsText = (bytes: Uint8Array, charset: string): string => {
   return repairLikelyUtf8Mojibake(decodedWithCharset);
 };
 
-const bytesToAscii = (bytes: Uint8Array): string => {
-  let output = "";
-  for (const byte of bytes) {
-    output += String.fromCharCode(byte);
-  }
-  return output;
-};
-
 const decodeMimeEncodedWord = (charset: string, encoding: string, encodedText: string): string => {
   const bytes =
     encoding.toLowerCase() === "b"
@@ -303,15 +295,9 @@ export const decodePartBody = (part: GmailMessagePart): string | undefined => {
   if (!data) return undefined;
 
   const baseBytes = decodeBase64UrlToBytes(data);
-  const transferEncoding = getHeader(part, "Content-Transfer-Encoding")?.toLowerCase();
   const contentType = getHeader(part, "Content-Type");
   const charset = parseCharset(contentType);
-
-  const contentBytes = transferEncoding?.includes("quoted-printable")
-    ? decodeQuotedPrintableToBytes(bytesToAscii(baseBytes))
-    : baseBytes;
-
-  const decoded = decodeBytesAsText(contentBytes, charset).trim();
+  const decoded = decodeBytesAsText(baseBytes, charset).trim();
   return decoded || undefined;
 };
 

@@ -155,7 +155,7 @@ const SortableGroup = ({
   return (
     <LazyMotion features={domAnimation}>
       <m.section
-        className={cn("space-y-1", {
+        className={cn("will-change-[height,opacity]", {
           "opacity-70": isDragSource,
         })}
         ref={sectionRef}
@@ -179,15 +179,15 @@ const SortableGroup = ({
           </span>
         </button>
 
-        <AnimatePresence>
+        <AnimatePresence initial={false}>
           {!collapsed && (
             <m.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden"
+              className="overflow-hidden will-change-[height,opacity]"
             >
-              {children}
+              <div className="space-y-1 pt-1">{children}</div>
             </m.div>
           )}
         </AnimatePresence>
@@ -332,7 +332,7 @@ export const MailboxSwitcherDropdown = ({
         sideOffset={10}
       >
         <DragDropProvider onDragEnd={handleGroupDragEnd}>
-          <div className="flex max-h-96 flex-col gap-3 overflow-y-auto p-1">
+          <div className="flex max-h-96 flex-col gap-1 overflow-y-auto p-1">
             {mailboxes.length > 0 ? (
               groups.map((group, groupIndex) => {
                 const isCollapsed = collapsedGroupIds.has(group.id);

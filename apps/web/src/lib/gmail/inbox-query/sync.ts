@@ -1,6 +1,7 @@
-import type { QueryClient } from "@tanstack/react-query";
+import type { QueryClient, QueryPersister } from "@tanstack/react-query";
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
+import { shouldRetryOrpcError } from "~/lib/orpc-errors";
 import { queryPersister } from "~/lib/query-persister";
 import { DEMO_MAILBOX_ID, listDemoMessages } from "../demo-mail";
 import {
@@ -45,6 +46,14 @@ type RefreshVisibleMessagesArgs = {
   signal?: AbortSignal;
 };
 
+type MessagesQueryPersister = QueryPersister<
+  ListMessagesPageResult,
+  ReturnType<typeof getMessagesQueryKey>,
+  string | undefined
+>;
+
+const messagesQueryPersister = queryPersister.persisterFn as unknown as MessagesQueryPersister;
+
 const fetchMessagesPage = async (
   mailboxId: string,
   mailbox: MailboxCategory,
@@ -87,9 +96,10 @@ export const refreshLoadedMessagesPages = async (
   const refreshedPageCount = Math.min(loadedPageCount, maxPageCount);
   const refreshedPages: ListMessagesPageResult[] = [];
   const refreshedPageParams: Array<string | undefined> = [];
-  let pageToken: string | undefined;
 
-  for (let pageIndex = 0; pageIndex < refreshedPageCount; pageIndex += 1) {
+  const refreshNextPage = async (pageIndex: number, pageToken: string | undefined) => {
+    if (pageIndex >= refreshedPageCount) return;
+
     refreshedPageParams.push(pageToken);
     const refreshedPage = await fetchMessagesPage(
       mailboxId,
@@ -100,9 +110,11 @@ export const refreshLoadedMessagesPages = async (
     );
 
     refreshedPages.push(refreshedPage);
-    if (!refreshedPage.nextPageToken) break;
-    pageToken = refreshedPage.nextPageToken;
-  }
+    if (!refreshedPage.nextPageToken) return;
+    await refreshNextPage(pageIndex + 1, refreshedPage.nextPageToken);
+  };
+
+  await refreshNextPage(0, undefined);
 
   queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
     mergeRefreshedMailboxPagesIntoQueryData(data, refreshedPages, refreshedPageParams, {
@@ -173,12 +185,16 @@ const applyMailboxSyncDelta = async (
 ) => {
   const currentMessages = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
   const removedMessageThreadIds = new Map<string, string>();
+  const currentMessagesById = new Map<string, MessageListItem>();
+
+  for (const page of currentMessages?.pages ?? []) {
+    for (const message of page.messages) {
+      currentMessagesById.set(message.id, message);
+    }
+  }
 
   for (const removedMessageId of removedMessageIds) {
-    const removedMessage = currentMessages?.pages
-      .flatMap((page) => page.messages)
-      .find((message) => message.id === removedMessageId);
-
+    const removedMessage = currentMessagesById.get(removedMessageId);
     if (removedMessage) {
       removedMessageThreadIds.set(removedMessageId, removedMessage.threadId);
     }
@@ -219,9 +235,11 @@ const applyMailboxSyncDelta = async (
     );
   }
 
-  for (const threadQueryKey of touchedThreadQueryKeys.values()) {
-    await queryPersister.persistQueryByKey(threadQueryKey, queryClient);
-  }
+  await Promise.all(
+    Array.from(touchedThreadQueryKeys.values(), (threadQueryKey) =>
+      queryPersister.persistQueryByKey(threadQueryKey, queryClient),
+    ),
+  );
 };
 
 export const syncMessages = async (
@@ -305,7 +323,8 @@ export const messagesQueryOptions = (
     getNextPageParam: (lastPage: ListMessagesPageResult) => lastPage.nextPageToken ?? undefined,
     staleTime: GMAIL_QUERY_STALE_TIME_MS,
     enabled,
-    retry: 3,
+    persister: messagesQueryPersister,
+    retry: shouldRetryOrpcError,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -326,8 +345,7 @@ export const liveSyncQueryOptions = (
       queryClient.getQueryData<MessagesQueryData>(
         getMessagesQueryKey(mailboxId, mailbox, searchQuery),
       )?.pages[0],
-    persister: undefined,
-    retry: 3,
+    retry: shouldRetryOrpcError,
     staleTime: 0,
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",

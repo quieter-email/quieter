@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
+import { queryPersister } from "~/lib/query-persister";
 import { DEMO_MAILBOX_ID, getDemoThread } from "./demo-mail";
 import {
   GMAIL_QUERY_STALE_TIME_MS,
@@ -24,6 +25,7 @@ export const getThreadWithDetailsOptions = (mailboxId: string, threadId: string,
         ? getDemoThread(threadId)
         : rpc.mail.getThread({ mailboxId, threadId }, { signal }),
     enabled,
+    persister: queryPersister.persisterFn,
     staleTime: GMAIL_QUERY_STALE_TIME_MS,
     refetchOnMount: (query) => (shouldRefreshThreadContent(query.state.data) ? "always" : true),
     refetchOnWindowFocus: false,

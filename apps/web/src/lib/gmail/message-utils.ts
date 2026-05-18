@@ -1,6 +1,24 @@
 import type { MessageListItem } from "./gmail";
 
 const EMAIL_ADDRESS_PATTERN = /([a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+)/i;
+const compactMessageDateFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+const fullMessageDateFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "long",
+  timeStyle: "short",
+});
+const messageListTimeFormatter = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
+const messageListCurrentYearDateFormatter = new Intl.DateTimeFormat(undefined, {
+  day: "numeric",
+  month: "short",
+});
+const messageListPreviousYearDateFormatter = new Intl.DateTimeFormat(undefined, {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
 
 const extractSenderEmail = (value: string | undefined): string | undefined => {
   const normalized = value?.trim();
@@ -23,10 +41,9 @@ export const formatMessageDate = (message: MessageListItem, format: "compact" | 
   const parsed = getParsedMessageDate(message);
   if (!parsed) return "";
 
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: format === "compact" ? "medium" : "long",
-    timeStyle: "short",
-  }).format(parsed);
+  return (format === "compact" ? compactMessageDateFormatter : fullMessageDateFormatter).format(
+    parsed,
+  );
 };
 
 export const formatMessageListDate = (message: MessageListItem, referenceDate = new Date()) => {
@@ -40,14 +57,12 @@ export const formatMessageListDate = (message: MessageListItem, referenceDate = 
     parsed.getDate() === referenceDate.getDate();
 
   if (isToday) {
-    return new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(parsed);
+    return messageListTimeFormatter.format(parsed);
   }
 
-  return new Intl.DateTimeFormat(undefined, {
-    day: "numeric",
-    month: "short",
-    ...(isCurrentYear ? {} : { year: "numeric" }),
-  }).format(parsed);
+  return (
+    isCurrentYear ? messageListCurrentYearDateFormatter : messageListPreviousYearDateFormatter
+  ).format(parsed);
 };
 
 export const parseSender = (from?: string) => {

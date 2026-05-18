@@ -22,6 +22,7 @@ import {
   updateMessageLabelsInMailbox,
   updateThreadLabelsInMailbox,
 } from "~/lib/gmail/inbox-query";
+import { redirectToGoogleScopeRepair } from "~/lib/orpc-errors";
 
 type LabelChangeSet = {
   addLabelIds?: string[];
@@ -87,6 +88,9 @@ export const createMailboxActionHandlers = ({
     try {
       await action();
       await refreshSearchResultsIfNeeded();
+    } catch (error) {
+      redirectToGoogleScopeRepair(error);
+      throw error;
     } finally {
       setMessageActionPending(messageId, false);
     }
@@ -99,6 +103,9 @@ export const createMailboxActionHandlers = ({
     try {
       await action();
       await refreshSearchResultsIfNeeded();
+    } catch (error) {
+      redirectToGoogleScopeRepair(error);
+      throw error;
     } finally {
       setThreadActionPending(threadId, false);
     }
@@ -119,13 +126,17 @@ export const createMailboxActionHandlers = ({
     if (actionableIds.length === 0) return;
 
     setPending(actionableIds, true);
-    let actionError: unknown = null;
+    let actionError: unknown;
     let shouldRefreshSearchResults = false;
 
     try {
-      for (const id of actionableIds) {
-        await action(id);
-        shouldRefreshSearchResults = true;
+      const results = await Promise.allSettled(actionableIds.map((id) => action(id)));
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          shouldRefreshSearchResults = true;
+        } else {
+          actionError ??= result.reason;
+        }
       }
     } catch (error) {
       actionError = error;
@@ -137,13 +148,15 @@ export const createMailboxActionHandlers = ({
       try {
         await refreshSearchResultsIfNeeded();
       } catch (refreshError) {
-        if (!actionError) {
+        if (actionError === undefined) {
+          redirectToGoogleScopeRepair(refreshError);
           throw refreshError;
         }
       }
     }
 
     if (actionError) {
+      redirectToGoogleScopeRepair(actionError);
       throw actionError;
     }
   };

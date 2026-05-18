@@ -27,8 +27,11 @@ const signature = (node: ReactNode): string =>
       }
 
       const props = Object.entries(child.props)
-        .filter(([name, value]) => name !== "children" && name !== "className" && primitive(value))
-        .map(([name, value]) => `${name}:${String(value)}`)
+        .flatMap(([name, value]) =>
+          name !== "children" && name !== "className" && primitive(value)
+            ? [`${name}:${String(value)}`]
+            : [],
+        )
         .join(",");
 
       return `${index}:${typeof child.type === "string" ? child.type : ""}:${props}:${signature(child.props.children)}`;

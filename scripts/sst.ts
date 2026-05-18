@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,7 +69,6 @@ const createSstEnv = () => {
 
   const localEnv = parseEnvFile(envFilePath);
 
-  delete localEnv.AWS_PROFILE;
   delete localEnv.AWS_CONFIG_FILE;
   delete localEnv.AWS_SHARED_CREDENTIALS_FILE;
 
@@ -79,7 +86,9 @@ const runOrThrow = (command: string, commandArgs: string[], options?: { cwd?: st
   });
 
   if (result.status !== 0) {
-    throw new Error(`${command} ${commandArgs.join(" ")} failed with exit code ${result.status ?? 1}`);
+    throw new Error(
+      `${command} ${commandArgs.join(" ")} failed with exit code ${result.status ?? 1}`,
+    );
   }
 };
 
@@ -102,8 +111,7 @@ const ensureWindowsArmRandomProvider = () => {
     return;
   }
 
-  const providerUrl =
-    `https://get.pulumi.com/releases/plugins/pulumi-resource-random-v${windowsArmRandomProviderVersion}-windows-amd64.tar.gz`;
+  const providerUrl = `https://get.pulumi.com/releases/plugins/pulumi-resource-random-v${windowsArmRandomProviderVersion}-windows-amd64.tar.gz`;
   const tempDir = mkdtempSync(resolve(tmpdir(), "quieter-sst-random-provider-"));
   const archivePath = resolve(tempDir, "pulumi-resource-random.tar.gz");
   const extractDir = resolve(tempDir, "extract");

@@ -16,19 +16,27 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@better-auth/core": "catalog:",
-    "@better-auth/passkey": "catalog:",
-    "@quieter/database": "workspace:*",
-    "better-auth": "catalog:",
-    "drizzle-orm": "catalog:"
+    "@quieter/database": "workspace:*"
   },
   "devDependencies": {
+    "@better-auth/api-key": "1.5.0",
+    "@better-auth/core": "catalog:",
+    "@better-auth/passkey": "catalog:",
     "@quieter/config": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "better-auth": "catalog:",
+    "drizzle-orm": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@better-auth/api-key": "1.5.0",
+    "@better-auth/core": "catalog:",
+    "@better-auth/passkey": "catalog:",
+    "better-auth": "catalog:",
+    "drizzle-orm": "catalog:"
   }
 }

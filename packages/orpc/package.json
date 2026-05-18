@@ -7,12 +7,13 @@
     "./compose": "./src/gmail/compose/schema.ts",
     "./context": "./src/context.ts",
     "./errors": "./src/errors.ts",
-    "./mailbox-service": "./src/mailbox-service.ts",
+    "./mailbox": "./src/mailbox.ts",
+    "./mail-domain": "./src/mail-domain.ts",
     "./server": "./src/server.ts",
     "./server-client": "./src/server-client.ts",
-    "./router": "./src/router.ts",
-    "./gmail-service": "./src/gmail-service.ts",
-    "./sender-avatar": "./src/sender-avatar.ts"
+    "./team-mail": "./src/team-mail.ts",
+    "./router": "./src/routers/index.ts",
+    "./gmail-service": "./src/gmail-service.ts"
   },
   "scripts": {
     "fmt": "oxfmt --config ../../oxfmt.json .",
@@ -24,19 +25,25 @@
   "dependencies": {
     "@aws-sdk/client-ses": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
-    "@orpc/client": "catalog:",
-    "@orpc/server": "catalog:",
     "@quieter/auth": "workspace:*",
-    "@quieter/database": "workspace:*",
-    "drizzle-orm": "catalog:",
-    "zod": "catalog:"
+    "@quieter/database": "workspace:*"
   },
   "devDependencies": {
+    "@orpc/client": "catalog:",
+    "@orpc/server": "catalog:",
     "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "drizzle-orm": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@orpc/client": "catalog:",
+    "@orpc/server": "catalog:",
+    "drizzle-orm": "catalog:",
+    "zod": "catalog:"
   }
 }

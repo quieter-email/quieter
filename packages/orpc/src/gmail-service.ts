@@ -159,6 +159,8 @@ const listLabelsSchema = z.object({
   labels: z.array(gmailLabelSchema).optional(),
 });
 
+const labelMutationSchema = gmailLabelSchema;
+
 const gmailHistoryMessageSchema = z.object({
   id: z.string(),
   threadId: z.string().optional(),
@@ -1359,6 +1361,62 @@ export const listLabels = async (
 
     return left.name.localeCompare(right.name);
   });
+};
+
+export const createLabel = async (
+  accessToken: string,
+  name: string,
+  signal?: AbortSignal,
+): Promise<GmailLabelListItem> => {
+  return await requestGmail(accessToken, "/gmail/v1/users/me/labels", labelMutationSchema, {
+    method: "POST",
+    body: {
+      labelListVisibility: "labelShow",
+      messageListVisibility: "show",
+      name,
+    },
+    signal,
+  });
+};
+
+export const updateLabel = async (
+  accessToken: string,
+  labelId: string,
+  name: string,
+  signal?: AbortSignal,
+): Promise<GmailLabelListItem> => {
+  return await requestGmail(
+    accessToken,
+    `/gmail/v1/users/me/labels/${encodeURIComponent(labelId)}`,
+    labelMutationSchema,
+    {
+      method: "PUT",
+      body: {
+        labelListVisibility: "labelShow",
+        messageListVisibility: "show",
+        name,
+      },
+      signal,
+    },
+  );
+};
+
+export const deleteLabel = async (
+  accessToken: string,
+  labelId: string,
+  signal?: AbortSignal,
+): Promise<{ id: string }> => {
+  await requestGmail(
+    accessToken,
+    `/gmail/v1/users/me/labels/${encodeURIComponent(labelId)}`,
+    z.object({}).passthrough(),
+    {
+      method: "DELETE",
+      signal,
+    },
+  );
+
+  return { id: labelId };
 };
 
 export const getMailboxSyncDelta = async (

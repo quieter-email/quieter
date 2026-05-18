@@ -23,6 +23,8 @@ export type MessageListProps = {
   mailboxActions: MailboxActions;
   messages: ListMessagesPageResult[];
   onActivateMessage: (messageId: string) => void;
+  /** Plain row click on the already-open thread closes the reading pane (same as back). */
+  onDeactivateActiveMessage: () => void;
   onLoadMore: () => void;
   onOpenSidebar?: () => void;
   onOpenDraft: (message: MessageListItem) => void;
