@@ -1,0 +1,9 @@
+reviews:
+  path_filters:
+    - "!.agents/**"
+    - "!**/.agents/**"
+    - "!skills-lock.json"
+    - "!.codex-dev*.log"
+    - "!todo.md"
+    - "!apps/web/src/routeTree.gen.ts"
+    - "!bun.lock"
