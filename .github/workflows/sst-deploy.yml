@@ -66,7 +66,7 @@ jobs:
             exit 1
           fi
 
-          bun <<'EOF'
+          bun run - <<'EOF'
           const outputs = await Bun.file(".sst/outputs.json").json();
           const values = [
             ["MAIL_BUCKET", outputs.mailBucket],
