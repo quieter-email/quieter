@@ -26,7 +26,7 @@
 - Better Auth organization plugin is the source of truth for explicit orgs only. Users can have zero or more organizations. Personal is always available but is not a Better Auth organization. Gmail mailboxes are derived from linked Google accounts, not `mailbox` table rows.
 - Managed/non-Gmail mailboxes are the table-backed mailbox records.
 - Google auth must request `https://mail.google.com/` plus profile/email scopes. Missing scope goes to the dedicated repair flow for the exact broken Gmail account.
-- Auth emails are local preview/placeholder flows, not real outbound delivery.
+- Auth emails send through `POST /api/messages` using `QUIETER_MAIL_API_KEY` and `auth@quieter.email` by default.
 - If Gmail exposes `List-Unsubscribe` mailto, use the single unsubscribe action that sends the email.
 - Mailbox list selection supports Shift range, Ctrl/Cmd toggle, `Mod+A`, and `Escape`.
 
@@ -54,7 +54,9 @@
 ## Mail Infra
 
 - SST owns the standalone SES/S3/SNS mail infrastructure.
-- The mail stack is not currently wired into the web app, oRPC, or app-owned DB records.
+- The web app exposes `POST /api/messages` for team API-key outbound mail. It verifies the Better Auth `team` API key, requires the `sender` domain to be a verified `mailDomain` for that team, and sends through SES from `packages/orpc/src/team-mail.ts`.
+- Better Auth email hooks call that endpoint from `packages/auth/src/email.ts`. Set `QUIETER_MAIL_API_KEY` to a team API key for the team that owns the auth sender domain. Override `QUIETER_AUTH_MAIL_SENDER` or `QUIETER_MAIL_API_URL` only when needed.
+- The mail stack is not currently wired into app-owned DB message records.
 - Domain registration should not be added back without rebuilding the integration intentionally.
 - Mail ingress/outbound auth tokens come from SST linked secrets.
 - Inbound mail is stored under the fixed `mail/inbound/...` key prefix.

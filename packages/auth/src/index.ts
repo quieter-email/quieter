@@ -12,6 +12,7 @@ import {
   ownerAc,
 } from "better-auth/plugins/organization/access";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
+import { sendMagicLinkEmail, sendVerificationEmail } from "./email";
 import { REQUIRED_GOOGLE_SCOPES } from "./google-scopes";
 import { assertCanLeaveOrganization, cleanupOrganizationsForDeletedUser } from "./organization";
 
@@ -106,8 +107,11 @@ export const auth = betterAuth({
     },
   },
   emailVerification: {
-    sendVerificationEmail: async () => {
-      // TODO: Wire this to real auth email delivery.
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendVerificationEmail({
+        email: user.email,
+        url,
+      });
     },
   },
   socialProviders: {
@@ -134,8 +138,11 @@ export const auth = betterAuth({
       references: "organization",
     }),
     magicLink({
-      sendMagicLink: async () => {
-        // TODO: Wire this to real auth email delivery.
+      sendMagicLink: async ({ email, url }) => {
+        await sendMagicLinkEmail({
+          email,
+          url,
+        });
       },
     }),
     lastLoginMethod(),

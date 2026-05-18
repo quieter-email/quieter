@@ -9,22 +9,12 @@ import {
   LinkButton,
   toast,
 } from "@quieter/ui";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
-import { type FormEvent, useState } from "react";
+import { useState, type SubmitEvent } from "react";
 import { ContourLines } from "~/components/contour-lines";
-import { getSessionUser } from "~/lib/auth.functions";
 
 export const Route = createFileRoute("/home")({
-  loader: async () => {
-    const user = await getSessionUser();
-
-    if (user) {
-      throw redirect({
-        to: "/",
-      });
-    }
-  },
   component: HomePage,
 });
 
@@ -120,7 +110,7 @@ type WaitlistResponse = {
 function WaitlistForm() {
   const [iconState, setIconState] = useState<WaitlistIconState>("idle");
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const form = event.currentTarget;

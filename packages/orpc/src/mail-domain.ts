@@ -88,46 +88,13 @@ export const getAwsRegion = () => {
   return region;
 };
 
-const getAwsStaticCredentials = () => {
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
-
-  if (!accessKeyId && !secretAccessKey) {
-    return undefined;
-  }
-
-  if (!accessKeyId || !secretAccessKey) {
-    throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      message:
-        "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must both be set for mail domain setup.",
-    });
-  }
-
-  const sessionToken = process.env.AWS_SESSION_TOKEN?.trim();
-
-  return {
-    accessKeyId,
-    secretAccessKey,
-    ...(sessionToken ? { sessionToken } : {}),
-  };
-};
-
-const getAwsClientConfig = () => {
-  const credentials = getAwsStaticCredentials();
-
-  return {
-    region: getAwsRegion(),
-    ...(credentials ? { credentials } : {}),
-  };
-};
-
 const getSesClient = () => {
-  sesClient ??= new SESClient(getAwsClientConfig());
+  sesClient ??= new SESClient({ region: getAwsRegion() });
   return sesClient;
 };
 
 const getSesv2Client = () => {
-  sesv2Client ??= new SESv2Client(getAwsClientConfig());
+  sesv2Client ??= new SESv2Client({ region: getAwsRegion() });
   return sesv2Client;
 };
 

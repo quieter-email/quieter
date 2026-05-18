@@ -11,6 +11,7 @@
     "./mail-domain": "./src/mail-domain.ts",
     "./server": "./src/server.ts",
     "./server-client": "./src/server-client.ts",
+    "./team-mail": "./src/team-mail.ts",
     "./router": "./src/routers/index.ts",
     "./gmail-service": "./src/gmail-service.ts"
   },

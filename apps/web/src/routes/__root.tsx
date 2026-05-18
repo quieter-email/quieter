@@ -26,11 +26,12 @@ export const Route = createRootRoute({
       {
         href: "/favicon.ico",
         rel: "icon",
-        sizes: "any",
+        sizes: "48x48",
       },
       {
         href: "/icon.svg",
         rel: "icon",
+        sizes: "any",
         type: "image/svg+xml",
       },
       {
