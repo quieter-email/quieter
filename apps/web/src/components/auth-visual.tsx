@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-const cursorTrailDuration = 1160;
+const cursorTrailDuration = 1080;
 const cursorTrailMinDistance = 3;
 const cursorTrailSampleLimit = 44;
 const dotGap = 4;
@@ -57,9 +57,9 @@ vec2 trailDisplacementFor(vec2 point) {
   if (uHasCursor > 0.5) {
     vec2 cursorOffset = point - uCursor;
     float cursorDistance = length(cursorOffset);
-    float cursorFalloffRadius = falloffRadius * mix(1.55, 0.46, uCursorSpeed);
+    float cursorFalloffRadius = falloffRadius * mix(1.5, 0.36, uCursorSpeed);
     float normalizedCursorDistance = cursorDistance / cursorFalloffRadius;
-    float cursorForce = exp(-normalizedCursorDistance * normalizedCursorDistance * 0.82);
+    float cursorForce = exp(-normalizedCursorDistance * normalizedCursorDistance * 0.76);
     vec2 cursorDirection = cursorDistance > 0.001 ? cursorOffset / cursorDistance : vec2(1.0, 0.0);
 
     force = cursorForce;
@@ -80,21 +80,22 @@ vec2 trailDisplacementFor(vec2 point) {
     float sampleTime = mix(startSample.z, endSample.z, segmentProgress);
     float sampleSpeed = mix(startSample.w, endSample.w, segmentProgress);
     float age = uTime - sampleTime;
-    float sampleDuration = mix(620.0, 1160.0, sampleSpeed);
+    float fastDurationAmount = smoothstep(0.18, 0.68, sampleSpeed);
+    float sampleDuration = mix(1080.0, 170.0, fastDurationAmount);
 
     if (age < 0.0 || age > sampleDuration) continue;
 
     vec2 offset = point - closestPoint;
     float distanceValue = length(offset);
 
-    float sampleFalloffRadius = falloffRadius * mix(1.45, 0.38, sampleSpeed);
+    float sampleFalloffRadius = falloffRadius * mix(1.6, 0.5, sampleSpeed);
     float ageStrength = 1.0 - smoothstep(0.0, sampleDuration, age);
     float newestStrength = smoothstep(0.0, 1.0, (float(index) + segmentProgress) / max(float(uTrailSampleCount - 1), 1.0));
     vec2 fallbackDirection = normalize(vec2(-segment.y, segment.x) + vec2(0.001, 0.0));
     vec2 direction = distanceValue > 0.001 ? offset / distanceValue : fallbackDirection;
     float normalizedDistance = distanceValue / sampleFalloffRadius;
-    float gravity = exp(-normalizedDistance * normalizedDistance * 0.82);
-    float sampleForce = gravity * ageStrength * mix(0.35, 1.0, newestStrength);
+    float gravity = exp(-normalizedDistance * normalizedDistance * 0.62);
+    float sampleForce = gravity * ageStrength * mix(0.35, 1.0, newestStrength) * mix(1.0, 0.64, sampleSpeed);
     float directionWeight = sampleForce * sampleForce * sampleForce;
 
     force = max(force, sampleForce);
