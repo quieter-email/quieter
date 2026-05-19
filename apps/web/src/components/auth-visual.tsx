@@ -2,124 +2,76 @@
 
 import { useEffect, useRef } from "react";
 
-const cursorTrailDuration = 1080;
-const cursorTrailMinDistance = 3;
-const cursorTrailSampleLimit = 44;
 const dotGap = 4;
-const maxDevicePixelRatio = 2;
-const dotStrideBytes = 4 * Float32Array.BYTES_PER_ELEMENT;
+const maxCanvasPixelCount = 2_200_000;
+const maxDevicePixelRatio = 1.5;
+const maxWaveCount = 24;
+const particleRenderStride = 6;
+const particleRenderStrideBytes = particleRenderStride * Float32Array.BYTES_PER_ELEMENT;
+const targetParticleGridCells = 54_000;
 
 type Point = {
   x: number;
   y: number;
 };
 
-type TrailSample = Point & {
-  speed: number;
-  startedAt: number;
-};
-
 type Rgb = [number, number, number];
 
-type Dot = {
+type Dot = Point & {
   opacity: number;
   radius: number;
-  x: number;
-  y: number;
+  vibrance: number;
+};
+
+type Wave = Point & {
+  activatedRadius: number;
+  force: number;
+  life: number;
+  speed: number;
+  startedAt: number;
+  width: number;
+};
+
+type WaveFrame = Wave & {
+  envelope: number;
+  frontRadius: number;
+  innerRadiusSquared: number;
+  outerRadiusSquared: number;
+};
+
+type Colors = {
+  background: Rgb;
+  primary: Rgb;
 };
 
 const vertexShaderSource = `#version 300 es
-#define MAX_TRAIL_SAMPLES 44
-
 in vec2 aCenter;
 in float aRadius;
 in float aOpacity;
+in float aVibrance;
+in float aEnergy;
 
 out float vOpacity;
 out float vPointSize;
 out float vRadius;
+out float vVibrance;
+out float vEnergy;
 
 uniform vec2 uResolution;
-uniform vec2 uCursor;
-uniform float uHasCursor;
-uniform float uCursorSpeed;
-uniform float uTime;
-uniform int uTrailSampleCount;
-uniform vec4 uTrailSamples[MAX_TRAIL_SAMPLES];
-
-vec2 trailDisplacementFor(vec2 point) {
-  float unit = min(uResolution.x, uResolution.y) / 10.0;
-  float falloffRadius = clamp(unit * 0.26, 28.0, 58.0);
-  float pushDistance = clamp(unit * 0.2, 16.0, 34.0);
-  float force = 0.0;
-  vec2 directionSum = vec2(0.0);
-
-  if (uHasCursor > 0.5) {
-    vec2 cursorOffset = point - uCursor;
-    float cursorDistance = length(cursorOffset);
-    float cursorFalloffRadius = falloffRadius * mix(1.5, 0.36, uCursorSpeed);
-    float normalizedCursorDistance = cursorDistance / cursorFalloffRadius;
-    float cursorForce = exp(-normalizedCursorDistance * normalizedCursorDistance * 0.76);
-    vec2 cursorDirection = cursorDistance > 0.001 ? cursorOffset / cursorDistance : vec2(1.0, 0.0);
-
-    force = cursorForce;
-    directionSum = cursorDirection * cursorForce * cursorForce * cursorForce;
-  }
-
-  for (int index = 0; index < MAX_TRAIL_SAMPLES - 1; index += 1) {
-    if (index >= uTrailSampleCount - 1) break;
-
-    vec4 startSample = uTrailSamples[index];
-    vec4 endSample = uTrailSamples[index + 1];
-    vec2 segment = endSample.xy - startSample.xy;
-    float segmentLengthSquared = dot(segment, segment);
-    float segmentProgress = segmentLengthSquared > 0.001
-      ? clamp(dot(point - startSample.xy, segment) / segmentLengthSquared, 0.0, 1.0)
-      : 0.0;
-    vec2 closestPoint = mix(startSample.xy, endSample.xy, segmentProgress);
-    float sampleTime = mix(startSample.z, endSample.z, segmentProgress);
-    float sampleSpeed = mix(startSample.w, endSample.w, segmentProgress);
-    float age = uTime - sampleTime;
-    float fastDurationAmount = smoothstep(0.18, 0.68, sampleSpeed);
-    float sampleDuration = mix(1080.0, 170.0, fastDurationAmount);
-
-    if (age < 0.0 || age > sampleDuration) continue;
-
-    vec2 offset = point - closestPoint;
-    float distanceValue = length(offset);
-
-    float sampleFalloffRadius = falloffRadius * mix(1.6, 0.5, sampleSpeed);
-    float ageStrength = 1.0 - smoothstep(0.0, sampleDuration, age);
-    float newestStrength = smoothstep(0.0, 1.0, (float(index) + segmentProgress) / max(float(uTrailSampleCount - 1), 1.0));
-    vec2 fallbackDirection = normalize(vec2(-segment.y, segment.x) + vec2(0.001, 0.0));
-    vec2 direction = distanceValue > 0.001 ? offset / distanceValue : fallbackDirection;
-    float normalizedDistance = distanceValue / sampleFalloffRadius;
-    float gravity = exp(-normalizedDistance * normalizedDistance * 0.62);
-    float sampleForce = gravity * ageStrength * mix(0.35, 1.0, newestStrength) * mix(1.0, 0.64, sampleSpeed);
-    float directionWeight = sampleForce * sampleForce * sampleForce;
-
-    force = max(force, sampleForce);
-    directionSum += direction * directionWeight;
-  }
-
-  float directionLength = length(directionSum);
-
-  if (force <= 0.0001 || directionLength <= 0.0001) {
-    return vec2(0.0);
-  }
-
-  return directionSum / directionLength * force * pushDistance;
-}
 
 void main() {
-  vec2 center = aCenter + trailDisplacementFor(aCenter);
+  float energy = clamp(aEnergy, 0.0, 1.0);
+  float shimmer = smoothstep(0.72, 1.0, aVibrance) * 0.12;
+  float radius = aRadius + energy * 0.12 + shimmer;
 
   vOpacity = aOpacity;
-  vRadius = aRadius;
-  vPointSize = (aRadius + 0.65) * 2.0;
+  vVibrance = aVibrance;
+  vEnergy = energy;
+  vRadius = radius;
+  vPointSize = (radius + 0.72) * 2.0;
 
   gl_PointSize = vPointSize;
-  gl_Position = vec4(center.x / uResolution.x * 2.0 - 1.0, 1.0 - center.y / uResolution.y * 2.0, 0.0, 1.0);
+  gl_Position = vec4(aCenter.x / uResolution.x * 2.0 - 1.0, 1.0 - aCenter.y / uResolution.y * 2.0, 0.0, 1.0);
 }
 `;
 
@@ -129,16 +81,22 @@ precision highp float;
 in float vOpacity;
 in float vPointSize;
 in float vRadius;
+in float vVibrance;
+in float vEnergy;
 
 out vec4 outColor;
 
 uniform vec3 uColor;
+uniform float uTime;
 
 void main() {
   float distanceValue = length((gl_PointCoord - 0.5) * vPointSize);
-  float alpha = 1.0 - smoothstep(max(vRadius - 0.65, 0.0), vRadius + 0.65, distanceValue);
+  float core = 1.0 - smoothstep(max(vRadius - 0.72, 0.0), vRadius + 0.78, distanceValue);
+  float shimmerSeed = smoothstep(0.68, 1.0, vVibrance);
+  float shimmer = (sin(uTime * mix(1.2, 2.8, vVibrance) + vVibrance * 41.0) * 0.5 + 0.5) * shimmerSeed;
+  float alpha = min(core * vOpacity * (0.94 + shimmer * 0.1 + vEnergy * 0.08), 1.0);
 
-  outColor = vec4(uColor, alpha * vOpacity);
+  outColor = vec4(uColor, alpha);
 }
 `;
 
@@ -155,12 +113,6 @@ const smoothstep = (edge0: number, edge1: number, value: number) => {
 
   return t * t * (3 - 2 * t);
 };
-
-const distanceBetween = (first: Point, second: Point) =>
-  Math.hypot(first.x - second.x, first.y - second.y);
-
-const speedForDistance = (distance: number, elapsedMs: number) =>
-  clamp(distance / Math.max(elapsedMs, 16) / 2.1, 0, 1);
 
 const oklchGrayToSrgb = (lightness: number) => {
   const linear = lightness ** 3;
@@ -194,6 +146,20 @@ const getCssColor = (element: HTMLElement, property: string, fallback: Rgb): Rgb
   return fallback;
 };
 
+const readColors = (canvas: HTMLCanvasElement): Colors => {
+  const background = getCssColor(
+    canvas,
+    "background-color",
+    getCssColor(canvas, "--background", [0.02, 0.02, 0.02]),
+  );
+  const primary = getCssColor(canvas, "--primary", [0.25, 0.25, 0.25]);
+
+  return {
+    background,
+    primary,
+  };
+};
+
 const squircleRadius = (point: Point, scale: number, width: number, height: number) => {
   const unit = Math.min(width, height) / 10;
   const offsetX = point.x - width * 0.5;
@@ -210,14 +176,16 @@ const appendNoiseDot = (
   dots: Dot[],
   cellX: number,
   cellY: number,
+  gap: number,
   width: number,
   height: number,
 ) => {
   const jitterX = hash(cellX + 53, cellY + 53) - 0.5;
   const jitterY = hash(cellX + 193, cellY + 193) - 0.5;
+  const radiusScale = clamp((gap / dotGap) ** 0.42, 1, 1.42);
   const center = {
-    x: (cellX + 0.5) * dotGap + jitterX * dotGap,
-    y: (cellY + 0.5) * dotGap + jitterY * dotGap,
+    x: (cellX + 0.5) * gap + jitterX * gap,
+    y: (cellY + 0.5) * gap + jitterY * gap,
   };
   const outerRadius = squircleRadius(center, 1, width, height);
   const nearestRadius = Math.min(
@@ -240,7 +208,8 @@ const appendNoiseDot = (
   dots.push({
     ...center,
     opacity: mix(1, 0.2, insideOuter),
-    radius: mix(0.25 + radiusSeed * 0.65, 0.45 + radiusSeed * 1.35, logoScatter),
+    radius: mix(0.25 + radiusSeed * 0.65, 0.45 + radiusSeed * 1.35, logoScatter) * radiusScale,
+    vibrance: hash(cellX + 941, cellY + 941),
   });
 };
 
@@ -263,6 +232,7 @@ const appendRingDot = (
   cellX: number,
   cellY: number,
   layerIndex: number,
+  gap: number,
   width: number,
   height: number,
 ) => {
@@ -275,9 +245,10 @@ const appendRingDot = (
   const seedY = cellY + layerIndex * 211;
   const jitterX = hash(seedX, seedY) - 0.5;
   const jitterY = hash(seedY, seedX) - 0.5;
+  const radiusScale = clamp((gap / dotGap) ** 0.42, 1, 1.42);
   const center = {
-    x: (cellX + 0.5) * dotGap + jitterX * 1.5,
-    y: (cellY + 0.5) * dotGap + jitterY * 1.5,
+    x: (cellX + 0.5) * gap + jitterX * gap * 0.38,
+    y: (cellY + 0.5) * gap + jitterY * gap * 0.38,
   };
   const radiusValue = squircleRadius(center, scale, width, height);
   const distanceFromCenterLine = Math.abs(radiusValue - 1);
@@ -294,25 +265,26 @@ const appendRingDot = (
   dots.push({
     ...center,
     opacity: opacity * (0.12 + edgeStrength * 0.88),
-    radius: (0.35 + edgeStrength * 1.55) * scale,
+    radius: (0.35 + edgeStrength * 1.55) * scale * radiusScale,
+    vibrance: hash(seedX + 463, seedY + 463),
   });
 };
 
-const buildDots = (width: number, height: number) => {
+const buildDots = (width: number, height: number, gap: number) => {
   const unit = Math.min(width, height) / 10;
-  const margin = Math.ceil((Math.max(15, unit * 0.13 + 2) + dotGap) / dotGap);
+  const margin = Math.ceil((Math.max(15, unit * 0.13 + 2) + gap) / gap);
   const minCellX = -margin;
-  const maxCellX = Math.ceil(width / dotGap) + margin;
+  const maxCellX = Math.ceil(width / gap) + margin;
   const minCellY = -margin;
-  const maxCellY = Math.ceil(height / dotGap) + margin;
+  const maxCellY = Math.ceil(height / gap) + margin;
   const dots: Dot[] = [];
 
   for (let cellY = minCellY; cellY <= maxCellY; cellY += 1) {
     for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
-      appendNoiseDot(dots, cellX, cellY, width, height);
+      appendNoiseDot(dots, cellX, cellY, gap, width, height);
 
       for (let layerIndex = 0; layerIndex < 4; layerIndex += 1) {
-        appendRingDot(dots, cellX, cellY, layerIndex, width, height);
+        appendRingDot(dots, cellX, cellY, layerIndex, gap, width, height);
       }
     }
   }
@@ -384,45 +356,41 @@ export const AuthVisual = () => {
     const centerAttribute = gl.getAttribLocation(program, "aCenter");
     const radiusAttribute = gl.getAttribLocation(program, "aRadius");
     const opacityAttribute = gl.getAttribLocation(program, "aOpacity");
+    const vibranceAttribute = gl.getAttribLocation(program, "aVibrance");
+    const energyAttribute = gl.getAttribLocation(program, "aEnergy");
     const resolutionUniform = gl.getUniformLocation(program, "uResolution");
     const colorUniform = gl.getUniformLocation(program, "uColor");
-    const cursorUniform = gl.getUniformLocation(program, "uCursor");
-    const hasCursorUniform = gl.getUniformLocation(program, "uHasCursor");
-    const cursorSpeedUniform = gl.getUniformLocation(program, "uCursorSpeed");
     const timeUniform = gl.getUniformLocation(program, "uTime");
-    const trailSampleCountUniform = gl.getUniformLocation(program, "uTrailSampleCount");
-    const trailSamplesUniform = gl.getUniformLocation(program, "uTrailSamples[0]");
 
     if (
       centerAttribute < 0 ||
       radiusAttribute < 0 ||
       opacityAttribute < 0 ||
+      vibranceAttribute < 0 ||
+      energyAttribute < 0 ||
       !resolutionUniform ||
       !colorUniform ||
-      !cursorUniform ||
-      !hasCursorUniform ||
-      !cursorSpeedUniform ||
-      !timeUniform ||
-      !trailSampleCountUniform ||
-      !trailSamplesUniform
+      !timeUniform
     )
       return;
 
-    const dotBuffer = gl.createBuffer();
-    if (!dotBuffer) return;
+    const particleBuffer = gl.createBuffer();
+    if (!particleBuffer) return;
 
     gl.useProgram(program);
-    gl.bindBuffer(gl.ARRAY_BUFFER, dotBuffer);
+    gl.bindBuffer(gl.ARRAY_BUFFER, particleBuffer);
     gl.enableVertexAttribArray(centerAttribute);
     gl.enableVertexAttribArray(radiusAttribute);
     gl.enableVertexAttribArray(opacityAttribute);
-    gl.vertexAttribPointer(centerAttribute, 2, gl.FLOAT, false, dotStrideBytes, 0);
+    gl.enableVertexAttribArray(vibranceAttribute);
+    gl.enableVertexAttribArray(energyAttribute);
+    gl.vertexAttribPointer(centerAttribute, 2, gl.FLOAT, false, particleRenderStrideBytes, 0);
     gl.vertexAttribPointer(
       radiusAttribute,
       1,
       gl.FLOAT,
       false,
-      dotStrideBytes,
+      particleRenderStrideBytes,
       2 * Float32Array.BYTES_PER_ELEMENT,
     );
     gl.vertexAttribPointer(
@@ -430,12 +398,30 @@ export const AuthVisual = () => {
       1,
       gl.FLOAT,
       false,
-      dotStrideBytes,
+      particleRenderStrideBytes,
       3 * Float32Array.BYTES_PER_ELEMENT,
+    );
+    gl.vertexAttribPointer(
+      vibranceAttribute,
+      1,
+      gl.FLOAT,
+      false,
+      particleRenderStrideBytes,
+      4 * Float32Array.BYTES_PER_ELEMENT,
+    );
+    gl.vertexAttribPointer(
+      energyAttribute,
+      1,
+      gl.FLOAT,
+      false,
+      particleRenderStrideBytes,
+      5 * Float32Array.BYTES_PER_ELEMENT,
     );
     gl.vertexAttribDivisor(centerAttribute, 1);
     gl.vertexAttribDivisor(radiusAttribute, 1);
     gl.vertexAttribDivisor(opacityAttribute, 1);
+    gl.vertexAttribDivisor(vibranceAttribute, 1);
+    gl.vertexAttribDivisor(energyAttribute, 1);
     gl.enable(gl.BLEND);
     gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -444,37 +430,46 @@ export const AuthVisual = () => {
     let bufferHeight = 0;
     let cssWidth = 1;
     let cssHeight = 1;
-    let dotCount = 0;
+    let particleGap = dotGap;
+    let particleCount = 0;
+    let bucketSize = 80;
+    let bucketMinX = 0;
+    let bucketMinY = 0;
+    let bucketColumnCount = 0;
+    let bucketRowCount = 0;
+    let particleBuckets: number[][] = [];
     let canvasRect = canvas.getBoundingClientRect();
-    let cursorTrail: TrailSample[] = [];
-    let cursor: Point | null = null;
-    let trailHead: TrailSample | null = null;
-    let trailTarget: Point | null = null;
-    let lastClientPoint: Point | null = null;
+    let baseX = new Float32Array(0);
+    let baseY = new Float32Array(0);
+    let positionX = new Float32Array(0);
+    let positionY = new Float32Array(0);
+    let velocityX = new Float32Array(0);
+    let velocityY = new Float32Array(0);
+    let radius = new Float32Array(0);
+    let opacity = new Float32Array(0);
+    let vibrance = new Float32Array(0);
+    let energy = new Float32Array(0);
+    let renderData = new Float32Array(0);
+    let activeFlags = new Uint8Array(0);
+    let activeIndices: number[] = [];
+    let waves: Wave[] = [];
+    let cursorTarget: Point | null = null;
+    let cursorPosition: Point | null = null;
+    let cursorVelocityX = 0;
+    let cursorVelocityY = 0;
+    let cursorStrength = 0;
+    let isPointerInside = false;
     let lastRenderTime = 0;
-    let wasPointerInside = false;
-    const canAnimateCursorTrail =
-      globalThis.window.matchMedia("(hover: hover) and (pointer: fine)").matches &&
-      !globalThis.window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const cursorTrailData = new Float32Array(cursorTrailSampleLimit * 4);
-    let colors = {
-      background: getCssColor(
-        canvas,
-        "background-color",
-        getCssColor(canvas, "--background", [0.02, 0.02, 0.02]),
-      ),
-      primary: getCssColor(canvas, "--primary", [0.25, 0.25, 0.25]),
-    };
+    let particlesSettled = true;
+    const canAnimateParticles = !globalThis.window.matchMedia("(prefers-reduced-motion: reduce)")
+      .matches;
+    const canTrackCursor =
+      canAnimateParticles &&
+      globalThis.window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    let colors = readColors(canvas);
 
     const refreshColors = () => {
-      colors = {
-        background: getCssColor(
-          canvas,
-          "background-color",
-          getCssColor(canvas, "--background", [0.02, 0.02, 0.02]),
-        ),
-        primary: getCssColor(canvas, "--primary", [0.25, 0.25, 0.25]),
-      };
+      colors = readColors(canvas);
     };
 
     const toCanvasPoint = (clientPoint: Point, requireInside: boolean) => {
@@ -490,124 +485,505 @@ export const AuthVisual = () => {
       };
     };
 
-    const pushCursorTrailPoint = (sample: TrailSample) => {
-      const lastPoint = cursorTrail.at(-1);
+    const writeParticleData = () => {
+      for (let index = 0; index < particleCount; index += 1) {
+        const offset = index * particleRenderStride;
 
-      if (lastPoint && distanceBetween(lastPoint, sample) < cursorTrailMinDistance) {
-        lastPoint.speed = sample.speed;
-        lastPoint.startedAt = sample.startedAt;
-        return;
+        renderData[offset] = positionX[index];
+        renderData[offset + 1] = positionY[index];
+        renderData[offset + 2] = radius[index];
+        renderData[offset + 3] = opacity[index];
+        renderData[offset + 4] = vibrance[index];
+        renderData[offset + 5] = energy[index];
       }
-
-      cursorTrail = [...cursorTrail, sample].slice(-cursorTrailSampleLimit);
     };
 
-    const syncTrailHead = (now: number) => {
-      if (!trailTarget) return false;
+    const syncParticleBuckets = () => {
+      bucketSize = clamp(particleGap * 12, 56, 132);
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
 
-      if (!trailHead) {
-        trailHead = { ...trailTarget, speed: 0, startedAt: now };
-        pushCursorTrailPoint(trailHead);
-        return false;
+      for (let index = 0; index < particleCount; index += 1) {
+        minX = Math.min(minX, baseX[index]);
+        minY = Math.min(minY, baseY[index]);
+        maxX = Math.max(maxX, baseX[index]);
+        maxY = Math.max(maxY, baseY[index]);
       }
 
-      const elapsedMs = clamp(now - lastRenderTime, 8, 48);
-      const catchup = 1 - Math.exp((-elapsedMs / 1000) * 18);
-      const nextPoint = {
-        x: mix(trailHead.x, trailTarget.x, catchup),
-        y: mix(trailHead.y, trailTarget.y, catchup),
-      };
-      const movedDistance = distanceBetween(trailHead, nextPoint);
-      const remainingDistance = distanceBetween(nextPoint, trailTarget);
+      bucketMinX = Math.floor(minX / bucketSize);
+      bucketMinY = Math.floor(minY / bucketSize);
+      bucketColumnCount = Math.max(1, Math.floor(maxX / bucketSize) - bucketMinX + 1);
+      bucketRowCount = Math.max(1, Math.floor(maxY / bucketSize) - bucketMinY + 1);
+      particleBuckets = Array.from({ length: bucketColumnCount * bucketRowCount }, () => []);
 
-      trailHead = {
-        ...nextPoint,
-        speed: mix(trailHead.speed, speedForDistance(movedDistance, elapsedMs), 0.45),
-        startedAt: now,
-      };
+      for (let index = 0; index < particleCount; index += 1) {
+        const bucketX = Math.floor(baseX[index] / bucketSize) - bucketMinX;
+        const bucketY = Math.floor(baseY[index] / bucketSize) - bucketMinY;
 
-      if (movedDistance >= 0.2) pushCursorTrailPoint(trailHead);
+        particleBuckets[bucketY * bucketColumnCount + bucketX]?.push(index);
+      }
+    };
 
-      return remainingDistance > 0.35 || movedDistance > 0.05;
+    const activateParticle = (index: number) => {
+      if (activeFlags[index]) return;
+
+      activeFlags[index] = 1;
+      activeIndices.push(index);
+      particlesSettled = false;
+    };
+
+    const activateParticlesInRange = (
+      centerX: number,
+      centerY: number,
+      innerRadius: number,
+      outerRadius: number,
+    ) => {
+      const clampedInnerRadius = Math.max(0, innerRadius);
+      const innerRadiusSquared = clampedInnerRadius * clampedInnerRadius;
+      const outerRadiusSquared = outerRadius * outerRadius;
+      const minBucketX = Math.max(0, Math.floor((centerX - outerRadius) / bucketSize) - bucketMinX);
+      const maxBucketX = Math.min(
+        bucketColumnCount - 1,
+        Math.floor((centerX + outerRadius) / bucketSize) - bucketMinX,
+      );
+      const minBucketY = Math.max(0, Math.floor((centerY - outerRadius) / bucketSize) - bucketMinY);
+      const maxBucketY = Math.min(
+        bucketRowCount - 1,
+        Math.floor((centerY + outerRadius) / bucketSize) - bucketMinY,
+      );
+
+      for (let bucketY = minBucketY; bucketY <= maxBucketY; bucketY += 1) {
+        for (let bucketX = minBucketX; bucketX <= maxBucketX; bucketX += 1) {
+          const bucket = particleBuckets[bucketY * bucketColumnCount + bucketX];
+
+          for (const index of bucket) {
+            const offsetX = baseX[index] - centerX;
+            const offsetY = baseY[index] - centerY;
+            const distanceSquared = offsetX * offsetX + offsetY * offsetY;
+
+            if (distanceSquared >= innerRadiusSquared && distanceSquared <= outerRadiusSquared) {
+              activateParticle(index);
+            }
+          }
+        }
+      }
+    };
+
+    const injectClickImpulse = (center: Point, radiusValue: number, force: number) => {
+      const radiusSquared = radiusValue * radiusValue;
+      const minBucketX = Math.max(
+        0,
+        Math.floor((center.x - radiusValue) / bucketSize) - bucketMinX,
+      );
+      const maxBucketX = Math.min(
+        bucketColumnCount - 1,
+        Math.floor((center.x + radiusValue) / bucketSize) - bucketMinX,
+      );
+      const minBucketY = Math.max(
+        0,
+        Math.floor((center.y - radiusValue) / bucketSize) - bucketMinY,
+      );
+      const maxBucketY = Math.min(
+        bucketRowCount - 1,
+        Math.floor((center.y + radiusValue) / bucketSize) - bucketMinY,
+      );
+
+      for (let bucketY = minBucketY; bucketY <= maxBucketY; bucketY += 1) {
+        for (let bucketX = minBucketX; bucketX <= maxBucketX; bucketX += 1) {
+          const bucket = particleBuckets[bucketY * bucketColumnCount + bucketX];
+
+          for (const index of bucket) {
+            const offsetX = baseX[index] - center.x;
+            const offsetY = baseY[index] - center.y;
+            const distanceSquared = offsetX * offsetX + offsetY * offsetY;
+
+            if (distanceSquared > radiusSquared) continue;
+
+            const distanceValue = Math.sqrt(distanceSquared);
+            const directionX =
+              distanceValue > 0.001
+                ? offsetX / distanceValue
+                : Math.cos(vibrance[index] * Math.PI * 2);
+            const directionY =
+              distanceValue > 0.001
+                ? offsetY / distanceValue
+                : Math.sin(vibrance[index] * Math.PI * 2);
+            const normalizedDistance = distanceValue / radiusValue;
+            const falloff = Math.exp(-(normalizedDistance * normalizedDistance) * 1.85);
+            const angularNoise = (vibrance[index] - 0.5) * force * falloff * 0.32;
+            const impulse = force * falloff;
+
+            activateParticle(index);
+            velocityX[index] += directionX * impulse - directionY * angularNoise;
+            velocityY[index] += directionY * impulse + directionX * angularNoise;
+            positionX[index] += directionX * impulse * 0.34;
+            positionY[index] += directionY * impulse * 0.34;
+            energy[index] = Math.max(energy[index], clamp(falloff * 0.48, 0, 1));
+          }
+        }
+      }
     };
 
     const syncDots = () => {
-      const dots = buildDots(bufferWidth, bufferHeight);
-      const data = new Float32Array(dots.length * 4);
+      const dots = buildDots(bufferWidth, bufferHeight, particleGap);
+
+      particleCount = dots.length;
+      baseX = new Float32Array(particleCount);
+      baseY = new Float32Array(particleCount);
+      positionX = new Float32Array(particleCount);
+      positionY = new Float32Array(particleCount);
+      velocityX = new Float32Array(particleCount);
+      velocityY = new Float32Array(particleCount);
+      radius = new Float32Array(particleCount);
+      opacity = new Float32Array(particleCount);
+      vibrance = new Float32Array(particleCount);
+      energy = new Float32Array(particleCount);
+      renderData = new Float32Array(particleCount * particleRenderStride);
+      activeFlags = new Uint8Array(particleCount);
+      activeIndices = [];
 
       for (const [index, dot] of dots.entries()) {
-        data[index * 4] = dot.x;
-        data[index * 4 + 1] = dot.y;
-        data[index * 4 + 2] = dot.radius;
-        data[index * 4 + 3] = dot.opacity;
+        baseX[index] = dot.x;
+        baseY[index] = dot.y;
+        positionX[index] = dot.x;
+        positionY[index] = dot.y;
+        radius[index] = dot.radius;
+        opacity[index] = dot.opacity;
+        vibrance[index] = dot.vibrance;
       }
 
-      dotCount = dots.length;
-      gl.bindBuffer(gl.ARRAY_BUFFER, dotBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+      writeParticleData();
+      syncParticleBuckets();
+      gl.bindBuffer(gl.ARRAY_BUFFER, particleBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, renderData, gl.DYNAMIC_DRAW);
     };
 
     const resize = () => {
       canvasRect = canvas.getBoundingClientRect();
-      const dpr = Math.min(globalThis.window.devicePixelRatio || 1, maxDevicePixelRatio);
       const nextCssWidth = Math.max(1, canvasRect.width);
       const nextCssHeight = Math.max(1, canvasRect.height);
+      const dpr = Math.min(
+        globalThis.window.devicePixelRatio || 1,
+        maxDevicePixelRatio,
+        Math.max(0.55, Math.sqrt(maxCanvasPixelCount / (nextCssWidth * nextCssHeight))),
+      );
       const pixelWidth = Math.max(1, Math.round(nextCssWidth * dpr));
       const pixelHeight = Math.max(1, Math.round(nextCssHeight * dpr));
+      const nextParticleGap = Math.max(
+        dotGap * dpr,
+        Math.sqrt((pixelWidth * pixelHeight) / targetParticleGridCells),
+      );
 
       cssWidth = nextCssWidth;
       cssHeight = nextCssHeight;
 
-      if (bufferWidth === pixelWidth && bufferHeight === pixelHeight) return;
+      if (
+        bufferWidth === pixelWidth &&
+        bufferHeight === pixelHeight &&
+        Math.abs(particleGap - nextParticleGap) < 0.01
+      )
+        return;
 
       bufferWidth = pixelWidth;
       bufferHeight = pixelHeight;
-      cursorTrail = [];
-      trailHead = null;
-      trailTarget = null;
+      particleGap = nextParticleGap;
+      waves = [];
+      activeIndices = [];
+      activeFlags.fill(0);
+      cursorTarget = null;
+      cursorPosition = null;
+      cursorVelocityX = 0;
+      cursorVelocityY = 0;
+      cursorStrength = 0;
+      isPointerInside = false;
+      particlesSettled = true;
       canvas.width = pixelWidth;
       canvas.height = pixelHeight;
       gl.viewport(0, 0, pixelWidth, pixelHeight);
       syncDots();
     };
 
+    const settleParticles = () => {
+      for (let index = 0; index < particleCount; index += 1) {
+        positionX[index] = baseX[index];
+        positionY[index] = baseY[index];
+        velocityX[index] = 0;
+        velocityY[index] = 0;
+        energy[index] = 0;
+      }
+
+      activeIndices = [];
+      activeFlags.fill(0);
+      particlesSettled = true;
+    };
+
+    const syncCursor = (elapsedMs: number) => {
+      const targetStrength = isPointerInside && cursorTarget ? 1 : 0;
+      const strengthFollow = 1 - Math.exp((-elapsedMs / 1000) * (targetStrength ? 12 : 5.5));
+
+      cursorStrength = mix(cursorStrength, targetStrength, strengthFollow);
+
+      if (!cursorTarget) {
+        const decay = 0.82 ** (elapsedMs / 16.667);
+
+        cursorVelocityX *= decay;
+        cursorVelocityY *= decay;
+        return cursorStrength > 0.002 || Math.hypot(cursorVelocityX, cursorVelocityY) > 0.02;
+      }
+
+      if (!cursorPosition) {
+        cursorPosition = { ...cursorTarget };
+        cursorVelocityX = 0;
+        cursorVelocityY = 0;
+        return cursorStrength > 0.002;
+      }
+
+      const previousX = cursorPosition.x;
+      const previousY = cursorPosition.y;
+      const follow = 1 - Math.exp((-elapsedMs / 1000) * 17);
+      const nextX = mix(previousX, cursorTarget.x, follow);
+      const nextY = mix(previousY, cursorTarget.y, follow);
+      const velocityFollow = 1 - Math.exp((-elapsedMs / 1000) * 18);
+
+      cursorVelocityX = mix(
+        cursorVelocityX,
+        (nextX - previousX) / Math.max(elapsedMs, 1),
+        velocityFollow,
+      );
+      cursorVelocityY = mix(
+        cursorVelocityY,
+        (nextY - previousY) / Math.max(elapsedMs, 1),
+        velocityFollow,
+      );
+      cursorPosition = {
+        x: nextX,
+        y: nextY,
+      };
+
+      return cursorStrength > 0.002 || Math.hypot(cursorVelocityX, cursorVelocityY) > 0.02;
+    };
+
+    const simulateParticles = (now: number) => {
+      if (!canAnimateParticles) return false;
+
+      const elapsedMs = lastRenderTime ? clamp(now - lastRenderTime, 8, 34) : 16.667;
+      const step = elapsedMs / 16.667;
+      const minSide = Math.min(bufferWidth, bufferHeight);
+      const diagonal = Math.hypot(bufferWidth, bufferHeight);
+      const cursorActive = syncCursor(elapsedMs);
+      const cursorRadius = clamp(minSide * 0.066, 42, 96);
+      const cursorRadiusSquared = (cursorRadius * 2.35) ** 2;
+      const cursorPush = clamp(minSide * 0.00125, 0.72, 1.9);
+      const cursorSweep = clamp(minSide * 0.00014, 0.07, 0.24);
+      const spring = 0.032;
+      const damping = 0.87 ** step;
+      const maxDisplacement = clamp(minSide * 0.04, 20, 54);
+      const velocityLimit = clamp(minSide * 0.01, 6, 17);
+      let maxMotion = 0;
+
+      if (cursorPosition && cursorStrength > 0.002) {
+        activateParticlesInRange(cursorPosition.x, cursorPosition.y, 0, cursorRadius * 2.35);
+      }
+
+      waves = waves.filter((wave) => now - wave.startedAt <= wave.life);
+      const activeWaves: WaveFrame[] = [];
+
+      for (const wave of waves) {
+        const age = now - wave.startedAt;
+        const frontRadius = age * wave.speed;
+        const outerRadius = frontRadius + wave.width * 3.8;
+        const innerRadius = Math.max(0, frontRadius - wave.width * 6.6);
+        const activationOuterRadius = frontRadius + wave.width * 2.7;
+        const activationInnerRadius = Math.max(0, wave.activatedRadius - wave.width * 5.6);
+
+        if (activationOuterRadius > wave.activatedRadius) {
+          activateParticlesInRange(wave.x, wave.y, activationInnerRadius, activationOuterRadius);
+          wave.activatedRadius = activationOuterRadius;
+        }
+
+        activeWaves.push({
+          ...wave,
+          envelope: (1 - age / wave.life) ** 1.12,
+          frontRadius,
+          innerRadiusSquared: innerRadius * innerRadius,
+          outerRadiusSquared: outerRadius * outerRadius,
+        });
+      }
+
+      if (particlesSettled && !cursorActive && activeWaves.length === 0) return false;
+
+      let nextActiveCount = 0;
+      const activeCount = activeIndices.length;
+
+      for (let activeIndex = 0; activeIndex < activeCount; activeIndex += 1) {
+        const index = activeIndices[activeIndex];
+        const restoreX = baseX[index] - positionX[index];
+        const restoreY = baseY[index] - positionY[index];
+        let ax = restoreX * spring;
+        let ay = restoreY * spring;
+        let localEnergy = 0;
+
+        if (cursorPosition && cursorStrength > 0.002) {
+          const offsetX = positionX[index] - cursorPosition.x;
+          const offsetY = positionY[index] - cursorPosition.y;
+          const distanceSquared = offsetX * offsetX + offsetY * offsetY;
+
+          if (distanceSquared <= cursorRadiusSquared) {
+            const distanceValue = Math.sqrt(distanceSquared);
+            const directionX =
+              distanceValue > 0.001
+                ? offsetX / distanceValue
+                : Math.cos(vibrance[index] * Math.PI * 2);
+            const directionY =
+              distanceValue > 0.001
+                ? offsetY / distanceValue
+                : Math.sin(vibrance[index] * Math.PI * 2);
+            const normalizedDistance = distanceValue / cursorRadius;
+            const pressure =
+              Math.exp(-normalizedDistance * normalizedDistance * 1.38) * cursorStrength;
+            const velocityFrameX = cursorVelocityX * 16.667;
+            const velocityFrameY = cursorVelocityY * 16.667;
+            const cursorSpeed = Math.hypot(velocityFrameX, velocityFrameY);
+            const speedPressure = clamp(cursorSpeed / cursorRadius, 0, 1.45);
+            const wake =
+              Math.exp(-normalizedDistance * normalizedDistance * 0.62) *
+              cursorStrength *
+              speedPressure;
+            const swirl =
+              (vibrance[index] - 0.5) * pressure * cursorPush * (0.26 + speedPressure * 0.16);
+
+            ax += directionX * pressure * cursorPush * (1 + speedPressure * 0.34);
+            ay += directionY * pressure * cursorPush * (1 + speedPressure * 0.34);
+            ax += velocityFrameX * wake * cursorSweep - directionY * swirl;
+            ay += velocityFrameY * wake * cursorSweep + directionX * swirl;
+            localEnergy += pressure * (0.18 + speedPressure * 0.14);
+          }
+        }
+
+        for (const wave of activeWaves) {
+          const offsetX = positionX[index] - wave.x;
+          const offsetY = positionY[index] - wave.y;
+          const distanceSquared = offsetX * offsetX + offsetY * offsetY;
+
+          if (
+            distanceSquared < wave.innerRadiusSquared ||
+            distanceSquared > wave.outerRadiusSquared
+          ) {
+            continue;
+          }
+
+          const distanceValue = Math.sqrt(distanceSquared);
+          const directionX =
+            distanceValue > 0.001
+              ? offsetX / distanceValue
+              : Math.cos(vibrance[index] * Math.PI * 2);
+          const directionY =
+            distanceValue > 0.001
+              ? offsetY / distanceValue
+              : Math.sin(vibrance[index] * Math.PI * 2);
+          const frontDistance = distanceValue - wave.frontRadius;
+          const band = Math.exp(-((frontDistance / wave.width) ** 2) * 0.38);
+          const pulse = band * wave.envelope;
+          const aftershock =
+            Math.exp(-(((frontDistance + wave.width * 2.15) / (wave.width * 2.05)) ** 2) * 0.42) *
+            wave.envelope;
+
+          ax += directionX * (pulse * wave.force - aftershock * wave.force * 0.12);
+          ay += directionY * (pulse * wave.force - aftershock * wave.force * 0.12);
+          localEnergy += pulse * 0.24 + aftershock * 0.08;
+        }
+
+        velocityX[index] = (velocityX[index] + ax * step) * damping;
+        velocityY[index] = (velocityY[index] + ay * step) * damping;
+
+        const speed = Math.hypot(velocityX[index], velocityY[index]);
+        const particleEnergy = clamp(energy[index] + localEnergy, 0, 4);
+        const particleVelocityLimit = velocityLimit * (1 + particleEnergy * 1.8);
+
+        if (speed > particleVelocityLimit) {
+          const velocityScale = particleVelocityLimit / speed;
+
+          velocityX[index] *= velocityScale;
+          velocityY[index] *= velocityScale;
+        }
+
+        positionX[index] += velocityX[index] * step;
+        positionY[index] += velocityY[index] * step;
+
+        const displacementX = positionX[index] - baseX[index];
+        const displacementY = positionY[index] - baseY[index];
+        const displacement = Math.hypot(displacementX, displacementY);
+        const particleMaxDisplacement = maxDisplacement * (1 + particleEnergy * 1.65);
+
+        if (displacement > particleMaxDisplacement) {
+          const displacementScale = particleMaxDisplacement / displacement;
+
+          positionX[index] = baseX[index] + displacementX * displacementScale;
+          positionY[index] = baseY[index] + displacementY * displacementScale;
+          velocityX[index] *= 0.58;
+          velocityY[index] *= 0.58;
+        }
+
+        const targetEnergy = clamp(
+          localEnergy + speed * 0.032 + (displacement / diagonal) * 2.3,
+          0,
+          1,
+        );
+        const energyFollow = 1 - (targetEnergy > energy[index] ? 0.7 : 0.88) ** step;
+
+        energy[index] = mix(energy[index], targetEnergy, energyFollow);
+        maxMotion = Math.max(maxMotion, speed + displacement * 0.03 + energy[index]);
+
+        if (speed + displacement * 0.04 + energy[index] > 0.012 || localEnergy > 0.001) {
+          activeIndices[nextActiveCount] = index;
+          nextActiveCount += 1;
+        } else {
+          positionX[index] = baseX[index];
+          positionY[index] = baseY[index];
+          velocityX[index] = 0;
+          velocityY[index] = 0;
+          energy[index] = 0;
+          activeFlags[index] = 0;
+        }
+      }
+
+      activeIndices.length = nextActiveCount;
+
+      if (!cursorActive && waves.length === 0 && activeIndices.length === 0 && maxMotion < 0.018) {
+        settleParticles();
+        writeParticleData();
+        return false;
+      }
+
+      writeParticleData();
+      particlesSettled = false;
+      return cursorActive || waves.length > 0 || activeIndices.length > 0 || maxMotion >= 0.018;
+    };
+
     const render = () => {
       const now = globalThis.performance.now();
+      const isActive = simulateParticles(now);
       const color = colors.primary;
       const background = colors.background;
-      const isTrailHeadMoving = syncTrailHead(now);
-
-      cursorTrail = cursorTrail.filter((point) => now - point.startedAt <= cursorTrailDuration);
-      cursorTrailData.fill(0);
-
-      if (!wasPointerInside && !isTrailHeadMoving) {
-        trailHead = null;
-        trailTarget = null;
-      }
-
-      for (const [index, point] of cursorTrail.entries()) {
-        cursorTrailData[index * 4] = point.x;
-        cursorTrailData[index * 4 + 1] = point.y;
-        cursorTrailData[index * 4 + 2] = point.startedAt;
-        cursorTrailData[index * 4 + 3] = point.speed;
-      }
 
       gl.clearColor(background[0], background[1], background[2], 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.useProgram(program);
       gl.uniform2f(resolutionUniform, bufferWidth, bufferHeight);
       gl.uniform3f(colorUniform, color[0], color[1], color[2]);
-      gl.uniform2f(cursorUniform, trailHead?.x ?? 0, trailHead?.y ?? 0);
-      gl.uniform1f(hasCursorUniform, wasPointerInside && trailHead ? 1 : 0);
-      gl.uniform1f(cursorSpeedUniform, wasPointerInside && trailHead ? trailHead.speed : 0);
-      gl.uniform1f(timeUniform, now);
-      gl.uniform1i(trailSampleCountUniform, Math.min(cursorTrail.length, cursorTrailSampleLimit));
-      gl.uniform4fv(trailSamplesUniform, cursorTrailData);
-      gl.drawArraysInstanced(gl.POINTS, 0, 1, dotCount);
+      gl.uniform1f(timeUniform, now / 1000);
 
+      if (isActive) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, particleBuffer);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, renderData);
+      }
+
+      gl.drawArraysInstanced(gl.POINTS, 0, 1, particleCount);
       lastRenderTime = now;
 
-      return cursorTrail.length > 0 || isTrailHeadMoving;
+      return isActive;
     };
 
     const animate = () => {
@@ -625,7 +1001,7 @@ export const AuthVisual = () => {
     };
 
     const handlePointerMove = (event: PointerEvent) => {
-      if (event.pointerType !== "mouse" && event.pointerType !== "pen") return;
+      if (!canTrackCursor || (event.pointerType !== "mouse" && event.pointerType !== "pen")) return;
 
       let shouldRender = false;
       const pointerEvents = event.getCoalescedEvents();
@@ -638,33 +1014,16 @@ export const AuthVisual = () => {
         const canvasPoint = toCanvasPoint(clientPoint, true);
 
         if (canvasPoint) {
-          const now = globalThis.performance.now();
-
-          cursor = canvasPoint;
-          trailTarget = canvasPoint;
+          cursorTarget = canvasPoint;
+          isPointerInside = true;
           shouldRender = true;
-
-          if (!wasPointerInside && lastClientPoint) {
-            const entryPoint = toCanvasPoint(lastClientPoint, false) ?? canvasPoint;
-
-            trailHead = {
-              ...entryPoint,
-              speed: 0,
-              startedAt: now,
-            };
-            pushCursorTrailPoint(trailHead);
-          }
-
-          wasPointerInside = true;
         } else {
-          if (cursor) shouldRender = true;
+          cursorTarget = toCanvasPoint(clientPoint, false);
 
-          cursor = null;
-          trailTarget = toCanvasPoint(clientPoint, false);
-          wasPointerInside = false;
+          if (isPointerInside || cursorStrength > 0.01) shouldRender = true;
+
+          isPointerInside = false;
         }
-
-        lastClientPoint = clientPoint;
       }
 
       if (shouldRender) queueRender();
@@ -672,6 +1031,61 @@ export const AuthVisual = () => {
 
     const handlePointerRawUpdate = (event: Event) => {
       if (event instanceof PointerEvent) handlePointerMove(event);
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!canAnimateParticles || !event.isPrimary) return;
+
+      const canvasPoint = toCanvasPoint(
+        {
+          x: event.clientX,
+          y: event.clientY,
+        },
+        true,
+      );
+
+      if (!canvasPoint) return;
+
+      const now = globalThis.performance.now();
+      const unit = Math.min(bufferWidth, bufferHeight) / 10;
+      const diagonal = Math.hypot(bufferWidth, bufferHeight);
+      const speed = clamp(unit * 0.008, 0.5, 1);
+      const width = clamp(unit * 0.58, 48, 120);
+      const force = clamp(unit * 0.052, 3.6, 9.6);
+      const impulseRadius = clamp(width * 1.28, 62, 190);
+      const impulseForce = clamp(force * 1.42, 5.2, 16);
+      const previousWaves = waves.filter((wave) => now - wave.startedAt <= wave.life);
+
+      if (canTrackCursor && (event.pointerType === "mouse" || event.pointerType === "pen")) {
+        cursorTarget = canvasPoint;
+        isPointerInside = true;
+      }
+
+      particlesSettled = false;
+      injectClickImpulse(canvasPoint, impulseRadius, impulseForce);
+      waves = [
+        ...previousWaves,
+        {
+          ...canvasPoint,
+          activatedRadius: 0,
+          force,
+          life: diagonal / speed + 780,
+          speed,
+          startedAt: now,
+          width,
+        },
+      ].slice(-maxWaveCount);
+      queueRender();
+    };
+
+    const handlePointerLeave = () => {
+      isPointerInside = false;
+      queueRender();
+    };
+
+    const handleWindowBlur = () => {
+      isPointerInside = false;
+      queueRender();
     };
 
     resize();
@@ -691,20 +1105,35 @@ export const AuthVisual = () => {
       attributeFilter: ["class", "style"],
       attributes: true,
     });
-    if (canAnimateCursorTrail) {
+
+    if (canTrackCursor) {
       globalThis.window.addEventListener("pointermove", handlePointerMove, { passive: true });
       canvas.addEventListener("pointerrawupdate", handlePointerRawUpdate, { passive: true });
+      canvas.addEventListener("pointerleave", handlePointerLeave, { passive: true });
+      globalThis.window.addEventListener("blur", handleWindowBlur);
+    }
+
+    if (canAnimateParticles) {
+      canvas.addEventListener("pointerdown", handlePointerDown, { passive: true });
     }
 
     return () => {
       if (animationFrame) globalThis.cancelAnimationFrame(animationFrame);
       resizeObserver.disconnect();
       mutationObserver.disconnect();
-      if (canAnimateCursorTrail) {
+
+      if (canTrackCursor) {
         globalThis.window.removeEventListener("pointermove", handlePointerMove);
         canvas.removeEventListener("pointerrawupdate", handlePointerRawUpdate);
+        canvas.removeEventListener("pointerleave", handlePointerLeave);
+        globalThis.window.removeEventListener("blur", handleWindowBlur);
       }
-      gl.deleteBuffer(dotBuffer);
+
+      if (canAnimateParticles) {
+        canvas.removeEventListener("pointerdown", handlePointerDown);
+      }
+
+      gl.deleteBuffer(particleBuffer);
       gl.deleteProgram(program);
     };
   }, []);
