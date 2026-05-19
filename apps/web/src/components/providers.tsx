@@ -5,6 +5,7 @@ import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@ta
 import { useLocation } from "@tanstack/react-router";
 import { MotionConfig } from "motion/react";
 import { type PropsWithChildren, useState } from "react";
+import { TelemetryProvider } from "~/components/telemetry-provider";
 import { redirectToGoogleScopeRepair, shouldRetryOrpcError } from "~/lib/orpc-errors";
 
 export const Providers = ({ children }: PropsWithChildren) => {
@@ -39,10 +40,12 @@ export const Providers = ({ children }: PropsWithChildren) => {
       initialColorMode="system"
     >
       <MotionConfig reducedMotion="user">
-        <QueryClientProvider client={queryClient}>
-          {children}
-          <Toaster />
-        </QueryClientProvider>
+        <TelemetryProvider>
+          <QueryClientProvider client={queryClient}>
+            {children}
+            <Toaster />
+          </QueryClientProvider>
+        </TelemetryProvider>
       </MotionConfig>
     </ColorModeProvider>
   );
