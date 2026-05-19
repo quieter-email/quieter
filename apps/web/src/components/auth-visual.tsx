@@ -6,8 +6,9 @@ const dotGap = 4;
 const maxCanvasPixelCount = 2_200_000;
 const maxDevicePixelRatio = 1.5;
 const maxWaveCount = 24;
-const particleRenderStride = 6;
-const particleRenderStrideBytes = particleRenderStride * Float32Array.BYTES_PER_ELEMENT;
+const maxImpulseCount = maxWaveCount;
+const particleStaticStride = 5;
+const particleStaticStrideBytes = particleStaticStride * Float32Array.BYTES_PER_ELEMENT;
 const targetParticleGridCells = 54_000;
 
 type Point = {
@@ -33,10 +34,17 @@ type Wave = Point & {
 };
 
 type WaveFrame = Wave & {
+  activationInnerRadiusSquared: number;
+  activationOuterRadiusSquared: number;
   envelope: number;
   frontRadius: number;
   innerRadiusSquared: number;
   outerRadiusSquared: number;
+};
+
+type Impulse = Point & {
+  force: number;
+  radius: number;
 };
 
 type Colors = {
@@ -44,8 +52,15 @@ type Colors = {
   primary: Rgb;
 };
 
-const vertexShaderSource = `#version 300 es
-in vec2 aCenter;
+type GpuBufferSet = {
+  active: WebGLBuffer;
+  energy: WebGLBuffer;
+  position: WebGLBuffer;
+  velocity: WebGLBuffer;
+};
+
+const renderVertexShaderSource = `#version 300 es
+in vec2 aPosition;
 in float aRadius;
 in float aOpacity;
 in float aVibrance;
@@ -71,7 +86,7 @@ void main() {
   vPointSize = (radius + 0.72) * 2.0;
 
   gl_PointSize = vPointSize;
-  gl_Position = vec4(aCenter.x / uResolution.x * 2.0 - 1.0, 1.0 - aCenter.y / uResolution.y * 2.0, 0.0, 1.0);
+  gl_Position = vec4(aPosition.x / uResolution.x * 2.0 - 1.0, 1.0 - aPosition.y / uResolution.y * 2.0, 0.0, 1.0);
 }
 `;
 
@@ -97,6 +112,237 @@ void main() {
   float alpha = min(core * vOpacity * (0.94 + shimmer * 0.1 + vEnergy * 0.08), 1.0);
 
   outColor = vec4(uColor, alpha);
+}
+`;
+
+const updateVertexShaderSource = `#version 300 es
+#define MAX_WAVES ${maxWaveCount}
+#define MAX_IMPULSES ${maxImpulseCount}
+
+in vec2 aBase;
+in vec2 aPosition;
+in vec2 aVelocity;
+in float aVibrance;
+in float aEnergy;
+in float aActive;
+
+out vec2 vNextPosition;
+out vec2 vNextVelocity;
+out float vNextEnergy;
+out float vNextActive;
+
+uniform float uStep;
+uniform float uSpring;
+uniform float uDamping;
+uniform float uDiagonal;
+uniform float uMaxDisplacement;
+uniform float uVelocityLimit;
+
+uniform float uCursorActive;
+uniform vec2 uCursor;
+uniform vec2 uCursorVelocity;
+uniform float uCursorRadius;
+uniform float uCursorRadiusSquared;
+uniform float uCursorActivationRadiusSquared;
+uniform float uCursorPush;
+uniform float uCursorSweep;
+uniform float uCursorStrength;
+
+uniform int uWaveCount;
+uniform vec2 uWaveCenter[MAX_WAVES];
+uniform float uWaveForce[MAX_WAVES];
+uniform float uWaveEnvelope[MAX_WAVES];
+uniform float uWaveFrontRadius[MAX_WAVES];
+uniform float uWaveWidth[MAX_WAVES];
+uniform float uWaveInnerRadiusSquared[MAX_WAVES];
+uniform float uWaveOuterRadiusSquared[MAX_WAVES];
+uniform float uWaveActivationInnerRadiusSquared[MAX_WAVES];
+uniform float uWaveActivationOuterRadiusSquared[MAX_WAVES];
+
+uniform int uImpulseCount;
+uniform vec2 uImpulseCenter[MAX_IMPULSES];
+uniform float uImpulseRadius[MAX_IMPULSES];
+uniform float uImpulseRadiusSquared[MAX_IMPULSES];
+uniform float uImpulseForce[MAX_IMPULSES];
+
+const float pi2 = 6.283185307179586;
+
+vec2 directionFor(vec2 offset, float distanceValue, float vibrance) {
+  if (distanceValue > 0.001) {
+    return offset / distanceValue;
+  }
+
+  return vec2(cos(vibrance * pi2), sin(vibrance * pi2));
+}
+
+void main() {
+  gl_Position = vec4(0.0);
+  gl_PointSize = 1.0;
+
+  vec2 position = aPosition;
+  vec2 velocity = aVelocity;
+  float energy = aEnergy;
+  float nextActive = aActive;
+
+  if (uCursorActive > 0.5) {
+    vec2 cursorActivationOffset = aBase - uCursor;
+    float cursorActivationDistanceSquared = dot(cursorActivationOffset, cursorActivationOffset);
+
+    if (cursorActivationDistanceSquared <= uCursorActivationRadiusSquared) {
+      nextActive = 1.0;
+    }
+  }
+
+  for (int index = 0; index < MAX_WAVES; index += 1) {
+    if (index >= uWaveCount) break;
+
+    vec2 waveActivationOffset = aBase - uWaveCenter[index];
+    float waveActivationDistanceSquared = dot(waveActivationOffset, waveActivationOffset);
+
+    if (
+      waveActivationDistanceSquared >= uWaveActivationInnerRadiusSquared[index] &&
+      waveActivationDistanceSquared <= uWaveActivationOuterRadiusSquared[index]
+    ) {
+      nextActive = 1.0;
+    }
+  }
+
+  for (int index = 0; index < MAX_IMPULSES; index += 1) {
+    if (index >= uImpulseCount) break;
+
+    vec2 impulseOffset = aBase - uImpulseCenter[index];
+    float impulseDistanceSquared = dot(impulseOffset, impulseOffset);
+
+    if (impulseDistanceSquared > uImpulseRadiusSquared[index]) continue;
+
+    float impulseDistance = sqrt(impulseDistanceSquared);
+    vec2 impulseDirection = directionFor(impulseOffset, impulseDistance, aVibrance);
+    float normalizedDistance = impulseDistance / uImpulseRadius[index];
+    float falloff = exp(-(normalizedDistance * normalizedDistance) * 1.85);
+    float angularNoise = (aVibrance - 0.5) * uImpulseForce[index] * falloff * 0.32;
+    float impulse = uImpulseForce[index] * falloff;
+
+    nextActive = 1.0;
+    velocity += vec2(
+      impulseDirection.x * impulse - impulseDirection.y * angularNoise,
+      impulseDirection.y * impulse + impulseDirection.x * angularNoise
+    );
+    position += impulseDirection * impulse * 0.34;
+    energy = max(energy, clamp(falloff * 0.48, 0.0, 1.0));
+  }
+
+  if (nextActive < 0.5) {
+    vNextPosition = aBase;
+    vNextVelocity = vec2(0.0);
+    vNextEnergy = 0.0;
+    vNextActive = 0.0;
+    return;
+  }
+
+  vec2 restore = aBase - position;
+  vec2 acceleration = restore * uSpring;
+  float localEnergy = 0.0;
+
+  if (uCursorActive > 0.5) {
+    vec2 cursorOffset = position - uCursor;
+    float cursorDistanceSquared = dot(cursorOffset, cursorOffset);
+
+    if (cursorDistanceSquared <= uCursorRadiusSquared) {
+      float cursorDistance = sqrt(cursorDistanceSquared);
+      vec2 cursorDirection = directionFor(cursorOffset, cursorDistance, aVibrance);
+      float normalizedDistance = cursorDistance / uCursorRadius;
+      float pressure = exp(-normalizedDistance * normalizedDistance * 1.38) * uCursorStrength;
+      float cursorSpeed = length(uCursorVelocity);
+      float speedPressure = clamp(cursorSpeed / uCursorRadius, 0.0, 1.45);
+      float wake = exp(-normalizedDistance * normalizedDistance * 0.62) * uCursorStrength * speedPressure;
+      float swirl = (aVibrance - 0.5) * pressure * uCursorPush * (0.26 + speedPressure * 0.16);
+
+      acceleration += cursorDirection * pressure * uCursorPush * (1.0 + speedPressure * 0.34);
+      acceleration += vec2(
+        uCursorVelocity.x * wake * uCursorSweep - cursorDirection.y * swirl,
+        uCursorVelocity.y * wake * uCursorSweep + cursorDirection.x * swirl
+      );
+      localEnergy += pressure * (0.18 + speedPressure * 0.14);
+    }
+  }
+
+  for (int index = 0; index < MAX_WAVES; index += 1) {
+    if (index >= uWaveCount) break;
+
+    vec2 waveOffset = position - uWaveCenter[index];
+    float waveDistanceSquared = dot(waveOffset, waveOffset);
+
+    if (
+      waveDistanceSquared < uWaveInnerRadiusSquared[index] ||
+      waveDistanceSquared > uWaveOuterRadiusSquared[index]
+    ) {
+      continue;
+    }
+
+    float waveDistance = sqrt(waveDistanceSquared);
+    vec2 waveDirection = directionFor(waveOffset, waveDistance, aVibrance);
+    float frontDistance = waveDistance - uWaveFrontRadius[index];
+    float band = exp(-pow(frontDistance / uWaveWidth[index], 2.0) * 0.38);
+    float pulse = band * uWaveEnvelope[index];
+    float aftershock = exp(-pow((frontDistance + uWaveWidth[index] * 2.15) / (uWaveWidth[index] * 2.05), 2.0) * 0.42) * uWaveEnvelope[index];
+
+    acceleration += waveDirection * (pulse * uWaveForce[index] - aftershock * uWaveForce[index] * 0.12);
+    localEnergy += pulse * 0.24 + aftershock * 0.08;
+  }
+
+  velocity = (velocity + acceleration * uStep) * uDamping;
+
+  float speed = length(velocity);
+  float particleEnergy = clamp(energy + localEnergy, 0.0, 4.0);
+  float particleVelocityLimit = uVelocityLimit * (1.0 + particleEnergy * 1.8);
+
+  if (speed > particleVelocityLimit) {
+    float velocityScale = particleVelocityLimit / speed;
+
+    velocity *= velocityScale;
+    speed = particleVelocityLimit;
+  }
+
+  position += velocity * uStep;
+
+  vec2 displacementVector = position - aBase;
+  float displacement = length(displacementVector);
+  float particleMaxDisplacement = uMaxDisplacement * (1.0 + particleEnergy * 1.65);
+
+  if (displacement > particleMaxDisplacement) {
+    float displacementScale = particleMaxDisplacement / displacement;
+
+    position = aBase + displacementVector * displacementScale;
+    velocity *= 0.58;
+    displacement = particleMaxDisplacement;
+  }
+
+  float targetEnergy = clamp(localEnergy + speed * 0.032 + (displacement / uDiagonal) * 2.3, 0.0, 1.0);
+  float energyFollow = 1.0 - pow(targetEnergy > energy ? 0.7 : 0.88, uStep);
+
+  energy = mix(energy, targetEnergy, energyFollow);
+
+  if (speed + displacement * 0.04 + energy > 0.012 || localEnergy > 0.001) {
+    vNextPosition = position;
+    vNextVelocity = velocity;
+    vNextEnergy = energy;
+    vNextActive = 1.0;
+  } else {
+    vNextPosition = aBase;
+    vNextVelocity = vec2(0.0);
+    vNextEnergy = 0.0;
+    vNextActive = 0.0;
+  }
+}
+`;
+
+const passthroughFragmentShaderSource = `#version 300 es
+precision highp float;
+
+out vec4 outColor;
+
+void main() {
+  outColor = vec4(0.0);
 }
 `;
 
@@ -305,9 +551,14 @@ const createShader = (gl: WebGL2RenderingContext, type: number, source: string) 
   return null;
 };
 
-const createProgram = (gl: WebGL2RenderingContext) => {
-  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
-  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+const createProgram = (
+  gl: WebGL2RenderingContext,
+  vertexSource: string,
+  fragmentSource: string,
+  transformFeedbackVaryings?: string[],
+) => {
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
   if (!vertexShader || !fragmentShader) return null;
 
   const program = gl.createProgram();
@@ -315,6 +566,11 @@ const createProgram = (gl: WebGL2RenderingContext) => {
 
   gl.attachShader(program, vertexShader);
   gl.attachShader(program, fragmentShader);
+
+  if (transformFeedbackVaryings) {
+    gl.transformFeedbackVaryings(program, transformFeedbackVaryings, gl.SEPARATE_ATTRIBS);
+  }
+
   gl.linkProgram(program);
   gl.deleteShader(vertexShader);
   gl.deleteShader(fragmentShader);
@@ -323,6 +579,22 @@ const createProgram = (gl: WebGL2RenderingContext) => {
 
   gl.deleteProgram(program);
   return null;
+};
+
+const createGpuBufferSet = (gl: WebGL2RenderingContext): GpuBufferSet | null => {
+  const position = gl.createBuffer();
+  const velocity = gl.createBuffer();
+  const energy = gl.createBuffer();
+  const active = gl.createBuffer();
+
+  if (!position || !velocity || !energy || !active) return null;
+
+  return {
+    active,
+    energy,
+    position,
+    velocity,
+  };
 };
 
 export const AuthVisual = () => {
@@ -350,78 +622,176 @@ export const AuthVisual = () => {
       });
     if (!gl) return;
 
-    const program = createProgram(gl);
-    if (!program) return;
+    const renderProgram = createProgram(gl, renderVertexShaderSource, fragmentShaderSource);
+    const updateProgram = createProgram(
+      gl,
+      updateVertexShaderSource,
+      passthroughFragmentShaderSource,
+      ["vNextPosition", "vNextVelocity", "vNextEnergy", "vNextActive"],
+    );
+    if (!renderProgram || !updateProgram) return;
 
-    const centerAttribute = gl.getAttribLocation(program, "aCenter");
-    const radiusAttribute = gl.getAttribLocation(program, "aRadius");
-    const opacityAttribute = gl.getAttribLocation(program, "aOpacity");
-    const vibranceAttribute = gl.getAttribLocation(program, "aVibrance");
-    const energyAttribute = gl.getAttribLocation(program, "aEnergy");
-    const resolutionUniform = gl.getUniformLocation(program, "uResolution");
-    const colorUniform = gl.getUniformLocation(program, "uColor");
-    const timeUniform = gl.getUniformLocation(program, "uTime");
+    const getAttribute = (program: WebGLProgram, name: string) => {
+      const attribute = gl.getAttribLocation(program, name);
+      if (attribute < 0) throw new Error(`Missing WebGL attribute: ${name}`);
+
+      return attribute;
+    };
+    const getUniform = (program: WebGLProgram, name: string) => {
+      const uniform = gl.getUniformLocation(program, name);
+      if (!uniform) throw new Error(`Missing WebGL uniform: ${name}`);
+
+      return uniform;
+    };
+
+    const renderAttributes = {
+      energy: getAttribute(renderProgram, "aEnergy"),
+      opacity: getAttribute(renderProgram, "aOpacity"),
+      position: getAttribute(renderProgram, "aPosition"),
+      radius: getAttribute(renderProgram, "aRadius"),
+      vibrance: getAttribute(renderProgram, "aVibrance"),
+    };
+    const updateAttributes = {
+      active: getAttribute(updateProgram, "aActive"),
+      base: getAttribute(updateProgram, "aBase"),
+      energy: getAttribute(updateProgram, "aEnergy"),
+      position: getAttribute(updateProgram, "aPosition"),
+      velocity: getAttribute(updateProgram, "aVelocity"),
+      vibrance: getAttribute(updateProgram, "aVibrance"),
+    };
+    const renderUniforms = {
+      color: getUniform(renderProgram, "uColor"),
+      resolution: getUniform(renderProgram, "uResolution"),
+      time: getUniform(renderProgram, "uTime"),
+    };
+    const updateUniforms = {
+      cursor: getUniform(updateProgram, "uCursor"),
+      cursorActivationRadiusSquared: getUniform(updateProgram, "uCursorActivationRadiusSquared"),
+      cursorActive: getUniform(updateProgram, "uCursorActive"),
+      cursorPush: getUniform(updateProgram, "uCursorPush"),
+      cursorRadius: getUniform(updateProgram, "uCursorRadius"),
+      cursorRadiusSquared: getUniform(updateProgram, "uCursorRadiusSquared"),
+      cursorStrength: getUniform(updateProgram, "uCursorStrength"),
+      cursorSweep: getUniform(updateProgram, "uCursorSweep"),
+      cursorVelocity: getUniform(updateProgram, "uCursorVelocity"),
+      damping: getUniform(updateProgram, "uDamping"),
+      diagonal: getUniform(updateProgram, "uDiagonal"),
+      impulseCenter: getUniform(updateProgram, "uImpulseCenter[0]"),
+      impulseCount: getUniform(updateProgram, "uImpulseCount"),
+      impulseForce: getUniform(updateProgram, "uImpulseForce[0]"),
+      impulseRadius: getUniform(updateProgram, "uImpulseRadius[0]"),
+      impulseRadiusSquared: getUniform(updateProgram, "uImpulseRadiusSquared[0]"),
+      maxDisplacement: getUniform(updateProgram, "uMaxDisplacement"),
+      spring: getUniform(updateProgram, "uSpring"),
+      step: getUniform(updateProgram, "uStep"),
+      velocityLimit: getUniform(updateProgram, "uVelocityLimit"),
+      waveActivationInnerRadiusSquared: getUniform(
+        updateProgram,
+        "uWaveActivationInnerRadiusSquared[0]",
+      ),
+      waveActivationOuterRadiusSquared: getUniform(
+        updateProgram,
+        "uWaveActivationOuterRadiusSquared[0]",
+      ),
+      waveCenter: getUniform(updateProgram, "uWaveCenter[0]"),
+      waveCount: getUniform(updateProgram, "uWaveCount"),
+      waveEnvelope: getUniform(updateProgram, "uWaveEnvelope[0]"),
+      waveForce: getUniform(updateProgram, "uWaveForce[0]"),
+      waveFrontRadius: getUniform(updateProgram, "uWaveFrontRadius[0]"),
+      waveInnerRadiusSquared: getUniform(updateProgram, "uWaveInnerRadiusSquared[0]"),
+      waveOuterRadiusSquared: getUniform(updateProgram, "uWaveOuterRadiusSquared[0]"),
+      waveWidth: getUniform(updateProgram, "uWaveWidth[0]"),
+    };
+
+    const staticBuffer = gl.createBuffer();
+    const firstStateBuffers = createGpuBufferSet(gl);
+    const secondStateBuffers = createGpuBufferSet(gl);
+    const transformFeedback = gl.createTransformFeedback();
+    const firstRenderVertexArray = gl.createVertexArray();
+    const secondRenderVertexArray = gl.createVertexArray();
+    const firstUpdateVertexArray = gl.createVertexArray();
+    const secondUpdateVertexArray = gl.createVertexArray();
 
     if (
-      centerAttribute < 0 ||
-      radiusAttribute < 0 ||
-      opacityAttribute < 0 ||
-      vibranceAttribute < 0 ||
-      energyAttribute < 0 ||
-      !resolutionUniform ||
-      !colorUniform ||
-      !timeUniform
+      !staticBuffer ||
+      !firstStateBuffers ||
+      !secondStateBuffers ||
+      !transformFeedback ||
+      !firstRenderVertexArray ||
+      !secondRenderVertexArray ||
+      !firstUpdateVertexArray ||
+      !secondUpdateVertexArray
     )
       return;
 
-    const particleBuffer = gl.createBuffer();
-    if (!particleBuffer) return;
+    const stateBuffers = [firstStateBuffers, secondStateBuffers] as const;
+    const renderVertexArrays = [firstRenderVertexArray, secondRenderVertexArray] as const;
+    const updateVertexArrays = [firstUpdateVertexArray, secondUpdateVertexArray] as const;
+    let readBufferIndex: 0 | 1 = 0;
 
-    gl.useProgram(program);
-    gl.bindBuffer(gl.ARRAY_BUFFER, particleBuffer);
-    gl.enableVertexAttribArray(centerAttribute);
-    gl.enableVertexAttribArray(radiusAttribute);
-    gl.enableVertexAttribArray(opacityAttribute);
-    gl.enableVertexAttribArray(vibranceAttribute);
-    gl.enableVertexAttribArray(energyAttribute);
-    gl.vertexAttribPointer(centerAttribute, 2, gl.FLOAT, false, particleRenderStrideBytes, 0);
-    gl.vertexAttribPointer(
-      radiusAttribute,
-      1,
-      gl.FLOAT,
-      false,
-      particleRenderStrideBytes,
-      2 * Float32Array.BYTES_PER_ELEMENT,
-    );
-    gl.vertexAttribPointer(
-      opacityAttribute,
-      1,
-      gl.FLOAT,
-      false,
-      particleRenderStrideBytes,
-      3 * Float32Array.BYTES_PER_ELEMENT,
-    );
-    gl.vertexAttribPointer(
-      vibranceAttribute,
-      1,
-      gl.FLOAT,
-      false,
-      particleRenderStrideBytes,
-      4 * Float32Array.BYTES_PER_ELEMENT,
-    );
-    gl.vertexAttribPointer(
-      energyAttribute,
-      1,
-      gl.FLOAT,
-      false,
-      particleRenderStrideBytes,
-      5 * Float32Array.BYTES_PER_ELEMENT,
-    );
-    gl.vertexAttribDivisor(centerAttribute, 1);
-    gl.vertexAttribDivisor(radiusAttribute, 1);
-    gl.vertexAttribDivisor(opacityAttribute, 1);
-    gl.vertexAttribDivisor(vibranceAttribute, 1);
-    gl.vertexAttribDivisor(energyAttribute, 1);
+    const bindFloatAttribute = (
+      attribute: number,
+      buffer: WebGLBuffer,
+      size: number,
+      stride: number,
+      offset: number,
+      divisor: number,
+    ) => {
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.enableVertexAttribArray(attribute);
+      gl.vertexAttribPointer(attribute, size, gl.FLOAT, false, stride, offset);
+      gl.vertexAttribDivisor(attribute, divisor);
+    };
+
+    const configureVertexArrays = (index: 0 | 1) => {
+      gl.bindVertexArray(renderVertexArrays[index]);
+      bindFloatAttribute(renderAttributes.position, stateBuffers[index].position, 2, 0, 0, 1);
+      bindFloatAttribute(renderAttributes.energy, stateBuffers[index].energy, 1, 0, 0, 1);
+      bindFloatAttribute(
+        renderAttributes.radius,
+        staticBuffer,
+        1,
+        particleStaticStrideBytes,
+        2 * Float32Array.BYTES_PER_ELEMENT,
+        1,
+      );
+      bindFloatAttribute(
+        renderAttributes.opacity,
+        staticBuffer,
+        1,
+        particleStaticStrideBytes,
+        3 * Float32Array.BYTES_PER_ELEMENT,
+        1,
+      );
+      bindFloatAttribute(
+        renderAttributes.vibrance,
+        staticBuffer,
+        1,
+        particleStaticStrideBytes,
+        4 * Float32Array.BYTES_PER_ELEMENT,
+        1,
+      );
+
+      gl.bindVertexArray(updateVertexArrays[index]);
+      bindFloatAttribute(updateAttributes.base, staticBuffer, 2, particleStaticStrideBytes, 0, 0);
+      bindFloatAttribute(
+        updateAttributes.vibrance,
+        staticBuffer,
+        1,
+        particleStaticStrideBytes,
+        4 * Float32Array.BYTES_PER_ELEMENT,
+        0,
+      );
+      bindFloatAttribute(updateAttributes.position, stateBuffers[index].position, 2, 0, 0, 0);
+      bindFloatAttribute(updateAttributes.velocity, stateBuffers[index].velocity, 2, 0, 0, 0);
+      bindFloatAttribute(updateAttributes.energy, stateBuffers[index].energy, 1, 0, 0, 0);
+      bindFloatAttribute(updateAttributes.active, stateBuffers[index].active, 1, 0, 0, 0);
+    };
+
+    configureVertexArrays(0);
+    configureVertexArrays(1);
+
+    gl.bindVertexArray(null);
     gl.enable(gl.BLEND);
     gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -432,27 +802,9 @@ export const AuthVisual = () => {
     let cssHeight = 1;
     let particleGap = dotGap;
     let particleCount = 0;
-    let bucketSize = 80;
-    let bucketMinX = 0;
-    let bucketMinY = 0;
-    let bucketColumnCount = 0;
-    let bucketRowCount = 0;
-    let particleBuckets: number[][] = [];
     let canvasRect = canvas.getBoundingClientRect();
-    let baseX = new Float32Array(0);
-    let baseY = new Float32Array(0);
-    let positionX = new Float32Array(0);
-    let positionY = new Float32Array(0);
-    let velocityX = new Float32Array(0);
-    let velocityY = new Float32Array(0);
-    let radius = new Float32Array(0);
-    let opacity = new Float32Array(0);
-    let vibrance = new Float32Array(0);
-    let energy = new Float32Array(0);
-    let renderData = new Float32Array(0);
-    let activeFlags = new Uint8Array(0);
-    let activeIndices: number[] = [];
     let waves: Wave[] = [];
+    let pendingImpulses: Impulse[] = [];
     let cursorTarget: Point | null = null;
     let cursorPosition: Point | null = null;
     let cursorVelocityX = 0;
@@ -461,6 +813,20 @@ export const AuthVisual = () => {
     let isPointerInside = false;
     let lastRenderTime = 0;
     let particlesSettled = true;
+    let settleUntil = 0;
+    const waveCenters = new Float32Array(maxWaveCount * 2);
+    const waveForces = new Float32Array(maxWaveCount);
+    const waveEnvelopes = new Float32Array(maxWaveCount);
+    const waveFrontRadii = new Float32Array(maxWaveCount);
+    const waveWidths = new Float32Array(maxWaveCount);
+    const waveInnerRadiiSquared = new Float32Array(maxWaveCount);
+    const waveOuterRadiiSquared = new Float32Array(maxWaveCount);
+    const waveActivationInnerRadiiSquared = new Float32Array(maxWaveCount);
+    const waveActivationOuterRadiiSquared = new Float32Array(maxWaveCount);
+    const impulseCenters = new Float32Array(maxImpulseCount * 2);
+    const impulseRadii = new Float32Array(maxImpulseCount);
+    const impulseRadiiSquared = new Float32Array(maxImpulseCount);
+    const impulseForces = new Float32Array(maxImpulseCount);
     const canAnimateParticles = !globalThis.window.matchMedia("(prefers-reduced-motion: reduce)")
       .matches;
     const canTrackCursor =
@@ -485,179 +851,51 @@ export const AuthVisual = () => {
       };
     };
 
-    const writeParticleData = () => {
-      for (let index = 0; index < particleCount; index += 1) {
-        const offset = index * particleRenderStride;
-
-        renderData[offset] = positionX[index];
-        renderData[offset + 1] = positionY[index];
-        renderData[offset + 2] = radius[index];
-        renderData[offset + 3] = opacity[index];
-        renderData[offset + 4] = vibrance[index];
-        renderData[offset + 5] = energy[index];
-      }
-    };
-
-    const syncParticleBuckets = () => {
-      bucketSize = clamp(particleGap * 12, 56, 132);
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
-
-      for (let index = 0; index < particleCount; index += 1) {
-        minX = Math.min(minX, baseX[index]);
-        minY = Math.min(minY, baseY[index]);
-        maxX = Math.max(maxX, baseX[index]);
-        maxY = Math.max(maxY, baseY[index]);
-      }
-
-      bucketMinX = Math.floor(minX / bucketSize);
-      bucketMinY = Math.floor(minY / bucketSize);
-      bucketColumnCount = Math.max(1, Math.floor(maxX / bucketSize) - bucketMinX + 1);
-      bucketRowCount = Math.max(1, Math.floor(maxY / bucketSize) - bucketMinY + 1);
-      particleBuckets = Array.from({ length: bucketColumnCount * bucketRowCount }, () => []);
-
-      for (let index = 0; index < particleCount; index += 1) {
-        const bucketX = Math.floor(baseX[index] / bucketSize) - bucketMinX;
-        const bucketY = Math.floor(baseY[index] / bucketSize) - bucketMinY;
-
-        particleBuckets[bucketY * bucketColumnCount + bucketX]?.push(index);
-      }
-    };
-
-    const activateParticle = (index: number) => {
-      if (activeFlags[index]) return;
-
-      activeFlags[index] = 1;
-      activeIndices.push(index);
-      particlesSettled = false;
-    };
-
-    const activateParticlesInRange = (
-      centerX: number,
-      centerY: number,
-      innerRadius: number,
-      outerRadius: number,
+    const uploadStateData = (
+      positions: Float32Array,
+      velocities: Float32Array,
+      energies: Float32Array,
+      activeFlags: Float32Array,
     ) => {
-      const clampedInnerRadius = Math.max(0, innerRadius);
-      const innerRadiusSquared = clampedInnerRadius * clampedInnerRadius;
-      const outerRadiusSquared = outerRadius * outerRadius;
-      const minBucketX = Math.max(0, Math.floor((centerX - outerRadius) / bucketSize) - bucketMinX);
-      const maxBucketX = Math.min(
-        bucketColumnCount - 1,
-        Math.floor((centerX + outerRadius) / bucketSize) - bucketMinX,
-      );
-      const minBucketY = Math.max(0, Math.floor((centerY - outerRadius) / bucketSize) - bucketMinY);
-      const maxBucketY = Math.min(
-        bucketRowCount - 1,
-        Math.floor((centerY + outerRadius) / bucketSize) - bucketMinY,
-      );
-
-      for (let bucketY = minBucketY; bucketY <= maxBucketY; bucketY += 1) {
-        for (let bucketX = minBucketX; bucketX <= maxBucketX; bucketX += 1) {
-          const bucket = particleBuckets[bucketY * bucketColumnCount + bucketX];
-
-          for (const index of bucket) {
-            const offsetX = baseX[index] - centerX;
-            const offsetY = baseY[index] - centerY;
-            const distanceSquared = offsetX * offsetX + offsetY * offsetY;
-
-            if (distanceSquared >= innerRadiusSquared && distanceSquared <= outerRadiusSquared) {
-              activateParticle(index);
-            }
-          }
-        }
-      }
-    };
-
-    const injectClickImpulse = (center: Point, radiusValue: number, force: number) => {
-      const radiusSquared = radiusValue * radiusValue;
-      const minBucketX = Math.max(
-        0,
-        Math.floor((center.x - radiusValue) / bucketSize) - bucketMinX,
-      );
-      const maxBucketX = Math.min(
-        bucketColumnCount - 1,
-        Math.floor((center.x + radiusValue) / bucketSize) - bucketMinX,
-      );
-      const minBucketY = Math.max(
-        0,
-        Math.floor((center.y - radiusValue) / bucketSize) - bucketMinY,
-      );
-      const maxBucketY = Math.min(
-        bucketRowCount - 1,
-        Math.floor((center.y + radiusValue) / bucketSize) - bucketMinY,
-      );
-
-      for (let bucketY = minBucketY; bucketY <= maxBucketY; bucketY += 1) {
-        for (let bucketX = minBucketX; bucketX <= maxBucketX; bucketX += 1) {
-          const bucket = particleBuckets[bucketY * bucketColumnCount + bucketX];
-
-          for (const index of bucket) {
-            const offsetX = baseX[index] - center.x;
-            const offsetY = baseY[index] - center.y;
-            const distanceSquared = offsetX * offsetX + offsetY * offsetY;
-
-            if (distanceSquared > radiusSquared) continue;
-
-            const distanceValue = Math.sqrt(distanceSquared);
-            const directionX =
-              distanceValue > 0.001
-                ? offsetX / distanceValue
-                : Math.cos(vibrance[index] * Math.PI * 2);
-            const directionY =
-              distanceValue > 0.001
-                ? offsetY / distanceValue
-                : Math.sin(vibrance[index] * Math.PI * 2);
-            const normalizedDistance = distanceValue / radiusValue;
-            const falloff = Math.exp(-(normalizedDistance * normalizedDistance) * 1.85);
-            const angularNoise = (vibrance[index] - 0.5) * force * falloff * 0.32;
-            const impulse = force * falloff;
-
-            activateParticle(index);
-            velocityX[index] += directionX * impulse - directionY * angularNoise;
-            velocityY[index] += directionY * impulse + directionX * angularNoise;
-            positionX[index] += directionX * impulse * 0.34;
-            positionY[index] += directionY * impulse * 0.34;
-            energy[index] = Math.max(energy[index], clamp(falloff * 0.48, 0, 1));
-          }
-        }
+      for (const bufferSet of stateBuffers) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufferSet.position);
+        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_COPY);
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufferSet.velocity);
+        gl.bufferData(gl.ARRAY_BUFFER, velocities, gl.DYNAMIC_COPY);
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufferSet.energy);
+        gl.bufferData(gl.ARRAY_BUFFER, energies, gl.DYNAMIC_COPY);
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufferSet.active);
+        gl.bufferData(gl.ARRAY_BUFFER, activeFlags, gl.DYNAMIC_COPY);
       }
     };
 
     const syncDots = () => {
       const dots = buildDots(bufferWidth, bufferHeight, particleGap);
+      const staticData = new Float32Array(dots.length * particleStaticStride);
+      const positions = new Float32Array(dots.length * 2);
+      const velocities = new Float32Array(dots.length * 2);
+      const energies = new Float32Array(dots.length);
+      const activeFlags = new Float32Array(dots.length);
 
       particleCount = dots.length;
-      baseX = new Float32Array(particleCount);
-      baseY = new Float32Array(particleCount);
-      positionX = new Float32Array(particleCount);
-      positionY = new Float32Array(particleCount);
-      velocityX = new Float32Array(particleCount);
-      velocityY = new Float32Array(particleCount);
-      radius = new Float32Array(particleCount);
-      opacity = new Float32Array(particleCount);
-      vibrance = new Float32Array(particleCount);
-      energy = new Float32Array(particleCount);
-      renderData = new Float32Array(particleCount * particleRenderStride);
-      activeFlags = new Uint8Array(particleCount);
-      activeIndices = [];
+      readBufferIndex = 0;
 
       for (const [index, dot] of dots.entries()) {
-        baseX[index] = dot.x;
-        baseY[index] = dot.y;
-        positionX[index] = dot.x;
-        positionY[index] = dot.y;
-        radius[index] = dot.radius;
-        opacity[index] = dot.opacity;
-        vibrance[index] = dot.vibrance;
+        const staticOffset = index * particleStaticStride;
+        const positionOffset = index * 2;
+
+        staticData[staticOffset] = dot.x;
+        staticData[staticOffset + 1] = dot.y;
+        staticData[staticOffset + 2] = dot.radius;
+        staticData[staticOffset + 3] = dot.opacity;
+        staticData[staticOffset + 4] = dot.vibrance;
+        positions[positionOffset] = dot.x;
+        positions[positionOffset + 1] = dot.y;
       }
 
-      writeParticleData();
-      syncParticleBuckets();
-      gl.bindBuffer(gl.ARRAY_BUFFER, particleBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, renderData, gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, staticBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, staticData, gl.STATIC_DRAW);
+      uploadStateData(positions, velocities, energies, activeFlags);
     };
 
     const resize = () => {
@@ -690,8 +928,7 @@ export const AuthVisual = () => {
       bufferHeight = pixelHeight;
       particleGap = nextParticleGap;
       waves = [];
-      activeIndices = [];
-      activeFlags.fill(0);
+      pendingImpulses = [];
       cursorTarget = null;
       cursorPosition = null;
       cursorVelocityX = 0;
@@ -699,24 +936,11 @@ export const AuthVisual = () => {
       cursorStrength = 0;
       isPointerInside = false;
       particlesSettled = true;
+      settleUntil = 0;
       canvas.width = pixelWidth;
       canvas.height = pixelHeight;
       gl.viewport(0, 0, pixelWidth, pixelHeight);
       syncDots();
-    };
-
-    const settleParticles = () => {
-      for (let index = 0; index < particleCount; index += 1) {
-        positionX[index] = baseX[index];
-        positionY[index] = baseY[index];
-        velocityX[index] = 0;
-        velocityY[index] = 0;
-        energy[index] = 0;
-      }
-
-      activeIndices = [];
-      activeFlags.fill(0);
-      particlesSettled = true;
     };
 
     const syncCursor = (elapsedMs: number) => {
@@ -765,30 +989,135 @@ export const AuthVisual = () => {
       return cursorStrength > 0.002 || Math.hypot(cursorVelocityX, cursorVelocityY) > 0.02;
     };
 
-    const simulateParticles = (now: number) => {
-      if (!canAnimateParticles) return false;
+    const syncWaveUniformData = (activeWaves: WaveFrame[]) => {
+      for (const [index, wave] of activeWaves.entries()) {
+        const centerOffset = index * 2;
 
-      const elapsedMs = lastRenderTime ? clamp(now - lastRenderTime, 8, 34) : 16.667;
+        waveCenters[centerOffset] = wave.x;
+        waveCenters[centerOffset + 1] = wave.y;
+        waveForces[index] = wave.force;
+        waveEnvelopes[index] = wave.envelope;
+        waveFrontRadii[index] = wave.frontRadius;
+        waveWidths[index] = wave.width;
+        waveInnerRadiiSquared[index] = wave.innerRadiusSquared;
+        waveOuterRadiiSquared[index] = wave.outerRadiusSquared;
+        waveActivationInnerRadiiSquared[index] = wave.activationInnerRadiusSquared;
+        waveActivationOuterRadiiSquared[index] = wave.activationOuterRadiusSquared;
+      }
+    };
+
+    const syncImpulseUniformData = (impulses: Impulse[]) => {
+      for (const [index, impulse] of impulses.entries()) {
+        const centerOffset = index * 2;
+
+        impulseCenters[centerOffset] = impulse.x;
+        impulseCenters[centerOffset + 1] = impulse.y;
+        impulseRadii[index] = impulse.radius;
+        impulseRadiiSquared[index] = impulse.radius * impulse.radius;
+        impulseForces[index] = impulse.force;
+      }
+    };
+
+    const runGpuSimulation = (
+      elapsedMs: number,
+      activeWaves: WaveFrame[],
+      impulses: Impulse[],
+      cursorActive: boolean,
+    ) => {
       const step = elapsedMs / 16.667;
       const minSide = Math.min(bufferWidth, bufferHeight);
       const diagonal = Math.hypot(bufferWidth, bufferHeight);
-      const cursorActive = syncCursor(elapsedMs);
       const cursorRadius = clamp(minSide * 0.066, 42, 96);
-      const cursorRadiusSquared = (cursorRadius * 2.35) ** 2;
+      const cursorActivationRadius = cursorRadius * 2.35;
       const cursorPush = clamp(minSide * 0.00125, 0.72, 1.9);
       const cursorSweep = clamp(minSide * 0.00014, 0.07, 0.24);
       const spring = 0.032;
       const damping = 0.87 ** step;
       const maxDisplacement = clamp(minSide * 0.04, 20, 54);
       const velocityLimit = clamp(minSide * 0.01, 6, 17);
-      let maxMotion = 0;
+      const writeBufferIndex: 0 | 1 = readBufferIndex === 0 ? 1 : 0;
 
-      if (cursorPosition && cursorStrength > 0.002) {
-        activateParticlesInRange(cursorPosition.x, cursorPosition.y, 0, cursorRadius * 2.35);
-      }
+      syncWaveUniformData(activeWaves);
+      syncImpulseUniformData(impulses);
+      gl.useProgram(updateProgram);
+      gl.bindVertexArray(updateVertexArrays[readBufferIndex]);
+      gl.uniform1f(updateUniforms.step, step);
+      gl.uniform1f(updateUniforms.spring, spring);
+      gl.uniform1f(updateUniforms.damping, damping);
+      gl.uniform1f(updateUniforms.diagonal, diagonal);
+      gl.uniform1f(updateUniforms.maxDisplacement, maxDisplacement);
+      gl.uniform1f(updateUniforms.velocityLimit, velocityLimit);
+      gl.uniform1f(updateUniforms.cursorActive, cursorActive ? 1 : 0);
+      gl.uniform2f(updateUniforms.cursor, cursorPosition?.x ?? 0, cursorPosition?.y ?? 0);
+      gl.uniform2f(
+        updateUniforms.cursorVelocity,
+        cursorVelocityX * 16.667,
+        cursorVelocityY * 16.667,
+      );
+      gl.uniform1f(updateUniforms.cursorRadius, cursorRadius);
+      gl.uniform1f(
+        updateUniforms.cursorRadiusSquared,
+        cursorActivationRadius * cursorActivationRadius,
+      );
+      gl.uniform1f(
+        updateUniforms.cursorActivationRadiusSquared,
+        cursorActivationRadius * cursorActivationRadius,
+      );
+      gl.uniform1f(updateUniforms.cursorPush, cursorPush);
+      gl.uniform1f(updateUniforms.cursorSweep, cursorSweep);
+      gl.uniform1f(updateUniforms.cursorStrength, cursorStrength);
+      gl.uniform1i(updateUniforms.waveCount, activeWaves.length);
+      gl.uniform2fv(updateUniforms.waveCenter, waveCenters);
+      gl.uniform1fv(updateUniforms.waveForce, waveForces);
+      gl.uniform1fv(updateUniforms.waveEnvelope, waveEnvelopes);
+      gl.uniform1fv(updateUniforms.waveFrontRadius, waveFrontRadii);
+      gl.uniform1fv(updateUniforms.waveWidth, waveWidths);
+      gl.uniform1fv(updateUniforms.waveInnerRadiusSquared, waveInnerRadiiSquared);
+      gl.uniform1fv(updateUniforms.waveOuterRadiusSquared, waveOuterRadiiSquared);
+      gl.uniform1fv(
+        updateUniforms.waveActivationInnerRadiusSquared,
+        waveActivationInnerRadiiSquared,
+      );
+      gl.uniform1fv(
+        updateUniforms.waveActivationOuterRadiusSquared,
+        waveActivationOuterRadiiSquared,
+      );
+      gl.uniform1i(updateUniforms.impulseCount, impulses.length);
+      gl.uniform2fv(updateUniforms.impulseCenter, impulseCenters);
+      gl.uniform1fv(updateUniforms.impulseRadius, impulseRadii);
+      gl.uniform1fv(updateUniforms.impulseRadiusSquared, impulseRadiiSquared);
+      gl.uniform1fv(updateUniforms.impulseForce, impulseForces);
+      gl.enable(gl.RASTERIZER_DISCARD);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, transformFeedback);
+      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, stateBuffers[writeBufferIndex].position);
+      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 1, stateBuffers[writeBufferIndex].velocity);
+      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 2, stateBuffers[writeBufferIndex].energy);
+      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 3, stateBuffers[writeBufferIndex].active);
+      gl.beginTransformFeedback(gl.POINTS);
+      gl.drawArrays(gl.POINTS, 0, particleCount);
+      gl.endTransformFeedback();
+      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
+      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 1, null);
+      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 2, null);
+      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 3, null);
+      gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
+      gl.disable(gl.RASTERIZER_DISCARD);
+      gl.bindVertexArray(null);
+      readBufferIndex = writeBufferIndex;
+    };
+
+    const simulateParticles = (now: number) => {
+      if (!canAnimateParticles) return false;
+
+      const elapsedMs = lastRenderTime ? clamp(now - lastRenderTime, 8, 34) : 16.667;
+      const cursorMoving = syncCursor(elapsedMs);
+      const cursorActive = !!cursorPosition && cursorStrength > 0.002;
+      const settlingDuration = 2200;
+      const impulses = pendingImpulses.slice(-maxImpulseCount);
+      const activeWaves: WaveFrame[] = [];
 
       waves = waves.filter((wave) => now - wave.startedAt <= wave.life);
-      const activeWaves: WaveFrame[] = [];
 
       for (const wave of waves) {
         const age = now - wave.startedAt;
@@ -799,12 +1128,13 @@ export const AuthVisual = () => {
         const activationInnerRadius = Math.max(0, wave.activatedRadius - wave.width * 5.6);
 
         if (activationOuterRadius > wave.activatedRadius) {
-          activateParticlesInRange(wave.x, wave.y, activationInnerRadius, activationOuterRadius);
           wave.activatedRadius = activationOuterRadius;
         }
 
         activeWaves.push({
           ...wave,
+          activationInnerRadiusSquared: activationInnerRadius * activationInnerRadius,
+          activationOuterRadiusSquared: activationOuterRadius * activationOuterRadius,
           envelope: (1 - age / wave.life) ** 1.12,
           frontRadius,
           innerRadiusSquared: innerRadius * innerRadius,
@@ -812,154 +1142,31 @@ export const AuthVisual = () => {
         });
       }
 
-      if (particlesSettled && !cursorActive && activeWaves.length === 0) return false;
-
-      let nextActiveCount = 0;
-      const activeCount = activeIndices.length;
-
-      for (let activeIndex = 0; activeIndex < activeCount; activeIndex += 1) {
-        const index = activeIndices[activeIndex];
-        const restoreX = baseX[index] - positionX[index];
-        const restoreY = baseY[index] - positionY[index];
-        let ax = restoreX * spring;
-        let ay = restoreY * spring;
-        let localEnergy = 0;
-
-        if (cursorPosition && cursorStrength > 0.002) {
-          const offsetX = positionX[index] - cursorPosition.x;
-          const offsetY = positionY[index] - cursorPosition.y;
-          const distanceSquared = offsetX * offsetX + offsetY * offsetY;
-
-          if (distanceSquared <= cursorRadiusSquared) {
-            const distanceValue = Math.sqrt(distanceSquared);
-            const directionX =
-              distanceValue > 0.001
-                ? offsetX / distanceValue
-                : Math.cos(vibrance[index] * Math.PI * 2);
-            const directionY =
-              distanceValue > 0.001
-                ? offsetY / distanceValue
-                : Math.sin(vibrance[index] * Math.PI * 2);
-            const normalizedDistance = distanceValue / cursorRadius;
-            const pressure =
-              Math.exp(-normalizedDistance * normalizedDistance * 1.38) * cursorStrength;
-            const velocityFrameX = cursorVelocityX * 16.667;
-            const velocityFrameY = cursorVelocityY * 16.667;
-            const cursorSpeed = Math.hypot(velocityFrameX, velocityFrameY);
-            const speedPressure = clamp(cursorSpeed / cursorRadius, 0, 1.45);
-            const wake =
-              Math.exp(-normalizedDistance * normalizedDistance * 0.62) *
-              cursorStrength *
-              speedPressure;
-            const swirl =
-              (vibrance[index] - 0.5) * pressure * cursorPush * (0.26 + speedPressure * 0.16);
-
-            ax += directionX * pressure * cursorPush * (1 + speedPressure * 0.34);
-            ay += directionY * pressure * cursorPush * (1 + speedPressure * 0.34);
-            ax += velocityFrameX * wake * cursorSweep - directionY * swirl;
-            ay += velocityFrameY * wake * cursorSweep + directionX * swirl;
-            localEnergy += pressure * (0.18 + speedPressure * 0.14);
-          }
-        }
-
-        for (const wave of activeWaves) {
-          const offsetX = positionX[index] - wave.x;
-          const offsetY = positionY[index] - wave.y;
-          const distanceSquared = offsetX * offsetX + offsetY * offsetY;
-
-          if (
-            distanceSquared < wave.innerRadiusSquared ||
-            distanceSquared > wave.outerRadiusSquared
-          ) {
-            continue;
-          }
-
-          const distanceValue = Math.sqrt(distanceSquared);
-          const directionX =
-            distanceValue > 0.001
-              ? offsetX / distanceValue
-              : Math.cos(vibrance[index] * Math.PI * 2);
-          const directionY =
-            distanceValue > 0.001
-              ? offsetY / distanceValue
-              : Math.sin(vibrance[index] * Math.PI * 2);
-          const frontDistance = distanceValue - wave.frontRadius;
-          const band = Math.exp(-((frontDistance / wave.width) ** 2) * 0.38);
-          const pulse = band * wave.envelope;
-          const aftershock =
-            Math.exp(-(((frontDistance + wave.width * 2.15) / (wave.width * 2.05)) ** 2) * 0.42) *
-            wave.envelope;
-
-          ax += directionX * (pulse * wave.force - aftershock * wave.force * 0.12);
-          ay += directionY * (pulse * wave.force - aftershock * wave.force * 0.12);
-          localEnergy += pulse * 0.24 + aftershock * 0.08;
-        }
-
-        velocityX[index] = (velocityX[index] + ax * step) * damping;
-        velocityY[index] = (velocityY[index] + ay * step) * damping;
-
-        const speed = Math.hypot(velocityX[index], velocityY[index]);
-        const particleEnergy = clamp(energy[index] + localEnergy, 0, 4);
-        const particleVelocityLimit = velocityLimit * (1 + particleEnergy * 1.8);
-
-        if (speed > particleVelocityLimit) {
-          const velocityScale = particleVelocityLimit / speed;
-
-          velocityX[index] *= velocityScale;
-          velocityY[index] *= velocityScale;
-        }
-
-        positionX[index] += velocityX[index] * step;
-        positionY[index] += velocityY[index] * step;
-
-        const displacementX = positionX[index] - baseX[index];
-        const displacementY = positionY[index] - baseY[index];
-        const displacement = Math.hypot(displacementX, displacementY);
-        const particleMaxDisplacement = maxDisplacement * (1 + particleEnergy * 1.65);
-
-        if (displacement > particleMaxDisplacement) {
-          const displacementScale = particleMaxDisplacement / displacement;
-
-          positionX[index] = baseX[index] + displacementX * displacementScale;
-          positionY[index] = baseY[index] + displacementY * displacementScale;
-          velocityX[index] *= 0.58;
-          velocityY[index] *= 0.58;
-        }
-
-        const targetEnergy = clamp(
-          localEnergy + speed * 0.032 + (displacement / diagonal) * 2.3,
-          0,
-          1,
-        );
-        const energyFollow = 1 - (targetEnergy > energy[index] ? 0.7 : 0.88) ** step;
-
-        energy[index] = mix(energy[index], targetEnergy, energyFollow);
-        maxMotion = Math.max(maxMotion, speed + displacement * 0.03 + energy[index]);
-
-        if (speed + displacement * 0.04 + energy[index] > 0.012 || localEnergy > 0.001) {
-          activeIndices[nextActiveCount] = index;
-          nextActiveCount += 1;
-        } else {
-          positionX[index] = baseX[index];
-          positionY[index] = baseY[index];
-          velocityX[index] = 0;
-          velocityY[index] = 0;
-          energy[index] = 0;
-          activeFlags[index] = 0;
-        }
+      if (cursorActive || activeWaves.length > 0 || impulses.length > 0) {
+        settleUntil = Math.max(settleUntil, now + settlingDuration);
       }
 
-      activeIndices.length = nextActiveCount;
-
-      if (!cursorActive && waves.length === 0 && activeIndices.length === 0 && maxMotion < 0.018) {
-        settleParticles();
-        writeParticleData();
+      if (particlesSettled && !cursorActive && activeWaves.length === 0 && impulses.length === 0) {
         return false;
       }
 
-      writeParticleData();
-      particlesSettled = false;
-      return cursorActive || waves.length > 0 || activeIndices.length > 0 || maxMotion >= 0.018;
+      if (
+        !cursorActive &&
+        activeWaves.length === 0 &&
+        impulses.length === 0 &&
+        now >= settleUntil
+      ) {
+        particlesSettled = true;
+        return false;
+      }
+
+      runGpuSimulation(elapsedMs, activeWaves, impulses, cursorActive);
+      pendingImpulses = [];
+
+      const shouldContinue = cursorMoving || waves.length > 0 || now < settleUntil;
+
+      particlesSettled = !shouldContinue;
+      return shouldContinue;
     };
 
     const render = () => {
@@ -970,17 +1177,13 @@ export const AuthVisual = () => {
 
       gl.clearColor(background[0], background[1], background[2], 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.useProgram(program);
-      gl.uniform2f(resolutionUniform, bufferWidth, bufferHeight);
-      gl.uniform3f(colorUniform, color[0], color[1], color[2]);
-      gl.uniform1f(timeUniform, now / 1000);
-
-      if (isActive) {
-        gl.bindBuffer(gl.ARRAY_BUFFER, particleBuffer);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, renderData);
-      }
-
+      gl.useProgram(renderProgram);
+      gl.bindVertexArray(renderVertexArrays[readBufferIndex]);
+      gl.uniform2f(renderUniforms.resolution, bufferWidth, bufferHeight);
+      gl.uniform3f(renderUniforms.color, color[0], color[1], color[2]);
+      gl.uniform1f(renderUniforms.time, now / 1000);
       gl.drawArraysInstanced(gl.POINTS, 0, 1, particleCount);
+      gl.bindVertexArray(null);
       lastRenderTime = now;
 
       return isActive;
@@ -1062,7 +1265,14 @@ export const AuthVisual = () => {
       }
 
       particlesSettled = false;
-      injectClickImpulse(canvasPoint, impulseRadius, impulseForce);
+      pendingImpulses = [
+        ...pendingImpulses,
+        {
+          ...canvasPoint,
+          force: impulseForce,
+          radius: impulseRadius,
+        },
+      ].slice(-maxImpulseCount);
       waves = [
         ...previousWaves,
         {
@@ -1133,8 +1343,26 @@ export const AuthVisual = () => {
         canvas.removeEventListener("pointerdown", handlePointerDown);
       }
 
-      gl.deleteBuffer(particleBuffer);
-      gl.deleteProgram(program);
+      gl.deleteBuffer(staticBuffer);
+
+      for (const bufferSet of stateBuffers) {
+        gl.deleteBuffer(bufferSet.position);
+        gl.deleteBuffer(bufferSet.velocity);
+        gl.deleteBuffer(bufferSet.energy);
+        gl.deleteBuffer(bufferSet.active);
+      }
+
+      for (const vertexArray of renderVertexArrays) {
+        gl.deleteVertexArray(vertexArray);
+      }
+
+      for (const vertexArray of updateVertexArrays) {
+        gl.deleteVertexArray(vertexArray);
+      }
+
+      gl.deleteTransformFeedback(transformFeedback);
+      gl.deleteProgram(renderProgram);
+      gl.deleteProgram(updateProgram);
     };
   }, []);
 
