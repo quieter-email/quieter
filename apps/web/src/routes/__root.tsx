@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
 
-import type { ReactNode } from "react";
+import * as Sentry from "@sentry/tanstackstart-react";
 import { HeadContent, Link, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
+import { type ReactNode, useEffect } from "react";
 import { Providers } from "~/components/providers";
 import appCss from "~/styles.css?url";
 
@@ -129,6 +130,12 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
 }
 
 function RootErrorComponent({ error, reset }: { error: Error | null; reset: () => void }) {
+  useEffect(() => {
+    if (error) {
+      Sentry.captureException(error);
+    }
+  }, [error]);
+
   const message =
     error instanceof Error && error.message
       ? error.message

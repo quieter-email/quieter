@@ -1,3 +1,7 @@
+import {
+  sentryGlobalFunctionMiddleware,
+  sentryGlobalRequestMiddleware,
+} from "@sentry/tanstackstart-react";
 import { createCsrfMiddleware, createMiddleware, createStart } from "@tanstack/react-start";
 import {
   hasSitePasswordConfigured,
@@ -44,7 +48,8 @@ const sitePasswordMiddleware = createMiddleware().server(async ({ next, request 
 });
 
 export const startInstance = createStart(() => ({
-  requestMiddleware: [csrfMiddleware, sitePasswordMiddleware],
+  functionMiddleware: [sentryGlobalFunctionMiddleware],
+  requestMiddleware: [sentryGlobalRequestMiddleware, csrfMiddleware, sitePasswordMiddleware],
 }));
 
 const shouldGatePath = (pathname: string) => {
