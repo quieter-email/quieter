@@ -135,8 +135,6 @@ uniform float uStep;
 uniform float uSpring;
 uniform float uDamping;
 uniform float uDiagonal;
-uniform float uMaxDisplacement;
-uniform float uVelocityLimit;
 
 uniform float uCursorActive;
 uniform vec2 uCursor;
@@ -228,7 +226,7 @@ void main() {
       impulseDirection.y * impulse + impulseDirection.x * angularNoise
     );
     position += impulseDirection * impulse * 0.34;
-    energy = max(energy, clamp(falloff * 0.48, 0.0, 1.0));
+    energy += falloff * 0.48;
   }
 
   if (nextActive < 0.5) {
@@ -293,32 +291,12 @@ void main() {
   velocity = (velocity + acceleration * uStep) * uDamping;
 
   float speed = length(velocity);
-  float particleEnergy = clamp(energy + localEnergy, 0.0, 4.0);
-  float particleVelocityLimit = uVelocityLimit * (1.0 + particleEnergy * 1.8);
-
-  if (speed > particleVelocityLimit) {
-    float velocityScale = particleVelocityLimit / speed;
-
-    velocity *= velocityScale;
-    speed = particleVelocityLimit;
-  }
-
   position += velocity * uStep;
 
   vec2 displacementVector = position - aBase;
   float displacement = length(displacementVector);
-  float particleMaxDisplacement = uMaxDisplacement * (1.0 + particleEnergy * 1.65);
-
-  if (displacement > particleMaxDisplacement) {
-    float displacementScale = particleMaxDisplacement / displacement;
-
-    position = aBase + displacementVector * displacementScale;
-    velocity *= 0.58;
-    displacement = particleMaxDisplacement;
-  }
-
-  float targetEnergy = clamp(localEnergy + speed * 0.032 + (displacement / uDiagonal) * 2.3, 0.0, 1.0);
-  float energyFollow = 1.0 - pow(targetEnergy > energy ? 0.7 : 0.88, uStep);
+  float targetEnergy = max(localEnergy + speed * 0.032 + (displacement / uDiagonal) * 2.3, 0.0);
+  float energyFollow = 1.0 - pow(targetEnergy > energy ? 0.7 : 0.93, uStep);
 
   energy = mix(energy, targetEnergy, energyFollow);
 
@@ -681,10 +659,8 @@ export const AuthVisual = () => {
       impulseForce: getUniform(updateProgram, "uImpulseForce[0]"),
       impulseRadius: getUniform(updateProgram, "uImpulseRadius[0]"),
       impulseRadiusSquared: getUniform(updateProgram, "uImpulseRadiusSquared[0]"),
-      maxDisplacement: getUniform(updateProgram, "uMaxDisplacement"),
       spring: getUniform(updateProgram, "uSpring"),
       step: getUniform(updateProgram, "uStep"),
-      velocityLimit: getUniform(updateProgram, "uVelocityLimit"),
       waveActivationInnerRadiusSquared: getUniform(
         updateProgram,
         "uWaveActivationInnerRadiusSquared[0]",
@@ -1033,8 +1009,6 @@ export const AuthVisual = () => {
       const cursorSweep = clamp(minSide * 0.00014, 0.07, 0.24);
       const spring = 0.032;
       const damping = 0.87 ** step;
-      const maxDisplacement = clamp(minSide * 0.04, 20, 54);
-      const velocityLimit = clamp(minSide * 0.01, 6, 17);
       const writeBufferIndex: 0 | 1 = readBufferIndex === 0 ? 1 : 0;
 
       syncWaveUniformData(activeWaves);
@@ -1045,8 +1019,6 @@ export const AuthVisual = () => {
       gl.uniform1f(updateUniforms.spring, spring);
       gl.uniform1f(updateUniforms.damping, damping);
       gl.uniform1f(updateUniforms.diagonal, diagonal);
-      gl.uniform1f(updateUniforms.maxDisplacement, maxDisplacement);
-      gl.uniform1f(updateUniforms.velocityLimit, velocityLimit);
       gl.uniform1f(updateUniforms.cursorActive, cursorActive ? 1 : 0);
       gl.uniform2f(updateUniforms.cursor, cursorPosition?.x ?? 0, cursorPosition?.y ?? 0);
       gl.uniform2f(
@@ -1254,9 +1226,10 @@ export const AuthVisual = () => {
       const diagonal = Math.hypot(bufferWidth, bufferHeight);
       const speed = clamp(unit * 0.008, 0.5, 1);
       const width = clamp(unit * 0.58, 48, 120);
-      const force = clamp(unit * 0.052, 3.6, 9.6);
+      const force = clamp(unit * 0.044, 3.1, 8.2);
+      const waveForce = clamp(unit * 0.037, 2.6, 7);
       const impulseRadius = clamp(width * 1.28, 62, 190);
-      const impulseForce = clamp(force * 1.42, 5.2, 16);
+      const impulseForce = clamp(force * 1.24, 4.4, 13.5);
       const previousWaves = waves.filter((wave) => now - wave.startedAt <= wave.life);
 
       if (canTrackCursor && (event.pointerType === "mouse" || event.pointerType === "pen")) {
@@ -1278,7 +1251,7 @@ export const AuthVisual = () => {
         {
           ...canvasPoint,
           activatedRadius: 0,
-          force,
+          force: waveForce,
           life: diagonal / speed + 780,
           speed,
           startedAt: now,
