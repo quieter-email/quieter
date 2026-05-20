@@ -1,0 +1,27 @@
+{
+  "name": "@quieter/ai",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "fmt": "oxfmt --config ../../oxfmt.json .",
+    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
+    "lint": "oxlint --config ../../oxlint.json .",
+    "lint:fix": "oxlint --fix --config ../../oxlint.json .",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@tanstack/ai": "catalog:",
+    "@tanstack/ai-openrouter": "catalog:"
+  },
+  "devDependencies": {
+    "@quieter/config": "workspace:*",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:"
+  }
+}
