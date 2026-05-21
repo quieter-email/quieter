@@ -28,7 +28,8 @@ type MailboxWorkspaceProps = {
 export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const queryClient = useQueryClient();
   const composeDialogRef = useRef<ComposeDialogHandle | null>(null);
-  const { activeMailbox, mailboxId, messageId, query, setMailboxSearch } = useMailboxRouteSearch();
+  const { activeMailbox, mailboxId, messageId, query, setMailboxSearch, view } =
+    useMailboxRouteSearch();
   const {
     isManualRefreshing,
     isMobileSidebarOpen,
@@ -75,7 +76,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     messageId,
     queryClient,
     searchQuery: query.trim(),
-    selectedMailboxId,
+    selectedMailboxId: view === "inbox" ? selectedMailboxId : null,
     setIsManualRefreshing,
   });
 
@@ -252,6 +253,10 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
           if (nextMailboxId === selectedMailboxId) return;
           void setMailboxSearch({ mailboxId: nextMailboxId, messageId: null });
         }}
+        onSelectView={(nextView) => {
+          if (nextView === view) return;
+          void setMailboxSearch({ view: nextView });
+        }}
         onSetDefaultMailbox={(nextMailboxId) => {
           void setDefaultMailboxMutation.mutateAsync({ mailboxId: nextMailboxId });
         }}
@@ -260,6 +265,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         searchQuery={query.trim()}
         selectedMailboxId={selectedMailboxId}
         selectedMessage={selectedMessage}
+        selectedView={view}
       />
       <ComposeDialog
         key={selectedMailboxId ?? user.id ?? "signed-out"}

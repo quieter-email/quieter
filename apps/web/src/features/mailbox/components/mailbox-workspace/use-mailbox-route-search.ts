@@ -1,6 +1,7 @@
 "use client";
 
 import { useNavigate } from "@tanstack/react-router";
+import type { MailboxWorkspaceView } from "~/features/mailbox/domain/mailbox-workspace-view";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 import type { MailboxSearch } from "~/routes/index";
 import { inboxRouteApi } from "~/lib/route-apis";
@@ -10,6 +11,7 @@ type MailboxSearchPatch = {
   mailboxId?: string | null;
   messageId?: string | null;
   query?: string | null;
+  view?: MailboxWorkspaceView;
 };
 
 type MailboxSearchOptions = {
@@ -32,13 +34,14 @@ const mergeMailboxSearch = (previous: MailboxSearch, patch: MailboxSearchPatch):
         : patch.messageId.trim() || undefined,
   query:
     patch.query === undefined ? previous.query : patch.query === null ? "" : patch.query.trim(),
+  view: patch.view ?? previous.view,
 });
 
 export const useMailboxRouteSearch = () => {
   const navigate = useNavigate({
     from: "/",
   });
-  const { mailbox: activeMailbox, mailboxId, messageId, query } = inboxRouteApi.useSearch();
+  const { mailbox: activeMailbox, mailboxId, messageId, query, view } = inboxRouteApi.useSearch();
 
   const setMailboxSearch = (
     patch: MailboxSearchPatch,
@@ -58,5 +61,6 @@ export const useMailboxRouteSearch = () => {
     messageId,
     query,
     setMailboxSearch,
+    view,
   };
 };

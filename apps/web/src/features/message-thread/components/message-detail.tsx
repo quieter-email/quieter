@@ -3,6 +3,7 @@
 import { ArrowLeft01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, IconButtonTooltip } from "@quieter/ui";
+import { m } from "motion/react";
 import { Suspense } from "react";
 import type { ComposeDraftState } from "~/features/compose";
 import type {
@@ -24,6 +25,14 @@ type MessageDetailProps = {
   pendingActions: MailboxPendingActions;
   selectedMessage: MessageListItem | null;
 };
+
+const messageDetailContentMotion = {
+  initial: { opacity: 0, scale: 0.96, filter: "blur(14px)" },
+  animate: { opacity: 1, scale: 1, filter: "blur(0px)" },
+  exit: { opacity: 0, scale: 0.96, filter: "blur(14px)" },
+  style: { transformOrigin: "center center" },
+  transition: { duration: 0.18, ease: "easeOut" },
+} as const;
 
 const MessageDetailLoadingSkeleton = () => (
   <div className="mx-auto w-full max-w-3xl space-y-6 py-6" role="status">
@@ -89,32 +98,34 @@ export const MessageDetail = ({
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto" data-message-detail-scroll-container>
-        {isPending && !selectedMessage ? (
-          <MessageDetailLoadingSkeleton />
-        ) : selectedMessage ? (
-          <Suspense
-            fallback={
-              <div className="grid h-full place-items-center text-sm text-muted-foreground">
-                <HugeiconsIcon
-                  className="animate-spin text-muted-foreground"
-                  icon={Loading03Icon}
-                />
-              </div>
-            }
-          >
-            <MessageView
-              activeMailbox={activeMailbox}
-              currentUserEmail={currentUserEmail}
-              mailboxActions={mailboxActions}
-              mailboxId={mailboxId}
-              message={selectedMessage}
-              onComposeDraftRequested={onComposeDraftRequested}
-              pendingActions={pendingActions}
-            />
-          </Suspense>
-        ) : (
-          emptyState
-        )}
+        <m.div className="min-h-full" {...messageDetailContentMotion}>
+          {isPending && !selectedMessage ? (
+            <MessageDetailLoadingSkeleton />
+          ) : selectedMessage ? (
+            <Suspense
+              fallback={
+                <div className="grid h-full place-items-center text-sm text-muted-foreground">
+                  <HugeiconsIcon
+                    className="animate-spin text-muted-foreground"
+                    icon={Loading03Icon}
+                  />
+                </div>
+              }
+            >
+              <MessageView
+                activeMailbox={activeMailbox}
+                currentUserEmail={currentUserEmail}
+                mailboxActions={mailboxActions}
+                mailboxId={mailboxId}
+                message={selectedMessage}
+                onComposeDraftRequested={onComposeDraftRequested}
+                pendingActions={pendingActions}
+              />
+            </Suspense>
+          ) : (
+            emptyState
+          )}
+        </m.div>
       </div>
     </section>
   );

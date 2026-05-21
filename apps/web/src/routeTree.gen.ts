@@ -19,6 +19,7 @@ import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
 import { Route as ApiSitePasswordRouteImport } from './routes/api/site-password'
 import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
 import { Route as ApiMessagesRouteImport } from './routes/api/messages'
+import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 
@@ -72,6 +73,11 @@ const ApiMessagesRoute = ApiMessagesRouteImport.update({
   path: '/api/messages',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiChatRoute = ApiChatRouteImport.update({
+  id: '/api/chat',
+  path: '/api/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiOrpcSplatRoute = ApiOrpcSplatRouteImport.update({
   id: '/api/orpc/$',
   path: '/api/orpc/$',
@@ -90,6 +96,7 @@ export interface FileRoutesByFullPath {
   '/home': typeof HomeRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
+  '/api/chat': typeof ApiChatRoute
   '/api/messages': typeof ApiMessagesRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/site-password': typeof ApiSitePasswordRoute
@@ -104,6 +111,7 @@ export interface FileRoutesByTo {
   '/home': typeof HomeRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
+  '/api/chat': typeof ApiChatRoute
   '/api/messages': typeof ApiMessagesRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/site-password': typeof ApiSitePasswordRoute
@@ -119,6 +127,7 @@ export interface FileRoutesById {
   '/home': typeof HomeRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
+  '/api/chat': typeof ApiChatRoute
   '/api/messages': typeof ApiMessagesRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/site-password': typeof ApiSitePasswordRoute
@@ -135,6 +144,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/settings'
     | '/site-password'
+    | '/api/chat'
     | '/api/messages'
     | '/api/openapi'
     | '/api/site-password'
@@ -149,6 +159,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/settings'
     | '/site-password'
+    | '/api/chat'
     | '/api/messages'
     | '/api/openapi'
     | '/api/site-password'
@@ -163,6 +174,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/settings'
     | '/site-password'
+    | '/api/chat'
     | '/api/messages'
     | '/api/openapi'
     | '/api/site-password'
@@ -178,6 +190,7 @@ export interface RootRouteChildren {
   HomeRoute: typeof HomeRoute
   SettingsRoute: typeof SettingsRoute
   SitePasswordRoute: typeof SitePasswordRoute
+  ApiChatRoute: typeof ApiChatRoute
   ApiMessagesRoute: typeof ApiMessagesRoute
   ApiOpenapiRoute: typeof ApiOpenapiRoute
   ApiSitePasswordRoute: typeof ApiSitePasswordRoute
@@ -258,6 +271,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMessagesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/chat': {
+      id: '/api/chat'
+      path: '/api/chat'
+      fullPath: '/api/chat'
+      preLoaderRoute: typeof ApiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/orpc/$': {
       id: '/api/orpc/$'
       path: '/api/orpc/$'
@@ -282,6 +302,7 @@ const rootRouteChildren: RootRouteChildren = {
   HomeRoute: HomeRoute,
   SettingsRoute: SettingsRoute,
   SitePasswordRoute: SitePasswordRoute,
+  ApiChatRoute: ApiChatRoute,
   ApiMessagesRoute: ApiMessagesRoute,
   ApiOpenapiRoute: ApiOpenapiRoute,
   ApiSitePasswordRoute: ApiSitePasswordRoute,

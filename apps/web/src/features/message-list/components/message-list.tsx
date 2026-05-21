@@ -2,6 +2,7 @@
 
 import { Delete01Icon, Delete02Icon, Mail01Icon, MailOpen02Icon } from "@hugeicons/core-free-icons";
 import { toast } from "@quieter/ui";
+import { m } from "motion/react";
 import { useMemo } from "react";
 import type { MessageListItem } from "~/lib/gmail/gmail";
 import { MessageListSearch } from "~/features/message-search/components/message-list-search";
@@ -10,6 +11,14 @@ import type { MessageListBulkAction, MessageListProps } from "./message-list-typ
 import { MessageListScrollPane } from "./message-list-scroll-pane";
 import { MessageListSelectionToolbar } from "./message-list-selection-toolbar";
 import { useMessageListSelection } from "./use-message-list-selection";
+
+const messageListContentMotion = {
+  initial: { opacity: 0, scale: 0.96, filter: "blur(14px)" },
+  animate: { opacity: 1, scale: 1, filter: "blur(0px)" },
+  exit: { opacity: 0, scale: 0.96, filter: "blur(14px)" },
+  style: { transformOrigin: "center center" },
+  transition: { duration: 0.18, ease: "easeOut" },
+} as const;
 
 const buildDraftListEntry = (message: MessageListItem): ThreadListEntry => ({
   threadId: message.draftId ?? message.id,
@@ -165,12 +174,14 @@ export const MessageList = (props: MessageListProps) => {
         />
       )}
 
-      <MessageListScrollPane
-        key={scrollPaneKey}
-        list={props}
-        selection={selection}
-        threadedMessages={threadedMessages}
-      />
+      <m.div className="flex min-h-0 flex-1 flex-col" {...messageListContentMotion}>
+        <MessageListScrollPane
+          key={scrollPaneKey}
+          list={props}
+          selection={selection}
+          threadedMessages={threadedMessages}
+        />
+      </m.div>
     </div>
   );
 };
