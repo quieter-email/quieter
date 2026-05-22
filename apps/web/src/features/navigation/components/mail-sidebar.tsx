@@ -3,14 +3,33 @@
 import {
   Cancel01Icon,
   Chat01Icon,
+  ChatAddIcon,
+  Delete01Icon,
   Edit01Icon,
   InboxIcon,
+  MoreHorizontalIcon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, cn, IconButtonTooltip, LinkButton } from "@quieter/ui";
+import {
+  Button,
+  cn,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  IconButtonTooltip,
+  Input,
+  LinkButton,
+} from "@quieter/ui";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
-import { useEffect, useEffectEvent } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useEffectEvent,
+  useState,
+} from "react";
 import type { MailboxWorkspaceView } from "~/features/mailbox/domain/mailbox-workspace-view";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 import {
@@ -21,6 +40,12 @@ import { SidebarLabelNav } from "~/features/navigation/components/sidebar-label-
 import { SidebarMailboxNav } from "~/features/navigation/components/sidebar-mailbox-nav";
 
 type MailSidebarProps = {
+  activeChatId: string | null;
+  chats: Array<{
+    id: string;
+    title: string | null;
+    updatedAt: Date;
+  }>;
   defaultMailboxId: string | null;
   groups: Array<{
     id: string;
@@ -41,6 +66,10 @@ type MailSidebarProps = {
   onSelectMailboxId: (mailboxId: string) => void;
   onSetDefaultMailbox: (mailboxId: string | null) => void;
   onSearch: (query: string) => void;
+  onCreateChat: () => void;
+  onDeleteChat: (chatId: string) => void;
+  onRenameChat: (chatId: string, title: string) => void;
+  onSelectChat: (chatId: string) => void;
   onComposeNewMail: () => void;
   onSelectView: (view: MailboxWorkspaceView) => void;
   searchQuery: string;
@@ -56,13 +85,127 @@ type SidebarContentProps = Omit<MailSidebarProps, "isMobileOpen" | "onMobileOpen
 
 const getSidebarEntranceDelay = (step: number) => step * 0.1;
 
+type SidebarChat = MailSidebarProps["chats"][number];
+
+type SidebarChatRowProps = {
+  chat: SidebarChat;
+  editingTitle: string;
+  index: number;
+  isActive: boolean;
+  isEditing: boolean;
+  onCancelRename: () => void;
+  onDelete: (chatId: string) => void;
+  onEditingTitleChange: (title: string) => void;
+  onRenameKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+  onRenameSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onSelect: (chatId: string) => void;
+  onStartRename: (chat: SidebarChat) => void;
+};
+
+const SidebarChatRow = ({
+  chat,
+  editingTitle,
+  index,
+  isActive,
+  isEditing,
+  onCancelRename,
+  onDelete,
+  onEditingTitleChange,
+  onRenameKeyDown,
+  onRenameSubmit,
+  onSelect,
+  onStartRename,
+}: SidebarChatRowProps) => {
+  const title = chat.title?.trim() || "New chat";
+
+  return (
+    <m.div
+      key={chat.id}
+      className="w-full will-change-[transform,opacity,filter]"
+      initial={{ opacity: 0, x: -20, filter: "blur(8px)" }}
+      animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+      transition={{
+        delay: getSidebarEntranceDelay(index + 3),
+        duration: 0.5,
+        ease: "easeOut",
+      }}
+    >
+      {isEditing ? (
+        <form className="w-full" onSubmit={onRenameSubmit}>
+          <Input
+            aria-label="Rename chat"
+            autoFocus
+            className="h-8"
+            onBlur={onCancelRename}
+            onChange={(event) => onEditingTitleChange(event.target.value)}
+            onKeyDown={onRenameKeyDown}
+            size="sm"
+            value={editingTitle}
+          />
+        </form>
+      ) : (
+        <div
+          className={cn(
+            "group/chat-row flex h-9 items-center rounded-md border border-transparent transition-colors",
+            {
+              "border-primary/20 bg-primary/10 text-foreground hover:bg-primary/15": isActive,
+              "text-muted-foreground hover:bg-muted/60 hover:text-foreground": !isActive,
+            },
+          )}
+        >
+          <button
+            aria-current={isActive ? "page" : undefined}
+            className={cn(
+              "flex h-full min-w-0 flex-1 items-center rounded-l-md px-3 text-left text-sm font-medium transition-[font-weight,scale] outline-none focus-visible:ring-2 focus-visible:ring-ring/20",
+              {
+                "font-medium": isActive,
+                "hover:font-medium": !isActive,
+              },
+            )}
+            onClick={() => onSelect(chat.id)}
+            type="button"
+          >
+            <span className="truncate">{title}</span>
+          </button>
+          <DropdownMenu>
+            <IconButtonTooltip label={`${title} options`}>
+              <DropdownMenuTrigger
+                aria-label={`${title} options`}
+                className="mr-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color,background-color,transform] outline-none group-hover/chat-row:opacity-100 hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/20 data-popup-open:opacity-100"
+              >
+                <HugeiconsIcon aria-hidden className="size-4" icon={MoreHorizontalIcon} />
+              </DropdownMenuTrigger>
+            </IconButtonTooltip>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => onStartRename(chat)}>
+                <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuItem className="text-destructive" onSelect={() => onDelete(chat.id)}>
+                <HugeiconsIcon aria-hidden className="size-4" icon={Delete01Icon} />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+    </m.div>
+  );
+};
+
 const SidebarContent = ({
+  activeChatId,
+  chats,
   defaultMailboxId,
+  onCreateChat,
+  onDeleteChat,
+  onRenameChat,
   groups,
   onComposeNewMail,
   onReorderMailboxSwitcher,
   onRequestClose,
   onSelectMailbox,
+  onSelectChat,
   onSelectMailboxId,
   onSelectView,
   onSetDefaultMailbox,
@@ -74,6 +217,7 @@ const SidebarContent = ({
   switcherSide = "right",
 }: SidebarContentProps) => {
   const isInboxView = selectedView === "inbox";
+  const [editingChat, setEditingChat] = useState<{ id: string; title: string } | null>(null);
 
   const handleComposeNewMail = () => {
     onComposeNewMail();
@@ -93,6 +237,35 @@ const SidebarContent = ({
   const handleSelectView = (view: MailboxWorkspaceView) => {
     onSelectView(view);
     onRequestClose?.();
+  };
+
+  const handleSelectChat = (chatId: string) => {
+    onSelectChat(chatId);
+    onRequestClose?.();
+  };
+
+  const startRenameChat = (chat: { id: string; title: string | null }) => {
+    setEditingChat({ id: chat.id, title: chat.title?.trim() || "New chat" });
+  };
+
+  const submitRenameChat = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const title = editingChat?.title.trim();
+    if (!editingChat || !title) {
+      setEditingChat(null);
+      return;
+    }
+
+    onRenameChat(editingChat.id, title);
+    setEditingChat(null);
+  };
+
+  const handleRenameKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setEditingChat(null);
+    }
   };
 
   return (
@@ -131,7 +304,7 @@ const SidebarContent = ({
 
       <m.div
         aria-label="Workspace view"
-        className="relative mt-3 grid grid-cols-2 rounded-lg border border-border/60 bg-muted/70 p-0.5 will-change-[transform,opacity,filter]"
+        className="relative mt-3 grid grid-cols-2 rounded-lg border border-border/60 bg-muted/70 p-px will-change-[transform,opacity,filter]"
         role="group"
         initial={{ opacity: 0, x: -20, filter: "blur(8px)" }}
         animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
@@ -139,7 +312,7 @@ const SidebarContent = ({
       >
         <m.div
           aria-hidden
-          className="pointer-events-none absolute top-0.5 bottom-0.5 left-0.5 w-[calc(50%-2px)] rounded-md bg-background shadow-sm"
+          className="pointer-events-none absolute top-px bottom-px left-px w-[calc(50%-1px)] rounded-md bg-background shadow-sm"
           initial={false}
           animate={{ x: isInboxView ? 0 : "100%" }}
           transition={{ type: "spring", stiffness: 420, damping: 36 }}
@@ -147,7 +320,7 @@ const SidebarContent = ({
         <button
           aria-pressed={isInboxView}
           className={cn(
-            "relative z-10 flex h-8 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium transition-[color,transform] duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/40 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100",
+            "relative z-10 flex h-7 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium transition-[color,transform] duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/40 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100",
             {
               "text-foreground": isInboxView,
               "text-muted-foreground hover:text-foreground": !isInboxView,
@@ -166,7 +339,7 @@ const SidebarContent = ({
         <button
           aria-pressed={!isInboxView}
           className={cn(
-            "relative z-10 flex h-8 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium transition-[color,transform] duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/40 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100",
+            "relative z-10 flex h-7 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium transition-[color,transform] duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/40 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100",
             {
               "text-foreground": !isInboxView,
               "text-muted-foreground hover:text-foreground": isInboxView,
@@ -244,6 +417,53 @@ const SidebarContent = ({
               Settings
             </LinkButton>
           </m.div>
+        </>
+      )}
+
+      {!isInboxView && (
+        <>
+          <m.div
+            className="mt-3 p-1 will-change-[transform,opacity,filter]"
+            initial={{ opacity: 0, x: -20, filter: "blur(8px)" }}
+            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+            transition={{ delay: getSidebarEntranceDelay(2), duration: 0.5, ease: "easeOut" }}
+          >
+            <Button
+              className="w-full justify-start rounded-md px-4 transition-[font-weight,scale] hover:font-bold active:font-bold [&_svg_*]:transition-[stroke-width] hover:[&_svg_*]:stroke-3 active:[&_svg_*]:stroke-3"
+              onClick={() => {
+                onCreateChat();
+                onRequestClose?.();
+              }}
+              type="button"
+            >
+              <HugeiconsIcon className="size-4 shrink-0" icon={ChatAddIcon} strokeWidth={1.5} />
+              New chat
+            </Button>
+          </m.div>
+
+          <nav aria-label="Chats" className="mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto p-1">
+            {chats.map((chat, index) => {
+              const isActive = chat.id === activeChatId;
+
+              return (
+                <SidebarChatRow
+                  key={chat.id}
+                  chat={chat}
+                  editingTitle={editingChat?.id === chat.id ? editingChat.title : ""}
+                  index={index}
+                  isActive={isActive}
+                  isEditing={editingChat?.id === chat.id}
+                  onCancelRename={() => setEditingChat(null)}
+                  onDelete={onDeleteChat}
+                  onEditingTitleChange={(title) => setEditingChat({ id: chat.id, title })}
+                  onRenameKeyDown={handleRenameKeyDown}
+                  onRenameSubmit={submitRenameChat}
+                  onSelect={handleSelectChat}
+                  onStartRename={startRenameChat}
+                />
+              );
+            })}
+          </nav>
         </>
       )}
     </div>

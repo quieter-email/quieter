@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui";
-import { domAnimation, LazyMotion, m } from "motion/react";
+import { domMax, LazyMotion, m } from "motion/react";
 
 type ChatComposerProps = {
   input: string;
@@ -29,7 +29,7 @@ export const ChatComposer = ({
   onStop,
   onSubmit,
 }: ChatComposerProps) => (
-  <LazyMotion features={domAnimation}>
+  <LazyMotion features={domMax}>
     <m.form
       className="squircle flex w-full flex-col rounded-xl border bg-background shadow-xl"
       layout
@@ -38,6 +38,7 @@ export const ChatComposer = ({
       transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
     >
       <textarea
+        aria-label="Message"
         className="max-h-40 min-h-18 w-full grow resize-none bg-transparent px-4 pt-4 pb-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
         disabled={isLoading}
         onChange={(event) => onInputChange(event.target.value)}
@@ -47,7 +48,7 @@ export const ChatComposer = ({
       />
       <div className="flex items-center justify-between gap-1 px-2 pb-2">
         <Select value="openrouter/free">
-          <SelectTrigger disabled variant="ghost">
+          <SelectTrigger aria-label="Model" disabled variant="ghost">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

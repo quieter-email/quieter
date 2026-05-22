@@ -65,6 +65,7 @@
     "posthog-js": "^1.373.5",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "react-remark": "^2.1.0",
     "simplex-noise": "^4.0.3",
     "tailwindcss": "catalog:",
     "zod": "catalog:"

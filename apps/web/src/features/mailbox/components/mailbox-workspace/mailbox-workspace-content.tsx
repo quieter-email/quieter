@@ -14,6 +14,7 @@ import { MailSidebar } from "~/features/navigation/components/mail-sidebar";
 import type { MailboxActions, MailboxPendingActions } from "../mailbox-action-handlers";
 
 type MailboxSidebarGroups = ComponentProps<typeof MailSidebar>["groups"];
+type MailboxSidebarChats = ComponentProps<typeof MailSidebar>["chats"];
 
 type MailboxWorkspaceListState = {
   error: unknown;
@@ -33,8 +34,11 @@ type MailboxWorkspaceLayoutState = {
 
 type MailboxWorkspaceContentProps = {
   activeMailbox: MailboxCategory;
+  chatId: string | null;
+  chats: MailboxSidebarChats;
   currentUserEmail: string | null;
   defaultMailboxId: string | null;
+  draftChatKey: string;
   layoutState: MailboxWorkspaceLayoutState;
   listState: MailboxWorkspaceListState;
   mailboxActions: MailboxActions;
@@ -51,12 +55,19 @@ type MailboxWorkspaceContentProps = {
   onRefresh: () => void;
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
   onSearch: (query: string) => void;
+  onCreateChat: () => void;
+  onDeleteChat: (chatId: string) => void;
+  onPendingPromptSent: () => void;
+  onRenameChat: (chatId: string, title: string) => void;
+  onSelectChat: (chatId: string) => void;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
   onSelectMailboxId: (mailboxId: string) => void;
   onSelectView: (view: MailboxWorkspaceView) => void;
   onSetDefaultMailbox: (mailboxId: string | null) => void;
+  onStartChatPrompt: (chatId: string, prompt: string) => void;
   onVisibleMessageIdsChange: (messageIds: readonly string[]) => void;
   pendingActions: MailboxPendingActions;
+  pendingChatPrompt: string | null;
   searchQuery: string;
   selectedMailboxId: string | null;
   selectedMessage: MessageListItem | null;
@@ -73,8 +84,11 @@ const workspaceContentMotion = {
 
 export const MailboxWorkspaceContent = ({
   activeMailbox,
+  chatId,
+  chats,
   currentUserEmail,
   defaultMailboxId,
+  draftChatKey,
   layoutState,
   listState,
   mailboxActions,
@@ -91,12 +105,19 @@ export const MailboxWorkspaceContent = ({
   onRefresh,
   onReorderMailboxSwitcher,
   onSearch,
+  onCreateChat,
+  onDeleteChat,
+  onPendingPromptSent,
+  onRenameChat,
+  onSelectChat,
   onSelectMailbox,
   onSelectMailboxId,
   onSelectView,
   onSetDefaultMailbox,
+  onStartChatPrompt,
   onVisibleMessageIdsChange,
   pendingActions,
+  pendingChatPrompt,
   searchQuery,
   selectedMailboxId,
   selectedMessage,
@@ -108,12 +129,18 @@ export const MailboxWorkspaceContent = ({
         <div className="pointer-events-none absolute inset-0" />
 
         <MailSidebar
+          activeChatId={chatId}
+          chats={chats}
           defaultMailboxId={defaultMailboxId}
           groups={mailboxGroups}
           onComposeNewMail={onComposeNewMail}
           onMobileOpenChange={onMobileOpenChange}
           onReorderMailboxSwitcher={onReorderMailboxSwitcher}
           onSearch={onSearch}
+          onCreateChat={onCreateChat}
+          onDeleteChat={onDeleteChat}
+          onRenameChat={onRenameChat}
+          onSelectChat={onSelectChat}
           onSelectMailbox={onSelectMailbox}
           onSelectMailboxId={onSelectMailboxId}
           onSelectView={onSelectView}
@@ -129,7 +156,7 @@ export const MailboxWorkspaceContent = ({
           <AnimatePresence initial={false}>
             {selectedView === "chat" ? (
               <m.div
-                key="chat"
+                key={`chat-${chatId ?? draftChatKey}`}
                 className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden bg-background"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -138,8 +165,13 @@ export const MailboxWorkspaceContent = ({
               >
                 <ChatView
                   activeMailbox={activeMailbox}
+                  chatId={chatId}
+                  draftChatKey={draftChatKey}
                   mailboxId={selectedMailboxId}
+                  onChatIdChange={onStartChatPrompt}
                   onOpenSidebar={onOpenSidebar}
+                  onPendingPromptSent={onPendingPromptSent}
+                  pendingPrompt={pendingChatPrompt}
                 />
               </m.div>
             ) : (

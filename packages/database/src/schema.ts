@@ -47,6 +47,11 @@ export type MailboxSwitcherOrder = {
   mailboxIdsByGroupId: Record<string, string[]>;
 };
 
+export type ChatMessageRole = "system" | "user" | "assistant";
+export type ChatMessagePart = {
+  type: string;
+};
+
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -228,6 +233,41 @@ export const mailDomain = pgTable(
   ],
 );
 
+export const chat = pgTable(
+  "chat",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id),
+    title: text("title"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [index("chat_user_id_updated_at_idx").on(table.userId, table.updatedAt)],
+);
+
+export const chatMessage = pgTable(
+  "chatMessage",
+  {
+    id: text("id").primaryKey(),
+    chatId: text("chatId")
+      .notNull()
+      .references(() => chat.id),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id),
+    position: integer("position").notNull(),
+    role: text("role").$type<ChatMessageRole>().notNull(),
+    parts: jsonb("parts").$type<ChatMessagePart[]>().notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => [
+    index("chat_message_chat_id_position_idx").on(table.chatId, table.position),
+    unique("chat_message_chat_id_position_unique").on(table.chatId, table.position),
+  ],
+);
+
 export const waitlistSignup = pgTable("waitlistSignup", {
   email: text("email").primaryKey(),
   createdAt: timestamp("createdAt").notNull(),
@@ -268,6 +308,8 @@ export const apikey = pgTable(
 
 export const tables = {
   apikey,
+  chat,
+  chatMessage,
   user,
   organization,
   session,
@@ -284,10 +326,31 @@ export const tables = {
 export const authRelations = defineRelations(tables, (r) => ({
   user: {
     accounts: r.many.account({ from: r.user.id, to: r.account.userId }),
+    chats: r.many.chat({ from: r.user.id, to: r.chat.userId }),
     invitations: r.many.invitation({ from: r.user.id, to: r.invitation.inviterId }),
     memberships: r.many.member({ from: r.user.id, to: r.member.userId }),
     sessions: r.many.session({ from: r.user.id, to: r.session.userId }),
     passkeys: r.many.passkey({ from: r.user.id, to: r.passkey.userId }),
+  },
+  chat: {
+    messages: r.many.chatMessage({ from: r.chat.id, to: r.chatMessage.chatId }),
+    user: r.one.user({
+      from: r.chat.userId,
+      to: r.user.id,
+      optional: false,
+    }),
+  },
+  chatMessage: {
+    chat: r.one.chat({
+      from: r.chatMessage.chatId,
+      to: r.chat.id,
+      optional: false,
+    }),
+    user: r.one.user({
+      from: r.chatMessage.userId,
+      to: r.user.id,
+      optional: false,
+    }),
   },
   organization: {
     invitations: r.many.invitation({

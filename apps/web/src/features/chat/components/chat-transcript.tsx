@@ -30,11 +30,17 @@ export const ChatTranscript = ({
       <ScrollAreaContent>
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-8 pb-8 sm:px-6">
           <AnimatePresence initial={false}>
-            {turns.map((turn) => (
-              <ConversationTurn key={turn.id} turn={turn} />
+            {turns.map((turn, index) => (
+              <ConversationTurn
+                isStreaming={isLoading && index === turns.length - 1}
+                key={turn.id}
+                turn={turn}
+              />
             ))}
           </AnimatePresence>
-          {isLoading && <ThinkingIndicator />}
+          {isLoading && !turns.at(-1)?.assistant?.parts.some((part) => part.type === "thinking") ? (
+            <ThinkingIndicator />
+          ) : null}
           {errorMessage && <ChatError message={errorMessage} />}
           <div ref={transcriptEndRef} />
         </div>

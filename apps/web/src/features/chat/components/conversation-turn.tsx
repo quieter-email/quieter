@@ -2,7 +2,13 @@ import { m } from "motion/react";
 import type { ChatTurn } from "../types";
 import { AssistantParts, UserParts } from "./message-parts";
 
-export const ConversationTurn = ({ turn }: { turn: ChatTurn }) => {
+export const ConversationTurn = ({
+  isStreaming = false,
+  turn,
+}: {
+  isStreaming?: boolean;
+  turn: ChatTurn;
+}) => {
   const hasUserContent = Boolean(turn.user?.parts.length);
 
   return (
@@ -13,8 +19,9 @@ export const ConversationTurn = ({ turn }: { turn: ChatTurn }) => {
       transition={{ duration: 0.25, ease: "easeOut" }}
     >
       {turn.user && hasUserContent && (
-        <div className="flex justify-end">
-          <p className="max-w-[80%] text-sm leading-relaxed text-foreground sm:max-w-[70%]">
+        <div className="flex flex-col items-end gap-1">
+          <p className="mr-4 text-sm text-foreground-dark">You</p>
+          <p className="squircle max-w-[80%] rounded-lg bg-background px-4 py-3 text-sm leading-relaxed text-foreground sm:max-w-[70%]">
             <UserParts parts={turn.user.parts} />
           </p>
         </div>
@@ -22,7 +29,7 @@ export const ConversationTurn = ({ turn }: { turn: ChatTurn }) => {
 
       {turn.assistant && (
         <div className="flex flex-col gap-2">
-          <AssistantParts parts={turn.assistant.parts} />
+          <AssistantParts isStreaming={isStreaming} parts={turn.assistant.parts} />
         </div>
       )}
     </m.div>

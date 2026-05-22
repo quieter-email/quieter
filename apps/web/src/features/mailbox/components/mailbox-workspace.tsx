@@ -1,11 +1,13 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import type { RouterOutputs } from "@quieter/orpc";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { LoadingPage } from "~/components/loading-page";
 import { type ComposeDraftState, buildComposeDraftFromSavedDraftMessage } from "~/features/compose";
 import { type ComposeDialogHandle, ComposeDialog } from "~/features/compose";
 import { useDemoModeEnabled } from "~/features/settings/domain/demo-mode-setting";
+import { chatsQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-query";
 import { createDemoMailboxActions } from "~/lib/gmail/demo-mail";
 import { type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
 import { orpc } from "~/lib/orpc";
@@ -25,11 +27,72 @@ type MailboxWorkspaceProps = {
   };
 };
 
+const useChatSidebarActions = ({
+  activeChatId,
+  chats,
+  selectedMailboxId,
+  setMailboxSearch,
+}: {
+  activeChatId: string | undefined;
+  chats: RouterOutputs["chat"]["list"];
+  selectedMailboxId: string | null;
+  setMailboxSearch: ReturnType<typeof useMailboxRouteSearch>["setMailboxSearch"];
+}) => {
+  const queryClient = useQueryClient();
+  const renameChatMutation = useMutation({
+    ...orpc.chat.rename.mutationOptions(),
+    onSuccess: async (_updatedChat, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: getChatsQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: getChatQueryKey(variables.chatId) }),
+      ]);
+    },
+  });
+  const deleteChatMutation = useMutation({
+    ...orpc.chat.delete.mutationOptions(),
+    onSuccess: async (_result, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: getChatsQueryKey() }),
+        queryClient.removeQueries({ queryKey: getChatQueryKey(variables.chatId) }),
+      ]);
+    },
+  });
+
+  const deleteChat = async (deletedChatId: string) => {
+    const nextChatId =
+      deletedChatId === activeChatId
+        ? (chats.find((existingChat) => existingChat.id !== deletedChatId)?.id ?? null)
+        : null;
+
+    await deleteChatMutation.mutateAsync({ chatId: deletedChatId });
+
+    if (deletedChatId === activeChatId) {
+      void setMailboxSearch({
+        chatId: nextChatId,
+        mailboxId: selectedMailboxId,
+        view: "chat",
+      });
+    }
+  };
+
+  return {
+    deleteChat,
+    renameChat: (chatId: string, title: string) =>
+      renameChatMutation.mutateAsync({ chatId, title }),
+  };
+};
+
 export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const queryClient = useQueryClient();
   const composeDialogRef = useRef<ComposeDialogHandle | null>(null);
-  const { activeMailbox, mailboxId, messageId, query, setMailboxSearch, view } =
+  const [draftChatVersion, setDraftChatVersion] = useState(0);
+  const [pendingChatPrompt, setPendingChatPrompt] = useState<{
+    chatId: string;
+    prompt: string;
+  } | null>(null);
+  const { activeMailbox, chatId, mailboxId, messageId, query, setMailboxSearch, view } =
     useMailboxRouteSearch();
+  const chatsQuery = useQuery(chatsQueryOptions());
   const {
     isManualRefreshing,
     isMobileSidebarOpen,
@@ -198,6 +261,12 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   };
 
   const isMessageRouteOpen = activeMailbox !== "drafts" && !!messageId;
+  const chatSidebarActions = useChatSidebarActions({
+    activeChatId: chatId,
+    chats: chatsQuery.data ?? [],
+    selectedMailboxId,
+    setMailboxSearch,
+  });
 
   if (!isDemoMode && mailboxesQuery.isPending) {
     return (
@@ -215,6 +284,8 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
 
   const currentUserEmail =
     mailboxes.find((mailbox) => mailbox.id === selectedMailboxId)?.emailAddress ?? null;
+  const activePendingChatPrompt =
+    pendingChatPrompt && pendingChatPrompt.chatId === chatId ? pendingChatPrompt.prompt : null;
 
   return (
     <>
@@ -227,6 +298,9 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
           isMessageRouteOpen,
           isMobileSidebarOpen,
         }}
+        chatId={chatId ?? null}
+        draftChatKey={`new-chat-${draftChatVersion}`}
+        chats={chatsQuery.data ?? []}
         listState={listState}
         mailboxActions={mailboxActions}
         mailboxGroups={mailboxGroups}
@@ -248,6 +322,32 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
           updateMailboxSwitcherOrderMutation.mutate(order);
         }}
         onSearch={applySearch}
+        onCreateChat={() => {
+          setPendingChatPrompt(null);
+          setDraftChatVersion((version) => version + 1);
+          void setMailboxSearch({
+            chatId: null,
+            mailboxId: selectedMailboxId,
+            view: "chat",
+          });
+        }}
+        onDeleteChat={(deletedChatId) => {
+          void chatSidebarActions.deleteChat(deletedChatId);
+        }}
+        onRenameChat={(renamedChatId, title) => {
+          void chatSidebarActions.renameChat(renamedChatId, title);
+        }}
+        onSelectChat={(nextChatId) => {
+          if (pendingChatPrompt?.chatId !== nextChatId) {
+            setPendingChatPrompt(null);
+          }
+
+          void setMailboxSearch({
+            chatId: nextChatId,
+            mailboxId: selectedMailboxId,
+            view: "chat",
+          });
+        }}
         onSelectMailbox={selectMailbox}
         onSelectMailboxId={(nextMailboxId) => {
           if (nextMailboxId === selectedMailboxId) return;
@@ -255,13 +355,33 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         }}
         onSelectView={(nextView) => {
           if (nextView === view) return;
+          if (nextView === "chat") {
+            const nextChatId = chatId ?? chatsQuery.data?.[0]?.id;
+            void setMailboxSearch({
+              chatId: nextChatId ?? null,
+              mailboxId: selectedMailboxId,
+              view: nextView,
+            });
+            return;
+          }
+
           void setMailboxSearch({ view: nextView });
         }}
+        onStartChatPrompt={(nextChatId, prompt) => {
+          setPendingChatPrompt({ chatId: nextChatId, prompt });
+          void setMailboxSearch({
+            chatId: nextChatId,
+            mailboxId: selectedMailboxId,
+            view: "chat",
+          });
+        }}
+        onPendingPromptSent={() => setPendingChatPrompt(null)}
         onSetDefaultMailbox={(nextMailboxId) => {
           void setDefaultMailboxMutation.mutateAsync({ mailboxId: nextMailboxId });
         }}
         onVisibleMessageIdsChange={handleVisibleMessageIdsChange}
         pendingActions={pendingActions}
+        pendingChatPrompt={activePendingChatPrompt}
         searchQuery={query.trim()}
         selectedMailboxId={selectedMailboxId}
         selectedMessage={selectedMessage}
