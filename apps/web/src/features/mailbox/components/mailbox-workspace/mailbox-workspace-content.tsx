@@ -57,17 +57,15 @@ type MailboxWorkspaceContentProps = {
   onSearch: (query: string) => void;
   onCreateChat: () => void;
   onDeleteChat: (chatId: string) => void;
-  onPendingPromptSent: () => void;
   onRenameChat: (chatId: string, title: string) => void;
   onSelectChat: (chatId: string) => void;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
   onSelectMailboxId: (mailboxId: string) => void;
   onSelectView: (view: MailboxWorkspaceView) => void;
   onSetDefaultMailbox: (mailboxId: string | null) => void;
-  onStartChatPrompt: (chatId: string, prompt: string) => void;
+  onChatIdChange: (chatId: string) => void;
   onVisibleMessageIdsChange: (messageIds: readonly string[]) => void;
   pendingActions: MailboxPendingActions;
-  pendingChatPrompt: string | null;
   searchQuery: string;
   selectedMailboxId: string | null;
   selectedMessage: MessageListItem | null;
@@ -107,17 +105,15 @@ export const MailboxWorkspaceContent = ({
   onSearch,
   onCreateChat,
   onDeleteChat,
-  onPendingPromptSent,
   onRenameChat,
   onSelectChat,
   onSelectMailbox,
   onSelectMailboxId,
   onSelectView,
   onSetDefaultMailbox,
-  onStartChatPrompt,
+  onChatIdChange,
   onVisibleMessageIdsChange,
   pendingActions,
-  pendingChatPrompt,
   searchQuery,
   selectedMailboxId,
   selectedMessage,
@@ -168,10 +164,8 @@ export const MailboxWorkspaceContent = ({
                   chatId={chatId}
                   draftChatKey={draftChatKey}
                   mailboxId={selectedMailboxId}
-                  onChatIdChange={onStartChatPrompt}
+                  onChatIdChange={onChatIdChange}
                   onOpenSidebar={onOpenSidebar}
-                  onPendingPromptSent={onPendingPromptSent}
-                  pendingPrompt={pendingChatPrompt}
                 />
               </m.div>
             ) : (

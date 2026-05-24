@@ -6,10 +6,8 @@ export type ChatViewProps = {
   chatId: string | null;
   draftChatKey: string;
   mailboxId: string | null;
-  onChatIdChange: (chatId: string, pendingPrompt: string) => void;
+  onChatIdChange: (chatId: string) => void;
   onOpenSidebar: () => void;
-  onPendingPromptSent: () => void;
-  pendingPrompt: string | null;
 };
 
 export type ChatTurn = {

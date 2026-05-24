@@ -8,6 +8,7 @@ import { MAILBOX_LABELS, type MailboxCategory } from "@quieter/orpc/gmail-servic
 import { createOrpcServerClient } from "@quieter/orpc/server-client";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
+import { getSessionUserForRequest } from "~/lib/auth.server";
 
 const mailboxCategories = Object.keys(MAILBOX_LABELS) as MailboxCategory[];
 
@@ -51,6 +52,11 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const user = await getSessionUserForRequest(request);
+        if (!user) {
+          return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         let params: Awaited<ReturnType<typeof chatParamsFromRequest>>;
 
         try {

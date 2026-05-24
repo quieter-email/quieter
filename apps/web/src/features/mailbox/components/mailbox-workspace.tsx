@@ -86,10 +86,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const queryClient = useQueryClient();
   const composeDialogRef = useRef<ComposeDialogHandle | null>(null);
   const [draftChatVersion, setDraftChatVersion] = useState(0);
-  const [pendingChatPrompt, setPendingChatPrompt] = useState<{
-    chatId: string;
-    prompt: string;
-  } | null>(null);
   const { activeMailbox, chatId, mailboxId, messageId, query, setMailboxSearch, view } =
     useMailboxRouteSearch();
   const chatsQuery = useQuery(chatsQueryOptions());
@@ -284,8 +280,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
 
   const currentUserEmail =
     mailboxes.find((mailbox) => mailbox.id === selectedMailboxId)?.emailAddress ?? null;
-  const activePendingChatPrompt =
-    pendingChatPrompt && pendingChatPrompt.chatId === chatId ? pendingChatPrompt.prompt : null;
 
   return (
     <>
@@ -323,7 +317,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         }}
         onSearch={applySearch}
         onCreateChat={() => {
-          setPendingChatPrompt(null);
           setDraftChatVersion((version) => version + 1);
           void setMailboxSearch({
             chatId: null,
@@ -338,10 +331,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
           void chatSidebarActions.renameChat(renamedChatId, title);
         }}
         onSelectChat={(nextChatId) => {
-          if (pendingChatPrompt?.chatId !== nextChatId) {
-            setPendingChatPrompt(null);
-          }
-
           void setMailboxSearch({
             chatId: nextChatId,
             mailboxId: selectedMailboxId,
@@ -367,21 +356,18 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
 
           void setMailboxSearch({ view: nextView });
         }}
-        onStartChatPrompt={(nextChatId, prompt) => {
-          setPendingChatPrompt({ chatId: nextChatId, prompt });
+        onChatIdChange={(nextChatId) => {
           void setMailboxSearch({
             chatId: nextChatId,
             mailboxId: selectedMailboxId,
             view: "chat",
           });
         }}
-        onPendingPromptSent={() => setPendingChatPrompt(null)}
         onSetDefaultMailbox={(nextMailboxId) => {
           void setDefaultMailboxMutation.mutateAsync({ mailboxId: nextMailboxId });
         }}
         onVisibleMessageIdsChange={handleVisibleMessageIdsChange}
         pendingActions={pendingActions}
-        pendingChatPrompt={activePendingChatPrompt}
         searchQuery={query.trim()}
         selectedMailboxId={selectedMailboxId}
         selectedMessage={selectedMessage}

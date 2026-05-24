@@ -6,7 +6,7 @@ import { Button } from "@quieter/ui";
 import { fetchServerSentEvents, useChat } from "@tanstack/ai-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LayoutGroup } from "motion/react";
-import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useMemo, useRef, useState } from "react";
 import { chatQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-query";
 import { orpc } from "~/lib/orpc";
 import type { ChatViewProps } from "../types";
@@ -28,6 +28,11 @@ const normalizeChatMessages = (messages: StoredChatMessage[]): UIMessage[] =>
     parts: message.parts as UIMessage["parts"],
   }));
 
+const waitForCommittedMessageState = () =>
+  new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+
 export const ChatView = ({
   activeMailbox,
   chatId,
@@ -35,17 +40,56 @@ export const ChatView = ({
   mailboxId,
   onChatIdChange,
   onOpenSidebar,
-  onPendingPromptSent,
-  pendingPrompt,
 }: ChatViewProps) => {
+  const chatQuery = useQuery(chatQueryOptions(chatId));
+  const initialMessages = useMemo(
+    () => (chatQuery.data ? normalizeChatMessages(chatQuery.data.messages) : []),
+    [chatQuery.data],
+  );
+  const initialSnapshotKey = useMemo(
+    () => getMessagesSnapshotKey(initialMessages),
+    [initialMessages],
+  );
+  const sessionKey = chatId
+    ? `chat-${chatId}-${chatQuery.data ? "loaded" : "loading"}`
+    : draftChatKey;
+
+  return (
+    <ChatSession
+      key={sessionKey}
+      activeMailbox={activeMailbox}
+      chatId={chatId}
+      draftChatKey={draftChatKey}
+      initialMessages={initialMessages}
+      initialSnapshotKey={initialSnapshotKey}
+      mailboxId={mailboxId}
+      onChatIdChange={onChatIdChange}
+      onOpenSidebar={onOpenSidebar}
+    />
+  );
+};
+
+type ChatSessionProps = ChatViewProps & {
+  initialMessages: UIMessage[];
+  initialSnapshotKey: string;
+};
+
+const ChatSession = ({
+  activeMailbox,
+  chatId,
+  draftChatKey,
+  initialMessages,
+  initialSnapshotKey,
+  mailboxId,
+  onChatIdChange,
+  onOpenSidebar,
+}: ChatSessionProps) => {
   const queryClient = useQueryClient();
   const [input, setInput] = useState("");
-  const loadedChatIdRef = useRef<string | null>(null);
-  const persistedSnapshotKeyRef = useRef("");
-  const sentPendingPromptRef = useRef<string | null>(null);
+  const persistedSnapshotKeyRef = useRef(initialSnapshotKey);
   const activeChatKey = chatId ?? draftChatKey;
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
-  const chatQuery = useQuery(chatQueryOptions(chatId));
+  const visibleMessagesRef = useRef<UIMessage[]>([]);
   const createChatMutation = useMutation({
     ...orpc.chat.create.mutationOptions(),
     onSuccess: async () => {
@@ -59,91 +103,61 @@ export const ChatView = ({
         queryClient.invalidateQueries({ queryKey: getChatsQueryKey() }),
         queryClient.invalidateQueries({ queryKey: getChatQueryKey(variables.chatId) }),
       ]);
-      loadedChatIdRef.current = variables.chatId;
     },
   });
-  const { error, isLoading, messages, sendMessage, setMessages, stop } = useChat({
+  const { error, isLoading, messages, sendMessage, stop } = useChat({
     connection: fetchServerSentEvents("/api/chat"),
     forwardedProps: { category: activeMailbox, chatId, mailboxId },
     id: activeChatKey,
+    initialMessages,
     threadId: chatId ?? activeChatKey,
   });
   const visibleMessages = useMemo(
     () => messages.filter((message): message is UIMessage => isVisibleChatMessage(message)),
     [messages],
   );
+  visibleMessagesRef.current = visibleMessages;
   const turns = useMemo(() => createChatTurns(visibleMessages), [visibleMessages]);
   const hasMessages = visibleMessages.length > 0;
-  const isComposerLoading = isLoading || createChatMutation.isPending;
+  const isComposerLoading =
+    isLoading || createChatMutation.isPending || saveMessagesMutation.isPending;
 
-  useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [isLoading, visibleMessages]);
-
-  useEffect(() => {
-    if (!chatId || !pendingPrompt || sentPendingPromptRef.current === pendingPrompt) {
+  const saveVisibleMessages = async (nextChatId: string) => {
+    const nextMessages = visibleMessagesRef.current;
+    if (nextMessages.length === 0) {
       return;
     }
 
-    sentPendingPromptRef.current = pendingPrompt;
-    void sendMessage(pendingPrompt).finally(onPendingPromptSent);
-  }, [chatId, onPendingPromptSent, pendingPrompt, sendMessage]);
-
-  useEffect(() => {
-    if (
-      !chatId ||
-      !chatQuery.data ||
-      loadedChatIdRef.current === chatId ||
-      isLoading ||
-      !!pendingPrompt ||
-      visibleMessages.length > 0
-    ) {
-      return;
-    }
-
-    const storedMessages = normalizeChatMessages(chatQuery.data.messages);
-    persistedSnapshotKeyRef.current = getMessagesSnapshotKey(storedMessages);
-    setMessages(storedMessages);
-    loadedChatIdRef.current = chatId;
-  }, [chatId, chatQuery.data, isLoading, pendingPrompt, setMessages, visibleMessages.length]);
-
-  useEffect(() => {
-    if (!chatId || visibleMessages.length === 0) {
-      return;
-    }
-
-    const snapshotKey = getMessagesSnapshotKey(visibleMessages);
+    const snapshotKey = getMessagesSnapshotKey(nextMessages);
     if (snapshotKey === persistedSnapshotKeyRef.current) {
       return;
     }
 
-    const timeoutId = window.setTimeout(
-      () => {
-        persistedSnapshotKeyRef.current = snapshotKey;
-        saveMessagesMutation.mutate({
-          chatId,
-          messages: visibleMessages,
-        });
-      },
-      isLoading ? 300 : 0,
-    );
-
-    return () => window.clearTimeout(timeoutId);
-  }, [chatId, isLoading, saveMessagesMutation, visibleMessages]);
+    persistedSnapshotKeyRef.current = snapshotKey;
+    await saveMessagesMutation.mutateAsync({
+      chatId: nextChatId,
+      messages: nextMessages,
+    });
+  };
 
   const submitPrompt = async () => {
     const prompt = input.trim();
     if (!prompt || isComposerLoading) return;
 
+    setInput("");
+
     if (!chatId) {
       const createdChat = await createChatMutation.mutateAsync(undefined);
-      onChatIdChange(createdChat.id, prompt);
-      setInput("");
+      await sendMessage(prompt);
+      await waitForCommittedMessageState();
+      await saveVisibleMessages(createdChat.id);
+      onChatIdChange(createdChat.id);
       return;
     }
 
-    void sendMessage(prompt);
-    setInput("");
+    await sendMessage(prompt);
+    await waitForCommittedMessageState();
+    await saveVisibleMessages(chatId);
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {

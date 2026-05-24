@@ -1,4 +1,8 @@
-- Pricing and checkout with Polar
+- Pricing and checkout with Polar and PayKit
+  - Gmail always included for free
+  - quieter managed is $10/month and gives you access to $10 worth of aws ses mails send/received, overages are aws ses prices + 5% or something
+  - quieter pro is $20/month and gives you access to $10 worth of aws ses mails send/received, overages are aws ses prices + 2% or something, together with $10 worth of ai credits and gives gmail pub/sub support
+  - option to byok always included for free
 - Landing page with waitlist form
 - AI integration
 - Pub/Sub gmail
@@ -14,4 +18,5 @@
   - AI auto reply (drafts)
   - AI priority inbox
   - Semantic search
-  -
+  - Websocket live updates(?)
+- Frontend add more dithers and monochrome gradients
