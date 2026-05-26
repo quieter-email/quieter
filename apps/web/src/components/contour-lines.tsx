@@ -298,6 +298,11 @@ export const ContourLines = () => {
       gl.viewport(0, 0, width, height);
       gl.uniform2f(resolutionLocation, width, height);
       lastRenderTime = -FRAME_INTERVAL_MS;
+
+      if (prefersReducedMotion) {
+        gl.uniform1f(timeLocation, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      }
     };
 
     const render = (timeMs: number) => {

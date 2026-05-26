@@ -17,17 +17,17 @@ export type ChatTurn = {
 };
 
 export type GmailSearchToolResult = {
-  category?: string;
+  category?: MailboxCategory;
   error?: string;
   messages?: Array<{
     date?: string;
     from?: string;
-    id?: string;
+    id: string;
     isUnread?: boolean;
     labelIds?: string[];
     snippet?: string;
     subject?: string;
-    threadId?: string;
+    threadId: string;
   }>;
   query?: string;
   resultSizeEstimate?: number;

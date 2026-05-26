@@ -263,7 +263,7 @@ export const chatMessage = pgTable(
     createdAt: timestamp("createdAt").notNull(),
   },
   (table) => [
-    index("chat_message_chat_id_position_idx").on(table.chatId, table.position),
+    unique("chat_message_chat_id_id_unique").on(table.chatId, table.id),
     unique("chat_message_chat_id_position_unique").on(table.chatId, table.position),
   ],
 );

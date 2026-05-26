@@ -163,7 +163,7 @@ function WaitlistForm() {
           <IconButtonTooltip label="Join waitlist">
             <Button
               aria-label="Join waitlist"
-              className="absolute top-1/2 right-1 !size-7 -translate-y-1/2 bg-transparent text-white/70 shadow-none hover:bg-white/10 hover:text-white min-[2560px]:right-1.5 min-[2560px]:!size-8"
+              className="absolute top-1/2 right-1 size-7! -translate-y-1/2 bg-transparent text-white/70 shadow-none hover:bg-white/10 hover:text-white min-[2560px]:right-1.5 min-[2560px]:size-8!"
               disabled={iconState === "loading"}
               size="icon-sm"
               type="submit"

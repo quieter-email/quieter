@@ -41,7 +41,7 @@ export const ChatView = ({
   onChatIdChange,
   onOpenSidebar,
 }: ChatViewProps) => {
-  const chatQuery = useQuery(chatQueryOptions(chatId));
+  const chatQuery = useQuery(chatQueryOptions(mailboxId, chatId));
   const initialMessages = useMemo(
     () => (chatQuery.data ? normalizeChatMessages(chatQuery.data.messages) : []),
     [chatQuery.data],
@@ -93,15 +93,17 @@ const ChatSession = ({
   const createChatMutation = useMutation({
     ...orpc.chat.create.mutationOptions(),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: getChatsQueryKey() });
+      await queryClient.invalidateQueries({ queryKey: getChatsQueryKey(mailboxId) });
     },
   });
   const saveMessagesMutation = useMutation({
     ...orpc.chat.saveMessages.mutationOptions(),
     onSuccess: async (_updatedChat, variables) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: getChatsQueryKey() }),
-        queryClient.invalidateQueries({ queryKey: getChatQueryKey(variables.chatId) }),
+        queryClient.invalidateQueries({ queryKey: getChatsQueryKey(mailboxId) }),
+        queryClient.invalidateQueries({
+          queryKey: getChatQueryKey(mailboxId, variables.chatId),
+        }),
       ]);
     },
   });
@@ -133,11 +135,11 @@ const ChatSession = ({
       return;
     }
 
-    persistedSnapshotKeyRef.current = snapshotKey;
     await saveMessagesMutation.mutateAsync({
       chatId: nextChatId,
       messages: nextMessages,
     });
+    persistedSnapshotKeyRef.current = snapshotKey;
   };
 
   const submitPrompt = async () => {

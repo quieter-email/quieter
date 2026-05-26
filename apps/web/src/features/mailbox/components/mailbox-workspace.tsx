@@ -43,8 +43,10 @@ const useChatSidebarActions = ({
     ...orpc.chat.rename.mutationOptions(),
     onSuccess: async (_updatedChat, variables) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: getChatsQueryKey() }),
-        queryClient.invalidateQueries({ queryKey: getChatQueryKey(variables.chatId) }),
+        queryClient.invalidateQueries({ queryKey: getChatsQueryKey(selectedMailboxId) }),
+        queryClient.invalidateQueries({
+          queryKey: getChatQueryKey(selectedMailboxId, variables.chatId),
+        }),
       ]);
     },
   });
@@ -52,8 +54,10 @@ const useChatSidebarActions = ({
     ...orpc.chat.delete.mutationOptions(),
     onSuccess: async (_result, variables) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: getChatsQueryKey() }),
-        queryClient.removeQueries({ queryKey: getChatQueryKey(variables.chatId) }),
+        queryClient.invalidateQueries({ queryKey: getChatsQueryKey(selectedMailboxId) }),
+        queryClient.removeQueries({
+          queryKey: getChatQueryKey(selectedMailboxId, variables.chatId),
+        }),
       ]);
     },
   });
@@ -89,7 +93,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const chatViewLeftAtRef = useRef<number | null>(null);
   const { activeMailbox, chatId, mailboxId, messageId, query, setMailboxSearch, view } =
     useMailboxRouteSearch();
-  const chatsQuery = useQuery(chatsQueryOptions());
   const {
     isManualRefreshing,
     isMobileSidebarOpen,
@@ -115,6 +118,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     setDefaultMailboxMutation,
     updateMailboxSwitcherOrderMutation,
   } = useMailboxSelection({ isDemoMode, mailboxId, queryClient });
+  const chatsQuery = useQuery(chatsQueryOptions(selectedMailboxId));
 
   const unsubscribeMutation = useMutation(orpc.mail.unsubscribeFromMessage.mutationOptions());
   const {
