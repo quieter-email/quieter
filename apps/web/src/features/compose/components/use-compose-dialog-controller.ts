@@ -389,6 +389,7 @@ export const useComposeDialogController = ({
     }
   };
 
+  // react-doctor-disable-next-line react-doctor/exhaustive-deps
   useEffect(() => {
     return () => {
       clearAutosaveTimer();

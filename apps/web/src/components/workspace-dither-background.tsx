@@ -76,7 +76,6 @@ export const WorkspaceDitherBackground = () => {
 
   return (
     <canvas
-      aria-hidden
       className="pointer-events-none absolute inset-0 z-0 size-full overflow-hidden"
       ref={canvasRef}
     />

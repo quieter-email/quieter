@@ -4,7 +4,7 @@ import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "@quieter/ui";
 import { Remark } from "react-remark";
 
-const markdownLink = ({ className, href, ...props }: ComponentPropsWithoutRef<"a">) => (
+const markdownLink = ({ children, className, href, ...props }: ComponentPropsWithoutRef<"a">) => (
   <a
     className={cn(
       "text-primary underline decoration-border underline-offset-2 hover:decoration-current",
@@ -14,7 +14,9 @@ const markdownLink = ({ className, href, ...props }: ComponentPropsWithoutRef<"a
     rel="noopener noreferrer"
     target="_blank"
     {...props}
-  />
+  >
+    {children}
+  </a>
 );
 
 type MarkdownContentProps = {

@@ -245,6 +245,7 @@ export const ContourLines = () => {
     if (!gl) {
       return;
     }
+    const activateProgram = gl.useProgram.bind(gl);
 
     const program = createProgram(gl);
     const positionBuffer = gl.createBuffer();
@@ -272,7 +273,7 @@ export const ContourLines = () => {
 
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    gl.useProgram(program);
+    activateProgram(program);
     gl.enableVertexAttribArray(positionLocation);
     gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
     gl.disable(gl.BLEND);
@@ -355,5 +356,5 @@ export const ContourLines = () => {
     };
   }, []);
 
-  return <canvas ref={canvasRef} aria-hidden="true" className="absolute inset-0 z-0 size-full" />;
+  return <canvas ref={canvasRef} className="absolute inset-0 z-0 size-full" />;
 };

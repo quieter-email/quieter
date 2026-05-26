@@ -33,7 +33,7 @@ export const MutedActionButton = ({
   <Tooltip>
     <TooltipTrigger
       className="inline-flex focus-visible:outline-none"
-      render={<span tabIndex={0} />}
+      render={<button aria-label={`${label} unavailable`} type="button" />}
     >
       <Button
         className={

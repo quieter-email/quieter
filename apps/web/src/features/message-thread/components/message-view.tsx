@@ -50,10 +50,8 @@ import {
 import { getMessageInspectorOptions } from "~/lib/gmail/message-inspector-query";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
-import {
-  createMailboxThreadMessageActionHandlers,
-  MessageActionsDropdown,
-} from "./message-actions";
+import { createMailboxThreadMessageActionHandlers } from "./message-action-handlers";
+import { MessageActionsDropdown } from "./message-actions";
 import { MessageAttachments } from "./message-attachments";
 import { MessageBody } from "./message-body";
 import {
@@ -210,7 +208,7 @@ const MessageHeaderContent = ({
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
           {onToggleExpanded ? (
-            <div
+            <button
               aria-controls={`message-body-${message.id}`}
               aria-expanded={isExpanded}
               className="w-full min-w-0 cursor-pointer rounded-sm text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60 sm:flex-1"
@@ -234,11 +232,10 @@ const MessageHeaderContent = ({
                 event.preventDefault();
                 onToggleExpanded();
               }}
-              role="button"
-              tabIndex={0}
+              type="button"
             >
               {content}
-            </div>
+            </button>
           ) : (
             <div className="w-full min-w-0 sm:flex-1">{content}</div>
           )}
@@ -786,6 +783,7 @@ export const MessageView = ({
   pendingActions,
 }: MessageViewProps) => {
   const threadQuery = useQuery({
+    // react-doctor-disable-next-line react-doctor/no-event-handler
     ...getThreadWithDetailsOptions(mailboxId, message.threadId),
     placeholderData: {
       threadId: message.threadId,
@@ -865,6 +863,7 @@ export const MessageView = ({
     refetchThread,
   ]);
 
+  // react-doctor-disable-next-line react-doctor/no-event-handler
   useEffect(() => {
     if (!threadIsUnread) {
       autoMarkedThreadIdsRef.current.delete(message.threadId);

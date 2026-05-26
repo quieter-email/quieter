@@ -19,7 +19,9 @@ export {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "./components/ui/alert-dialog";
-export { Avatar, AvatarFallback, AvatarImage } from "./components/ui/avatar";
+export { Avatar } from "./components/ui/avatar";
+export { AvatarFallback } from "./components/ui/avatar-fallback";
+export { AvatarImage } from "./components/ui/avatar-image";
 export { Calendar, type CalendarProps } from "./components/ui/calendar";
 export { Checkbox, CheckboxGroup, CheckboxIndicator } from "./components/ui/checkbox";
 export { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "./components/ui/collapsible";

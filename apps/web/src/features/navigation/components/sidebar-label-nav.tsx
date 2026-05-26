@@ -24,7 +24,7 @@ import {
 } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { m } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 import { serializeStructuredSearchState } from "~/features/message-search/components/message-list-search/message-list-search-utils";
 import {
@@ -46,6 +46,11 @@ type EditingLabel =
   | { mode: "create"; name: string }
   | { label: GmailLabelListItem; mode: "rename"; name: string }
   | null;
+
+type HiddenLabelState = {
+  mailboxId: string | null;
+  value: Set<string>;
+};
 
 const MAX_VISIBLE_SIDEBAR_LABELS = 10;
 const SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY = "quieter:sidebar-label-visibility";
@@ -100,10 +105,23 @@ export const SidebarLabelNav = ({
   const queryClient = useQueryClient();
   const [editingLabel, setEditingLabel] = useState<EditingLabel>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [hiddenLabelIds, setHiddenLabelIds] = useState(() => readHiddenLabelIds(mailboxId));
+  const [hiddenLabelState, setHiddenLabelState] = useState<HiddenLabelState>(() => ({
+    mailboxId,
+    value: readHiddenLabelIds(mailboxId),
+  }));
   const labelsQuery = useQuery(labelsQueryOptions(mailboxId ?? "", !!mailboxId));
   const userLabels = getUserLabels(labelsQuery.data ?? []);
-  const visibleUserLabels = userLabels.filter((label) => !hiddenLabelIds.has(label.id));
+  const hiddenLabelIds =
+    hiddenLabelState.mailboxId === mailboxId
+      ? hiddenLabelState.value
+      : readHiddenLabelIds(mailboxId);
+  const effectiveHiddenLabelIds = new Set(hiddenLabelIds);
+  for (const label of userLabels
+    .filter((userLabel) => !hiddenLabelIds.has(userLabel.id))
+    .slice(MAX_VISIBLE_SIDEBAR_LABELS)) {
+    effectiveHiddenLabelIds.add(label.id);
+  }
+  const visibleUserLabels = userLabels.filter((label) => !effectiveHiddenLabelIds.has(label.id));
   const selectedLabelKeys = useMemo(
     () =>
       new Set(
@@ -114,34 +132,18 @@ export const SidebarLabelNav = ({
     [searchQuery],
   );
 
-  useEffect(() => {
-    setHiddenLabelIds(readHiddenLabelIds(mailboxId));
-  }, [mailboxId]);
-
-  useEffect(() => {
-    if (
-      !mailboxId ||
-      userLabels.length === 0 ||
-      visibleUserLabels.length <= MAX_VISIBLE_SIDEBAR_LABELS
-    ) {
-      return;
-    }
-
-    setMailboxHiddenLabelIds((current) => {
-      for (const label of visibleUserLabels.slice(MAX_VISIBLE_SIDEBAR_LABELS)) {
-        current.add(label.id);
-      }
-      return current;
-    });
-  }, [mailboxId, userLabels.length, visibleUserLabels]);
-
   const setMailboxHiddenLabelIds = (updater: (current: Set<string>) => Set<string>) => {
     if (!mailboxId) return;
 
-    setHiddenLabelIds((current) => {
-      const next = updater(new Set(current));
+    setHiddenLabelState((current) => {
+      const currentValue =
+        current.mailboxId === mailboxId ? current.value : readHiddenLabelIds(mailboxId);
+      const next = updater(new Set(currentValue));
       writeHiddenLabelIds(mailboxId, next);
-      return next;
+      return {
+        mailboxId,
+        value: next,
+      };
     });
   };
 
@@ -213,10 +215,9 @@ export const SidebarLabelNav = ({
 
   const toggleSidebarVisibility = (labelId: string) => {
     setMailboxHiddenLabelIds((current) => {
-      if (current.has(labelId)) {
-        if (
-          userLabels.filter((label) => !current.has(label.id)).length >= MAX_VISIBLE_SIDEBAR_LABELS
-        ) {
+      const isShown = !effectiveHiddenLabelIds.has(labelId);
+      if (!isShown) {
+        if (visibleUserLabels.length >= MAX_VISIBLE_SIDEBAR_LABELS) {
           toast.error("Hide one label before showing another.");
           return current;
         }
@@ -265,7 +266,7 @@ export const SidebarLabelNav = ({
             animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
             transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
           >
-            Loading labels...
+            Loading labels…
           </m.p>
         ) : labelsQuery.isError ? (
           <m.p
@@ -346,11 +347,10 @@ export const SidebarLabelNav = ({
           </DialogHeader>
           <DialogBody className="space-y-4 pt-0">
             <form
-              className="flex items-center gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
+              action={() => {
                 void submitLabelEdit();
               }}
+              className="flex items-center gap-2"
             >
               <Input
                 aria-label={editingLabel?.mode === "rename" ? "Rename label" : "New label name"}
@@ -381,7 +381,7 @@ export const SidebarLabelNav = ({
 
             <div className="max-h-[min(24rem,48vh)] overflow-y-auto pr-1">
               {labelsQuery.isPending ? (
-                <p className="py-3 text-sm text-muted-foreground">Loading labels...</p>
+                <p className="py-3 text-sm text-muted-foreground">Loading labels…</p>
               ) : labelsQuery.isError ? (
                 <p className="py-3 text-sm text-destructive">Could not load labels.</p>
               ) : userLabels.length === 0 ? (
@@ -389,7 +389,7 @@ export const SidebarLabelNav = ({
               ) : (
                 <div className="flex flex-col">
                   {userLabels.map((label) => {
-                    const isShown = !hiddenLabelIds.has(label.id);
+                    const isShown = !effectiveHiddenLabelIds.has(label.id);
                     return (
                       <div
                         className="flex min-h-10 items-center gap-3 rounded-md px-2 hover:bg-muted/60"

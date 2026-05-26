@@ -139,11 +139,11 @@ export const MessageAttachments = ({
         attachment.fileName,
         attachment.mimeType,
       );
+      setActiveAttachmentKey((current) => (current === attachmentKey ? null : current));
     } catch (error) {
       setErrorMessage(
         (error as { message?: string })?.message ?? `Could not download ${attachment.fileName}.`,
       );
-    } finally {
       setActiveAttachmentKey((current) => (current === attachmentKey ? null : current));
     }
   };

@@ -28,9 +28,9 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
       >
         {isActive ? (
           <m.span
-            animate={{ backgroundPosition: ["200% center", "-200% center"] }}
-            className="bg-gradient-to-r from-muted-foreground/30 via-muted-foreground/70 to-muted-foreground/30 bg-[length:200%_auto] bg-clip-text text-xs text-transparent"
-            transition={{ duration: 2.8, ease: "linear", repeat: Number.POSITIVE_INFINITY }}
+            animate={{ opacity: [0.45, 0.85, 0.45] }}
+            className="text-xs text-muted-foreground"
+            transition={{ duration: 1.8, ease: "easeInOut", repeat: Number.POSITIVE_INFINITY }}
           >
             Thinking
           </m.span>

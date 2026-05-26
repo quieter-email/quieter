@@ -6,7 +6,14 @@ import { Button } from "@quieter/ui";
 import { fetchServerSentEvents, useChat } from "@tanstack/ai-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LayoutGroup } from "motion/react";
-import { type FormEvent, type KeyboardEvent, useMemo, useRef, useState } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { chatQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-query";
 import { orpc } from "~/lib/orpc";
 import type { ChatViewProps } from "../types";
@@ -118,7 +125,9 @@ const ChatSession = ({
     () => messages.filter((message): message is UIMessage => isVisibleChatMessage(message)),
     [messages],
   );
-  visibleMessagesRef.current = visibleMessages;
+  useLayoutEffect(() => {
+    visibleMessagesRef.current = visibleMessages;
+  }, [visibleMessages]);
   const turns = useMemo(() => createChatTurns(visibleMessages), [visibleMessages]);
   const hasMessages = visibleMessages.length > 0 || !!chatId;
   const isComposerLoading =
@@ -149,17 +158,18 @@ const ChatSession = ({
     setInput("");
 
     if (!chatId) {
-      const createdChat = await createChatMutation.mutateAsync(undefined);
-      await sendMessage(prompt);
-      await waitForCommittedMessageState();
-      await saveVisibleMessages(createdChat.id);
+      const [createdChat] = await Promise.all([
+        createChatMutation.mutateAsync(undefined),
+        sendMessage(prompt),
+      ]);
+      await waitForCommittedMessageState().then(() => saveVisibleMessages(createdChat.id));
       onChatIdChange(createdChat.id);
       return;
     }
 
-    await sendMessage(prompt);
-    await waitForCommittedMessageState();
-    await saveVisibleMessages(chatId);
+    await sendMessage(prompt)
+      .then(waitForCommittedMessageState)
+      .then(() => saveVisibleMessages(chatId));
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {

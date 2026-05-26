@@ -1,13 +1,19 @@
 "use client";
 
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { useEffect, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import type { ThreadPressGesture } from "./message-list-types";
 
 const SCROLL_TOP_EPSILON_PX = 2;
 const SCROLL_WAIT_TIMEOUT_MS = 600;
+
+type SelectionState = {
+  scopeKey: string;
+  selectedThreadIds: Set<string>;
+  selectionAnchorThreadId: string | null;
+};
 
 export const useMessageListSelection = ({
   activeMailbox,
@@ -26,8 +32,34 @@ export const useMessageListSelection = ({
 }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isProgrammaticScrollToTopRef = useRef(false);
-  const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(new Set());
-  const [selectionAnchorThreadId, setSelectionAnchorThreadId] = useState<string | null>(null);
+  const selectionScopeKey = `${activeMailbox}:${searchQuery}`;
+  const loadedThreadIdSet = useMemo(
+    () => new Set(threadedMessages.map((thread) => thread.threadId)),
+    [threadedMessages],
+  );
+  const [selectionState, setSelectionState] = useState<SelectionState>(() => ({
+    scopeKey: selectionScopeKey,
+    selectedThreadIds: new Set(),
+    selectionAnchorThreadId: null,
+  }));
+  const scopedSelectionState =
+    selectionState.scopeKey === selectionScopeKey
+      ? selectionState
+      : {
+          scopeKey: selectionScopeKey,
+          selectedThreadIds: new Set<string>(),
+          selectionAnchorThreadId: null,
+        };
+  const selectedThreadIds = new Set(
+    Array.from(scopedSelectionState.selectedThreadIds).filter((threadId) =>
+      loadedThreadIdSet.has(threadId),
+    ),
+  );
+  const selectionAnchorThreadId =
+    scopedSelectionState.selectionAnchorThreadId &&
+    loadedThreadIdSet.has(scopedSelectionState.selectionAnchorThreadId)
+      ? scopedSelectionState.selectionAnchorThreadId
+      : null;
   const selectedThreads = Array.from(selectedThreadIds).flatMap((threadId) => {
     const thread = threadedMessages.find((entry) => entry.threadId === threadId);
     return thread ? [thread] : [];
@@ -96,49 +128,74 @@ export const useMessageListSelection = ({
     return true;
   };
 
-  useEffect(() => {
-    setSelectedThreadIds(new Set());
-    setSelectionAnchorThreadId(null);
-  }, [activeMailbox, searchQuery]);
+  const getCurrentSelectionState = (current: SelectionState) => {
+    if (current.scopeKey !== selectionScopeKey) {
+      return {
+        selectedThreadIds: new Set<string>(),
+        selectionAnchorThreadId: null,
+      };
+    }
 
-  useEffect(() => {
-    const loadedThreadIdSet = new Set(threadedMessages.map((thread) => thread.threadId));
-    setSelectedThreadIds((current) => {
-      const nextSelectedIds = Array.from(current).filter((threadId) =>
-        loadedThreadIdSet.has(threadId),
-      );
-      return nextSelectedIds.length === current.size ? current : new Set(nextSelectedIds);
-    });
-    setSelectionAnchorThreadId(
-      (current) => (current && loadedThreadIdSet.has(current) && current) || null,
-    );
-  }, [threadedMessages]);
+    return {
+      selectedThreadIds: new Set(
+        Array.from(current.selectedThreadIds).filter((threadId) => loadedThreadIdSet.has(threadId)),
+      ),
+      selectionAnchorThreadId:
+        current.selectionAnchorThreadId && loadedThreadIdSet.has(current.selectionAnchorThreadId)
+          ? current.selectionAnchorThreadId
+          : null,
+    };
+  };
+
+  const setSelection = (
+    updater: (current: {
+      selectedThreadIds: Set<string>;
+      selectionAnchorThreadId: string | null;
+    }) => {
+      selectedThreadIds: Set<string>;
+      selectionAnchorThreadId: string | null;
+    },
+  ) => {
+    setSelectionState((current) => ({
+      scopeKey: selectionScopeKey,
+      ...updater(getCurrentSelectionState(current)),
+    }));
+  };
 
   const clearSelection = () => {
-    setSelectedThreadIds(new Set());
-    setSelectionAnchorThreadId(null);
+    setSelectionState({
+      scopeKey: selectionScopeKey,
+      selectedThreadIds: new Set(),
+      selectionAnchorThreadId: null,
+    });
   };
 
   const selectSingleThread = (threadId: string) => {
-    setSelectedThreadIds(new Set([threadId]));
-    setSelectionAnchorThreadId(threadId);
+    setSelectionState({
+      scopeKey: selectionScopeKey,
+      selectedThreadIds: new Set([threadId]),
+      selectionAnchorThreadId: threadId,
+    });
   };
 
   const toggleThreadSelection = (threadId: string) => {
-    setSelectedThreadIds((current) => {
-      const next = new Set(current);
+    setSelection((current) => {
+      const next = new Set(current.selectedThreadIds);
       if (next.has(threadId)) {
         next.delete(threadId);
       } else {
         next.add(threadId);
       }
-      return next;
+
+      return {
+        selectedThreadIds: next,
+        selectionAnchorThreadId: threadId,
+      };
     });
-    setSelectionAnchorThreadId(threadId);
   };
 
   const startAdditiveSelection = (threadId: string) => {
-    setSelectedThreadIds(() => {
+    setSelection(() => {
       const next = new Set<string>();
 
       if (activeThreadId && threadedMessages.find((thread) => thread.threadId === activeThreadId)) {
@@ -146,9 +203,11 @@ export const useMessageListSelection = ({
       }
 
       next.add(threadId);
-      return next;
+      return {
+        selectedThreadIds: next,
+        selectionAnchorThreadId: threadId,
+      };
     });
-    setSelectionAnchorThreadId(threadId);
   };
 
   const selectThreadRange = (threadId: string, additive: boolean) => {
@@ -163,10 +222,10 @@ export const useMessageListSelection = ({
 
     if (targetIndex < 0) return;
 
-    setSelectedThreadIds((current) => {
+    setSelection((current) => {
       if (anchorIndex == null || anchorIndex < 0) {
         if (additive) {
-          const next = new Set(current);
+          const next = new Set(current.selectedThreadIds);
 
           if (
             activeThreadId &&
@@ -176,13 +235,19 @@ export const useMessageListSelection = ({
           }
 
           next.add(threadId);
-          return next;
+          return {
+            selectedThreadIds: next,
+            selectionAnchorThreadId: threadId,
+          };
         }
 
-        return new Set([threadId]);
+        return {
+          selectedThreadIds: new Set([threadId]),
+          selectionAnchorThreadId: threadId,
+        };
       }
 
-      const next = additive ? new Set(current) : new Set<string>();
+      const next = additive ? new Set(current.selectedThreadIds) : new Set<string>();
       const startIndex = Math.min(anchorIndex, targetIndex);
       const endIndex = Math.max(anchorIndex, targetIndex);
 
@@ -193,16 +258,21 @@ export const useMessageListSelection = ({
         }
       }
 
-      return next;
+      return {
+        selectedThreadIds: next,
+        selectionAnchorThreadId: threadId,
+      };
     });
-    setSelectionAnchorThreadId(threadId);
   };
 
   const toggleAllLoadedThreads = (selected: boolean) => {
-    setSelectedThreadIds(
-      selected ? new Set(threadedMessages.map((thread) => thread.threadId)) : new Set(),
-    );
-    setSelectionAnchorThreadId((selected && threadedMessages[0]?.threadId) || null);
+    setSelectionState({
+      scopeKey: selectionScopeKey,
+      selectedThreadIds: selected
+        ? new Set(threadedMessages.map((thread) => thread.threadId))
+        : new Set(),
+      selectionAnchorThreadId: (selected && threadedMessages[0]?.threadId) || null,
+    });
   };
 
   const handleThreadSelectionPress = (thread: ThreadListEntry, gesture: ThreadPressGesture) => {
@@ -245,7 +315,10 @@ export const useMessageListSelection = ({
       return;
     }
 
-    setSelectionAnchorThreadId(thread.threadId);
+    setSelection((current) => ({
+      selectedThreadIds: current.selectedThreadIds,
+      selectionAnchorThreadId: thread.threadId,
+    }));
 
     if (activeThreadId !== null && activeThreadId === thread.threadId) {
       onDeactivateActiveMessage();

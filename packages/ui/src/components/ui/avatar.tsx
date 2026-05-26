@@ -29,20 +29,3 @@ export const Avatar = ({
   VariantProps<typeof avatarRootVariants>) => (
   <AvatarPrimitive.Root className={cn(avatarRootVariants({ size }), className)} {...props} />
 );
-
-export const AvatarImage = ({
-  className,
-  ...props
-}: ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>) => (
-  <AvatarPrimitive.Image className={cn("size-full object-cover", className)} {...props} />
-);
-
-export const AvatarFallback = ({
-  className,
-  ...props
-}: ComponentPropsWithoutRef<typeof AvatarPrimitive.Fallback>) => (
-  <AvatarPrimitive.Fallback
-    className={cn("flex size-full items-center justify-center bg-muted text-foreground", className)}
-    {...props}
-  />
-);

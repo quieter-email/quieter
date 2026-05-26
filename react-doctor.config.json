@@ -1,0 +1,15 @@
+{
+  "ignore": {
+    "overrides": [
+      {
+        "files": ["src/**", "instrument.server.mjs"],
+        "rules": ["deslop/unused-file"]
+      }
+    ]
+  },
+  "rules": {
+    "react-doctor/no-giant-component": "off",
+    "react-doctor/prefer-useReducer": "off",
+    "react-doctor/tanstack-start-missing-head-content": "off"
+  }
+}

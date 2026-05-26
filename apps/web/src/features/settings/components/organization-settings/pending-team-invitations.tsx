@@ -49,9 +49,9 @@ export const PendingTeamInvitations = ({
     try {
       setPendingInvitationId(invitationId);
       await cancelInvitationMutation.mutateAsync(invitationId);
+      setPendingInvitationId(null);
     } catch (mutationError) {
       setError((mutationError as { message?: string })?.message ?? "Could not cancel invitation.");
-    } finally {
       setPendingInvitationId(null);
     }
   };

@@ -11,6 +11,7 @@ import { chatsQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat
 import { createDemoMailboxActions } from "~/lib/gmail/demo-mail";
 import { type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
 import { orpc } from "~/lib/orpc";
+import type { MailboxWorkspaceView } from "../domain/mailbox-workspace-view";
 import { createMailboxActionHandlers } from "./mailbox-action-handlers";
 import { MailboxWorkspaceContent } from "./mailbox-workspace/mailbox-workspace-content";
 import { useMailboxMessages } from "./mailbox-workspace/use-mailbox-messages";
@@ -102,9 +103,9 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     setIsWindowActive,
   } = useWorkspaceUiState();
   const {
+    isMessageActionPending,
+    isThreadActionPending,
     pendingActions,
-    pendingMessageActionIdsRef,
-    pendingThreadActionIdsRef,
     setMessageActionsPending,
     setThreadActionsPending,
   } = useMailboxPendingActions();
@@ -159,7 +160,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       window.removeEventListener("blur", updateWindowActivity);
       document.removeEventListener("visibilitychange", updateWindowActivity);
     };
-  }, []);
+  }, [setIsWindowActive]);
 
   useLayoutEffect(() => {
     if (!isDemoMode && mailboxesQuery.isPending) {
@@ -175,7 +176,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       mailboxId: selectedMailboxId,
       messageId: null,
     });
-  }, [isDemoMode, mailboxId, mailboxesQuery.isPending, selectedMailboxId]);
+  }, [isDemoMode, mailboxId, mailboxesQuery.isPending, selectedMailboxId, setMailboxSearch]);
 
   useLayoutEffect(() => {
     if (
@@ -189,7 +190,14 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     }
 
     void setMailboxSearch({ messageId: null });
-  }, [hasMessagePages, messageId, messagesPending, selectedMessage]);
+  }, [
+    hasMessagePages,
+    messageId,
+    messagesPending,
+    selectedMailboxId,
+    selectedMessage,
+    setMailboxSearch,
+  ]);
 
   const mailboxActions = isDemoMode
     ? createDemoMailboxActions(queryClient)
@@ -198,8 +206,8 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         activeSearchQuery: query.trim(),
         queryClient,
         refreshSearchResultsIfNeeded,
-        isMessageActionPending: (id) => (id ? pendingMessageActionIdsRef.current.has(id) : false),
-        isThreadActionPending: (id) => (id ? pendingThreadActionIdsRef.current.has(id) : false),
+        isMessageActionPending,
+        isThreadActionPending,
         setMessageActionPending: (id, pending) => setMessageActionsPending([id], pending),
         setMessageActionsPending,
         setThreadActionPending: (id, pending) => setThreadActionsPending([id], pending),
@@ -259,6 +267,27 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const selectMailbox = (mailbox: MailboxCategory) => {
     if (mailbox === activeMailbox) return;
     void setMailboxSearch({ mailbox, messageId: null });
+  };
+
+  const selectView = (nextView: MailboxWorkspaceView) => {
+    if (nextView === view) return;
+    if (nextView === "chat") {
+      const leftAt = chatViewLeftAtRef.current;
+      const isStale = leftAt !== null && performance.now() - leftAt > 5 * 60 * 1000;
+      const nextChatId = isStale ? null : (chatId ?? chatsQuery.data?.[0]?.id);
+      if (isStale) {
+        setDraftChatVersion((version) => version + 1);
+      }
+      void setMailboxSearch({
+        chatId: nextChatId ?? null,
+        mailboxId: selectedMailboxId,
+        view: nextView,
+      });
+      return;
+    }
+
+    chatViewLeftAtRef.current = performance.now();
+    void setMailboxSearch({ view: nextView });
   };
 
   const isMessageRouteOpen = activeMailbox !== "drafts" && !!messageId;
@@ -347,26 +376,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
           if (nextMailboxId === selectedMailboxId) return;
           void setMailboxSearch({ mailboxId: nextMailboxId, messageId: null });
         }}
-        onSelectView={(nextView) => {
-          if (nextView === view) return;
-          if (nextView === "chat") {
-            const leftAt = chatViewLeftAtRef.current;
-            const isStale = leftAt !== null && Date.now() - leftAt > 5 * 60 * 1000;
-            const nextChatId = isStale ? null : (chatId ?? chatsQuery.data?.[0]?.id);
-            if (isStale) {
-              setDraftChatVersion((version) => version + 1);
-            }
-            void setMailboxSearch({
-              chatId: nextChatId ?? null,
-              mailboxId: selectedMailboxId,
-              view: nextView,
-            });
-            return;
-          }
-
-          chatViewLeftAtRef.current = Date.now();
-          void setMailboxSearch({ view: nextView });
-        }}
+        onSelectView={selectView}
         onChatIdChange={(nextChatId) => {
           void setMailboxSearch({
             chatId: nextChatId,

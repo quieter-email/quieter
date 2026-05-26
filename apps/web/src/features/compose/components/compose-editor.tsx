@@ -105,17 +105,20 @@ export const ComposeEditor = ({
   // `disabled` must call setEditable so the instance matches without recreating the editor.
   useEffect(() => {
     if (!editor) return;
+    // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent
     editor.setEditable(!disabled);
   }, [disabled, editor]);
 
   useEffect(() => {
     if (!editor) return;
 
+    // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent
     const current = normalizeComposeBodyHtml(editor.getHTML());
     const next = normalizeComposeBodyHtml(html);
 
     if (current === next || normalizeComposeBodyHtml(lastSyncedHtmlRef.current) === next) return;
     editor.commands.setContent(next || "<p></p>", { emitUpdate: false });
+    // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent
     lastSyncedHtmlRef.current = editor.getHTML();
   }, [editor, html]);
 

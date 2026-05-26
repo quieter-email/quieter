@@ -1,7 +1,7 @@
 "use client";
 
+import type { ComponentPropsWithRef, ComponentPropsWithoutRef } from "react";
 import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
-import { forwardRef, type ComponentPropsWithoutRef, type ComponentRef } from "react";
 import { cn } from "../../lib/cn";
 
 export const ScrollArea = ({
@@ -11,18 +11,17 @@ export const ScrollArea = ({
   <ScrollAreaPrimitive.Root className={cn("relative overflow-hidden", className)} {...props} />
 );
 
-export const ScrollAreaViewport = forwardRef<
-  ComponentRef<typeof ScrollAreaPrimitive.Viewport>,
-  ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Viewport>
->(({ className, ...props }, ref) => (
+export const ScrollAreaViewport = ({
+  className,
+  ref,
+  ...props
+}: ComponentPropsWithRef<typeof ScrollAreaPrimitive.Viewport>) => (
   <ScrollAreaPrimitive.Viewport
     className={cn("size-full rounded-[inherit]", className)}
     ref={ref}
     {...props}
   />
-));
-
-ScrollAreaViewport.displayName = "ScrollAreaViewport";
+);
 
 export const ScrollAreaContent = ({
   className,

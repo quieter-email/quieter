@@ -2,7 +2,11 @@
 
 import { type QueryClient, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { type SetStateAction, useMemo } from "react";
-import { type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
+import {
+  type ListMessagesPageResult,
+  type MailboxCategory,
+  type MessageListItem,
+} from "~/lib/gmail/gmail";
 import {
   getLiveSyncQueryKey,
   getMessagesQueryKey,
@@ -25,6 +29,8 @@ type UseMailboxMessagesOptions = {
   setIsManualRefreshing: (action: SetStateAction<boolean>) => void;
 };
 
+const EMPTY_MESSAGE_PAGES: ListMessagesPageResult[] = [];
+
 export const useMailboxMessages = ({
   activeMailbox,
   isDemoMode,
@@ -45,7 +51,7 @@ export const useMailboxMessages = ({
       !!selectedMailboxId,
     ),
   );
-  const messages = messagesQuery.data?.pages ?? [];
+  const messages = messagesQuery.data?.pages ?? EMPTY_MESSAGE_PAGES;
   const hasLoadedMessages = !!messagesQuery.data?.pages.length;
   const isLiveSyncEnabled =
     !!selectedMailboxId &&
@@ -80,8 +86,10 @@ export const useMailboxMessages = ({
     setIsManualRefreshing(true);
     try {
       await syncMessages(queryClient, selectedMailboxId, activeMailbox, normalizedQuery);
-    } finally {
       setIsManualRefreshing(false);
+    } catch (error) {
+      setIsManualRefreshing(false);
+      throw error;
     }
   };
 

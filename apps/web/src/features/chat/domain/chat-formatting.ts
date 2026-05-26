@@ -1,3 +1,8 @@
+const chatMessageDateFormatter = new Intl.DateTimeFormat(undefined, {
+  day: "numeric",
+  month: "short",
+});
+
 export const formatMessageDate = (value: string) => {
   const numeric = Number(value);
   const date = Number.isFinite(numeric) ? new Date(numeric) : new Date(value);
@@ -6,8 +11,5 @@ export const formatMessageDate = (value: string) => {
     return value;
   }
 
-  return new Intl.DateTimeFormat(undefined, {
-    day: "numeric",
-    month: "short",
-  }).format(date);
+  return chatMessageDateFormatter.format(date);
 };

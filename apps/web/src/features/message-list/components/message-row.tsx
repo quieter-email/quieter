@@ -7,10 +7,8 @@ import { cn } from "@quieter/ui";
 import { type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import { SenderAvatar } from "~/components/sender-avatar";
-import {
-  createMailboxThreadMessageActionHandlers,
-  MessageActionsContextMenu,
-} from "~/features/message-thread/components/message-actions";
+import { createMailboxThreadMessageActionHandlers } from "~/features/message-thread/components/message-action-handlers";
+import { MessageActionsContextMenu } from "~/features/message-thread/components/message-actions";
 import { formatMessageListDate, parseSender } from "~/lib/gmail/message-utils";
 import type { MessageListProps } from "./message-list-types";
 import type { useMessageListSelection } from "./use-message-list-selection";

@@ -1,6 +1,7 @@
 import { m } from "motion/react";
 import type { ChatTurn } from "../types";
-import { AssistantParts, UserParts } from "./message-parts";
+import { AssistantParts } from "./message-parts/assistant-parts";
+import { UserParts } from "./message-parts/user-parts";
 
 export const ConversationTurn = ({
   isStreaming = false,

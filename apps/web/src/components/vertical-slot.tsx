@@ -44,22 +44,25 @@ export const VerticalSlot = ({
   duration = 500,
 }: PropsWithChildren<{ className?: string; duration?: number }>) => {
   const key = useMemo(() => signature(children), [children]);
-  const [items, setItems] = useState<Array<SlotItem>>([{ children, key, phase: "active" }]);
+  const [state, setState] = useState<{ items: Array<SlotItem>; key: string }>(() => ({
+    items: [{ children, key, phase: "active" }],
+    key,
+  }));
+  let items = state.items;
 
-  useLayoutEffect(() => {
-    setItems((current) => {
-      const active = current.at(-1);
-
-      return active?.key === key
-        ? current.map((item, index) =>
-            index === current.length - 1 ? { children, key, phase: "active" } : item,
-          )
-        : [
-            ...(active ? [{ ...active, phase: "exit" as const }] : []),
-            { children, key, phase: "enter" },
-          ];
-    });
-  }, [children, key]);
+  if (state.key !== key) {
+    const active = state.items.at(-1);
+    items = [
+      ...(active ? [{ ...active, phase: "exit" as const }] : []),
+      { children, key, phase: "enter" },
+    ];
+    setState({ items, key });
+  } else if (items.at(-1)?.children !== children) {
+    items = items.map((item, index) =>
+      index === items.length - 1 ? { children, key, phase: "active" } : item,
+    );
+    setState({ items, key });
+  }
 
   useLayoutEffect(() => {
     if (items.at(-1)?.phase !== "enter") {
@@ -67,11 +70,12 @@ export const VerticalSlot = ({
     }
 
     const frame = requestAnimationFrame(() => {
-      setItems((current) =>
-        current.map((item, index) =>
-          index === current.length - 1 ? { ...item, phase: "active" } : item,
+      setState((current) => ({
+        ...current,
+        items: current.items.map((item, index) =>
+          index === current.items.length - 1 ? { ...item, phase: "active" } : item,
         ),
-      );
+      }));
     });
 
     return () => cancelAnimationFrame(frame);
@@ -95,7 +99,10 @@ export const VerticalSlot = ({
           key={item.key}
           onTransitionEnd={(event: TransitionEvent<HTMLDivElement>) => {
             if (event.currentTarget === event.target && item.phase === "exit") {
-              setItems((current) => current.filter((currentItem) => currentItem.key !== item.key));
+              setState((current) => ({
+                ...current,
+                items: current.items.filter((currentItem) => currentItem.key !== item.key),
+              }));
             }
           }}
           style={{ transitionDuration: `${duration}ms` }}

@@ -519,7 +519,7 @@ export const RegisterDomainDialog = ({
                     }}
                     size="sm"
                   >
-                    Done
+                    Finish setup
                   </Button>
                 </DialogFooter>
               </>

@@ -65,7 +65,7 @@ export const MessageListSearchView = ({
   } = controller;
 
   return (
-    <div className="bg-transparent p-4" role="search">
+    <search className="block bg-transparent p-4">
       <div className="relative">
         <div className="flex min-w-0 items-center gap-2 lg:-ml-2">
           {onOpenSidebar && (
@@ -317,6 +317,6 @@ export const MessageListSearchView = ({
           </IconButtonTooltip>
         </div>
       </div>
-    </div>
+    </search>
   );
 };
