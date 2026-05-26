@@ -16,7 +16,7 @@ const FRAGMENT_SHADER_SOURCE = `
   uniform vec2 uResolution;
   uniform float uTime;
 
-  /* ── simplex 3D noise ─────────────────────────── */
+  // Simplex 3D noise
 
   vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
   vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -75,13 +75,13 @@ const FRAGMENT_SHADER_SOURCE = `
     return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
   }
 
-  /* ── per-cell hash ─────────────────────────────── */
+  // Per-cell hash
 
   float hash21(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
   }
 
-  /* ── HSV → RGB (full control) ────────────────── */
+  // HSV to RGB
 
   vec3 hsv2rgb(float h, float s, float v) {
     float hh = fract(h) * 6.0;
@@ -98,9 +98,7 @@ const FRAGMENT_SHADER_SOURCE = `
     return vec3(v, p, q);
   }
 
-  /* ── contour colour from band + hue ────────── */
-  /*    outer = dark, saturated                    */
-  /*    inner = bright, desaturated (cream/pastel)  */
+  // Contour color from band and hue (outer = dark/saturated, inner = bright/desaturated)
 
   vec3 contourColor(float band, float hue) {
     if (band < 0.5) return vec3(0.0);
@@ -113,7 +111,7 @@ const FRAGMENT_SHADER_SOURCE = `
   void main() {
     float time = uTime;
 
-    /* ── halftone cell grid ──────────────────────── */
+    // Halftone cell grid
     float cellSize = 4.0;
     vec2 cell = floor(gl_FragCoord.xy / cellSize);
     vec2 cellCenter = (cell + 0.5) * cellSize;
@@ -123,47 +121,32 @@ const FRAGMENT_SHADER_SOURCE = `
     float maxDim = max(uResolution.x, uResolution.y);
     vec2 normPos = cellCenter / maxDim;
 
-    /* ── domain warping (gentle) ──────────────────── */
+    // Domain warping
     float wx = snoise(vec3(normPos * 1.0 + 100.0, time * 0.008));
     float wy = snoise(vec3(normPos * 1.0 + 200.0, time * 0.006));
     vec2 warped = normPos + vec2(wx, wy) * 0.18;
 
-    /* ── noise field (slow, large shapes) ────────── */
+    // Noise field
     float n1 = snoise(vec3(warped * 1.1, time * 0.010));
     float n2 = snoise(vec3(normPos * 0.55 + 50.0, time * 0.007 + 10.0));
     float noiseVal = (n1 * 0.55 + n2 * 0.45) * 0.5 + 0.5;
 
-    /*
-     * ── Hue field (separate slow noise) ─────────────
-     * Restricted to orange → red → purple → purple-blue
-     * (HSV 0.75 → 1.08, wrapping through red at 1.0).
-     */
+    // Hue field (orange to purple-blue, HSV 0.75 to 1.08)
     float hueN1 = snoise(vec3(normPos * 0.9 + 300.0, time * 0.005));
     float hueN2 = snoise(vec3(normPos * 0.5 + 450.0, time * 0.004 + 30.0));
     float hueRaw = (hueN1 * 0.6 + hueN2 * 0.4) * 0.5 + 0.5;
     float hue = mix(0.75, 1.08, hueRaw);
 
-    /*
-     * ── Contour edges ───────────────────────────────
-     * Slice the noise into N bands. The colour only
-     * appears near the EDGES between bands (where
-     * fract crosses 0). Everything far from an edge
-     * is black.
-     */
+    // Contour edges: color only near band boundaries, black elsewhere
     float numContours = 5.0;
     float scaled = noiseVal * numContours;
     float edgeDist = min(fract(scaled), 1.0 - fract(scaled));
 
-    /* how wide each coloured ribbon is (smaller = more black) */
+    // Edge ribbon width (smaller = more black)
     float edgeWidth = 0.26;
     float edgeIntensity = 1.0 - smoothstep(0.0, edgeWidth, edgeDist);
 
-    /*
-     * ── Map edge intensity to discrete colour bands ─
-     * pow(0.5) expands the outer bands so they occupy
-     * more screen space → wider dithering transitions
-     * at the dark edges, tighter at the bright center.
-     */
+    // Map edge intensity to discrete color bands
     float bandPos = pow(edgeIntensity, 0.7) * 7.0;
     float lo = floor(bandPos);
     float hi = min(lo + 1.0, 7.0);
@@ -172,11 +155,11 @@ const FRAGMENT_SHADER_SOURCE = `
     vec3 loCol = contourColor(lo, hue);
     vec3 hiCol = contourColor(hi, hue);
 
-    /* ── per-cell jitter for organic edges ────────── */
+    // Per-cell jitter for organic edges
     float jitter = (hash21(cell) - 0.5) * 0.35;
     float threshold = clamp(frac + jitter, 0.0, 1.0);
 
-    /* ── halftone circle dithering between colours ── */
+    // Halftone circle dithering between colors
     float dotRadius = threshold * 1.42;
     vec3 outColor = (dist < dotRadius) ? hiCol : loCol;
 
