@@ -18,17 +18,3 @@ export const parseGmailSearchResult = (value: string): GmailSearchToolResult | n
   }
 };
 
-export const formatToolState = (state: string) => {
-  switch (state) {
-    case "input-streaming":
-      return "preparing";
-    case "input-complete":
-      return "running";
-    case "approval-requested":
-      return "approval";
-    case "approval-responded":
-      return "approved";
-    default:
-      return state;
-  }
-};

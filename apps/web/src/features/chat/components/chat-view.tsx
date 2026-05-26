@@ -118,7 +118,7 @@ const ChatSession = ({
   );
   visibleMessagesRef.current = visibleMessages;
   const turns = useMemo(() => createChatTurns(visibleMessages), [visibleMessages]);
-  const hasMessages = visibleMessages.length > 0;
+  const hasMessages = visibleMessages.length > 0 || !!chatId;
   const isComposerLoading =
     isLoading || createChatMutation.isPending || saveMessagesMutation.isPending;
 

@@ -4,37 +4,18 @@ export const ThinkingIndicator = () => (
   <LazyMotion features={domAnimation}>
     <m.div
       animate={{ opacity: 1 }}
-      className="flex items-center gap-2 py-2"
+      className="flex items-center gap-1.5 py-1"
       initial={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
+      transition={{ duration: 0.15 }}
     >
-      <span className="flex items-center gap-1">
+      {[0, 0.15, 0.3].map((delay) => (
         <m.span
-          animate={{ opacity: [0.3, 1, 0.3] }}
-          className="size-1.5 rounded-full bg-muted-foreground/50"
-          transition={{ duration: 1.4, ease: "easeInOut", repeat: Number.POSITIVE_INFINITY }}
+          animate={{ opacity: [0.2, 0.8, 0.2] }}
+          className="size-1 rounded-full bg-muted-foreground/40"
+          key={delay}
+          transition={{ delay, duration: 1.6, ease: "easeInOut", repeat: Number.POSITIVE_INFINITY }}
         />
-        <m.span
-          animate={{ opacity: [0.3, 1, 0.3] }}
-          className="size-1.5 rounded-full bg-muted-foreground/50"
-          transition={{
-            delay: 0.2,
-            duration: 1.4,
-            ease: "easeInOut",
-            repeat: Number.POSITIVE_INFINITY,
-          }}
-        />
-        <m.span
-          animate={{ opacity: [0.3, 1, 0.3] }}
-          className="size-1.5 rounded-full bg-muted-foreground/50"
-          transition={{
-            delay: 0.4,
-            duration: 1.4,
-            ease: "easeInOut",
-            repeat: Number.POSITIVE_INFINITY,
-          }}
-        />
-      </span>
+      ))}
     </m.div>
   </LazyMotion>
 );

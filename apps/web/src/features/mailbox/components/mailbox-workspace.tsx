@@ -86,6 +86,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const queryClient = useQueryClient();
   const composeDialogRef = useRef<ComposeDialogHandle | null>(null);
   const [draftChatVersion, setDraftChatVersion] = useState(0);
+  const chatViewLeftAtRef = useRef<number | null>(null);
   const { activeMailbox, chatId, mailboxId, messageId, query, setMailboxSearch, view } =
     useMailboxRouteSearch();
   const chatsQuery = useQuery(chatsQueryOptions());
@@ -345,7 +346,12 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         onSelectView={(nextView) => {
           if (nextView === view) return;
           if (nextView === "chat") {
-            const nextChatId = chatId ?? chatsQuery.data?.[0]?.id;
+            const leftAt = chatViewLeftAtRef.current;
+            const isStale = leftAt !== null && Date.now() - leftAt > 5 * 60 * 1000;
+            const nextChatId = isStale ? null : (chatId ?? chatsQuery.data?.[0]?.id);
+            if (isStale) {
+              setDraftChatVersion((version) => version + 1);
+            }
             void setMailboxSearch({
               chatId: nextChatId ?? null,
               mailboxId: selectedMailboxId,
@@ -354,6 +360,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
             return;
           }
 
+          chatViewLeftAtRef.current = Date.now();
           void setMailboxSearch({ view: nextView });
         }}
         onChatIdChange={(nextChatId) => {

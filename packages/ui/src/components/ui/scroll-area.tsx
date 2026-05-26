@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentPropsWithoutRef } from "react";
+import type { ComponentProps, ComponentPropsWithoutRef } from "react";
 import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
 import { cn } from "../../lib/cn";
 
@@ -14,7 +14,7 @@ export const ScrollArea = ({
 export const ScrollAreaViewport = ({
   className,
   ...props
-}: ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Viewport>) => (
+}: ComponentProps<typeof ScrollAreaPrimitive.Viewport>) => (
   <ScrollAreaPrimitive.Viewport
     className={cn("size-full rounded-[inherit]", className)}
     {...props}
