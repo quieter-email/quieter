@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-const FRAME_INTERVAL_MS = 1000 / 24;
+const FRAME_INTERVAL_MS = 1000 / 30;
 
 const VERTEX_SHADER_SOURCE = `
   attribute vec2 aPosition;
@@ -11,29 +11,17 @@ const VERTEX_SHADER_SOURCE = `
 `;
 
 const FRAGMENT_SHADER_SOURCE = `
-  #extension GL_OES_standard_derivatives : enable
-
   precision highp float;
 
   uniform vec2 uResolution;
-  uniform vec2 uCssResolution;
   uniform float uTime;
 
-  vec4 mod289(vec4 x) {
-    return x - floor(x * (1.0 / 289.0)) * 289.0;
-  }
+  /* ── simplex 3D noise ─────────────────────────── */
 
-  vec3 mod289(vec3 x) {
-    return x - floor(x * (1.0 / 289.0)) * 289.0;
-  }
-
-  vec4 permute(vec4 x) {
-    return mod289(((x * 34.0) + 1.0) * x);
-  }
-
-  vec4 taylorInvSqrt(vec4 r) {
-    return 1.79284291400159 - 0.85373472095314 * r;
-  }
+  vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+  vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+  vec4 permute(vec4 x) { return mod289(((x * 34.0) + 1.0) * x); }
+  vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
 
   float snoise(vec3 v) {
     const vec2 c = vec2(1.0 / 6.0, 1.0 / 3.0);
@@ -58,13 +46,13 @@ const FRAGMENT_SHADER_SOURCE = `
     float n = 0.142857142857;
     vec3 ns = n * d.wyz - d.xzx;
     vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
-    vec4 x = floor(j * ns.z);
-    vec4 y = floor(j - 7.0 * x);
-    vec4 x_ = x * ns.x + ns.yyyy;
-    vec4 y_ = y * ns.x + ns.yyyy;
-    vec4 h = 1.0 - abs(x_) - abs(y_);
-    vec4 b0 = vec4(x_.xy, y_.xy);
-    vec4 b1 = vec4(x_.zw, y_.zw);
+    vec4 x_ = floor(j * ns.z);
+    vec4 y_ = floor(j - 7.0 * x_);
+    vec4 xn = x_ * ns.x + ns.yyyy;
+    vec4 yn = y_ * ns.x + ns.yyyy;
+    vec4 h = 1.0 - abs(xn) - abs(yn);
+    vec4 b0 = vec4(xn.xy, yn.xy);
+    vec4 b1 = vec4(xn.zw, yn.zw);
     vec4 s0 = floor(b0) * 2.0 + 1.0;
     vec4 s1 = floor(b1) * 2.0 + 1.0;
     vec4 sh = -step(h, vec4(0.0));
@@ -82,85 +70,117 @@ const FRAGMENT_SHADER_SOURCE = `
     p3 *= norm.w;
 
     vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
-
     m *= m;
 
     return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
   }
 
-  vec4 colorRamp(float progress) {
-    float position = pow(clamp(progress, 0.0, 1.0), 1.8) * 8.0;
-    float segment = floor(position);
-    float t = position - segment;
-    vec4 c0 = vec4(0.078, 0.722, 0.651, 0.16);
-    vec4 c1 = vec4(0.176, 0.831, 0.749, 0.24);
-    vec4 c2 = vec4(0.133, 0.827, 0.933, 0.32);
-    vec4 c3 = vec4(0.376, 0.647, 0.980, 0.42);
-    vec4 c4 = vec4(0.506, 0.549, 0.973, 0.52);
-    vec4 c5 = vec4(0.659, 0.333, 0.969, 0.64);
-    vec4 c6 = vec4(0.851, 0.275, 0.937, 0.76);
-    vec4 c7 = vec4(0.957, 0.447, 0.714, 0.86);
-    vec4 c8 = vec4(0.973, 0.443, 0.443, 0.94);
+  /* ── per-cell hash ─────────────────────────────── */
 
-    if (segment < 1.0) {
-      return mix(c0, c1, t);
-    }
+  float hash21(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+  }
 
-    if (segment < 2.0) {
-      return mix(c1, c2, t);
-    }
+  /* ── HSV → RGB (full control) ────────────────── */
 
-    if (segment < 3.0) {
-      return mix(c2, c3, t);
-    }
+  vec3 hsv2rgb(float h, float s, float v) {
+    float hh = fract(h) * 6.0;
+    float f = fract(hh);
+    float p = v * (1.0 - s);
+    float q = v * (1.0 - s * f);
+    float t = v * (1.0 - s * (1.0 - f));
 
-    if (segment < 4.0) {
-      return mix(c3, c4, t);
-    }
+    if (hh < 1.0) return vec3(v, t, p);
+    if (hh < 2.0) return vec3(q, v, p);
+    if (hh < 3.0) return vec3(p, v, t);
+    if (hh < 4.0) return vec3(p, q, v);
+    if (hh < 5.0) return vec3(t, p, v);
+    return vec3(v, p, q);
+  }
 
-    if (segment < 5.0) {
-      return mix(c4, c5, t);
-    }
+  /* ── contour colour from band + hue ────────── */
+  /*    outer = dark, saturated                    */
+  /*    inner = bright, desaturated (cream/pastel)  */
 
-    if (segment < 6.0) {
-      return mix(c5, c6, t);
-    }
-
-    if (segment < 7.0) {
-      return mix(c6, c7, t);
-    }
-
-    return mix(c7, c8, clamp(t, 0.0, 1.0));
+  vec3 contourColor(float band, float hue) {
+    if (band < 0.5) return vec3(0.0);
+    float t = band / 7.0;
+    float sat = 1.0 - pow(t, 0.7) * 0.88;
+    float val = pow(t, 1.5) * 0.95 + 0.04;
+    return hsv2rgb(hue + t * 0.08, sat, val);
   }
 
   void main() {
-    vec2 pixel = vec2(gl_FragCoord.x, uResolution.y - gl_FragCoord.y) * (uCssResolution / uResolution);
     float time = uTime;
 
-    float heightField = snoise(vec3(pixel * 0.00175, time * 0.014)) * 0.5 + 0.5;
-    float bands = heightField * 11.0;
-    float bandDistance = min(fract(bands), 1.0 - fract(bands));
-    float distancePixels = bandDistance / max(fwidth(bands), 0.000001);
-    float contourLine = 1.0 - smoothstep(0.58, 1.76, distancePixels);
-    float contourGlow = 1.0 - smoothstep(1.0, 13.0, distancePixels);
+    /* ── halftone cell grid ──────────────────────── */
+    float cellSize = 4.0;
+    vec2 cell = floor(gl_FragCoord.xy / cellSize);
+    vec2 cellCenter = (cell + 0.5) * cellSize;
+    float halfDiag = cellSize * 0.707;
+    float dist = length(gl_FragCoord.xy - cellCenter) / halfDiag;
 
-    vec2 colorDrift = vec2(sin(time * 0.095) * 120.0, cos(time * 0.085) * 120.0);
-    float colorField = snoise(vec3((pixel + colorDrift) * 0.001, time * 0.025 + 100.0)) * 0.5 + 0.5;
-    float colorProgress = (colorField - 0.62) / 0.38;
-    vec4 ramp = colorRamp(colorProgress);
-    float colorFade = smoothstep(0.0, 1.0, colorProgress / 0.18);
-    float colorMask = max(contourLine, contourGlow * 0.2);
-    float colorAlpha = colorMask * ramp.a * colorFade;
-    float greyAlpha = contourLine * 0.06;
-    float totalAlpha = clamp(greyAlpha + colorAlpha * (1.0 - greyAlpha), 0.0, 0.97);
-    vec3 grey = vec3(0.06, 0.09, 0.16);
-    vec3 color = grey;
+    float maxDim = max(uResolution.x, uResolution.y);
+    vec2 normPos = cellCenter / maxDim;
 
-    if (totalAlpha > 0.0) {
-      color = (grey * greyAlpha + ramp.rgb * colorAlpha * (1.0 - greyAlpha)) / totalAlpha;
-    }
+    /* ── domain warping (gentle) ──────────────────── */
+    float wx = snoise(vec3(normPos * 1.0 + 100.0, time * 0.008));
+    float wy = snoise(vec3(normPos * 1.0 + 200.0, time * 0.006));
+    vec2 warped = normPos + vec2(wx, wy) * 0.18;
 
-    gl_FragColor = vec4(color, totalAlpha);
+    /* ── noise field (slow, large shapes) ────────── */
+    float n1 = snoise(vec3(warped * 1.1, time * 0.010));
+    float n2 = snoise(vec3(normPos * 0.55 + 50.0, time * 0.007 + 10.0));
+    float noiseVal = (n1 * 0.55 + n2 * 0.45) * 0.5 + 0.5;
+
+    /*
+     * ── Hue field (separate slow noise) ─────────────
+     * Restricted to orange → red → purple → purple-blue
+     * (HSV 0.75 → 1.08, wrapping through red at 1.0).
+     */
+    float hueN1 = snoise(vec3(normPos * 0.9 + 300.0, time * 0.005));
+    float hueN2 = snoise(vec3(normPos * 0.5 + 450.0, time * 0.004 + 30.0));
+    float hueRaw = (hueN1 * 0.6 + hueN2 * 0.4) * 0.5 + 0.5;
+    float hue = mix(0.75, 1.08, hueRaw);
+
+    /*
+     * ── Contour edges ───────────────────────────────
+     * Slice the noise into N bands. The colour only
+     * appears near the EDGES between bands (where
+     * fract crosses 0). Everything far from an edge
+     * is black.
+     */
+    float numContours = 5.0;
+    float scaled = noiseVal * numContours;
+    float edgeDist = min(fract(scaled), 1.0 - fract(scaled));
+
+    /* how wide each coloured ribbon is (smaller = more black) */
+    float edgeWidth = 0.26;
+    float edgeIntensity = 1.0 - smoothstep(0.0, edgeWidth, edgeDist);
+
+    /*
+     * ── Map edge intensity to discrete colour bands ─
+     * pow(0.5) expands the outer bands so they occupy
+     * more screen space → wider dithering transitions
+     * at the dark edges, tighter at the bright center.
+     */
+    float bandPos = pow(edgeIntensity, 0.7) * 7.0;
+    float lo = floor(bandPos);
+    float hi = min(lo + 1.0, 7.0);
+    float frac = bandPos - lo;
+
+    vec3 loCol = contourColor(lo, hue);
+    vec3 hiCol = contourColor(hi, hue);
+
+    /* ── per-cell jitter for organic edges ────────── */
+    float jitter = (hash21(cell) - 0.5) * 0.35;
+    float threshold = clamp(frac + jitter, 0.0, 1.0);
+
+    /* ── halftone circle dithering between colours ── */
+    float dotRadius = threshold * 1.42;
+    vec3 outColor = (dist < dotRadius) ? hiCol : loCol;
+
+    gl_FragColor = vec4(outColor, 1.0);
   }
 `;
 
@@ -231,7 +251,7 @@ export const ContourLines = () => {
     }
 
     const gl = canvas.getContext("webgl", {
-      alpha: true,
+      alpha: false,
       antialias: false,
       depth: false,
       preserveDrawingBuffer: false,
@@ -239,7 +259,7 @@ export const ContourLines = () => {
       stencil: false,
     });
 
-    if (!gl || !gl.getExtension("OES_standard_derivatives")) {
+    if (!gl) {
       return;
     }
 
@@ -252,10 +272,9 @@ export const ContourLines = () => {
 
     const positionLocation = gl.getAttribLocation(program, "aPosition");
     const resolutionLocation = gl.getUniformLocation(program, "uResolution");
-    const cssResolutionLocation = gl.getUniformLocation(program, "uCssResolution");
     const timeLocation = gl.getUniformLocation(program, "uTime");
 
-    if (positionLocation === -1 || !resolutionLocation || !cssResolutionLocation || !timeLocation) {
+    if (positionLocation === -1 || !resolutionLocation || !timeLocation) {
       gl.deleteBuffer(positionBuffer);
       gl.deleteProgram(program);
       return;
@@ -274,7 +293,9 @@ export const ContourLines = () => {
     gl.enableVertexAttribArray(positionLocation);
     gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
     gl.disable(gl.BLEND);
-    gl.clearColor(0, 0, 0, 0);
+    gl.clearColor(0, 0, 0, 1);
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
@@ -293,7 +314,6 @@ export const ContourLines = () => {
       canvas.height = height;
       gl.viewport(0, 0, width, height);
       gl.uniform2f(resolutionLocation, width, height);
-      gl.uniform2f(cssResolutionLocation, width / dpr, height / dpr);
       lastRenderTime = -FRAME_INTERVAL_MS;
     };
 
@@ -323,6 +343,18 @@ export const ContourLines = () => {
 
     resize();
     resizeObserver.observe(canvas);
+
+    if (prefersReducedMotion) {
+      gl.uniform1f(timeLocation, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+      return () => {
+        resizeObserver.disconnect();
+        gl.deleteBuffer(positionBuffer);
+        gl.deleteProgram(program);
+      };
+    }
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
     raf = requestAnimationFrame(render);
 
@@ -335,11 +367,5 @@ export const ContourLines = () => {
     };
   }, []);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      aria-hidden="true"
-      className="absolute inset-0 z-0 size-full bg-transparent opacity-50"
-    />
-  );
+  return <canvas ref={canvasRef} aria-hidden="true" className="absolute inset-0 z-0 size-full" />;
 };

@@ -137,7 +137,7 @@ const MessageRowContent = ({
         {
           "bg-muted/80 ring-1 ring-border/80 ring-inset": isSelected,
           "bg-muted": isActive && !isSelected,
-          "bg-background-light/85": unread && !isActive && !isSelected,
+          "bg-background-light/55": unread && !isActive && !isSelected,
           "group-hover:bg-muted/45": !isActive && !isSelected,
         },
       )}

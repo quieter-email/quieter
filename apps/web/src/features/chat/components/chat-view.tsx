@@ -173,7 +173,7 @@ const ChatSession = ({
   };
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden border border-border/60 bg-background-light lg:my-1 lg:mr-1 lg:rounded-lg">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden border border-border/60 bg-background-light/75 lg:my-1 lg:mr-1 lg:rounded-lg">
       <header className="flex min-h-14 items-center px-3 lg:hidden">
         <Button onClick={onOpenSidebar} size="sm" type="button" variant="ghost">
           Sidebar

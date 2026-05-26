@@ -1,6 +1,17 @@
 @import "@quieter/ui/styles.css";
 @source "./**/*.{ts,tsx}";
 
+.quieter-workspace-background {
+  background-color: var(--background);
+  --workspace-dither-dot-rgb: 0, 0, 0;
+}
+
+.dark .quieter-workspace-background,
+:root[data-theme="dark"] .quieter-workspace-background,
+:root[data-kb-theme="dark"] .quieter-workspace-background {
+  --workspace-dither-dot-rgb: 255, 255, 255;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

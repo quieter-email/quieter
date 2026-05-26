@@ -80,7 +80,7 @@ export const MessageDetail = ({
     );
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background-light">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {onBackToList && (
         <div className="flex h-12 shrink-0 items-center border-b px-3 lg:hidden">
           <IconButtonTooltip label="Back to list">
@@ -97,8 +97,11 @@ export const MessageDetail = ({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto" data-message-detail-scroll-container>
-        <m.div className="min-h-full" {...messageDetailContentMotion}>
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+        data-message-detail-scroll-container
+      >
+        <m.div className="flex min-h-full flex-1 flex-col" {...messageDetailContentMotion}>
           {isPending && !selectedMessage ? (
             <MessageDetailLoadingSkeleton />
           ) : selectedMessage ? (

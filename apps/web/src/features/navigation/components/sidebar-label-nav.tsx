@@ -36,6 +36,7 @@ import { getLabelsQueryKey, labelsQueryOptions } from "~/lib/gmail/labels-query"
 import { orpc } from "~/lib/orpc";
 
 type SidebarLabelNavProps = {
+  animateEntrance: boolean;
   mailboxId: string | null;
   onSearch: (query: string) => void;
   searchQuery: string;
@@ -50,6 +51,8 @@ const MAX_VISIBLE_SIDEBAR_LABELS = 10;
 const SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY = "quieter:sidebar-label-visibility";
 
 const getSidebarEntranceDelay = (step: number) => step * 0.1;
+const getSidebarEntranceInitial = (animateEntrance: boolean) =>
+  animateEntrance ? { opacity: 0, x: -20, filter: "blur(20px)" } : false;
 
 const updateLabelFilter = (searchQuery: string, labelName: string, enabled: boolean) => {
   const state = parseStructuredSearchQuery(searchQuery);
@@ -88,7 +91,12 @@ const writeHiddenLabelIds = (mailboxId: string, hiddenLabelIds: Set<string>) => 
   window.localStorage.setItem(SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY, JSON.stringify(parsed));
 };
 
-export const SidebarLabelNav = ({ mailboxId, onSearch, searchQuery }: SidebarLabelNavProps) => {
+export const SidebarLabelNav = ({
+  animateEntrance,
+  mailboxId,
+  onSearch,
+  searchQuery,
+}: SidebarLabelNavProps) => {
   const queryClient = useQueryClient();
   const [editingLabel, setEditingLabel] = useState<EditingLabel>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -227,7 +235,7 @@ export const SidebarLabelNav = ({ mailboxId, onSearch, searchQuery }: SidebarLab
     <section className="mt-4">
       <m.div
         className="mb-1 flex items-center justify-between px-2 will-change-[transform,opacity,filter]"
-        initial={{ opacity: 0, x: -20, filter: "blur(20px)" }}
+        initial={getSidebarEntranceInitial(animateEntrance)}
         animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
         transition={{ delay: getSidebarEntranceDelay(8), duration: 0.5, ease: "easeOut" }}
       >
@@ -253,7 +261,7 @@ export const SidebarLabelNav = ({ mailboxId, onSearch, searchQuery }: SidebarLab
         {labelsQuery.isPending ? (
           <m.p
             className="px-2 py-1 text-xs text-muted-foreground will-change-[transform,opacity,filter]"
-            initial={{ opacity: 0, x: -20, filter: "blur(20px)" }}
+            initial={getSidebarEntranceInitial(animateEntrance)}
             animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
             transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
           >
@@ -262,7 +270,7 @@ export const SidebarLabelNav = ({ mailboxId, onSearch, searchQuery }: SidebarLab
         ) : labelsQuery.isError ? (
           <m.p
             className="px-2 py-1 text-xs text-destructive will-change-[transform,opacity,filter]"
-            initial={{ opacity: 0, x: -20, filter: "blur(20px)" }}
+            initial={getSidebarEntranceInitial(animateEntrance)}
             animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
             transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
           >
@@ -271,7 +279,7 @@ export const SidebarLabelNav = ({ mailboxId, onSearch, searchQuery }: SidebarLab
         ) : visibleUserLabels.length === 0 ? (
           <m.p
             className="px-2 py-1 text-xs text-muted-foreground will-change-[transform,opacity,filter]"
-            initial={{ opacity: 0, x: -20, filter: "blur(20px)" }}
+            initial={getSidebarEntranceInitial(animateEntrance)}
             animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
             transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
           >
@@ -284,7 +292,7 @@ export const SidebarLabelNav = ({ mailboxId, onSearch, searchQuery }: SidebarLab
               <m.div
                 key={label.id}
                 className="w-full will-change-[transform,opacity,filter]"
-                initial={{ opacity: 0, x: -20, filter: "blur(20px)" }}
+                initial={getSidebarEntranceInitial(animateEntrance)}
                 animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
                 transition={{
                   delay: getSidebarEntranceDelay(index + 9),

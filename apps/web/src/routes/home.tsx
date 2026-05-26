@@ -21,18 +21,24 @@ export const Route = createFileRoute("/home")({
 function HomePage() {
   return (
     <LazyMotion features={domAnimation}>
-      <div className="relative isolate min-h-dvh w-full">
+      <m.div
+        initial={{ opacity: 0, filter: "blur(12px)" }}
+        animate={{ opacity: 1, filter: "blur(0px)" }}
+        transition={{ duration: 1.2, ease: "easeOut" }}
+        className="relative isolate min-h-dvh w-full bg-black will-change-[opacity,filter]"
+      >
         <LinkButton
-          className="fixed top-4 right-4 z-20 h-8 border-foreground/10 bg-background/10 px-3 text-xs text-foreground/35 shadow-none backdrop-blur-sm hover:bg-background/25 hover:text-foreground/60"
+          className="fixed top-4 right-4 z-20 h-8 border-white/15 bg-white/5 px-3 text-xs text-white/50 shadow-none backdrop-blur-sm hover:bg-white/10 hover:text-white/80"
           search={{ returnTo: "/auth" }}
           to="/site-password"
           variant="outline"
         >
           Access
         </LinkButton>
-        <div className="relative z-10 grid min-h-dvh w-full place-items-center">
-          <div className="flex h-[90vh] w-2/3 flex-col items-center gap-y-10 max-sm:w-full max-sm:px-6">
-            <h1 className="mt-[15vh] max-w-xl text-center text-6xl font-semibold text-balance">
+        <div className="relative z-10 grid min-h-dvh w-full place-items-center px-6 py-16">
+          <div className="absolute inset-0 bg-[radial-gradient(48%_42%_at_50%_50%,rgba(0,0,0,0.92)_0%,rgba(0,0,0,0.68)_48%,rgba(0,0,0,0.18)_72%,transparent_100%)]" />
+          <div className="relative flex w-full max-w-5xl flex-col items-center justify-center gap-y-10 min-[2560px]:max-w-6xl min-[2560px]:gap-y-11">
+            <h1 className="max-w-3xl text-center text-6xl leading-[0.95] font-semibold text-balance text-white min-[1920px]:max-w-4xl min-[1920px]:text-[3.875rem] min-[2560px]:text-[4.25rem]">
               <m.p
                 initial={{ opacity: 0, y: 20, filter: "blur(20px)" }}
                 animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
@@ -49,13 +55,14 @@ function HomePage() {
               >
                 a whole lot{" "}
                 <m.span
-                  className="relative inline-block bg-transparent"
+                  className="relative inline-block"
                   animate={{
                     color: [
-                      "oklch(0.6 0.15 0)",
-                      "oklch(0.6 0.15 120)",
-                      "oklch(0.6 0.15 240)",
-                      "oklch(0.6 0.15 360)",
+                      "oklch(0.75 0.15 280)",
+                      "oklch(0.75 0.15 330)",
+                      "oklch(0.75 0.15 385)",
+                      "oklch(0.75 0.15 330)",
+                      "oklch(0.75 0.15 280)",
                     ],
                   }}
                   transition={{
@@ -71,7 +78,7 @@ function HomePage() {
               initial={{ opacity: 0, y: 20, filter: "blur(20px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               transition={{ delay: 0.6, duration: 0.8, ease: "easeOut" }}
-              className="text-center text-base font-light text-balance will-change-[transform,opacity,filter]"
+              className="w-full text-center text-base leading-7 font-light text-balance text-white/60 will-change-[transform,opacity,filter] min-[900px]:whitespace-nowrap min-[2560px]:text-[17px]"
             >
               Just want a modern email client? Or need to manage your whole companies support inbox?
               We&apos;ve got you covered.
@@ -80,22 +87,16 @@ function HomePage() {
               initial={{ opacity: 0, y: 20, filter: "blur(20px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               transition={{ delay: 0.9, duration: 0.8, ease: "easeOut" }}
-              className="w-full max-w-sm will-change-[transform,opacity,filter]"
+              className="w-full max-w-sm will-change-[transform,opacity,filter] min-[2560px]:max-w-[26rem]"
             >
               <WaitlistForm />
             </m.div>
           </div>
         </div>
-        <m.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 1, ease: "easeOut" }}
-          className="fixed top-0 left-0 h-dvh w-dvw"
-        >
+        <div className="fixed top-0 left-0 h-dvh w-dvw">
           <ContourLines />
-          <div className="absolute inset-0 z-0 bg-[radial-gradient(125%_125%_at_50%_10%,transparent_40%,#475569_100%)]" />
-        </m.div>
-      </div>
+        </div>
+      </m.div>
     </LazyMotion>
   );
 }
@@ -143,27 +144,30 @@ function WaitlistForm() {
   return (
     <form action="/api/waitlist" className="grid gap-2" method="post" onSubmit={handleSubmit}>
       <Field>
-        <FieldLabel htmlFor="waitlist-email">Join the waitlist</FieldLabel>
-        <div className="flex items-center gap-2">
+        <FieldLabel className="text-white/70 min-[2560px]:text-[15px]" htmlFor="waitlist-email">
+          Join the waitlist
+        </FieldLabel>
+        <div className="relative">
           <Input
             autoCapitalize="none"
             autoComplete="off"
             autoCorrect="off"
-            chrome="primary"
+            className="h-9 border-white/15 bg-white/5 pr-11 text-sm text-white placeholder:text-white/30 min-[2560px]:h-10 min-[2560px]:pr-12 min-[2560px]:text-[15px]"
             disabled={iconState === "loading"}
             id="waitlist-email"
             name="email"
             placeholder="you@example.com"
             required
-            size="sm"
             type="text"
           />
           <IconButtonTooltip label="Join waitlist">
             <Button
               aria-label="Join waitlist"
+              className="absolute top-1/2 right-1 !size-7 -translate-y-1/2 bg-transparent text-white/70 shadow-none hover:bg-white/10 hover:text-white min-[2560px]:right-1.5 min-[2560px]:!size-8"
               disabled={iconState === "loading"}
               size="icon-sm"
               type="submit"
+              variant="ghost"
             >
               <WaitlistSubmitIcon state={iconState} />
             </Button>

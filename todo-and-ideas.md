@@ -1,3 +1,5 @@
+I want to create something like resend, but not just for programmatic sending. We cover the whole stack, from programmatic sending AND receiving to AI sending and receiving to human sending and receiving. All in one unified platform.
+
 - Pricing and checkout with Polar and PayKit
   - Gmail always included for free
   - quieter managed is $10/month and gives you access to $10 worth of aws ses mails send/received, overages are aws ses prices + 5% or something

@@ -7,7 +7,7 @@ import {
   Delete01Icon,
   Edit01Icon,
   InboxIcon,
-  MoreHorizontalIcon,
+  MoreVerticalIcon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -32,6 +32,7 @@ import {
 } from "react";
 import type { MailboxWorkspaceView } from "~/features/mailbox/domain/mailbox-workspace-view";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
+import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
 import {
   type MailboxSwitcherOrder,
   MailboxSwitcherDropdown,
@@ -79,15 +80,22 @@ type MailSidebarProps = {
 };
 
 type SidebarContentProps = Omit<MailSidebarProps, "isMobileOpen" | "onMobileOpenChange"> & {
+  animateEntrance: boolean;
   onRequestClose?: () => void;
   switcherSide?: "bottom" | "right";
 };
 
 const getSidebarEntranceDelay = (step: number) => step * 0.1;
 
+const getSidebarEntranceInitial = (animateEntrance: boolean) =>
+  animateEntrance ? { opacity: 0, x: -20, filter: "blur(8px)" } : false;
+
+let hasPlayedSidebarEntrance = false;
+
 type SidebarChat = MailSidebarProps["chats"][number];
 
 type SidebarChatRowProps = {
+  animateEntrance: boolean;
   chat: SidebarChat;
   editingTitle: string;
   index: number;
@@ -103,6 +111,7 @@ type SidebarChatRowProps = {
 };
 
 const SidebarChatRow = ({
+  animateEntrance,
   chat,
   editingTitle,
   index,
@@ -122,7 +131,7 @@ const SidebarChatRow = ({
     <m.div
       key={chat.id}
       className="w-full will-change-[transform,opacity,filter]"
-      initial={{ opacity: 0, x: -20, filter: "blur(8px)" }}
+      initial={getSidebarEntranceInitial(animateEntrance)}
       animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
       transition={{
         delay: getSidebarEntranceDelay(index + 3),
@@ -146,34 +155,40 @@ const SidebarChatRow = ({
       ) : (
         <div
           className={cn(
-            "group/chat-row flex h-9 items-center rounded-md border border-transparent transition-colors",
-            {
-              "border-primary/20 bg-primary/10 text-foreground hover:bg-primary/15": isActive,
-              "text-muted-foreground hover:bg-muted/60 hover:text-foreground": !isActive,
-            },
+            "group flex h-8 w-full items-center rounded-md border border-transparent transition-colors",
+            isActive
+              ? "border-primary/20 bg-primary/10 hover:bg-primary/15"
+              : "hover:bg-secondary/50",
           )}
         >
-          <button
+          <Button
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "flex h-full min-w-0 flex-1 items-center rounded-l-md px-3 text-left text-sm font-medium transition-[font-weight,scale] outline-none focus-visible:ring-2 focus-visible:ring-ring/20",
-              {
-                "font-medium": isActive,
-                "hover:font-medium": !isActive,
-              },
+              "h-8 min-w-0 flex-1 justify-start bg-transparent px-3 text-left text-sm font-medium hover:bg-transparent active:bg-transparent",
+              isActive ? "font-extrabold text-foreground" : "hover:font-extrabold",
             )}
             onClick={() => onSelect(chat.id)}
+            size="sm"
             type="button"
+            variant="ghost"
           >
             <span className="truncate">{title}</span>
-          </button>
+          </Button>
           <DropdownMenu>
-            <IconButtonTooltip label={`${title} options`}>
+            <IconButtonTooltip label={`Options for "${title}"`}>
               <DropdownMenuTrigger
-                aria-label={`${title} options`}
-                className="mr-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color,background-color,transform] outline-none group-hover/chat-row:opacity-100 hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/20 data-popup-open:opacity-100"
+                aria-label={`Options for "${title}"`}
+                className="pointer-events-none shrink-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 data-popup-open:pointer-events-auto data-popup-open:opacity-100"
+                render={
+                  <Button
+                    className="bg-transparent hover:bg-transparent active:bg-transparent [&_svg]:opacity-60 hover:[&_svg]:opacity-100"
+                    size="icon-sm"
+                    type="button"
+                    variant="ghost"
+                  />
+                }
               >
-                <HugeiconsIcon aria-hidden className="size-4" icon={MoreHorizontalIcon} />
+                <HugeiconsIcon aria-hidden className="size-4" icon={MoreVerticalIcon} />
               </DropdownMenuTrigger>
             </IconButtonTooltip>
             <DropdownMenuContent align="end">
@@ -195,6 +210,7 @@ const SidebarChatRow = ({
 
 const SidebarContent = ({
   activeChatId,
+  animateEntrance,
   chats,
   defaultMailboxId,
   onCreateChat,
@@ -269,10 +285,10 @@ const SidebarContent = ({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col p-3">
+    <div className="relative z-10 flex min-h-0 flex-1 flex-col p-3">
       <m.div
         className="flex min-w-0 items-start gap-2 rounded-md will-change-[transform,opacity,filter]"
-        initial={{ opacity: 0, x: -20, filter: "blur(8px)" }}
+        initial={getSidebarEntranceInitial(animateEntrance)}
         animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
         transition={{ delay: getSidebarEntranceDelay(0), duration: 0.5, ease: "easeOut" }}
       >
@@ -304,19 +320,12 @@ const SidebarContent = ({
 
       <m.div
         aria-label="Workspace view"
-        className="relative mt-3 grid grid-cols-2 rounded-lg border border-border/60 bg-muted/70 p-px will-change-[transform,opacity,filter]"
+        className="relative mt-3 grid grid-cols-2 rounded-lg bg-muted/70 p-px will-change-[transform,opacity,filter]"
         role="group"
-        initial={{ opacity: 0, x: -20, filter: "blur(8px)" }}
+        initial={getSidebarEntranceInitial(animateEntrance)}
         animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
         transition={{ delay: getSidebarEntranceDelay(1), duration: 0.5, ease: "easeOut" }}
       >
-        <m.div
-          aria-hidden
-          className="pointer-events-none absolute top-px bottom-px left-px w-[calc(50%-1px)] rounded-md bg-background shadow-sm"
-          initial={false}
-          animate={{ x: isInboxView ? 0 : "100%" }}
-          transition={{ type: "spring", stiffness: 420, damping: 36 }}
-        />
         <button
           aria-pressed={isInboxView}
           className={cn(
@@ -329,6 +338,15 @@ const SidebarContent = ({
           onClick={() => handleSelectView("inbox")}
           type="button"
         >
+          {isInboxView && (
+            <m.div
+              aria-hidden
+              className="pointer-events-none absolute inset-px -z-10 rounded-md bg-background/60 shadow-sm"
+              initial={false}
+              layoutId="sidebar-view-background"
+              transition={{ type: "spring", stiffness: 420, damping: 36 }}
+            />
+          )}
           <HugeiconsIcon
             className="size-3.5 shrink-0"
             icon={InboxIcon}
@@ -348,6 +366,15 @@ const SidebarContent = ({
           onClick={() => handleSelectView("chat")}
           type="button"
         >
+          {!isInboxView && (
+            <m.div
+              aria-hidden
+              className="pointer-events-none absolute inset-px -z-10 rounded-md bg-background/60 shadow-sm"
+              initial={false}
+              layoutId="sidebar-view-background"
+              transition={{ type: "spring", stiffness: 420, damping: 36 }}
+            />
+          )}
           <HugeiconsIcon
             className="size-3.5 shrink-0"
             icon={Chat01Icon}
@@ -360,7 +387,7 @@ const SidebarContent = ({
       {isInboxView && (
         <m.div
           className="mt-3 p-1 will-change-[transform,opacity,filter]"
-          initial={{ opacity: 0, x: -20, filter: "blur(8px)" }}
+          initial={getSidebarEntranceInitial(animateEntrance)}
           animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
           transition={{ delay: getSidebarEntranceDelay(2), duration: 0.5, ease: "easeOut" }}
         >
@@ -377,54 +404,29 @@ const SidebarContent = ({
       )}
 
       {isInboxView && (
-        <>
-          <div className="mt-4 min-h-0 flex-1 p-1">
-            <SidebarMailboxNav
-              onSelectMailbox={handleSelectMailbox}
-              selectedMailbox={selectedMailbox}
-            />
-            <SidebarLabelNav
-              mailboxId={selectedMailboxId}
-              onSearch={(query) => {
-                onSearch(query);
-                onRequestClose?.();
-              }}
-              searchQuery={searchQuery}
-            />
-          </div>
-          <m.div
-            className="mt-auto p-2 will-change-[transform,opacity,filter]"
-            initial={{ opacity: 0, x: -20, filter: "blur(8px)" }}
-            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-            transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
-          >
-            <LinkButton
-              aria-label="Settings"
-              className="group w-full justify-start transition-[font-weight,scale] hover:font-extrabold active:font-extrabold [&_svg_*]:transition-[stroke-width] hover:[&_svg_*]:stroke-3 active:[&_svg_*]:stroke-3"
-              onClick={onRequestClose}
-              search={{
-                from: "/",
-                tab: "general",
-              }}
-              variant="ghost"
-              to="/settings"
-            >
-              <HugeiconsIcon
-                className="size-4 shrink-0 rotate-0 transition-transform duration-1000 ease-in-out group-hover:rotate-360"
-                icon={Settings01Icon}
-                strokeWidth={1.5}
-              />
-              Settings
-            </LinkButton>
-          </m.div>
-        </>
+        <div className="mt-2 min-h-0 flex-1 p-1">
+          <SidebarMailboxNav
+            animateEntrance={animateEntrance}
+            onSelectMailbox={handleSelectMailbox}
+            selectedMailbox={selectedMailbox}
+          />
+          <SidebarLabelNav
+            animateEntrance={animateEntrance}
+            mailboxId={selectedMailboxId}
+            onSearch={(query) => {
+              onSearch(query);
+              onRequestClose?.();
+            }}
+            searchQuery={searchQuery}
+          />
+        </div>
       )}
 
       {!isInboxView && (
         <>
           <m.div
             className="mt-3 p-1 will-change-[transform,opacity,filter]"
-            initial={{ opacity: 0, x: -20, filter: "blur(8px)" }}
+            initial={getSidebarEntranceInitial(animateEntrance)}
             animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
             transition={{ delay: getSidebarEntranceDelay(2), duration: 0.5, ease: "easeOut" }}
           >
@@ -441,13 +443,17 @@ const SidebarContent = ({
             </Button>
           </m.div>
 
-          <nav aria-label="Chats" className="mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto p-1">
+          <nav
+            aria-label="Chats"
+            className="mt-2 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-1"
+          >
             {chats.map((chat, index) => {
               const isActive = chat.id === activeChatId;
 
               return (
                 <SidebarChatRow
                   key={chat.id}
+                  animateEntrance={animateEntrance}
                   chat={chat}
                   editingTitle={editingChat?.id === chat.id ? editingChat.title : ""}
                   index={index}
@@ -466,6 +472,32 @@ const SidebarContent = ({
           </nav>
         </>
       )}
+
+      <m.div
+        className="mt-auto p-2 will-change-[transform,opacity,filter]"
+        initial={getSidebarEntranceInitial(animateEntrance)}
+        animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+        transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
+      >
+        <LinkButton
+          aria-label="Settings"
+          className="group w-full justify-start transition-[font-weight,scale] hover:font-extrabold active:font-extrabold [&_svg_*]:transition-[stroke-width] hover:[&_svg_*]:stroke-3 active:[&_svg_*]:stroke-3"
+          onClick={onRequestClose}
+          search={{
+            from: "/",
+            tab: "general",
+          }}
+          variant="ghost"
+          to="/settings"
+        >
+          <HugeiconsIcon
+            className="size-4 shrink-0 rotate-0 transition-transform duration-1000 ease-in-out group-hover:rotate-360"
+            icon={Settings01Icon}
+            strokeWidth={1.5}
+          />
+          Settings
+        </LinkButton>
+      </m.div>
     </div>
   );
 };
@@ -475,9 +507,20 @@ export const MailSidebar = ({
   onMobileOpenChange,
   ...sidebarProps
 }: MailSidebarProps) => {
+  const [animateEntrance, setAnimateEntrance] = useState(() => !hasPlayedSidebarEntrance);
   const closeMobileSidebar = useEffectEvent(() => {
     onMobileOpenChange(false);
   });
+
+  useEffect(() => {
+    if (!animateEntrance) {
+      return;
+    }
+
+    hasPlayedSidebarEntrance = true;
+    const frame = requestAnimationFrame(() => setAnimateEntrance(false));
+    return () => cancelAnimationFrame(frame);
+  }, [animateEntrance]);
 
   useEffect(() => {
     if (!isMobileOpen) {
@@ -500,10 +543,10 @@ export const MailSidebar = ({
     <LazyMotion features={domAnimation}>
       <>
         <aside
-          className="relative hidden h-full shrink-0 bg-background text-foreground lg:flex lg:flex-col"
+          className="relative hidden h-full shrink-0 bg-transparent text-foreground lg:flex lg:flex-col"
           style={{ width: "248px" }}
         >
-          <SidebarContent {...sidebarProps} />
+          <SidebarContent {...sidebarProps} animateEntrance={animateEntrance} />
         </aside>
 
         <AnimatePresence initial={false}>
@@ -520,14 +563,16 @@ export const MailSidebar = ({
               />
               <m.aside
                 aria-label="Mail sidebar"
-                className="fixed inset-y-0 left-0 z-50 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-foreground shadow-2xl lg:hidden"
+                className="quieter-workspace-background fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-foreground shadow-2xl lg:hidden"
                 initial={{ x: "-100%" }}
                 animate={{ x: 0 }}
                 exit={{ x: "-100%" }}
                 transition={{ type: "spring", bounce: 0, duration: 0.24 }}
               >
+                <WorkspaceDitherBackground />
                 <SidebarContent
                   {...sidebarProps}
+                  animateEntrance={animateEntrance}
                   onRequestClose={() => onMobileOpenChange(false)}
                   switcherSide="bottom"
                 />

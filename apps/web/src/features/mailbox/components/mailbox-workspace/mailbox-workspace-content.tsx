@@ -7,6 +7,7 @@ import type { ComposeDraftState } from "~/features/compose";
 import type { MailboxWorkspaceView } from "~/features/mailbox/domain/mailbox-workspace-view";
 import type { MailboxSwitcherOrder } from "~/features/navigation/components/mailbox-switcher";
 import type { ListMessagesPageResult, MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
+import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
 import { ChatView } from "~/features/chat/components/chat-view";
 import { MessageList } from "~/features/message-list/components/message-list";
 import { MessageDetail } from "~/features/message-thread/components/message-detail";
@@ -120,10 +121,9 @@ export const MailboxWorkspaceContent = ({
   selectedView,
 }: MailboxWorkspaceContentProps) => (
   <LazyMotion features={domAnimation}>
-    <main className="flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground">
-      <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        <div className="pointer-events-none absolute inset-0" />
-
+    <main className="quieter-workspace-background relative isolate flex h-dvh min-h-0 flex-col overflow-hidden text-foreground">
+      <WorkspaceDitherBackground />
+      <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
         <MailSidebar
           activeChatId={chatId}
           chats={chats}
@@ -148,12 +148,12 @@ export const MailboxWorkspaceContent = ({
           isMobileOpen={layoutState.isMobileSidebarOpen}
         />
 
-        <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
+        <div className="relative min-h-0 flex-1 overflow-hidden bg-transparent">
           <AnimatePresence initial={false}>
             {selectedView === "chat" ? (
               <m.div
                 key={`chat-${chatId ?? draftChatKey}`}
-                className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden bg-background"
+                className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden bg-transparent"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -171,7 +171,7 @@ export const MailboxWorkspaceContent = ({
             ) : (
               <m.div
                 key="inbox"
-                className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden bg-background lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-1 lg:py-1 lg:pr-1"
+                className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden bg-transparent lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-1 lg:py-1 lg:pr-1"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -181,7 +181,7 @@ export const MailboxWorkspaceContent = ({
                   <>
                     <section
                       className={cn(
-                        "min-h-0 min-w-0 flex-col overflow-hidden border border-border/60 bg-background-light lg:flex lg:rounded-lg",
+                        "min-h-0 min-w-0 flex-col overflow-hidden border border-border/60 bg-background-light/75 lg:flex lg:rounded-lg",
                         {
                           "flex flex-1": !layoutState.isMessageRouteOpen,
                           hidden: layoutState.isMessageRouteOpen,
@@ -215,7 +215,7 @@ export const MailboxWorkspaceContent = ({
 
                     <div
                       className={cn(
-                        "min-h-0 min-w-0 flex-col overflow-hidden border border-border/60 bg-background-light lg:flex lg:rounded-lg",
+                        "min-h-0 min-w-0 flex-col overflow-hidden border border-border/60 bg-background-light/75 lg:flex lg:rounded-lg",
                         {
                           "flex flex-1": layoutState.isMessageRouteOpen,
                           hidden: !layoutState.isMessageRouteOpen,
@@ -238,7 +238,7 @@ export const MailboxWorkspaceContent = ({
                     </div>
                   </>
                 ) : (
-                  <section className="flex min-h-0 flex-1 items-center justify-center bg-background-light px-8">
+                  <section className="flex min-h-0 flex-1 items-center justify-center bg-background-light/75 px-8">
                     <m.div className="max-w-md space-y-3 text-center" {...workspaceContentMotion}>
                       <h1 className="text-lg font-semibold tracking-tight text-foreground">
                         No mailboxes

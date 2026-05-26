@@ -129,7 +129,7 @@ const HtmlMessageBodyContent = ({
         </div>
       )}
       <div
-        className="mail-content no-scrollbar w-full flex-1 overflow-scroll bg-background-light text-foreground"
+        className="mail-content no-scrollbar w-full flex-1 overflow-scroll bg-transparent text-foreground"
         ref={hostRef}
       />
     </>
@@ -152,7 +152,7 @@ const MessageBodyLoadingSkeleton = () => (
 );
 
 const PlainTextMessageBody = ({ text }: { text: string }) => (
-  <p className="bg-background-light p-4 text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground">
+  <p className="bg-transparent p-4 text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground">
     {linkifyText(text).map((segment, index) =>
       segment.kind === "link" ? (
         <a

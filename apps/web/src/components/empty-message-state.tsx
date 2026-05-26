@@ -9,7 +9,7 @@ export const EmptyMessageState = ({
   title?: string | null;
 }) => (
   <LazyMotion features={domAnimation}>
-    <div className="grid h-full min-h-56 place-items-center">
+    <div className="flex flex-1 items-center justify-center">
       <div className="relative max-w-sm p-8">
         <m.div
           aria-hidden

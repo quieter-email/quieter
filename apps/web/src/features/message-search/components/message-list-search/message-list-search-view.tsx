@@ -65,7 +65,7 @@ export const MessageListSearchView = ({
   } = controller;
 
   return (
-    <div className="bg-background-light p-4" role="search">
+    <div className="bg-transparent p-4" role="search">
       <div className="relative">
         <div className="flex min-w-0 items-center gap-2 lg:-ml-2">
           {onOpenSidebar && (
