@@ -17,4 +17,3 @@ export const parseGmailSearchResult = (value: string): GmailSearchToolResult | n
     return null;
   }
 };
-

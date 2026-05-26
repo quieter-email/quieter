@@ -72,7 +72,8 @@ export const ChatTranscript = ({
                 />
               ))}
             </AnimatePresence>
-            {isLoading && !turns.at(-1)?.assistant?.parts.some((part) => part.type === "thinking") ? (
+            {isLoading &&
+            !turns.at(-1)?.assistant?.parts.some((part) => part.type === "thinking") ? (
               <ThinkingIndicator />
             ) : null}
             {errorMessage && <ChatError message={errorMessage} />}
