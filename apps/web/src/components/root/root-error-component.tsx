@@ -17,7 +17,7 @@ export const RootErrorComponent = ({
   }, [error]);
 
   const message =
-    error instanceof Error && error.message
+    import.meta.env.DEV && error instanceof Error && error.message
       ? error.message
       : "An unexpected error occurred while loading this screen.";
 

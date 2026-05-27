@@ -109,13 +109,14 @@ export const MailboxesSettingsPanel = () => {
       const result = await mailboxesQuery.refetch({
         cancelRefetch: true,
       });
-      writePendingGmailLink(null);
-      setPendingGmailLink(null);
 
       if (result.isError) {
         toast.error("Could not finish Gmail connection.");
         return result;
       }
+
+      writePendingGmailLink(null);
+      setPendingGmailLink(null);
 
       const nextMailboxCount = result.data?.groups.flatMap((group) => group.mailboxes).length ?? 0;
       if (nextMailboxCount > pendingGmailLink.mailboxCount) {

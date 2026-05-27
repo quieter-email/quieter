@@ -23,19 +23,19 @@ export const HomePage = () => (
         <div className="absolute inset-0 bg-[radial-gradient(48%_42%_at_50%_50%,rgba(0,0,0,0.92)_0%,rgba(0,0,0,0.68)_48%,rgba(0,0,0,0.18)_72%,transparent_100%)]" />
         <div className="relative flex w-full max-w-5xl flex-col items-center justify-center gap-y-10 min-[2560px]:max-w-6xl min-[2560px]:gap-y-11">
           <h1 className="max-w-3xl text-center text-6xl leading-[0.95] font-semibold text-balance text-white min-[1920px]:max-w-4xl min-[1920px]:text-[3.875rem] min-[2560px]:text-[4.25rem]">
-            <m.p
+            <m.span
               initial={{ opacity: 0, y: 20, filter: "blur(8px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               transition={{ delay: 0, duration: 0.8, ease: "easeOut" }}
-              className="will-change-[transform,opacity,filter]"
+              className="block will-change-[transform,opacity,filter]"
             >
               Your inbox just got
-            </m.p>
-            <m.p
+            </m.span>
+            <m.span
               initial={{ opacity: 0, y: 20, filter: "blur(8px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               transition={{ delay: 0.3, duration: 0.8, ease: "easeOut" }}
-              className="will-change-[transform,opacity,filter]"
+              className="block will-change-[transform,opacity,filter]"
             >
               a whole lot{" "}
               <m.span
@@ -56,7 +56,7 @@ export const HomePage = () => (
               >
                 quieter
               </m.span>
-            </m.p>
+            </m.span>
           </h1>
           <m.h2
             initial={{ opacity: 0, y: 20, filter: "blur(8px)" }}
@@ -64,8 +64,8 @@ export const HomePage = () => (
             transition={{ delay: 0.6, duration: 0.8, ease: "easeOut" }}
             className="w-full text-center text-base leading-7 font-light text-balance text-white/60 will-change-[transform,opacity,filter] min-[900px]:whitespace-nowrap min-[2560px]:text-[17px]"
           >
-            Just want a modern email client? Or need to manage your whole companies support inbox?
-            We&apos;ve got you covered.
+            Just want a modern email client? Or need to manage your whole company&apos;s support
+            inbox? We&apos;ve got you covered.
           </m.h2>
           <m.div
             initial={{ opacity: 0, y: 20, filter: "blur(8px)" }}

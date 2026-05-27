@@ -316,7 +316,7 @@ export const useMessageListSearchController = ({
 
     const normalizedQuery = serializeStructuredSearchState(normalizedState);
     setDraftState(
-      normalizedQuery === committedSearchQuery
+      normalizedQuery === searchQuery
         ? null
         : {
             baseQuery: normalizedQuery,

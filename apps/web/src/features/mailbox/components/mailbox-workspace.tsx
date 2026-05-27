@@ -42,22 +42,24 @@ const useChatSidebarActions = ({
   const queryClient = useQueryClient();
   const renameChatMutation = useMutation({
     ...orpc.chat.rename.mutationOptions(),
-    onSuccess: async (_updatedChat, variables) => {
+    onMutate: () => ({ mailboxId: selectedMailboxId }),
+    onSuccess: async (_updatedChat, variables, context) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: getChatsQueryKey(selectedMailboxId) }),
+        queryClient.invalidateQueries({ queryKey: getChatsQueryKey(context.mailboxId) }),
         queryClient.invalidateQueries({
-          queryKey: getChatQueryKey(selectedMailboxId, variables.chatId),
+          queryKey: getChatQueryKey(context.mailboxId, variables.chatId),
         }),
       ]);
     },
   });
   const deleteChatMutation = useMutation({
     ...orpc.chat.delete.mutationOptions(),
-    onSuccess: async (_result, variables) => {
+    onMutate: () => ({ mailboxId: selectedMailboxId }),
+    onSuccess: async (_result, variables, context) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: getChatsQueryKey(selectedMailboxId) }),
+        queryClient.invalidateQueries({ queryKey: getChatsQueryKey(context.mailboxId) }),
         queryClient.removeQueries({
-          queryKey: getChatQueryKey(selectedMailboxId, variables.chatId),
+          queryKey: getChatQueryKey(context.mailboxId, variables.chatId),
         }),
       ]);
     },

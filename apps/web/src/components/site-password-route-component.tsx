@@ -1,4 +1,8 @@
-export const SitePasswordRouteComponent = () => (
+export const SitePasswordRouteComponent = ({
+  hasSitePasswordError,
+}: {
+  hasSitePasswordError: boolean;
+}) => (
   <main className="grid min-h-dvh place-items-center bg-background px-6 py-10">
     <div className="w-full max-w-sm">
       <h1 className="text-2xl font-medium tracking-normal text-foreground">quieter</h1>
@@ -16,7 +20,7 @@ export const SitePasswordRouteComponent = () => (
           required
           type="password"
         />
-        {globalThis.location?.search.includes("sitePasswordError=1") && (
+        {hasSitePasswordError && (
           <p className="text-sm text-destructive">That password did not work.</p>
         )}
         <button

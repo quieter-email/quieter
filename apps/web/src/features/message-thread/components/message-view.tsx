@@ -224,14 +224,6 @@ const MessageHeaderContent = ({
 
                 onToggleExpanded();
               }}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") {
-                  return;
-                }
-
-                event.preventDefault();
-                onToggleExpanded();
-              }}
               type="button"
             >
               {content}
@@ -893,7 +885,6 @@ export const MessageView = ({
             <MessageActionsDropdown
               actions={createMailboxThreadMessageActionHandlers({
                 mailboxActions,
-                threadId: message.threadId,
               })}
               isPending={isActionPending}
               isUnread={threadIsUnread}

@@ -6,38 +6,36 @@ export type LabelChanges = {
   removeLabelIds?: string[];
 };
 
-export type MessageActionsHandlers = {
+export type ThreadActionHandlers = {
   onDeleteDraft?: (message: MessageListItem) => void | Promise<void>;
-  onMarkAsRead?: (messageId: string) => void | Promise<void>;
-  onMarkAsSpam?: (messageId: string) => void | Promise<void>;
-  onMarkAsUnread?: (messageId: string) => void | Promise<void>;
+  onMarkAsRead?: (threadId: string) => void | Promise<void>;
+  onMarkAsSpam?: (threadId: string) => void | Promise<void>;
+  onMarkAsUnread?: (threadId: string) => void | Promise<void>;
   onOpenDraft?: (message: MessageListItem) => void | Promise<void>;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
-  onUpdateLabels?: (messageId: string, changes: LabelChanges) => void | Promise<void>;
-  onMoveToTrash?: (messageId: string) => void | Promise<void>;
-  onUntrash?: (messageId: string) => void | Promise<void>;
-  onUnmarkAsSpam?: (messageId: string) => void | Promise<void>;
-  onDeletePermanently?: (messageId: string) => void | Promise<void>;
+  onUpdateLabels?: (threadId: string, changes: LabelChanges) => void | Promise<void>;
+  onMoveToTrash?: (threadId: string) => void | Promise<void>;
+  onUntrash?: (threadId: string) => void | Promise<void>;
+  onUnmarkAsSpam?: (threadId: string) => void | Promise<void>;
+  onDeletePermanently?: (threadId: string) => void | Promise<void>;
 };
 
 export const createMailboxThreadMessageActionHandlers = ({
   mailboxActions,
   onOpenDraft,
-  threadId,
 }: {
   mailboxActions: MailboxActions;
   onOpenDraft?: (message: MessageListItem) => void | Promise<void>;
-  threadId: string;
-}): MessageActionsHandlers => ({
+}): ThreadActionHandlers => ({
   onDeleteDraft: mailboxActions.deleteDraft,
-  onDeletePermanently: () => mailboxActions.deleteThreadPermanently(threadId),
-  onMarkAsRead: () => mailboxActions.markThreadAsRead(threadId),
-  onMarkAsSpam: () => mailboxActions.markThreadAsSpam(threadId),
-  onMarkAsUnread: () => mailboxActions.markThreadAsUnread(threadId),
-  onMoveToTrash: () => mailboxActions.moveThreadToTrash(threadId),
+  onDeletePermanently: (threadId) => mailboxActions.deleteThreadPermanently(threadId),
+  onMarkAsRead: (threadId) => mailboxActions.markThreadAsRead(threadId),
+  onMarkAsSpam: (threadId) => mailboxActions.markThreadAsSpam(threadId),
+  onMarkAsUnread: (threadId) => mailboxActions.markThreadAsUnread(threadId),
+  onMoveToTrash: (threadId) => mailboxActions.moveThreadToTrash(threadId),
   onOpenDraft,
-  onUnmarkAsSpam: () => mailboxActions.unmarkThreadAsSpam(threadId),
+  onUnmarkAsSpam: (threadId) => mailboxActions.unmarkThreadAsSpam(threadId),
   onUnsubscribe: mailboxActions.unsubscribeFromMessage,
-  onUntrash: () => mailboxActions.untrashThread(threadId),
-  onUpdateLabels: (_messageId, changes) => mailboxActions.updateThreadLabels(threadId, changes),
+  onUntrash: (threadId) => mailboxActions.untrashThread(threadId),
+  onUpdateLabels: (threadId, changes) => mailboxActions.updateThreadLabels(threadId, changes),
 });

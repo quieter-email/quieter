@@ -1340,5 +1340,13 @@ export const AuthVisual = () => {
     };
   }, []);
 
-  return <canvas className="block size-full bg-background" ref={canvasRef} />;
+  return (
+    <canvas
+      aria-hidden="true"
+      className="block size-full bg-background"
+      ref={canvasRef}
+      role="presentation"
+      tabIndex={-1}
+    />
+  );
 };

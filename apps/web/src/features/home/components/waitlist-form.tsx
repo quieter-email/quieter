@@ -70,10 +70,11 @@ export const WaitlistForm = () => {
             className="h-9 border-white/15 bg-white/5 pr-11 text-sm text-white placeholder:text-white/30 min-[2560px]:h-10 min-[2560px]:pr-12 min-[2560px]:text-[15px]"
             disabled={iconState === "loading"}
             id="waitlist-email"
+            inputMode="email"
             name="email"
             placeholder="you@example.com"
             required
-            type="text"
+            type="email"
           />
           <IconButtonTooltip label="Join waitlist">
             <Button

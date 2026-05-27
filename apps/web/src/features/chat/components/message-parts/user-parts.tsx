@@ -3,9 +3,9 @@ import { UserTextPart } from "./user-text-part";
 
 export const UserParts = ({ parts }: { parts: MessagePart[] }) => (
   <>
-    {parts.map((part) =>
+    {parts.map((part, index) =>
       part.type === "text" ? (
-        <UserTextPart key={`text:${part.content}`} text={part.content} />
+        <UserTextPart key={`text:${index}:${part.content}`} text={part.content} />
       ) : null,
     )}
   </>

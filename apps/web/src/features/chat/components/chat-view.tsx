@@ -2,7 +2,7 @@
 
 import type { RouterOutputs } from "@quieter/orpc";
 import type { UIMessage } from "@tanstack/ai";
-import { Button } from "@quieter/ui";
+import { Button, toast } from "@quieter/ui";
 import { fetchServerSentEvents, useChat } from "@tanstack/ai-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LayoutGroup } from "motion/react";
@@ -155,21 +155,23 @@ const ChatSession = ({
     const prompt = input.trim();
     if (!prompt || isComposerLoading) return;
 
-    setInput("");
+    try {
+      let nextChatId = chatId;
+      if (!nextChatId) {
+        const createdChat = await createChatMutation.mutateAsync(undefined);
+        nextChatId = createdChat.id;
+        onChatIdChange(createdChat.id);
+      }
 
-    if (!chatId) {
-      const [createdChat] = await Promise.all([
-        createChatMutation.mutateAsync(undefined),
-        sendMessage(prompt),
-      ]);
-      await waitForCommittedMessageState().then(() => saveVisibleMessages(createdChat.id));
-      onChatIdChange(createdChat.id);
-      return;
+      await sendMessage(prompt);
+      await waitForCommittedMessageState();
+      await saveVisibleMessages(nextChatId);
+      setInput("");
+    } catch (error) {
+      toast.error(
+        error instanceof Error && error.message ? error.message : "Could not send message.",
+      );
     }
-
-    await sendMessage(prompt)
-      .then(waitForCommittedMessageState)
-      .then(() => saveVisibleMessages(chatId));
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {

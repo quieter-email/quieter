@@ -42,11 +42,11 @@ import { useReducer, useState } from "react";
 import { getUserLabels } from "~/features/message-search/state/message-list-search-state";
 import { isMessageUnread, type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
-import type { LabelChanges, MessageActionsHandlers } from "./message-action-handlers";
+import type { LabelChanges, ThreadActionHandlers } from "./message-action-handlers";
 import { getMessageUnsubscribeTarget, openUnsubscribeUrl } from "./message-unsubscribe";
 
 type MessageActionsSharedProps = {
-  actions: MessageActionsHandlers;
+  actions: ThreadActionHandlers;
   mailboxId: string;
   message: MessageListItem;
   mailbox: MailboxCategory;
@@ -246,8 +246,8 @@ const MessageActionsDialogs = ({
   onOpenLabelsDialog: (open: boolean) => void;
   openDeleteDialog: boolean;
   onOpenDeleteDialog: (open: boolean) => void;
-  onUpdateLabels?: (messageId: string, changes: LabelChanges) => void | Promise<void>;
-  onDeletePermanently?: (messageId: string) => void | Promise<void>;
+  onUpdateLabels?: (threadId: string, changes: LabelChanges) => void | Promise<void>;
+  onDeletePermanently?: (threadId: string) => void | Promise<void>;
 }) => {
   const labelsQuery = useQuery(labelsQueryOptions(mailboxId, openLabelsDialog));
   const userLabels = getUserLabels(labelsQuery.data ?? []);
@@ -296,7 +296,7 @@ const MessageActionsDialogs = ({
     });
 
     try {
-      await onUpdateLabels(message.id, {
+      await onUpdateLabels(message.threadId, {
         addLabelIds,
         removeLabelIds,
       });
@@ -330,7 +330,7 @@ const MessageActionsDialogs = ({
     });
 
     try {
-      await onDeletePermanently(message.id);
+      await onDeletePermanently(message.threadId);
       onOpenDeleteDialog(false);
       dispatch({
         type: "delete/pending",
@@ -502,11 +502,11 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
       label: isUnread ? "Mark as Read" : "Mark as Unread",
       onSelect: () => {
         if (isUnread) {
-          void actions.onMarkAsRead?.(props.message.id);
+          void actions.onMarkAsRead?.(props.message.threadId);
           return;
         }
 
-        void actions.onMarkAsUnread?.(props.message.id);
+        void actions.onMarkAsUnread?.(props.message.threadId);
       },
     },
     {
@@ -551,7 +551,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
             icon: Delete02Icon,
             label: "Mark as Spam",
             onSelect: () => {
-              void actions.onMarkAsSpam?.(props.message.id);
+              void actions.onMarkAsSpam?.(props.message.threadId);
             },
           },
         ]
@@ -565,7 +565,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
             icon: Mail01Icon,
             label: "Unmark as Spam",
             onSelect: () => {
-              void actions.onUnmarkAsSpam?.(props.message.id);
+              void actions.onUnmarkAsSpam?.(props.message.threadId);
             },
           },
         ]
@@ -579,7 +579,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
             icon: InboxIcon,
             label: "Move to Inbox",
             onSelect: () => {
-              void actions.onUntrash?.(props.message.id);
+              void actions.onUntrash?.(props.message.threadId);
             },
           },
         ]
@@ -597,7 +597,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
           return;
         }
 
-        void actions.onMoveToTrash?.(props.message.id);
+        void actions.onMoveToTrash?.(props.message.threadId);
       },
     },
   ];

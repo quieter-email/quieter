@@ -6,7 +6,7 @@ import {
   type ChatMessagePart,
   type ChatMessageRole,
 } from "@quieter/database";
-import { and, desc, eq, notInArray, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure } from "./base";
 
@@ -181,55 +181,34 @@ export const chatRouter = {
     .handler(async ({ context, input }) => {
       const authorizedChat = await getAuthorizedChat(input.chatId, context.userId);
       const now = new Date();
-      const title = authorizedChat.title ?? createFallbackTitle(input.messages);
-
-      const messageIds = input.messages.map((message) => message.id);
+      const fallbackTitle = createFallbackTitle(input.messages);
 
       const [updatedChat] = await db.transaction(async (tx) => {
-        if (messageIds.length === 0) {
-          await tx.delete(chatMessage).where(eq(chatMessage.chatId, authorizedChat.id));
-        } else {
-          await tx
-            .delete(chatMessage)
-            .where(
-              and(
-                eq(chatMessage.chatId, authorizedChat.id),
-                notInArray(chatMessage.id, messageIds),
-              ),
-            );
+        await tx.delete(chatMessage).where(eq(chatMessage.chatId, authorizedChat.id));
 
-          await tx
-            .insert(chatMessage)
-            .values(
-              input.messages.map((message, position) => {
-                const createdAt = message.createdAt ?? now;
-                const parts = message.parts as ChatMessagePart[];
+        if (input.messages.length > 0) {
+          await tx.insert(chatMessage).values(
+            input.messages.map((message, position) => {
+              const createdAt = message.createdAt ?? now;
+              const parts = message.parts as ChatMessagePart[];
 
-                return {
-                  chatId: authorizedChat.id,
-                  createdAt,
-                  id: message.id,
-                  parts,
-                  position,
-                  role: message.role,
-                  userId: context.userId,
-                };
-              }),
-            )
-            .onConflictDoUpdate({
-              target: [chatMessage.chatId, chatMessage.id],
-              set: {
-                parts: sql.raw(`excluded."parts"`),
-                position: sql.raw(`excluded."position"`),
-                role: sql.raw(`excluded."role"`),
-              },
-            });
+              return {
+                chatId: authorizedChat.id,
+                createdAt,
+                id: message.id,
+                parts,
+                position,
+                role: message.role,
+                userId: context.userId,
+              };
+            }),
+          );
         }
 
         return await tx
           .update(chat)
           .set({
-            title,
+            title: sql<string | null>`coalesce(${chat.title}, ${fallbackTitle})`,
             updatedAt: now,
           })
           .where(eq(chat.id, authorizedChat.id))

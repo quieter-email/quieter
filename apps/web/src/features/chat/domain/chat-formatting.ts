@@ -4,6 +4,10 @@ const chatMessageDateFormatter = new Intl.DateTimeFormat(undefined, {
 });
 
 export const formatMessageDate = (value: string) => {
+  if (value.trim() === "") {
+    return value;
+  }
+
   const numeric = Number(value);
   const date = Number.isFinite(numeric) ? new Date(numeric) : new Date(value);
 

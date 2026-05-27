@@ -7,8 +7,12 @@ import { ToolResultPart } from "./tool-result-part";
 const getLastThinkingIndex = (parts: MessagePart[]) =>
   parts.reduce<number>((last, part, index) => (part.type === "thinking" ? index : last), -1);
 
-const getPartKey = (part: MessagePart) => {
-  if (part.type === "text" || part.type === "thinking") return `${part.type}:${part.content}`;
+const getPartKey = (part: MessagePart, index: number) => {
+  if (part.type === "text" || part.type === "thinking") {
+    const partId = "id" in part && typeof part.id === "string" ? part.id : index;
+    return `${part.type}:${partId}`;
+  }
+
   if (part.type === "tool-call") return `tool-call:${part.id}`;
   if (part.type === "tool-result") return `tool-result:${part.toolCallId}`;
   return part.type;
@@ -27,7 +31,7 @@ export const AssistantParts = ({
     <>
       {parts.map((part, index) => {
         if (part.type === "text") {
-          return <TextPart key={getPartKey(part)} text={part.content} />;
+          return <TextPart key={getPartKey(part, index)} text={part.content} />;
         }
 
         if (part.type === "thinking") {
@@ -36,7 +40,13 @@ export const AssistantParts = ({
             return null;
           }
 
-          return <ThinkingPart content={part.content} isActive={isActive} key={getPartKey(part)} />;
+          return (
+            <ThinkingPart
+              content={part.content}
+              isActive={isActive}
+              key={getPartKey(part, index)}
+            />
+          );
         }
 
         if (part.type === "tool-call") {

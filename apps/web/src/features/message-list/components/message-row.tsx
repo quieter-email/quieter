@@ -214,7 +214,6 @@ const MessageRowContent = ({
         actions={createMailboxThreadMessageActionHandlers({
           mailboxActions: list.mailboxActions,
           onOpenDraft: list.onOpenDraft,
-          threadId: thread.threadId,
         })}
         isPending={isActionPending}
         mailboxId={list.mailboxId}

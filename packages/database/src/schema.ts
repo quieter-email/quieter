@@ -1,6 +1,7 @@
 import {
   bigint,
   boolean,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -244,26 +245,29 @@ export const chat = pgTable(
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
   },
-  (table) => [index("chat_user_id_updated_at_idx").on(table.userId, table.updatedAt)],
+  (table) => [
+    index("chat_user_id_updated_at_idx").on(table.userId, table.updatedAt),
+    unique("chat_id_user_id_unique").on(table.id, table.userId),
+  ],
 );
 
 export const chatMessage = pgTable(
   "chatMessage",
   {
     id: text("id").primaryKey(),
-    chatId: text("chatId")
-      .notNull()
-      .references(() => chat.id),
-    userId: text("userId")
-      .notNull()
-      .references(() => user.id),
+    chatId: text("chatId").notNull(),
+    userId: text("userId").notNull(),
     position: integer("position").notNull(),
     role: text("role").$type<ChatMessageRole>().notNull(),
     parts: jsonb("parts").$type<ChatMessagePart[]>().notNull(),
     createdAt: timestamp("createdAt").notNull(),
   },
   (table) => [
-    unique("chat_message_chat_id_id_unique").on(table.chatId, table.id),
+    foreignKey({
+      columns: [table.chatId, table.userId],
+      foreignColumns: [chat.id, chat.userId],
+      name: "chat_message_chat_id_user_id_fkey",
+    }),
     unique("chat_message_chat_id_position_unique").on(table.chatId, table.position),
   ],
 );

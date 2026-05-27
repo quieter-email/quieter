@@ -18,6 +18,7 @@ type SelectionState = {
 export const useMessageListSelection = ({
   activeMailbox,
   activeThreadId,
+  mailboxId,
   onActivateMessage,
   onDeactivateActiveMessage,
   searchQuery,
@@ -25,6 +26,7 @@ export const useMessageListSelection = ({
 }: {
   activeMailbox: MailboxCategory;
   activeThreadId: string | null;
+  mailboxId: string;
   onActivateMessage: (messageId: string) => void;
   onDeactivateActiveMessage: () => void;
   searchQuery: string;
@@ -32,7 +34,7 @@ export const useMessageListSelection = ({
 }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isProgrammaticScrollToTopRef = useRef(false);
-  const selectionScopeKey = `${activeMailbox}:${searchQuery}`;
+  const selectionScopeKey = `${mailboxId}:${activeMailbox}:${searchQuery}`;
   const loadedThreadIdSet = useMemo(
     () => new Set(threadedMessages.map((thread) => thread.threadId)),
     [threadedMessages],

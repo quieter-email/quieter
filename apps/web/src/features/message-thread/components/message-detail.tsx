@@ -35,7 +35,7 @@ const messageDetailContentMotion = {
 } as const;
 
 const MessageDetailLoadingSkeleton = () => (
-  <output className="mx-auto block w-full max-w-3xl space-y-6 py-6">
+  <div aria-live="polite" className="mx-auto block w-full max-w-3xl space-y-6 py-6" role="status">
     <span className="sr-only">Loading message…</span>
     <div aria-hidden="true" className="animate-pulse space-y-8">
       <div className="space-y-2">
@@ -58,7 +58,7 @@ const MessageDetailLoadingSkeleton = () => (
         <div className="h-3.5 w-2/3 rounded-md bg-muted/70" />
       </div>
     </div>
-  </output>
+  </div>
 );
 
 export const MessageDetail = ({

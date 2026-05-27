@@ -54,6 +54,7 @@ export const MessageList = (props: MessageListProps) => {
   const selection = useMessageListSelection({
     activeMailbox: props.activeMailbox,
     activeThreadId,
+    mailboxId: props.mailboxId,
     onActivateMessage: props.onActivateMessage,
     onDeactivateActiveMessage: props.onDeactivateActiveMessage,
     searchQuery: props.searchQuery,
