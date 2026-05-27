@@ -15,7 +15,17 @@ export const Route = createFileRoute("/site-password")({
         .catch("/")
         .default("/"),
       sitePasswordError: z
-        .preprocess((value) => value === "1", z.boolean())
+        .preprocess((value) => {
+          if (typeof value === "string") {
+            return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+          }
+
+          if (typeof value === "boolean" || typeof value === "number") {
+            return Boolean(value);
+          }
+
+          return false;
+        }, z.boolean())
         .catch(false)
         .default(false),
     }),
