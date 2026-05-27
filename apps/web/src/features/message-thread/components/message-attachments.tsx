@@ -198,9 +198,7 @@ export const MessageAttachments = ({
         })}
       </div>
 
-      {errorMessage ? (
-        <p className="mt-1.5 text-xs leading-snug text-destructive">{errorMessage}</p>
-      ) : null}
+      {errorMessage ? <p className="mt-1.5 text-xs/snug text-destructive">{errorMessage}</p> : null}
     </section>
   );
 };

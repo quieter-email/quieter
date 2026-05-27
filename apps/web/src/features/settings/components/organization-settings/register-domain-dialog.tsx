@@ -462,7 +462,7 @@ export const RegisterDomainDialog = ({
                           <p className="font-medium text-foreground">
                             {check.purpose.replaceAll("_", " ")}
                           </p>
-                          <p className="mt-0.5 break-words text-muted-foreground">
+                          <p className="mt-0.5 wrap-break-word text-muted-foreground">
                             {check.message}
                           </p>
                         </div>

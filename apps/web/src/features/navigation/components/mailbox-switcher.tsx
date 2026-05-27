@@ -317,7 +317,7 @@ export const MailboxSwitcherDropdown = ({
       >
         <VerticalSlot className="min-w-0">
           <div>
-            <p className="truncate text-[13px] leading-5 font-medium tracking-tight text-foreground">
+            <p className="truncate text-[13px]/5 font-medium tracking-tight text-foreground">
               {primaryLabel}
             </p>
             <p className="mt-1 truncate text-xs text-muted-foreground">{secondaryLabel}</p>

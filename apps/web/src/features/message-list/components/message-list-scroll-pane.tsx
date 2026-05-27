@@ -35,10 +35,10 @@ const MessageListLoadingSkeleton = () => (
     {MESSAGE_LIST_SKELETON_ROW_IDS.map((rowId) => (
       <div
         aria-hidden="true"
-        className="flex h-[68px] animate-pulse items-center gap-3 rounded-xl px-3"
+        className="flex h-17 animate-pulse items-center gap-3 rounded-xl px-3"
         key={rowId}
       >
-        <div className="size-[38px] shrink-0 rounded-lg bg-muted/80" />
+        <div className="size-9.5 shrink-0 rounded-lg bg-muted/80" />
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex items-center justify-between gap-4">
             <div className="h-3 w-32 rounded-md bg-muted/80" />

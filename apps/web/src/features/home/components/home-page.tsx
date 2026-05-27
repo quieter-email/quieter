@@ -62,7 +62,7 @@ export const HomePage = () => (
             initial={{ opacity: 0, y: 20, filter: "blur(8px)" }}
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
             transition={{ delay: 0.6, duration: 0.8, ease: "easeOut" }}
-            className="w-full text-center text-base leading-7 font-light text-balance text-white/60 will-change-[transform,opacity,filter] min-[900px]:whitespace-nowrap min-[2560px]:text-[17px]"
+            className="w-full text-center text-base/7 font-light text-balance text-white/60 will-change-[transform,opacity,filter] min-[900px]:whitespace-nowrap min-[2560px]:text-[17px]"
           >
             Just want a modern email client? Or need to manage your whole company&apos;s support
             inbox? We&apos;ve got you covered.
@@ -71,7 +71,7 @@ export const HomePage = () => (
             initial={{ opacity: 0, y: 20, filter: "blur(8px)" }}
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
             transition={{ delay: 0.9, duration: 0.8, ease: "easeOut" }}
-            className="w-full max-w-sm will-change-[transform,opacity,filter] min-[2560px]:max-w-[26rem]"
+            className="w-full max-w-sm will-change-[transform,opacity,filter] min-[2560px]:max-w-104"
           >
             <WaitlistForm />
           </m.div>

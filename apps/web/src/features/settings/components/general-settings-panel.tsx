@@ -57,7 +57,7 @@ export const GeneralSettingsPanel = () => {
               >
                 Allow external images
               </label>
-              <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+              <p className="mt-1 max-w-xl text-sm/6 text-muted-foreground">
                 When disabled, remote images stay hidden until you allow them for the open message.
               </p>
             </div>
@@ -82,7 +82,7 @@ export const GeneralSettingsPanel = () => {
                 <label className="text-sm font-medium text-foreground" htmlFor="demo-mode-toggle">
                   Demo mailbox
                 </label>
-                <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+                <p className="mt-1 max-w-xl text-sm/6 text-muted-foreground">
                   Replace real mailbox data with local demo messages while developing.
                 </p>
               </div>

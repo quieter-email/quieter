@@ -586,7 +586,7 @@ const ThreadMessageCard = ({
       })}
     >
       <MessageHeaderContent
-        className="px-4 py-4 sm:px-5 sm:py-4"
+        className="p-4 sm:px-5 sm:py-4"
         headerActions={
           expanded ? (
             <MessageHeaderActions
@@ -677,7 +677,7 @@ const SingleMessageCard = ({
   return (
     <section>
       <MessageHeaderContent
-        className="px-4 py-4 sm:px-5 sm:py-5"
+        className="p-4 sm:p-5"
         headerActions={
           <MessageHeaderActions
             onContinueDraft={linkedDraftMessage ? openLinkedDraft : undefined}
@@ -875,9 +875,9 @@ export const MessageView = ({
 
   return (
     <article className="w-full">
-      <header className="w-full border-b px-5 py-5 sm:px-6 sm:py-6">
+      <header className="w-full border-b p-5 sm:p-6">
         <div className="flex min-w-0 flex-col items-start gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-8">
-          <h1 className="min-w-0 text-lg leading-tight font-medium tracking-tight wrap-break-word text-foreground sm:text-xl">
+          <h1 className="min-w-0 text-lg/tight font-medium tracking-tight wrap-break-word text-foreground sm:text-xl">
             {subject}
           </h1>
 

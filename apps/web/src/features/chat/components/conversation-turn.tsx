@@ -21,7 +21,7 @@ export const ConversationTurn = ({
     >
       {turn.user && hasUserContent && (
         <div className="flex flex-col items-end gap-1">
-          <p className="squircle max-w-[80%] rounded-lg bg-background/85 px-4 py-2.5 text-sm leading-relaxed text-foreground sm:max-w-[70%]">
+          <p className="squircle max-w-[80%] rounded-lg bg-background/85 px-4 py-2.5 text-sm/relaxed text-foreground sm:max-w-[70%]">
             <UserParts parts={turn.user.parts} />
           </p>
         </div>

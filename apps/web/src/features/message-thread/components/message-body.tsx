@@ -119,7 +119,7 @@ const HtmlMessageBodyContent = ({
             >
               <HugeiconsIcon className="size-4 shrink-0" icon={Image01Icon} />
             </div>
-            <p className="min-w-0 text-sm leading-snug text-muted-foreground">
+            <p className="min-w-0 text-sm/snug text-muted-foreground">
               Remote images are hidden for security reasons.
             </p>
           </div>
@@ -158,7 +158,7 @@ const MessageBodyLoadingSkeleton = () => (
 );
 
 const PlainTextMessageBody = ({ text }: { text: string }) => (
-  <p className="bg-transparent p-4 text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground">
+  <p className="bg-transparent p-4 text-base/7 wrap-break-word whitespace-pre-wrap text-foreground">
     {linkifyText(text).map((segment, index) =>
       segment.kind === "link" ? (
         <a

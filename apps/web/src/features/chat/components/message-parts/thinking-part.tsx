@@ -58,9 +58,9 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
             style={{ overflow: "hidden" }}
             transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
           >
-            <div className="pt-1 pb-1">
+            <div className="py-1">
               <MarkdownContent
-                className="prose-sm prose-headings:text-muted-foreground/60 prose-p:text-xs prose-p:leading-5 prose-p:text-muted-foreground/50 prose-p:italic prose-code:text-muted-foreground/60"
+                className="prose-sm prose-headings:text-muted-foreground/60 prose-p:text-xs/5 prose-p:text-muted-foreground/50 prose-p:italic prose-code:text-muted-foreground/60"
                 markdown={content}
               />
             </div>

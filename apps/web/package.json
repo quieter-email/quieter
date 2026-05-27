@@ -7,8 +7,8 @@
     "dev": "bun --env-file=../../.env.local vite dev --port 3000",
     "fmt": "oxfmt --config ../../oxfmt.json .",
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
-    "lint": "oxlint --config ../../oxlint.json .",
-    "lint:fix": "oxlint --fix --config ../../oxlint.json .",
+    "lint": "bun --cwd ../.. oxlint --config oxlint.json apps/web",
+    "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json apps/web",
     "start": "bun --env-file=../../.env.local node .output/server/index.mjs",
     "test": "bun test",
     "typecheck": "tsgo --noEmit"

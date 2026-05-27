@@ -78,7 +78,7 @@ export const MessageListSelectionToolbar = ({
           <Checkbox
             aria-label={`Select all ${itemLabelPlural}`}
             checked={allSelected}
-            className="size-[18px] rounded-[5px]"
+            className="size-4.5 rounded-[5px]"
             disabled={disabled}
             indeterminate={indeterminate}
             onCheckedChange={(checked) => {

@@ -11,8 +11,8 @@
   "scripts": {
     "fmt": "oxfmt --config ../../oxfmt.json .",
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
-    "lint": "oxlint --config ../../oxlint.json .",
-    "lint:fix": "oxlint --fix --config ../../oxlint.json .",
+    "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/auth",
+    "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/auth",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
