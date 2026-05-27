@@ -71,7 +71,7 @@ const ComposeTextField = ({
         aria-invalid={invalid}
         aria-label={ariaLabel}
         autoComplete="off"
-        className="min-w-0 flex-1 bg-transparent py-2.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/60"
+        className="min-w-0 flex-1 bg-transparent py-2.5 text-sm/6 text-foreground outline-none placeholder:text-muted-foreground/60"
         disabled={disabled}
         onBlur={onBlur}
         onChange={(event) => onChange(event.currentTarget.value)}
@@ -183,7 +183,7 @@ export const ComposeDialog = ({ demoMode = false, mailboxId, ref }: ComposeDialo
           action={async () => {
             await form.handleSubmit();
           }}
-          className="flex max-h-[85vh] min-h-0 flex-col px-5 py-5 sm:px-6 sm:py-6"
+          className="flex max-h-[85vh] min-h-0 flex-col p-5 sm:p-6"
         >
           <div className="flex min-h-0 flex-1 flex-col gap-4">
             <div className="flex shrink-0 items-start justify-between gap-4 pb-1">

@@ -3,6 +3,7 @@ import { zodValidator } from "@tanstack/zod-adapter";
 import { z } from "zod";
 import { LoadingPage } from "~/components/loading-page";
 import { InboxPageClient } from "~/features/mailbox/components/inbox-page-client";
+import { MAILBOX_WORKSPACE_VIEWS } from "~/features/mailbox/domain/mailbox-workspace-view";
 import { getSessionUser } from "~/lib/auth.functions";
 
 export const Route = createFileRoute("/")({
@@ -13,8 +14,10 @@ export const Route = createFileRoute("/")({
         .catch("inbox")
         .default("inbox"),
       mailboxId: z.string().trim().min(1).optional().catch(undefined),
+      chatId: z.string().trim().min(1).optional().catch(undefined),
       messageId: z.string().trim().min(1).optional().catch(undefined),
       query: z.string().trim().catch("").default(""),
+      view: z.enum(MAILBOX_WORKSPACE_VIEWS).catch("inbox").default("inbox"),
     }),
   ),
   ssr: "data-only",

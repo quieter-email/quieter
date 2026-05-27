@@ -12,8 +12,8 @@
     "db:push": "bun --env-file=../../.env.local drizzle-kit push",
     "fmt": "oxfmt --config ../../oxfmt.json .",
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
-    "lint": "oxlint --config ../../oxlint.json .",
-    "lint:fix": "oxlint --fix --config ../../oxlint.json .",
+    "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/database",
+    "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/database",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {

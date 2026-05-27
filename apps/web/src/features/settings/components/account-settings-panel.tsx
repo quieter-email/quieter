@@ -432,11 +432,11 @@ const PasskeysDialog = ({
     try {
       setRemovingPasskeyId(passkeyId);
       await deletePasskeyMutation.mutateAsync({ id: passkeyId });
+      setRemovingPasskeyId(null);
     } catch (mutationError) {
       setSubmitError(
         (mutationError as { message?: string })?.message ?? "Could not remove the passkey.",
       );
-    } finally {
       setRemovingPasskeyId(null);
     }
   };

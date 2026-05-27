@@ -81,7 +81,7 @@ export const PopoverArrow = ({
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Arrow>) => (
   <PopoverPrimitive.Arrow
     className={cn(
-      "pointer-events-none absolute size-2.5 rotate-45 rounded-[2px] bg-popover data-[side=bottom]:top-[-5px] data-[side=bottom]:border-t data-[side=bottom]:border-l data-[side=left]:right-[-5px] data-[side=left]:border-t data-[side=left]:border-r data-[side=right]:left-[-5px] data-[side=right]:border-b data-[side=right]:border-l data-[side=top]:bottom-[-5px] data-[side=top]:border-r data-[side=top]:border-b",
+      "pointer-events-none absolute size-2.5 rotate-45 rounded-sm bg-popover data-[side=bottom]:-top-1.25 data-[side=bottom]:border-t data-[side=bottom]:border-l data-[side=left]:-right-1.25 data-[side=left]:border-t data-[side=left]:border-r data-[side=right]:-left-1.25 data-[side=right]:border-b data-[side=right]:border-l data-[side=top]:-bottom-1.25 data-[side=top]:border-r data-[side=top]:border-b",
       className,
     )}
     {...props}

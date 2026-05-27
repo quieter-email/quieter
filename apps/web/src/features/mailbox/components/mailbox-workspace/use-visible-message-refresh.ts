@@ -1,7 +1,7 @@
 "use client";
 
 import type { QueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import type { ListMessagesPageResult, MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
 import { DEMO_MAILBOX_ID } from "~/lib/gmail/demo-mail";
 import { refreshVisibleMailboxMessages } from "~/lib/gmail/inbox-query";
@@ -43,16 +43,19 @@ export const useVisibleMessageRefresh = ({
   const timeoutRef = useRef<number | null>(null);
   const flushQueueRef = useRef<() => void>(() => {});
 
-  const scheduleRefresh = useCallback((delayMs = VISIBLE_MESSAGE_REFRESH_DEBOUNCE_MS) => {
-    if (timeoutRef.current) return;
+  const scheduleRefresh = useCallback(
+    (delayMs = VISIBLE_MESSAGE_REFRESH_DEBOUNCE_MS) => {
+      if (timeoutRef.current) return;
 
-    timeoutRef.current = window.setTimeout(() => {
-      timeoutRef.current = null;
-      flushQueueRef.current();
-    }, delayMs);
-  }, []);
+      timeoutRef.current = window.setTimeout(() => {
+        timeoutRef.current = null;
+        flushQueueRef.current();
+      }, delayMs);
+    },
+    [VISIBLE_MESSAGE_REFRESH_DEBOUNCE_MS],
+  );
 
-  flushQueueRef.current = () => {
+  const flushQueue = useCallback(() => {
     if (inFlightRef.current) return;
 
     if (!selectedMailboxId || selectedMailboxId === DEMO_MAILBOX_ID || activeMailbox === "drafts") {
@@ -95,7 +98,11 @@ export const useVisibleMessageRefresh = ({
           scheduleRefresh(0);
         }
       });
-  };
+  }, [activeMailbox, messages, queryClient, scheduleRefresh, searchQuery, selectedMailboxId]);
+
+  useLayoutEffect(() => {
+    flushQueueRef.current = flushQueue;
+  }, [flushQueue]);
 
   const handleVisibleMessageIdsChange = useCallback(
     (messageIds: readonly string[]) => {
@@ -121,10 +128,12 @@ export const useVisibleMessageRefresh = ({
     [activeMailbox, messages, scheduleRefresh, selectedMailboxId],
   );
 
+  // react-doctor-disable-next-line react-doctor/exhaustive-deps
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) {
-        window.clearTimeout(timeoutRef.current);
+      const timeoutId = timeoutRef.current;
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
         timeoutRef.current = null;
       }
 

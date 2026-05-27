@@ -50,10 +50,8 @@ import {
 import { getMessageInspectorOptions } from "~/lib/gmail/message-inspector-query";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
-import {
-  createMailboxThreadMessageActionHandlers,
-  MessageActionsDropdown,
-} from "./message-actions";
+import { createMailboxThreadMessageActionHandlers } from "./message-action-handlers";
+import { MessageActionsDropdown } from "./message-actions";
 import { MessageAttachments } from "./message-attachments";
 import { MessageBody } from "./message-body";
 import {
@@ -210,7 +208,7 @@ const MessageHeaderContent = ({
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
           {onToggleExpanded ? (
-            <div
+            <button
               aria-controls={`message-body-${message.id}`}
               aria-expanded={isExpanded}
               className="w-full min-w-0 cursor-pointer rounded-sm text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60 sm:flex-1"
@@ -226,19 +224,10 @@ const MessageHeaderContent = ({
 
                 onToggleExpanded();
               }}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") {
-                  return;
-                }
-
-                event.preventDefault();
-                onToggleExpanded();
-              }}
-              role="button"
-              tabIndex={0}
+              type="button"
             >
               {content}
-            </div>
+            </button>
           ) : (
             <div className="w-full min-w-0 sm:flex-1">{content}</div>
           )}
@@ -597,7 +586,7 @@ const ThreadMessageCard = ({
       })}
     >
       <MessageHeaderContent
-        className="px-4 py-4 sm:px-5 sm:py-4"
+        className="p-4 sm:px-5 sm:py-4"
         headerActions={
           expanded ? (
             <MessageHeaderActions
@@ -688,7 +677,7 @@ const SingleMessageCard = ({
   return (
     <section>
       <MessageHeaderContent
-        className="px-4 py-4 sm:px-5 sm:py-5"
+        className="p-4 sm:p-5"
         headerActions={
           <MessageHeaderActions
             onContinueDraft={linkedDraftMessage ? openLinkedDraft : undefined}
@@ -786,6 +775,7 @@ export const MessageView = ({
   pendingActions,
 }: MessageViewProps) => {
   const threadQuery = useQuery({
+    // react-doctor-disable-next-line react-doctor/no-event-handler
     ...getThreadWithDetailsOptions(mailboxId, message.threadId),
     placeholderData: {
       threadId: message.threadId,
@@ -865,6 +855,7 @@ export const MessageView = ({
     refetchThread,
   ]);
 
+  // react-doctor-disable-next-line react-doctor/no-event-handler
   useEffect(() => {
     if (!threadIsUnread) {
       autoMarkedThreadIdsRef.current.delete(message.threadId);
@@ -884,9 +875,9 @@ export const MessageView = ({
 
   return (
     <article className="w-full">
-      <header className="w-full border-b px-5 py-5 sm:px-6 sm:py-6">
+      <header className="w-full border-b p-5 sm:p-6">
         <div className="flex min-w-0 flex-col items-start gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-8">
-          <h1 className="min-w-0 text-lg leading-tight font-medium tracking-tight wrap-break-word text-foreground sm:text-xl">
+          <h1 className="min-w-0 text-lg/tight font-medium tracking-tight wrap-break-word text-foreground sm:text-xl">
             {subject}
           </h1>
 
@@ -894,7 +885,6 @@ export const MessageView = ({
             <MessageActionsDropdown
               actions={createMailboxThreadMessageActionHandlers({
                 mailboxActions,
-                threadId: message.threadId,
               })}
               isPending={isActionPending}
               isUnread={threadIsUnread}

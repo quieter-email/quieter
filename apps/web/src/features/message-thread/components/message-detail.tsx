@@ -3,6 +3,7 @@
 import { ArrowLeft01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, IconButtonTooltip } from "@quieter/ui";
+import { m } from "motion/react";
 import { Suspense } from "react";
 import type { ComposeDraftState } from "~/features/compose";
 import type {
@@ -25,8 +26,16 @@ type MessageDetailProps = {
   selectedMessage: MessageListItem | null;
 };
 
+const messageDetailContentMotion = {
+  initial: { opacity: 0, scale: 0.96, filter: "blur(14px)" },
+  animate: { opacity: 1, scale: 1, filter: "blur(0px)" },
+  exit: { opacity: 0, scale: 0.96, filter: "blur(14px)" },
+  style: { transformOrigin: "center center" },
+  transition: { duration: 0.18, ease: "easeOut" },
+} as const;
+
 const MessageDetailLoadingSkeleton = () => (
-  <div className="mx-auto w-full max-w-3xl space-y-6 py-6" role="status">
+  <div aria-live="polite" className="mx-auto block w-full max-w-3xl space-y-6 py-6" role="status">
     <span className="sr-only">Loading message…</span>
     <div aria-hidden="true" className="animate-pulse space-y-8">
       <div className="space-y-2">
@@ -71,7 +80,7 @@ export const MessageDetail = ({
     );
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background-light">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {onBackToList && (
         <div className="flex h-12 shrink-0 items-center border-b px-3 lg:hidden">
           <IconButtonTooltip label="Back to list">
@@ -88,33 +97,38 @@ export const MessageDetail = ({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto" data-message-detail-scroll-container>
-        {isPending && !selectedMessage ? (
-          <MessageDetailLoadingSkeleton />
-        ) : selectedMessage ? (
-          <Suspense
-            fallback={
-              <div className="grid h-full place-items-center text-sm text-muted-foreground">
-                <HugeiconsIcon
-                  className="animate-spin text-muted-foreground"
-                  icon={Loading03Icon}
-                />
-              </div>
-            }
-          >
-            <MessageView
-              activeMailbox={activeMailbox}
-              currentUserEmail={currentUserEmail}
-              mailboxActions={mailboxActions}
-              mailboxId={mailboxId}
-              message={selectedMessage}
-              onComposeDraftRequested={onComposeDraftRequested}
-              pendingActions={pendingActions}
-            />
-          </Suspense>
-        ) : (
-          emptyState
-        )}
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+        data-message-detail-scroll-container
+      >
+        <m.div className="flex min-h-full flex-1 flex-col" {...messageDetailContentMotion}>
+          {isPending && !selectedMessage ? (
+            <MessageDetailLoadingSkeleton />
+          ) : selectedMessage ? (
+            <Suspense
+              fallback={
+                <div className="grid h-full place-items-center text-sm text-muted-foreground">
+                  <HugeiconsIcon
+                    className="animate-spin text-muted-foreground"
+                    icon={Loading03Icon}
+                  />
+                </div>
+              }
+            >
+              <MessageView
+                activeMailbox={activeMailbox}
+                currentUserEmail={currentUserEmail}
+                mailboxActions={mailboxActions}
+                mailboxId={mailboxId}
+                message={selectedMessage}
+                onComposeDraftRequested={onComposeDraftRequested}
+                pendingActions={pendingActions}
+              />
+            </Suspense>
+          ) : (
+            emptyState
+          )}
+        </m.div>
       </div>
     </section>
   );

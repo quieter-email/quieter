@@ -2,8 +2,30 @@
 
 import type { ComponentPropsWithoutRef } from "react";
 import { Select as SelectPrimitive } from "@base-ui/react/select";
+import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../../lib/cn";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "./icons";
+
+const selectTriggerVariants = cva(
+  "squircle inline-flex shrink-0 items-center justify-between gap-2 rounded-md font-normal whitespace-nowrap transition-transform duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  {
+    variants: {
+      variant: {
+        default: "w-full border border-input bg-background text-foreground shadow-sm",
+        ghost:
+          "w-auto bg-transparent text-foreground-dark hover:bg-secondary/50 hover:text-foreground active:bg-secondary active:text-foreground-light",
+      },
+      size: {
+        sm: "h-8 px-3 text-[13px] [&_svg]:size-3.5",
+        default: "h-9 px-3.5 text-sm [&_svg]:size-4",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  },
+);
 
 export const Select = SelectPrimitive.Root;
 export const SelectPortal = SelectPrimitive.Portal;
@@ -31,16 +53,18 @@ export const SelectValue = ({
   />
 );
 
+export type SelectTriggerProps = ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> &
+  VariantProps<typeof selectTriggerVariants>;
+
 export const SelectTrigger = ({
   children,
   className,
+  size = "default",
+  variant = "default",
   ...props
-}: ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>) => (
+}: SelectTriggerProps) => (
   <SelectPrimitive.Trigger
-    className={cn(
-      "squircle inline-flex h-9 w-full shrink-0 items-center justify-between gap-2 rounded-md border border-input bg-background px-3.5 text-sm font-normal whitespace-nowrap text-foreground shadow-sm transition-transform duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
-      className,
-    )}
+    className={cn(selectTriggerVariants({ size, variant }), className)}
     {...props}
   >
     {children}

@@ -36,7 +36,7 @@ export const Providers = ({ children }: PropsWithChildren) => {
 
   return (
     <ColorModeProvider
-      forcedTheme={pathname === "/home" ? "light" : undefined}
+      forcedTheme={pathname === "/home" ? "dark" : undefined}
       initialColorMode="system"
     >
       <MotionConfig reducedMotion="user">

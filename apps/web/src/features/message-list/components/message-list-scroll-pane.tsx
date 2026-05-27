@@ -3,7 +3,7 @@
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useLayoutEffect, useMemo } from "react";
+import { useCallback, useLayoutEffect, useMemo } from "react";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import type { MessageListProps } from "./message-list-types";
 import type { useMessageListSelection } from "./use-message-list-selection";
@@ -30,15 +30,15 @@ type MessageListScrollPaneProps = {
 };
 
 const MessageListLoadingSkeleton = () => (
-  <div className="space-y-0.5" role="status">
+  <div aria-live="polite" className="block space-y-0.5" role="status">
     <span className="sr-only">Loading messages…</span>
     {MESSAGE_LIST_SKELETON_ROW_IDS.map((rowId) => (
       <div
         aria-hidden="true"
-        className="flex h-[68px] animate-pulse items-center gap-3 rounded-xl px-3"
+        className="flex h-17 animate-pulse items-center gap-3 rounded-xl px-3"
         key={rowId}
       >
-        <div className="size-[38px] shrink-0 rounded-lg bg-muted/80" />
+        <div className="size-9.5 shrink-0 rounded-lg bg-muted/80" />
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex items-center justify-between gap-4">
             <div className="h-3 w-32 rounded-md bg-muted/80" />
@@ -65,6 +65,7 @@ export const MessageListScrollPane = ({
   const isLoadingEmptyMessages =
     threadedMessages.length === 0 && (list.isPending || list.isRefreshing);
 
+  // react-doctor-disable-next-line react-hooks-js/incompatible-library
   const messageVirtualizer = useVirtualizer({
     count: threadedMessages.length,
     estimateSize: () => MESSAGE_ROW_HEIGHT_PX,
@@ -74,19 +75,23 @@ export const MessageListScrollPane = ({
     overscan: MESSAGE_LIST_OVERSCAN,
   });
   const virtualItems = messageVirtualizer.getVirtualItems();
-  const visibleMessageIds = virtualItems.flatMap(
-    (virtualItem) =>
-      threadedMessages[virtualItem.index]?.messages.map((message) => message.id) ?? [],
+  const visibleMessageIds = useMemo(
+    () =>
+      virtualItems.flatMap(
+        (virtualItem) =>
+          threadedMessages[virtualItem.index]?.messages.map((message) => message.id) ?? [],
+      ),
+    [threadedMessages, virtualItems],
   );
   const visibleMessageIdsKey = visibleMessageIds.join(":");
 
-  const shouldPrefetch = (element: HTMLDivElement) => {
+  const shouldPrefetch = useCallback((element: HTMLDivElement) => {
     const distanceToBottom = element.scrollHeight - (element.scrollTop + element.clientHeight);
     const threshold = Math.max(element.clientHeight, 400);
     return distanceToBottom <= threshold;
-  };
+  }, []);
 
-  const maybeLoadMore = () => {
+  const maybeLoadMore = useCallback(() => {
     if (
       !selection.scrollRef.current ||
       !shouldPrefetch(selection.scrollRef.current) ||
@@ -98,15 +103,15 @@ export const MessageListScrollPane = ({
       return;
 
     list.onLoadMore();
-  };
+  }, [list, selection.scrollRef, shouldPrefetch]);
 
   useLayoutEffect(() => {
     maybeLoadMore();
-  }, [threadedMessages.length]);
+  }, [maybeLoadMore, threadedMessages.length]);
 
   useLayoutEffect(() => {
     list.onVisibleMessageIdsChange?.(visibleMessageIds);
-  }, [list.onVisibleMessageIdsChange, visibleMessageIdsKey]);
+  }, [list.onVisibleMessageIdsChange, visibleMessageIds, visibleMessageIdsKey]);
 
   return (
     <div

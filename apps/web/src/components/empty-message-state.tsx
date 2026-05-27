@@ -9,11 +9,11 @@ export const EmptyMessageState = ({
   title?: string | null;
 }) => (
   <LazyMotion features={domAnimation}>
-    <div className="grid h-full min-h-56 place-items-center">
+    <div className="flex flex-1 items-center justify-center">
       <div className="relative max-w-sm p-8">
         <m.div
           aria-hidden
-          className="squircle pointer-events-none absolute top-1/2 left-1/2 size-52 -translate-x-1/2 -translate-y-1/2 rounded-5xl border"
+          className="squircle pointer-events-none absolute top-1/2 left-1/2 size-52 -translate-1/2 rounded-5xl border"
           initial={{ rotate: 0, opacity: 0 }}
           animate={{ rotate: 45, opacity: 1 }}
           transition={{

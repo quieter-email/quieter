@@ -67,16 +67,17 @@ const PendingInvitationsSection = () => {
 
       if (action === "accept") {
         await acceptInvitationMutation.mutateAsync(invitation.id);
+        setPendingInvitationId(null);
         return;
       }
 
       await rejectInvitationMutation.mutateAsync(invitation.id);
+      setPendingInvitationId(null);
     } catch (mutationError) {
       setError(
         (mutationError as { message?: string })?.message ??
           (action === "accept" ? "Could not accept invitation." : "Could not reject invitation."),
       );
-    } finally {
       setPendingInvitationId(null);
     }
   };

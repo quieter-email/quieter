@@ -7,10 +7,8 @@ import { cn } from "@quieter/ui";
 import { type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import { SenderAvatar } from "~/components/sender-avatar";
-import {
-  createMailboxThreadMessageActionHandlers,
-  MessageActionsContextMenu,
-} from "~/features/message-thread/components/message-actions";
+import { createMailboxThreadMessageActionHandlers } from "~/features/message-thread/components/message-action-handlers";
+import { MessageActionsContextMenu } from "~/features/message-thread/components/message-actions";
 import { formatMessageListDate, parseSender } from "~/lib/gmail/message-utils";
 import type { MessageListProps } from "./message-list-types";
 import type { useMessageListSelection } from "./use-message-list-selection";
@@ -45,7 +43,7 @@ const MessageRowMetaBadge = ({
   title: string;
 }) => (
   <span
-    className="squircle inline-flex h-[18px] shrink-0 items-center gap-1 rounded-md border border-border/70 bg-background/75 px-1 text-[10.5px] font-medium text-muted-foreground tabular-nums shadow-xs"
+    className="squircle inline-flex h-4.5 shrink-0 items-center gap-1 rounded-md border border-border/70 bg-background/75 px-1 text-[10.5px] font-medium text-muted-foreground tabular-nums shadow-xs"
     title={title}
   >
     <HugeiconsIcon aria-hidden className="size-3" icon={icon} />
@@ -133,11 +131,11 @@ const MessageRowContent = ({
   return (
     <div
       className={cn(
-        "relative flex h-[68px] items-stretch overflow-hidden rounded-xl transition-transform duration-100 ease-out motion-safe:has-[button:active]:scale-[0.98]",
+        "relative flex h-17 items-stretch overflow-hidden rounded-xl transition-transform duration-100 ease-out motion-safe:has-[button:active]:scale-[0.98]",
         {
           "bg-muted/80 ring-1 ring-border/80 ring-inset": isSelected,
           "bg-muted": isActive && !isSelected,
-          "bg-background-light/85": unread && !isActive && !isSelected,
+          "bg-background-light/55": unread && !isActive && !isSelected,
           "group-hover:bg-muted/45": !isActive && !isSelected,
         },
       )}
@@ -145,10 +143,10 @@ const MessageRowContent = ({
       {unread && (
         <span
           aria-hidden
-          className="pointer-events-none absolute top-1/2 left-0 h-8 w-[3px] -translate-y-1/2 rounded-r-full bg-primary"
+          className="pointer-events-none absolute top-1/2 left-0 h-8 w-0.75 -translate-y-1/2 rounded-r-full bg-primary"
         />
       )}
-      <div className="relative ml-3 flex h-full w-[38px] shrink-0 items-center justify-center">
+      <div className="relative ml-3 flex h-full w-9.5 shrink-0 items-center justify-center">
         <button
           aria-label={selectionAriaLabel}
           aria-pressed={!!isSelected}
@@ -167,7 +165,7 @@ const MessageRowContent = ({
           <SenderAvatar
             avatarUrlDark={anchorMessage.senderAvatarUrls?.dark}
             avatarUrlLight={anchorMessage.senderAvatarUrls?.light}
-            className="size-[38px] rounded-lg"
+            className="size-9.5 rounded-lg"
             fallbackLabel={senderInitial}
           />
         </button>
@@ -190,7 +188,7 @@ const MessageRowContent = ({
           <span
             aria-hidden="true"
             className={cn(
-              "flex size-[18px] items-center justify-center rounded-[5px] border bg-background text-transparent shadow-xs transition-[background-color,border-color,color,box-shadow] duration-100 ease-out",
+              "flex size-4.5 items-center justify-center rounded-[5px] border bg-background text-transparent shadow-xs transition-[background-color,border-color,color,box-shadow] duration-100 ease-out",
               {
                 "border-primary bg-primary text-primary-foreground": isSelected,
                 "border-input": !isSelected,
@@ -216,7 +214,6 @@ const MessageRowContent = ({
         actions={createMailboxThreadMessageActionHandlers({
           mailboxActions: list.mailboxActions,
           onOpenDraft: list.onOpenDraft,
-          threadId: thread.threadId,
         })}
         isPending={isActionPending}
         mailboxId={list.mailboxId}
@@ -241,7 +238,7 @@ const MessageRowContent = ({
           <div className="relative z-10 flex min-w-0 flex-1 items-center gap-3 px-3">
             <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden">
               <div className="flex w-full min-w-0 items-center justify-between gap-2">
-                <p className="min-w-0 truncate text-left text-[13px] leading-[18px] text-foreground">
+                <p className="min-w-0 truncate text-left text-[13px]/4.5 text-foreground">
                   {isDraftMailbox && <span className="font-medium text-muted-foreground">To </span>}
                   <span className={cn({ "font-semibold": unread, "font-medium": !unread })}>
                     {senderLabel}
@@ -288,7 +285,7 @@ const MessageRowContent = ({
               </div>
 
               <p
-                className={cn("w-full min-w-0 truncate text-left text-[13px] leading-[18px]", {
+                className={cn("w-full min-w-0 truncate text-left text-[13px]/4.5", {
                   "font-medium text-foreground": unread,
                   "text-muted-foreground": !unread,
                 })}

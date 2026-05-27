@@ -1,16 +1,6 @@
 "use client";
 
-import {
-  ArrowRight01Icon,
-  Calendar01Icon,
-  Calendar03Icon,
-  FileAttachmentIcon,
-  FileEditIcon,
-  MailAtSign01Icon,
-  MailAtSign02Icon,
-  MailOpen02Icon,
-  Tag01Icon,
-} from "@hugeicons/core-free-icons";
+import { ArrowRight01Icon, Tag01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { cn } from "@quieter/ui";
 import { LazyMotion, domAnimation, AnimatePresence, m } from "motion/react";
@@ -22,56 +12,7 @@ import {
   type SearchFilterChip,
   type StructuredSearchState,
 } from "~/features/message-search/state/message-list-search-state";
-
-export const searchFilterOptions: ReadonlyArray<{
-  filter: SearchFilterChip;
-  hint: string;
-  icon: IconSvgElement;
-  label: string;
-}> = [
-  {
-    filter: { type: "is", value: "unread" },
-    hint: "is:unread",
-    icon: MailAtSign01Icon,
-    label: "Unread",
-  },
-  {
-    filter: { type: "is", value: "read" },
-    hint: "is:read",
-    icon: MailOpen02Icon,
-    label: "Read",
-  },
-  { filter: { type: "before", value: "" }, hint: "before:", icon: Calendar01Icon, label: "Before" },
-  { filter: { type: "after", value: "" }, hint: "after:", icon: Calendar03Icon, label: "After" },
-  {
-    filter: { type: "older_than", value: "" },
-    hint: "older_than:",
-    icon: Calendar01Icon,
-    label: "Older than",
-  },
-  {
-    filter: { type: "newer_than", value: "" },
-    hint: "newer_than:",
-    icon: Calendar03Icon,
-    label: "Newer than",
-  },
-  { filter: { type: "from", value: "" }, hint: "from:", icon: MailAtSign01Icon, label: "From" },
-  { filter: { type: "to", value: "" }, hint: "to:", icon: MailAtSign02Icon, label: "To" },
-  { filter: { type: "cc", value: "" }, hint: "cc:", icon: MailAtSign02Icon, label: "Cc" },
-  { filter: { type: "bcc", value: "" }, hint: "bcc:", icon: MailAtSign02Icon, label: "Bcc" },
-  {
-    filter: { type: "filename", value: "" },
-    hint: "filename:",
-    icon: FileEditIcon,
-    label: "Filename",
-  },
-  {
-    filter: { type: "has", value: "attachment" },
-    hint: "has:attachment",
-    icon: FileAttachmentIcon,
-    label: "Has attachment",
-  },
-];
+import { searchFilterOptions } from "./message-list-search-filter-options";
 
 const searchFilterSections: ReadonlyArray<{
   label: string;
@@ -327,7 +268,6 @@ export const MessageListSearchDropdown = ({
           aria-label="Labels"
           className="absolute top-0 left-2 w-72 rounded-lg border bg-popover p-1 shadow-lg"
           ref={labelsSubmenuRef}
-          role="group"
         >
           {labelsContent}
         </div>
@@ -355,7 +295,6 @@ export const MessageListSearchDropdown = ({
             onMouseDown={(event) => {
               event.preventDefault();
             }}
-            role="group"
           >
             <div className="flex flex-col gap-3">
               {searchFilterSections.map((section) => (

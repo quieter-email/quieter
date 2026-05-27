@@ -35,6 +35,7 @@ const HtmlMessageBodyContent = ({
   const [temporaryImagesEnabled, setTemporaryImagesEnabled] = useState(false);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const shadowRootRef = useRef<ShadowRoot | null>(null);
+  // react-doctor-disable-next-line react-doctor/no-event-handler
   const shouldLoadImages = (loadExternalImages ?? externalImagesEnabled) || temporaryImagesEnabled;
   const preprocessedHtml = useMemo(() => preprocessEmailHtml(html), [html]);
   const processedMail = useMemo<ProcessedMailHtml>(
@@ -47,23 +48,29 @@ const HtmlMessageBodyContent = ({
   useEffect(() => {
     if (!hostRef.current) return;
 
-    shadowRootRef.current ??= hostRef.current.attachShadow({ mode: "open" });
+    let shadowRoot = shadowRootRef.current;
+    if (!shadowRoot) {
+      shadowRoot = hostRef.current.attachShadow({ mode: "open" });
+      shadowRootRef.current = shadowRoot;
+    }
 
-    shadowRootRef.current.innerHTML = processedMail.processedHtml;
-    fixNonReadableColors(shadowRootRef.current, {
+    shadowRoot.innerHTML = processedMail.processedHtml;
+    fixNonReadableColors(shadowRoot, {
       defaultBackground: colorMode === "dark" ? "#1A1A1A" : "#ffffff",
     });
   }, [colorMode, processedMail]);
 
-  handleImageErrorRef.current = (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLImageElement)) return;
+  useEffect(() => {
+    handleImageErrorRef.current = (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLImageElement)) return;
 
-    if (!shouldLoadImages && REMOTE_IMAGE_REGEX.test(target.currentSrc || target.src)) {
-      setCspViolation(true);
-    }
-    target.style.display = "none";
-  };
+      if (!shouldLoadImages && REMOTE_IMAGE_REGEX.test(target.currentSrc || target.src)) {
+        setCspViolation(true);
+      }
+      target.style.display = "none";
+    };
+  }, [shouldLoadImages]);
 
   useEffect(() => {
     const root = shadowRootRef.current;
@@ -99,12 +106,11 @@ const HtmlMessageBodyContent = ({
   return (
     <>
       {!shouldLoadImages && (remoteImagesPresent || cspViolation) && (
-        <div
+        <section
           aria-label="Remote images"
           className={cn(
             "flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/80 bg-muted/35 px-3 py-2",
           )}
-          role="region"
         >
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
             <div
@@ -113,7 +119,7 @@ const HtmlMessageBodyContent = ({
             >
               <HugeiconsIcon className="size-4 shrink-0" icon={Image01Icon} />
             </div>
-            <p className="min-w-0 text-sm leading-snug text-muted-foreground">
+            <p className="min-w-0 text-sm/snug text-muted-foreground">
               Remote images are hidden for security reasons.
             </p>
           </div>
@@ -126,10 +132,10 @@ const HtmlMessageBodyContent = ({
           >
             Show images
           </Button>
-        </div>
+        </section>
       )}
       <div
-        className="mail-content no-scrollbar w-full flex-1 overflow-scroll bg-background-light text-foreground"
+        className="mail-content no-scrollbar w-full flex-1 overflow-scroll bg-transparent text-foreground"
         ref={hostRef}
       />
     </>
@@ -141,18 +147,18 @@ const HtmlMessageBody = (props: { html: string; loadExternalImages?: boolean }) 
 );
 
 const MessageBodyLoadingSkeleton = () => (
-  <div aria-label="Loading message content" className="space-y-3 p-4" role="status">
+  <output aria-label="Loading message content" className="block space-y-3 p-4">
     <div aria-hidden="true" className="animate-pulse space-y-3">
       <div className="h-3.5 w-full rounded-md bg-muted/75" />
       <div className="h-3.5 w-11/12 rounded-md bg-muted/70" />
       <div className="h-3.5 w-4/5 rounded-md bg-muted/65" />
       <div className="h-3.5 w-2/3 rounded-md bg-muted/60" />
     </div>
-  </div>
+  </output>
 );
 
 const PlainTextMessageBody = ({ text }: { text: string }) => (
-  <p className="bg-background-light p-4 text-base leading-7 wrap-break-word whitespace-pre-wrap text-foreground">
+  <p className="bg-transparent p-4 text-base/7 wrap-break-word whitespace-pre-wrap text-foreground">
     {linkifyText(text).map((segment, index) =>
       segment.kind === "link" ? (
         <a

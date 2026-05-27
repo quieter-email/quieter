@@ -608,6 +608,7 @@ export const AuthVisual = () => {
       ["vNextPosition", "vNextVelocity", "vNextEnergy", "vNextActive"],
     );
     if (!renderProgram || !updateProgram) return;
+    const activateProgram = gl.useProgram.bind(gl);
 
     const getAttribute = (program: WebGLProgram, name: string) => {
       const attribute = gl.getAttribLocation(program, name);
@@ -1013,7 +1014,7 @@ export const AuthVisual = () => {
 
       syncWaveUniformData(activeWaves);
       syncImpulseUniformData(impulses);
-      gl.useProgram(updateProgram);
+      activateProgram(updateProgram);
       gl.bindVertexArray(updateVertexArrays[readBufferIndex]);
       gl.uniform1f(updateUniforms.step, step);
       gl.uniform1f(updateUniforms.spring, spring);
@@ -1149,7 +1150,7 @@ export const AuthVisual = () => {
 
       gl.clearColor(background[0], background[1], background[2], 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.useProgram(renderProgram);
+      activateProgram(renderProgram);
       gl.bindVertexArray(renderVertexArrays[readBufferIndex]);
       gl.uniform2f(renderUniforms.resolution, bufferWidth, bufferHeight);
       gl.uniform3f(renderUniforms.color, color[0], color[1], color[2]);
@@ -1339,5 +1340,13 @@ export const AuthVisual = () => {
     };
   }, []);
 
-  return <canvas aria-hidden className="block size-full bg-background" ref={canvasRef} />;
+  return (
+    <canvas
+      aria-hidden="true"
+      className="block size-full bg-background"
+      ref={canvasRef}
+      role="presentation"
+      tabIndex={-1}
+    />
+  );
 };

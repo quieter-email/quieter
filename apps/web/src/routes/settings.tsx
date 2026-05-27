@@ -2,7 +2,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { z } from "zod";
 import { LoadingPage } from "~/components/loading-page";
-import { SettingsScreen } from "~/features/settings/components/settings-screen";
+import { SettingsRouteComponent } from "~/features/settings/components/settings-route-component";
 import { SETTINGS_TABS } from "~/features/settings/domain/settings-tab";
 import { TEAM_SETTINGS_VIEWS } from "~/features/settings/domain/team-settings-view";
 import { getSessionUser } from "~/lib/auth.functions";
@@ -45,9 +45,3 @@ export const Route = createFileRoute("/settings")({
   pendingComponent: LoadingPage,
   component: SettingsRouteComponent,
 });
-
-function SettingsRouteComponent() {
-  const { user } = Route.useLoaderData();
-
-  return <SettingsScreen initialUser={user} />;
-}

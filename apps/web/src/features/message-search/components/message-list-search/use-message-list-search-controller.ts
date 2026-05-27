@@ -21,7 +21,7 @@ import {
   type StructuredSearchState,
 } from "~/features/message-search/state/message-list-search-state";
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
-import { searchFilterOptions } from "../message-list-search-dropdown";
+import { searchFilterOptions } from "../message-list-search-filter-options";
 import {
   type DropdownDirection,
   type MessageListSearchProps,
@@ -51,6 +51,11 @@ const initialSearchOverlayState: SearchOverlayState = {
   isDropdownOpen: false,
 };
 
+type DraftSearchState = {
+  baseQuery: string;
+  state: StructuredSearchState;
+};
+
 const resolveStateAction = <T>(action: SetStateAction<T>, current: T) =>
   typeof action === "function" ? (action as (current: T) => T)(current) : action;
 
@@ -69,9 +74,8 @@ export const useMessageListSearchController = ({
   const segmentRefs = useRef<Array<HTMLElement | null>>([]);
   const dateTokenRefs = useRef(new Map<number, HTMLDivElement>());
   const pendingFocusRef = useRef<PendingFocusTarget | null>(null);
-  const latestCommittedSearchQueryRef = useRef(searchQuery.trim());
-  const selfPublishedSearchQueriesRef = useRef(new Set<string>());
-  const [draftState, setDraftState] = useState<StructuredSearchState | null>(null);
+  const committedSearchQuery = searchQuery.trim();
+  const [draftState, setDraftState] = useState<DraftSearchState | null>(null);
   const calendarFallbackMonth = useSyncExternalStore(
     subscribeToCalendarFallbackMonth,
     getCalendarFallbackMonth,
@@ -109,8 +113,14 @@ export const useMessageListSearchController = ({
     }));
   };
 
-  const committedState = parseStructuredSearchQuery(searchQuery);
-  const currentState = draftState ?? committedState;
+  const committedState = parseStructuredSearchQuery(committedSearchQuery);
+  const serializedDraftState = draftState ? serializeStructuredSearchState(draftState.state) : null;
+  const activeDraftState =
+    draftState &&
+    (draftState.baseQuery === committedSearchQuery || serializedDraftState === committedSearchQuery)
+      ? draftState.state
+      : null;
+  const currentState = activeDraftState ?? committedState;
   const labelsQuery = useQuery(labelsQueryOptions(mailboxId, isDropdownOpen));
   const userLabels = getUserLabels(labelsQuery.data ?? []);
   const activeDateFilter =
@@ -166,19 +176,19 @@ export const useMessageListSearchController = ({
     nextQuery: string,
     { refreshIfUnchanged = false }: { refreshIfUnchanged?: boolean } = {},
   ) => {
-    if (nextQuery === latestCommittedSearchQueryRef.current && !refreshIfUnchanged) {
+    if (nextQuery === committedSearchQuery && !refreshIfUnchanged) {
       return;
     }
 
-    if (nextQuery !== latestCommittedSearchQueryRef.current) {
-      selfPublishedSearchQueriesRef.current.add(nextQuery);
-    }
     void onScrollToTop();
     onSearch(nextQuery);
   };
 
   const stageState = (nextState: StructuredSearchState) => {
-    setDraftState(nextState);
+    setDraftState({
+      baseQuery: committedSearchQuery,
+      state: nextState,
+    });
   };
 
   const updateFilterValue = (index: number, value: string) => {
@@ -306,7 +316,12 @@ export const useMessageListSearchController = ({
 
     const normalizedQuery = serializeStructuredSearchState(normalizedState);
     setDraftState(
-      normalizedQuery === latestCommittedSearchQueryRef.current ? null : normalizedState,
+      normalizedQuery === searchQuery
+        ? null
+        : {
+            baseQuery: normalizedQuery,
+            state: normalizedState,
+          },
     );
     publishSearchQuery(normalizedQuery, { refreshIfUnchanged });
     if (closeAfterCommit) {
@@ -361,7 +376,13 @@ export const useMessageListSearchController = ({
         }))),
   ];
   const highlightedDropdownItemKey =
-    activeDropdownIndex === null ? null : (dropdownItems[activeDropdownIndex]?.key ?? null);
+    !isDropdownOpen || activeDateFilterIndex !== null || activeDropdownIndex === null
+      ? null
+      : (dropdownItems[
+          activeDropdownIndex >= dropdownItems.length
+            ? dropdownItems.length - 1
+            : activeDropdownIndex
+        ]?.key ?? null);
 
   const navigateDropdown = (direction: "next" | "previous") => {
     if (dropdownItems.length === 0) {
@@ -391,7 +412,10 @@ export const useMessageListSearchController = ({
       return false;
     }
 
-    const item = dropdownItems[activeDropdownIndex];
+    const item =
+      dropdownItems[
+        activeDropdownIndex >= dropdownItems.length ? dropdownItems.length - 1 : activeDropdownIndex
+      ];
     if (!item) {
       return false;
     }
@@ -630,24 +654,6 @@ export const useMessageListSearchController = ({
   };
 
   useEffect(() => {
-    const committedQuery = searchQuery.trim();
-    const isSelfPublishedQuery = selfPublishedSearchQueriesRef.current.delete(committedQuery);
-    latestCommittedSearchQueryRef.current = committedQuery;
-
-    setDraftState((currentDraftState) => {
-      if (!currentDraftState) {
-        return null;
-      }
-
-      if (isSelfPublishedQuery) {
-        return currentDraftState;
-      }
-
-      return null;
-    });
-  }, [searchQuery]);
-
-  useEffect(() => {
     if (!isDropdownOpen && activeDateFilterIndex === null) {
       return;
     }
@@ -666,17 +672,6 @@ export const useMessageListSearchController = ({
       document.removeEventListener("focusin", handleOutsideSearchEvent, true);
     };
   }, [activeDateFilterIndex, isDropdownOpen]);
-
-  useEffect(() => {
-    if (!isDropdownOpen || activeDateFilterIndex !== null) {
-      setActiveDropdownIndex(null);
-      return;
-    }
-
-    if (activeDropdownIndex !== null && activeDropdownIndex >= dropdownItems.length) {
-      setActiveDropdownIndex(dropdownItems.length > 0 ? dropdownItems.length - 1 : null);
-    }
-  }, [activeDateFilterIndex, activeDropdownIndex, dropdownItems.length, isDropdownOpen]);
 
   useLayoutEffect(() => {
     if (!pendingFocusRef.current) {

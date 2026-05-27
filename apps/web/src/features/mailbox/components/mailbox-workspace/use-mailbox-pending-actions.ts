@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { MailboxPendingActions } from "../mailbox-action-handlers";
 
 const updatePendingIds = (
@@ -28,11 +28,6 @@ export const useMailboxPendingActions = () => {
   const [pendingThreadActionIds, setPendingThreadActionIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
-  const pendingMessageActionIdsRef = useRef(pendingMessageActionIds);
-  const pendingThreadActionIdsRef = useRef(pendingThreadActionIds);
-
-  pendingMessageActionIdsRef.current = pendingMessageActionIds;
-  pendingThreadActionIdsRef.current = pendingThreadActionIds;
 
   const pendingActions: MailboxPendingActions = {
     isMessageActionPending: (id) => (id ? pendingMessageActionIds.has(id) : false),
@@ -43,9 +38,7 @@ export const useMailboxPendingActions = () => {
     if (ids.length === 0) return;
 
     setPendingMessageActionIds((current) => {
-      const next = updatePendingIds(current, ids, pending);
-      pendingMessageActionIdsRef.current = next;
-      return next;
+      return updatePendingIds(current, ids, pending);
     });
   };
 
@@ -53,16 +46,14 @@ export const useMailboxPendingActions = () => {
     if (ids.length === 0) return;
 
     setPendingThreadActionIds((current) => {
-      const next = updatePendingIds(current, ids, pending);
-      pendingThreadActionIdsRef.current = next;
-      return next;
+      return updatePendingIds(current, ids, pending);
     });
   };
 
   return {
     pendingActions,
-    pendingMessageActionIdsRef,
-    pendingThreadActionIdsRef,
+    isMessageActionPending: pendingActions.isMessageActionPending,
+    isThreadActionPending: pendingActions.isThreadActionPending,
     setMessageActionsPending,
     setThreadActionsPending,
   };

@@ -139,11 +139,11 @@ export const MessageAttachments = ({
         attachment.fileName,
         attachment.mimeType,
       );
+      setActiveAttachmentKey((current) => (current === attachmentKey ? null : current));
     } catch (error) {
       setErrorMessage(
         (error as { message?: string })?.message ?? `Could not download ${attachment.fileName}.`,
       );
-    } finally {
       setActiveAttachmentKey((current) => (current === attachmentKey ? null : current));
     }
   };
@@ -198,9 +198,7 @@ export const MessageAttachments = ({
         })}
       </div>
 
-      {errorMessage ? (
-        <p className="mt-1.5 text-xs leading-snug text-destructive">{errorMessage}</p>
-      ) : null}
+      {errorMessage ? <p className="mt-1.5 text-xs/snug text-destructive">{errorMessage}</p> : null}
     </section>
   );
 };

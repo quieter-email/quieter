@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { z } from "zod";
-import { AuthScreen } from "~/components/auth-screen";
+import { AuthRouteComponent } from "~/components/auth-route-component";
 import { LoadingPage } from "~/components/loading-page";
 import { getSessionUser } from "~/lib/auth.functions";
 
@@ -24,7 +24,3 @@ export const Route = createFileRoute("/auth")({
   pendingComponent: LoadingPage,
   component: AuthRouteComponent,
 });
-
-function AuthRouteComponent() {
-  return <AuthScreen />;
-}

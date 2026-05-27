@@ -11,7 +11,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { REQUIRED_GOOGLE_SCOPES } from "@quieter/auth/google-scopes";
 import { Button, cn, toast } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { MailboxSettingsRow } from "~/features/navigation/components/mailbox-switcher";
 import { authClient } from "~/lib/auth";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
@@ -70,11 +70,11 @@ export const MailboxesSettingsPanel = () => {
   const [pendingGmailLink, setPendingGmailLink] = useState<PendingGmailLinkState | null>(() =>
     readPendingGmailLink(),
   );
+  const [isStartingGmailLink, setIsStartingGmailLink] = useState(false);
   const mailboxesQuery = useQuery(mailboxesQueryOptions());
   const groups = mailboxesQuery.data?.groups ?? [];
   const mailboxes = groups.flatMap((group) => group.mailboxes);
-  const isGmailConnecting =
-    pendingGmailLink != null && (mailboxesQuery.isPending || mailboxesQuery.isFetching);
+  const isGmailConnecting = isStartingGmailLink || pendingGmailLink != null;
   const defaultMailboxId = mailboxesQuery.data?.defaultMailboxId ?? null;
   const disconnectMailboxMutation = useMutation({
     ...orpc.mail.disconnectMailbox.mutationOptions(),
@@ -94,8 +94,14 @@ export const MailboxesSettingsPanel = () => {
       });
     },
   });
-  const finishGmailLinkMutation = useMutation({
-    mutationFn: async () => {
+  useQuery({
+    enabled: pendingGmailLink != null,
+    queryKey: ["mailboxes", "finish-gmail-link", pendingGmailLink?.startedAt],
+    queryFn: async () => {
+      if (!pendingGmailLink) {
+        return null;
+      }
+
       await queryClient.invalidateQueries({
         queryKey: getMailboxesQueryKey(),
       });
@@ -103,34 +109,23 @@ export const MailboxesSettingsPanel = () => {
       const result = await mailboxesQuery.refetch({
         cancelRefetch: true,
       });
-      return result;
-    },
-  });
-
-  useEffect(() => {
-    if (!pendingGmailLink) {
-      return;
-    }
-
-    if (finishGmailLinkMutation.isPending) {
-      return;
-    }
-
-    void finishGmailLinkMutation.mutateAsync().then((result) => {
-      writePendingGmailLink(null);
-      setPendingGmailLink(null);
 
       if (result.isError) {
         toast.error("Could not finish Gmail connection.");
-        return;
+        return result;
       }
+
+      writePendingGmailLink(null);
+      setPendingGmailLink(null);
 
       const nextMailboxCount = result.data?.groups.flatMap((group) => group.mailboxes).length ?? 0;
       if (nextMailboxCount > pendingGmailLink.mailboxCount) {
         toast.success("Gmail connected.");
       }
-    });
-  }, [finishGmailLinkMutation, mailboxesQuery, pendingGmailLink, queryClient]);
+
+      return result;
+    },
+  });
 
   const handleConnectGmail = async () => {
     setConnectError(null);
@@ -141,7 +136,7 @@ export const MailboxesSettingsPanel = () => {
     } satisfies PendingGmailLinkState;
 
     writePendingGmailLink(nextPendingGmailLink);
-    setPendingGmailLink(nextPendingGmailLink);
+    setIsStartingGmailLink(true);
 
     try {
       const response = await authClient.linkSocial({
@@ -153,11 +148,17 @@ export const MailboxesSettingsPanel = () => {
       });
 
       if (response.error) {
-        throw new Error(response.error.message ?? "Could not start Google account linking.");
+        writePendingGmailLink(null);
+        setIsStartingGmailLink(false);
+        setConnectError(response.error.message ?? "Could not start Google account linking.");
+        return;
       }
 
       if (!response.data?.url) {
-        throw new Error("Could not start Google account linking.");
+        writePendingGmailLink(null);
+        setIsStartingGmailLink(false);
+        setConnectError("Could not start Google account linking.");
+        return;
       }
 
       const providerUrl = new URL(response.data.url);
@@ -165,7 +166,7 @@ export const MailboxesSettingsPanel = () => {
       window.location.assign(providerUrl.toString());
     } catch (error) {
       writePendingGmailLink(null);
-      setPendingGmailLink(null);
+      setIsStartingGmailLink(false);
       setConnectError(
         (error as { message?: string })?.message ?? "Could not start Google account linking.",
       );

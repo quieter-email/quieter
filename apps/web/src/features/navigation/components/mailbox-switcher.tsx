@@ -317,7 +317,7 @@ export const MailboxSwitcherDropdown = ({
       >
         <VerticalSlot className="min-w-0">
           <div>
-            <p className="truncate text-[13px] leading-5 font-medium tracking-tight text-foreground">
+            <p className="truncate text-[13px]/5 font-medium tracking-tight text-foreground">
               {primaryLabel}
             </p>
             <p className="mt-1 truncate text-xs text-muted-foreground">{secondaryLabel}</p>
@@ -416,13 +416,13 @@ export const MailboxSwitcherDropdown = ({
                         }}
                       </MailboxRows>
                     ) : (
-                      <p className="px-2 py-1 text-sm text-muted-foreground">no mailbox</p>
+                      <p className="px-2 py-1 text-sm text-muted-foreground">No Mailbox</p>
                     )}
                   </SortableGroup>
                 );
               })
             ) : (
-              <div className="rounded-md px-2.5 py-2 text-sm text-muted-foreground">no mailbox</div>
+              <div className="rounded-md px-2.5 py-2 text-sm text-muted-foreground">No Mailbox</div>
             )}
           </div>
         </DragDropProvider>
