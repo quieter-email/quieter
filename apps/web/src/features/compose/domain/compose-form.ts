@@ -105,5 +105,4 @@ export const shouldPersistComposeDraft = ({
   composeDraftFormValuesSchema.safeParse(values).success &&
   hasComposeDraftContent(nextDraft) &&
   (currentDraft.saveStatus === "error" ||
-    !nextDraft.draftId ||
     haveComposeDraftPersistedFieldsChanged(currentDraft, nextDraft));

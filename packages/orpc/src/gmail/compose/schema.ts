@@ -233,7 +233,7 @@ export const composeDraftInputSchema = z.object({
   updatedAt: z.number(),
 });
 
-export const composeSendDraftInputSchema = composeDraftInputSchema.superRefine((value, ctx) => {
+export const composeMessageInputSchema = composeDraftInputSchema.superRefine((value, ctx) => {
   if (splitMailAddressList(value.recipients.to).length > 0) {
     return;
   }
@@ -244,3 +244,5 @@ export const composeSendDraftInputSchema = composeDraftInputSchema.superRefine((
     path: ["recipients", "to"],
   });
 });
+
+export const composeSendDraftInputSchema = composeMessageInputSchema;

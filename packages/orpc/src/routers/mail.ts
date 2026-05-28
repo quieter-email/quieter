@@ -11,6 +11,7 @@ import {
   deleteMessagePermanently,
   deleteThreadPermanently,
   extractListUnsubscribeTargets,
+  getDraft,
   getGmailMessageMetadata,
   getMailboxSyncDelta,
   getMessageAttachment,
@@ -44,6 +45,7 @@ import {
 } from "../gmail/compose/mime";
 import {
   composeDraftInputSchema,
+  composeMessageInputSchema,
   composeSendDraftInputSchema,
   splitMailAddressList,
 } from "../gmail/compose/schema";
@@ -600,17 +602,38 @@ export const mailRouter = {
             )
           : await createDraft(accessToken, raw, input.draft.replyContext?.threadId);
 
-        const parsed = parseDraftMessage(response);
+        const savedDraft = await getDraft(accessToken, response.id);
+        const parsed = parseDraftMessage(savedDraft);
         return {
-          draftId: response.id,
-          draftAnchor: parsed.draftAnchor,
-          messageId: response.message?.id ?? parsed.messageId,
-          bodyHtml: parsed.bodyHtml,
-          bodyText: parsed.bodyText,
-          replyContext: parsed.replyContext,
-          subject: parsed.subject,
-          recipients: parsed.recipients,
+          draftId: savedDraft.id,
+          draftAnchor: parsed.draftAnchor ?? input.draft.draftAnchor ?? null,
+          messageId: savedDraft.message?.id ?? response.message?.id ?? parsed.messageId,
+          bodyHtml: parsed.bodyHtml || input.draft.bodyHtml,
+          bodyText: parsed.bodyText || input.draft.bodyText,
+          replyContext: parsed.replyContext ?? input.draft.replyContext ?? null,
+          subject: parsed.subject || input.draft.subject,
+          recipients: {
+            to: parsed.recipients.to || input.draft.recipients.to,
+            cc: parsed.recipients.cc || input.draft.recipients.cc,
+            bcc: parsed.recipients.bcc || input.draft.recipients.bcc,
+          },
         };
+      });
+    }),
+
+  sendMessage: protectedProcedure
+    .input(
+      z.object({
+        mailboxId: mailboxIdSchema,
+        message: composeMessageInputSchema,
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      return await callGmail(context, input.mailboxId, async (accessToken) => {
+        const raw = arrayBufferToBase64Url(
+          new TextEncoder().encode(await buildMimeMessage(input.message)),
+        );
+        return await sendRawMessage(accessToken, raw, input.message.replyContext?.threadId);
       });
     }),
 

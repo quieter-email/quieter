@@ -400,12 +400,12 @@ export const saveComposeDraft = async (
   };
 };
 
-export const sendComposeDraft = async (
+export const sendComposeMessage = async (
   mailboxId: string,
   draft: ComposeDraftState,
   signal?: AbortSignal,
 ) => {
-  return rpc.mail.sendDraft({ mailboxId, draft: await serializeDraft(draft) }, { signal });
+  return rpc.mail.sendMessage({ mailboxId, message: await serializeDraft(draft) }, { signal });
 };
 
 export const deleteComposeDraft = async (

@@ -8,6 +8,7 @@ import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
 import {
   createEmptyComposeDraft,
   escapeComposeHtml,
+  normalizeComposeBodyHtml,
   type ComposeDraftState,
   type ComposeReplyContext,
 } from "./draft";
@@ -219,6 +220,9 @@ const getReplyRecipients = (
 
 const normalizeRecipientField = (value: string) => value.trim().replaceAll(/\s+/g, " ");
 
+const hasSavedDraftBody = (draft: ComposeDraftState) =>
+  !!(normalizeComposeBodyHtml(draft.bodyHtml) || draft.bodyText.trim());
+
 export const hasDistinctReplyAllRecipients = (
   message: MessageListItem,
   currentUserEmail: string | null | undefined,
@@ -248,20 +252,27 @@ export const buildComposeDraftFromMessageAction = ({
 }): ComposeDraftState => {
   if (existingDraftMessage?.draftId) {
     const existingDraft = buildComposeDraftFromSavedDraftMessage(existingDraftMessage);
-
-    return {
-      ...existingDraft,
-      draftAnchor: buildDraftAnchor(message, action),
-      recipients:
+    if (hasSavedDraftBody(existingDraft)) {
+      const fallbackRecipients =
         action === "forward"
           ? {
               to: "",
               cc: "",
               bcc: "",
             }
-          : getReplyRecipients(message, currentUserEmail, action === "reply-all"),
-      updatedAt: Date.now(),
-    };
+          : getReplyRecipients(message, currentUserEmail, action === "reply-all");
+
+      return {
+        ...existingDraft,
+        draftAnchor: buildDraftAnchor(message, action),
+        recipients: {
+          to: existingDraft.recipients.to || fallbackRecipients.to,
+          cc: existingDraft.recipients.cc || fallbackRecipients.cc,
+          bcc: existingDraft.recipients.bcc || fallbackRecipients.bcc,
+        },
+        updatedAt: Date.now(),
+      };
+    }
   }
 
   const draft = createEmptyComposeDraft();

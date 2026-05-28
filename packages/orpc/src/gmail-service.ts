@@ -1979,11 +1979,15 @@ export const sendDraft = async (
 export const sendRawMessage = async (
   accessToken: string,
   raw: string,
+  threadId?: string,
   signal?: AbortSignal,
 ): Promise<GmailMessage> => {
   return await requestGmail(accessToken, "/gmail/v1/users/me/messages/send", gmailMessageSchema, {
     method: "POST",
-    body: { raw },
+    body: {
+      raw,
+      ...(threadId ? { threadId } : {}),
+    },
     signal,
   });
 };

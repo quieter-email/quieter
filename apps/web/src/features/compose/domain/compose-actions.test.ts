@@ -5,7 +5,9 @@ import {
   buildComposeDraftFromSavedDraftMessage,
 } from "./compose-actions";
 import {
+  composeFormValuesToDraft,
   draftToComposeFormValues,
+  shouldPersistComposeDraft,
   writeComposeFormValues,
   type ComposeFormValues,
 } from "./compose-form";
@@ -86,6 +88,31 @@ describe("buildComposeDraftFromMessageAction", () => {
     });
     expect(buildComposeDraftFromSavedDraftMessage(savedDraftMessage).saveStatus).toBe("saved");
   });
+
+  test("rebuilds reply content when a linked draft has no body", () => {
+    const emptyLinkedDraft = {
+      id: "draft-message-empty",
+      threadId: "thread-1",
+      draftId: "draft-empty",
+      subject: "Re: Project update",
+      draftAnchor: {
+        seededBy: "reply",
+        sourceMessageId: "msg-1",
+        sourceThreadId: "thread-1",
+      },
+    } satisfies MessageListItem;
+
+    const draft = buildComposeDraftFromMessageAction({
+      action: "reply",
+      currentUserEmail: "me@example.com",
+      existingDraftMessage: emptyLinkedDraft,
+      message: sourceMessage,
+    });
+
+    expect(draft.draftId).toBeUndefined();
+    expect(draft.bodyHtml).toContain("<blockquote><p>Hello from Alex.</p></blockquote>");
+    expect(draft.recipients.to).toBe("Alex Sender <alex@example.com>");
+  });
 });
 
 describe("writeComposeFormValues", () => {
@@ -125,6 +152,55 @@ describe("writeComposeFormValues", () => {
       ["bodyText", "Reply body"],
     ]);
     expect(validateWrites).toEqual(["change"]);
+  });
+});
+
+describe("shouldPersistComposeDraft", () => {
+  test("does not save an unchanged generated reply draft", () => {
+    const currentDraft = buildComposeDraftFromMessageAction({
+      action: "reply",
+      currentUserEmail: "me@example.com",
+      message: sourceMessage,
+    });
+
+    expect(
+      shouldPersistComposeDraft({
+        currentDraft,
+        nextDraft: currentDraft,
+        values: draftToComposeFormValues(currentDraft),
+      }),
+    ).toBe(false);
+  });
+
+  test("saves a new message after the user adds content", () => {
+    const currentDraft = createEmptyComposeDraft();
+    const values: ComposeFormValues = {
+      ...draftToComposeFormValues(currentDraft),
+      bodyHtml: "<p>Hello Alex.</p>",
+      bodyText: "Hello Alex.",
+      to: "alex@example.com",
+    };
+    const nextDraft = composeFormValuesToDraft(values, {
+      localId: currentDraft.localId,
+      draftId: currentDraft.draftId,
+      messageId: currentDraft.messageId,
+      draftAnchor: currentDraft.draftAnchor,
+      replyContext: currentDraft.replyContext,
+      attachments: currentDraft.attachments,
+      inlineImages: currentDraft.inlineImages,
+      saveStatus: currentDraft.saveStatus,
+      errorMessage: currentDraft.errorMessage,
+      lastSavedAt: currentDraft.lastSavedAt,
+      updatedAt: Date.now(),
+    });
+
+    expect(
+      shouldPersistComposeDraft({
+        currentDraft,
+        nextDraft,
+        values,
+      }),
+    ).toBe(true);
   });
 });
 

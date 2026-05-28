@@ -23,7 +23,7 @@ import {
   createEmptyComposeDraft,
   deleteComposeDraft,
   saveComposeDraft,
-  sendComposeDraft,
+  sendComposeMessage,
   type ComposeDraftState,
 } from "../domain/draft";
 
@@ -34,8 +34,6 @@ type ComposeDialogState = {
   showCc: boolean;
 };
 type ComposeDraftUpdate = ComposeDraftState | ((current: ComposeDraftState) => ComposeDraftState);
-
-const AUTOSAVE_DELAY_MS = 1000;
 
 const createDialogState = (): ComposeDialogState => ({
   draft: createEmptyComposeDraft(),
@@ -48,8 +46,8 @@ export const getDraftStatusMessage = (draft: ComposeDraftState) => {
   if (draft.saveStatus === "sending") return "Sending message…";
   if (draft.saveStatus === "saving") return "Saving draft…";
   if (draft.saveStatus === "error") return "Draft needs attention";
-  if (draft.lastSavedAt) return "Draft saved";
-  return "Drafts save automatically";
+  if (draft.draftId || draft.lastSavedAt) return "Draft saved";
+  return "Draft saved when you close";
 };
 
 export const useComposeDialogController = ({
@@ -62,7 +60,6 @@ export const useComposeDialogController = ({
   const queryClient = useQueryClient();
   const [state, setState] = useState(createDialogState);
   const activeDraftRef = useRef(state.draft);
-  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const openIdRef = useRef(0);
   const saveQueueRef = useRef(Promise.resolve());
   const savedDraftByLocalIdRef = useRef(new Map<string, ComposeDraftState>());
@@ -78,11 +75,6 @@ export const useComposeDialogController = ({
       onSubmit: composeSendFormValuesSchema,
     },
   });
-
-  const clearAutosaveTimer = () => {
-    clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = undefined;
-  };
 
   const setDraft = (update: ComposeDraftUpdate) => {
     const draft = typeof update === "function" ? update(activeDraftRef.current) : update;
@@ -220,7 +212,6 @@ export const useComposeDialogController = ({
   };
 
   const openComposeDraft = (nextDraft: ComposeDraftState | null) => {
-    clearAutosaveTimer();
     openIdRef.current += 1;
     openDraftInDialog(nextDraft ? cloneComposeDraft(nextDraft) : createEmptyComposeDraft());
   };
@@ -228,7 +219,6 @@ export const useComposeDialogController = ({
   const closeComposeDialog = () => {
     if (activeDraftRef.current.saveStatus === "sending") return;
 
-    clearAutosaveTimer();
     openIdRef.current += 1;
     const values = form.state.values;
     const draft = buildDraftFromForm(values);
@@ -257,59 +247,53 @@ export const useComposeDialogController = ({
     closeComposeDialog();
   };
 
-  const scheduleAutosave = () => {
-    clearAutosaveTimer();
-    if (!mailboxId || !state.open || activeDraftRef.current.saveStatus === "sending") return;
-
-    const values = form.state.values;
-    const draft = buildDraftFromForm(values);
-    if (!shouldSaveDraft(draft, values)) return;
-
-    if (activeDraftRef.current.saveStatus === "saved") {
-      setDraft((current) => ({ ...current, saveStatus: "idle" }));
-    }
-
-    const openId = openIdRef.current;
-    autosaveTimerRef.current = setTimeout(() => {
-      void saveDraft(draft, { applyToOpenDraft: true, openId }).catch(() => {});
-    }, AUTOSAVE_DELAY_MS);
-  };
-
   const submitComposeForm = async (values: ComposeFormValues) => {
     if (!mailboxId) return;
 
-    clearAutosaveTimer();
-    const draft = buildDraftFromForm(values);
-    setDraft(() => ({ ...draft, saveStatus: "sending", errorMessage: null }));
+    const message = buildDraftFromForm(values);
+    setDraft(() => ({ ...message, saveStatus: "sending", errorMessage: null }));
 
     try {
-      const savedDraft = await saveDraft(draft);
-      setDraft(() => ({ ...savedDraft, saveStatus: "sending" }));
       if (demoMode) {
-        await sendDemoDraft(savedDraft);
+        await sendDemoDraft(message);
       } else {
-        await sendComposeDraft(mailboxId, savedDraft);
+        await sendComposeMessage(mailboxId, message);
       }
-      closeDialog();
-      clearComposeDraftRuntimeFiles(savedDraft);
-      await Promise.all([
-        refreshCachedMailboxQueries(queryClient, mailboxId, "drafts"),
-        refreshCachedMailboxQueries(queryClient, mailboxId, "sent"),
-        refreshThread(savedDraft),
-      ]);
     } catch (error) {
       setDraft({
         ...activeDraftRef.current,
         errorMessage: (error as { message?: string })?.message ?? "Could not send message.",
         saveStatus: "error",
       });
+      return;
+    }
+
+    closeDialog();
+
+    try {
+      await saveQueueRef.current.catch(() => {});
+      const savedDraft = savedDraftByLocalIdRef.current.get(message.localId) ?? message;
+
+      if (savedDraft.draftId) {
+        await (
+          demoMode ? deleteDemoDraft(savedDraft) : deleteComposeDraft(mailboxId, savedDraft)
+        ).catch(() => {});
+      }
+
+      savedDraftByLocalIdRef.current.delete(message.localId);
+      await Promise.all([
+        refreshCachedMailboxQueries(queryClient, mailboxId, "drafts"),
+        refreshCachedMailboxQueries(queryClient, mailboxId, "sent"),
+        refreshThread(message),
+      ]).catch(() => {});
+    } finally {
+      clearComposeDraftRuntimeFiles(message);
     }
   };
 
   const discardActiveDraft = () => {
     if (activeDraftRef.current.saveStatus === "sending") return;
 
-    clearAutosaveTimer();
     openIdRef.current += 1;
     const draft = buildDraftFromForm(form.state.values);
     closeDialog();
@@ -379,7 +363,6 @@ export const useComposeDialogController = ({
 
       setDraft(nextDraft);
       form.setFieldValue("bodyHtml", attachInlineImagesToHtml(nextDraft, inlineImages));
-      scheduleAutosave();
     } catch (error) {
       setDraft({
         ...activeDraftRef.current,
@@ -392,7 +375,6 @@ export const useComposeDialogController = ({
   // react-doctor-disable-next-line react-doctor/exhaustive-deps
   useEffect(() => {
     return () => {
-      clearAutosaveTimer();
       clearComposeDraftRuntimeFiles(activeDraftRef.current);
     };
   }, []);
@@ -404,7 +386,6 @@ export const useComposeDialogController = ({
     form,
     handleDialogOpenChange,
     openComposeDraft,
-    scheduleAutosave,
     state,
     toggleRecipientVisibility,
   };
