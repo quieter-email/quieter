@@ -64,6 +64,13 @@
 - Production SST deploys sync `MAIL_BUCKET`, `MAIL_RECEIPT_TOPIC_ARN`, `MAIL_RECEIPT_ROLE_ARN`, and `MAIL_RECEIPT_RULE_SET_NAME` into Vercel as production-only sensitive env vars from `.sst/outputs.json`, then trigger a Vercel production Deploy Hook from `.github/workflows/sst-deploy.yml`. The GitHub environment must provide `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID`, and `VERCEL_DEPLOY_HOOK_URL`. Commit-triggered Vercel deployments stay disabled through `vercel.json` `git.deploymentEnabled`; do not use an ignored-build command that exits `0`, because it also cancels Deploy Hook builds.
 - Run the combined local dev session with `bun run dev`; Turbo runs the web app and SST mail stack side by side. Run direct SST commands through `bun run sst ...`; the wrapper defaults to `sst.config.ts` and the `mail-dev` stage, and loads AWS credentials from `.env.local`.
 
+## Billing
+
+- Pricing and checkout use PayKit with Polar.
+- Subscriptions are user-scoped in `billingSubscription`; checkout metadata must include the Quieter user id and plan so Polar webhooks can reconcile the subscription.
+- Paid plans are `managed` and `pro`. Gmail and BYOK remain available without checkout.
+- Polar product ids come from `QUIETER_POLAR_MANAGED_PRODUCT_ID` and `QUIETER_POLAR_PRO_PRODUCT_ID`. The Polar webhook posts to `/api/billing/polar-webhook` and uses `POLAR_WEBHOOK_SECRET`.
+
 ## Schema + Generated Files
 
 - Schema changes go in `packages/database/src/schema.ts`.

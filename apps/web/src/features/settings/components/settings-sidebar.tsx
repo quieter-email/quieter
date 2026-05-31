@@ -2,6 +2,7 @@
 
 import {
   ArrowLeft01Icon,
+  CreditCardIcon,
   Mail01Icon,
   Settings01Icon,
   UserGroupIcon,
@@ -20,6 +21,7 @@ type SettingsSidebarProps = {
 const SETTINGS_SIDEBAR_NAV = [
   { tab: "general", label: "General", icon: Settings01Icon },
   { tab: "account", label: "Account", icon: UserIcon },
+  { tab: "plan", label: "Plan", icon: CreditCardIcon },
   { tab: "mailboxes", label: "Mailboxes", icon: Mail01Icon },
   { tab: "organization", label: "Teams", icon: UserGroupIcon },
 ] as const satisfies ReadonlyArray<{

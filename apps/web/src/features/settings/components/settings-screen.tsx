@@ -7,6 +7,7 @@ import { AccountSettingsPanel } from "./account-settings-panel";
 import { GeneralSettingsPanel } from "./general-settings-panel";
 import { MailboxesSettingsPanel } from "./mailboxes-settings-panel";
 import { OrganizationSettingsPanel } from "./organization-settings-panel";
+import { PlanSettingsPanel } from "./plan-settings-panel";
 import { SettingsSidebar } from "./settings-sidebar";
 
 type SettingsUser = {
@@ -54,6 +55,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
       <main className="min-h-0 flex-1 overflow-y-auto pt-8 md:h-full md:pt-20 md:pr-6">
         {tab === "general" && <GeneralSettingsPanel />}
         {tab === "account" && <AccountSettingsPanel initialUser={initialUser} />}
+        {tab === "plan" && <PlanSettingsPanel />}
         {tab === "mailboxes" && <MailboxesSettingsPanel />}
         {tab === "organization" && <OrganizationSettingsPanel />}
       </main>

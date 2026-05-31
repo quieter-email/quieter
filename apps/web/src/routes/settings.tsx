@@ -18,6 +18,7 @@ export const Route = createFileRoute("/settings")({
         )
         .catch("/")
         .default("/"),
+      billing: z.enum(["canceled", "success"]).optional().catch(undefined),
       tab: z.string().trim().pipe(z.enum(SETTINGS_TABS)).catch("general").default("general"),
       teamId: z.string().trim().catch("").default(""),
       teamView: z

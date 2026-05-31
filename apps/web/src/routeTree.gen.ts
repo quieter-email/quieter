@@ -21,6 +21,7 @@ import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
 import { Route as ApiMessagesRouteImport } from './routes/api/messages'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
+import { Route as ApiBillingPolarWebhookRouteImport } from './routes/api/billing.polar-webhook'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 
 const SitePasswordRoute = SitePasswordRouteImport.update({
@@ -83,6 +84,11 @@ const ApiOrpcSplatRoute = ApiOrpcSplatRouteImport.update({
   path: '/api/orpc/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBillingPolarWebhookRoute = ApiBillingPolarWebhookRouteImport.update({
+  id: '/api/billing/polar-webhook',
+  path: '/api/billing/polar-webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -102,6 +108,7 @@ export interface FileRoutesByFullPath {
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/billing/polar-webhook': typeof ApiBillingPolarWebhookRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
 }
 export interface FileRoutesByTo {
@@ -117,6 +124,7 @@ export interface FileRoutesByTo {
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/billing/polar-webhook': typeof ApiBillingPolarWebhookRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
 }
 export interface FileRoutesById {
@@ -133,6 +141,7 @@ export interface FileRoutesById {
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/billing/polar-webhook': typeof ApiBillingPolarWebhookRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
 }
 export interface FileRouteTypes {
@@ -150,6 +159,7 @@ export interface FileRouteTypes {
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
+    | '/api/billing/polar-webhook'
     | '/api/orpc/$'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -165,6 +175,7 @@ export interface FileRouteTypes {
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
+    | '/api/billing/polar-webhook'
     | '/api/orpc/$'
   id:
     | '__root__'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
+    | '/api/billing/polar-webhook'
     | '/api/orpc/$'
   fileRoutesById: FileRoutesById
 }
@@ -196,6 +208,7 @@ export interface RootRouteChildren {
   ApiSitePasswordRoute: typeof ApiSitePasswordRoute
   ApiWaitlistRoute: typeof ApiWaitlistRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiBillingPolarWebhookRoute: typeof ApiBillingPolarWebhookRoute
   ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
 }
 
@@ -285,6 +298,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOrpcSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/billing/polar-webhook': {
+      id: '/api/billing/polar-webhook'
+      path: '/api/billing/polar-webhook'
+      fullPath: '/api/billing/polar-webhook'
+      preLoaderRoute: typeof ApiBillingPolarWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -308,6 +328,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSitePasswordRoute: ApiSitePasswordRoute,
   ApiWaitlistRoute: ApiWaitlistRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiBillingPolarWebhookRoute: ApiBillingPolarWebhookRoute,
   ApiOrpcSplatRoute: ApiOrpcSplatRoute,
 }
 export const routeTree = rootRouteImport

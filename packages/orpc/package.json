@@ -4,6 +4,8 @@
   "type": "module",
   "exports": {
     ".": "./src/client.ts",
+    "./billing": "./src/billing.ts",
+    "./billing-plans": "./src/billing-plans.ts",
     "./compose": "./src/gmail/compose/schema.ts",
     "./context": "./src/context.ts",
     "./errors": "./src/errors.ts",
@@ -25,6 +27,8 @@
   "dependencies": {
     "@aws-sdk/client-ses": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
+    "@paykit-sdk/core": "^1.2.1",
+    "@paykit-sdk/polar": "^1.2.0",
     "@quieter/auth": "workspace:*",
     "@quieter/database": "workspace:*"
   },

@@ -13,6 +13,15 @@ import {
 import { defineRelations } from "drizzle-orm/relations";
 
 export type MailDomainStatus = "failed" | "pending_dns" | "verified";
+export type BillingPlan = "managed" | "pro";
+export type BillingProvider = "polar";
+export type BillingSubscriptionStatus =
+  | "active"
+  | "canceled"
+  | "expired"
+  | "past_due"
+  | "pending"
+  | "trialing";
 
 export type MailDomainDnsRecord = {
   name: string;
@@ -234,6 +243,35 @@ export const mailDomain = pgTable(
   ],
 );
 
+export const billingSubscription = pgTable(
+  "billingSubscription",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id),
+    provider: text("provider").$type<BillingProvider>().notNull(),
+    providerSubscriptionId: text("providerSubscriptionId").notNull(),
+    providerCustomerId: text("providerCustomerId"),
+    providerProductId: text("providerProductId").notNull(),
+    plan: text("plan").$type<BillingPlan>().notNull(),
+    status: text("status").$type<BillingSubscriptionStatus>().notNull(),
+    currentPeriodStart: timestamp("currentPeriodStart").notNull(),
+    currentPeriodEnd: timestamp("currentPeriodEnd").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, string>>(),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    index("billing_subscription_user_id_idx").on(table.userId),
+    index("billing_subscription_provider_subscription_id_idx").on(table.providerSubscriptionId),
+    unique("billing_subscription_provider_subscription_unique").on(
+      table.provider,
+      table.providerSubscriptionId,
+    ),
+  ],
+);
+
 export const chat = pgTable(
   "chat",
   {
@@ -312,6 +350,7 @@ export const apikey = pgTable(
 
 export const tables = {
   apikey,
+  billingSubscription,
   chat,
   chatMessage,
   user,
@@ -330,6 +369,10 @@ export const tables = {
 export const authRelations = defineRelations(tables, (r) => ({
   user: {
     accounts: r.many.account({ from: r.user.id, to: r.account.userId }),
+    billingSubscriptions: r.many.billingSubscription({
+      from: r.user.id,
+      to: r.billingSubscription.userId,
+    }),
     chats: r.many.chat({ from: r.user.id, to: r.chat.userId }),
     invitations: r.many.invitation({ from: r.user.id, to: r.invitation.inviterId }),
     memberships: r.many.member({ from: r.user.id, to: r.member.userId }),
@@ -426,6 +469,13 @@ export const authRelations = defineRelations(tables, (r) => ({
     organization: r.one.organization({
       from: r.mailDomain.organizationId,
       to: r.organization.id,
+      optional: false,
+    }),
+  },
+  billingSubscription: {
+    user: r.one.user({
+      from: r.billingSubscription.userId,
+      to: r.user.id,
       optional: false,
     }),
   },
