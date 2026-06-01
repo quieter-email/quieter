@@ -8,6 +8,7 @@ import {
 } from "../src/mailbox";
 
 const gmailMailbox = (id: string, emailAddress: string): MailboxListItem => ({
+  connectionStatus: "connected",
   connectedUserId: "user_1",
   displayName: null,
   emailAddress,
@@ -18,6 +19,7 @@ const gmailMailbox = (id: string, emailAddress: string): MailboxListItem => ({
   organizationId: null,
   provider: "gmail",
   providerAccountId: id.replace("gmail:", ""),
+  reconnectReason: null,
 });
 
 const managedMailbox = (
@@ -26,6 +28,7 @@ const managedMailbox = (
   organizationId: string,
   organizationName: string,
 ): MailboxListItem => ({
+  connectionStatus: "connected",
   connectedUserId: null,
   displayName: null,
   emailAddress,

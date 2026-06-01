@@ -6,18 +6,14 @@ import { useLocation } from "@tanstack/react-router";
 import { MotionConfig } from "motion/react";
 import { type PropsWithChildren, useState } from "react";
 import { TelemetryProvider } from "~/components/telemetry-provider";
-import { redirectToGoogleScopeRepair, shouldRetryOrpcError } from "~/lib/orpc-errors";
+import { shouldRetryOrpcError } from "~/lib/orpc-errors";
 
 export const Providers = ({ children }: PropsWithChildren) => {
   const [queryClient] = useState(
     () =>
       new QueryClient({
-        mutationCache: new MutationCache({
-          onError: redirectToGoogleScopeRepair,
-        }),
-        queryCache: new QueryCache({
-          onError: redirectToGoogleScopeRepair,
-        }),
+        mutationCache: new MutationCache(),
+        queryCache: new QueryCache(),
         defaultOptions: {
           queries: {
             gcTime: 1000 * 60 * 30,

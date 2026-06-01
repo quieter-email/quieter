@@ -22,6 +22,7 @@ import { type ReactNode, useRef, useState } from "react";
 import { VerticalSlot } from "~/components/vertical-slot";
 
 type MailboxSwitcherMailbox = {
+  connectionStatus: "connected" | "needs_reconnect";
   displayName: string | null;
   emailAddress: string;
   groupName: string;
@@ -123,7 +124,14 @@ const getMailboxSwitcherOrder = (groups: MailboxSwitcherGroup[]): MailboxSwitche
 
 const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => (
   <div className={cn("flex min-w-0 items-center justify-between gap-3 rounded-md", className)}>
-    <p className="truncate text-sm text-foreground">{mailbox.emailAddress}</p>
+    <div className="min-w-0 flex-1">
+      <p className="truncate text-sm text-foreground">{mailbox.emailAddress}</p>
+      {mailbox.connectionStatus === "needs_reconnect" && (
+        <p className="mt-0.5 truncate text-xs text-destructive">
+          This account needs to reconnect through Google.
+        </p>
+      )}
+    </div>
     {action}
   </div>
 );

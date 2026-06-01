@@ -21,6 +21,8 @@ const PENDING_GMAIL_LINK_STORAGE_KEY = "quieter:pending-gmail-link";
 
 type PendingGmailLinkState = {
   mailboxCount: number;
+  mailboxId?: string;
+  mode: "connect" | "reconnect";
   startedAt: number;
 };
 
@@ -40,6 +42,8 @@ const readPendingGmailLink = (): PendingGmailLinkState | null => {
       typeof parsedValue !== "object" ||
       parsedValue === null ||
       typeof parsedValue.mailboxCount !== "number" ||
+      (parsedValue.mode !== "connect" && parsedValue.mode !== "reconnect") ||
+      ("mailboxId" in parsedValue && typeof parsedValue.mailboxId !== "string") ||
       typeof parsedValue.startedAt !== "number"
     ) {
       return null;
@@ -119,19 +123,38 @@ export const MailboxesSettingsPanel = () => {
       setPendingGmailLink(null);
 
       const nextMailboxCount = result.data?.groups.flatMap((group) => group.mailboxes).length ?? 0;
-      if (nextMailboxCount > pendingGmailLink.mailboxCount) {
+      const reconnectedMailbox = result.data?.groups
+        .flatMap((group) => group.mailboxes)
+        .find((mailbox) => mailbox.id === pendingGmailLink.mailboxId);
+
+      if (pendingGmailLink.mode === "connect" && nextMailboxCount > pendingGmailLink.mailboxCount) {
         toast.success("Gmail connected.");
+      }
+
+      if (
+        pendingGmailLink.mode === "reconnect" &&
+        reconnectedMailbox?.connectionStatus === "connected"
+      ) {
+        toast.success("Google reconnected.");
       }
 
       return result;
     },
   });
 
-  const handleConnectGmail = async () => {
+  const handleConnectGmail = async (
+    input: {
+      loginHint?: string;
+      mailboxId?: string;
+      mode?: PendingGmailLinkState["mode"];
+    } = {},
+  ) => {
     setConnectError(null);
 
     const nextPendingGmailLink = {
       mailboxCount: mailboxes.length,
+      mailboxId: input.mailboxId,
+      mode: input.mode ?? "connect",
       startedAt: Date.now(),
     } satisfies PendingGmailLinkState;
 
@@ -162,6 +185,9 @@ export const MailboxesSettingsPanel = () => {
       }
 
       const providerUrl = new URL(response.data.url);
+      if (input.loginHint) {
+        providerUrl.searchParams.set("login_hint", input.loginHint);
+      }
       providerUrl.searchParams.set("prompt", "consent select_account");
       window.location.assign(providerUrl.toString());
     } catch (error) {
@@ -230,6 +256,7 @@ export const MailboxesSettingsPanel = () => {
                   disconnectMailboxMutation.variables?.mailboxId === mailbox.id;
                 const isDefault = mailbox.id === defaultMailboxId;
                 const isGmailMailbox = mailbox.provider === "gmail";
+                const needsReconnect = mailbox.connectionStatus === "needs_reconnect";
 
                 return (
                   <MailboxSettingsRow
@@ -260,6 +287,29 @@ export const MailboxesSettingsPanel = () => {
                           />
                           {isDefault ? "Default" : "Set default"}
                         </Button>
+
+                        {needsReconnect && (
+                          <Button
+                            disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
+                            onClick={() => {
+                              void handleConnectGmail({
+                                loginHint: mailbox.emailAddress,
+                                mailboxId: mailbox.id,
+                                mode: "reconnect",
+                              });
+                            }}
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <HugeiconsIcon
+                              aria-hidden
+                              className={cn("size-4", { "animate-spin": isGmailConnecting })}
+                              icon={isGmailConnecting ? Loading03Icon : Mail01Icon}
+                            />
+                            Reconnect
+                          </Button>
+                        )}
 
                         {isGmailMailbox && (
                           <Button

@@ -11,6 +11,8 @@ export const MAILBOX_PROVIDER_GMAIL = "gmail" as const;
 const GMAIL_MAILBOX_ID_PREFIX = "gmail:";
 const PERSONAL_GROUP_ID = "personal";
 const PERSONAL_GROUP_NAME = "Personal";
+const GMAIL_CONNECTED_STATUS = "connected";
+const GMAIL_NEEDS_RECONNECT_STATUS = "needs_reconnect";
 
 type LinkedAccount = Awaited<ReturnType<typeof auth.api.listUserAccounts>>[number];
 
@@ -21,6 +23,7 @@ type MailboxGroupMetadata = {
 };
 
 type ManagedMailbox = MailboxGroupMetadata & {
+  connectionStatus: typeof GMAIL_CONNECTED_STATUS;
   connectedUserId: null;
   displayName: string | null;
   emailAddress: string;
@@ -31,6 +34,7 @@ type ManagedMailbox = MailboxGroupMetadata & {
 };
 
 type GmailMailbox = MailboxGroupMetadata & {
+  connectionStatus: typeof GMAIL_CONNECTED_STATUS | typeof GMAIL_NEEDS_RECONNECT_STATUS;
   connectedUserId: string;
   displayName: string | null;
   emailAddress: string;
@@ -38,6 +42,7 @@ type GmailMailbox = MailboxGroupMetadata & {
   organizationId: null;
   provider: typeof MAILBOX_PROVIDER_GMAIL;
   providerAccountId: string;
+  reconnectReason: "invalid_access_token" | "missing_scopes" | null;
 };
 
 export type MailboxListItem = GmailMailbox | ManagedMailbox;
@@ -48,15 +53,6 @@ export type MailboxGroup = {
   mailboxes: MailboxListItem[];
   name: string;
   slug: string | null;
-};
-
-export type GoogleScopeRepairTarget = {
-  displayName: string | null;
-  emailAddress: string;
-  isStillMissingScopes: boolean;
-  mailboxId: string;
-  providerAccountId: string;
-  repairReason: "invalid_access_token" | "missing_scopes";
 };
 
 const createGmailMailboxId = (providerAccountId: string) =>
@@ -139,6 +135,7 @@ const listManagedMailboxesForUser = async (userId: string): Promise<ManagedMailb
     .orderBy(asc(organization.name), asc(mailbox.emailAddress));
 
   return managedMailboxes.map((managedMailbox) => ({
+    connectionStatus: GMAIL_CONNECTED_STATUS,
     connectedUserId: null,
     displayName: managedMailbox.displayName,
     emailAddress: managedMailbox.emailAddress,
@@ -196,17 +193,17 @@ const isGmailAccessRepairError = (error: unknown) => {
   return isGmailServiceError(error) && (error.status === 401 || error.status === 403);
 };
 
-const createGmailRepairMailbox = (input: {
+const createGmailReconnectMailbox = async (input: {
   account: LinkedAccount;
-  repairReason: GoogleScopeRepairTarget["repairReason"];
+  reconnectReason: NonNullable<GmailMailbox["reconnectReason"]>;
   userId: string;
-}): {
-  mailbox: GmailMailbox;
-  repairTarget: GoogleScopeRepairTarget;
-} => {
-  const emailAddress = getGoogleAccountFallbackLabel(input.account.accountId);
+}): Promise<GmailMailbox> => {
+  const emailAddress =
+    (await getStoredGoogleAccountEmail(input.account.accountId)) ??
+    getGoogleAccountFallbackLabel(input.account.accountId);
   const mailboxId = createGmailMailboxId(input.account.accountId);
-  const mailboxRecord = {
+  return {
+    connectionStatus: GMAIL_NEEDS_RECONNECT_STATUS,
     connectedUserId: input.userId,
     displayName: null,
     emailAddress,
@@ -217,40 +214,21 @@ const createGmailRepairMailbox = (input: {
     organizationId: null,
     provider: MAILBOX_PROVIDER_GMAIL,
     providerAccountId: input.account.accountId,
+    reconnectReason: input.reconnectReason,
   } satisfies GmailMailbox;
-
-  return {
-    mailbox: mailboxRecord,
-    repairTarget: {
-      displayName: mailboxRecord.displayName,
-      emailAddress: mailboxRecord.emailAddress,
-      isStillMissingScopes: input.repairReason === "missing_scopes",
-      mailboxId,
-      providerAccountId: input.account.accountId,
-      repairReason: input.repairReason,
-    },
-  };
 };
 
 const createGmailMailboxFromAccount = async (input: {
   account: LinkedAccount;
   headers: Headers;
   userId: string;
-}): Promise<{
-  mailbox: GmailMailbox | null;
-  repairTarget: GoogleScopeRepairTarget | null;
-}> => {
+}): Promise<GmailMailbox> => {
   if (!hasRequiredGoogleScopes(input.account.scopes)) {
-    const repair = createGmailRepairMailbox({
+    return await createGmailReconnectMailbox({
       account: input.account,
-      repairReason: "missing_scopes",
+      reconnectReason: "missing_scopes",
       userId: input.userId,
     });
-
-    return {
-      mailbox: null,
-      repairTarget: repair.repairTarget,
-    };
   }
 
   let accessToken: string | null = null;
@@ -261,29 +239,19 @@ const createGmailMailboxFromAccount = async (input: {
       input.account.accountId,
     );
   } catch {
-    const repair = createGmailRepairMailbox({
+    return await createGmailReconnectMailbox({
       account: input.account,
-      repairReason: "invalid_access_token",
+      reconnectReason: "invalid_access_token",
       userId: input.userId,
     });
-
-    return {
-      mailbox: null,
-      repairTarget: repair.repairTarget,
-    };
   }
 
   if (!accessToken) {
-    const repair = createGmailRepairMailbox({
+    return await createGmailReconnectMailbox({
       account: input.account,
-      repairReason: "invalid_access_token",
+      reconnectReason: "invalid_access_token",
       userId: input.userId,
     });
-
-    return {
-      mailbox: null,
-      repairTarget: repair.repairTarget,
-    };
   }
 
   try {
@@ -293,43 +261,33 @@ const createGmailMailboxFromAccount = async (input: {
       getGoogleAccountFallbackLabel(input.account.accountId);
 
     return {
-      mailbox: {
-        connectedUserId: input.userId,
-        displayName: profile.emailAddress || null,
-        emailAddress,
-        groupId: PERSONAL_GROUP_ID,
-        groupKind: "personal",
-        groupName: PERSONAL_GROUP_NAME,
-        id: createGmailMailboxId(input.account.accountId),
-        organizationId: null,
-        provider: MAILBOX_PROVIDER_GMAIL,
-        providerAccountId: input.account.accountId,
-      },
-      repairTarget: null,
+      connectionStatus: GMAIL_CONNECTED_STATUS,
+      connectedUserId: input.userId,
+      displayName: profile.emailAddress || null,
+      emailAddress,
+      groupId: PERSONAL_GROUP_ID,
+      groupKind: "personal",
+      groupName: PERSONAL_GROUP_NAME,
+      id: createGmailMailboxId(input.account.accountId),
+      organizationId: null,
+      provider: MAILBOX_PROVIDER_GMAIL,
+      providerAccountId: input.account.accountId,
+      reconnectReason: null,
     };
   } catch (error) {
     if (!isGmailAccessRepairError(error)) {
       throw error;
     }
 
-    const repair = createGmailRepairMailbox({
+    return await createGmailReconnectMailbox({
       account: input.account,
-      repairReason: "invalid_access_token",
+      reconnectReason: "invalid_access_token",
       userId: input.userId,
     });
-
-    return {
-      mailbox: null,
-      repairTarget: repair.repairTarget,
-    };
   }
 };
 
-export const listPersonalGmailMailboxes = async (input: {
-  headers: Headers;
-  includeRepairTargets?: boolean;
-  userId: string;
-}) => {
+export const listPersonalGmailMailboxes = async (input: { headers: Headers; userId: string }) => {
   const googleAccounts = await listLinkedGoogleAccounts(input.headers);
   const gmailMailboxResults = await Promise.all(
     googleAccounts.map((account) =>
@@ -342,48 +300,10 @@ export const listPersonalGmailMailboxes = async (input: {
   );
 
   return {
-    mailboxes: gmailMailboxResults
-      .map((result) => result.mailbox)
-      .filter((mailbox): mailbox is GmailMailbox => mailbox != null)
-      .sort((left, right) => left.emailAddress.localeCompare(right.emailAddress)),
-    repairTargets: input.includeRepairTargets
-      ? gmailMailboxResults
-          .flatMap((result) => (result.repairTarget ? [result.repairTarget] : []))
-          .sort((left, right) => left.emailAddress.localeCompare(right.emailAddress))
-      : [],
+    mailboxes: gmailMailboxResults.sort((left, right) =>
+      left.emailAddress.localeCompare(right.emailAddress),
+    ),
   };
-};
-
-export const resolveGoogleScopeRepairTarget = (input: {
-  preferredMailboxId?: string | null;
-  repairTargets: GoogleScopeRepairTarget[];
-  targetAccountId?: string | null;
-}) => {
-  if (input.repairTargets.length === 0) {
-    return null;
-  }
-
-  if (input.targetAccountId) {
-    const matchingTarget = input.repairTargets.find(
-      (candidate) => candidate.providerAccountId === input.targetAccountId,
-    );
-
-    if (matchingTarget) {
-      return matchingTarget;
-    }
-  }
-
-  if (input.preferredMailboxId) {
-    const matchingMailbox = input.repairTargets.find(
-      (candidate) => candidate.mailboxId === input.preferredMailboxId,
-    );
-
-    if (matchingMailbox) {
-      return matchingMailbox;
-    }
-  }
-
-  return input.repairTargets[0] ?? null;
 };
 
 export const refreshAuthorizedGmailAccessToken = async (input: {
@@ -531,7 +451,6 @@ export const listAccessibleMailboxState = async (input: { headers: Headers; user
     listManagedMailboxesForUser(input.userId),
     listPersonalGmailMailboxes({
       headers: input.headers,
-      includeRepairTargets: true,
       userId: input.userId,
     }),
   ]);
@@ -587,6 +506,7 @@ export const getAuthorizedGmailMailbox = async (input: {
     (await getStoredGoogleAccountEmail(providerAccountId)) ??
     getGoogleAccountFallbackLabel(providerAccountId);
   const selectedMailbox = {
+    connectionStatus: GMAIL_CONNECTED_STATUS,
     connectedUserId: input.userId,
     displayName: null,
     emailAddress,
@@ -597,6 +517,7 @@ export const getAuthorizedGmailMailbox = async (input: {
     organizationId: null,
     provider: MAILBOX_PROVIDER_GMAIL,
     providerAccountId,
+    reconnectReason: null,
   } satisfies GmailMailbox;
 
   if (!hasRequiredGoogleScopes(linkedGoogleAccount.scopes)) {

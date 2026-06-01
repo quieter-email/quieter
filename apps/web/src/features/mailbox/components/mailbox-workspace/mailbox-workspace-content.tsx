@@ -69,6 +69,7 @@ type MailboxWorkspaceContentProps = {
   pendingActions: MailboxPendingActions;
   searchQuery: string;
   selectedMailboxId: string | null;
+  selectedMailboxNeedsReconnect: boolean;
   selectedMessage: MessageListItem | null;
   selectedView: MailboxWorkspaceView;
 };
@@ -117,6 +118,7 @@ export const MailboxWorkspaceContent = ({
   pendingActions,
   searchQuery,
   selectedMailboxId,
+  selectedMailboxNeedsReconnect,
   selectedMessage,
   selectedView,
 }: MailboxWorkspaceContentProps) => (
@@ -177,7 +179,18 @@ export const MailboxWorkspaceContent = ({
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.08, ease: "linear" }}
               >
-                {selectedMailboxId ? (
+                {selectedMailboxId && selectedMailboxNeedsReconnect ? (
+                  <section className="flex min-h-0 flex-1 items-center justify-center bg-background-light/75 px-8">
+                    <m.div className="max-w-md space-y-3 text-center" {...workspaceContentMotion}>
+                      <h1 className="text-lg font-semibold tracking-tight text-foreground">
+                        Reconnect Google
+                      </h1>
+                      <p className="text-sm text-muted-foreground">
+                        This account needs to reconnect through Google before Quieter can load mail.
+                      </p>
+                    </m.div>
+                  </section>
+                ) : selectedMailboxId ? (
                   <>
                     <section
                       className={cn(

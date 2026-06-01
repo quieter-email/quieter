@@ -548,6 +548,7 @@ export const getDemoMailboxes = () => ({
       slug: null,
       mailboxes: [
         {
+          connectionStatus: "connected" as const,
           connectedUserId: "demo-user",
           displayName: "Demo Mailbox",
           emailAddress: DEMO_EMAIL_ADDRESS,

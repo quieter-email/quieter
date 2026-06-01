@@ -59,7 +59,6 @@ import {
   listPersonalGmailMailboxes,
   parseGmailProviderAccountId,
   resolveDefaultMailboxId,
-  resolveGoogleScopeRepairTarget,
   type MailboxListItem,
 } from "../mailbox";
 import {
@@ -111,37 +110,13 @@ const parseListUnsubscribeMailto = (value: string) => {
 };
 
 export const mailRouter = {
-  getGoogleScopeRepairTarget: protectedProcedure
-    .route({ method: "GET" })
-    .input(
-      z.object({
-        preferredMailboxId: mailboxIdSchema.nullish(),
-        targetAccountId: z.string().trim().min(1).nullish(),
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      return await callWithRateLimitHandling(context, async () => {
-        const gmailState = await listPersonalGmailMailboxes({
-          headers: getRequestHeaders(context),
-          includeRepairTargets: true,
-          userId: context.userId,
-        });
-
-        return resolveGoogleScopeRepairTarget({
-          preferredMailboxId: input.preferredMailboxId ?? null,
-          repairTargets: gmailState.repairTargets,
-          targetAccountId: input.targetAccountId ?? null,
-        });
-      });
-    }),
-
   listMailboxes: protectedProcedure.route({ method: "GET" }).handler(async ({ context }) => {
     const headers = getRequestHeaders(context);
     const [mailboxPreferences, mailboxState] = await Promise.all([
       getUserMailboxPreferences(context.userId),
       listAccessibleMailboxState({ headers, userId: context.userId }),
     ]);
-    const { gmailState, groups } = mailboxState;
+    const { groups } = mailboxState;
     const orderedGroups = applyMailboxSwitcherOrder(
       groups,
       mailboxPreferences.mailboxSwitcherOrder,
@@ -151,9 +126,6 @@ export const mailRouter = {
     return {
       defaultMailboxId: resolveDefaultMailboxId(allMailboxes, mailboxPreferences.defaultMailboxId),
       groups: orderedGroups,
-      googleScopeRepairTarget: resolveGoogleScopeRepairTarget({
-        repairTargets: gmailState.repairTargets,
-      }),
     };
   }),
 
@@ -165,9 +137,6 @@ export const mailRouter = {
       });
 
       return {
-        googleScopeRepairTarget: resolveGoogleScopeRepairTarget({
-          repairTargets: gmailState.repairTargets,
-        }),
         mailboxes: gmailState.mailboxes,
       };
     });

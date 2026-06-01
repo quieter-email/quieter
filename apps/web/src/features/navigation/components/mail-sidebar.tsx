@@ -52,6 +52,7 @@ type MailSidebarProps = {
     id: string;
     kind: "personal" | "team";
     mailboxes: Array<{
+      connectionStatus: "connected" | "needs_reconnect";
       id: string;
       emailAddress: string;
       displayName: string | null;

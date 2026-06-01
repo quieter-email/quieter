@@ -118,6 +118,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     mailboxes,
     mailboxesQuery,
     selectedMailboxId,
+    selectedMailboxNeedsReconnect,
     setDefaultMailboxMutation,
     updateMailboxSwitcherOrderMutation,
   } = useMailboxSelection({ isDemoMode, mailboxId, queryClient });
@@ -143,7 +144,8 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     messageId,
     queryClient,
     searchQuery: query.trim(),
-    selectedMailboxId: view === "inbox" ? selectedMailboxId : null,
+    selectedMailboxId:
+      view === "inbox" && !selectedMailboxNeedsReconnect ? selectedMailboxId : null,
     setIsManualRefreshing,
   });
 
@@ -393,6 +395,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         pendingActions={pendingActions}
         searchQuery={query.trim()}
         selectedMailboxId={selectedMailboxId}
+        selectedMailboxNeedsReconnect={selectedMailboxNeedsReconnect}
         selectedMessage={selectedMessage}
         selectedView={view}
       />

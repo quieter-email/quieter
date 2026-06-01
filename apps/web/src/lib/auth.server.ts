@@ -1,7 +1,5 @@
 import "@tanstack/react-start/server-only";
-import type { RouterOutputs } from "@quieter/orpc";
 import { getSessionWithOrganization } from "@quieter/auth";
-import { createOrpcServerClient } from "@quieter/orpc/server-client";
 
 type SessionUser = {
   email: string;
@@ -25,28 +23,4 @@ export const getSessionUserForRequest = async (request: Request): Promise<Sessio
     image: session.user.image ?? null,
     name: session.user.name,
   };
-};
-
-export const getGoogleScopeRepairTargetForRequest = async (
-  request: Request,
-  input?: {
-    preferredMailboxId?: string | null;
-    targetAccountId?: string | null;
-  },
-): Promise<RouterOutputs["mail"]["getGoogleScopeRepairTarget"]> => {
-  const authHeaders = new Headers(request.headers);
-  const session = await getSessionWithOrganization(authHeaders);
-
-  if (!session?.user || !session.session) {
-    return null;
-  }
-
-  const client = createOrpcServerClient({
-    headers: authHeaders,
-  });
-
-  return await client.mail.getGoogleScopeRepairTarget({
-    preferredMailboxId: input?.preferredMailboxId ?? null,
-    targetAccountId: input?.targetAccountId ?? null,
-  });
 };

@@ -72,6 +72,7 @@ export const useMailboxSelection = ({
     kind: group.kind,
     name: group.name,
     mailboxes: group.mailboxes.map((mailbox) => ({
+      connectionStatus: mailbox.connectionStatus,
       displayName: mailbox.displayName,
       emailAddress: mailbox.emailAddress,
       groupName: mailbox.groupName,
@@ -86,6 +87,7 @@ export const useMailboxSelection = ({
     mailboxes[0] ??
     null;
   const selectedMailboxId = selectedMailbox?.id ?? null;
+  const selectedMailboxNeedsReconnect = selectedMailbox?.connectionStatus === "needs_reconnect";
 
   const setDefaultMailboxMutation = useMutation({
     ...orpc.mail.setDefaultMailbox.mutationOptions(),
@@ -130,6 +132,7 @@ export const useMailboxSelection = ({
     mailboxes,
     mailboxesQuery,
     selectedMailboxId,
+    selectedMailboxNeedsReconnect,
     setDefaultMailboxMutation,
     updateMailboxSwitcherOrderMutation,
   };
