@@ -13,7 +13,7 @@ const posthogToken =
 const posthogHost = import.meta.env.VITE_PUBLIC_POSTHOG_HOST?.trim() || "https://eu.i.posthog.com";
 const appEnvironment = import.meta.env.MODE;
 
-const isPostHogEnabled = typeof window !== "undefined" && !!posthogToken;
+const isPostHogEnabled = typeof window !== "undefined" && !import.meta.env.DEV && !!posthogToken;
 
 if (isPostHogEnabled && !posthog.__loaded) {
   posthog.init(posthogToken, {

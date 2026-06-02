@@ -11,7 +11,7 @@ export const RootErrorComponent = ({
 }) => {
   useEffect(() => {
     // react-doctor-disable-next-line react-doctor/no-event-handler
-    if (error) {
+    if (!import.meta.env.DEV && error) {
       Sentry.captureException(error);
     }
   }, [error]);

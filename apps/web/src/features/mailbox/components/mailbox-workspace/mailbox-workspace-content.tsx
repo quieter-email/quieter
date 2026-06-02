@@ -8,30 +8,16 @@ import { domAnimation, LazyMotion, m } from "motion/react";
 import type { ComposeDraftState } from "~/features/compose";
 import type { MailboxWorkspaceView } from "~/features/mailbox/domain/mailbox-workspace-view";
 import type { MailboxSwitcherOrder } from "~/features/navigation/components/mailbox-switcher";
-import type { ListMessagesPageResult, MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
+import type { MailboxCategory } from "~/lib/gmail/gmail";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
 import { ChatView } from "~/features/chat/components/chat-view";
-import { MessageList } from "~/features/message-list/components/message-list";
-import { MessageDetail } from "~/features/message-thread/components/message-detail";
 import { MailSidebar } from "~/features/navigation/components/mail-sidebar";
-import type { MailboxActions, MailboxPendingActions } from "../mailbox-action-handlers";
+import { MailboxMessagesPanel } from "./mailbox-messages-panel";
 
 type MailboxSidebarGroups = ComponentProps<typeof MailSidebar>["groups"];
 type MailboxSidebarChats = ComponentProps<typeof MailSidebar>["chats"];
 
-type MailboxWorkspaceListState = {
-  error: unknown;
-  hasNextPage: boolean;
-  isError: boolean;
-  isFetchingNextPage: boolean;
-  isPending: boolean;
-  isRefreshing: boolean;
-  messages: ListMessagesPageResult[];
-};
-
 type MailboxWorkspaceLayoutState = {
-  isLoadingEmptyMessages: boolean;
-  isMessageRouteOpen: boolean;
   isMobileSidebarOpen: boolean;
 };
 
@@ -42,20 +28,13 @@ type MailboxWorkspaceContentProps = {
   currentUserEmail: string | null;
   defaultMailboxId: string | null;
   draftChatKey: string;
+  isDemoMode: boolean;
   layoutState: MailboxWorkspaceLayoutState;
-  listState: MailboxWorkspaceListState;
-  mailboxActions: MailboxActions;
   mailboxGroups: MailboxSidebarGroups;
-  messageId: string | null;
-  onActivateMessage: (messageId: string) => void;
-  onBackToList: () => void;
   onComposeDraftRequested: (draft: ComposeDraftState) => void;
   onComposeNewMail: () => void;
-  onLoadMore: () => void;
   onMobileOpenChange: (open: boolean) => void;
-  onOpenDraft: (message: MessageListItem) => void;
   onOpenSidebar: () => void;
-  onRefresh: () => void | Promise<void>;
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
   onSearch: (query: string) => void;
   onCreateChat: () => void;
@@ -68,14 +47,11 @@ type MailboxWorkspaceContentProps = {
   onSelectView: (view: MailboxWorkspaceView) => void;
   onSetDefaultMailbox: (mailboxId: string | null) => void;
   onChatIdChange: (chatId: string) => void;
-  onVisibleMessageIdsChange: (messageIds: readonly string[]) => void;
-  pendingActions: MailboxPendingActions;
   reconnectError: string | null;
   reconnectingMailboxId: string | null;
   searchQuery: string;
   selectedMailboxId: string | null;
   selectedMailboxNeedsReconnect: boolean;
-  selectedMessage: MessageListItem | null;
   selectedView: MailboxWorkspaceView;
 };
 
@@ -94,20 +70,13 @@ export const MailboxWorkspaceContent = ({
   currentUserEmail,
   defaultMailboxId,
   draftChatKey,
+  isDemoMode,
   layoutState,
-  listState,
-  mailboxActions,
   mailboxGroups,
-  messageId,
-  onActivateMessage,
-  onBackToList,
   onComposeDraftRequested,
   onComposeNewMail,
-  onLoadMore,
   onMobileOpenChange,
-  onOpenDraft,
   onOpenSidebar,
-  onRefresh,
   onReorderMailboxSwitcher,
   onSearch,
   onCreateChat,
@@ -120,14 +89,11 @@ export const MailboxWorkspaceContent = ({
   onSelectView,
   onSetDefaultMailbox,
   onChatIdChange,
-  onVisibleMessageIdsChange,
-  pendingActions,
   reconnectError,
   reconnectingMailboxId,
   searchQuery,
   selectedMailboxId,
   selectedMailboxNeedsReconnect,
-  selectedMessage,
   selectedView,
 }: MailboxWorkspaceContentProps) => (
   <LazyMotion features={domAnimation}>
@@ -218,65 +184,16 @@ export const MailboxWorkspaceContent = ({
                   </m.div>
                 </section>
               ) : selectedMailboxId ? (
-                <>
-                  <section
-                    className={cn(
-                      "min-h-0 min-w-0 flex-col overflow-hidden border border-border/60 bg-background-light/75 lg:flex lg:rounded-lg",
-                      {
-                        "flex flex-1": !layoutState.isMessageRouteOpen,
-                        hidden: layoutState.isMessageRouteOpen,
-                      },
-                    )}
-                  >
-                    <MessageList
-                      activeMailbox={activeMailbox}
-                      activeMessageId={messageId}
-                      mailboxId={selectedMailboxId}
-                      error={listState.error}
-                      hasNextPage={listState.hasNextPage}
-                      isError={listState.isError}
-                      isFetchingNextPage={listState.isFetchingNextPage}
-                      isPending={listState.isPending}
-                      isRefreshing={listState.isRefreshing}
-                      mailboxActions={mailboxActions}
-                      messages={listState.messages}
-                      onActivateMessage={onActivateMessage}
-                      onDeactivateActiveMessage={onBackToList}
-                      onLoadMore={onLoadMore}
-                      onOpenDraft={onOpenDraft}
-                      onOpenSidebar={onOpenSidebar}
-                      onRefresh={onRefresh}
-                      onSearch={onSearch}
-                      onVisibleMessageIdsChange={onVisibleMessageIdsChange}
-                      pendingActions={pendingActions}
-                      searchQuery={searchQuery}
-                    />
-                  </section>
-
-                  <div
-                    className={cn(
-                      "min-h-0 min-w-0 flex-col overflow-hidden border border-border/60 bg-background-light/75 lg:flex lg:rounded-lg",
-                      {
-                        "flex flex-1": layoutState.isMessageRouteOpen,
-                        hidden: !layoutState.isMessageRouteOpen,
-                      },
-                    )}
-                  >
-                    <MessageDetail
-                      activeMailbox={activeMailbox}
-                      currentUserEmail={currentUserEmail}
-                      mailboxId={selectedMailboxId}
-                      mailboxActions={mailboxActions}
-                      onComposeDraftRequested={onComposeDraftRequested}
-                      pendingActions={pendingActions}
-                      isPending={
-                        layoutState.isMessageRouteOpen && layoutState.isLoadingEmptyMessages
-                      }
-                      onBackToList={onBackToList}
-                      selectedMessage={selectedMessage}
-                    />
-                  </div>
-                </>
+                <MailboxMessagesPanel
+                  activeMailbox={activeMailbox}
+                  currentUserEmail={currentUserEmail}
+                  isDemoMode={isDemoMode}
+                  mailboxId={selectedMailboxId}
+                  onComposeDraftRequested={onComposeDraftRequested}
+                  onOpenSidebar={onOpenSidebar}
+                  onSearchQueryChange={onSearch}
+                  searchQuery={searchQuery}
+                />
               ) : (
                 <section className="flex min-h-0 flex-1 items-center justify-center bg-background-light/75 px-8">
                   <m.div className="max-w-md space-y-3 text-center" {...workspaceContentMotion}>

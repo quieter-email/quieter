@@ -3,14 +3,13 @@
 import type { RouterOutputs } from "@quieter/orpc";
 import { toast } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useDeferredValue, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import type { ComposeDraftState } from "~/features/compose";
+import type { MailboxCategory } from "~/lib/gmail/gmail";
 import { LoadingPage } from "~/components/loading-page";
-import { type ComposeDraftState, buildComposeDraftFromSavedDraftMessage } from "~/features/compose";
 import { type ComposeDialogHandle, ComposeDialog } from "~/features/compose";
 import { useDemoModeEnabled } from "~/features/settings/domain/demo-mode-setting";
 import { chatsQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-query";
-import { createDemoMailboxActions } from "~/lib/gmail/demo-mail";
-import { type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
 import {
   openGoogleAccountLink,
   readPendingGmailLink,
@@ -20,10 +19,7 @@ import {
 import { getMailboxesQueryKey } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 import type { MailboxWorkspaceView } from "../domain/mailbox-workspace-view";
-import { createMailboxActionHandlers } from "./mailbox-action-handlers";
 import { MailboxWorkspaceContent } from "./mailbox-workspace/mailbox-workspace-content";
-import { useMailboxMessages } from "./mailbox-workspace/use-mailbox-messages";
-import { useMailboxPendingActions } from "./mailbox-workspace/use-mailbox-pending-actions";
 import { useMailboxRouteSearch } from "./mailbox-workspace/use-mailbox-route-search";
 import { useMailboxSelection } from "./mailbox-workspace/use-mailbox-selection";
 import { useWorkspaceUiState } from "./mailbox-workspace/use-workspace-ui-state";
@@ -115,22 +111,9 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   );
   const [startingReconnectMailboxId, setStartingReconnectMailboxId] = useState<string | null>(null);
   const chatViewLeftAtRef = useRef<number | null>(null);
-  const { activeMailbox, chatId, mailboxId, messageId, query, setMailboxSearch, view } =
+  const { activeMailbox, chatId, mailboxId, query, setMailboxSearch, view } =
     useMailboxRouteSearch();
-  const {
-    isManualRefreshing,
-    isMobileSidebarOpen,
-    isWindowActive,
-    setIsManualRefreshing,
-    setIsMobileSidebarOpen,
-  } = useWorkspaceUiState();
-  const {
-    isMessageActionPending,
-    isThreadActionPending,
-    pendingActions,
-    setMessageActionsPending,
-    setThreadActionsPending,
-  } = useMailboxPendingActions();
+  const { isMobileSidebarOpen, setIsMobileSidebarOpen } = useWorkspaceUiState();
   const isDemoMode = useDemoModeEnabled();
   const {
     defaultMailboxId,
@@ -185,31 +168,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     },
   });
 
-  const unsubscribeMutation = useMutation(orpc.mail.unsubscribeFromMessage.mutationOptions());
-  const {
-    flattenedMessages,
-    handleVisibleMessageIdsChange,
-    hasMessagePages,
-    isLoadingEmptyMessages,
-    listState,
-    loadMoreMessages,
-    messagesPending,
-    refreshMessages,
-    refreshSearchResultsIfNeeded,
-    selectedMessage,
-  } = useMailboxMessages({
-    activeMailbox,
-    isDemoMode,
-    isManualRefreshing,
-    isWindowActive,
-    messageId,
-    queryClient,
-    searchQuery: query.trim(),
-    selectedMailboxId:
-      view === "inbox" && !selectedMailboxNeedsReconnect ? selectedMailboxId : null,
-    setIsManualRefreshing,
-  });
-
   useLayoutEffect(() => {
     if (!isDemoMode && mailboxesQuery.isPending) {
       return;
@@ -226,75 +184,8 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     });
   }, [isDemoMode, mailboxId, mailboxesQuery.isPending, selectedMailboxId, setMailboxSearch]);
 
-  useLayoutEffect(() => {
-    if (
-      !selectedMailboxId ||
-      !messageId ||
-      messagesPending ||
-      !hasMessagePages ||
-      selectedMessage
-    ) {
-      return;
-    }
-
-    void setMailboxSearch({ messageId: null });
-  }, [
-    hasMessagePages,
-    messageId,
-    messagesPending,
-    selectedMailboxId,
-    selectedMessage,
-    setMailboxSearch,
-  ]);
-
-  const mailboxActions = isDemoMode
-    ? createDemoMailboxActions(queryClient)
-    : createMailboxActionHandlers({
-        activeMailbox,
-        activeSearchQuery: query.trim(),
-        queryClient,
-        refreshSearchResultsIfNeeded,
-        isMessageActionPending,
-        isThreadActionPending,
-        setMessageActionPending: (id, pending) => setMessageActionsPending([id], pending),
-        setMessageActionsPending,
-        setThreadActionPending: (id, pending) => setThreadActionsPending([id], pending),
-        setThreadActionsPending,
-        unsubscribeFromMessageMutation: async (messageId) => {
-          if (!selectedMailboxId) {
-            return;
-          }
-
-          await unsubscribeMutation.mutateAsync({ mailboxId: selectedMailboxId, messageId });
-        },
-        mailboxId: selectedMailboxId ?? "",
-      });
-
   const openComposeDraft = (draft: ComposeDraftState) => {
     composeDialogRef.current?.openDraft(draft);
-  };
-
-  const openDraft = (message: MessageListItem) => {
-    if (!message.draftId) {
-      return;
-    }
-
-    void setMailboxSearch({ messageId: null });
-    openComposeDraft(buildComposeDraftFromSavedDraftMessage(message));
-  };
-
-  const activateMessage = (nextMessageId: string) => {
-    if (activeMailbox === "drafts") {
-      const draftMessage = flattenedMessages.find((message) => message.id === nextMessageId);
-      if (draftMessage) {
-        openDraft(draftMessage);
-      }
-      return;
-    }
-
-    const shouldPushMobileHistory =
-      !messageId && window.matchMedia("(max-width: 1023.98px)").matches;
-    void setMailboxSearch({ messageId: nextMessageId }, { replace: !shouldPushMobileHistory });
   };
 
   const applySearch = (nextQuery: string) => {
@@ -302,7 +193,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
 
     if (normalizedQuery === query.trim()) {
       void setMailboxSearch({ messageId: null });
-      void refreshMessages();
       return;
     }
 
@@ -338,7 +228,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     void setMailboxSearch({ view: nextView });
   };
 
-  const isMessageRouteOpen = activeMailbox !== "drafts" && !!messageId;
   const chatSidebarActions = useChatSidebarActions({
     activeChatId: chatId,
     chats: chatsQuery.data ?? [],
@@ -374,13 +263,9 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     }
   };
 
-  // Render the workspace tree at transition priority so React builds it in the
-  // background while the committed LoadingPage stays mounted and its spinner keeps
-  // animating, then swaps once the heavy mount is ready.
   const isWorkspaceReady = isDemoMode || !mailboxesQuery.isPending;
-  const deferredWorkspaceReady = useDeferredValue(isWorkspaceReady);
 
-  if (!deferredWorkspaceReady) {
+  if (!isWorkspaceReady) {
     return (
       <>
         <LoadingPage />
@@ -404,28 +289,17 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         currentUserEmail={currentUserEmail}
         defaultMailboxId={defaultMailboxId}
         layoutState={{
-          isLoadingEmptyMessages,
-          isMessageRouteOpen,
           isMobileSidebarOpen,
         }}
         chatId={chatId ?? null}
         draftChatKey={`new-chat-${draftChatVersion}`}
+        isDemoMode={isDemoMode}
         chats={chatsQuery.data ?? []}
-        listState={listState}
-        mailboxActions={mailboxActions}
         mailboxGroups={mailboxGroups}
-        messageId={messageId ?? null}
-        onActivateMessage={activateMessage}
-        onBackToList={() => {
-          void setMailboxSearch({ messageId: null });
-        }}
         onComposeDraftRequested={openComposeDraft}
         onComposeNewMail={() => composeDialogRef.current?.openNewMail()}
-        onLoadMore={loadMoreMessages}
         onMobileOpenChange={setIsMobileSidebarOpen}
-        onOpenDraft={openDraft}
         onOpenSidebar={() => setIsMobileSidebarOpen(true)}
-        onRefresh={() => refreshMessages()}
         onReorderMailboxSwitcher={(order) => {
           updateMailboxSwitcherOrderMutation.mutate(order);
         }}
@@ -470,14 +344,11 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         onSetDefaultMailbox={(nextMailboxId) => {
           void setDefaultMailboxMutation.mutateAsync({ mailboxId: nextMailboxId });
         }}
-        onVisibleMessageIdsChange={handleVisibleMessageIdsChange}
-        pendingActions={pendingActions}
         reconnectError={gmailReconnectError}
         reconnectingMailboxId={reconnectingMailboxId}
         searchQuery={query.trim()}
         selectedMailboxId={selectedMailboxId}
         selectedMailboxNeedsReconnect={selectedMailboxNeedsReconnect}
-        selectedMessage={selectedMessage}
         selectedView={view}
       />
       <ComposeDialog

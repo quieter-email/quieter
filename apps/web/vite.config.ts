@@ -9,37 +9,48 @@ import { defineConfig } from "vite";
 
 const motionPackages = ["motion", "framer-motion", "motion-dom", "motion-utils"] as const;
 
-export default defineConfig({
-  build: {
-    sourcemap: !!process.env.SENTRY_AUTH_TOKEN,
-  },
-  plugins: [
-    tanstackStart(),
-    viteReact(),
-    reactScan(),
-    babel({
-      presets: [reactCompilerPreset()],
-    }),
-    tailwindcss(),
-    nitro({ preset: "vercel", traceDeps: ["react"] }),
-    sentryTanstackStart({
-      authToken: process.env.SENTRY_AUTH_TOKEN,
-      org: process.env.SENTRY_ORG,
-      project: process.env.SENTRY_PROJECT,
-      sourcemaps: {
-        filesToDeleteAfterUpload: ["./.vercel/output/**/*.map", "./node_modules/.nitro/**/*.map"],
-      },
-      telemetry: false,
-    }),
-  ],
-  optimizeDeps: {
-    include: [...motionPackages, "motion/react"],
-  },
-  resolve: {
-    dedupe: ["@tanstack/react-router", "react", "react-dom", ...motionPackages],
-    tsconfigPaths: true,
-  },
-  server: {
-    port: 3000,
-  },
+export default defineConfig(({ command }) => {
+  const isSentryEnabled = command !== "serve" && !!process.env.SENTRY_AUTH_TOKEN;
+
+  return {
+    build: {
+      sourcemap: isSentryEnabled,
+    },
+    plugins: [
+      tanstackStart(),
+      viteReact(),
+      reactScan(),
+      babel({
+        presets: [reactCompilerPreset()],
+      }),
+      tailwindcss(),
+      nitro({ preset: "vercel", traceDeps: ["react"] }),
+      ...(isSentryEnabled
+        ? [
+            sentryTanstackStart({
+              authToken: process.env.SENTRY_AUTH_TOKEN,
+              org: process.env.SENTRY_ORG,
+              project: process.env.SENTRY_PROJECT,
+              sourcemaps: {
+                filesToDeleteAfterUpload: [
+                  "./.vercel/output/**/*.map",
+                  "./node_modules/.nitro/**/*.map",
+                ],
+              },
+              telemetry: false,
+            }),
+          ]
+        : []),
+    ],
+    optimizeDeps: {
+      include: [...motionPackages, "motion/react"],
+    },
+    resolve: {
+      dedupe: ["@tanstack/react-router", "react", "react-dom", ...motionPackages],
+      tsconfigPaths: true,
+    },
+    server: {
+      port: 3000,
+    },
+  };
 });

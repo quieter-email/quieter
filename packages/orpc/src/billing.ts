@@ -38,8 +38,7 @@ const getPaykit = async () => {
     });
   }
 
-  const polarModulePath = "@paykit-sdk/polar/dist/index.mjs";
-  const { createPolar } = (await import(polarModulePath)) as typeof import("@paykit-sdk/polar");
+  const { createPolar } = await import("@paykit-sdk/polar");
 
   paykit = new PayKit(
     createPolar({

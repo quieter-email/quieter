@@ -23,3 +23,19 @@
     scroll-behavior: auto !important;
   }
 }
+
+.loading-spinner-dot {
+  animation: loading-spinner-dot 1.8s ease-in-out infinite;
+}
+
+@keyframes loading-spinner-dot {
+  0%,
+  55%,
+  100% {
+    opacity: var(--_dim);
+  }
+
+  15% {
+    opacity: var(--_bright);
+  }
+}

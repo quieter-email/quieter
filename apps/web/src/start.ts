@@ -19,6 +19,7 @@ const sitePasswordPaths = new Set([
 const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
 const publicPathPrefixes = ["/_build/", "/assets/"];
+const isSentryEnabled = process.env.NODE_ENV !== "development" && !!process.env.SENTRY_DSN;
 
 const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === "serverFn",
@@ -53,8 +54,12 @@ const sitePasswordMiddleware = createMiddleware().server(async ({ next, request 
 });
 
 export const startInstance = createStart(() => ({
-  functionMiddleware: [sentryGlobalFunctionMiddleware],
-  requestMiddleware: [sentryGlobalRequestMiddleware, csrfMiddleware, sitePasswordMiddleware],
+  functionMiddleware: isSentryEnabled ? [sentryGlobalFunctionMiddleware] : [],
+  requestMiddleware: [
+    ...(isSentryEnabled ? [sentryGlobalRequestMiddleware] : []),
+    csrfMiddleware,
+    sitePasswordMiddleware,
+  ],
 }));
 
 const shouldGatePath = (pathname: string) => {

@@ -3,7 +3,7 @@
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useLayoutEffect, useMemo } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import type { MessageListProps } from "./message-list-types";
 import type { useMessageListSelection } from "./use-message-list-selection";
@@ -84,6 +84,8 @@ export const MessageListScrollPane = ({
     [threadedMessages, virtualItems],
   );
   const visibleMessageIdsKey = visibleMessageIds.join(":");
+  const visibleMessageIdsRef = useRef(visibleMessageIds);
+  visibleMessageIdsRef.current = visibleMessageIds;
 
   const shouldPrefetch = useCallback((element: HTMLDivElement) => {
     const distanceToBottom = element.scrollHeight - (element.scrollTop + element.clientHeight);
@@ -103,15 +105,23 @@ export const MessageListScrollPane = ({
       return;
 
     list.onLoadMore();
-  }, [list, selection.scrollRef, shouldPrefetch]);
+  }, [
+    list.hasNextPage,
+    list.isError,
+    list.isFetchingNextPage,
+    list.isPending,
+    list.onLoadMore,
+    selection.scrollRef,
+    shouldPrefetch,
+  ]);
 
   useLayoutEffect(() => {
     maybeLoadMore();
   }, [maybeLoadMore, threadedMessages.length]);
 
   useLayoutEffect(() => {
-    list.onVisibleMessageIdsChange?.(visibleMessageIds);
-  }, [list.onVisibleMessageIdsChange, visibleMessageIds, visibleMessageIdsKey]);
+    list.onVisibleMessageIdsChange?.(visibleMessageIdsRef.current);
+  }, [list.onVisibleMessageIdsChange, visibleMessageIdsKey]);
 
   return (
     <div
@@ -143,17 +153,20 @@ export const MessageListScrollPane = ({
             return (
               thread && (
                 <MessageRow
+                  activeMailbox={list.activeMailbox}
                   className="absolute top-0 left-0 w-full"
                   dataIndex={virtualItem.index}
                   isActive={activeThreadId === thread.threadId}
                   isSelected={selection.selectedThreadIds.has(thread.threadId)}
                   isSelectionMode={selection.selectedThreadIds.size > 0}
                   key={thread.threadId}
-                  list={list}
-                  selection={selection}
-                  style={{
-                    transform: `translateY(${virtualItem.start}px)`,
-                  }}
+                  mailboxActions={list.mailboxActions}
+                  mailboxId={list.mailboxId}
+                  offsetY={virtualItem.start}
+                  onOpenDraft={list.onOpenDraft}
+                  onThreadPress={selection.handleThreadPress}
+                  onThreadSelectionPress={selection.handleThreadSelectionPress}
+                  pendingActions={list.pendingActions}
                   thread={thread}
                 />
               )
