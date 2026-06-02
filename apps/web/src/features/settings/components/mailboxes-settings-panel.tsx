@@ -8,65 +8,18 @@ import {
   PinOffIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { REQUIRED_GOOGLE_SCOPES } from "@quieter/auth/google-scopes";
 import { Button, cn, toast } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { MailboxSettingsRow } from "~/features/navigation/components/mailbox-switcher";
-import { authClient } from "~/lib/auth";
+import {
+  openGoogleAccountLink,
+  readPendingGmailLink,
+  writePendingGmailLink,
+  type PendingGmailLinkState,
+} from "~/lib/google-account-link";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
-
-const PENDING_GMAIL_LINK_STORAGE_KEY = "quieter:pending-gmail-link";
-
-type PendingGmailLinkState = {
-  mailboxCount: number;
-  mailboxId?: string;
-  mode: "connect" | "reconnect";
-  startedAt: number;
-};
-
-const readPendingGmailLink = (): PendingGmailLinkState | null => {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const rawValue = window.sessionStorage.getItem(PENDING_GMAIL_LINK_STORAGE_KEY);
-  if (!rawValue) {
-    return null;
-  }
-
-  try {
-    const parsedValue = JSON.parse(rawValue);
-    if (
-      typeof parsedValue !== "object" ||
-      parsedValue === null ||
-      typeof parsedValue.mailboxCount !== "number" ||
-      (parsedValue.mode !== "connect" && parsedValue.mode !== "reconnect") ||
-      ("mailboxId" in parsedValue && typeof parsedValue.mailboxId !== "string") ||
-      typeof parsedValue.startedAt !== "number"
-    ) {
-      return null;
-    }
-
-    return parsedValue;
-  } catch {
-    return null;
-  }
-};
-
-const writePendingGmailLink = (value: PendingGmailLinkState | null) => {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  if (!value) {
-    window.sessionStorage.removeItem(PENDING_GMAIL_LINK_STORAGE_KEY);
-    return;
-  }
-
-  window.sessionStorage.setItem(PENDING_GMAIL_LINK_STORAGE_KEY, JSON.stringify(value));
-};
 
 export const MailboxesSettingsPanel = () => {
   const queryClient = useQueryClient();
@@ -162,34 +115,11 @@ export const MailboxesSettingsPanel = () => {
     setIsStartingGmailLink(true);
 
     try {
-      const response = await authClient.linkSocial({
+      await openGoogleAccountLink({
         callbackURL: "/settings?tab=mailboxes",
-        disableRedirect: true,
         errorCallbackURL: "/settings?tab=mailboxes",
-        provider: "google",
-        scopes: [...REQUIRED_GOOGLE_SCOPES],
+        loginHint: input.loginHint,
       });
-
-      if (response.error) {
-        writePendingGmailLink(null);
-        setIsStartingGmailLink(false);
-        setConnectError(response.error.message ?? "Could not start Google account linking.");
-        return;
-      }
-
-      if (!response.data?.url) {
-        writePendingGmailLink(null);
-        setIsStartingGmailLink(false);
-        setConnectError("Could not start Google account linking.");
-        return;
-      }
-
-      const providerUrl = new URL(response.data.url);
-      if (input.loginHint) {
-        providerUrl.searchParams.set("login_hint", input.loginHint);
-      }
-      providerUrl.searchParams.set("prompt", "consent select_account");
-      window.location.assign(providerUrl.toString());
     } catch (error) {
       writePendingGmailLink(null);
       setIsStartingGmailLink(false);

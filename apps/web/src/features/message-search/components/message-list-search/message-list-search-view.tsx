@@ -10,6 +10,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, Calendar, IconButtonTooltip, cn } from "@quieter/ui";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
+import { useState } from "react";
 import { ArrowInteractionButton } from "~/components/arrow-interaction-button";
 import { SpinWhileActive } from "~/components/spin-while-active";
 import { normalizeLabelSelectionKey } from "~/features/message-search/state/message-list-search-state";
@@ -27,6 +28,7 @@ export const MessageListSearchView = ({
 }: {
   controller: MessageListSearchController;
 }) => {
+  const [isRefreshSpinLatched, setIsRefreshSpinLatched] = useState(false);
   const {
     activeDateFilter,
     activeDateFilterIndex,
@@ -63,6 +65,7 @@ export const MessageListSearchView = ({
     updateSearchText,
     userLabels,
   } = controller;
+  const isRefreshSpinActive = isRefreshing || isRefreshSpinLatched;
 
   return (
     <search className="block bg-transparent p-4">
@@ -86,11 +89,16 @@ export const MessageListSearchView = ({
             <Button
               aria-label="Refresh list"
               disabled={isRefreshing}
-              onClick={() => void onRefresh()}
+              onClick={() => {
+                setIsRefreshSpinLatched(true);
+                void Promise.resolve(onRefresh()).finally(() => {
+                  setIsRefreshSpinLatched(false);
+                });
+              }}
               size="icon-sm"
               variant="outline"
             >
-              <SpinWhileActive active={isRefreshing}>
+              <SpinWhileActive active={isRefreshSpinActive}>
                 <HugeiconsIcon icon={Refresh01Icon} />
               </SpinWhileActive>
             </Button>

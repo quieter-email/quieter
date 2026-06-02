@@ -64,6 +64,7 @@ type MailSidebarProps = {
   selectedMailboxId: string | null;
   selectedMailbox: MailboxCategory;
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
+  onReconnectMailbox: (mailbox: { emailAddress: string; id: string }) => void;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
   onSelectMailboxId: (mailboxId: string) => void;
   onSetDefaultMailbox: (mailboxId: string | null) => void;
@@ -74,6 +75,7 @@ type MailSidebarProps = {
   onSelectChat: (chatId: string) => void;
   onComposeNewMail: () => void;
   onSelectView: (view: MailboxWorkspaceView) => void;
+  reconnectingMailboxId: string | null;
   searchQuery: string;
   selectedView: MailboxWorkspaceView;
   isMobileOpen: boolean;
@@ -220,6 +222,7 @@ const SidebarContent = ({
   groups,
   onComposeNewMail,
   onReorderMailboxSwitcher,
+  onReconnectMailbox,
   onRequestClose,
   onSelectMailbox,
   onSelectChat,
@@ -227,6 +230,7 @@ const SidebarContent = ({
   onSelectView,
   onSetDefaultMailbox,
   onSearch,
+  reconnectingMailboxId,
   searchQuery,
   selectedMailboxId,
   selectedMailbox,
@@ -297,8 +301,10 @@ const SidebarContent = ({
           defaultMailboxId={defaultMailboxId}
           groups={groups}
           onReorderMailboxSwitcher={onReorderMailboxSwitcher}
+          onReconnectMailbox={onReconnectMailbox}
           onSelectMailboxId={handleSelectMailboxId}
           onSetDefaultMailbox={onSetDefaultMailbox}
+          reconnectingMailboxId={reconnectingMailboxId}
           selectedMailboxId={selectedMailboxId}
           side={switcherSide}
         />

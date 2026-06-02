@@ -1,7 +1,9 @@
 "use client";
 
 import type { ComponentProps } from "react";
-import { cn } from "@quieter/ui";
+import { Loading03Icon, Mail01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Button, cn } from "@quieter/ui";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
 import type { ComposeDraftState } from "~/features/compose";
 import type { MailboxWorkspaceView } from "~/features/mailbox/domain/mailbox-workspace-view";
@@ -53,12 +55,13 @@ type MailboxWorkspaceContentProps = {
   onMobileOpenChange: (open: boolean) => void;
   onOpenDraft: (message: MessageListItem) => void;
   onOpenSidebar: () => void;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<void>;
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
   onSearch: (query: string) => void;
   onCreateChat: () => void;
   onDeleteChat: (chatId: string) => void;
   onRenameChat: (chatId: string, title: string) => void;
+  onReconnectMailbox: (mailbox: { emailAddress: string; id: string }) => void;
   onSelectChat: (chatId: string) => void;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
   onSelectMailboxId: (mailboxId: string) => void;
@@ -67,6 +70,8 @@ type MailboxWorkspaceContentProps = {
   onChatIdChange: (chatId: string) => void;
   onVisibleMessageIdsChange: (messageIds: readonly string[]) => void;
   pendingActions: MailboxPendingActions;
+  reconnectError: string | null;
+  reconnectingMailboxId: string | null;
   searchQuery: string;
   selectedMailboxId: string | null;
   selectedMailboxNeedsReconnect: boolean;
@@ -108,6 +113,7 @@ export const MailboxWorkspaceContent = ({
   onCreateChat,
   onDeleteChat,
   onRenameChat,
+  onReconnectMailbox,
   onSelectChat,
   onSelectMailbox,
   onSelectMailboxId,
@@ -116,6 +122,8 @@ export const MailboxWorkspaceContent = ({
   onChatIdChange,
   onVisibleMessageIdsChange,
   pendingActions,
+  reconnectError,
+  reconnectingMailboxId,
   searchQuery,
   selectedMailboxId,
   selectedMailboxNeedsReconnect,
@@ -134,6 +142,7 @@ export const MailboxWorkspaceContent = ({
           onComposeNewMail={onComposeNewMail}
           onMobileOpenChange={onMobileOpenChange}
           onReorderMailboxSwitcher={onReorderMailboxSwitcher}
+          onReconnectMailbox={onReconnectMailbox}
           onSearch={onSearch}
           onCreateChat={onCreateChat}
           onDeleteChat={onDeleteChat}
@@ -143,6 +152,7 @@ export const MailboxWorkspaceContent = ({
           onSelectMailboxId={onSelectMailboxId}
           onSelectView={onSelectView}
           onSetDefaultMailbox={onSetDefaultMailbox}
+          reconnectingMailboxId={reconnectingMailboxId}
           searchQuery={searchQuery}
           selectedMailbox={activeMailbox}
           selectedMailboxId={selectedMailboxId}
@@ -188,6 +198,34 @@ export const MailboxWorkspaceContent = ({
                       <p className="text-sm text-muted-foreground">
                         This account needs to reconnect through Google before Quieter can load mail.
                       </p>
+                      <div className="pt-1">
+                        <Button
+                          disabled={reconnectingMailboxId === selectedMailboxId}
+                          onClick={() => {
+                            onReconnectMailbox({
+                              emailAddress: currentUserEmail ?? "",
+                              id: selectedMailboxId,
+                            });
+                          }}
+                          type="button"
+                        >
+                          <HugeiconsIcon
+                            aria-hidden
+                            className={cn("size-4", {
+                              "animate-spin": reconnectingMailboxId === selectedMailboxId,
+                            })}
+                            icon={
+                              reconnectingMailboxId === selectedMailboxId
+                                ? Loading03Icon
+                                : Mail01Icon
+                            }
+                          />
+                          Reconnect
+                        </Button>
+                        {reconnectError && (
+                          <p className="mt-3 text-sm text-destructive">{reconnectError}</p>
+                        )}
+                      </div>
                     </m.div>
                   </section>
                 ) : selectedMailboxId ? (

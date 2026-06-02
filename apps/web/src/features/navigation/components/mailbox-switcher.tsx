@@ -4,7 +4,14 @@ import { Modifier } from "@dnd-kit/abstract";
 import { PointerActivationConstraints, PointerSensor } from "@dnd-kit/dom";
 import { type DragEndEvent, DragDropProvider } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
-import { ArrowDown01Icon, ArrowRight01Icon, PinIcon, PinOffIcon } from "@hugeicons/core-free-icons";
+import {
+  ArrowDown01Icon,
+  ArrowRight01Icon,
+  Loading03Icon,
+  Mail01Icon,
+  PinIcon,
+  PinOffIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   DropdownMenu,
@@ -48,12 +55,21 @@ type MailboxSummaryProps = {
   mailbox: MailboxSwitcherMailbox;
 };
 
+type MailboxDefaultButtonProps = {
+  defaultMailboxLabel: string;
+  isDefault: boolean;
+  mailboxId: string;
+  onSetDefaultMailbox: (mailboxId: string | null) => void;
+};
+
 type MailboxSwitcherDropdownProps = {
   defaultMailboxId: string | null;
   groups: MailboxSwitcherGroup[];
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
+  onReconnectMailbox: (mailbox: Pick<MailboxSwitcherMailbox, "emailAddress" | "id">) => void;
   onSelectMailboxId: (mailboxId: string) => void;
   onSetDefaultMailbox: (mailboxId: string | null) => void;
+  reconnectingMailboxId: string | null;
   selectedMailboxId: string | null;
   side?: "bottom" | "right";
 };
@@ -134,6 +150,41 @@ const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => 
     </div>
     {action}
   </div>
+);
+
+const MailboxDefaultButton = ({
+  defaultMailboxLabel,
+  isDefault,
+  mailboxId,
+  onSetDefaultMailbox,
+}: MailboxDefaultButtonProps) => (
+  <Tooltip>
+    <TooltipTrigger className="inline-flex" render={<span />}>
+      <button
+        aria-label={defaultMailboxLabel}
+        className={cn(
+          "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
+          {
+            "text-foreground": isDefault,
+            "text-muted-foreground/50 opacity-0 group-hover/item:opacity-100 hover:text-foreground":
+              !isDefault,
+          },
+        )}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onSetDefaultMailbox(isDefault ? null : mailboxId);
+        }}
+        type="button"
+      >
+        <HugeiconsIcon aria-hidden className="size-3.5" icon={isDefault ? PinIcon : PinOffIcon} />
+      </button>
+    </TooltipTrigger>
+    <TooltipContent className="px-2 py-1">
+      {defaultMailboxLabel}
+      <TooltipArrow />
+    </TooltipContent>
+  </Tooltip>
 );
 
 const SortableGroup = ({
@@ -275,8 +326,10 @@ export const MailboxSwitcherDropdown = ({
   defaultMailboxId,
   groups,
   onReorderMailboxSwitcher,
+  onReconnectMailbox,
   onSelectMailboxId,
   onSetDefaultMailbox,
+  reconnectingMailboxId,
   selectedMailboxId,
   side = "right",
 }: MailboxSwitcherDropdownProps) => {
@@ -364,6 +417,8 @@ export const MailboxSwitcherDropdown = ({
                         {(mailbox, mailboxIndex) => {
                           const isActive = mailbox.id === selectedMailboxId;
                           const isDefault = mailbox.id === defaultMailboxId;
+                          const needsReconnect = mailbox.connectionStatus === "needs_reconnect";
+                          const isReconnecting = reconnectingMailboxId === mailbox.id;
                           const defaultMailboxLabel = isDefault
                             ? "Unset default mailbox"
                             : "Set as default mailbox";
@@ -377,47 +432,57 @@ export const MailboxSwitcherDropdown = ({
                               mailbox={mailbox}
                             >
                               <DropdownMenuItem
-                                className={cn("group/item rounded-xs px-2", {
+                                className={cn("group/item rounded-xs px-2 py-1", {
                                   "bg-muted/70": isActive,
                                 })}
                                 onSelect={() => onSelectMailboxId(mailbox.id)}
                               >
-                                <MailboxSummary
-                                  action={
-                                    <Tooltip>
-                                      <TooltipTrigger className="inline-flex" render={<span />}>
-                                        <button
-                                          aria-label={defaultMailboxLabel}
-                                          className={cn(
-                                            "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
-                                            {
-                                              "text-foreground": isDefault,
-                                              "text-muted-foreground/50 opacity-0 group-hover/item:opacity-100 hover:text-foreground":
-                                                !isDefault,
-                                            },
-                                          )}
-                                          onClick={(event) => {
-                                            event.stopPropagation();
-                                            onSetDefaultMailbox(isDefault ? null : mailbox.id);
-                                          }}
-                                          type="button"
-                                        >
-                                          <HugeiconsIcon
-                                            aria-hidden
-                                            className="size-3.5"
-                                            icon={isDefault ? PinIcon : PinOffIcon}
-                                          />
-                                        </button>
-                                      </TooltipTrigger>
-                                      <TooltipContent className="px-2 py-1">
-                                        {defaultMailboxLabel}
-                                        <TooltipArrow />
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  }
-                                  className="w-full"
-                                  mailbox={mailbox}
-                                />
+                                {needsReconnect ? (
+                                  <div className="flex w-full min-w-0 items-center gap-2">
+                                    <p className="min-w-0 flex-1 truncate text-sm text-foreground">
+                                      {mailbox.emailAddress}
+                                    </p>
+                                    <button
+                                      aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
+                                      className="flex h-7 shrink-0 items-center gap-1 px-1 text-xs font-medium text-destructive transition-colors hover:text-destructive/80"
+                                      disabled={isReconnecting}
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        onReconnectMailbox(mailbox);
+                                      }}
+                                      type="button"
+                                    >
+                                      <HugeiconsIcon
+                                        aria-hidden
+                                        className={cn("size-3.5", {
+                                          "animate-spin": isReconnecting,
+                                        })}
+                                        icon={isReconnecting ? Loading03Icon : Mail01Icon}
+                                      />
+                                      Reconnect
+                                    </button>
+                                    <MailboxDefaultButton
+                                      defaultMailboxLabel={defaultMailboxLabel}
+                                      isDefault={isDefault}
+                                      mailboxId={mailbox.id}
+                                      onSetDefaultMailbox={onSetDefaultMailbox}
+                                    />
+                                  </div>
+                                ) : (
+                                  <MailboxSummary
+                                    action={
+                                      <MailboxDefaultButton
+                                        defaultMailboxLabel={defaultMailboxLabel}
+                                        isDefault={isDefault}
+                                        mailboxId={mailbox.id}
+                                        onSetDefaultMailbox={onSetDefaultMailbox}
+                                      />
+                                    }
+                                    className="w-full"
+                                    mailbox={mailbox}
+                                  />
+                                )}
                               </DropdownMenuItem>
                             </SortableMailboxRow>
                           );
