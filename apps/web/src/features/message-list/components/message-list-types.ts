@@ -28,7 +28,7 @@ export type MessageListProps = {
   onLoadMore: () => void;
   onOpenSidebar?: () => void;
   onOpenDraft: (message: MessageListItem) => void;
-  onRefresh: () => void | Promise<void>;
+  onRefresh: () => void;
   onSearch: (query: string) => void;
   onVisibleMessageIdsChange?: (messageIds: readonly string[]) => void;
   pendingActions: MailboxPendingActions;

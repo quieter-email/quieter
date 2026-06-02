@@ -7,7 +7,6 @@ import { LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { useState } from "react";
 
 type ArrowIconMotionKind = "idle" | "success" | "failure";
-type ArrowInteractionButtonClickEvent = Parameters<NonNullable<ButtonProps["onClick"]>>[0];
 
 const arrowPrimaryVariants = {
   idle: {
@@ -63,18 +62,12 @@ const arrowSecondaryVariants = {
 };
 
 const arrowPrimaryInitial: Record<ArrowIconMotionKind, keyof typeof arrowPrimaryVariants> = {
-  failure: "failureFrom",
   idle: "idle",
   success: "successFrom",
+  failure: "failureFrom",
 };
 
-export const ArrowInteractionButton = ({
-  className,
-  onClick,
-  ...props
-}: Omit<ButtonProps, "onClick"> & {
-  onClick: (event: ArrowInteractionButtonClickEvent) => boolean | Promise<boolean>;
-}) => {
+export const ArrowInteractionButton = ({ className, onClick, ...props }: ButtonProps) => {
   const shouldReduceMotion = useReducedMotion() ?? false;
   const [animation, setAnimation] = useState<{ kind: ArrowIconMotionKind; nonce: number }>({
     kind: "idle",
@@ -86,22 +79,16 @@ export const ArrowInteractionButton = ({
       {...props}
       className={cn("relative overflow-hidden", className)}
       onClick={(event) => {
-        void Promise.resolve(onClick(event))
+        void Promise.resolve(onClick?.(event))
           .then((success) => {
-            if (shouldReduceMotion) {
-              return;
-            }
-
+            if (shouldReduceMotion) return;
             setAnimation((previous) => ({
               kind: success ? "success" : "failure",
               nonce: previous.nonce + 1,
             }));
           })
           .catch(() => {
-            if (shouldReduceMotion) {
-              return;
-            }
-
+            if (shouldReduceMotion) return;
             setAnimation((previous) => ({ kind: "failure", nonce: previous.nonce + 1 }));
           });
       }}
@@ -123,7 +110,7 @@ export const ArrowInteractionButton = ({
           >
             <HugeiconsIcon icon={ArrowUp01Icon} />
           </m.span>
-          {animation.kind === "success" ? (
+          {animation.kind === "success" && (
             <m.span
               key={`secondary-${animation.nonce}`}
               animate="to"
@@ -133,7 +120,7 @@ export const ArrowInteractionButton = ({
             >
               <HugeiconsIcon icon={ArrowUp01Icon} />
             </m.span>
-          ) : null}
+          )}
         </span>
       </LazyMotion>
     </Button>

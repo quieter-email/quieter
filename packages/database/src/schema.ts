@@ -116,6 +116,7 @@ export const account = pgTable(
     idToken: text("idToken"),
     accessTokenExpiresAt: timestamp("accessTokenExpiresAt"),
     refreshTokenExpiresAt: timestamp("refreshTokenExpiresAt"),
+    disconnectedAt: timestamp("disconnectedAt"),
     scope: text("scope"),
     password: text("password"),
     createdAt: timestamp("createdAt").notNull(),

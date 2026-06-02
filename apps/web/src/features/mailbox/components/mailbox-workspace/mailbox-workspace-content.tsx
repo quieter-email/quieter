@@ -4,7 +4,7 @@ import type { ComponentProps } from "react";
 import { Loading03Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, cn } from "@quieter/ui";
-import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
+import { domAnimation, LazyMotion, m } from "motion/react";
 import type { ComposeDraftState } from "~/features/compose";
 import type { MailboxWorkspaceView } from "~/features/mailbox/domain/mailbox-workspace-view";
 import type { MailboxSwitcherOrder } from "~/features/navigation/components/mailbox-switcher";
@@ -161,148 +161,136 @@ export const MailboxWorkspaceContent = ({
         />
 
         <div className="relative min-h-0 flex-1 overflow-hidden bg-transparent">
-          <AnimatePresence initial={false}>
-            {selectedView === "chat" ? (
-              <m.div
-                key={`chat-${chatId ?? draftChatKey}`}
-                className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden bg-transparent"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.08, ease: "linear" }}
-              >
-                <ChatView
-                  activeMailbox={activeMailbox}
-                  chatId={chatId}
-                  draftChatKey={draftChatKey}
-                  mailboxId={selectedMailboxId}
-                  onChatIdChange={onChatIdChange}
-                  onOpenSidebar={onOpenSidebar}
-                />
-              </m.div>
-            ) : (
-              <m.div
-                key="inbox"
-                className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden bg-transparent lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-1 lg:py-1 lg:pr-1"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.08, ease: "linear" }}
-              >
-                {selectedMailboxId && selectedMailboxNeedsReconnect ? (
-                  <section className="flex min-h-0 flex-1 items-center justify-center bg-background-light/75 px-8">
-                    <m.div className="max-w-md space-y-3 text-center" {...workspaceContentMotion}>
-                      <h1 className="text-lg font-semibold tracking-tight text-foreground">
-                        Reconnect Google
-                      </h1>
-                      <p className="text-sm text-muted-foreground">
-                        This account needs to reconnect through Google before Quieter can load mail.
-                      </p>
-                      <div className="pt-1">
-                        <Button
-                          disabled={reconnectingMailboxId === selectedMailboxId}
-                          onClick={() => {
-                            onReconnectMailbox({
-                              emailAddress: currentUserEmail ?? "",
-                              id: selectedMailboxId,
-                            });
-                          }}
-                          type="button"
-                        >
-                          <HugeiconsIcon
-                            aria-hidden
-                            className={cn("size-4", {
-                              "animate-spin": reconnectingMailboxId === selectedMailboxId,
-                            })}
-                            icon={
-                              reconnectingMailboxId === selectedMailboxId
-                                ? Loading03Icon
-                                : Mail01Icon
-                            }
-                          />
-                          Reconnect
-                        </Button>
-                        {reconnectError && (
-                          <p className="mt-3 text-sm text-destructive">{reconnectError}</p>
-                        )}
-                      </div>
-                    </m.div>
-                  </section>
-                ) : selectedMailboxId ? (
-                  <>
-                    <section
-                      className={cn(
-                        "min-h-0 min-w-0 flex-col overflow-hidden border border-border/60 bg-background-light/75 lg:flex lg:rounded-lg",
-                        {
-                          "flex flex-1": !layoutState.isMessageRouteOpen,
-                          hidden: layoutState.isMessageRouteOpen,
-                        },
+          {selectedView === "chat" ? (
+            <m.div
+              key={`chat-${chatId ?? draftChatKey}`}
+              className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden bg-transparent"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.08, ease: "linear" }}
+            >
+              <ChatView
+                activeMailbox={activeMailbox}
+                chatId={chatId}
+                draftChatKey={draftChatKey}
+                mailboxId={selectedMailboxId}
+                onChatIdChange={onChatIdChange}
+                onOpenSidebar={onOpenSidebar}
+              />
+            </m.div>
+          ) : (
+            <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden bg-transparent lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-1 lg:py-1 lg:pr-1">
+              {selectedMailboxId && selectedMailboxNeedsReconnect ? (
+                <section className="flex min-h-0 flex-1 items-center justify-center bg-background-light/75 px-8">
+                  <m.div className="max-w-md space-y-3 text-center" {...workspaceContentMotion}>
+                    <h1 className="text-lg font-semibold tracking-tight text-foreground">
+                      Reconnect Google
+                    </h1>
+                    <p className="text-sm text-muted-foreground">
+                      This account needs to reconnect through Google before Quieter can load mail.
+                    </p>
+                    <div className="pt-1">
+                      <Button
+                        disabled={reconnectingMailboxId === selectedMailboxId}
+                        onClick={() => {
+                          onReconnectMailbox({
+                            emailAddress: currentUserEmail ?? "",
+                            id: selectedMailboxId,
+                          });
+                        }}
+                        type="button"
+                      >
+                        <HugeiconsIcon
+                          aria-hidden
+                          className={cn("size-4", {
+                            "animate-spin": reconnectingMailboxId === selectedMailboxId,
+                          })}
+                          icon={
+                            reconnectingMailboxId === selectedMailboxId ? Loading03Icon : Mail01Icon
+                          }
+                        />
+                        Reconnect
+                      </Button>
+                      {reconnectError && (
+                        <p className="mt-3 text-sm text-destructive">{reconnectError}</p>
                       )}
-                    >
-                      <MessageList
-                        activeMailbox={activeMailbox}
-                        activeMessageId={messageId}
-                        mailboxId={selectedMailboxId}
-                        error={listState.error}
-                        hasNextPage={listState.hasNextPage}
-                        isError={listState.isError}
-                        isFetchingNextPage={listState.isFetchingNextPage}
-                        isPending={listState.isPending}
-                        isRefreshing={listState.isRefreshing}
-                        mailboxActions={mailboxActions}
-                        messages={listState.messages}
-                        onActivateMessage={onActivateMessage}
-                        onDeactivateActiveMessage={onBackToList}
-                        onLoadMore={onLoadMore}
-                        onOpenDraft={onOpenDraft}
-                        onOpenSidebar={onOpenSidebar}
-                        onRefresh={onRefresh}
-                        onSearch={onSearch}
-                        onVisibleMessageIdsChange={onVisibleMessageIdsChange}
-                        pendingActions={pendingActions}
-                        searchQuery={searchQuery}
-                      />
-                    </section>
-
-                    <div
-                      className={cn(
-                        "min-h-0 min-w-0 flex-col overflow-hidden border border-border/60 bg-background-light/75 lg:flex lg:rounded-lg",
-                        {
-                          "flex flex-1": layoutState.isMessageRouteOpen,
-                          hidden: !layoutState.isMessageRouteOpen,
-                        },
-                      )}
-                    >
-                      <MessageDetail
-                        activeMailbox={activeMailbox}
-                        currentUserEmail={currentUserEmail}
-                        mailboxId={selectedMailboxId}
-                        mailboxActions={mailboxActions}
-                        onComposeDraftRequested={onComposeDraftRequested}
-                        pendingActions={pendingActions}
-                        isPending={
-                          layoutState.isMessageRouteOpen && layoutState.isLoadingEmptyMessages
-                        }
-                        onBackToList={onBackToList}
-                        selectedMessage={selectedMessage}
-                      />
                     </div>
-                  </>
-                ) : (
-                  <section className="flex min-h-0 flex-1 items-center justify-center bg-background-light/75 px-8">
-                    <m.div className="max-w-md space-y-3 text-center" {...workspaceContentMotion}>
-                      <h1 className="text-lg font-semibold tracking-tight text-foreground">
-                        No mailboxes
-                      </h1>
-                      <p className="text-sm text-muted-foreground">
-                        Connect Gmail or add a managed mailbox to a team.
-                      </p>
-                    </m.div>
+                  </m.div>
+                </section>
+              ) : selectedMailboxId ? (
+                <>
+                  <section
+                    className={cn(
+                      "min-h-0 min-w-0 flex-col overflow-hidden border border-border/60 bg-background-light/75 lg:flex lg:rounded-lg",
+                      {
+                        "flex flex-1": !layoutState.isMessageRouteOpen,
+                        hidden: layoutState.isMessageRouteOpen,
+                      },
+                    )}
+                  >
+                    <MessageList
+                      activeMailbox={activeMailbox}
+                      activeMessageId={messageId}
+                      mailboxId={selectedMailboxId}
+                      error={listState.error}
+                      hasNextPage={listState.hasNextPage}
+                      isError={listState.isError}
+                      isFetchingNextPage={listState.isFetchingNextPage}
+                      isPending={listState.isPending}
+                      isRefreshing={listState.isRefreshing}
+                      mailboxActions={mailboxActions}
+                      messages={listState.messages}
+                      onActivateMessage={onActivateMessage}
+                      onDeactivateActiveMessage={onBackToList}
+                      onLoadMore={onLoadMore}
+                      onOpenDraft={onOpenDraft}
+                      onOpenSidebar={onOpenSidebar}
+                      onRefresh={onRefresh}
+                      onSearch={onSearch}
+                      onVisibleMessageIdsChange={onVisibleMessageIdsChange}
+                      pendingActions={pendingActions}
+                      searchQuery={searchQuery}
+                    />
                   </section>
-                )}
-              </m.div>
-            )}
-          </AnimatePresence>
+
+                  <div
+                    className={cn(
+                      "min-h-0 min-w-0 flex-col overflow-hidden border border-border/60 bg-background-light/75 lg:flex lg:rounded-lg",
+                      {
+                        "flex flex-1": layoutState.isMessageRouteOpen,
+                        hidden: !layoutState.isMessageRouteOpen,
+                      },
+                    )}
+                  >
+                    <MessageDetail
+                      activeMailbox={activeMailbox}
+                      currentUserEmail={currentUserEmail}
+                      mailboxId={selectedMailboxId}
+                      mailboxActions={mailboxActions}
+                      onComposeDraftRequested={onComposeDraftRequested}
+                      pendingActions={pendingActions}
+                      isPending={
+                        layoutState.isMessageRouteOpen && layoutState.isLoadingEmptyMessages
+                      }
+                      onBackToList={onBackToList}
+                      selectedMessage={selectedMessage}
+                    />
+                  </div>
+                </>
+              ) : (
+                <section className="flex min-h-0 flex-1 items-center justify-center bg-background-light/75 px-8">
+                  <m.div className="max-w-md space-y-3 text-center" {...workspaceContentMotion}>
+                    <h1 className="text-lg font-semibold tracking-tight text-foreground">
+                      No mailboxes
+                    </h1>
+                    <p className="text-sm text-muted-foreground">
+                      Connect Gmail or add a managed mailbox to a team.
+                    </p>
+                  </m.div>
+                </section>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </main>

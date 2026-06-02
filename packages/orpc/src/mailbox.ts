@@ -14,7 +14,10 @@ const PERSONAL_GROUP_NAME = "Personal";
 const GMAIL_CONNECTED_STATUS = "connected";
 const GMAIL_NEEDS_RECONNECT_STATUS = "needs_reconnect";
 
-type LinkedAccount = Awaited<ReturnType<typeof auth.api.listUserAccounts>>[number];
+type BetterAuthLinkedAccount = Awaited<ReturnType<typeof auth.api.listUserAccounts>>[number];
+type LinkedAccount = BetterAuthLinkedAccount & {
+  disconnectedAt: Date | null;
+};
 
 type MailboxGroupMetadata = {
   groupId: string;
@@ -42,7 +45,7 @@ type GmailMailbox = MailboxGroupMetadata & {
   organizationId: null;
   provider: typeof MAILBOX_PROVIDER_GMAIL;
   providerAccountId: string;
-  reconnectReason: "invalid_access_token" | "missing_scopes" | null;
+  reconnectReason: "disconnected" | "invalid_access_token" | "missing_scopes" | null;
 };
 
 export type MailboxListItem = GmailMailbox | ManagedMailbox;
@@ -149,12 +152,62 @@ const listManagedMailboxesForUser = async (userId: string): Promise<ManagedMailb
   }));
 };
 
-export const listLinkedGoogleAccounts = async (headers: Headers) => {
-  const linkedAccounts = await auth.api.listUserAccounts({
-    headers,
-  });
+export const listLinkedGoogleAccounts = async (input: { headers: Headers; userId: string }) => {
+  const [linkedAccounts, storedAccounts] = await Promise.all([
+    auth.api.listUserAccounts({
+      headers: input.headers,
+    }),
+    db
+      .select({
+        accountId: account.accountId,
+        accessToken: account.accessToken,
+        disconnectedAt: account.disconnectedAt,
+        refreshToken: account.refreshToken,
+      })
+      .from(account)
+      .where(and(eq(account.userId, input.userId), eq(account.providerId, "google"))),
+  ]);
+  const storedAccountsById = new Map(
+    storedAccounts.map((storedAccount) => [storedAccount.accountId, storedAccount]),
+  );
+  const reconnectedAccountIds: string[] = [];
 
-  return linkedAccounts.filter((account) => account.providerId === "google");
+  const googleAccounts = linkedAccounts
+    .filter((linkedAccount) => linkedAccount.providerId === "google")
+    .map((linkedAccount) => {
+      const storedAccount = storedAccountsById.get(linkedAccount.accountId);
+      const hasFreshTokens = !!storedAccount?.accessToken || !!storedAccount?.refreshToken;
+      const wasReconnected =
+        !!storedAccount?.disconnectedAt &&
+        hasFreshTokens &&
+        hasRequiredGoogleScopes(linkedAccount.scopes);
+
+      if (wasReconnected) {
+        reconnectedAccountIds.push(linkedAccount.accountId);
+      }
+
+      return {
+        ...linkedAccount,
+        disconnectedAt: wasReconnected ? null : (storedAccount?.disconnectedAt ?? null),
+      };
+    });
+
+  await Promise.all(
+    reconnectedAccountIds.map((accountId) =>
+      db
+        .update(account)
+        .set({ disconnectedAt: null, updatedAt: new Date() })
+        .where(
+          and(
+            eq(account.userId, input.userId),
+            eq(account.providerId, "google"),
+            eq(account.accountId, accountId),
+          ),
+        ),
+    ),
+  );
+
+  return googleAccounts;
 };
 
 const getGoogleAccessTokenForLinkedAccount = async (
@@ -223,6 +276,14 @@ const createGmailMailboxFromAccount = async (input: {
   headers: Headers;
   userId: string;
 }): Promise<GmailMailbox> => {
+  if (input.account.disconnectedAt) {
+    return await createGmailReconnectMailbox({
+      account: input.account,
+      reconnectReason: "disconnected",
+      userId: input.userId,
+    });
+  }
+
   if (!hasRequiredGoogleScopes(input.account.scopes)) {
     return await createGmailReconnectMailbox({
       account: input.account,
@@ -288,7 +349,7 @@ const createGmailMailboxFromAccount = async (input: {
 };
 
 export const listPersonalGmailMailboxes = async (input: { headers: Headers; userId: string }) => {
-  const googleAccounts = await listLinkedGoogleAccounts(input.headers);
+  const googleAccounts = await listLinkedGoogleAccounts(input);
   const gmailMailboxResults = await Promise.all(
     googleAccounts.map((account) =>
       createGmailMailboxFromAccount({
@@ -492,9 +553,9 @@ export const getAuthorizedGmailMailbox = async (input: {
     });
   }
 
-  const linkedGoogleAccount = (await listLinkedGoogleAccounts(input.headers)).find(
-    (account) => account.accountId === providerAccountId,
-  );
+  const linkedGoogleAccount = (
+    await listLinkedGoogleAccounts({ headers: input.headers, userId: input.userId })
+  ).find((account) => account.accountId === providerAccountId);
 
   if (!linkedGoogleAccount) {
     throw new ORPCError("NOT_FOUND", {
@@ -519,6 +580,10 @@ export const getAuthorizedGmailMailbox = async (input: {
     providerAccountId,
     reconnectReason: null,
   } satisfies GmailMailbox;
+
+  if (linkedGoogleAccount.disconnectedAt) {
+    throw getGoogleMailboxRepairRequiredError(selectedMailbox);
+  }
 
   if (!hasRequiredGoogleScopes(linkedGoogleAccount.scopes)) {
     throw getGoogleMailboxRepairRequiredError(selectedMailbox);

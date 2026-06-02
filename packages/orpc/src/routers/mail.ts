@@ -1,6 +1,5 @@
 import { ORPCError } from "@orpc/server";
-import { auth } from "@quieter/auth";
-import { db, user } from "@quieter/database";
+import { db, account, user } from "@quieter/database";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getRequestHeaders } from "../context";
@@ -149,7 +148,6 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
-      const headers = getRequestHeaders(context);
       const providerAccountId = parseGmailProviderAccountId(input.mailboxId);
 
       if (!providerAccountId) {
@@ -158,13 +156,30 @@ export const mailRouter = {
         });
       }
 
-      await auth.api.unlinkAccount({
-        body: {
-          providerId: "google",
-          accountId: providerAccountId,
-        },
-        headers,
-      });
+      const [disconnectedAccount] = await db
+        .update(account)
+        .set({
+          accessToken: null,
+          accessTokenExpiresAt: null,
+          disconnectedAt: new Date(),
+          refreshToken: null,
+          refreshTokenExpiresAt: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(account.userId, context.userId),
+            eq(account.providerId, "google"),
+            eq(account.accountId, providerAccountId),
+          ),
+        )
+        .returning({ id: account.id });
+
+      if (!disconnectedAccount) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "Google account not found for this user.",
+        });
+      }
 
       await db
         .update(user)
@@ -190,9 +205,9 @@ export const mailRouter = {
         const providerAccountId = parseGmailProviderAccountId(input.mailboxId);
 
         if (providerAccountId) {
-          const linkedGoogleAccount = (await listLinkedGoogleAccounts(headers)).find(
-            (account) => account.accountId === providerAccountId,
-          );
+          const linkedGoogleAccount = (
+            await listLinkedGoogleAccounts({ headers, userId: context.userId })
+          ).find((account) => account.accountId === providerAccountId);
 
           if (!linkedGoogleAccount) {
             throw new ORPCError("NOT_FOUND", {

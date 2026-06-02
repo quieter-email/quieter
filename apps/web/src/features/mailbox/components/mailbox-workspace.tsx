@@ -3,7 +3,7 @@
 import type { RouterOutputs } from "@quieter/orpc";
 import { toast } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useDeferredValue, useLayoutEffect, useRef, useState } from "react";
 import { LoadingPage } from "~/components/loading-page";
 import { type ComposeDraftState, buildComposeDraftFromSavedDraftMessage } from "~/features/compose";
 import { type ComposeDialogHandle, ComposeDialog } from "~/features/compose";
@@ -123,7 +123,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     isWindowActive,
     setIsManualRefreshing,
     setIsMobileSidebarOpen,
-    setIsWindowActive,
   } = useWorkspaceUiState();
   const {
     isMessageActionPending,
@@ -210,26 +209,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       view === "inbox" && !selectedMailboxNeedsReconnect ? selectedMailboxId : null,
     setIsManualRefreshing,
   });
-
-  const setIsWindowActiveRef = useRef(setIsWindowActive);
-  setIsWindowActiveRef.current = setIsWindowActive;
-
-  useEffect(() => {
-    const updateWindowActivity = () => {
-      setIsWindowActiveRef.current(document.visibilityState === "visible" && document.hasFocus());
-    };
-
-    updateWindowActivity();
-    window.addEventListener("focus", updateWindowActivity);
-    window.addEventListener("blur", updateWindowActivity);
-    document.addEventListener("visibilitychange", updateWindowActivity);
-
-    return () => {
-      window.removeEventListener("focus", updateWindowActivity);
-      window.removeEventListener("blur", updateWindowActivity);
-      document.removeEventListener("visibilitychange", updateWindowActivity);
-    };
-  }, []);
 
   useLayoutEffect(() => {
     if (!isDemoMode && mailboxesQuery.isPending) {

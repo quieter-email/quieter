@@ -109,7 +109,8 @@ export const WorkspaceDitherBackground = () => {
       return;
     }
 
-    gl.useProgram(program);
+    const activateProgram = gl.useProgram.bind(gl);
+    activateProgram(program);
 
     const positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
