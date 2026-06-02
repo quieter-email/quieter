@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { decodePartBody } from "../src/gmail-message-content";
+import { decodePartBody } from "../src/message-content";
 
 const base64UrlEncode = (value: string, encoding: BufferEncoding = "utf8") =>
   Buffer.from(value, encoding).toString("base64url");

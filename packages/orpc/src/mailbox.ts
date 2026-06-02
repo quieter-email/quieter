@@ -3,8 +3,8 @@ import { ORPCError } from "@orpc/server";
 import { auth } from "@quieter/auth";
 import { hasRequiredGoogleScopes } from "@quieter/auth/google-scopes";
 import { account, db, mailbox, member, organization, user } from "@quieter/database";
+import { getGmailProfile, isGmailServiceError } from "@quieter/gmail";
 import { and, asc, eq, ne } from "drizzle-orm";
-import { getGmailProfile, isGmailServiceError } from "./gmail-service";
 
 export const MAILBOX_PROVIDER_GMAIL = "gmail" as const;
 

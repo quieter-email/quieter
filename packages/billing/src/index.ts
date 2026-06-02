@@ -6,7 +6,7 @@ import { PayKit } from "@paykit-sdk/core";
 import { auth } from "@quieter/auth";
 import { billingSubscription, db } from "@quieter/database";
 import { desc, eq, and } from "drizzle-orm";
-import { paidBillingPlanSchema, type PaidBillingPlan } from "./billing-plans";
+import { paidBillingPlanSchema, type PaidBillingPlan } from "./plans";
 
 const BILLING_PROVIDER = "polar" as const;
 const BILLING_METADATA_PLAN = "quieterPlan";

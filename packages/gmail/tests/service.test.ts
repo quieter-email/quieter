@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { extractListUnsubscribeTargets, refreshMailboxMessages } from "../src/gmail-service";
+import { extractListUnsubscribeTargets, refreshMailboxMessages } from "../src/service";
 
 const createBatchResponse = (boundary: string, bodies: readonly unknown[]) => {
   return [

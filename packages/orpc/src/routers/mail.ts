@@ -1,10 +1,8 @@
 import { ORPCError } from "@orpc/server";
 import { db, account, user } from "@quieter/database";
-import { and, eq } from "drizzle-orm";
-import { z } from "zod";
-import { getRequestHeaders } from "../context";
 import {
   createDraft,
+  createLabel,
   deleteDraft,
   deleteLabel,
   deleteMessagePermanently,
@@ -34,20 +32,22 @@ import {
   updateLabel,
   updateMessageLabels,
   updateThreadLabels,
-  createLabel,
-} from "../gmail-service";
-import { parseDraftMessage } from "../gmail/compose/draft-parser";
+} from "@quieter/gmail";
+import { parseDraftMessage } from "@quieter/gmail/compose";
 import {
   arrayBufferToBase64Url,
   buildMimeMessage,
   buildPlainTextMessage,
-} from "../gmail/compose/mime";
+} from "@quieter/mail/compose";
 import {
   composeDraftInputSchema,
   composeMessageInputSchema,
   composeSendDraftInputSchema,
   splitMailAddressList,
-} from "../gmail/compose/schema";
+} from "@quieter/mail/compose";
+import { and, eq } from "drizzle-orm";
+import { z } from "zod";
+import { getRequestHeaders } from "../context";
 import {
   applyMailboxSwitcherOrder,
   canonicalizeMailboxSwitcherOrder,

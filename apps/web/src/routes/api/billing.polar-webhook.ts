@@ -1,4 +1,4 @@
-import { handlePolarBillingWebhook } from "@quieter/orpc/billing";
+import { handlePolarBillingWebhook } from "@quieter/billing";
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/api/billing/polar-webhook")({

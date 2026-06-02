@@ -1,13 +1,9 @@
 import { ORPCError, os } from "@orpc/server";
 import { auth } from "@quieter/auth";
+import { isGmailRateLimitedError, isGmailServiceError, type MailboxCategory } from "@quieter/gmail";
 import { z } from "zod";
 import { getRequestHeaders, type OrpcContext } from "../context";
 import { orpcErrorMap } from "../errors";
-import {
-  isGmailRateLimitedError,
-  isGmailServiceError,
-  type MailboxCategory,
-} from "../gmail-service";
 import { getAuthorizedGmailMailbox, refreshAuthorizedGmailAccessToken } from "../mailbox";
 
 export const base = os.errors(orpcErrorMap).$context<OrpcContext>();

@@ -4,9 +4,6 @@
   "type": "module",
   "exports": {
     ".": "./src/client.ts",
-    "./billing": "./src/billing.ts",
-    "./billing-plans": "./src/billing-plans.ts",
-    "./compose": "./src/gmail/compose/schema.ts",
     "./context": "./src/context.ts",
     "./errors": "./src/errors.ts",
     "./mailbox": "./src/mailbox.ts",
@@ -14,8 +11,7 @@
     "./server": "./src/server.ts",
     "./server-client": "./src/server-client.ts",
     "./team-mail": "./src/team-mail.ts",
-    "./router": "./src/routers/index.ts",
-    "./gmail-service": "./src/gmail-service.ts"
+    "./router": "./src/routers/index.ts"
   },
   "scripts": {
     "fmt": "oxfmt --config ../../oxfmt.json .",
@@ -27,10 +23,11 @@
   "dependencies": {
     "@aws-sdk/client-ses": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
-    "@paykit-sdk/core": "^1.2.1",
-    "@paykit-sdk/polar": "^1.2.0",
     "@quieter/auth": "workspace:*",
-    "@quieter/database": "workspace:*"
+    "@quieter/billing": "workspace:*",
+    "@quieter/database": "workspace:*",
+    "@quieter/gmail": "workspace:*",
+    "@quieter/mail": "workspace:*"
   },
   "devDependencies": {
     "@orpc/client": "catalog:",

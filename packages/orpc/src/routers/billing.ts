@@ -1,6 +1,6 @@
+import { createBillingCheckout, getBillingOverview } from "@quieter/billing";
+import { paidBillingPlanSchema } from "@quieter/billing/plans";
 import { z } from "zod";
-import { createBillingCheckout, getBillingOverview } from "../billing";
-import { paidBillingPlanSchema } from "../billing-plans";
 import { getRequestHeaders } from "../context";
 import { protectedProcedure } from "./base";
 

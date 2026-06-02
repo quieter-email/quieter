@@ -1,14 +1,14 @@
-import { z } from "zod";
-import type { ComposeDraftAnchor } from "./gmail/compose/schema";
+import type { ComposeDraftAnchor } from "@quieter/mail/compose";
+import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose";
 import {
   decodePartBody,
   decodeMimeHeaderValue,
   extractMessageAttachments,
   extractMessageContent,
   findRenderablePart,
-} from "./gmail-message-content";
-import { parseDraftAnchorFromHeaderReader } from "./gmail/compose/draft-anchor";
-import { getSenderAvatarUrls } from "./sender-avatar";
+} from "@quieter/mail/message-content";
+import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
+import { z } from "zod";
 
 export const MAILBOX_LABELS = {
   inbox: "INBOX",

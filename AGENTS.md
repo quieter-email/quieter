@@ -15,6 +15,9 @@
 - `apps/*` consume reusable UI through `@quieter/ui`.
 - Do not import Base UI, Vaul, or Sonner directly in app code unless extending `packages/ui` in the same change.
 - `packages/orpc` is the boundary between app and DB logic.
+- `packages/mail` owns pure mail parsing, compose schemas, MIME building, message content extraction, and sender avatar derivation.
+- `packages/gmail` owns Gmail REST service logic and Gmail-specific draft parsing; tokens are still resolved through `packages/orpc`.
+- `packages/billing` owns PayKit/Polar billing plans, checkout, subscription sync, and webhook handling.
 - `packages/database` owns schema and migrations.
 - `packages/auth` owns Better Auth config.
 
@@ -38,7 +41,7 @@
 - Use route loaders / TanStack Start server functions for auth guards and request-scoped SSR data.
 - Validate search params with `validateSearch` + Zod (colocated on the route file; settings tab ids are shared via `apps/web/src/features/settings/domain/settings-tab.ts`).
 - Keep inbox `loaderDeps` limited to `mailboxId`.
-- Gmail REST calls run server-side in `packages/orpc/src/gmail-service.ts`; tokens are resolved through Better Auth linked accounts.
+- Gmail REST calls run server-side through `packages/gmail`; tokens are resolved through Better Auth linked accounts in `packages/orpc`.
 - Mailbox-scoped query keys must include `mailboxId`.
 - Persist manual `queryClient.setQueryData` writes with `persistQueryByKey`.
 - Prefer TanStack Query for app-owned async/server state.

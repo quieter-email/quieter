@@ -2,7 +2,7 @@
 
 import { FileAttachmentIcon, MessageMultiple01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
-import { splitMailAddressList } from "@quieter/orpc/compose";
+import { splitMailAddressList } from "@quieter/mail/compose";
 import { cn } from "@quieter/ui";
 import { type KeyboardEvent, type MouseEvent } from "react";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";

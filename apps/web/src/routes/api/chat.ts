@@ -4,7 +4,7 @@ import {
   toolDefinition,
   type ServerTool,
 } from "@quieter/ai";
-import { MAILBOX_LABELS, type MailboxCategory } from "@quieter/orpc/gmail-service";
+import { MAILBOX_LABELS, type MailboxCategory } from "@quieter/gmail";
 import { createOrpcServerClient } from "@quieter/orpc/server-client";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";

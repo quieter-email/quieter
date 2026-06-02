@@ -1,6 +1,6 @@
 "use client";
 
-import { composeDraftFormValuesSchema, composeSendFormValuesSchema } from "@quieter/orpc/compose";
+import { composeDraftFormValuesSchema, composeSendFormValuesSchema } from "@quieter/mail/compose";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";

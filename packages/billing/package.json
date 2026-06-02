@@ -1,0 +1,33 @@
+{
+  "name": "@quieter/billing",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./plans": "./src/plans.ts"
+  },
+  "scripts": {
+    "fmt": "oxfmt --config ../../oxfmt.json .",
+    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
+    "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/billing",
+    "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/billing",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@orpc/server": "catalog:",
+    "@paykit-sdk/core": "^1.2.1",
+    "@paykit-sdk/polar": "^1.2.0",
+    "@quieter/auth": "workspace:*",
+    "@quieter/database": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@quieter/config": "workspace:*",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:"
+  }
+}
