@@ -10,6 +10,7 @@ import {
   BILLING_PLANS,
   formatBillingPlan,
   formatBillingStatus,
+  normalizeBillingPlan,
   USER_BILLING_QUERY_KEY,
   userBillingQueryOptions,
 } from "~/features/settings/domain/billing";
@@ -52,7 +53,7 @@ export const PlanSettingsPanel = () => {
     });
   }, [billingQuery, billingResult, navigate]);
 
-  const currentPlan = billingQuery.data?.plan ?? "free";
+  const currentPlan = normalizeBillingPlan(billingQuery.data?.plan);
   const currentSubscription = billingQuery.data?.subscription ?? null;
   const isReady = !billingQuery.isPending && !billingQuery.isError;
 

@@ -9,6 +9,7 @@ import {
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { BILLING_FEATURES } from "@quieter/billing/plans";
 import {
   Button,
   Dialog,
@@ -182,17 +183,22 @@ const DomainRow = ({
 
 export const DomainsView = ({
   canManageDomains,
+  canUseTeamDomains,
   onBack,
   organization,
 }: {
   canManageDomains: boolean;
+  canUseTeamDomains: boolean;
   onBack: () => void;
   organization: FullOrganization;
 }) => {
   const domainsQuery = useQuery(teamMailDomainsQueryOptions(organization.id));
   const domains = domainsQuery.data?.domains ?? [];
   const manageDomainsReason =
-    (!canManageDomains && "Only admins and owners can register team domains.") || null;
+    (!canUseTeamDomains &&
+      `Registering domains requires the ${BILLING_FEATURES.teamDomains.requiredPlan} plan.`) ||
+    (!canManageDomains && "Only admins and owners can register team domains.") ||
+    null;
 
   return (
     <div className="space-y-6">
@@ -238,7 +244,7 @@ export const DomainsView = ({
         ) : domains.length > 0 ? (
           domains.map((domain) => (
             <DomainRow
-              canManageDomains={canManageDomains}
+              canManageDomains={canManageDomains && canUseTeamDomains}
               domain={domain}
               key={domain.id}
               organizationId={organization.id}

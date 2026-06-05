@@ -1,4 +1,5 @@
 import type { RouterOutputs } from "@quieter/orpc";
+import { BILLING_PRODUCTS, billingPlanSchema, type BillingPlan } from "@quieter/billing/plans";
 import { queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
 
@@ -14,7 +15,13 @@ export const userBillingQueryOptions = () =>
     staleTime: 30_000,
   });
 
-export const formatBillingPlan = (plan: UserBillingPlan) => {
+export const normalizeBillingPlan = (plan: UserBillingPlan | null | undefined): BillingPlan => {
+  const parsedPlan = billingPlanSchema.safeParse(plan);
+
+  return parsedPlan.success ? parsedPlan.data : "free";
+};
+
+export const formatBillingPlan = (plan: BillingPlan) => {
   if (plan === "managed") return "Managed";
   if (plan === "pro") return "Pro";
   return "Free";
@@ -41,23 +48,19 @@ export const BILLING_PLANS = [
     price: "$0",
   },
   {
-    description: "Hosted mailboxes with a predictable included mail allowance.",
-    features: [
-      "Managed sending and receiving",
-      "$10 AWS SES usage included",
-      "Overages at SES + 5%",
-    ],
-    highlight: false,
-    name: "Managed",
+    description: BILLING_PRODUCTS.managed.description,
+    features: BILLING_PRODUCTS.managed.features,
+    highlight: BILLING_PRODUCTS.managed.highlight,
+    name: BILLING_PRODUCTS.managed.name,
     plan: "managed",
-    price: "$10",
+    price: `$${BILLING_PRODUCTS.managed.monthlyPriceCents / 100}`,
   },
   {
-    description: "Managed mail plus AI credits and live Gmail infrastructure.",
-    features: ["Everything in Managed", "$10 AI credits included", "Gmail Pub/Sub support"],
-    highlight: true,
-    name: "Pro",
+    description: BILLING_PRODUCTS.pro.description,
+    features: BILLING_PRODUCTS.pro.features,
+    highlight: BILLING_PRODUCTS.pro.highlight,
+    name: BILLING_PRODUCTS.pro.name,
     plan: "pro",
-    price: "$20",
+    price: `$${BILLING_PRODUCTS.pro.monthlyPriceCents / 100}`,
   },
 ] as const;

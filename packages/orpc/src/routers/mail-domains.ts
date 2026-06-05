@@ -1,6 +1,7 @@
 import type { GetEmailIdentityCommandOutput } from "@aws-sdk/client-sesv2";
 import type { MailDomainCheckResult } from "@quieter/database";
 import { ORPCError } from "@orpc/server";
+import { assertUserBillingFeature } from "@quieter/billing/entitlements";
 import { db, mailDomain } from "@quieter/database";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -70,6 +71,10 @@ export const mailDomainsRouter = {
     .handler(async ({ context, input }) => {
       await assertUserCanManageMailDomains({
         organizationId: input.organizationId,
+        userId: context.userId,
+      });
+      await assertUserBillingFeature({
+        feature: "teamDomains",
         userId: context.userId,
       });
 
@@ -176,6 +181,10 @@ export const mailDomainsRouter = {
     .handler(async ({ context, input }) => {
       await assertUserCanManageMailDomains({
         organizationId: input.organizationId,
+        userId: context.userId,
+      });
+      await assertUserBillingFeature({
+        feature: "teamDomains",
         userId: context.userId,
       });
 

@@ -2,6 +2,7 @@
 
 import type { RouterOutputs } from "@quieter/orpc";
 import type { UIMessage } from "@tanstack/ai";
+import { BILLING_FEATURES, hasBillingPlanAccess } from "@quieter/billing/plans";
 import { Button, toast } from "@quieter/ui";
 import { fetchServerSentEvents, useChat } from "@tanstack/ai-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -14,6 +15,11 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  formatBillingPlan,
+  normalizeBillingPlan,
+  userBillingQueryOptions,
+} from "~/features/settings/domain/billing";
 import { chatQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-query";
 import { orpc } from "~/lib/orpc";
 import type { ChatViewProps } from "../types";
@@ -92,6 +98,7 @@ const ChatSession = ({
   onOpenSidebar,
 }: ChatSessionProps) => {
   const queryClient = useQueryClient();
+  const billingQuery = useQuery(userBillingQueryOptions());
   const [input, setInput] = useState("");
   const persistedSnapshotKeyRef = useRef(initialSnapshotKey);
   const activeChatKey = chatId ?? draftChatKey;
@@ -132,6 +139,12 @@ const ChatSession = ({
   const hasMessages = visibleMessages.length > 0 || !!chatId;
   const isComposerLoading =
     isLoading || createChatMutation.isPending || saveMessagesMutation.isPending;
+  const currentPlan = normalizeBillingPlan(billingQuery.data?.plan);
+  const aiRequirement = BILLING_FEATURES.aiChat;
+  const canUseAiChat =
+    !!billingQuery.data?.hasUnlimitedAccess ||
+    hasBillingPlanAccess(currentPlan, aiRequirement.requiredPlan);
+  const composerDisabled = billingQuery.isPending || !canUseAiChat;
 
   const saveVisibleMessages = async (nextChatId: string) => {
     const nextMessages = visibleMessagesRef.current;
@@ -153,7 +166,7 @@ const ChatSession = ({
 
   const submitPrompt = async () => {
     const prompt = input.trim();
-    if (!prompt || isComposerLoading) return;
+    if (!prompt || isComposerLoading || composerDisabled) return;
 
     try {
       let nextChatId = chatId;
@@ -206,7 +219,14 @@ const ChatSession = ({
 
               <div className="w-full px-4 pb-5">
                 <div className="mx-auto w-full max-w-2xl">
+                  {!canUseAiChat && !billingQuery.isPending && (
+                    <PlanRequiredBlock
+                      currentPlan={currentPlan}
+                      requiredPlan={aiRequirement.requiredPlan}
+                    />
+                  )}
                   <ChatComposer
+                    disabled={composerDisabled}
                     input={input}
                     isLoading={isComposerLoading}
                     onInputChange={setInput}
@@ -220,7 +240,14 @@ const ChatSession = ({
           ) : (
             <div className="flex min-h-0 flex-1 items-center justify-center px-4">
               <div className="w-full max-w-xl">
+                {!canUseAiChat && !billingQuery.isPending && (
+                  <PlanRequiredBlock
+                    currentPlan={currentPlan}
+                    requiredPlan={aiRequirement.requiredPlan}
+                  />
+                )}
                 <ChatComposer
+                  disabled={composerDisabled}
                   input={input}
                   isLoading={isComposerLoading}
                   onInputChange={setInput}
@@ -236,3 +263,30 @@ const ChatSession = ({
     </section>
   );
 };
+
+const PlanRequiredBlock = ({
+  currentPlan,
+  requiredPlan,
+}: {
+  currentPlan: Parameters<typeof formatBillingPlan>[0];
+  requiredPlan: "managed" | "pro";
+}) => (
+  <div className="mb-3 rounded-lg border border-border/70 bg-secondary/35 p-3 text-sm">
+    <p className="font-medium text-foreground">Upgrade required</p>
+    <p className="mt-1 text-muted-foreground">
+      AI chat requires {formatBillingPlan(requiredPlan)}. Your current plan is{" "}
+      {formatBillingPlan(currentPlan)}.
+    </p>
+    <Button
+      className="mt-3"
+      onClick={() => {
+        window.location.assign("/settings?tab=plan");
+      }}
+      size="sm"
+      type="button"
+      variant="outline"
+    >
+      View plans
+    </Button>
+  </div>
+);

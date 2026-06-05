@@ -89,6 +89,12 @@ export default $config({
     });
 
     mailReceiptTopic.subscribe("MailReceiptProcessor", {
+      environment: {
+        DATABASE_URL: process.env.DATABASE_URL ?? "",
+        POLAR_ACCESS_TOKEN: process.env.POLAR_ACCESS_TOKEN ?? "",
+        POLAR_ORGANIZATION_ID: process.env.POLAR_ORGANIZATION_ID ?? "",
+        POLAR_SANDBOX: process.env.POLAR_SANDBOX ?? "",
+      },
       handler: "packages/aws/src/receipt.handler",
       link: [mailBucket],
       timeout: "30 seconds",

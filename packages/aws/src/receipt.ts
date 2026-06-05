@@ -1,3 +1,5 @@
+import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { recordInboundTeamMailUsage } from "@quieter/billing/team-mail-usage";
 import { Resource } from "sst";
 
 type SnsRecord = {
@@ -37,6 +39,16 @@ const normalizeRecipients = (recipients: string[]) =>
     new Set(recipients.map((recipient) => recipient.trim().toLowerCase()).filter(Boolean)),
   );
 
+let s3Client: S3Client | null = null;
+
+const getS3Client = () => {
+  s3Client ??= new S3Client({
+    region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION,
+  });
+
+  return s3Client;
+};
+
 export const handler = async (event: SnsEvent) => {
   for (const record of event.Records ?? []) {
     if (!record.Sns?.Message) {
@@ -64,6 +76,25 @@ export const handler = async (event: SnsEvent) => {
       continue;
     }
 
+    const recipients = normalizeRecipients(
+      notification.receipt?.recipients?.length
+        ? notification.receipt.recipients
+        : (notification.mail?.destination ?? []),
+    );
+    const headObject = await getS3Client().send(
+      new HeadObjectCommand({
+        Bucket: Resource.MailBucket.name,
+        Key: s3Key,
+      }),
+    );
+    const messageSizeBytes = headObject.ContentLength ?? 0;
+
+    await recordInboundTeamMailUsage({
+      messageSizeBytes,
+      providerMessageId,
+      recipients,
+    });
+
     console.info("Processed SES receipt notification.", {
       mailFrom: notification.mail?.source?.trim() || null,
       messageIdHeader: notification.mail?.commonHeaders?.messageId?.trim() || null,
@@ -71,11 +102,7 @@ export const handler = async (event: SnsEvent) => {
       receivedAt: new Date(
         notification.receipt?.timestamp || notification.mail?.timestamp || Date.now(),
       ),
-      recipients: normalizeRecipients(
-        notification.receipt?.recipients?.length
-          ? notification.receipt.recipients
-          : (notification.mail?.destination ?? []),
-      ),
+      recipients,
       s3Bucket: Resource.MailBucket.name,
       s3Key,
       subject: notification.mail?.commonHeaders?.subject?.trim() || null,

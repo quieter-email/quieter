@@ -1,4 +1,10 @@
 import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
+import { ORPCError } from "@orpc/server";
+import {
+  assertCanConsumeTeamMailUsage,
+  estimateOutboundTeamMailUsage,
+  recordTeamMailUsage,
+} from "@quieter/billing/team-mail-usage";
 import { db, mailDomain } from "@quieter/database";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -93,6 +99,21 @@ export const sendTeamMailMessage = async (input: {
   message: TeamMailMessageInput;
   organizationId: string;
 }) => {
+  const usageEstimate = estimateOutboundTeamMailUsage(input.message);
+
+  try {
+    await assertCanConsumeTeamMailUsage({
+      estimate: usageEstimate,
+      organizationId: input.organizationId,
+    });
+  } catch (error) {
+    if (error instanceof ORPCError) {
+      throw new TeamMailSendError(error.message, error.status ?? 403);
+    }
+
+    throw error;
+  }
+
   await assertTeamOwnsVerifiedSenderDomain({
     organizationId: input.organizationId,
     sender: input.message.sender,
@@ -135,6 +156,17 @@ export const sendTeamMailMessage = async (input: {
       ReplyToAddresses: normalizeAddresses(input.message.replyTo),
     }),
   );
+
+  if (response.MessageId) {
+    await recordTeamMailUsage({
+      ...usageEstimate,
+      metadata: {
+        sender: input.message.sender.trim().toLowerCase(),
+      },
+      organizationId: input.organizationId,
+      providerMessageId: response.MessageId,
+    });
+  }
 
   return {
     messageId: response.MessageId ?? null,

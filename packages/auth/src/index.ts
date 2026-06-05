@@ -1,9 +1,11 @@
 import { apiKey } from "@better-auth/api-key";
 import { passkey } from "@better-auth/passkey";
+import { hasUserBillingFeature } from "@quieter/billing/entitlements";
+import { BILLING_FEATURES, type PaidBillingPlan } from "@quieter/billing/plans";
 import { db, tables } from "@quieter/database";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
+import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { createAccessControl, magicLink, organization, lastLoginMethod } from "better-auth/plugins";
 import {
   adminAc,
@@ -54,7 +56,12 @@ export const auth = betterAuth({
   }),
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
-      if (ctx.path !== "/get-session" && !ctx.path.startsWith("/organization")) return;
+      const requiresSession =
+        ctx.path === "/get-session" ||
+        ctx.path.startsWith("/organization") ||
+        ctx.path === "/api-key/create";
+
+      if (!requiresSession) return;
 
       const currentSession = await getSessionFromCtx(ctx, {
         disableCookieCache: true,
@@ -70,6 +77,18 @@ export const auth = betterAuth({
         typeof ctx.body.organizationId === "string"
       )
         await assertCanLeaveOrganization(currentSession.user, ctx.body.organizationId);
+
+      if (ctx.path === "/api-key/create") {
+        const requirement = BILLING_FEATURES.teamApiKeys;
+        const entitlement = await hasUserBillingFeature({
+          feature: "teamApiKeys",
+          userId: currentSession.user.id,
+        });
+
+        if (!entitlement.hasAccess) {
+          throwPlanRequiredError(requirement.requiredPlan, requirement.description);
+        }
+      }
 
       if (ctx.path === "/get-session") {
         return {
@@ -151,3 +170,9 @@ export const auth = betterAuth({
 });
 
 export { REQUIRED_GOOGLE_SCOPES };
+
+const throwPlanRequiredError = (plan: PaidBillingPlan, description: string) => {
+  throw new APIError("FORBIDDEN", {
+    message: `${description} requires the ${plan} plan.`,
+  });
+};

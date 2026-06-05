@@ -22,6 +22,8 @@ export type BillingSubscriptionStatus =
   | "past_due"
   | "pending"
   | "trialing";
+export type TeamMailUsageAlertTarget = "included_usage" | "overage_limit";
+export type TeamMailUsageDirection = "inbound" | "outbound";
 
 export type MailDomainDnsRecord = {
   name: string;
@@ -273,6 +275,83 @@ export const billingSubscription = pgTable(
   ],
 );
 
+export const teamMailUsageEvent = pgTable(
+  "teamMailUsageEvent",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id),
+    direction: text("direction").$type<TeamMailUsageDirection>().notNull(),
+    provider: text("provider").notNull(),
+    providerMessageId: text("providerMessageId").notNull(),
+    dedupeKey: text("dedupeKey").notNull(),
+    recipientCount: integer("recipientCount").notNull(),
+    messageCount: integer("messageCount").notNull(),
+    messageSizeBytes: integer("messageSizeBytes").notNull(),
+    attachmentSizeBytes: integer("attachmentSizeBytes").notNull(),
+    incomingChunkCount: integer("incomingChunkCount").notNull(),
+    sesCostMicroCents: bigint("sesCostMicroCents", { mode: "number" }).notNull(),
+    includedSesCostMicroCents: bigint("includedSesCostMicroCents", { mode: "number" }).notNull(),
+    billableCostMicroCents: bigint("billableCostMicroCents", { mode: "number" }).notNull(),
+    polarEventReportedAt: timestamp("polarEventReportedAt"),
+    metadata: jsonb("metadata").$type<Record<string, string | number | boolean>>(),
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => [
+    index("team_mail_usage_event_organization_created_at_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
+    unique("team_mail_usage_event_dedupe_key_unique").on(table.dedupeKey),
+  ],
+);
+
+export const teamMailUsageSettings = pgTable("teamMailUsageSettings", {
+  organizationId: text("organizationId")
+    .primaryKey()
+    .references(() => organization.id),
+  overageEnabled: boolean("overageEnabled").notNull().default(true),
+  monthlyOverageLimitMicroCents: bigint("monthlyOverageLimitMicroCents", {
+    mode: "number",
+  }),
+  alertMilestonePercents: jsonb("alertMilestonePercents")
+    .$type<number[]>()
+    .notNull()
+    .default([50, 80, 100]),
+  createdAt: timestamp("createdAt").notNull(),
+  updatedAt: timestamp("updatedAt").notNull(),
+});
+
+export const teamMailUsageAlertEvent = pgTable(
+  "teamMailUsageAlertEvent",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id),
+    periodStart: timestamp("periodStart").notNull(),
+    periodEnd: timestamp("periodEnd").notNull(),
+    target: text("target").$type<TeamMailUsageAlertTarget>().notNull(),
+    milestonePercent: integer("milestonePercent").notNull(),
+    thresholdMicroCents: bigint("thresholdMicroCents", { mode: "number" }).notNull(),
+    usageMicroCents: bigint("usageMicroCents", { mode: "number" }).notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => [
+    index("team_mail_usage_alert_event_organization_period_idx").on(
+      table.organizationId,
+      table.periodStart,
+    ),
+    unique("team_mail_usage_alert_event_period_milestone_unique").on(
+      table.organizationId,
+      table.periodStart,
+      table.target,
+      table.milestonePercent,
+    ),
+  ],
+);
+
 export const chat = pgTable(
   "chat",
   {
@@ -364,6 +443,9 @@ export const tables = {
   invitation,
   mailbox,
   mailDomain,
+  teamMailUsageAlertEvent,
+  teamMailUsageEvent,
+  teamMailUsageSettings,
   waitlistSignup,
 };
 
@@ -408,6 +490,19 @@ export const authRelations = defineRelations(tables, (r) => ({
     mailboxes: r.many.mailbox({ from: r.organization.id, to: r.mailbox.organizationId }),
     mailDomains: r.many.mailDomain({ from: r.organization.id, to: r.mailDomain.organizationId }),
     members: r.many.member({ from: r.organization.id, to: r.member.organizationId }),
+    teamMailUsageEvents: r.many.teamMailUsageEvent({
+      from: r.organization.id,
+      to: r.teamMailUsageEvent.organizationId,
+    }),
+    teamMailUsageSettings: r.one.teamMailUsageSettings({
+      from: r.organization.id,
+      to: r.teamMailUsageSettings.organizationId,
+      optional: true,
+    }),
+    teamMailUsageAlertEvents: r.many.teamMailUsageAlertEvent({
+      from: r.organization.id,
+      to: r.teamMailUsageAlertEvent.organizationId,
+    }),
   },
   session: {
     activeOrganization: r.one.organization({
@@ -477,6 +572,27 @@ export const authRelations = defineRelations(tables, (r) => ({
     user: r.one.user({
       from: r.billingSubscription.userId,
       to: r.user.id,
+      optional: false,
+    }),
+  },
+  teamMailUsageEvent: {
+    organization: r.one.organization({
+      from: r.teamMailUsageEvent.organizationId,
+      to: r.organization.id,
+      optional: false,
+    }),
+  },
+  teamMailUsageSettings: {
+    organization: r.one.organization({
+      from: r.teamMailUsageSettings.organizationId,
+      to: r.organization.id,
+      optional: false,
+    }),
+  },
+  teamMailUsageAlertEvent: {
+    organization: r.one.organization({
+      from: r.teamMailUsageAlertEvent.organizationId,
+      to: r.organization.id,
       optional: false,
     }),
   },

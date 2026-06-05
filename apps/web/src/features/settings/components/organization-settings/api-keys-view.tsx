@@ -9,6 +9,7 @@ import {
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { BILLING_FEATURES } from "@quieter/billing/plans";
 import {
   AlertDialog,
   AlertDialogBody,
@@ -470,17 +471,22 @@ const ApiKeyRow = ({
 
 export const ApiKeysView = ({
   canManageApiKeys,
+  canUseTeamApiKeys,
   onBack,
   organization,
 }: {
   canManageApiKeys: boolean;
+  canUseTeamApiKeys: boolean;
   onBack: () => void;
   organization: FullOrganization;
 }) => {
   const apiKeysQuery = useQuery(teamApiKeysQueryOptions(organization.id));
   const apiKeys = (apiKeysQuery.data?.apiKeys ?? []) as TeamApiKey[];
   const manageApiKeysReason =
-    (!canManageApiKeys && "Only admins and owners can create API keys.") || null;
+    (!canUseTeamApiKeys &&
+      `Creating API keys requires the ${BILLING_FEATURES.teamApiKeys.requiredPlan} plan.`) ||
+    (!canManageApiKeys && "Only admins and owners can create API keys.") ||
+    null;
 
   return (
     <div className="space-y-6">

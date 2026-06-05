@@ -2,8 +2,10 @@
 
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { BILLING_FEATURES, hasBillingPlanAccess } from "@quieter/billing/plans";
 import { useQuery } from "@tanstack/react-query";
 import type { TeamSettingsView } from "~/features/settings/domain/team-settings-view";
+import { normalizeBillingPlan, userBillingQueryOptions } from "~/features/settings/domain/billing";
 import { ApiKeysView } from "./api-keys-view";
 import {
   type OrganizationSummary,
@@ -35,6 +37,7 @@ export const TeamView = ({
   view: TeamSettingsView;
 }) => {
   const fullOrganizationQuery = useQuery(fullOrganizationQueryOptions(organization.id));
+  const billingQuery = useQuery(userBillingQueryOptions());
   const fullOrganization = fullOrganizationQuery.data;
   const activeMember = fullOrganization?.members.find((member) => member.userId === userId) ?? null;
   const activeRole = activeMember && normalizeOrganizationRole(activeMember.role);
@@ -58,6 +61,19 @@ export const TeamView = ({
   const canUpdateOrganization = hasOrganizationPermission(activeRole, {
     organization: ["update"],
   });
+  const currentPlan = normalizeBillingPlan(billingQuery.data?.plan);
+  const canUseTeamDomains =
+    billingQuery.isPending ||
+    !!billingQuery.data?.hasUnlimitedAccess ||
+    hasBillingPlanAccess(currentPlan, BILLING_FEATURES.teamDomains.requiredPlan);
+  const canUseTeamApiKeys =
+    billingQuery.isPending ||
+    !!billingQuery.data?.hasUnlimitedAccess ||
+    hasBillingPlanAccess(currentPlan, BILLING_FEATURES.teamApiKeys.requiredPlan);
+  const canUseTeamMail =
+    billingQuery.isPending ||
+    !!billingQuery.data?.hasUnlimitedAccess ||
+    hasBillingPlanAccess(currentPlan, BILLING_FEATURES.teamMail.requiredPlan);
 
   if (fullOrganizationQuery.isPending) {
     return (
@@ -100,6 +116,7 @@ export const TeamView = ({
     return (
       <DomainsView
         canManageDomains={canUpdateOrganization}
+        canUseTeamDomains={canUseTeamDomains}
         onBack={onBackToTeam}
         organization={fullOrganization}
       />
@@ -110,6 +127,7 @@ export const TeamView = ({
     return (
       <ApiKeysView
         canManageApiKeys={canUpdateOrganization}
+        canUseTeamApiKeys={canUseTeamApiKeys}
         onBack={onBackToTeam}
         organization={fullOrganization}
       />
@@ -121,6 +139,9 @@ export const TeamView = ({
       activeRole={activeRole}
       canDeleteOrganization={canDeleteOrganization}
       canUpdateOrganization={canUpdateOrganization}
+      canUseTeamApiKeys={canUseTeamApiKeys}
+      canUseTeamDomains={canUseTeamDomains}
+      canUseTeamMail={canUseTeamMail}
       fullOrganization={fullOrganization}
       onBackToList={onBackToList}
       onOpenApiKeys={onOpenApiKeys}

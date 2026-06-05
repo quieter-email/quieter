@@ -270,6 +270,19 @@ export const assertUserCanManageMailDomains = async (input: {
   }
 };
 
+export const assertUserCanManageTeamSettings = async (input: {
+  organizationId: string;
+  userId: string;
+}) => {
+  const membership = await assertUserOrganizationMember(input);
+
+  if (!hasOrganizationManagerRole(membership.role)) {
+    throw new ORPCError("FORBIDDEN", {
+      message: "Only admins and owners can manage team settings.",
+    });
+  }
+};
+
 export const getEmailIdentity = async (domain: string) =>
   await getSesv2Client().send(new GetEmailIdentityCommand({ EmailIdentity: domain }));
 

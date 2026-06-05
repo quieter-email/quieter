@@ -21,6 +21,8 @@ export const billingRouter = {
     .handler(
       async ({ context, input }) =>
         await createBillingCheckout({
+          customerEmail: context.user.email,
+          customerName: context.user.name,
           headers: getRequestHeaders(context),
           plan: input.plan,
           userId: context.userId,

@@ -10,6 +10,11 @@ export const base = os.errors(orpcErrorMap).$context<OrpcContext>();
 export const publicProcedure = base;
 
 export type ProtectedContext = OrpcContext & {
+  user: {
+    email: string;
+    id: string;
+    name: string;
+  };
   userId: string;
 };
 
@@ -24,6 +29,11 @@ export const protectedProcedure = base.use(async ({ context, errors, next }) => 
   return next({
     context: {
       ...context,
+      user: {
+        email: session.user.email,
+        id: session.user.id,
+        name: session.user.name,
+      },
       userId: session.user.id,
     },
   });

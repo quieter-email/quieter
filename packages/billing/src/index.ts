@@ -1,31 +1,33 @@
 import type { Subscription } from "@paykit-sdk/core";
 import type { createPolar as createPolarFactory } from "@paykit-sdk/polar";
-import type { BillingPlan, BillingSubscriptionStatus } from "@quieter/database";
+import type { BillingPlan } from "@quieter/database";
 import { ORPCError } from "@orpc/server";
 import { PayKit } from "@paykit-sdk/core";
-import { auth } from "@quieter/auth";
 import { billingSubscription, db } from "@quieter/database";
 import { desc, eq, and } from "drizzle-orm";
-import { paidBillingPlanSchema, type PaidBillingPlan } from "./plans";
+import {
+  getUserBillingPlan,
+  hasUnlimitedBillingAccess,
+  isActiveBillingStatus,
+} from "./entitlements";
+import { BILLING_PRODUCTS, paidBillingPlanSchema, type PaidBillingPlan } from "./plans";
+import { getPolarClient, getPolarOrganizationId, getPolarSandboxMode } from "./polar";
+import { getTeamMailMeteredPrice } from "./team-mail-usage";
 
 const BILLING_PROVIDER = "polar" as const;
 const BILLING_METADATA_PLAN = "quieterPlan";
 const BILLING_METADATA_USER_ID = "quieterUserId";
-const ACTIVE_BILLING_STATUSES = new Set<BillingSubscriptionStatus>([
-  "active",
-  "past_due",
-  "pending",
-  "trialing",
-]);
-const BILLING_PLAN_PRODUCT_ENV = {
-  managed: "QUIETER_POLAR_MANAGED_PRODUCT_ID",
-  pro: "QUIETER_POLAR_PRO_PRODUCT_ID",
-} as const satisfies Record<PaidBillingPlan, string>;
+const BILLING_METADATA_PRODUCT_KEY = "quieterProduct";
+const BILLING_METADATA_METER_KEY = "quieterMeter";
+const AI_USAGE_EVENT_NAME = "quieter.ai.llm_usage";
+const AI_USAGE_METER_KEY = "quieter_ai_llm_cost";
 
 type PolarProvider = ReturnType<typeof createPolarFactory>;
 type Paykit = PayKit<PolarProvider>;
 
 let paykit: Paykit | null = null;
+const billingProductIdCache = new Map<PaidBillingPlan, string>();
+let aiUsageMeterId: string | null = null;
 
 const getPaykit = async () => {
   if (paykit) return paykit;
@@ -50,31 +52,81 @@ const getPaykit = async () => {
   return paykit;
 };
 
-const getPolarSandboxMode = () => {
-  const configured = process.env.POLAR_SANDBOX?.trim().toLowerCase();
+const getBillingProductId = async (plan: PaidBillingPlan) => {
+  const cachedProductId = billingProductIdCache.get(plan);
+  if (cachedProductId) return cachedProductId;
 
-  if (configured) {
-    return ["1", "true", "yes", "on"].includes(configured);
+  const product = BILLING_PRODUCTS[plan];
+  const polar = await getPolarClient();
+  const organizationId = getPolarOrganizationId();
+  const products = await polar.products.list({
+    isArchived: false,
+    isRecurring: true,
+    limit: 100,
+    metadata: {
+      [BILLING_METADATA_PRODUCT_KEY]: product.polarMetadataKey,
+    },
+    organizationId,
+  });
+  const existingProduct = products.result.items.find(
+    (candidate) => candidate.metadata[BILLING_METADATA_PRODUCT_KEY] === product.polarMetadataKey,
+  );
+
+  if (existingProduct) {
+    const teamMailMeteredPrice = await getTeamMailMeteredPrice();
+    const hasTeamMailMeteredPrice = existingProduct.prices.some(
+      (price) =>
+        price.amountType === "metered_unit" &&
+        "meterId" in price &&
+        price.meterId === teamMailMeteredPrice.meterId,
+    );
+
+    if (!hasTeamMailMeteredPrice) {
+      await polar.products.update({
+        id: existingProduct.id,
+        productUpdate: {
+          prices: [
+            ...existingProduct.prices
+              .filter((price) => !price.isArchived)
+              .map((price) => ({ id: price.id })),
+            teamMailMeteredPrice,
+          ],
+        },
+      });
+    }
+
+    billingProductIdCache.set(plan, existingProduct.id);
+    return existingProduct.id;
   }
 
-  return process.env.NODE_ENV !== "production";
-};
+  const teamMailMeteredPrice = await getTeamMailMeteredPrice();
 
-const getBillingProductId = (plan: PaidBillingPlan) => {
-  const productId = process.env[BILLING_PLAN_PRODUCT_ENV[plan]]?.trim();
+  const createdProduct = await polar.products.create({
+    description: product.description,
+    metadata: {
+      [BILLING_METADATA_PLAN]: plan,
+      [BILLING_METADATA_PRODUCT_KEY]: product.polarMetadataKey,
+    },
+    name: `Quieter ${product.name}`,
+    organizationId,
+    prices: [
+      {
+        amountType: "fixed",
+        priceAmount: product.monthlyPriceCents,
+        priceCurrency: "usd",
+      },
+      teamMailMeteredPrice,
+    ],
+    recurringInterval: "month",
+  });
 
-  if (!productId) {
-    throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      message: `Missing ${BILLING_PLAN_PRODUCT_ENV[plan]} for Polar checkout.`,
-    });
-  }
-
-  return productId;
+  billingProductIdCache.set(plan, createdProduct.id);
+  return createdProduct.id;
 };
 
 const getPlanForProductId = (productId: string) => {
-  for (const plan of paidBillingPlanSchema.options) {
-    if (process.env[BILLING_PLAN_PRODUCT_ENV[plan]]?.trim() === productId) {
+  for (const [plan, cachedProductId] of billingProductIdCache.entries()) {
+    if (cachedProductId === productId) {
       return plan;
     }
   }
@@ -124,32 +176,20 @@ const getSyncedBillingPlan = (subscription: Subscription): BillingPlan | null =>
 };
 
 export const createBillingCheckout = async (input: {
+  customerEmail: string;
+  customerName: string;
   headers: Headers;
   plan: PaidBillingPlan;
   userId: string;
 }) => {
-  const session = await auth.api.getSession({ headers: input.headers });
-
-  if (!session?.user) {
-    throw new ORPCError("UNAUTHORIZED", {
-      message: "Sign in before starting checkout.",
-    });
-  }
-
-  if (session.user.id !== input.userId) {
-    throw new ORPCError("FORBIDDEN", {
-      message: "You can only manage your own plan.",
-    });
-  }
-
   const successUrl = getSettingsUrl(input.headers, "success");
   const cancelUrl = getSettingsUrl(input.headers, "canceled");
   const checkout = await (
     await getPaykit()
   ).checkouts.create({
     cancel_url: cancelUrl,
-    customer: { email: session.user.email },
-    item_id: getBillingProductId(input.plan),
+    customer: { email: input.customerEmail },
+    item_id: await getBillingProductId(input.plan),
     metadata: {
       [BILLING_METADATA_PLAN]: input.plan,
       [BILLING_METADATA_USER_ID]: input.userId,
@@ -159,7 +199,7 @@ export const createBillingCheckout = async (input: {
       customerMetadata: {
         [BILLING_METADATA_USER_ID]: input.userId,
       },
-      customerName: session.user.name,
+      customerName: input.customerName,
       externalCustomerId: `user:${input.userId}`,
       returnUrl: cancelUrl,
     },
@@ -187,12 +227,11 @@ export const getBillingOverview = async (input: { userId: string }) => {
     .from(billingSubscription)
     .where(eq(billingSubscription.userId, input.userId))
     .orderBy(desc(billingSubscription.updatedAt));
-  const subscription =
-    rows.find((row) => ACTIVE_BILLING_STATUSES.has(row.status)) ?? rows[0] ?? null;
+  const subscription = rows.find((row) => isActiveBillingStatus(row.status)) ?? rows[0] ?? null;
 
   return {
-    plan:
-      subscription && ACTIVE_BILLING_STATUSES.has(subscription.status) ? subscription.plan : "free",
+    hasUnlimitedAccess: await hasUnlimitedBillingAccess(input.userId),
+    plan: await getUserBillingPlan(input.userId),
     subscription,
   };
 };
@@ -251,6 +290,88 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
   }
 
   return { synced: true };
+};
+
+const getAiUsageMeterId = async () => {
+  if (aiUsageMeterId) return aiUsageMeterId;
+
+  const polar = await getPolarClient();
+  const organizationId = getPolarOrganizationId();
+  const meters = await polar.meters.list({
+    limit: 100,
+    metadata: {
+      [BILLING_METADATA_METER_KEY]: AI_USAGE_METER_KEY,
+    },
+    organizationId,
+  });
+  const existingMeter = meters.result.items.find(
+    (meter) => meter.metadata[BILLING_METADATA_METER_KEY] === AI_USAGE_METER_KEY,
+  );
+
+  if (existingMeter) {
+    aiUsageMeterId = existingMeter.id;
+    return existingMeter.id;
+  }
+
+  const createdMeter = await polar.meters.create({
+    aggregation: {
+      func: "sum",
+      property: "costCents",
+    },
+    filter: {
+      clauses: [
+        {
+          operator: "eq",
+          property: "name",
+          value: AI_USAGE_EVENT_NAME,
+        },
+      ],
+      conjunction: "and",
+    },
+    metadata: {
+      [BILLING_METADATA_METER_KEY]: AI_USAGE_METER_KEY,
+    },
+    name: "Quieter AI LLM cost",
+    organizationId,
+  });
+
+  aiUsageMeterId = createdMeter.id;
+  return createdMeter.id;
+};
+
+export const reportAiUsage = async (input: {
+  chatId?: string | null;
+  completionTokens: number;
+  model: string;
+  promptTokens: number;
+  userId: string;
+}) => {
+  const promptCostCents = (input.promptTokens / 1_000_000) * 20;
+  const completionCostCents = (input.completionTokens / 1_000_000) * 125;
+  const costCents = Number((promptCostCents + completionCostCents).toFixed(8));
+
+  if (costCents <= 0) return;
+
+  await getAiUsageMeterId();
+  await (
+    await getPolarClient()
+  ).events.ingest({
+    events: [
+      {
+        externalCustomerId: `user:${input.userId}`,
+        metadata: {
+          chatId: input.chatId ?? "",
+          completionTokens: input.completionTokens,
+          costCents,
+          model: input.model,
+          promptTokens: input.promptTokens,
+        },
+        name: AI_USAGE_EVENT_NAME,
+        organizationId: getPolarOrganizationId(),
+        timestamp: new Date(),
+      },
+    ],
+  });
 };
 
 export const handlePolarBillingWebhook = async (input: {

@@ -14,6 +14,9 @@ export {
   passkey,
   session,
   tables,
+  teamMailUsageAlertEvent,
+  teamMailUsageEvent,
+  teamMailUsageSettings,
   user,
   verification,
   waitlistSignup,
@@ -26,4 +29,6 @@ export {
   type MailDomainDnsRecord,
   type MailDomainStatus,
   type MailboxSwitcherOrder,
+  type TeamMailUsageAlertTarget,
+  type TeamMailUsageDirection,
 } from "./schema";
