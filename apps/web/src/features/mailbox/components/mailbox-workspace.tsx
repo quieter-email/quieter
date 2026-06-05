@@ -146,6 +146,9 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       });
 
       if (result.isError) {
+        writePendingGmailLink(null);
+        setPendingGmailLink(null);
+        setStartingReconnectMailboxId(null);
         toast.error("Could not finish Google reconnect.");
         return result;
       }

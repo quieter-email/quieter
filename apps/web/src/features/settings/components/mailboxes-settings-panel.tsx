@@ -218,7 +218,7 @@ export const MailboxesSettingsPanel = () => {
                           {isDefault ? "Default" : "Set default"}
                         </Button>
 
-                        {needsReconnect && (
+                        {needsReconnect && isGmailMailbox && (
                           <Button
                             disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
                             onClick={() => {

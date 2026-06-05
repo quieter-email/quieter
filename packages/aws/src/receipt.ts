@@ -81,31 +81,40 @@ export const handler = async (event: SnsEvent) => {
         ? notification.receipt.recipients
         : (notification.mail?.destination ?? []),
     );
-    const headObject = await getS3Client().send(
-      new HeadObjectCommand({
-        Bucket: Resource.MailBucket.name,
-        Key: s3Key,
-      }),
-    );
-    const messageSizeBytes = headObject.ContentLength ?? 0;
+    try {
+      const headObject = await getS3Client().send(
+        new HeadObjectCommand({
+          Bucket: Resource.MailBucket.name,
+          Key: s3Key,
+        }),
+      );
+      const messageSizeBytes = headObject.ContentLength ?? 0;
 
-    await recordInboundTeamMailUsage({
-      messageSizeBytes,
-      providerMessageId,
-      recipients,
-    });
+      await recordInboundTeamMailUsage({
+        messageSizeBytes,
+        providerMessageId,
+        recipients,
+      });
 
-    console.info("Processed SES receipt notification.", {
-      mailFrom: notification.mail?.source?.trim() || null,
-      messageIdHeader: notification.mail?.commonHeaders?.messageId?.trim() || null,
-      providerMessageId,
-      receivedAt: new Date(
-        notification.receipt?.timestamp || notification.mail?.timestamp || Date.now(),
-      ),
-      recipients,
-      s3Bucket: Resource.MailBucket.name,
-      s3Key,
-      subject: notification.mail?.commonHeaders?.subject?.trim() || null,
-    });
+      console.info("Processed SES receipt notification.", {
+        mailFrom: notification.mail?.source?.trim() || null,
+        messageIdHeader: notification.mail?.commonHeaders?.messageId?.trim() || null,
+        providerMessageId,
+        receivedAt: new Date(
+          notification.receipt?.timestamp || notification.mail?.timestamp || Date.now(),
+        ),
+        recipients,
+        s3Bucket: Resource.MailBucket.name,
+        s3Key,
+        subject: notification.mail?.commonHeaders?.subject?.trim() || null,
+      });
+    } catch (error) {
+      console.error("Failed to process SES receipt record.", {
+        error,
+        providerMessageId,
+        recipients,
+        s3Key,
+      });
+    }
   }
 };

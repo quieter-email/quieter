@@ -159,9 +159,12 @@ export const MailboxWorkspaceContent = ({
                       <Button
                         disabled={reconnectingMailboxId === selectedMailboxId}
                         onClick={() => {
+                          const selectedMailbox = mailboxGroups
+                            .flatMap((group) => group.mailboxes)
+                            .find((m) => m.id === selectedMailboxId);
                           onReconnectMailbox({
-                            emailAddress: currentUserEmail ?? "",
-                            id: selectedMailboxId,
+                            emailAddress: selectedMailbox?.emailAddress ?? "",
+                            id: selectedMailboxId ?? "",
                           });
                         }}
                         type="button"

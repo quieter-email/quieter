@@ -16,13 +16,7 @@ export const Route = createFileRoute("/api/billing/polar-webhook")({
         } catch (error) {
           console.error(error);
 
-          return Response.json(
-            {
-              error:
-                error instanceof Error ? error.message : "Could not process the Polar webhook.",
-            },
-            { status: 500 },
-          );
+          return Response.json({ error: "Could not process the Polar webhook." }, { status: 500 });
         }
       },
     },

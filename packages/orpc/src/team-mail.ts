@@ -158,13 +158,19 @@ export const sendTeamMailMessage = async (input: {
   );
 
   if (response.MessageId) {
-    await recordTeamMailUsage({
+    recordTeamMailUsage({
       ...usageEstimate,
       metadata: {
         sender: input.message.sender.trim().toLowerCase(),
       },
       organizationId: input.organizationId,
       providerMessageId: response.MessageId,
+    }).catch((error) => {
+      console.error("Failed to record team mail usage after SES send.", {
+        error,
+        messageId: response.MessageId,
+        organizationId: input.organizationId,
+      });
     });
   }
 

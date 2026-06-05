@@ -29,13 +29,25 @@ export const formatBillingPlan = (plan: BillingPlan) => {
 
 export const formatBillingStatus = (
   status: NonNullable<UserBillingOverview["subscription"]>["status"],
-) => {
-  if (status === "active") return "Active";
-  if (status === "canceled") return "Canceled";
-  if (status === "expired") return "Expired";
-  if (status === "past_due") return "Past due";
-  if (status === "trialing") return "Trialing";
-  return "Pending";
+): string => {
+  switch (status) {
+    case "active":
+      return "Active";
+    case "canceled":
+      return "Canceled";
+    case "expired":
+      return "Expired";
+    case "past_due":
+      return "Past due";
+    case "trialing":
+      return "Trialing";
+    case "pending":
+      return "Pending";
+    default: {
+      const _exhaustiveCheck: never = status;
+      throw new Error(`Unexpected billing status: ${_exhaustiveCheck}`);
+    }
+  }
 };
 
 export const BILLING_PLANS = [

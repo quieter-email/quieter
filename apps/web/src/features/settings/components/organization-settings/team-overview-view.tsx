@@ -75,19 +75,19 @@ export const TeamOverviewView = ({
   ]
     .filter(Boolean)
     .join(", ");
-  const domainsSummary = domainsQuery.isPending
-    ? "Loading domains…"
-    : domainsQuery.isError
-      ? "Could not load domains."
-      : !canUseTeamDomains
-        ? `Requires ${BILLING_FEATURES.teamDomains.requiredPlan}`
+  const domainsSummary = !canUseTeamDomains
+    ? `Requires ${BILLING_FEATURES.teamDomains.requiredPlan}`
+    : domainsQuery.isPending
+      ? "Loading domains…"
+      : domainsQuery.isError
+        ? "Could not load domains."
         : formatCount(domainsQuery.data.domains.length, "Domain", "Domains");
-  const apiKeysSummary = apiKeysQuery.isPending
-    ? "Loading API keys…"
-    : apiKeysQuery.isError
-      ? "Could not load API keys."
-      : !canUseTeamApiKeys
-        ? `Requires ${BILLING_FEATURES.teamApiKeys.requiredPlan}`
+  const apiKeysSummary = !canUseTeamApiKeys
+    ? `Requires ${BILLING_FEATURES.teamApiKeys.requiredPlan}`
+    : apiKeysQuery.isPending
+      ? "Loading API keys…"
+      : apiKeysQuery.isError
+        ? "Could not load API keys."
         : formatCount(apiKeysQuery.data.apiKeys.length, "API Key", "API Keys");
 
   return (

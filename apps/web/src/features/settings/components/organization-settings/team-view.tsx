@@ -63,17 +63,17 @@ export const TeamView = ({
   });
   const currentPlan = normalizeBillingPlan(billingQuery.data?.plan);
   const canUseTeamDomains =
-    billingQuery.isPending ||
-    !!billingQuery.data?.hasUnlimitedAccess ||
-    hasBillingPlanAccess(currentPlan, BILLING_FEATURES.teamDomains.requiredPlan);
+    !billingQuery.isPending &&
+    (!!billingQuery.data?.hasUnlimitedAccess ||
+      hasBillingPlanAccess(currentPlan, BILLING_FEATURES.teamDomains.requiredPlan));
   const canUseTeamApiKeys =
-    billingQuery.isPending ||
-    !!billingQuery.data?.hasUnlimitedAccess ||
-    hasBillingPlanAccess(currentPlan, BILLING_FEATURES.teamApiKeys.requiredPlan);
+    !billingQuery.isPending &&
+    (!!billingQuery.data?.hasUnlimitedAccess ||
+      hasBillingPlanAccess(currentPlan, BILLING_FEATURES.teamApiKeys.requiredPlan));
   const canUseTeamMail =
-    billingQuery.isPending ||
-    !!billingQuery.data?.hasUnlimitedAccess ||
-    hasBillingPlanAccess(currentPlan, BILLING_FEATURES.teamMail.requiredPlan);
+    !billingQuery.isPending &&
+    (!!billingQuery.data?.hasUnlimitedAccess ||
+      hasBillingPlanAccess(currentPlan, BILLING_FEATURES.teamMail.requiredPlan));
 
   if (fullOrganizationQuery.isPending) {
     return (

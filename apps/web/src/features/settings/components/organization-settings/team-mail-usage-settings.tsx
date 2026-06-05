@@ -101,13 +101,17 @@ const TeamMailUsageSettingsForm = ({
     try {
       await updateMutation.mutateAsync({
         alertMilestonePercents: parseMilestones(milestones),
-        monthlyOverageLimitCents: parseLimitCents(limit),
+        monthlyOverageLimitCents: overageEnabled ? parseLimitCents(limit) : null,
         organizationId,
         overageEnabled,
       });
       toast.success("Team mail usage settings updated.");
     } catch (error) {
-      toast.error((error as { message?: string })?.message ?? "Could not update usage settings.");
+      if (error instanceof Error) {
+        toast.error(error.message);
+      } else {
+        toast.error("Could not update usage settings.");
+      }
     }
   };
 

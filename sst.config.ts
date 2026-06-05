@@ -88,10 +88,17 @@ export default $config({
       role: mailReceiptRole.id,
     });
 
+    const databaseUrl = process.env.DATABASE_URL;
+    const polarAccessToken = process.env.POLAR_ACCESS_TOKEN;
+
+    if (!databaseUrl) throw new Error("DATABASE_URL is required for MailReceiptProcessor.");
+    if (!polarAccessToken)
+      throw new Error("POLAR_ACCESS_TOKEN is required for MailReceiptProcessor.");
+
     mailReceiptTopic.subscribe("MailReceiptProcessor", {
       environment: {
-        DATABASE_URL: process.env.DATABASE_URL ?? "",
-        POLAR_ACCESS_TOKEN: process.env.POLAR_ACCESS_TOKEN ?? "",
+        DATABASE_URL: databaseUrl,
+        POLAR_ACCESS_TOKEN: polarAccessToken,
         POLAR_ORGANIZATION_ID: process.env.POLAR_ORGANIZATION_ID ?? "",
         POLAR_SANDBOX: process.env.POLAR_SANDBOX ?? "",
       },

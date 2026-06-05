@@ -89,11 +89,11 @@ export const getTeamMailUsageSettings = async (
     .where(eq(teamMailUsageSettings.organizationId, organizationId))
     .limit(1);
 
+  const normalized = normalizeTeamMailAlertMilestones(settings?.alertMilestonePercents ?? []);
+
   return {
     alertMilestonePercents:
-      normalizeTeamMailAlertMilestones(settings?.alertMilestonePercents ?? []).length > 0
-        ? normalizeTeamMailAlertMilestones(settings?.alertMilestonePercents ?? [])
-        : DEFAULT_TEAM_MAIL_USAGE_SETTINGS.alertMilestonePercents,
+      normalized.length > 0 ? normalized : DEFAULT_TEAM_MAIL_USAGE_SETTINGS.alertMilestonePercents,
     monthlyOverageLimitMicroCents:
       settings?.monthlyOverageLimitMicroCents ??
       DEFAULT_TEAM_MAIL_USAGE_SETTINGS.monthlyOverageLimitMicroCents,
@@ -616,15 +616,25 @@ export const recordInboundTeamMailUsage = async (input: {
 
   await Promise.all(
     Array.from(organizationIds).map(async (organizationId) => {
+      const orgDomains = new Set(
+        domainRows.filter((row) => row.organizationId === organizationId).map((row) => row.domain),
+      );
+      const orgRecipients = normalizedRecipients.filter((recipient) => {
+        const domain = recipient.split("@").at(1);
+        return domain != null && orgDomains.has(domain);
+      });
+
+      if (orgRecipients.length === 0) return;
+
       const estimate = estimateInboundTeamMailUsage({
         messageSizeBytes: input.messageSizeBytes,
-        recipientCount: normalizedRecipients.length,
+        recipientCount: orgRecipients.length,
       });
 
       await recordTeamMailUsage({
         ...estimate,
         metadata: {
-          recipients: normalizedRecipients.join(","),
+          recipients: orgRecipients.join(","),
         },
         organizationId,
         providerMessageId: input.providerMessageId,

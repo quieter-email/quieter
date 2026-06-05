@@ -51,7 +51,7 @@ export const PlanSettingsPanel = () => {
       }),
       to: ".",
     });
-  }, [billingQuery, billingResult, navigate]);
+  }, [billingQuery.refetch, billingResult, navigate]);
 
   const currentPlan = normalizeBillingPlan(billingQuery.data?.plan);
   const currentSubscription = billingQuery.data?.subscription ?? null;
@@ -100,10 +100,10 @@ export const PlanSettingsPanel = () => {
 
             return (
               <article
-                className={cn(
-                  "rounded-xl border bg-background p-5 transition-colors",
-                  isCurrent ? "border-primary/50 bg-primary/4" : "border-border/70",
-                )}
+                className={cn("rounded-xl border bg-background p-5 transition-colors", {
+                  "border-primary/50 bg-primary/4": isCurrent,
+                  "border-border/70": !isCurrent,
+                })}
                 key={plan.plan}
               >
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">

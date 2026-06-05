@@ -18,10 +18,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Tooltip,
-  TooltipArrow,
-  TooltipContent,
-  TooltipTrigger,
+  IconButtonTooltip,
   cn,
 } from "@quieter/ui";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
@@ -158,33 +155,27 @@ const MailboxDefaultButton = ({
   mailboxId,
   onSetDefaultMailbox,
 }: MailboxDefaultButtonProps) => (
-  <Tooltip>
-    <TooltipTrigger className="inline-flex" render={<span />}>
-      <button
-        aria-label={defaultMailboxLabel}
-        className={cn(
-          "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
-          {
-            "text-foreground": isDefault,
-            "text-muted-foreground/50 opacity-0 group-hover/item:opacity-100 hover:text-foreground":
-              !isDefault,
-          },
-        )}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onSetDefaultMailbox(isDefault ? null : mailboxId);
-        }}
-        type="button"
-      >
-        <HugeiconsIcon aria-hidden className="size-3.5" icon={isDefault ? PinIcon : PinOffIcon} />
-      </button>
-    </TooltipTrigger>
-    <TooltipContent className="px-2 py-1">
-      {defaultMailboxLabel}
-      <TooltipArrow />
-    </TooltipContent>
-  </Tooltip>
+  <IconButtonTooltip label={defaultMailboxLabel}>
+    <button
+      aria-label={defaultMailboxLabel}
+      className={cn(
+        "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
+        {
+          "text-foreground": isDefault,
+          "text-muted-foreground/50 opacity-0 group-hover/item:opacity-100 hover:text-foreground":
+            !isDefault,
+        },
+      )}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onSetDefaultMailbox(isDefault ? null : mailboxId);
+      }}
+      type="button"
+    >
+      <HugeiconsIcon aria-hidden className="size-3.5" icon={isDefault ? PinIcon : PinOffIcon} />
+    </button>
+  </IconButtonTooltip>
 );
 
 const SortableGroup = ({

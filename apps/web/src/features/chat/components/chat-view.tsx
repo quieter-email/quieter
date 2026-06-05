@@ -6,6 +6,7 @@ import { BILLING_FEATURES, hasBillingPlanAccess } from "@quieter/billing/plans";
 import { Button, toast } from "@quieter/ui";
 import { fetchServerSentEvents, useChat } from "@tanstack/ai-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { LayoutGroup } from "motion/react";
 import {
   type FormEvent,
@@ -270,23 +271,27 @@ const PlanRequiredBlock = ({
 }: {
   currentPlan: Parameters<typeof formatBillingPlan>[0];
   requiredPlan: "managed" | "pro";
-}) => (
-  <div className="mb-3 rounded-lg border border-border/70 bg-secondary/35 p-3 text-sm">
-    <p className="font-medium text-foreground">Upgrade required</p>
-    <p className="mt-1 text-muted-foreground">
-      AI chat requires {formatBillingPlan(requiredPlan)}. Your current plan is{" "}
-      {formatBillingPlan(currentPlan)}.
-    </p>
-    <Button
-      className="mt-3"
-      onClick={() => {
-        window.location.assign("/settings?tab=plan");
-      }}
-      size="sm"
-      type="button"
-      variant="outline"
-    >
-      View plans
-    </Button>
-  </div>
-);
+}) => {
+  const navigate = useNavigate();
+
+  return (
+    <div className="mb-3 rounded-lg border border-border/70 bg-secondary/35 p-3 text-sm">
+      <p className="font-medium text-foreground">Upgrade required</p>
+      <p className="mt-1 text-muted-foreground">
+        AI chat requires {formatBillingPlan(requiredPlan)}. Your current plan is{" "}
+        {formatBillingPlan(currentPlan)}.
+      </p>
+      <Button
+        className="mt-3"
+        onClick={() => {
+          void navigate({ to: "/settings", search: { tab: "plan" } });
+        }}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        View plans
+      </Button>
+    </div>
+  );
+};
