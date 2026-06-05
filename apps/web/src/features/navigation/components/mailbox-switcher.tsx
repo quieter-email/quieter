@@ -159,10 +159,10 @@ const MailboxDefaultButton = ({
     <button
       aria-label={defaultMailboxLabel}
       className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
+        "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
         {
           "text-foreground": isDefault,
-          "text-muted-foreground/50 opacity-0 group-hover/item:opacity-100 hover:text-foreground":
+          "text-muted-foreground/50 opacity-0 group-focus-within/item:opacity-100 group-hover/item:opacity-100 hover:text-foreground focus-visible:opacity-100":
             !isDefault,
         },
       )}

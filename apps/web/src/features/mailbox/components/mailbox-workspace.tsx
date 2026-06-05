@@ -11,6 +11,7 @@ import { type ComposeDialogHandle, ComposeDialog } from "~/features/compose";
 import { useDemoModeEnabled } from "~/features/settings/domain/demo-mode-setting";
 import { chatsQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-query";
 import {
+  getGoogleLinkCallbackURL,
   openGoogleAccountLink,
   readPendingGmailLink,
   writePendingGmailLink,
@@ -130,7 +131,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     startingReconnectMailboxId ??
     (pendingGmailLink?.mode === "reconnect" ? (pendingGmailLink.mailboxId ?? null) : null);
   useQuery({
-    enabled: pendingGmailLink?.mode === "reconnect",
+    enabled: pendingGmailLink?.mode === "reconnect" && pendingGmailLink.readyToFinalize === true,
     queryKey: ["mailboxes", "finish-gmail-link", pendingGmailLink?.startedAt],
     queryFn: async () => {
       if (!pendingGmailLink || pendingGmailLink.mode !== "reconnect") {
@@ -244,6 +245,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       mailboxCount: mailboxes.length,
       mailboxId: mailbox.id,
       mode: "reconnect",
+      readyToFinalize: false,
       startedAt: Date.now(),
     } satisfies PendingGmailLinkState;
 
@@ -253,7 +255,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
 
     try {
       await openGoogleAccountLink({
-        callbackURL: getCurrentCallbackURL(),
+        callbackURL: getGoogleLinkCallbackURL(getCurrentCallbackURL()),
         loginHint: mailbox.emailAddress,
       });
     } catch (error) {

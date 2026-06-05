@@ -8,8 +8,8 @@ export const Route = createFileRoute("/google-scope-repair")({
     const { search } = ctx as unknown as { search: Record<string, unknown> };
     throw redirect({
       search: {
-        tab: "mailboxes",
         ...search,
+        tab: "mailboxes",
       },
       to: "/settings",
     });
