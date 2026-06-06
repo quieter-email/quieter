@@ -182,11 +182,13 @@ const DomainRow = ({
 );
 
 export const DomainsView = ({
+  billingAccessUnknown,
   canManageDomains,
   canUseOrganizationDomains,
   onBack,
   organization,
 }: {
+  billingAccessUnknown: boolean;
   canManageDomains: boolean;
   canUseOrganizationDomains: boolean;
   onBack: () => void;
@@ -195,6 +197,7 @@ export const DomainsView = ({
   const domainsQuery = useQuery(organizationMailDomainsQueryOptions(organization.id));
   const domains = domainsQuery.data?.domains ?? [];
   const manageDomainsReason =
+    (billingAccessUnknown && "Could not load billing access.") ||
     (!canUseOrganizationDomains &&
       `Registering domains requires the ${BILLING_FEATURES.organizationDomains.requiredPlan} plan.`) ||
     (!canManageDomains && "Only admins and owners can register organization domains.") ||
@@ -244,7 +247,7 @@ export const DomainsView = ({
         ) : domains.length > 0 ? (
           domains.map((domain) => (
             <DomainRow
-              canManageDomains={canManageDomains && canUseOrganizationDomains}
+              canManageDomains={canManageDomains}
               domain={domain}
               key={domain.id}
               organizationId={organization.id}

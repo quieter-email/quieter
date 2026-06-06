@@ -74,6 +74,10 @@ const googleRefreshResponseSchema = z.object({
   scope: z.string().min(1).optional(),
   token_type: z.string().min(1),
 });
+const googleTokenErrorResponseSchema = z.object({
+  error: z.string().optional(),
+});
+const permanentGoogleTokenErrors = new Set(["invalid_grant", "invalid_token"]);
 
 const googleTokenInfoSchema = z.object({
   aud: z.string().min(1),
@@ -324,7 +328,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
 
 export const assertAccessibleMailbox = async (input: { mailboxId: string; userId: string }) => {
   const [ownedGmailMailbox] = await db
-    .select({ id: mailbox.id })
+    .select({ id: mailbox.id, provider: mailbox.provider })
     .from(mailbox)
     .where(
       and(
@@ -340,7 +344,7 @@ export const assertAccessibleMailbox = async (input: { mailboxId: string; userId
   }
 
   const [grantedManagedMailbox] = await db
-    .select({ id: mailbox.id })
+    .select({ id: mailbox.id, provider: mailbox.provider })
     .from(mailboxGrant)
     .innerJoin(mailbox, eq(mailbox.id, mailboxGrant.mailboxId))
     .innerJoin(
@@ -690,11 +694,25 @@ const refreshGmailAccessToken = async (record: {
   });
 
   if (!response.ok) {
-    await db
-      .update(mailbox)
-      .set({ status: "needs_reconnect", updatedAt: new Date() })
-      .where(eq(mailbox.id, record.id));
-    throw getGmailRepairRequiredError(record);
+    const errorBody = await response
+      .json()
+      .then((body: unknown) => googleTokenErrorResponseSchema.safeParse(body))
+      .catch(() => null);
+    const errorCode = errorBody?.success ? errorBody.data.error : undefined;
+    const isPermanentAuthFailure =
+      response.status === 400 ||
+      response.status === 401 ||
+      (errorCode != null && permanentGoogleTokenErrors.has(errorCode));
+
+    if (isPermanentAuthFailure) {
+      await db
+        .update(mailbox)
+        .set({ status: "needs_reconnect", updatedAt: new Date() })
+        .where(eq(mailbox.id, record.id));
+      throw getGmailRepairRequiredError(record);
+    }
+
+    throw new Error(`Google token refresh failed with status ${response.status}.`);
   }
 
   const refreshed = googleRefreshResponseSchema.parse(await response.json());

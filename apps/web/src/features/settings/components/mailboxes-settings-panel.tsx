@@ -115,6 +115,8 @@ export const MailboxesSettingsPanel = () => {
       toast.error(error instanceof Error ? error.message : "Could not start Gmail connection.");
     }
   };
+  const getMutationErrorMessage = (error: unknown, fallback: string) =>
+    error instanceof Error ? error.message : fallback;
 
   return (
     <div className="space-y-8">
@@ -187,11 +189,23 @@ export const MailboxesSettingsPanel = () => {
                             "text-muted-foreground": !isDefault,
                           })}
                           disabled={setDefaultMailboxMutation.isPending}
-                          onClick={() =>
-                            void setDefaultMailboxMutation.mutateAsync({
-                              mailboxId: isDefault ? null : mailbox.id,
-                            })
-                          }
+                          onClick={() => {
+                            setDefaultMailboxMutation.mutate(
+                              {
+                                mailboxId: isDefault ? null : mailbox.id,
+                              },
+                              {
+                                onError: (error) => {
+                                  toast.error(
+                                    getMutationErrorMessage(
+                                      error,
+                                      "Could not update default mailbox.",
+                                    ),
+                                  );
+                                },
+                              },
+                            );
+                          }}
                           size="sm"
                           type="button"
                           variant="ghost"
@@ -208,12 +222,21 @@ export const MailboxesSettingsPanel = () => {
                           <Select
                             disabled={moveGmailMailboxMutation.isPending}
                             items={placementItems}
-                            onValueChange={(value) =>
-                              void moveGmailMailboxMutation.mutateAsync({
-                                mailboxId: mailbox.id,
-                                organizationId: value === personalPlacementValue ? null : value,
-                              })
-                            }
+                            onValueChange={(value) => {
+                              moveGmailMailboxMutation.mutate(
+                                {
+                                  mailboxId: mailbox.id,
+                                  organizationId: value === personalPlacementValue ? null : value,
+                                },
+                                {
+                                  onError: (error) => {
+                                    toast.error(
+                                      getMutationErrorMessage(error, "Could not move mailbox."),
+                                    );
+                                  },
+                                },
+                              );
+                            }}
                             value={mailbox.organizationId ?? personalPlacementValue}
                           >
                             <SelectTrigger
@@ -250,11 +273,20 @@ export const MailboxesSettingsPanel = () => {
                           )}
                           <Button
                             disabled={disconnectMailboxMutation.isPending}
-                            onClick={() =>
-                              void disconnectMailboxMutation.mutateAsync({
-                                mailboxId: mailbox.id,
-                              })
-                            }
+                            onClick={() => {
+                              disconnectMailboxMutation.mutate(
+                                {
+                                  mailboxId: mailbox.id,
+                                },
+                                {
+                                  onError: (error) => {
+                                    toast.error(
+                                      getMutationErrorMessage(error, "Could not remove mailbox."),
+                                    );
+                                  },
+                                },
+                              );
+                            }}
                             size="sm"
                             type="button"
                             variant="ghost"
@@ -361,12 +393,21 @@ export const MailboxesSettingsPanel = () => {
                 !managedOrganizationId ||
                 createManagedMailboxMutation.isPending
               }
-              onClick={() =>
-                void createManagedMailboxMutation.mutateAsync({
-                  emailAddress: `${trimmedLocalPart}@${selectedDomain}`,
-                  organizationId: managedOrganizationId,
-                })
-              }
+              onClick={() => {
+                createManagedMailboxMutation.mutate(
+                  {
+                    emailAddress: `${trimmedLocalPart}@${selectedDomain}`,
+                    organizationId: managedOrganizationId,
+                  },
+                  {
+                    onError: (error) => {
+                      toast.error(
+                        getMutationErrorMessage(error, "Could not create managed mailbox."),
+                      );
+                    },
+                  },
+                );
+              }}
               size="sm"
               type="button"
             >

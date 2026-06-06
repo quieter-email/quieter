@@ -62,16 +62,17 @@ export const OrganizationDetailView = ({
     organization: ["update"],
   });
   const currentPlan = normalizeBillingPlan(billingQuery.data?.plan);
+  const billingAccessUnknown = billingQuery.isError;
   const canUseOrganizationDomains =
-    !billingQuery.isPending &&
+    billingQuery.isSuccess &&
     (!!billingQuery.data?.hasUnlimitedAccess ||
       hasBillingPlanAccess(currentPlan, BILLING_FEATURES.organizationDomains.requiredPlan));
   const canUseOrganizationApiKeys =
-    !billingQuery.isPending &&
+    billingQuery.isSuccess &&
     (!!billingQuery.data?.hasUnlimitedAccess ||
       hasBillingPlanAccess(currentPlan, BILLING_FEATURES.organizationApiKeys.requiredPlan));
   const canUseOrganizationMail =
-    !billingQuery.isPending &&
+    billingQuery.isSuccess &&
     (!!billingQuery.data?.hasUnlimitedAccess ||
       hasBillingPlanAccess(currentPlan, BILLING_FEATURES.organizationMail.requiredPlan));
 
@@ -115,6 +116,7 @@ export const OrganizationDetailView = ({
   if (view === "domains") {
     return (
       <DomainsView
+        billingAccessUnknown={billingAccessUnknown}
         canManageDomains={canUpdateOrganization}
         canUseOrganizationDomains={canUseOrganizationDomains}
         onBack={onBackToOrganization}
@@ -126,6 +128,7 @@ export const OrganizationDetailView = ({
   if (view === "api-keys") {
     return (
       <ApiKeysView
+        billingAccessUnknown={billingAccessUnknown}
         canManageApiKeys={canUpdateOrganization}
         canUseOrganizationApiKeys={canUseOrganizationApiKeys}
         onBack={onBackToOrganization}
@@ -137,6 +140,7 @@ export const OrganizationDetailView = ({
   return (
     <OrganizationOverviewView
       activeRole={activeRole}
+      billingAccessUnknown={billingAccessUnknown}
       canDeleteOrganization={canDeleteOrganization}
       canUpdateOrganization={canUpdateOrganization}
       canUseOrganizationApiKeys={canUseOrganizationApiKeys}

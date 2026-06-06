@@ -31,6 +31,7 @@ import { MutedActionButton, SettingsRow } from "./settings-row";
 
 export const OrganizationOverviewView = ({
   activeRole,
+  billingAccessUnknown,
   canDeleteOrganization,
   canUpdateOrganization,
   canUseOrganizationApiKeys,
@@ -45,6 +46,7 @@ export const OrganizationOverviewView = ({
   fullOrganization,
 }: {
   activeRole: OrganizationRoleOption | null;
+  billingAccessUnknown: boolean;
   canDeleteOrganization: boolean;
   canUpdateOrganization: boolean;
   canUseOrganizationApiKeys: boolean;
@@ -58,8 +60,14 @@ export const OrganizationOverviewView = ({
   pendingInvitationsCount: number;
   fullOrganization: FullOrganization;
 }) => {
-  const apiKeysQuery = useQuery(organizationApiKeysQueryOptions(organization.id));
-  const domainsQuery = useQuery(organizationMailDomainsQueryOptions(organization.id));
+  const apiKeysQuery = useQuery({
+    ...organizationApiKeysQueryOptions(organization.id),
+    enabled: canUseOrganizationApiKeys && !!organization.id,
+  });
+  const domainsQuery = useQuery({
+    ...organizationMailDomainsQueryOptions(organization.id),
+    enabled: canUseOrganizationDomains && !!organization.id,
+  });
   const ownerCount = fullOrganization.members.filter((member) =>
     hasOrganizationRole(member.role, "owner"),
   ).length;
@@ -75,20 +83,24 @@ export const OrganizationOverviewView = ({
   ]
     .filter(Boolean)
     .join(", ");
-  const domainsSummary = !canUseOrganizationDomains
-    ? `Requires ${BILLING_FEATURES.organizationDomains.requiredPlan}`
-    : domainsQuery.isPending
-      ? "Loading domains…"
-      : domainsQuery.isError
-        ? "Could not load domains."
-        : formatCount(domainsQuery.data.domains.length, "Domain", "Domains");
-  const apiKeysSummary = !canUseOrganizationApiKeys
-    ? `Requires ${BILLING_FEATURES.organizationApiKeys.requiredPlan}`
-    : apiKeysQuery.isPending
-      ? "Loading API keys…"
-      : apiKeysQuery.isError
-        ? "Could not load API keys."
-        : formatCount(apiKeysQuery.data.apiKeys.length, "API Key", "API Keys");
+  const domainsSummary = billingAccessUnknown
+    ? "Could not load billing access."
+    : !canUseOrganizationDomains
+      ? `Requires ${BILLING_FEATURES.organizationDomains.requiredPlan}`
+      : domainsQuery.isPending
+        ? "Loading domains…"
+        : domainsQuery.isError
+          ? "Could not load domains."
+          : formatCount(domainsQuery.data.domains.length, "Domain", "Domains");
+  const apiKeysSummary = billingAccessUnknown
+    ? "Could not load billing access."
+    : !canUseOrganizationApiKeys
+      ? `Requires ${BILLING_FEATURES.organizationApiKeys.requiredPlan}`
+      : apiKeysQuery.isPending
+        ? "Loading API keys…"
+        : apiKeysQuery.isError
+          ? "Could not load API keys."
+          : formatCount(apiKeysQuery.data.apiKeys.length, "API Key", "API Keys");
 
   return (
     <section className="space-y-6">
@@ -169,6 +181,7 @@ export const OrganizationOverviewView = ({
         />
 
         <OrganizationMailUsageSettings
+          billingAccessUnknown={billingAccessUnknown}
           canManageOrganizationMailUsage={canUpdateOrganization}
           canUseOrganizationMail={canUseOrganizationMail}
           organizationId={organization.id}

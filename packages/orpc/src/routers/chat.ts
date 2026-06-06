@@ -146,10 +146,8 @@ export const chatRouter = {
     .handler(async ({ context, input }) => {
       const authorizedChat = await getAuthorizedChat(input.chatId, input.mailboxId, context.userId);
 
-      await db.transaction(async (tx) => {
-        await tx.delete(chatMessage).where(eq(chatMessage.chatId, authorizedChat.id));
-        await tx.delete(chat).where(eq(chat.id, authorizedChat.id));
-      });
+      await db.delete(chatMessage).where(eq(chatMessage.chatId, authorizedChat.id));
+      await db.delete(chat).where(eq(chat.id, authorizedChat.id));
 
       return { deleted: true, id: authorizedChat.id };
     }),
@@ -198,42 +196,40 @@ export const chatRouter = {
       const now = new Date();
       const fallbackTitle = createFallbackTitle(input.messages);
 
-      const [updatedChat] = await db.transaction(async (tx) => {
-        await tx.delete(chatMessage).where(eq(chatMessage.chatId, authorizedChat.id));
+      await db.delete(chatMessage).where(eq(chatMessage.chatId, authorizedChat.id));
 
-        if (input.messages.length > 0) {
-          await tx.insert(chatMessage).values(
-            input.messages.map((message, position) => {
-              const createdAt = message.createdAt ?? now;
-              const parts = message.parts as ChatMessagePart[];
+      if (input.messages.length > 0) {
+        await db.insert(chatMessage).values(
+          input.messages.map((message, position) => {
+            const createdAt = message.createdAt ?? now;
+            const parts = message.parts as ChatMessagePart[];
 
-              return {
-                chatId: authorizedChat.id,
-                createdAt,
-                id: message.id,
-                parts,
-                position,
-                role: message.role,
-                userId: context.userId,
-              };
-            }),
-          );
-        }
+            return {
+              chatId: authorizedChat.id,
+              createdAt,
+              id: message.id,
+              parts,
+              position,
+              role: message.role,
+              userId: context.userId,
+            };
+          }),
+        );
+      }
 
-        return await tx
-          .update(chat)
-          .set({
-            title: sql<string | null>`coalesce(${chat.title}, ${fallbackTitle})`,
-            updatedAt: now,
-          })
-          .where(eq(chat.id, authorizedChat.id))
-          .returning({
-            createdAt: chat.createdAt,
-            id: chat.id,
-            title: chat.title,
-            updatedAt: chat.updatedAt,
-          });
-      });
+      const [updatedChat] = await db
+        .update(chat)
+        .set({
+          title: sql<string | null>`coalesce(${chat.title}, ${fallbackTitle})`,
+          updatedAt: now,
+        })
+        .where(eq(chat.id, authorizedChat.id))
+        .returning({
+          createdAt: chat.createdAt,
+          id: chat.id,
+          title: chat.title,
+          updatedAt: chat.updatedAt,
+        });
 
       return updatedChat!;
     }),

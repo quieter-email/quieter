@@ -8,7 +8,7 @@ import {
   type OrganizationMailUsageAlertTarget,
   type OrganizationMailUsageDirection,
 } from "@quieter/database";
-import { and, eq, gte, lt } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { PaidBillingPlan } from "./plans";
 import { getOrganizationBillingEntitlement } from "./entitlements";
 import { getPolarClient, getPolarOrganizationId } from "./polar";
@@ -207,10 +207,10 @@ const getPeriodUsageMicroCents = async (input: {
   organizationId: string;
   start: Date;
 }) => {
-  const rows = await db
+  const [usage] = await db
     .select({
-      billableCostMicroCents: organizationMailUsageEvent.billableCostMicroCents,
-      sesCostMicroCents: organizationMailUsageEvent.sesCostMicroCents,
+      billableCostMicroCents: sql<number>`coalesce(sum(${organizationMailUsageEvent.billableCostMicroCents}), 0)`,
+      sesCostMicroCents: sql<number>`coalesce(sum(${organizationMailUsageEvent.sesCostMicroCents}), 0)`,
     })
     .from(organizationMailUsageEvent)
     .where(
@@ -219,15 +219,13 @@ const getPeriodUsageMicroCents = async (input: {
         gte(organizationMailUsageEvent.createdAt, input.start),
         lt(organizationMailUsageEvent.createdAt, input.end),
       ),
-    );
+    )
+    .limit(1);
 
-  return rows.reduce(
-    (totals, row) => ({
-      billableCostMicroCents: totals.billableCostMicroCents + row.billableCostMicroCents,
-      sesCostMicroCents: totals.sesCostMicroCents + row.sesCostMicroCents,
-    }),
-    { billableCostMicroCents: 0, sesCostMicroCents: 0 },
-  );
+  return {
+    billableCostMicroCents: Number(usage?.billableCostMicroCents ?? 0),
+    sesCostMicroCents: Number(usage?.sesCostMicroCents ?? 0),
+  };
 };
 
 const getEventOverage = (input: {
@@ -493,6 +491,26 @@ export const recordOrganizationMailUsage = async (input: OrganizationMailUsageIn
   const rawBillableCostMicroCents = entitlement.hasUnlimitedAccess
     ? 0
     : eventOverage.billableCostMicroCents;
+
+  if (rawBillableCostMicroCents > 0 && !settings.overageEnabled) {
+    throw new ORPCError("FORBIDDEN", {
+      message: "Managed Usage overage is disabled for this organization.",
+      status: 403,
+    });
+  }
+
+  if (
+    rawBillableCostMicroCents > 0 &&
+    settings.monthlyOverageLimitMicroCents != null &&
+    usage.billableCostMicroCents + rawBillableCostMicroCents >
+      settings.monthlyOverageLimitMicroCents
+  ) {
+    throw new ORPCError("FORBIDDEN", {
+      message: "Managed Usage overage limit reached for this billing period.",
+      status: 403,
+    });
+  }
+
   const billableCostMicroCents = entitlement.hasUnlimitedAccess
     ? 0
     : applyOrganizationMailUsageSettings({
@@ -611,7 +629,12 @@ export const recordInboundOrganizationMailUsage = async (input: {
     new Set(input.recipients.map((recipient) => recipient.trim().toLowerCase()).filter(Boolean)),
   );
   const domains = Array.from(
-    new Set(normalizedRecipients.map((recipient) => recipient.split("@").at(1)).filter(Boolean)),
+    new Set(
+      normalizedRecipients.flatMap((recipient) => {
+        const domain = recipient.split("@").at(1);
+        return domain ? [domain] : [];
+      }),
+    ),
   );
 
   if (domains.length === 0) return;
@@ -622,10 +645,8 @@ export const recordInboundOrganizationMailUsage = async (input: {
       organizationId: mailDomain.organizationId,
     })
     .from(mailDomain)
-    .where(eq(mailDomain.status, "verified"));
-  const organizationIds = new Set(
-    domainRows.filter((row) => domains.includes(row.domain)).map((row) => row.organizationId),
-  );
+    .where(and(eq(mailDomain.status, "verified"), inArray(mailDomain.domain, domains)));
+  const organizationIds = new Set(domainRows.map((row) => row.organizationId));
 
   await Promise.all(
     Array.from(organizationIds).map(async (organizationId) => {

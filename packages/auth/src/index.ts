@@ -21,9 +21,9 @@ import {
   cleanupMailboxesForDeletedOrganization,
   cleanupOrganizationsForDeletedUser,
 } from "./organization";
+import { ORGANIZATION_API_KEY_CONFIG_ID } from "./organization-api-key";
 
 const appName = process.env.BETTER_AUTH_APP_NAME ?? "quieter";
-const organizationApiKeyConfigId = "organization";
 const organizationAccessControl = createAccessControl({
   ...defaultStatements,
   apiKey: ["create", "read", "update", "delete"],
@@ -163,7 +163,7 @@ export const auth = betterAuth({
       },
     }),
     apiKey({
-      configId: organizationApiKeyConfigId,
+      configId: ORGANIZATION_API_KEY_CONFIG_ID,
       defaultPrefix: "quieter_",
       references: "organization",
     }),

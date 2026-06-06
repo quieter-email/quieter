@@ -1,5 +1,6 @@
 import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
 import { ORPCError } from "@orpc/server";
+import { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
 import {
   assertCanConsumeOrganizationMailUsage,
   estimateOutboundOrganizationMailUsage,
@@ -9,7 +10,7 @@ import { db, mailDomain } from "@quieter/database";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
-export const ORGANIZATION_API_KEY_CONFIG_ID = "organization";
+export { ORGANIZATION_API_KEY_CONFIG_ID };
 
 export const organizationMailMessageSchema = z
   .object({

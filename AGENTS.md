@@ -77,7 +77,7 @@
 - Subscriptions are user-scoped in `billingSubscription`; checkout metadata must include the Quieter user id and plan so Polar webhooks can reconcile the subscription.
 - Paid plans are `managed` and `pro`. Gmail and BYOK remain available without checkout.
 - Managed and Pro Polar products are defined in code and synced through PayKit/Polar at checkout. The Polar webhook posts to `/api/billing/polar-webhook` and uses `POLAR_WEBHOOK_SECRET`.
-- Organization mail SES usage is metered in `organizationMailUsageEvent`. Managed and Pro include $10 raw SES usage per billing period; overage events are sent to Polar at SES + 5%.
+- Organization mail SES usage is metered in `organizationMailUsageEvent`. Managed and Pro include $10 raw SES usage per billing period; overage events are sent to Polar at SES + 5% for Managed and SES + 2% for Pro.
 
 ## Schema + Generated Files
 

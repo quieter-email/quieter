@@ -9,6 +9,7 @@ import {
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import {
   AlertDialog,
@@ -46,11 +47,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
-import {
-  getOrganizationApiKeysQueryKey,
-  organizationApiKeysQueryOptions,
-  ORGANIZATION_API_KEY_CONFIG_ID,
-} from "./api-keys";
+import { getOrganizationApiKeysQueryKey, organizationApiKeysQueryOptions } from "./api-keys";
 import { formatCount, type FullOrganization } from "./domain";
 import { MutedActionButton } from "./settings-row";
 
@@ -470,11 +467,13 @@ const ApiKeyRow = ({
 );
 
 export const ApiKeysView = ({
+  billingAccessUnknown,
   canManageApiKeys,
   canUseOrganizationApiKeys,
   onBack,
   organization,
 }: {
+  billingAccessUnknown: boolean;
   canManageApiKeys: boolean;
   canUseOrganizationApiKeys: boolean;
   onBack: () => void;
@@ -483,6 +482,7 @@ export const ApiKeysView = ({
   const apiKeysQuery = useQuery(organizationApiKeysQueryOptions(organization.id));
   const apiKeys = (apiKeysQuery.data?.apiKeys ?? []) as OrganizationApiKey[];
   const manageApiKeysReason =
+    (billingAccessUnknown && "Could not load billing access.") ||
     (!canUseOrganizationApiKeys &&
       `Creating API keys requires the ${BILLING_FEATURES.organizationApiKeys.requiredPlan} plan.`) ||
     (!canManageApiKeys && "Only admins and owners can create API keys.") ||

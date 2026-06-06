@@ -64,7 +64,7 @@ export const LeaveOrganizationDialog = ({
         resetDialog();
       } catch (mutationError) {
         setSubmitError(
-          (mutationError as { message?: string })?.message ?? "Could not leave organization.",
+          mutationError instanceof Error ? mutationError.message : "Could not leave organization.",
         );
       }
     },
@@ -214,7 +214,7 @@ export const DeleteOrganizationDialog = ({
         resetDialog();
       } catch (mutationError) {
         setSubmitError(
-          (mutationError as { message?: string })?.message ?? "Could not delete organization.",
+          mutationError instanceof Error ? mutationError.message : "Could not delete organization.",
         );
       }
     },

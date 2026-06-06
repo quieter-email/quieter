@@ -439,7 +439,7 @@ const updateDemoState = (updater: (state: DemoMailState) => DemoMailState) => {
 const invalidateDemoMail = async (queryClient: QueryClient) => {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: ["messages", DEMO_MAILBOX_ID] }),
-    queryClient.invalidateQueries({ queryKey: ["message-thread"] }),
+    queryClient.invalidateQueries({ queryKey: ["message-thread", DEMO_MAILBOX_ID] }),
     queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() }),
   ]);
 };

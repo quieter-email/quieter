@@ -450,10 +450,12 @@ const ManagedUsageSettingsForm = ({
 };
 
 export const OrganizationMailUsageSettings = ({
+  billingAccessUnknown,
   canManageOrganizationMailUsage,
   canUseOrganizationMail,
   organizationId,
 }: {
+  billingAccessUnknown: boolean;
   canManageOrganizationMailUsage: boolean;
   canUseOrganizationMail: boolean;
   organizationId: string;
@@ -461,6 +463,10 @@ export const OrganizationMailUsageSettings = ({
   const usageQuery = useQuery(
     organizationMailUsageQueryOptions(organizationId, canUseOrganizationMail),
   );
+
+  if (billingAccessUnknown) {
+    return <ManagedUsageUnavailable message="Could not load billing access." />;
+  }
 
   if (!canUseOrganizationMail) {
     return <ManagedUsageUnavailable message="Available on Managed and Pro." />;

@@ -5,6 +5,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./google-scopes": "./src/google-scopes.ts",
+    "./organization-api-key": "./src/organization-api-key.ts",
     "./user-status": "./src/user-status.ts",
     "./workspace": "./src/workspace.ts"
   },

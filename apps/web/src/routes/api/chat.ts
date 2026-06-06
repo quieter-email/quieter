@@ -80,10 +80,17 @@ export const Route = createFileRoute("/api/chat")({
         }
 
         try {
-          await assertAccessibleMailbox({
+          const accessibleMailbox = await assertAccessibleMailbox({
             mailboxId: chatContext.mailboxId,
             userId: user.id,
           });
+
+          if (accessibleMailbox.provider !== "gmail") {
+            return Response.json(
+              { error: "AI chat search currently supports Gmail mailboxes only." },
+              { status: 400 },
+            );
+          }
 
           if (chatContext.chatId) {
             const rpc = createOrpcServerClient({ headers: request.headers });

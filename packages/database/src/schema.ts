@@ -230,6 +230,7 @@ export const mailbox = pgTable(
         (${table.provider} = 'managed' and ${table.ownerUserId} is null and ${table.organizationId} is not null)
       )`,
     ),
+    check("mailbox_provider_check", sql`${table.provider} in ('gmail', 'managed')`),
     check("mailbox_status_check", sql`${table.status} in ('connected', 'needs_reconnect')`),
     index("mailbox_owner_user_id_idx").on(table.ownerUserId),
     index("mailbox_organization_id_idx").on(table.organizationId),
