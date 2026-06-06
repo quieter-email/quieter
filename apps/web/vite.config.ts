@@ -10,16 +10,18 @@ import { defineConfig } from "vite";
 const motionPackages = ["motion", "framer-motion", "motion-dom", "motion-utils"] as const;
 
 export default defineConfig(({ command }) => {
-  const isSentryEnabled = command !== "serve" && !!process.env.SENTRY_AUTH_TOKEN;
+  const isDev = command === "serve";
+  const isSentryEnabled = !isDev && !!process.env.SENTRY_AUTH_TOKEN;
 
   return {
     build: {
+      chunkSizeWarningLimit: 1200,
       sourcemap: isSentryEnabled,
     },
     plugins: [
       tanstackStart(),
       viteReact(),
-      reactScan(),
+      ...(isDev ? [reactScan()] : []),
       babel({
         presets: [reactCompilerPreset()],
       }),
@@ -29,13 +31,12 @@ export default defineConfig(({ command }) => {
         ? [
             sentryTanstackStart({
               authToken: process.env.SENTRY_AUTH_TOKEN,
+              autoInstrumentMiddleware: false,
               org: process.env.SENTRY_ORG,
               project: process.env.SENTRY_PROJECT,
               sourcemaps: {
-                filesToDeleteAfterUpload: [
-                  "./.vercel/output/**/*.map",
-                  "./node_modules/.nitro/**/*.map",
-                ],
+                assets: ["./.vercel/output/static/**/*.js"],
+                filesToDeleteAfterUpload: ["./.vercel/output/static/**/*.map"],
               },
               telemetry: false,
             }),
