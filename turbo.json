@@ -8,8 +8,11 @@
       "dependsOn": ["^build"],
       "env": [
         "BETTER_AUTH_SECRET",
-        "GOOGLE_CLIENT_ID",
-        "GOOGLE_CLIENT_SECRET",
+        "GOOGLE_AUTH_CLIENT_ID",
+        "GOOGLE_AUTH_CLIENT_SECRET",
+        "GOOGLE_GMAIL_CLIENT_ID",
+        "GOOGLE_GMAIL_CLIENT_SECRET",
+        "GMAIL_TOKEN_ENCRYPTION_KEY",
         "DATABASE_URL",
         "VITE_LOGO_DEV_PUBLISHABLE_KEY",
         "OPENROUTER_API_KEY",
@@ -92,8 +95,11 @@
     "dev": {
       "env": [
         "BETTER_AUTH_SECRET",
-        "GOOGLE_CLIENT_ID",
-        "GOOGLE_CLIENT_SECRET",
+        "GOOGLE_AUTH_CLIENT_ID",
+        "GOOGLE_AUTH_CLIENT_SECRET",
+        "GOOGLE_GMAIL_CLIENT_ID",
+        "GOOGLE_GMAIL_CLIENT_SECRET",
+        "GMAIL_TOKEN_ENCRYPTION_KEY",
         "DATABASE_URL",
         "AWS_REGION",
         "AWS_DEFAULT_REGION",

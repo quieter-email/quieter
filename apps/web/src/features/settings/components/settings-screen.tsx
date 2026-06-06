@@ -33,8 +33,8 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
       search: (previous) => ({
         ...previous,
         tab: nextTab,
-        teamId: "",
-        teamView: "overview",
+        organizationId: "",
+        organizationView: "overview",
       }),
       to: ".",
     });

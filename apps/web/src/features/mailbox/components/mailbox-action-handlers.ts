@@ -5,8 +5,6 @@ import type { MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import {
   deleteDraftInMailbox,
-  deleteMessagePermanentlyInMailbox,
-  deleteThreadPermanentlyInMailbox,
   markMessageAsReadInMailbox,
   markMessageAsSpamInMailbox,
   markMessageAsUnreadInMailbox,
@@ -231,12 +229,6 @@ export const createMailboxActionHandlers = ({
   return {
     deleteDraft,
     deleteDrafts,
-    deleteMessagePermanently: (messageId: string) =>
-      runMailboxMessageAction(messageId, deleteMessagePermanentlyInMailbox),
-    deleteThreadPermanently: (threadId: string) =>
-      runMailboxThreadAction(threadId, deleteThreadPermanentlyInMailbox),
-    deleteThreadsPermanently: (threads: ThreadListEntry[]) =>
-      runBulkMailboxThreadAction(threads, deleteThreadPermanentlyInMailbox),
     markMessageAsRead: (messageId: string) =>
       runMailboxMessageAction(messageId, markMessageAsReadInMailbox),
     markMessageAsSpam: (messageId: string) =>

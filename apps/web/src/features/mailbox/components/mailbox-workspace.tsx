@@ -1,7 +1,6 @@
 "use client";
 
 import type { RouterOutputs } from "@quieter/orpc";
-import { toast } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLayoutEffect, useRef, useState } from "react";
 import type { ComposeDraftState } from "~/features/compose";
@@ -10,14 +9,7 @@ import { LoadingPage } from "~/components/loading-page";
 import { type ComposeDialogHandle, ComposeDialog } from "~/features/compose";
 import { useDemoModeEnabled } from "~/features/settings/domain/demo-mode-setting";
 import { chatsQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-query";
-import {
-  getGoogleLinkCallbackURL,
-  openGoogleAccountLink,
-  readPendingGmailLink,
-  writePendingGmailLink,
-  type PendingGmailLinkState,
-} from "~/lib/google-account-link";
-import { getMailboxesQueryKey } from "~/lib/mailboxes-query";
+import { openGoogleAccountLink } from "~/lib/google-account-link";
 import { orpc } from "~/lib/orpc";
 import type { MailboxWorkspaceView } from "../domain/mailbox-workspace-view";
 import { MailboxWorkspaceContent } from "./mailbox-workspace/mailbox-workspace-content";
@@ -47,36 +39,39 @@ const useChatSidebarActions = ({
   const queryClient = useQueryClient();
   const renameChatMutation = useMutation({
     ...orpc.chat.rename.mutationOptions(),
-    onMutate: () => ({ mailboxId: selectedMailboxId }),
-    onSuccess: async (_updatedChat, variables, context) => {
+    onSuccess: async (_updatedChat, variables) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: getChatsQueryKey(context.mailboxId) }),
+        queryClient.invalidateQueries({ queryKey: getChatsQueryKey(variables.mailboxId) }),
         queryClient.invalidateQueries({
-          queryKey: getChatQueryKey(context.mailboxId, variables.chatId),
+          queryKey: getChatQueryKey(variables.mailboxId, variables.chatId),
         }),
       ]);
     },
   });
   const deleteChatMutation = useMutation({
     ...orpc.chat.delete.mutationOptions(),
-    onMutate: () => ({ mailboxId: selectedMailboxId }),
-    onSuccess: async (_result, variables, context) => {
+    onSuccess: async (_result, variables) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: getChatsQueryKey(context.mailboxId) }),
+        queryClient.invalidateQueries({ queryKey: getChatsQueryKey(variables.mailboxId) }),
         queryClient.removeQueries({
-          queryKey: getChatQueryKey(context.mailboxId, variables.chatId),
+          queryKey: getChatQueryKey(variables.mailboxId, variables.chatId),
         }),
       ]);
     },
   });
 
   const deleteChat = async (deletedChatId: string) => {
+    if (!selectedMailboxId) return;
+
     const nextChatId =
       deletedChatId === activeChatId
         ? (chats.find((existingChat) => existingChat.id !== deletedChatId)?.id ?? null)
         : null;
 
-    await deleteChatMutation.mutateAsync({ chatId: deletedChatId });
+    await deleteChatMutation.mutateAsync({
+      chatId: deletedChatId,
+      mailboxId: selectedMailboxId,
+    });
 
     if (deletedChatId === activeChatId) {
       void setMailboxSearch({
@@ -89,17 +84,11 @@ const useChatSidebarActions = ({
 
   return {
     deleteChat,
-    renameChat: (chatId: string, title: string) =>
-      renameChatMutation.mutateAsync({ chatId, title }),
+    renameChat: (chatId: string, title: string) => {
+      if (!selectedMailboxId) return;
+      return renameChatMutation.mutateAsync({ chatId, mailboxId: selectedMailboxId, title });
+    },
   };
-};
-
-const getCurrentCallbackURL = () => {
-  if (typeof window === "undefined") {
-    return "/";
-  }
-
-  return `${window.location.pathname}${window.location.search}${window.location.hash}` || "/";
 };
 
 export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
@@ -107,9 +96,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const composeDialogRef = useRef<ComposeDialogHandle | null>(null);
   const [draftChatVersion, setDraftChatVersion] = useState(0);
   const [gmailReconnectError, setGmailReconnectError] = useState<string | null>(null);
-  const [pendingGmailLink, setPendingGmailLink] = useState<PendingGmailLinkState | null>(() =>
-    readPendingGmailLink(),
-  );
+  const [isStartingGmailConnection, setIsStartingGmailConnection] = useState(false);
   const [startingReconnectMailboxId, setStartingReconnectMailboxId] = useState<string | null>(null);
   const chatViewLeftAtRef = useRef<number | null>(null);
   const { activeMailbox, chatId, mailboxId, query, setMailboxSearch, view } =
@@ -127,50 +114,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     updateMailboxSwitcherOrderMutation,
   } = useMailboxSelection({ isDemoMode, mailboxId, queryClient });
   const chatsQuery = useQuery(chatsQueryOptions(selectedMailboxId));
-  const reconnectingMailboxId =
-    startingReconnectMailboxId ??
-    (pendingGmailLink?.mode === "reconnect" ? (pendingGmailLink.mailboxId ?? null) : null);
-  useQuery({
-    enabled: pendingGmailLink?.mode === "reconnect" && pendingGmailLink.readyToFinalize === true,
-    queryKey: ["mailboxes", "finish-gmail-link", pendingGmailLink?.startedAt],
-    queryFn: async () => {
-      if (!pendingGmailLink || pendingGmailLink.mode !== "reconnect") {
-        return null;
-      }
-
-      await queryClient.invalidateQueries({
-        queryKey: getMailboxesQueryKey(),
-      });
-
-      const result = await mailboxesQuery.refetch({
-        cancelRefetch: true,
-      });
-
-      if (result.isError) {
-        writePendingGmailLink(null);
-        setPendingGmailLink(null);
-        setStartingReconnectMailboxId(null);
-        toast.error("Could not finish Google reconnect.");
-        return result;
-      }
-
-      writePendingGmailLink(null);
-      setPendingGmailLink(null);
-      setStartingReconnectMailboxId(null);
-
-      const reconnectedMailbox = result.data?.groups
-        .flatMap((group) => group.mailboxes)
-        .find((mailbox) => mailbox.id === pendingGmailLink.mailboxId);
-
-      if (reconnectedMailbox?.connectionStatus === "connected") {
-        toast.success("Google reconnected.");
-        return result;
-      }
-
-      setGmailReconnectError("Google did not reconnect that account. Try again and choose it.");
-      return result;
-    },
-  });
+  const reconnectingMailboxId = startingReconnectMailboxId;
 
   useLayoutEffect(() => {
     if (!isDemoMode && mailboxesQuery.isPending) {
@@ -178,15 +122,40 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     }
 
     const normalizedMailboxId = mailboxId?.trim() || null;
-    if (normalizedMailboxId === selectedMailboxId) {
+    if (
+      normalizedMailboxId === selectedMailboxId &&
+      (selectedMailboxId || (view === "inbox" && !chatId))
+    ) {
       return;
     }
 
     void setMailboxSearch({
+      chatId: normalizedMailboxId === selectedMailboxId && selectedMailboxId ? undefined : null,
       mailboxId: selectedMailboxId,
       messageId: null,
+      view: selectedMailboxId ? undefined : "inbox",
     });
-  }, [isDemoMode, mailboxId, mailboxesQuery.isPending, selectedMailboxId, setMailboxSearch]);
+  }, [
+    chatId,
+    isDemoMode,
+    mailboxId,
+    mailboxesQuery.isPending,
+    selectedMailboxId,
+    setMailboxSearch,
+    view,
+  ]);
+
+  useLayoutEffect(() => {
+    if (view !== "chat" || !selectedMailboxId || chatsQuery.isPending) return;
+
+    if (chatId && !chatsQuery.data?.some((existingChat) => existingChat.id === chatId)) {
+      void setMailboxSearch({
+        chatId: chatsQuery.data?.[0]?.id ?? null,
+        mailboxId: selectedMailboxId,
+        view: "chat",
+      });
+    }
+  }, [chatId, chatsQuery.data, chatsQuery.isPending, selectedMailboxId, setMailboxSearch, view]);
 
   const openComposeDraft = (draft: ComposeDraftState) => {
     composeDialogRef.current?.openDraft(draft);
@@ -240,30 +209,34 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   });
   const reconnectMailbox = async (mailbox: { emailAddress: string; id: string }) => {
     setGmailReconnectError(null);
-
-    const nextPendingGmailLink = {
-      mailboxCount: mailboxes.length,
-      mailboxId: mailbox.id,
-      mode: "reconnect",
-      readyToFinalize: false,
-      startedAt: Date.now(),
-    } satisfies PendingGmailLinkState;
-
-    writePendingGmailLink(nextPendingGmailLink);
-    setPendingGmailLink(nextPendingGmailLink);
     setStartingReconnectMailboxId(mailbox.id);
 
     try {
       await openGoogleAccountLink({
-        callbackURL: getGoogleLinkCallbackURL(getCurrentCallbackURL()),
-        loginHint: mailbox.emailAddress,
+        mailboxId: mailbox.id,
+        returnTo:
+          `${window.location.pathname}${window.location.search}${window.location.hash}` || "/",
       });
     } catch (error) {
-      writePendingGmailLink(null);
-      setPendingGmailLink(null);
       setStartingReconnectMailboxId(null);
       setGmailReconnectError(
         (error as { message?: string })?.message ?? "Could not start Google reconnect.",
+      );
+    }
+  };
+  const connectGmail = async () => {
+    setGmailReconnectError(null);
+    setIsStartingGmailConnection(true);
+
+    try {
+      await openGoogleAccountLink({
+        returnTo:
+          `${window.location.pathname}${window.location.search}${window.location.hash}` || "/",
+      });
+    } catch (error) {
+      setIsStartingGmailConnection(false);
+      setGmailReconnectError(
+        error instanceof Error ? error.message : "Could not start Gmail connection.",
       );
     }
   };
@@ -298,9 +271,13 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         }}
         chatId={chatId ?? null}
         draftChatKey={`new-chat-${draftChatVersion}`}
+        isConnectingGmail={isStartingGmailConnection}
         isDemoMode={isDemoMode}
         chats={chatsQuery.data ?? []}
         mailboxGroups={mailboxGroups}
+        onConnectGmail={() => {
+          void connectGmail();
+        }}
         onComposeDraftRequested={openComposeDraft}
         onComposeNewMail={() => composeDialogRef.current?.openNewMail()}
         onMobileOpenChange={setIsMobileSidebarOpen}
@@ -336,7 +313,11 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         onSelectMailbox={selectMailbox}
         onSelectMailboxId={(nextMailboxId) => {
           if (nextMailboxId === selectedMailboxId) return;
-          void setMailboxSearch({ mailboxId: nextMailboxId, messageId: null });
+          void setMailboxSearch({
+            chatId: view === "chat" ? null : undefined,
+            mailboxId: nextMailboxId,
+            messageId: null,
+          });
         }}
         onSelectView={selectView}
         onChatIdChange={(nextChatId) => {

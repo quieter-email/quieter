@@ -12,7 +12,7 @@ import {
 } from "./domain";
 import { InviteMemberForm } from "./invite-member-form";
 import { MemberActions } from "./member-actions";
-import { PendingTeamInvitations } from "./pending-team-invitations";
+import { PendingOrganizationInvitations } from "./pending-organization-invitations";
 
 export const MembersView = ({
   activeMember,
@@ -110,7 +110,7 @@ export const MembersView = ({
         )}
       </div>
 
-      <PendingTeamInvitations
+      <PendingOrganizationInvitations
         canCancelInvitations={permissions.canCancelInvitations}
         invitations={organization.invitations}
         organizationId={organization.id}

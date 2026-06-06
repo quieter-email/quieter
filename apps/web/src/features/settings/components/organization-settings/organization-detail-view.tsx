@@ -4,7 +4,7 @@ import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { BILLING_FEATURES, hasBillingPlanAccess } from "@quieter/billing/plans";
 import { useQuery } from "@tanstack/react-query";
-import type { TeamSettingsView } from "~/features/settings/domain/team-settings-view";
+import type { OrganizationSettingsView } from "~/features/settings/domain/organization-settings-view";
 import { normalizeBillingPlan, userBillingQueryOptions } from "~/features/settings/domain/billing";
 import { ApiKeysView } from "./api-keys-view";
 import {
@@ -15,11 +15,11 @@ import {
 } from "./domain";
 import { DomainsView } from "./domains-view";
 import { MembersView } from "./members-view";
-import { TeamOverviewView } from "./team-overview-view";
+import { OrganizationOverviewView } from "./organization-overview-view";
 
-export const TeamView = ({
+export const OrganizationDetailView = ({
   onBackToList,
-  onBackToTeam,
+  onBackToOrganization,
   onOpenApiKeys,
   onOpenDomains,
   onOpenMembers,
@@ -28,13 +28,13 @@ export const TeamView = ({
   view,
 }: {
   onBackToList: () => void;
-  onBackToTeam: () => void;
+  onBackToOrganization: () => void;
   onOpenApiKeys: () => void;
   onOpenDomains: () => void;
   onOpenMembers: () => void;
   organization: OrganizationSummary;
   userId: string;
-  view: TeamSettingsView;
+  view: OrganizationSettingsView;
 }) => {
   const fullOrganizationQuery = useQuery(fullOrganizationQueryOptions(organization.id));
   const billingQuery = useQuery(userBillingQueryOptions());
@@ -62,24 +62,24 @@ export const TeamView = ({
     organization: ["update"],
   });
   const currentPlan = normalizeBillingPlan(billingQuery.data?.plan);
-  const canUseTeamDomains =
+  const canUseOrganizationDomains =
     !billingQuery.isPending &&
     (!!billingQuery.data?.hasUnlimitedAccess ||
-      hasBillingPlanAccess(currentPlan, BILLING_FEATURES.teamDomains.requiredPlan));
-  const canUseTeamApiKeys =
+      hasBillingPlanAccess(currentPlan, BILLING_FEATURES.organizationDomains.requiredPlan));
+  const canUseOrganizationApiKeys =
     !billingQuery.isPending &&
     (!!billingQuery.data?.hasUnlimitedAccess ||
-      hasBillingPlanAccess(currentPlan, BILLING_FEATURES.teamApiKeys.requiredPlan));
-  const canUseTeamMail =
+      hasBillingPlanAccess(currentPlan, BILLING_FEATURES.organizationApiKeys.requiredPlan));
+  const canUseOrganizationMail =
     !billingQuery.isPending &&
     (!!billingQuery.data?.hasUnlimitedAccess ||
-      hasBillingPlanAccess(currentPlan, BILLING_FEATURES.teamMail.requiredPlan));
+      hasBillingPlanAccess(currentPlan, BILLING_FEATURES.organizationMail.requiredPlan));
 
   if (fullOrganizationQuery.isPending) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-        Loading team…
+        Loading organization…
       </div>
     );
   }
@@ -87,13 +87,13 @@ export const TeamView = ({
   if (fullOrganizationQuery.isError) {
     return (
       <p className="text-sm text-destructive">
-        {fullOrganizationQuery.error.message ?? "Could not load team."}
+        {fullOrganizationQuery.error.message ?? "Could not load organization."}
       </p>
     );
   }
 
   if (!fullOrganization) {
-    return <p className="text-sm text-muted-foreground">Team not found.</p>;
+    return <p className="text-sm text-muted-foreground">Organization not found.</p>;
   }
 
   if (view === "members") {
@@ -106,7 +106,7 @@ export const TeamView = ({
           canRemoveMembers,
           canUpdateMemberRole,
         }}
-        onBack={onBackToTeam}
+        onBack={onBackToOrganization}
         organization={fullOrganization}
       />
     );
@@ -116,8 +116,8 @@ export const TeamView = ({
     return (
       <DomainsView
         canManageDomains={canUpdateOrganization}
-        canUseTeamDomains={canUseTeamDomains}
-        onBack={onBackToTeam}
+        canUseOrganizationDomains={canUseOrganizationDomains}
+        onBack={onBackToOrganization}
         organization={fullOrganization}
       />
     );
@@ -127,21 +127,21 @@ export const TeamView = ({
     return (
       <ApiKeysView
         canManageApiKeys={canUpdateOrganization}
-        canUseTeamApiKeys={canUseTeamApiKeys}
-        onBack={onBackToTeam}
+        canUseOrganizationApiKeys={canUseOrganizationApiKeys}
+        onBack={onBackToOrganization}
         organization={fullOrganization}
       />
     );
   }
 
   return (
-    <TeamOverviewView
+    <OrganizationOverviewView
       activeRole={activeRole}
       canDeleteOrganization={canDeleteOrganization}
       canUpdateOrganization={canUpdateOrganization}
-      canUseTeamApiKeys={canUseTeamApiKeys}
-      canUseTeamDomains={canUseTeamDomains}
-      canUseTeamMail={canUseTeamMail}
+      canUseOrganizationApiKeys={canUseOrganizationApiKeys}
+      canUseOrganizationDomains={canUseOrganizationDomains}
+      canUseOrganizationMail={canUseOrganizationMail}
       fullOrganization={fullOrganization}
       onBackToList={onBackToList}
       onOpenApiKeys={onOpenApiKeys}

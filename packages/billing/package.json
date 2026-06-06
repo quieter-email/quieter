@@ -7,7 +7,7 @@
     "./entitlements": "./src/entitlements.ts",
     "./plans": "./src/plans.ts",
     "./ses-pricing": "./src/ses-pricing.ts",
-    "./team-mail-usage": "./src/team-mail-usage.ts"
+    "./organization-mail-usage": "./src/organization-mail-usage.ts"
   },
   "scripts": {
     "fmt": "oxfmt --config ../../oxfmt.json .",

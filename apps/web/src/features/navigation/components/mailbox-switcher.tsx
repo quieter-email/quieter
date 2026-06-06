@@ -36,7 +36,7 @@ type MailboxSwitcherMailbox = {
 
 type MailboxSwitcherGroup = {
   id: string;
-  kind: "personal" | "team";
+  kind: "personal" | "organization";
   mailboxes: MailboxSwitcherMailbox[];
   name: string;
 };
@@ -328,7 +328,7 @@ export const MailboxSwitcherDropdown = ({
   const selectedMailbox =
     mailboxes.find((mailbox) => mailbox.id === selectedMailboxId) ?? mailboxes[0] ?? null;
   const primaryLabel = selectedMailbox?.emailAddress ?? "no mailbox";
-  const secondaryLabel = selectedMailbox?.groupName ?? "No team";
+  const secondaryLabel = selectedMailbox?.groupName ?? "No organization";
   const canReorderGroups = groups.length > 1;
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<ReadonlySet<string>>(() => new Set());
   const toggleGroup = (groupId: string) => {

@@ -1,9 +1,12 @@
 import {
-  getTeamMailUsageOverview,
-  updateTeamMailUsageSettings,
-} from "@quieter/billing/team-mail-usage";
+  getOrganizationMailUsageOverview,
+  updateOrganizationMailUsageSettings,
+} from "@quieter/billing/organization-mail-usage";
 import { z } from "zod";
-import { assertUserCanManageTeamSettings, assertUserOrganizationMember } from "../mail-domain";
+import {
+  assertUserCanManageOrganizationSettings,
+  assertUserOrganizationMember,
+} from "../mail-domain";
 import { protectedProcedure } from "./base";
 
 const microCentsPerCent = 1_000_000;
@@ -15,17 +18,18 @@ const toMicroCents = (cents: number | null) =>
   cents == null ? null : Math.round(cents * microCentsPerCent);
 
 const serializeOverview = async (organizationId: string) => {
-  const overview = await getTeamMailUsageOverview(organizationId);
+  const overview = await getOrganizationMailUsageOverview(organizationId);
 
   return {
     hasAccess: overview.hasAccess,
     hasUnlimitedAccess: overview.hasUnlimitedAccess,
-    includedSesUsageCents: toCents(overview.includedSesUsageMicroCents),
+    includedManagedUsageCents: toCents(overview.includedSesUsageMicroCents),
+    managedUsageRates: overview.managedUsageRates,
     period: {
       end: overview.period.end.toISOString(),
       start: overview.period.start.toISOString(),
     },
-    remainingIncludedSesUsageCents: toCents(overview.remainingIncludedSesUsageMicroCents),
+    remainingIncludedManagedUsageCents: toCents(overview.remainingIncludedSesUsageMicroCents),
     settings: {
       alertMilestonePercents: overview.settings.alertMilestonePercents,
       monthlyOverageLimitCents: toCents(overview.settings.monthlyOverageLimitMicroCents),
@@ -33,12 +37,12 @@ const serializeOverview = async (organizationId: string) => {
     },
     usage: {
       billableCostCents: toCents(overview.usage.billableCostMicroCents),
-      sesCostCents: toCents(overview.usage.sesCostMicroCents),
+      managedUsageCostCents: toCents(overview.usage.sesCostMicroCents),
     },
   };
 };
 
-export const teamMailUsageRouter = {
+export const organizationMailUsageRouter = {
   overview: protectedProcedure
     .route({ method: "GET" })
     .input(
@@ -65,12 +69,12 @@ export const teamMailUsageRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
-      await assertUserCanManageTeamSettings({
+      await assertUserCanManageOrganizationSettings({
         organizationId: input.organizationId,
         userId: context.userId,
       });
 
-      await updateTeamMailUsageSettings({
+      await updateOrganizationMailUsageSettings({
         alertMilestonePercents: input.alertMilestonePercents,
         monthlyOverageLimitMicroCents: toMicroCents(input.monthlyOverageLimitCents),
         organizationId: input.organizationId,

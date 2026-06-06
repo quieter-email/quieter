@@ -13,10 +13,10 @@ const openApiDocument = {
   ],
   components: {
     securitySchemes: {
-      teamApiKey: {
+      organizationApiKey: {
         type: "http",
         scheme: "bearer",
-        bearerFormat: "Quieter team API key",
+        bearerFormat: "Quieter organization API key",
       },
     },
     schemas: {
@@ -45,7 +45,7 @@ const openApiDocument = {
             type: "string",
             format: "email",
             description:
-              "Sender address. The domain must be verified for the team that owns the API key.",
+              "Sender address. The domain must be verified for the organization that owns the API key.",
           },
           subject: {
             type: "string",
@@ -94,8 +94,9 @@ const openApiDocument = {
       post: {
         operationId: "sendMessage",
         summary: "Send a mail message",
-        description: "Sends a message from a verified sender domain owned by the team API key.",
-        security: [{ teamApiKey: [] }],
+        description:
+          "Sends a message from a verified sender domain owned by the organization API key.",
+        security: [{ organizationApiKey: [] }],
         requestBody: {
           required: true,
           content: {
@@ -122,7 +123,7 @@ const openApiDocument = {
             },
           },
           "401": {
-            description: "Missing or invalid team API key.",
+            description: "Missing or invalid organization API key.",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
@@ -130,7 +131,7 @@ const openApiDocument = {
             },
           },
           "403": {
-            description: "Sender domain is not verified for this team.",
+            description: "Sender domain is not verified for this organization.",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },

@@ -1,6 +1,8 @@
+import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  check,
   foreignKey,
   index,
   integer,
@@ -13,6 +15,9 @@ import {
 import { defineRelations } from "drizzle-orm/relations";
 
 export type MailDomainStatus = "failed" | "pending_dns" | "verified";
+export type MailboxConnectionStatus = "connected" | "needs_reconnect";
+export type MailboxGrantRole = "manager" | "reader" | "responder";
+export type MailboxProvider = "gmail" | "managed";
 export type BillingPlan = "managed" | "pro";
 export type BillingProvider = "polar";
 export type BillingSubscriptionStatus =
@@ -22,8 +27,8 @@ export type BillingSubscriptionStatus =
   | "past_due"
   | "pending"
   | "trialing";
-export type TeamMailUsageAlertTarget = "included_usage" | "overage_limit";
-export type TeamMailUsageDirection = "inbound" | "outbound";
+export type OrganizationMailUsageAlertTarget = "included_usage" | "overage_limit";
+export type OrganizationMailUsageDirection = "inbound" | "outbound";
 
 export type MailDomainDnsRecord = {
   name: string;
@@ -118,7 +123,6 @@ export const account = pgTable(
     idToken: text("idToken"),
     accessTokenExpiresAt: timestamp("accessTokenExpiresAt"),
     refreshTokenExpiresAt: timestamp("refreshTokenExpiresAt"),
-    disconnectedAt: timestamp("disconnectedAt"),
     scope: text("scope"),
     password: text("password"),
     createdAt: timestamp("createdAt").notNull(),
@@ -206,21 +210,91 @@ export const mailbox = pgTable(
   "mailbox",
   {
     id: text("id").primaryKey(),
-    organizationId: text("organizationId")
-      .notNull()
-      .references(() => organization.id),
-    provider: text("provider").notNull(),
+    provider: text("provider").$type<MailboxProvider>().notNull(),
     emailAddress: text("emailAddress").notNull(),
     displayName: text("displayName"),
+    ownerUserId: text("ownerUserId").references(() => user.id, {
+      onDelete: "cascade",
+    }),
+    organizationId: text("organizationId").references(() => organization.id),
+    status: text("status").$type<MailboxConnectionStatus>().notNull().default("connected"),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
-    index("mailbox_organization_id_idx").on(table.organizationId),
-    unique("mailbox_organization_id_email_address_unique").on(
-      table.organizationId,
-      table.emailAddress,
+    check(
+      "mailbox_provider_ownership_check",
+      sql`(
+        (${table.provider} = 'gmail' and ${table.ownerUserId} is not null)
+        or
+        (${table.provider} = 'managed' and ${table.ownerUserId} is null and ${table.organizationId} is not null)
+      )`,
     ),
+    check("mailbox_status_check", sql`${table.status} in ('connected', 'needs_reconnect')`),
+    index("mailbox_owner_user_id_idx").on(table.ownerUserId),
+    index("mailbox_organization_id_idx").on(table.organizationId),
+    unique("mailbox_email_address_unique").on(table.emailAddress),
+  ],
+);
+
+export const gmailCredential = pgTable(
+  "gmailCredential",
+  {
+    mailboxId: text("mailboxId")
+      .primaryKey()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    googleSubject: text("googleSubject").notNull(),
+    encryptedAccessToken: text("encryptedAccessToken"),
+    encryptedRefreshToken: text("encryptedRefreshToken"),
+    accessTokenExpiresAt: timestamp("accessTokenExpiresAt"),
+    scopes: text("scopes").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [unique("gmail_credential_google_subject_unique").on(table.googleSubject)],
+);
+
+export const gmailOAuthState = pgTable(
+  "gmailOAuthState",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    mailboxId: text("mailboxId").references(() => mailbox.id, { onDelete: "cascade" }),
+    organizationId: text("organizationId").references(() => organization.id, {
+      onDelete: "cascade",
+    }),
+    codeVerifier: text("codeVerifier").notNull(),
+    returnTo: text("returnTo").notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => [
+    index("gmail_oauth_state_user_id_idx").on(table.userId),
+    index("gmail_oauth_state_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
+export const mailboxGrant = pgTable(
+  "mailboxGrant",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: text("role").$type<MailboxGrantRole>().notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check("mailbox_grant_role_check", sql`${table.role} in ('reader', 'responder', 'manager')`),
+    index("mailbox_grant_mailbox_id_idx").on(table.mailboxId),
+    index("mailbox_grant_user_id_idx").on(table.userId),
+    unique("mailbox_grant_mailbox_id_user_id_unique").on(table.mailboxId, table.userId),
   ],
 );
 
@@ -275,14 +349,14 @@ export const billingSubscription = pgTable(
   ],
 );
 
-export const teamMailUsageEvent = pgTable(
-  "teamMailUsageEvent",
+export const organizationMailUsageEvent = pgTable(
+  "organizationMailUsageEvent",
   {
     id: text("id").primaryKey(),
     organizationId: text("organizationId")
       .notNull()
       .references(() => organization.id),
-    direction: text("direction").$type<TeamMailUsageDirection>().notNull(),
+    direction: text("direction").$type<OrganizationMailUsageDirection>().notNull(),
     provider: text("provider").notNull(),
     providerMessageId: text("providerMessageId").notNull(),
     dedupeKey: text("dedupeKey").notNull(),
@@ -299,15 +373,15 @@ export const teamMailUsageEvent = pgTable(
     createdAt: timestamp("createdAt").notNull(),
   },
   (table) => [
-    index("team_mail_usage_event_organization_created_at_idx").on(
+    index("organization_mail_usage_event_organization_created_at_idx").on(
       table.organizationId,
       table.createdAt,
     ),
-    unique("team_mail_usage_event_dedupe_key_unique").on(table.dedupeKey),
+    unique("organization_mail_usage_event_dedupe_key_unique").on(table.dedupeKey),
   ],
 );
 
-export const teamMailUsageSettings = pgTable("teamMailUsageSettings", {
+export const organizationMailUsageSettings = pgTable("organizationMailUsageSettings", {
   organizationId: text("organizationId")
     .primaryKey()
     .references(() => organization.id),
@@ -323,8 +397,8 @@ export const teamMailUsageSettings = pgTable("teamMailUsageSettings", {
   updatedAt: timestamp("updatedAt").notNull(),
 });
 
-export const teamMailUsageAlertEvent = pgTable(
-  "teamMailUsageAlertEvent",
+export const organizationMailUsageAlertEvent = pgTable(
+  "organizationMailUsageAlertEvent",
   {
     id: text("id").primaryKey(),
     organizationId: text("organizationId")
@@ -332,18 +406,18 @@ export const teamMailUsageAlertEvent = pgTable(
       .references(() => organization.id),
     periodStart: timestamp("periodStart").notNull(),
     periodEnd: timestamp("periodEnd").notNull(),
-    target: text("target").$type<TeamMailUsageAlertTarget>().notNull(),
+    target: text("target").$type<OrganizationMailUsageAlertTarget>().notNull(),
     milestonePercent: integer("milestonePercent").notNull(),
     thresholdMicroCents: bigint("thresholdMicroCents", { mode: "number" }).notNull(),
     usageMicroCents: bigint("usageMicroCents", { mode: "number" }).notNull(),
     createdAt: timestamp("createdAt").notNull(),
   },
   (table) => [
-    index("team_mail_usage_alert_event_organization_period_idx").on(
+    index("organization_mail_usage_alert_event_organization_period_idx").on(
       table.organizationId,
       table.periodStart,
     ),
-    unique("team_mail_usage_alert_event_period_milestone_unique").on(
+    unique("organization_mail_usage_alert_event_period_milestone_unique").on(
       table.organizationId,
       table.periodStart,
       table.target,
@@ -356,6 +430,9 @@ export const chat = pgTable(
   "chat",
   {
     id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
     userId: text("userId")
       .notNull()
       .references(() => user.id),
@@ -364,7 +441,11 @@ export const chat = pgTable(
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
-    index("chat_user_id_updated_at_idx").on(table.userId, table.updatedAt),
+    index("chat_mailbox_id_user_id_updated_at_idx").on(
+      table.mailboxId,
+      table.userId,
+      table.updatedAt,
+    ),
     unique("chat_id_user_id_unique").on(table.id, table.userId),
   ],
 );
@@ -441,11 +522,14 @@ export const tables = {
   passkey,
   member,
   invitation,
+  gmailCredential,
+  gmailOAuthState,
   mailbox,
+  mailboxGrant,
   mailDomain,
-  teamMailUsageAlertEvent,
-  teamMailUsageEvent,
-  teamMailUsageSettings,
+  organizationMailUsageAlertEvent,
+  organizationMailUsageEvent,
+  organizationMailUsageSettings,
   waitlistSignup,
 };
 
@@ -458,11 +542,22 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
     chats: r.many.chat({ from: r.user.id, to: r.chat.userId }),
     invitations: r.many.invitation({ from: r.user.id, to: r.invitation.inviterId }),
+    gmailOAuthStates: r.many.gmailOAuthState({
+      from: r.user.id,
+      to: r.gmailOAuthState.userId,
+    }),
+    mailboxGrants: r.many.mailboxGrant({ from: r.user.id, to: r.mailboxGrant.userId }),
+    ownedMailboxes: r.many.mailbox({ from: r.user.id, to: r.mailbox.ownerUserId }),
     memberships: r.many.member({ from: r.user.id, to: r.member.userId }),
     sessions: r.many.session({ from: r.user.id, to: r.session.userId }),
     passkeys: r.many.passkey({ from: r.user.id, to: r.passkey.userId }),
   },
   chat: {
+    mailbox: r.one.mailbox({
+      from: r.chat.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
     messages: r.many.chatMessage({ from: r.chat.id, to: r.chatMessage.chatId }),
     user: r.one.user({
       from: r.chat.userId,
@@ -483,6 +578,10 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
   },
   organization: {
+    gmailOAuthStates: r.many.gmailOAuthState({
+      from: r.organization.id,
+      to: r.gmailOAuthState.organizationId,
+    }),
     invitations: r.many.invitation({
       from: r.organization.id,
       to: r.invitation.organizationId,
@@ -490,18 +589,18 @@ export const authRelations = defineRelations(tables, (r) => ({
     mailboxes: r.many.mailbox({ from: r.organization.id, to: r.mailbox.organizationId }),
     mailDomains: r.many.mailDomain({ from: r.organization.id, to: r.mailDomain.organizationId }),
     members: r.many.member({ from: r.organization.id, to: r.member.organizationId }),
-    teamMailUsageEvents: r.many.teamMailUsageEvent({
+    organizationMailUsageEvents: r.many.organizationMailUsageEvent({
       from: r.organization.id,
-      to: r.teamMailUsageEvent.organizationId,
+      to: r.organizationMailUsageEvent.organizationId,
     }),
-    teamMailUsageSettings: r.one.teamMailUsageSettings({
+    organizationMailUsageSettings: r.one.organizationMailUsageSettings({
       from: r.organization.id,
-      to: r.teamMailUsageSettings.organizationId,
+      to: r.organizationMailUsageSettings.organizationId,
       optional: true,
     }),
-    teamMailUsageAlertEvents: r.many.teamMailUsageAlertEvent({
+    organizationMailUsageAlertEvents: r.many.organizationMailUsageAlertEvent({
       from: r.organization.id,
-      to: r.teamMailUsageAlertEvent.organizationId,
+      to: r.organizationMailUsageAlertEvent.organizationId,
     }),
   },
   session: {
@@ -555,9 +654,57 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
   },
   mailbox: {
+    chats: r.many.chat({ from: r.mailbox.id, to: r.chat.mailboxId }),
+    gmailCredential: r.one.gmailCredential({
+      from: r.mailbox.id,
+      to: r.gmailCredential.mailboxId,
+      optional: true,
+    }),
+    grants: r.many.mailboxGrant({ from: r.mailbox.id, to: r.mailboxGrant.mailboxId }),
+    owner: r.one.user({
+      from: r.mailbox.ownerUserId,
+      to: r.user.id,
+      optional: true,
+    }),
     organization: r.one.organization({
       from: r.mailbox.organizationId,
       to: r.organization.id,
+      optional: true,
+    }),
+  },
+  gmailCredential: {
+    mailbox: r.one.mailbox({
+      from: r.gmailCredential.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+  },
+  gmailOAuthState: {
+    mailbox: r.one.mailbox({
+      from: r.gmailOAuthState.mailboxId,
+      to: r.mailbox.id,
+      optional: true,
+    }),
+    organization: r.one.organization({
+      from: r.gmailOAuthState.organizationId,
+      to: r.organization.id,
+      optional: true,
+    }),
+    user: r.one.user({
+      from: r.gmailOAuthState.userId,
+      to: r.user.id,
+      optional: false,
+    }),
+  },
+  mailboxGrant: {
+    mailbox: r.one.mailbox({
+      from: r.mailboxGrant.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+    user: r.one.user({
+      from: r.mailboxGrant.userId,
+      to: r.user.id,
       optional: false,
     }),
   },
@@ -575,23 +722,23 @@ export const authRelations = defineRelations(tables, (r) => ({
       optional: false,
     }),
   },
-  teamMailUsageEvent: {
+  organizationMailUsageEvent: {
     organization: r.one.organization({
-      from: r.teamMailUsageEvent.organizationId,
+      from: r.organizationMailUsageEvent.organizationId,
       to: r.organization.id,
       optional: false,
     }),
   },
-  teamMailUsageSettings: {
+  organizationMailUsageSettings: {
     organization: r.one.organization({
-      from: r.teamMailUsageSettings.organizationId,
+      from: r.organizationMailUsageSettings.organizationId,
       to: r.organization.id,
       optional: false,
     }),
   },
-  teamMailUsageAlertEvent: {
+  organizationMailUsageAlertEvent: {
     organization: r.one.organization({
-      from: r.teamMailUsageAlertEvent.organizationId,
+      from: r.organizationMailUsageAlertEvent.organizationId,
       to: r.organization.id,
       optional: false,
     }),

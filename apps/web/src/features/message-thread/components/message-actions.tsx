@@ -26,7 +26,6 @@ import {
   DialogBody,
   DialogCloseButton,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -128,25 +127,12 @@ const renderContextEntry = (entry: MenuEntry) => {
 };
 
 type MessageActionsDialogsState = {
-  deleteError: string | null;
   draftLabelIds: string[] | null;
   isApplyingLabels: boolean;
-  isDeleting: boolean;
   labelError: string | null;
 };
 
 type MessageActionsDialogsAction =
-  | {
-      type: "delete/error";
-      value: string | null;
-    }
-  | {
-      type: "delete/pending";
-      value: boolean;
-    }
-  | {
-      type: "delete/reset";
-    }
   | {
       checked: boolean;
       currentUserLabelIds: readonly string[];
@@ -166,10 +152,8 @@ type MessageActionsDialogsAction =
     };
 
 const initialMessageActionsDialogsState: MessageActionsDialogsState = {
-  deleteError: null,
   draftLabelIds: null,
   isApplyingLabels: false,
-  isDeleting: false,
   labelError: null,
 };
 
@@ -178,22 +162,6 @@ const messageActionsDialogsReducer = (
   action: MessageActionsDialogsAction,
 ): MessageActionsDialogsState => {
   switch (action.type) {
-    case "delete/error":
-      return {
-        ...state,
-        deleteError: action.value,
-      };
-    case "delete/pending":
-      return {
-        ...state,
-        isDeleting: action.value,
-      };
-    case "delete/reset":
-      return {
-        ...state,
-        deleteError: null,
-        isDeleting: false,
-      };
     case "labels/toggle": {
       const nextCurrent = state.draftLabelIds ?? [...action.currentUserLabelIds];
 
@@ -228,26 +196,18 @@ const messageActionsDialogsReducer = (
 
 const MessageActionsDialogs = ({
   isPending,
-  isTrashMailbox,
   mailboxId,
   message,
-  onDeletePermanently,
-  onOpenDeleteDialog,
   onOpenLabelsDialog,
   onUpdateLabels,
-  openDeleteDialog,
   openLabelsDialog,
 }: {
   mailboxId: string;
   message: MessageListItem;
   isPending: boolean;
-  isTrashMailbox: boolean;
   openLabelsDialog: boolean;
   onOpenLabelsDialog: (open: boolean) => void;
-  openDeleteDialog: boolean;
-  onOpenDeleteDialog: (open: boolean) => void;
   onUpdateLabels?: (threadId: string, changes: LabelChanges) => void | Promise<void>;
-  onDeletePermanently?: (threadId: string) => void | Promise<void>;
 }) => {
   const labelsQuery = useQuery(labelsQueryOptions(mailboxId, openLabelsDialog));
   const userLabels = getUserLabels(labelsQuery.data ?? []);
@@ -261,7 +221,6 @@ const MessageActionsDialogs = ({
   const selectedLabelIds = state.draftLabelIds ?? currentUserLabelIds;
   const labelsChanged = !areStringArraysEqual(currentUserLabelIds, selectedLabelIds);
   const isLabelsBusy = isPending || state.isApplyingLabels;
-  const isDeleteBusy = isPending || state.isDeleting;
 
   const toggleDraftLabel = (labelId: string, checked: boolean) => {
     dispatch({
@@ -317,133 +276,65 @@ const MessageActionsDialogs = ({
     }
   };
 
-  const confirmDelete = async () => {
-    if (!onDeletePermanently || !isTrashMailbox || isDeleteBusy) return;
-
-    dispatch({
-      type: "delete/pending",
-      value: true,
-    });
-    dispatch({
-      type: "delete/error",
-      value: null,
-    });
-
-    try {
-      await onDeletePermanently(message.threadId);
-      onOpenDeleteDialog(false);
-      dispatch({
-        type: "delete/pending",
-        value: false,
-      });
-    } catch (error) {
-      dispatch({
-        type: "delete/error",
-        value:
-          error instanceof Error && error.message
-            ? error.message
-            : "Could not delete this message.",
-      });
-      dispatch({
-        type: "delete/pending",
-        value: false,
-      });
-    }
-  };
-
   return (
-    <>
-      <Dialog
-        onOpenChange={(open) => {
-          onOpenLabelsDialog(open);
-          dispatch({ type: "labels/reset" });
-        }}
-        open={openLabelsDialog}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Modify Labels</DialogTitle>
-          </DialogHeader>
+    <Dialog
+      onOpenChange={(open) => {
+        onOpenLabelsDialog(open);
+        dispatch({ type: "labels/reset" });
+      }}
+      open={openLabelsDialog}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Modify Labels</DialogTitle>
+        </DialogHeader>
 
-          <DialogBody className="max-h-[50vh] space-y-3 overflow-y-auto">
-            {labelsQuery.isPending ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <HugeiconsIcon aria-hidden className="animate-spin" icon={Loading03Icon} />
-                <span>Loading labels…</span>
-              </div>
-            ) : labelsQuery.isError ? (
-              <p className="text-sm text-destructive">
-                {labelsQuery.error?.message ?? "Could not load labels."}
-              </p>
-            ) : userLabels.length > 0 ? (
-              <div className="space-y-2">
-                {userLabels.map((label) => (
-                  <label className="flex items-center gap-2 text-sm text-foreground" key={label.id}>
-                    <input
-                      aria-label={label.name}
-                      checked={selectedLabelIds.includes(label.id)}
-                      className="size-4 rounded-md accent-foreground"
-                      disabled={isLabelsBusy}
-                      onChange={(event) => toggleDraftLabel(label.id, event.currentTarget.checked)}
-                      type="checkbox"
-                    />
-                    <span>{label.name}</span>
-                  </label>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No custom labels.</p>
-            )}
+        <DialogBody className="max-h-[50vh] space-y-3 overflow-y-auto">
+          {labelsQuery.isPending ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <HugeiconsIcon aria-hidden className="animate-spin" icon={Loading03Icon} />
+              <span>Loading labels…</span>
+            </div>
+          ) : labelsQuery.isError ? (
+            <p className="text-sm text-destructive">
+              {labelsQuery.error?.message ?? "Could not load labels."}
+            </p>
+          ) : userLabels.length > 0 ? (
+            <div className="space-y-2">
+              {userLabels.map((label) => (
+                <label className="flex items-center gap-2 text-sm text-foreground" key={label.id}>
+                  <input
+                    aria-label={label.name}
+                    checked={selectedLabelIds.includes(label.id)}
+                    className="size-4 rounded-md accent-foreground"
+                    disabled={isLabelsBusy}
+                    onChange={(event) => toggleDraftLabel(label.id, event.currentTarget.checked)}
+                    type="checkbox"
+                  />
+                  <span>{label.name}</span>
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No custom labels.</p>
+          )}
 
-            {state.labelError && <p className="text-sm text-destructive">{state.labelError}</p>}
-          </DialogBody>
+          {state.labelError && <p className="text-sm text-destructive">{state.labelError}</p>}
+        </DialogBody>
 
-          <DialogFooter>
-            <DialogCloseButton>Cancel</DialogCloseButton>
-            <Button
-              disabled={
-                !labelsChanged || labelsQuery.isPending || labelsQuery.isError || isLabelsBusy
-              }
-              onClick={() => void applyLabels()}
-            >
-              Apply
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        onOpenChange={(open) => {
-          onOpenDeleteDialog(open);
-          if (!open) {
-            dispatch({ type: "delete/reset" });
-          }
-        }}
-        open={openDeleteDialog}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete permanently?</DialogTitle>
-            <DialogDescription>This action cannot be undone.</DialogDescription>
-          </DialogHeader>
-
-          <DialogBody>
-            {state.deleteError && <p className="text-sm text-destructive">{state.deleteError}</p>}
-          </DialogBody>
-
-          <DialogFooter>
-            <DialogCloseButton>Cancel</DialogCloseButton>
-            <Button
-              disabled={isDeleteBusy}
-              onClick={() => void confirmDelete()}
-              variant="destructive"
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+        <DialogFooter>
+          <DialogCloseButton>Cancel</DialogCloseButton>
+          <Button
+            disabled={
+              !labelsChanged || labelsQuery.isPending || labelsQuery.isError || isLabelsBusy
+            }
+            onClick={() => void applyLabels()}
+          >
+            Apply
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 
@@ -455,7 +346,6 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
   const isTrashMailbox = props.mailbox === "trash";
   const isBusy = !!props.isPending;
   const [openLabelsDialog, setOpenLabelsDialog] = useState(false);
-  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const showMarkAsSpam = props.mailbox === "inbox";
   const unsubscribeTarget = getMessageUnsubscribeTarget(props.message);
 
@@ -584,35 +474,30 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
           },
         ]
       : []),
-    {
-      type: "item",
-      id: isTrashMailbox ? "delete-permanently" : "move-to-trash",
-      destructive: true,
-      disabled: isBusy || (isTrashMailbox ? !actions.onDeletePermanently : !actions.onMoveToTrash),
-      icon: isTrashMailbox ? Delete02Icon : Delete01Icon,
-      label: isTrashMailbox ? "Delete permanently" : "Move to Trash",
-      onSelect: () => {
-        if (isTrashMailbox) {
-          setOpenDeleteDialog(true);
-          return;
-        }
-
-        void actions.onMoveToTrash?.(props.message.threadId);
-      },
-    },
+    ...(!isTrashMailbox
+      ? [
+          {
+            type: "item" as const,
+            id: "move-to-trash",
+            destructive: true,
+            disabled: isBusy || !actions.onMoveToTrash,
+            icon: Delete01Icon,
+            label: "Move to Trash",
+            onSelect: () => {
+              void actions.onMoveToTrash?.(props.message.threadId);
+            },
+          },
+        ]
+      : []),
   ];
 
   const dialogs = (
     <MessageActionsDialogs
       isPending={isBusy}
-      isTrashMailbox={isTrashMailbox}
       mailboxId={props.mailboxId}
       message={props.message}
-      onDeletePermanently={actions.onDeletePermanently}
-      onOpenDeleteDialog={setOpenDeleteDialog}
       onOpenLabelsDialog={setOpenLabelsDialog}
       onUpdateLabels={actions.onUpdateLabels}
-      openDeleteDialog={openDeleteDialog}
       openLabelsDialog={openLabelsDialog}
     />
   );

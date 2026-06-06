@@ -4,7 +4,11 @@ import { isGmailRateLimitedError, isGmailServiceError, type MailboxCategory } fr
 import { z } from "zod";
 import { getRequestHeaders, type OrpcContext } from "../context";
 import { orpcErrorMap } from "../errors";
-import { getAuthorizedGmailMailbox, refreshAuthorizedGmailAccessToken } from "../mailbox";
+import {
+  getAuthorizedGmailMailbox,
+  markGmailMailboxNeedsReconnect,
+  refreshAuthorizedGmailAccessToken,
+} from "../mailbox";
 
 export const base = os.errors(orpcErrorMap).$context<OrpcContext>();
 export const publicProcedure = base;
@@ -106,9 +110,7 @@ export const callGmail = async <TValue>(
   mailboxId: string,
   runner: (accessToken: string, signal?: AbortSignal) => Promise<TValue>,
 ): Promise<TValue> => {
-  const headers = getRequestHeaders(context);
   const { accessToken, mailbox } = await getAuthorizedGmailMailbox({
-    headers,
     mailboxId,
     userId: context.userId,
   });
@@ -121,16 +123,21 @@ export const callGmail = async <TValue>(
     }
 
     const refreshedAccessToken = await refreshAuthorizedGmailAccessToken({
-      emailAddress: mailbox.emailAddress,
-      headers,
-      mailboxId: mailbox.id,
-      providerAccountId: mailbox.providerAccountId,
-      userId: mailbox.connectedUserId,
+      mailboxId,
+      userId: context.userId,
     });
 
     try {
       return await runner(refreshedAccessToken, context.signal);
     } catch (retryError) {
+      if (isGmailAuthError(retryError)) {
+        await markGmailMailboxNeedsReconnect(mailbox.id);
+        await getAuthorizedGmailMailbox({
+          mailboxId,
+          userId: context.userId,
+        });
+        throw retryError;
+      }
       return rethrowKnownRateLimit(context, retryError);
     }
   }

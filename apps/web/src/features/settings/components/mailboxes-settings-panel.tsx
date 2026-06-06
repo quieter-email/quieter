@@ -8,186 +8,172 @@ import {
   PinOffIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, cn, toast } from "@quieter/ui";
+import {
+  Button,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  TextFieldInput,
+  cn,
+  toast,
+} from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { MailboxSettingsRow } from "~/features/navigation/components/mailbox-switcher";
-import {
-  openGoogleAccountLink,
-  readPendingGmailLink,
-  writePendingGmailLink,
-  type PendingGmailLinkState,
-} from "~/lib/google-account-link";
+import { organizationMailDomainsQueryOptions } from "~/features/settings/components/organization-settings/mail-domains";
+import { authClient } from "~/lib/auth";
+import { openGoogleAccountLink } from "~/lib/google-account-link";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 
+const getSettingsReturnTo = () => "/settings?tab=mailboxes";
+const personalPlacementValue = "personal";
+
 export const MailboxesSettingsPanel = () => {
   const queryClient = useQueryClient();
-  const [connectError, setConnectError] = useState<string | null>(null);
-  const [pendingGmailLink, setPendingGmailLink] = useState<PendingGmailLinkState | null>(() =>
-    readPendingGmailLink(),
-  );
-  const [isStartingGmailLink, setIsStartingGmailLink] = useState(false);
+  const organizations = authClient.useListOrganizations().data ?? [];
+  const [gmailOrganizationId, setGmailOrganizationId] = useState("");
+  const [managedOrganizationId, setManagedOrganizationId] = useState("");
+  const [managedLocalPart, setManagedLocalPart] = useState("");
+  const [managedDomain, setManagedDomain] = useState<string | undefined>(undefined);
+  const [isStartingGmail, setIsStartingGmail] = useState(false);
   const mailboxesQuery = useQuery(mailboxesQueryOptions());
   const groups = mailboxesQuery.data?.groups ?? [];
-  const mailboxes = groups.flatMap((group) => group.mailboxes);
-  const isGmailConnecting = isStartingGmailLink || pendingGmailLink != null;
+  const gmailGroups = groups.map((group) => ({
+    ...group,
+    mailboxes: group.mailboxes.filter((mailbox) => mailbox.provider === "gmail"),
+  }));
+  const managedGroups = groups.map((group) => ({
+    ...group,
+    mailboxes: group.mailboxes.filter((mailbox) => mailbox.provider === "managed"),
+  }));
   const defaultMailboxId = mailboxesQuery.data?.defaultMailboxId ?? null;
+  const placementItems = [
+    { value: personalPlacementValue, label: "Personal" },
+    ...organizations.map((organization) => ({
+      value: organization.id,
+      label: organization.name,
+    })),
+  ];
+  const organizationItems = organizations.map((organization) => ({
+    value: organization.id,
+    label: organization.name,
+  }));
+  const managedDomainsQuery = useQuery({
+    ...organizationMailDomainsQueryOptions(managedOrganizationId),
+    enabled: managedOrganizationId.length > 0,
+  });
+  const verifiedDomains = (managedDomainsQuery.data?.domains ?? []).filter(
+    (domain) => domain.status === "verified",
+  );
+  const selectedDomain = managedDomain ?? verifiedDomains[0]?.domain ?? "";
+  const trimmedLocalPart = managedLocalPart.trim();
+  const invalidateMailboxes = async () => {
+    await queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() });
+  };
   const disconnectMailboxMutation = useMutation({
     ...orpc.mail.disconnectMailbox.mutationOptions(),
     mutationKey: ["mail", "disconnect-mailbox"],
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: getMailboxesQueryKey(),
-      });
-    },
+    onSuccess: invalidateMailboxes,
+  });
+  const moveGmailMailboxMutation = useMutation({
+    ...orpc.mail.moveGmailMailbox.mutationOptions(),
+    mutationKey: ["mail", "move-gmail-mailbox"],
+    onSuccess: invalidateMailboxes,
   });
   const setDefaultMailboxMutation = useMutation({
     ...orpc.mail.setDefaultMailbox.mutationOptions(),
     mutationKey: ["mail", "set-default-mailbox"],
+    onSuccess: invalidateMailboxes,
+  });
+  const createManagedMailboxMutation = useMutation({
+    ...orpc.mail.createManagedMailbox.mutationOptions(),
+    mutationKey: ["mail", "create-managed-mailbox"],
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: getMailboxesQueryKey(),
-      });
-    },
-  });
-  useQuery({
-    enabled: pendingGmailLink != null,
-    queryKey: ["mailboxes", "finish-gmail-link", pendingGmailLink?.startedAt],
-    queryFn: async () => {
-      if (!pendingGmailLink) {
-        return null;
-      }
-
-      await queryClient.invalidateQueries({
-        queryKey: getMailboxesQueryKey(),
-      });
-
-      const result = await mailboxesQuery.refetch({
-        cancelRefetch: true,
-      });
-
-      if (result.isError) {
-        toast.error("Could not finish Gmail connection.");
-        return result;
-      }
-
-      writePendingGmailLink(null);
-      setPendingGmailLink(null);
-
-      const nextMailboxCount = result.data?.groups.flatMap((group) => group.mailboxes).length ?? 0;
-      const reconnectedMailbox = result.data?.groups
-        .flatMap((group) => group.mailboxes)
-        .find((mailbox) => mailbox.id === pendingGmailLink.mailboxId);
-
-      if (pendingGmailLink.mode === "connect" && nextMailboxCount > pendingGmailLink.mailboxCount) {
-        toast.success("Gmail connected.");
-      }
-
-      if (
-        pendingGmailLink.mode === "reconnect" &&
-        reconnectedMailbox?.connectionStatus === "connected"
-      ) {
-        toast.success("Google reconnected.");
-      }
-
-      return result;
+      setManagedLocalPart("");
+      await invalidateMailboxes();
+      toast.success("Managed mailbox created.");
     },
   });
 
-  const handleConnectGmail = async (
-    input: {
-      loginHint?: string;
-      mailboxId?: string;
-      mode?: PendingGmailLinkState["mode"];
-    } = {},
-  ) => {
-    setConnectError(null);
-
-    const nextPendingGmailLink = {
-      mailboxCount: mailboxes.length,
-      mailboxId: input.mailboxId,
-      mode: input.mode ?? "connect",
-      startedAt: Date.now(),
-    } satisfies PendingGmailLinkState;
-
-    writePendingGmailLink(nextPendingGmailLink);
-    setIsStartingGmailLink(true);
-
+  const startGmailConnection = async (input?: {
+    mailboxId?: string;
+    organizationId?: string | null;
+  }) => {
+    setIsStartingGmail(true);
     try {
       await openGoogleAccountLink({
-        callbackURL: "/settings?tab=mailboxes",
-        errorCallbackURL: "/settings?tab=mailboxes",
-        loginHint: input.loginHint,
+        mailboxId: input?.mailboxId,
+        organizationId:
+          input?.organizationId === undefined ? gmailOrganizationId || null : input.organizationId,
+        returnTo: getSettingsReturnTo(),
       });
     } catch (error) {
-      writePendingGmailLink(null);
-      setIsStartingGmailLink(false);
-      setConnectError(
-        (error as { message?: string })?.message ?? "Could not start Google account linking.",
-      );
+      setIsStartingGmail(false);
+      toast.error(error instanceof Error ? error.message : "Could not start Gmail connection.");
     }
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
-          onClick={() => {
-            void handleConnectGmail();
-          }}
-          size="sm"
-          type="button"
-        >
-          <HugeiconsIcon
-            aria-hidden
-            className={isGmailConnecting ? "size-4 animate-spin" : "size-4"}
-            icon={isGmailConnecting ? Loading03Icon : Mail01Icon}
-          />
-          {isGmailConnecting ? "Connecting Gmail" : "Add Gmail"}
-        </Button>
-      </div>
-
-      {isGmailConnecting && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-          <span>Syncing Gmail…</span>
+    <div className="space-y-8">
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-sm font-medium text-foreground">Connected Gmail</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Connect an existing personal or Google Workspace inbox. Organization placement does not
+            share the mailbox with other members.
+          </p>
         </div>
-      )}
 
-      {connectError && <p className="text-sm text-destructive">{connectError}</p>}
-
-      {mailboxesQuery.isError && (
-        <p className="text-sm text-destructive">
-          {mailboxesQuery.error.message ?? "Could not load mailboxes."}
-        </p>
-      )}
-
-      {!mailboxesQuery.isError && !isGmailConnecting && mailboxesQuery.isPending && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-          <span>Loading mailboxes…</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <Select
+            items={placementItems}
+            onValueChange={(value) =>
+              setGmailOrganizationId(value === personalPlacementValue ? "" : (value ?? ""))
+            }
+            value={gmailOrganizationId || personalPlacementValue}
+          >
+            <SelectTrigger aria-label="Gmail mailbox placement" className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="start">
+              <SelectItem value={personalPlacementValue}>Personal</SelectItem>
+              {organizations.map((organization) => (
+                <SelectItem key={organization.id} value={organization.id}>
+                  {organization.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            disabled={isStartingGmail}
+            onClick={() => void startGmailConnection()}
+            size="sm"
+            type="button"
+          >
+            <HugeiconsIcon
+              aria-hidden
+              className={cn("size-4", { "animate-spin": isStartingGmail })}
+              icon={isStartingGmail ? Loading03Icon : Mail01Icon}
+            />
+            {isStartingGmail ? "Opening Google" : "Connect Gmail"}
+          </Button>
         </div>
-      )}
 
-      {!mailboxesQuery.isPending && !mailboxesQuery.isError && mailboxes.length === 0 && (
-        <p className="text-sm text-muted-foreground">No mailboxes connected yet.</p>
-      )}
+        {mailboxesQuery.isError && (
+          <p className="text-sm text-destructive">
+            {mailboxesQuery.error.message ?? "Could not load mailboxes."}
+          </p>
+        )}
 
-      {groups.map((group) => (
-        <section className="space-y-2" key={group.id}>
-          <p className="text-xs text-muted-foreground">{group.name}</p>
-
-          {group.mailboxes.length > 0 ? (
+        {gmailGroups.map((group) => (
+          <div className="space-y-2" key={group.id}>
+            <p className="text-xs text-muted-foreground">{group.name}</p>
             <div className="divide-y divide-border/70">
               {group.mailboxes.map((mailbox) => {
-                const isDisconnecting =
-                  disconnectMailboxMutation.variables?.mailboxId === mailbox.id;
                 const isDefault = mailbox.id === defaultMailboxId;
-                const isGmailMailbox = mailbox.provider === "gmail";
-                const needsReconnect = mailbox.connectionStatus === "needs_reconnect";
-
                 return (
                   <MailboxSettingsRow
                     action={
@@ -201,11 +187,11 @@ export const MailboxesSettingsPanel = () => {
                             "text-muted-foreground": !isDefault,
                           })}
                           disabled={setDefaultMailboxMutation.isPending}
-                          onClick={() => {
+                          onClick={() =>
                             void setDefaultMailboxMutation.mutateAsync({
                               mailboxId: isDefault ? null : mailbox.id,
-                            });
-                          }}
+                            })
+                          }
                           size="sm"
                           type="button"
                           variant="ghost"
@@ -218,47 +204,65 @@ export const MailboxesSettingsPanel = () => {
                           {isDefault ? "Default" : "Set default"}
                         </Button>
 
-                        {needsReconnect && isGmailMailbox && (
-                          <Button
-                            disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
-                            onClick={() => {
-                              void handleConnectGmail({
-                                loginHint: mailbox.emailAddress,
+                        <>
+                          <Select
+                            disabled={moveGmailMailboxMutation.isPending}
+                            items={placementItems}
+                            onValueChange={(value) =>
+                              void moveGmailMailboxMutation.mutateAsync({
                                 mailboxId: mailbox.id,
-                                mode: "reconnect",
-                              });
-                            }}
-                            size="sm"
-                            type="button"
-                            variant="ghost"
+                                organizationId: value === personalPlacementValue ? null : value,
+                              })
+                            }
+                            value={mailbox.organizationId ?? personalPlacementValue}
                           >
-                            <HugeiconsIcon
-                              aria-hidden
-                              className={cn("size-4", { "animate-spin": isGmailConnecting })}
-                              icon={isGmailConnecting ? Loading03Icon : Mail01Icon}
-                            />
-                            Reconnect
-                          </Button>
-                        )}
-
-                        {isGmailMailbox && (
+                            <SelectTrigger
+                              aria-label={`Placement for ${mailbox.emailAddress}`}
+                              size="sm"
+                              variant="ghost"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent align="end">
+                              <SelectItem value={personalPlacementValue}>Personal</SelectItem>
+                              {organizations.map((organization) => (
+                                <SelectItem key={organization.id} value={organization.id}>
+                                  {organization.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {mailbox.connectionStatus === "needs_reconnect" && (
+                            <Button
+                              disabled={isStartingGmail}
+                              onClick={() =>
+                                void startGmailConnection({
+                                  mailboxId: mailbox.id,
+                                  organizationId: mailbox.organizationId,
+                                })
+                              }
+                              size="sm"
+                              type="button"
+                              variant="ghost"
+                            >
+                              Reconnect
+                            </Button>
+                          )}
                           <Button
-                            disabled={disconnectMailboxMutation.isPending || isGmailConnecting}
-                            onClick={() => {
-                              void disconnectMailboxMutation.mutateAsync({ mailboxId: mailbox.id });
-                            }}
+                            disabled={disconnectMailboxMutation.isPending}
+                            onClick={() =>
+                              void disconnectMailboxMutation.mutateAsync({
+                                mailboxId: mailbox.id,
+                              })
+                            }
                             size="sm"
                             type="button"
                             variant="ghost"
                           >
-                            <HugeiconsIcon
-                              aria-hidden
-                              className={cn("size-4", { "animate-spin": isDisconnecting })}
-                              icon={isDisconnecting ? Loading03Icon : Delete02Icon}
-                            />
+                            <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
                             Remove
                           </Button>
-                        )}
+                        </>
                       </div>
                     }
                     key={mailbox.id}
@@ -267,17 +271,148 @@ export const MailboxesSettingsPanel = () => {
                 );
               })}
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No mailboxes in this group.</p>
-          )}
-        </section>
-      ))}
+          </div>
+        ))}
+      </section>
 
-      {disconnectMailboxMutation.isError && (
-        <p className="text-sm text-destructive">
-          {disconnectMailboxMutation.error.message ?? "Could not disconnect that mailbox."}
-        </p>
-      )}
+      <section className="space-y-4 border-t border-border pt-6">
+        <div>
+          <h2 className="text-sm font-medium text-foreground">Shared inbox</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Create a mailbox your organization can access.
+          </p>
+        </div>
+        {organizations.length > 0 ? (
+          <div className="flex flex-wrap items-end gap-3">
+            <Select
+              items={organizationItems}
+              onValueChange={(value) => {
+                setManagedOrganizationId(value ?? "");
+                setManagedDomain(undefined);
+              }}
+              value={managedOrganizationId}
+            >
+              <SelectTrigger aria-label="Managed mailbox organization" className="w-48">
+                <SelectValue placeholder="Select organization" />
+              </SelectTrigger>
+              <SelectContent align="start">
+                {organizations.map((organization) => (
+                  <SelectItem key={organization.id} value={organization.id}>
+                    {organization.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <div className="squircle flex h-9 w-72 items-center rounded-md border border-input bg-background shadow-sm transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
+              <TextFieldInput
+                aria-label="Mailbox address"
+                chrome="ghost"
+                className="h-full min-w-0 flex-1 pr-1"
+                onChange={(event) =>
+                  setManagedLocalPart(event.currentTarget.value.replace(/[@\s]/g, ""))
+                }
+                placeholder="support"
+                value={managedLocalPart}
+              />
+              <span aria-hidden className="text-sm text-muted-foreground select-none">
+                @
+              </span>
+              {verifiedDomains.length > 0 ? (
+                <Select
+                  items={verifiedDomains.map((domain) => ({
+                    value: domain.domain,
+                    label: domain.domain,
+                  }))}
+                  onValueChange={(value) => setManagedDomain(value ?? undefined)}
+                  value={selectedDomain}
+                >
+                  <SelectTrigger
+                    aria-label="Mailbox domain"
+                    className="h-full rounded-l-none pr-2.5 pl-1.5 shadow-none active:scale-100"
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent align="end">
+                    {verifiedDomains.map((domain) => (
+                      <SelectItem key={domain.id} value={domain.domain}>
+                        {domain.domain}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <span className="px-2.5 text-sm text-muted-foreground">
+                  {!managedOrganizationId
+                    ? "domain"
+                    : managedDomainsQuery.isLoading
+                      ? "loading…"
+                      : "no verified domain"}
+                </span>
+              )}
+            </div>
+
+            <Button
+              disabled={
+                !trimmedLocalPart ||
+                !selectedDomain ||
+                !managedOrganizationId ||
+                createManagedMailboxMutation.isPending
+              }
+              onClick={() =>
+                void createManagedMailboxMutation.mutateAsync({
+                  emailAddress: `${trimmedLocalPart}@${selectedDomain}`,
+                  organizationId: managedOrganizationId,
+                })
+              }
+              size="sm"
+              type="button"
+            >
+              Create Managed mailbox
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Create an organization before creating a Managed mailbox.
+          </p>
+        )}
+        {organizations.length > 0 &&
+          managedOrganizationId.length > 0 &&
+          !managedDomainsQuery.isLoading &&
+          verifiedDomains.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              This organization has no verified domain yet. Add and verify one in the organization
+              settings to create a shared inbox.
+            </p>
+          )}
+        {createManagedMailboxMutation.isError && (
+          <p className="text-sm text-destructive">
+            {createManagedMailboxMutation.error.message ?? "Could not create managed mailbox."}
+          </p>
+        )}
+        {managedGroups.map((group) =>
+          group.mailboxes.length > 0 ? (
+            <div className="space-y-2" key={group.id}>
+              <p className="text-xs text-muted-foreground">{group.name}</p>
+              <div className="divide-y divide-border/70">
+                {group.mailboxes.map((mailbox) => (
+                  <MailboxSettingsRow
+                    action={
+                      <span className="text-xs text-muted-foreground capitalize">
+                        {mailbox.grantRole}
+                      </span>
+                    }
+                    key={mailbox.id}
+                    mailbox={mailbox}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null,
+        )}
+      </section>
     </div>
   );
 };

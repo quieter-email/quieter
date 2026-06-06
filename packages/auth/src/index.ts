@@ -15,11 +15,15 @@ import {
 } from "better-auth/plugins/organization/access";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { sendMagicLinkEmail, sendVerificationEmail } from "./email";
-import { REQUIRED_GOOGLE_SCOPES } from "./google-scopes";
-import { assertCanLeaveOrganization, cleanupOrganizationsForDeletedUser } from "./organization";
+import { GOOGLE_AUTH_SCOPES } from "./google-scopes";
+import {
+  assertCanLeaveOrganization,
+  cleanupMailboxesForDeletedOrganization,
+  cleanupOrganizationsForDeletedUser,
+} from "./organization";
 
 const appName = process.env.BETTER_AUTH_APP_NAME ?? "quieter";
-const teamApiKeyConfigId = "team";
+const organizationApiKeyConfigId = "organization";
 const organizationAccessControl = createAccessControl({
   ...defaultStatements,
   apiKey: ["create", "read", "update", "delete"],
@@ -79,9 +83,9 @@ export const auth = betterAuth({
         await assertCanLeaveOrganization(currentSession.user, ctx.body.organizationId);
 
       if (ctx.path === "/api-key/create") {
-        const requirement = BILLING_FEATURES.teamApiKeys;
+        const requirement = BILLING_FEATURES.organizationApiKeys;
         const entitlement = await hasUserBillingFeature({
-          feature: "teamApiKeys",
+          feature: "organizationApiKeys",
           userId: currentSession.user.id,
         });
 
@@ -113,9 +117,6 @@ export const auth = betterAuth({
   },
   account: {
     updateAccountOnSignIn: true,
-    accountLinking: {
-      allowDifferentEmails: true,
-    },
   },
   user: {
     changeEmail: {
@@ -135,16 +136,26 @@ export const auth = betterAuth({
   },
   socialProviders: {
     google: {
-      clientId: process.env.GOOGLE_CLIENT_ID as string,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-      accessType: "offline",
-      scope: [...REQUIRED_GOOGLE_SCOPES],
+      clientId: process.env.GOOGLE_AUTH_CLIENT_ID as string,
+      clientSecret: process.env.GOOGLE_AUTH_CLIENT_SECRET as string,
+      scope: [...GOOGLE_AUTH_SCOPES],
     },
   },
   plugins: [
     passkey(),
     organization({
       ac: organizationAccessControl,
+      hooks: {
+        organization: {
+          beforeDelete: async ({
+            organization: deletedOrganization,
+          }: {
+            organization: { id: string };
+          }) => {
+            await cleanupMailboxesForDeletedOrganization(deletedOrganization.id);
+          },
+        },
+      },
       roles: {
         admin: adminRole,
         member: memberRole,
@@ -152,7 +163,7 @@ export const auth = betterAuth({
       },
     }),
     apiKey({
-      configId: teamApiKeyConfigId,
+      configId: organizationApiKeyConfigId,
       defaultPrefix: "quieter_",
       references: "organization",
     }),
@@ -169,7 +180,7 @@ export const auth = betterAuth({
   ],
 });
 
-export { REQUIRED_GOOGLE_SCOPES };
+export { GOOGLE_AUTH_SCOPES };
 
 const throwPlanRequiredError = (plan: PaidBillingPlan, description: string) => {
   throw new APIError("FORBIDDEN", {

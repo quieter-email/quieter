@@ -9,6 +9,7 @@ import { reportAiUsage } from "@quieter/billing";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { MAILBOX_LABELS, type MailboxCategory } from "@quieter/gmail";
+import { assertAccessibleMailbox } from "@quieter/orpc/mailbox";
 import { createOrpcServerClient } from "@quieter/orpc/server-client";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
@@ -74,6 +75,27 @@ export const Route = createFileRoute("/api/chat")({
         }
 
         const chatContext = parseChatContext(params.forwardedProps);
+        if (!chatContext.mailboxId) {
+          return Response.json({ error: "A mailbox is required for chat." }, { status: 400 });
+        }
+
+        try {
+          await assertAccessibleMailbox({
+            mailboxId: chatContext.mailboxId,
+            userId: user.id,
+          });
+
+          if (chatContext.chatId) {
+            const rpc = createOrpcServerClient({ headers: request.headers });
+            await rpc.chat.get({
+              chatId: chatContext.chatId,
+              mailboxId: chatContext.mailboxId,
+            });
+          }
+        } catch {
+          return Response.json({ error: "Mailbox or chat not found." }, { status: 404 });
+        }
+
         const entitlement = await hasUserBillingFeature({
           feature: "aiChat",
           userId: user.id,

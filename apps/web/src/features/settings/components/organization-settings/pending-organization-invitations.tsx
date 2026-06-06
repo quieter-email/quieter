@@ -8,7 +8,7 @@ import { useState } from "react";
 import { authClient } from "~/lib/auth";
 import { type FullOrganization, formatRoleLabel, getFullOrganizationQueryKey } from "./domain";
 
-export const PendingTeamInvitations = ({
+export const PendingOrganizationInvitations = ({
   canCancelInvitations,
   invitations,
   organizationId,

@@ -1859,42 +1859,6 @@ export const untrashThread = async (
   return toThreadMetadataUpdate(updated);
 };
 
-export const deleteMessagePermanently = async (
-  accessToken: string,
-  messageId: string,
-  signal?: AbortSignal,
-) => {
-  await requestGmail(
-    accessToken,
-    `/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}`,
-    z.object({}).passthrough(),
-    {
-      method: "DELETE",
-      signal,
-    },
-  );
-
-  return { id: messageId };
-};
-
-export const deleteThreadPermanently = async (
-  accessToken: string,
-  threadId: string,
-  signal?: AbortSignal,
-) => {
-  await requestGmail(
-    accessToken,
-    `/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}`,
-    z.object({}).passthrough(),
-    {
-      method: "DELETE",
-      signal,
-    },
-  );
-
-  return { threadId };
-};
-
 export const getDraft = async (
   accessToken: string,
   draftId: string,

@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SitePasswordRouteImport } from './routes/site-password'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as HomeRouteImport } from './routes/home'
-import { Route as GoogleScopeRepairRouteImport } from './routes/google-scope-repair'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
@@ -21,6 +20,7 @@ import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
 import { Route as ApiMessagesRouteImport } from './routes/api/messages'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
+import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callback'
 import { Route as ApiBillingPolarWebhookRouteImport } from './routes/api/billing.polar-webhook'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 
@@ -37,11 +37,6 @@ const SettingsRoute = SettingsRouteImport.update({
 const HomeRoute = HomeRouteImport.update({
   id: '/home',
   path: '/home',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const GoogleScopeRepairRoute = GoogleScopeRepairRouteImport.update({
-  id: '/google-scope-repair',
-  path: '/google-scope-repair',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -84,6 +79,11 @@ const ApiOrpcSplatRoute = ApiOrpcSplatRouteImport.update({
   path: '/api/orpc/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGmailCallbackRoute = ApiGmailCallbackRouteImport.update({
+  id: '/api/gmail/callback',
+  path: '/api/gmail/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiBillingPolarWebhookRoute = ApiBillingPolarWebhookRouteImport.update({
   id: '/api/billing/polar-webhook',
   path: '/api/billing/polar-webhook',
@@ -98,7 +98,6 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/google-scope-repair': typeof GoogleScopeRepairRoute
   '/home': typeof HomeRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
@@ -109,12 +108,12 @@ export interface FileRoutesByFullPath {
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/billing/polar-webhook': typeof ApiBillingPolarWebhookRoute
+  '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/google-scope-repair': typeof GoogleScopeRepairRoute
   '/home': typeof HomeRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
@@ -125,13 +124,13 @@ export interface FileRoutesByTo {
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/billing/polar-webhook': typeof ApiBillingPolarWebhookRoute
+  '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/google-scope-repair': typeof GoogleScopeRepairRoute
   '/home': typeof HomeRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
@@ -142,6 +141,7 @@ export interface FileRoutesById {
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/billing/polar-webhook': typeof ApiBillingPolarWebhookRoute
+  '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
 }
 export interface FileRouteTypes {
@@ -149,7 +149,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
-    | '/google-scope-repair'
     | '/home'
     | '/settings'
     | '/site-password'
@@ -160,12 +159,12 @@ export interface FileRouteTypes {
     | '/api/waitlist'
     | '/api/auth/$'
     | '/api/billing/polar-webhook'
+    | '/api/gmail/callback'
     | '/api/orpc/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
-    | '/google-scope-repair'
     | '/home'
     | '/settings'
     | '/site-password'
@@ -176,12 +175,12 @@ export interface FileRouteTypes {
     | '/api/waitlist'
     | '/api/auth/$'
     | '/api/billing/polar-webhook'
+    | '/api/gmail/callback'
     | '/api/orpc/$'
   id:
     | '__root__'
     | '/'
     | '/auth'
-    | '/google-scope-repair'
     | '/home'
     | '/settings'
     | '/site-password'
@@ -192,13 +191,13 @@ export interface FileRouteTypes {
     | '/api/waitlist'
     | '/api/auth/$'
     | '/api/billing/polar-webhook'
+    | '/api/gmail/callback'
     | '/api/orpc/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
-  GoogleScopeRepairRoute: typeof GoogleScopeRepairRoute
   HomeRoute: typeof HomeRoute
   SettingsRoute: typeof SettingsRoute
   SitePasswordRoute: typeof SitePasswordRoute
@@ -209,6 +208,7 @@ export interface RootRouteChildren {
   ApiWaitlistRoute: typeof ApiWaitlistRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiBillingPolarWebhookRoute: typeof ApiBillingPolarWebhookRoute
+  ApiGmailCallbackRoute: typeof ApiGmailCallbackRoute
   ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
 }
 
@@ -233,13 +233,6 @@ declare module '@tanstack/react-router' {
       path: '/home'
       fullPath: '/home'
       preLoaderRoute: typeof HomeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/google-scope-repair': {
-      id: '/google-scope-repair'
-      path: '/google-scope-repair'
-      fullPath: '/google-scope-repair'
-      preLoaderRoute: typeof GoogleScopeRepairRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -298,6 +291,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOrpcSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/gmail/callback': {
+      id: '/api/gmail/callback'
+      path: '/api/gmail/callback'
+      fullPath: '/api/gmail/callback'
+      preLoaderRoute: typeof ApiGmailCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/billing/polar-webhook': {
       id: '/api/billing/polar-webhook'
       path: '/api/billing/polar-webhook'
@@ -318,7 +318,6 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
-  GoogleScopeRepairRoute: GoogleScopeRepairRoute,
   HomeRoute: HomeRoute,
   SettingsRoute: SettingsRoute,
   SitePasswordRoute: SitePasswordRoute,
@@ -329,6 +328,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiWaitlistRoute: ApiWaitlistRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiBillingPolarWebhookRoute: ApiBillingPolarWebhookRoute,
+  ApiGmailCallbackRoute: ApiGmailCallbackRoute,
   ApiOrpcSplatRoute: ApiOrpcSplatRoute,
 }
 export const routeTree = rootRouteImport

@@ -22,3 +22,9 @@ I want to create something like resend, but not just for programmatic sending. W
   - Semantic search
   - Websocket live updates(?)
 - Frontend add more dithers and monochrome gradients
+- Better Teams/Organizations
+  - Have Teams inside Organizations
+  - For example, engineers, marketing, sales, etc.
+  - Then you can for example have social@quieter.email which only the social media team can access, support@quieter.email for support etc.
+  - Then one team can share emails inside a mailbox with other teams, maybe even without forwarding them, just on our platform, need for find out the right ergonomics where these would then show up
+  -

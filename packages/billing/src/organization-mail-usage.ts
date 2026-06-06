@@ -2,31 +2,33 @@ import { ORPCError } from "@orpc/server";
 import {
   db,
   mailDomain,
-  teamMailUsageAlertEvent,
-  teamMailUsageEvent,
-  teamMailUsageSettings,
-  type TeamMailUsageAlertTarget,
-  type TeamMailUsageDirection,
+  organizationMailUsageAlertEvent,
+  organizationMailUsageEvent,
+  organizationMailUsageSettings,
+  type OrganizationMailUsageAlertTarget,
+  type OrganizationMailUsageDirection,
 } from "@quieter/database";
 import { and, eq, gte, lt } from "drizzle-orm";
+import type { PaidBillingPlan } from "./plans";
 import { getOrganizationBillingEntitlement } from "./entitlements";
 import { getPolarClient, getPolarOrganizationId } from "./polar";
 import {
+  getManagedUsageMarkupBasisPoints,
+  getManagedUsageRates,
   SES_INBOUND_CHUNK_BYTES,
   SES_INBOUND_CHUNK_MICROCENTS,
   SES_INBOUND_MESSAGE_MICROCENTS,
   SES_OUTBOUND_ATTACHMENT_DATA_MICROCENTS_PER_GB,
   SES_OUTBOUND_MESSAGE_MICROCENTS,
-  TEAM_MAIL_INCLUDED_SES_USAGE_MICROCENTS,
-  TEAM_MAIL_OVERAGE_MARKUP_BASIS_POINTS,
+  ORGANIZATION_MAIL_INCLUDED_SES_USAGE_MICROCENTS,
 } from "./ses-pricing";
 
-export const TEAM_MAIL_POLAR_EVENT_NAME = "quieter.team_mail.ses_overage";
-export const TEAM_MAIL_USAGE_METER_KEY = "quieter_team_mail_ses_overage";
+export const ORGANIZATION_MAIL_POLAR_EVENT_NAME = "quieter.organization_mail.ses_overage";
+export const ORGANIZATION_MAIL_USAGE_METER_KEY = "quieter_organization_mail_ses_overage";
 
-type TeamMailUsageEstimate = {
+type OrganizationMailUsageEstimate = {
   attachmentSizeBytes: number;
-  direction: TeamMailUsageDirection;
+  direction: OrganizationMailUsageDirection;
   incomingChunkCount: number;
   messageCount: number;
   messageSizeBytes: number;
@@ -34,25 +36,25 @@ type TeamMailUsageEstimate = {
   sesCostMicroCents: number;
 };
 
-type TeamMailUsageInput = TeamMailUsageEstimate & {
+type OrganizationMailUsageInput = OrganizationMailUsageEstimate & {
   metadata?: Record<string, string | number | boolean>;
   organizationId: string;
   providerMessageId: string;
 };
 
-export type TeamMailUsageSettings = {
+export type OrganizationMailUsageSettings = {
   alertMilestonePercents: number[];
   monthlyOverageLimitMicroCents: number | null;
   overageEnabled: boolean;
 };
 
-let teamMailUsageMeterId: string | null = null;
+let organizationMailUsageMeterId: string | null = null;
 
-export const DEFAULT_TEAM_MAIL_USAGE_SETTINGS = {
+export const DEFAULT_ORGANIZATION_MAIL_USAGE_SETTINGS = {
   alertMilestonePercents: [50, 80, 100],
   monthlyOverageLimitMicroCents: null,
   overageEnabled: true,
-} satisfies TeamMailUsageSettings;
+} satisfies OrganizationMailUsageSettings;
 
 const getBillingPeriod = (start: Date | null, end: Date | null) => {
   if (start && end) return { end, start };
@@ -64,10 +66,10 @@ const getBillingPeriod = (start: Date | null, end: Date | null) => {
   return { end: calendarEnd, start: calendarStart };
 };
 
-const applyOverageMarkup = (sesCostMicroCents: number) =>
-  Math.ceil(sesCostMicroCents * (1 + TEAM_MAIL_OVERAGE_MARKUP_BASIS_POINTS / 10_000));
+const applyOverageMarkup = (sesCostMicroCents: number, plan: PaidBillingPlan | null) =>
+  Math.ceil(sesCostMicroCents * (1 + getManagedUsageMarkupBasisPoints(plan) / 10_000));
 
-export const normalizeTeamMailAlertMilestones = (milestones: number[]) =>
+export const normalizeOrganizationMailAlertMilestones = (milestones: number[]) =>
   Array.from(
     new Set(
       milestones
@@ -76,50 +78,57 @@ export const normalizeTeamMailAlertMilestones = (milestones: number[]) =>
     ),
   ).sort((left, right) => left - right);
 
-export const getTeamMailUsageSettings = async (
+export const getOrganizationMailUsageSettings = async (
   organizationId: string,
-): Promise<TeamMailUsageSettings> => {
+): Promise<OrganizationMailUsageSettings> => {
   const [settings] = await db
     .select({
-      alertMilestonePercents: teamMailUsageSettings.alertMilestonePercents,
-      monthlyOverageLimitMicroCents: teamMailUsageSettings.monthlyOverageLimitMicroCents,
-      overageEnabled: teamMailUsageSettings.overageEnabled,
+      alertMilestonePercents: organizationMailUsageSettings.alertMilestonePercents,
+      monthlyOverageLimitMicroCents: organizationMailUsageSettings.monthlyOverageLimitMicroCents,
+      overageEnabled: organizationMailUsageSettings.overageEnabled,
     })
-    .from(teamMailUsageSettings)
-    .where(eq(teamMailUsageSettings.organizationId, organizationId))
+    .from(organizationMailUsageSettings)
+    .where(eq(organizationMailUsageSettings.organizationId, organizationId))
     .limit(1);
 
-  const normalized = normalizeTeamMailAlertMilestones(settings?.alertMilestonePercents ?? []);
+  const normalized = normalizeOrganizationMailAlertMilestones(
+    settings?.alertMilestonePercents ?? [],
+  );
 
   return {
     alertMilestonePercents:
-      normalized.length > 0 ? normalized : DEFAULT_TEAM_MAIL_USAGE_SETTINGS.alertMilestonePercents,
+      normalized.length > 0
+        ? normalized
+        : DEFAULT_ORGANIZATION_MAIL_USAGE_SETTINGS.alertMilestonePercents,
     monthlyOverageLimitMicroCents:
       settings?.monthlyOverageLimitMicroCents ??
-      DEFAULT_TEAM_MAIL_USAGE_SETTINGS.monthlyOverageLimitMicroCents,
-    overageEnabled: settings?.overageEnabled ?? DEFAULT_TEAM_MAIL_USAGE_SETTINGS.overageEnabled,
+      DEFAULT_ORGANIZATION_MAIL_USAGE_SETTINGS.monthlyOverageLimitMicroCents,
+    overageEnabled:
+      settings?.overageEnabled ?? DEFAULT_ORGANIZATION_MAIL_USAGE_SETTINGS.overageEnabled,
   };
 };
 
-export const updateTeamMailUsageSettings = async (input: {
+export const updateOrganizationMailUsageSettings = async (input: {
   alertMilestonePercents: number[];
   monthlyOverageLimitMicroCents: number | null;
   organizationId: string;
   overageEnabled: boolean;
 }) => {
   const now = new Date();
-  const alertMilestonePercents = normalizeTeamMailAlertMilestones(input.alertMilestonePercents);
+  const alertMilestonePercents = normalizeOrganizationMailAlertMilestones(
+    input.alertMilestonePercents,
+  );
   const settings = {
     alertMilestonePercents:
       alertMilestonePercents.length > 0
         ? alertMilestonePercents
-        : DEFAULT_TEAM_MAIL_USAGE_SETTINGS.alertMilestonePercents,
+        : DEFAULT_ORGANIZATION_MAIL_USAGE_SETTINGS.alertMilestonePercents,
     monthlyOverageLimitMicroCents: input.monthlyOverageLimitMicroCents,
     overageEnabled: input.overageEnabled,
-  } satisfies TeamMailUsageSettings;
+  } satisfies OrganizationMailUsageSettings;
 
   const [updatedSettings] = await db
-    .insert(teamMailUsageSettings)
+    .insert(organizationMailUsageSettings)
     .values({
       ...settings,
       createdAt: now,
@@ -131,18 +140,18 @@ export const updateTeamMailUsageSettings = async (input: {
         ...settings,
         updatedAt: now,
       },
-      target: teamMailUsageSettings.organizationId,
+      target: organizationMailUsageSettings.organizationId,
     })
     .returning({
-      alertMilestonePercents: teamMailUsageSettings.alertMilestonePercents,
-      monthlyOverageLimitMicroCents: teamMailUsageSettings.monthlyOverageLimitMicroCents,
-      overageEnabled: teamMailUsageSettings.overageEnabled,
+      alertMilestonePercents: organizationMailUsageSettings.alertMilestonePercents,
+      monthlyOverageLimitMicroCents: organizationMailUsageSettings.monthlyOverageLimitMicroCents,
+      overageEnabled: organizationMailUsageSettings.overageEnabled,
     });
 
   return updatedSettings ?? settings;
 };
 
-export const estimateOutboundTeamMailUsage = (input: {
+export const estimateOutboundOrganizationMailUsage = (input: {
   attachmentSizeBytes?: number;
   bcc?: string[];
   cc?: string[];
@@ -150,7 +159,7 @@ export const estimateOutboundTeamMailUsage = (input: {
   subject: string;
   text?: string;
   to: string[];
-}): TeamMailUsageEstimate => {
+}): OrganizationMailUsageEstimate => {
   const recipientCount = new Set([...(input.to ?? []), ...(input.cc ?? []), ...(input.bcc ?? [])])
     .size;
   const messageSizeBytes = Buffer.byteLength(
@@ -174,10 +183,10 @@ export const estimateOutboundTeamMailUsage = (input: {
   };
 };
 
-export const estimateInboundTeamMailUsage = (input: {
+export const estimateInboundOrganizationMailUsage = (input: {
   messageSizeBytes: number;
   recipientCount: number;
-}): TeamMailUsageEstimate => {
+}): OrganizationMailUsageEstimate => {
   const incomingChunkCount =
     input.messageSizeBytes > 0 ? Math.ceil(input.messageSizeBytes / SES_INBOUND_CHUNK_BYTES) : 0;
 
@@ -200,15 +209,15 @@ const getPeriodUsageMicroCents = async (input: {
 }) => {
   const rows = await db
     .select({
-      billableCostMicroCents: teamMailUsageEvent.billableCostMicroCents,
-      sesCostMicroCents: teamMailUsageEvent.sesCostMicroCents,
+      billableCostMicroCents: organizationMailUsageEvent.billableCostMicroCents,
+      sesCostMicroCents: organizationMailUsageEvent.sesCostMicroCents,
     })
-    .from(teamMailUsageEvent)
+    .from(organizationMailUsageEvent)
     .where(
       and(
-        eq(teamMailUsageEvent.organizationId, input.organizationId),
-        gte(teamMailUsageEvent.createdAt, input.start),
-        lt(teamMailUsageEvent.createdAt, input.end),
+        eq(organizationMailUsageEvent.organizationId, input.organizationId),
+        gte(organizationMailUsageEvent.createdAt, input.start),
+        lt(organizationMailUsageEvent.createdAt, input.end),
       ),
     );
 
@@ -222,12 +231,13 @@ const getPeriodUsageMicroCents = async (input: {
 };
 
 const getEventOverage = (input: {
-  estimate: TeamMailUsageEstimate;
+  estimate: OrganizationMailUsageEstimate;
+  plan: PaidBillingPlan | null;
   usedSesCostMicroCents: number;
 }) => {
   const remainingIncludedSesCostMicroCents = Math.max(
     0,
-    TEAM_MAIL_INCLUDED_SES_USAGE_MICROCENTS - input.usedSesCostMicroCents,
+    ORGANIZATION_MAIL_INCLUDED_SES_USAGE_MICROCENTS - input.usedSesCostMicroCents,
   );
   const overageSesCostMicroCents = Math.max(
     0,
@@ -235,16 +245,16 @@ const getEventOverage = (input: {
   );
 
   return {
-    billableCostMicroCents: applyOverageMarkup(overageSesCostMicroCents),
+    billableCostMicroCents: applyOverageMarkup(overageSesCostMicroCents, input.plan),
     overageSesCostMicroCents,
     remainingIncludedSesCostMicroCents,
   };
 };
 
-const applyTeamMailUsageSettings = (input: {
+const applyOrganizationMailUsageSettings = (input: {
   billableCostMicroCents: number;
   currentBillableCostMicroCents: number;
-  settings: TeamMailUsageSettings;
+  settings: OrganizationMailUsageSettings;
 }) => {
   if (!input.settings.overageEnabled) return 0;
 
@@ -260,24 +270,24 @@ const applyTeamMailUsageSettings = (input: {
   return Math.min(input.billableCostMicroCents, remainingBillableCostMicroCents);
 };
 
-const getTeamMailUsageMeterId = async () => {
-  if (teamMailUsageMeterId) return teamMailUsageMeterId;
+const getOrganizationMailUsageMeterId = async () => {
+  if (organizationMailUsageMeterId) return organizationMailUsageMeterId;
 
   const polar = await getPolarClient();
   const organizationId = getPolarOrganizationId();
   const meters = await polar.meters.list({
     limit: 100,
     metadata: {
-      quieterMeter: TEAM_MAIL_USAGE_METER_KEY,
+      quieterMeter: ORGANIZATION_MAIL_USAGE_METER_KEY,
     },
     organizationId,
   });
   const existingMeter = meters.result.items.find(
-    (meter) => meter.metadata.quieterMeter === TEAM_MAIL_USAGE_METER_KEY,
+    (meter) => meter.metadata.quieterMeter === ORGANIZATION_MAIL_USAGE_METER_KEY,
   );
 
   if (existingMeter) {
-    teamMailUsageMeterId = existingMeter.id;
+    organizationMailUsageMeterId = existingMeter.id;
     return existingMeter.id;
   }
 
@@ -291,46 +301,46 @@ const getTeamMailUsageMeterId = async () => {
         {
           operator: "eq",
           property: "name",
-          value: TEAM_MAIL_POLAR_EVENT_NAME,
+          value: ORGANIZATION_MAIL_POLAR_EVENT_NAME,
         },
       ],
       conjunction: "and",
     },
     metadata: {
-      quieterMeter: TEAM_MAIL_USAGE_METER_KEY,
+      quieterMeter: ORGANIZATION_MAIL_USAGE_METER_KEY,
     },
-    name: "Quieter team mail SES overage",
+    name: "Quieter Managed Usage overage",
     organizationId,
   });
 
-  teamMailUsageMeterId = createdMeter.id;
+  organizationMailUsageMeterId = createdMeter.id;
   return createdMeter.id;
 };
 
-export const getTeamMailMeteredPrice = async () => ({
+export const getOrganizationMailMeteredPrice = async () => ({
   amountType: "metered_unit" as const,
-  meterId: await getTeamMailUsageMeterId(),
+  meterId: await getOrganizationMailUsageMeterId(),
   priceCurrency: "usd",
   unitAmount: "1",
 });
 
-const recordTeamMailUsageAlerts = async (input: {
+const recordOrganizationMailUsageAlerts = async (input: {
   organizationId: string;
   period: { end: Date; start: Date };
-  settings: TeamMailUsageSettings;
+  settings: OrganizationMailUsageSettings;
   usage: {
     billableCostMicroCents: number;
     sesCostMicroCents: number;
   };
 }) => {
   type AlertCandidate = {
-    target: TeamMailUsageAlertTarget;
+    target: OrganizationMailUsageAlertTarget;
     thresholdMicroCents: number;
   };
 
   const alerts = input.settings.alertMilestonePercents.flatMap((milestonePercent) => {
     const includedUsageThreshold = Math.ceil(
-      TEAM_MAIL_INCLUDED_SES_USAGE_MICROCENTS * (milestonePercent / 100),
+      ORGANIZATION_MAIL_INCLUDED_SES_USAGE_MICROCENTS * (milestonePercent / 100),
     );
     const includedUsageAlert: AlertCandidate[] =
       input.usage.sesCostMicroCents >= includedUsageThreshold
@@ -374,30 +384,30 @@ const recordTeamMailUsageAlerts = async (input: {
   if (alerts.length === 0) return;
 
   await db
-    .insert(teamMailUsageAlertEvent)
+    .insert(organizationMailUsageAlertEvent)
     .values(alerts)
     .onConflictDoNothing({
       target: [
-        teamMailUsageAlertEvent.organizationId,
-        teamMailUsageAlertEvent.periodStart,
-        teamMailUsageAlertEvent.target,
-        teamMailUsageAlertEvent.milestonePercent,
+        organizationMailUsageAlertEvent.organizationId,
+        organizationMailUsageAlertEvent.periodStart,
+        organizationMailUsageAlertEvent.target,
+        organizationMailUsageAlertEvent.milestonePercent,
       ],
     });
 };
 
-export const assertCanConsumeTeamMailUsage = async (input: {
-  estimate: TeamMailUsageEstimate;
+export const assertCanConsumeOrganizationMailUsage = async (input: {
+  estimate: OrganizationMailUsageEstimate;
   organizationId: string;
 }) => {
   const entitlement = await getOrganizationBillingEntitlement({
-    feature: "teamMail",
+    feature: "organizationMail",
     organizationId: input.organizationId,
   });
 
   if (!entitlement.hasAccess) {
     throw new ORPCError("FORBIDDEN", {
-      message: "Team mail API sending requires the managed plan.",
+      message: "Organization mail API sending requires the managed plan.",
       status: 403,
     });
   }
@@ -410,17 +420,18 @@ export const assertCanConsumeTeamMailUsage = async (input: {
   });
   const eventOverage = getEventOverage({
     estimate: input.estimate,
+    plan: entitlement.plan,
     usedSesCostMicroCents: usage.sesCostMicroCents,
   });
 
   if (eventOverage.overageSesCostMicroCents > 0 && !entitlement.hasUnlimitedAccess) {
-    const settings = await getTeamMailUsageSettings(input.organizationId);
+    const settings = await getOrganizationMailUsageSettings(input.organizationId);
     const projectedBillableCostMicroCents =
       usage.billableCostMicroCents + eventOverage.billableCostMicroCents;
 
     if (!settings.overageEnabled) {
       throw new ORPCError("FORBIDDEN", {
-        message: "Team mail SES overage is disabled for this team.",
+        message: "Managed Usage overage is disabled for this organization.",
         status: 403,
       });
     }
@@ -430,7 +441,7 @@ export const assertCanConsumeTeamMailUsage = async (input: {
       projectedBillableCostMicroCents > settings.monthlyOverageLimitMicroCents
     ) {
       throw new ORPCError("FORBIDDEN", {
-        message: "Team mail SES overage limit reached for this billing period.",
+        message: "Managed Usage overage limit reached for this billing period.",
         status: 403,
       });
     }
@@ -442,21 +453,21 @@ export const assertCanConsumeTeamMailUsage = async (input: {
     !entitlement.billingUserId
   ) {
     throw new ORPCError("FORBIDDEN", {
-      message: "Team mail SES overage billing is not available for this team.",
+      message: "Managed Usage overage billing is not available for this organization.",
       status: 403,
     });
   }
 
   if (eventOverage.overageSesCostMicroCents > 0 && !entitlement.hasUnlimitedAccess) {
-    await getTeamMailUsageMeterId();
+    await getOrganizationMailUsageMeterId();
   }
 
   return { entitlement, period };
 };
 
-export const recordTeamMailUsage = async (input: TeamMailUsageInput) => {
+export const recordOrganizationMailUsage = async (input: OrganizationMailUsageInput) => {
   const entitlement = await getOrganizationBillingEntitlement({
-    feature: "teamMail",
+    feature: "organizationMail",
     organizationId: input.organizationId,
   });
 
@@ -470,20 +481,21 @@ export const recordTeamMailUsage = async (input: TeamMailUsageInput) => {
   });
   const eventOverage = getEventOverage({
     estimate: input,
+    plan: entitlement.plan,
     usedSesCostMicroCents: usage.sesCostMicroCents,
   });
   const includedSesCostMicroCents = entitlement.hasUnlimitedAccess
     ? input.sesCostMicroCents
     : Math.min(input.sesCostMicroCents, eventOverage.remainingIncludedSesCostMicroCents);
   const settings = entitlement.hasUnlimitedAccess
-    ? DEFAULT_TEAM_MAIL_USAGE_SETTINGS
-    : await getTeamMailUsageSettings(input.organizationId);
+    ? DEFAULT_ORGANIZATION_MAIL_USAGE_SETTINGS
+    : await getOrganizationMailUsageSettings(input.organizationId);
   const rawBillableCostMicroCents = entitlement.hasUnlimitedAccess
     ? 0
     : eventOverage.billableCostMicroCents;
   const billableCostMicroCents = entitlement.hasUnlimitedAccess
     ? 0
-    : applyTeamMailUsageSettings({
+    : applyOrganizationMailUsageSettings({
         billableCostMicroCents: rawBillableCostMicroCents,
         currentBillableCostMicroCents: usage.billableCostMicroCents,
         settings,
@@ -491,7 +503,7 @@ export const recordTeamMailUsage = async (input: TeamMailUsageInput) => {
   const now = new Date();
   const dedupeKey = `${input.direction}:${input.organizationId}:${input.providerMessageId}`;
   const [usageEvent] = await db
-    .insert(teamMailUsageEvent)
+    .insert(organizationMailUsageEvent)
     .values({
       attachmentSizeBytes: input.attachmentSizeBytes,
       billableCostMicroCents,
@@ -510,13 +522,13 @@ export const recordTeamMailUsage = async (input: TeamMailUsageInput) => {
       recipientCount: input.recipientCount,
       sesCostMicroCents: input.sesCostMicroCents,
     })
-    .onConflictDoNothing({ target: teamMailUsageEvent.dedupeKey })
+    .onConflictDoNothing({ target: organizationMailUsageEvent.dedupeKey })
     .returning({
-      id: teamMailUsageEvent.id,
+      id: organizationMailUsageEvent.id,
     });
 
   if (usageEvent && !entitlement.hasUnlimitedAccess) {
-    await recordTeamMailUsageAlerts({
+    await recordOrganizationMailUsageAlerts({
       organizationId: input.organizationId,
       period,
       settings,
@@ -531,7 +543,7 @@ export const recordTeamMailUsage = async (input: TeamMailUsageInput) => {
     return usageEvent ?? null;
   }
 
-  await getTeamMailUsageMeterId();
+  await getOrganizationMailUsageMeterId();
   await (
     await getPolarClient()
   ).events.ingest({
@@ -546,7 +558,7 @@ export const recordTeamMailUsage = async (input: TeamMailUsageInput) => {
           sesCostCents: input.sesCostMicroCents / 1_000_000,
           usageEventId: usageEvent.id,
         },
-        name: TEAM_MAIL_POLAR_EVENT_NAME,
+        name: ORGANIZATION_MAIL_POLAR_EVENT_NAME,
         organizationId: getPolarOrganizationId(),
         timestamp: now,
       },
@@ -554,21 +566,21 @@ export const recordTeamMailUsage = async (input: TeamMailUsageInput) => {
   });
 
   await db
-    .update(teamMailUsageEvent)
+    .update(organizationMailUsageEvent)
     .set({ polarEventReportedAt: new Date() })
-    .where(eq(teamMailUsageEvent.id, usageEvent.id));
+    .where(eq(organizationMailUsageEvent.id, usageEvent.id));
 
   return usageEvent;
 };
 
-export const getTeamMailUsageOverview = async (organizationId: string) => {
+export const getOrganizationMailUsageOverview = async (organizationId: string) => {
   const entitlement = await getOrganizationBillingEntitlement({
-    feature: "teamMail",
+    feature: "organizationMail",
     organizationId,
   });
   const period = getBillingPeriod(entitlement.currentPeriodStart, entitlement.currentPeriodEnd);
   const [settings, usage] = await Promise.all([
-    getTeamMailUsageSettings(organizationId),
+    getOrganizationMailUsageSettings(organizationId),
     getPeriodUsageMicroCents({
       end: period.end,
       organizationId,
@@ -579,17 +591,18 @@ export const getTeamMailUsageOverview = async (organizationId: string) => {
   return {
     hasAccess: entitlement.hasAccess,
     hasUnlimitedAccess: entitlement.hasUnlimitedAccess,
-    includedSesUsageMicroCents: TEAM_MAIL_INCLUDED_SES_USAGE_MICROCENTS,
+    includedSesUsageMicroCents: ORGANIZATION_MAIL_INCLUDED_SES_USAGE_MICROCENTS,
+    managedUsageRates: getManagedUsageRates(entitlement.plan === "pro" ? "pro" : "managed"),
     period,
     remainingIncludedSesUsageMicroCents: entitlement.hasUnlimitedAccess
       ? null
-      : Math.max(0, TEAM_MAIL_INCLUDED_SES_USAGE_MICROCENTS - usage.sesCostMicroCents),
+      : Math.max(0, ORGANIZATION_MAIL_INCLUDED_SES_USAGE_MICROCENTS - usage.sesCostMicroCents),
     settings,
     usage,
   };
 };
 
-export const recordInboundTeamMailUsage = async (input: {
+export const recordInboundOrganizationMailUsage = async (input: {
   messageSizeBytes: number;
   providerMessageId: string;
   recipients: string[];
@@ -626,12 +639,12 @@ export const recordInboundTeamMailUsage = async (input: {
 
       if (orgRecipients.length === 0) return;
 
-      const estimate = estimateInboundTeamMailUsage({
+      const estimate = estimateInboundOrganizationMailUsage({
         messageSizeBytes: input.messageSizeBytes,
         recipientCount: orgRecipients.length,
       });
 
-      await recordTeamMailUsage({
+      await recordOrganizationMailUsage({
         ...estimate,
         metadata: {
           recipients: orgRecipients.join(","),

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { formatSesUsagePriceFeature } from "./ses-pricing";
+import { formatManagedUsagePriceFeature } from "./ses-pricing";
 
 export const PAID_BILLING_PLANS = ["managed", "pro"] as const;
 export const paidBillingPlanSchema = z.enum(PAID_BILLING_PLANS);
@@ -9,7 +9,11 @@ export const billingPlanSchema = z.enum(BILLING_PLAN_IDS);
 export type PaidBillingPlan = (typeof PAID_BILLING_PLANS)[number];
 export type BillingPlan = "free" | PaidBillingPlan;
 
-export type BillingFeature = "aiChat" | "teamApiKeys" | "teamDomains" | "teamMail";
+export type BillingFeature =
+  | "aiChat"
+  | "organizationApiKeys"
+  | "organizationDomains"
+  | "organizationMail";
 
 export const BILLING_PLAN_ORDER = {
   free: 0,
@@ -22,16 +26,16 @@ export const BILLING_FEATURES = {
     description: "AI chat",
     requiredPlan: "pro",
   },
-  teamApiKeys: {
-    description: "team API keys",
+  organizationApiKeys: {
+    description: "organization API keys",
     requiredPlan: "managed",
   },
-  teamDomains: {
-    description: "custom team domains",
+  organizationDomains: {
+    description: "custom organization domains",
     requiredPlan: "managed",
   },
-  teamMail: {
-    description: "team mail API sending",
+  organizationMail: {
+    description: "organization mail API sending",
     requiredPlan: "managed",
   },
 } as const satisfies Record<
@@ -44,12 +48,12 @@ export const BILLING_FEATURES = {
 
 export const BILLING_PRODUCTS = {
   managed: {
-    description: "Hosted team mailboxes, custom domains, and API-key sending.",
+    description: "Hosted organization mailboxes, custom domains, and API-key sending.",
     features: [
       "Managed sending and receiving",
-      "Custom team domains",
-      "Team API keys",
-      formatSesUsagePriceFeature(),
+      "Custom organization domains",
+      "Organization API keys",
+      formatManagedUsagePriceFeature("managed"),
     ],
     highlight: false,
     monthlyPriceCents: 1_000,
@@ -60,6 +64,7 @@ export const BILLING_PRODUCTS = {
     description: "Managed mail plus AI chat and live Gmail infrastructure.",
     features: [
       "Everything in Managed",
+      formatManagedUsagePriceFeature("pro"),
       "AI chat",
       "$10 AI credits included",
       "Gmail Pub/Sub support",

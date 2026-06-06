@@ -1,17 +1,17 @@
 import { queryOptions } from "@tanstack/react-query";
 import { authClient } from "~/lib/auth";
 
-export const TEAM_API_KEY_CONFIG_ID = "team";
+export const ORGANIZATION_API_KEY_CONFIG_ID = "organization";
 
-export const getTeamApiKeysQueryKey = (organizationId: string) =>
-  ["team-api-keys", organizationId] as const;
+export const getOrganizationApiKeysQueryKey = (organizationId: string) =>
+  ["organization-api-keys", organizationId] as const;
 
-export const teamApiKeysQueryOptions = (organizationId: string) =>
+export const organizationApiKeysQueryOptions = (organizationId: string) =>
   queryOptions({
     queryFn: async () => {
       const response = await authClient.apiKey.list({
         query: {
-          configId: TEAM_API_KEY_CONFIG_ID,
+          configId: ORGANIZATION_API_KEY_CONFIG_ID,
           organizationId,
           sortBy: "createdAt",
           sortDirection: "desc",
@@ -24,6 +24,6 @@ export const teamApiKeysQueryOptions = (organizationId: string) =>
 
       return response.data;
     },
-    queryKey: getTeamApiKeysQueryKey(organizationId),
+    queryKey: getOrganizationApiKeysQueryKey(organizationId),
     staleTime: 30_000,
   });

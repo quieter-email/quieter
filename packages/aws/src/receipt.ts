@@ -1,5 +1,5 @@
 import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { recordInboundTeamMailUsage } from "@quieter/billing/team-mail-usage";
+import { recordInboundOrganizationMailUsage } from "@quieter/billing/organization-mail-usage";
 import { Resource } from "sst";
 
 type SnsRecord = {
@@ -90,7 +90,7 @@ export const handler = async (event: SnsEvent) => {
       );
       const messageSizeBytes = headObject.ContentLength ?? 0;
 
-      await recordInboundTeamMailUsage({
+      await recordInboundOrganizationMailUsage({
         messageSizeBytes,
         providerMessageId,
         recipients,

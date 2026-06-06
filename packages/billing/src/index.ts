@@ -10,9 +10,9 @@ import {
   hasUnlimitedBillingAccess,
   isActiveBillingStatus,
 } from "./entitlements";
+import { getOrganizationMailMeteredPrice } from "./organization-mail-usage";
 import { BILLING_PRODUCTS, paidBillingPlanSchema, type PaidBillingPlan } from "./plans";
 import { getPolarClient, getPolarOrganizationId, getPolarSandboxMode } from "./polar";
-import { getTeamMailMeteredPrice } from "./team-mail-usage";
 
 const BILLING_PROVIDER = "polar" as const;
 const BILLING_METADATA_PLAN = "quieterPlan";
@@ -73,15 +73,15 @@ const getBillingProductId = async (plan: PaidBillingPlan) => {
   );
 
   if (existingProduct) {
-    const teamMailMeteredPrice = await getTeamMailMeteredPrice();
-    const hasTeamMailMeteredPrice = existingProduct.prices.some(
+    const organizationMailMeteredPrice = await getOrganizationMailMeteredPrice();
+    const hasOrganizationMailMeteredPrice = existingProduct.prices.some(
       (price) =>
         price.amountType === "metered_unit" &&
         "meterId" in price &&
-        price.meterId === teamMailMeteredPrice.meterId,
+        price.meterId === organizationMailMeteredPrice.meterId,
     );
 
-    if (!hasTeamMailMeteredPrice) {
+    if (!hasOrganizationMailMeteredPrice) {
       await polar.products.update({
         id: existingProduct.id,
         productUpdate: {
@@ -89,7 +89,7 @@ const getBillingProductId = async (plan: PaidBillingPlan) => {
             ...existingProduct.prices
               .filter((price) => !price.isArchived)
               .map((price) => ({ id: price.id })),
-            teamMailMeteredPrice,
+            organizationMailMeteredPrice,
           ],
         },
       });
@@ -99,7 +99,7 @@ const getBillingProductId = async (plan: PaidBillingPlan) => {
     return existingProduct.id;
   }
 
-  const teamMailMeteredPrice = await getTeamMailMeteredPrice();
+  const organizationMailMeteredPrice = await getOrganizationMailMeteredPrice();
 
   const createdProduct = await polar.products.create({
     description: product.description,
@@ -115,7 +115,7 @@ const getBillingProductId = async (plan: PaidBillingPlan) => {
         priceAmount: product.monthlyPriceCents,
         priceCurrency: "usd",
       },
-      teamMailMeteredPrice,
+      organizationMailMeteredPrice,
     ],
     recurringInterval: "month",
   });

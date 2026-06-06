@@ -22,7 +22,6 @@ export const isMailboxScopeRepairRequiredError = (
     !!data &&
     typeof data === "object" &&
     typeof (data as Partial<MailboxScopeRepairRequiredErrorData>).mailboxId === "string" &&
-    typeof (data as Partial<MailboxScopeRepairRequiredErrorData>).providerAccountId === "string" &&
     typeof (data as Partial<MailboxScopeRepairRequiredErrorData>).emailAddress === "string"
   );
 };

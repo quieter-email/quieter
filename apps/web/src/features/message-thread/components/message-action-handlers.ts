@@ -17,7 +17,6 @@ export type ThreadActionHandlers = {
   onMoveToTrash?: (threadId: string) => void | Promise<void>;
   onUntrash?: (threadId: string) => void | Promise<void>;
   onUnmarkAsSpam?: (threadId: string) => void | Promise<void>;
-  onDeletePermanently?: (threadId: string) => void | Promise<void>;
 };
 
 export const createMailboxThreadMessageActionHandlers = ({
@@ -28,7 +27,6 @@ export const createMailboxThreadMessageActionHandlers = ({
   onOpenDraft?: (message: MessageListItem) => void | Promise<void>;
 }): ThreadActionHandlers => ({
   onDeleteDraft: mailboxActions.deleteDraft,
-  onDeletePermanently: (threadId) => mailboxActions.deleteThreadPermanently(threadId),
   onMarkAsRead: (threadId) => mailboxActions.markThreadAsRead(threadId),
   onMarkAsSpam: (threadId) => mailboxActions.markThreadAsSpam(threadId),
   onMarkAsUnread: (threadId) => mailboxActions.markThreadAsUnread(threadId),

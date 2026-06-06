@@ -29,9 +29,9 @@ import { orpc } from "~/lib/orpc";
 import { formatCount, type FullOrganization } from "./domain";
 import {
   formatMailDomainStatus,
-  getTeamMailDomainsQueryKey,
-  teamMailDomainsQueryOptions,
-  type TeamMailDomain,
+  getOrganizationMailDomainsQueryKey,
+  organizationMailDomainsQueryOptions,
+  type OrganizationMailDomain,
 } from "./mail-domains";
 import { RegisterDomainDialog } from "./register-domain-dialog";
 import { MutedActionButton } from "./settings-row";
@@ -45,7 +45,7 @@ const formatDomainDate = (value: Date | string) => {
   return Number.isNaN(date.getTime()) ? "Unknown" : dateFormatter.format(date);
 };
 
-const DomainStatusBadge = ({ domain }: { domain: TeamMailDomain }) => {
+const DomainStatusBadge = ({ domain }: { domain: OrganizationMailDomain }) => {
   const verified = domain.status === "verified";
 
   return (
@@ -67,7 +67,7 @@ const RemoveDomainDialog = ({
   domain,
   organizationId,
 }: {
-  domain: TeamMailDomain;
+  domain: OrganizationMailDomain;
   organizationId: string;
 }) => {
   const queryClient = useQueryClient();
@@ -77,7 +77,7 @@ const RemoveDomainDialog = ({
     mutationKey: ["mail-domains", organizationId, domain.id, "remove"],
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: getTeamMailDomainsQueryKey(organizationId),
+        queryKey: getOrganizationMailDomainsQueryKey(organizationId),
       });
     },
   });
@@ -111,8 +111,8 @@ const RemoveDomainDialog = ({
 
           <DialogBody className="space-y-3 text-sm text-muted-foreground">
             <p>
-              This removes the domain from this team and releases it for future registration in
-              Quieter.
+              This removes the domain from this organization and releases it for future registration
+              in Quieter.
             </p>
             <p>
               Remove the DNS records as soon as possible. Leaving old records in place can keep mail
@@ -150,7 +150,7 @@ const DomainRow = ({
   organizationId,
 }: {
   canManageDomains: boolean;
-  domain: TeamMailDomain;
+  domain: OrganizationMailDomain;
   organizationId: string;
 }) => (
   <div className="flex flex-col gap-3 border-b border-border/70 py-4 last:border-b-0 md:flex-row md:items-center md:justify-between">
@@ -183,21 +183,21 @@ const DomainRow = ({
 
 export const DomainsView = ({
   canManageDomains,
-  canUseTeamDomains,
+  canUseOrganizationDomains,
   onBack,
   organization,
 }: {
   canManageDomains: boolean;
-  canUseTeamDomains: boolean;
+  canUseOrganizationDomains: boolean;
   onBack: () => void;
   organization: FullOrganization;
 }) => {
-  const domainsQuery = useQuery(teamMailDomainsQueryOptions(organization.id));
+  const domainsQuery = useQuery(organizationMailDomainsQueryOptions(organization.id));
   const domains = domainsQuery.data?.domains ?? [];
   const manageDomainsReason =
-    (!canUseTeamDomains &&
-      `Registering domains requires the ${BILLING_FEATURES.teamDomains.requiredPlan} plan.`) ||
-    (!canManageDomains && "Only admins and owners can register team domains.") ||
+    (!canUseOrganizationDomains &&
+      `Registering domains requires the ${BILLING_FEATURES.organizationDomains.requiredPlan} plan.`) ||
+    (!canManageDomains && "Only admins and owners can register organization domains.") ||
     null;
 
   return (
@@ -244,7 +244,7 @@ export const DomainsView = ({
         ) : domains.length > 0 ? (
           domains.map((domain) => (
             <DomainRow
-              canManageDomains={canManageDomains && canUseTeamDomains}
+              canManageDomains={canManageDomains && canUseOrganizationDomains}
               domain={domain}
               key={domain.id}
               organizationId={organization.id}

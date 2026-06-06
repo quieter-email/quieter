@@ -1,12 +1,10 @@
 import { ORPCError } from "@orpc/server";
-import { db, account, user } from "@quieter/database";
+import { db, user } from "@quieter/database";
 import {
   createDraft,
   createLabel,
   deleteDraft,
   deleteLabel,
-  deleteMessagePermanently,
-  deleteThreadPermanently,
   extractListUnsubscribeTargets,
   getDraft,
   getGmailMessageMetadata,
@@ -45,24 +43,24 @@ import {
   composeSendDraftInputSchema,
   splitMailAddressList,
 } from "@quieter/mail/compose";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { getRequestHeaders } from "../context";
 import {
   applyMailboxSwitcherOrder,
   canonicalizeMailboxSwitcherOrder,
-  getAuthorizedManagedMailbox,
+  createManagedMailbox,
+  disconnectGmailMailbox,
   getUserMailboxPreferences,
   listAccessibleMailboxState,
-  listLinkedGoogleAccounts,
-  listPersonalGmailMailboxes,
-  parseGmailProviderAccountId,
+  moveGmailMailbox,
+  removeManagedMailboxGrant,
   resolveDefaultMailboxId,
+  setManagedMailboxGrant,
+  startGmailOAuth,
   type MailboxListItem,
 } from "../mailbox";
 import {
   callGmail,
-  callWithRateLimitHandling,
   historySyncMailboxCategorySchema,
   gmailUserLabelNameSchema,
   mailboxCategorySchema,
@@ -110,10 +108,9 @@ const parseListUnsubscribeMailto = (value: string) => {
 
 export const mailRouter = {
   listMailboxes: protectedProcedure.route({ method: "GET" }).handler(async ({ context }) => {
-    const headers = getRequestHeaders(context);
     const [mailboxPreferences, mailboxState] = await Promise.all([
       getUserMailboxPreferences(context.userId),
-      listAccessibleMailboxState({ headers, userId: context.userId }),
+      listAccessibleMailboxState({ userId: context.userId }),
     ]);
     const { groups } = mailboxState;
     const orderedGroups = applyMailboxSwitcherOrder(
@@ -128,18 +125,22 @@ export const mailRouter = {
     };
   }),
 
-  syncPersonalMailboxes: protectedProcedure.handler(async ({ context }) => {
-    return await callWithRateLimitHandling(context, async () => {
-      const gmailState = await listPersonalGmailMailboxes({
-        headers: getRequestHeaders(context),
+  startGmailConnection: protectedProcedure
+    .input(
+      z.object({
+        mailboxId: mailboxIdSchema.optional(),
+        organizationId: z.string().trim().min(1).nullable().optional(),
+        returnTo: z.string().trim().optional(),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      return await startGmailOAuth({
+        mailboxId: input.mailboxId,
+        organizationId: input.organizationId,
+        returnTo: input.returnTo,
         userId: context.userId,
       });
-
-      return {
-        mailboxes: gmailState.mailboxes,
-      };
-    });
-  }),
+    }),
 
   disconnectMailbox: protectedProcedure
     .input(
@@ -148,48 +149,72 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
-      const providerAccountId = parseGmailProviderAccountId(input.mailboxId);
-
-      if (!providerAccountId) {
-        throw new ORPCError("BAD_REQUEST", {
-          message: "Only Gmail accounts can be disconnected here.",
-        });
-      }
-
-      const [disconnectedAccount] = await db
-        .update(account)
-        .set({
-          accessToken: null,
-          accessTokenExpiresAt: null,
-          disconnectedAt: new Date(),
-          refreshToken: null,
-          refreshTokenExpiresAt: null,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(account.userId, context.userId),
-            eq(account.providerId, "google"),
-            eq(account.accountId, providerAccountId),
-          ),
-        )
-        .returning({ id: account.id });
-
-      if (!disconnectedAccount) {
-        throw new ORPCError("NOT_FOUND", {
-          message: "Google account not found for this user.",
-        });
-      }
-
-      await db
-        .update(user)
-        .set({ defaultMailboxId: null, updatedAt: new Date() })
-        .where(and(eq(user.id, context.userId), eq(user.defaultMailboxId, input.mailboxId)));
-
-      return {
-        disconnected: true,
+      return await disconnectGmailMailbox({
         mailboxId: input.mailboxId,
-      };
+        userId: context.userId,
+      });
+    }),
+
+  moveGmailMailbox: protectedProcedure
+    .input(
+      z.object({
+        mailboxId: mailboxIdSchema,
+        organizationId: z.string().trim().min(1).nullable(),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      return await moveGmailMailbox({
+        mailboxId: input.mailboxId,
+        organizationId: input.organizationId,
+        userId: context.userId,
+      });
+    }),
+
+  createManagedMailbox: protectedProcedure
+    .input(
+      z.object({
+        displayName: z.string().trim().max(120).nullable().optional(),
+        emailAddress: z.string().trim().email(),
+        organizationId: z.string().trim().min(1),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      return await createManagedMailbox({
+        ...input,
+        userId: context.userId,
+      });
+    }),
+
+  setManagedMailboxGrant: protectedProcedure
+    .input(
+      z.object({
+        mailboxId: mailboxIdSchema,
+        role: z.enum(["reader", "responder", "manager"]),
+        userId: z.string().trim().min(1),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      return await setManagedMailboxGrant({
+        mailboxId: input.mailboxId,
+        role: input.role,
+        targetUserId: input.userId,
+        userId: context.userId,
+      });
+    }),
+
+  removeManagedMailboxGrant: protectedProcedure
+    .input(
+      z.object({
+        mailboxId: mailboxIdSchema,
+        userId: z.string().trim().min(1),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      return await removeManagedMailboxGrant({
+        mailboxId: input.mailboxId,
+        targetUserId: input.userId,
+        userId: context.userId,
+      });
     }),
 
   setDefaultMailbox: protectedProcedure
@@ -199,26 +224,14 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
-      const headers = getRequestHeaders(context);
-
       if (input.mailboxId) {
-        const providerAccountId = parseGmailProviderAccountId(input.mailboxId);
-
-        if (providerAccountId) {
-          const linkedGoogleAccount = (
-            await listLinkedGoogleAccounts({ headers, userId: context.userId })
-          ).find((account) => account.accountId === providerAccountId);
-
-          if (!linkedGoogleAccount) {
-            throw new ORPCError("NOT_FOUND", {
-              message: "Google account not found for this user.",
-            });
-          }
-        } else {
-          await getAuthorizedManagedMailbox({
-            mailboxId: input.mailboxId,
-            userId: context.userId,
-          });
+        const mailboxState = await listAccessibleMailboxState({ userId: context.userId });
+        if (
+          !mailboxState.groups.some((group) =>
+            group.mailboxes.some((record) => record.id === input.mailboxId),
+          )
+        ) {
+          throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
         }
       }
 
@@ -233,9 +246,7 @@ export const mailRouter = {
   updateMailboxSwitcherOrder: protectedProcedure
     .input(mailboxSwitcherOrderSchema)
     .handler(async ({ context, input }) => {
-      const headers = getRequestHeaders(context);
       const mailboxState = await listAccessibleMailboxState({
-        headers,
         userId: context.userId,
       });
       const canonicalOrder = canonicalizeMailboxSwitcherOrder(mailboxState.groups, input);
@@ -534,32 +545,6 @@ export const mailRouter = {
     .handler(async ({ context, input }) => {
       return await callGmail(context, input.mailboxId, async (accessToken) => {
         return await moveThreadToTrash(accessToken, input.threadId);
-      });
-    }),
-
-  deleteMessagePermanently: protectedProcedure
-    .input(
-      z.object({
-        mailboxId: mailboxIdSchema,
-        messageId: z.string(),
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      return await callGmail(context, input.mailboxId, async (accessToken) => {
-        return await deleteMessagePermanently(accessToken, input.messageId);
-      });
-    }),
-
-  deleteThreadPermanently: protectedProcedure
-    .input(
-      z.object({
-        mailboxId: mailboxIdSchema,
-        threadId: z.string(),
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      return await callGmail(context, input.mailboxId, async (accessToken) => {
-        return await deleteThreadPermanently(accessToken, input.threadId);
       });
     }),
 

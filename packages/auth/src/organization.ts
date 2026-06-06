@@ -1,6 +1,6 @@
-import { db, invitation, member, organization, user } from "@quieter/database";
+import { db, invitation, mailbox, member, organization, user } from "@quieter/database";
 import { APIError } from "better-auth/api";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 type AuthUser = typeof user.$inferSelect;
 
@@ -47,6 +47,16 @@ export const getUserById = async (userId: string) => {
 export const cleanupOrganizationsForDeletedUser = async (userId: string) => {
   await db.delete(invitation).where(eq(invitation.inviterId, userId));
   await db.delete(member).where(eq(member.userId, userId));
+};
+
+export const cleanupMailboxesForDeletedOrganization = async (organizationId: string) => {
+  await db
+    .delete(mailbox)
+    .where(and(eq(mailbox.organizationId, organizationId), eq(mailbox.provider, "managed")));
+  await db
+    .update(mailbox)
+    .set({ organizationId: null, updatedAt: new Date() })
+    .where(and(eq(mailbox.organizationId, organizationId), eq(mailbox.provider, "gmail")));
 };
 
 export const assertCanLeaveOrganization = async (

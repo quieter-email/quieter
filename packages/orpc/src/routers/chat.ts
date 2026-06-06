@@ -8,7 +8,8 @@ import {
 } from "@quieter/database";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { protectedProcedure } from "./base";
+import { assertAccessibleMailbox } from "../mailbox";
+import { mailboxIdSchema, protectedProcedure } from "./base";
 
 const chatIdSchema = z.string().trim().min(1);
 const chatTitleSchema = z.string().trim().min(1).max(120);
@@ -50,11 +51,13 @@ const createFallbackTitle = (messages: ChatMessageInput[]) => {
   return title ? title.slice(0, 80) : null;
 };
 
-const getAuthorizedChat = async (chatId: string, userId: string) => {
+const getAuthorizedChat = async (chatId: string, mailboxId: string, userId: string) => {
+  await assertAccessibleMailbox({ mailboxId, userId });
+
   const [authorizedChat] = await db
     .select()
     .from(chat)
-    .where(and(eq(chat.id, chatId), eq(chat.userId, userId)))
+    .where(and(eq(chat.id, chatId), eq(chat.mailboxId, mailboxId), eq(chat.userId, userId)))
     .limit(1);
 
   if (!authorizedChat) {
@@ -67,49 +70,60 @@ const getAuthorizedChat = async (chatId: string, userId: string) => {
 };
 
 export const chatRouter = {
-  list: protectedProcedure.route({ method: "GET" }).handler(async ({ context }) => {
-    return await db
-      .select({
-        createdAt: chat.createdAt,
-        id: chat.id,
-        title: chat.title,
-        updatedAt: chat.updatedAt,
-      })
-      .from(chat)
-      .where(eq(chat.userId, context.userId))
-      .orderBy(desc(chat.updatedAt));
-  }),
+  list: protectedProcedure
+    .route({ method: "GET" })
+    .input(z.object({ mailboxId: mailboxIdSchema }))
+    .handler(async ({ context, input }) => {
+      await assertAccessibleMailbox({ mailboxId: input.mailboxId, userId: context.userId });
 
-  create: protectedProcedure.handler(async ({ context }) => {
-    const now = new Date();
-    const [createdChat] = await db
-      .insert(chat)
-      .values({
-        createdAt: now,
-        id: crypto.randomUUID(),
-        title: null,
-        updatedAt: now,
-        userId: context.userId,
-      })
-      .returning({
-        createdAt: chat.createdAt,
-        id: chat.id,
-        title: chat.title,
-        updatedAt: chat.updatedAt,
-      });
+      return await db
+        .select({
+          createdAt: chat.createdAt,
+          id: chat.id,
+          title: chat.title,
+          updatedAt: chat.updatedAt,
+        })
+        .from(chat)
+        .where(and(eq(chat.mailboxId, input.mailboxId), eq(chat.userId, context.userId)))
+        .orderBy(desc(chat.updatedAt));
+    }),
 
-    return createdChat!;
-  }),
+  create: protectedProcedure
+    .input(z.object({ mailboxId: mailboxIdSchema }))
+    .handler(async ({ context, input }) => {
+      await assertAccessibleMailbox({ mailboxId: input.mailboxId, userId: context.userId });
+
+      const now = new Date();
+      const [createdChat] = await db
+        .insert(chat)
+        .values({
+          createdAt: now,
+          id: crypto.randomUUID(),
+          mailboxId: input.mailboxId,
+          title: null,
+          updatedAt: now,
+          userId: context.userId,
+        })
+        .returning({
+          createdAt: chat.createdAt,
+          id: chat.id,
+          title: chat.title,
+          updatedAt: chat.updatedAt,
+        });
+
+      return createdChat!;
+    }),
 
   rename: protectedProcedure
     .input(
       z.object({
         chatId: chatIdSchema,
+        mailboxId: mailboxIdSchema,
         title: chatTitleSchema,
       }),
     )
     .handler(async ({ context, input }) => {
-      const authorizedChat = await getAuthorizedChat(input.chatId, context.userId);
+      const authorizedChat = await getAuthorizedChat(input.chatId, input.mailboxId, context.userId);
       const [updatedChat] = await db
         .update(chat)
         .set({
@@ -128,9 +142,9 @@ export const chatRouter = {
     }),
 
   delete: protectedProcedure
-    .input(z.object({ chatId: chatIdSchema }))
+    .input(z.object({ chatId: chatIdSchema, mailboxId: mailboxIdSchema }))
     .handler(async ({ context, input }) => {
-      const authorizedChat = await getAuthorizedChat(input.chatId, context.userId);
+      const authorizedChat = await getAuthorizedChat(input.chatId, input.mailboxId, context.userId);
 
       await db.transaction(async (tx) => {
         await tx.delete(chatMessage).where(eq(chatMessage.chatId, authorizedChat.id));
@@ -142,9 +156,9 @@ export const chatRouter = {
 
   get: protectedProcedure
     .route({ method: "GET" })
-    .input(z.object({ chatId: chatIdSchema }))
+    .input(z.object({ chatId: chatIdSchema, mailboxId: mailboxIdSchema }))
     .handler(async ({ context, input }) => {
-      const authorizedChat = await getAuthorizedChat(input.chatId, context.userId);
+      const authorizedChat = await getAuthorizedChat(input.chatId, input.mailboxId, context.userId);
       const messages = await db
         .select({
           createdAt: chatMessage.createdAt,
@@ -175,11 +189,12 @@ export const chatRouter = {
     .input(
       z.object({
         chatId: chatIdSchema,
+        mailboxId: mailboxIdSchema,
         messages: z.array(chatMessageSchema).max(200),
       }),
     )
     .handler(async ({ context, input }) => {
-      const authorizedChat = await getAuthorizedChat(input.chatId, context.userId);
+      const authorizedChat = await getAuthorizedChat(input.chatId, input.mailboxId, context.userId);
       const now = new Date();
       const fallbackTitle = createFallbackTitle(input.messages);
 

@@ -160,6 +160,7 @@ const ChatSession = ({
 
     await saveMessagesMutation.mutateAsync({
       chatId: nextChatId,
+      mailboxId,
       messages: nextMessages,
     });
     persistedSnapshotKeyRef.current = snapshotKey;
@@ -172,7 +173,7 @@ const ChatSession = ({
     try {
       let nextChatId = chatId;
       if (!nextChatId) {
-        const createdChat = await createChatMutation.mutateAsync(undefined);
+        const createdChat = await createChatMutation.mutateAsync({ mailboxId });
         nextChatId = createdChat.id;
         onChatIdChange(createdChat.id);
       }

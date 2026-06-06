@@ -74,7 +74,7 @@ export const mailDomainsRouter = {
         userId: context.userId,
       });
       await assertUserBillingFeature({
-        feature: "teamDomains",
+        feature: "organizationDomains",
         userId: context.userId,
       });
 
@@ -93,7 +93,7 @@ export const mailDomainsRouter = {
 
       if (existingDomain && existingDomain.organizationId !== input.organizationId) {
         throw new ORPCError("BAD_REQUEST", {
-          message: "This domain is already registered to another team.",
+          message: "This domain is already registered to another organization.",
         });
       }
 
@@ -184,7 +184,7 @@ export const mailDomainsRouter = {
         userId: context.userId,
       });
       await assertUserBillingFeature({
-        feature: "teamDomains",
+        feature: "organizationDomains",
         userId: context.userId,
       });
 
@@ -203,7 +203,7 @@ export const mailDomainsRouter = {
 
       if (!storedDomain) {
         throw new ORPCError("NOT_FOUND", {
-          message: "Mail domain setup was not found in the active team.",
+          message: "Mail domain setup was not found in the active organization.",
         });
       }
 
@@ -319,7 +319,7 @@ export const mailDomainsRouter = {
 
       if (!storedDomain) {
         throw new ORPCError("NOT_FOUND", {
-          message: "Mail domain was not found in the active team.",
+          message: "Mail domain was not found in the active organization.",
         });
       }
 

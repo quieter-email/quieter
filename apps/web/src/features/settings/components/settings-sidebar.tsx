@@ -23,7 +23,7 @@ const SETTINGS_SIDEBAR_NAV = [
   { tab: "account", label: "Account", icon: UserIcon },
   { tab: "plan", label: "Plan", icon: CreditCardIcon },
   { tab: "mailboxes", label: "Mailboxes", icon: Mail01Icon },
-  { tab: "organization", label: "Teams", icon: UserGroupIcon },
+  { tab: "organization", label: "Organizations", icon: UserGroupIcon },
 ] as const satisfies ReadonlyArray<{
   tab: SettingsTab;
   label: string;
