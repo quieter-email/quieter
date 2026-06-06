@@ -50,6 +50,11 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Deploy SST
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
+          POLAR_ORGANIZATION_ID: ${{ vars.POLAR_ORGANIZATION_ID || secrets.POLAR_ORGANIZATION_ID }}
+          POLAR_SANDBOX: ${{ vars.POLAR_SANDBOX }}
         run: bunx sst deploy --config sst.config.ts --stage "$SST_STAGE"
 
       - name: Sync mail stack outputs to Vercel
