@@ -28,7 +28,10 @@
     "@posthog/react": "^1.9.0",
     "@quieter/ai": "workspace:*",
     "@quieter/auth": "workspace:*",
+    "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*",
+    "@quieter/gmail": "workspace:*",
+    "@quieter/mail": "workspace:*",
     "@quieter/orpc": "workspace:*",
     "@quieter/ui": "workspace:*",
     "@sentry/tanstackstart-react": "^10.53.1",
@@ -69,6 +72,7 @@
   "devDependencies": {
     "@babel/core": "^7.29.0",
     "@quieter/config": "workspace:*",
+    "@react-scan/vite-plugin-react-scan": "^0.2.7",
     "@rolldown/plugin-babel": "^0.2.3",
     "@tailwindcss/vite": "catalog:",
     "@types/babel__core": "^7.20.5",
@@ -81,6 +85,7 @@
     "nitro": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
+    "react-scan": "^0.5.7",
     "typescript": "catalog:",
     "vite": "catalog:"
   }

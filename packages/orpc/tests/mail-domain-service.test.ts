@@ -24,7 +24,7 @@ describe("createMailDomainDnsRecords", () => {
     const records = createMailDomainDnsRecords({
       dkimTokens: ["one", "two", "three"],
       domain: "example.com",
-      ownershipToken: "team-token",
+      ownershipToken: "org-token",
       region: "eu-central-1",
     });
 
@@ -34,7 +34,7 @@ describe("createMailDomainDnsRecords", () => {
         purpose: "ownership",
         required: true,
         type: "TXT",
-        value: "quieter-domain-verification=team-token",
+        value: "quieter-domain-verification=org-token",
       },
       {
         name: "one._domainkey.example.com",
@@ -96,7 +96,7 @@ describe("checkMailDomainDnsRecords", () => {
     const records = createMailDomainDnsRecords({
       dkimTokens: ["one"],
       domain: "example.com",
-      ownershipToken: "team-token",
+      ownershipToken: "org-token",
       region: "eu-central-1",
     });
     const checks = await checkMailDomainDnsRecords(
@@ -110,7 +110,7 @@ describe("checkMailDomainDnsRecords", () => {
           name === "_dmarc.example.com"
             ? [["v=DMARC1; p=none; rua=mailto:dmarc@example.com"]]
             : name === "_quieter-verify.example.com"
-              ? [["quieter-domain-verification=team-token"]]
+              ? [["quieter-domain-verification=org-token"]]
               : [["v=spf1 include:amazonses.com -all"]],
       },
       records,
@@ -124,7 +124,7 @@ describe("checkMailDomainDnsRecords", () => {
     const records = createMailDomainDnsRecords({
       dkimTokens: ["one"],
       domain: "example.com",
-      ownershipToken: "team-token",
+      ownershipToken: "org-token",
       region: "eu-central-1",
     });
     const checks = await checkMailDomainDnsRecords(

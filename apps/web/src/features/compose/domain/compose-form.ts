@@ -1,4 +1,4 @@
-import { composeDraftFormValuesSchema } from "@quieter/orpc/compose";
+import { composeDraftFormValuesSchema } from "@quieter/mail/compose";
 import { z } from "zod";
 import {
   haveComposeDraftPersistedFieldsChanged,

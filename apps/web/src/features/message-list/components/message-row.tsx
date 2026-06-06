@@ -2,9 +2,9 @@
 
 import { FileAttachmentIcon, MessageMultiple01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
-import { splitMailAddressList } from "@quieter/orpc/compose";
+import { splitMailAddressList } from "@quieter/mail/compose";
 import { cn } from "@quieter/ui";
-import { type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
+import { type KeyboardEvent, type MouseEvent } from "react";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import { SenderAvatar } from "~/components/sender-avatar";
 import { createMailboxThreadMessageActionHandlers } from "~/features/message-thread/components/message-action-handlers";
@@ -18,20 +18,39 @@ type MessageRowSelectionGesture = {
   range: boolean;
 };
 
+type MessageRowGestureEvent = {
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+};
+
+const getSelectionGesture = (event: MessageRowGestureEvent): MessageRowSelectionGesture => ({
+  additive: event.metaKey || event.ctrlKey,
+  range: event.shiftKey,
+});
+
 type MessageRowProps = {
+  activeMailbox: MessageListProps["activeMailbox"];
   isActive?: boolean;
   isSelected?: boolean;
   isSelectionMode?: boolean;
-  list: MessageListProps;
-  selection: ReturnType<typeof useMessageListSelection>;
+  mailboxActions: MessageListProps["mailboxActions"];
+  mailboxId: string;
+  offsetY: number;
+  onOpenDraft: MessageListProps["onOpenDraft"];
+  onThreadPress: ReturnType<typeof useMessageListSelection>["handleThreadPress"];
+  onThreadSelectionPress: ReturnType<typeof useMessageListSelection>["handleThreadSelectionPress"];
+  pendingActions: MessageListProps["pendingActions"];
   className?: string;
-  style?: CSSProperties;
   rowRef?: (element: HTMLLIElement | null) => void;
   dataIndex?: number;
   thread: ThreadListEntry;
 };
 
-type MessageRowContentProps = Omit<MessageRowProps, "className" | "dataIndex" | "rowRef" | "style">;
+type MessageRowContentProps = Omit<
+  MessageRowProps,
+  "className" | "dataIndex" | "offsetY" | "rowRef"
+>;
 
 const MessageRowMetaBadge = ({
   icon,
@@ -52,16 +71,21 @@ const MessageRowMetaBadge = ({
 );
 
 const MessageRowContent = ({
+  activeMailbox,
   isActive,
   isSelected,
   isSelectionMode,
-  list,
-  selection,
+  mailboxActions,
+  mailboxId,
+  onOpenDraft,
+  onThreadPress,
+  onThreadSelectionPress,
+  pendingActions,
   thread,
 }: MessageRowContentProps) => {
   const anchorMessage = thread.anchorMessage;
   const subject = anchorMessage.subject || "(No subject)";
-  const isDraftMailbox = list.activeMailbox === "drafts";
+  const isDraftMailbox = activeMailbox === "drafts";
   const draftRecipient = splitMailAddressList(anchorMessage.to)[0] ?? anchorMessage.to ?? "";
   const sender = parseSender(isDraftMailbox ? draftRecipient : anchorMessage.from);
   const senderLabel = isDraftMailbox
@@ -75,17 +99,9 @@ const MessageRowContent = ({
   const attachmentCount = thread.attachmentCount;
   const showSelectionControl = !!isSelectionMode;
   const isActionPending =
-    list.pendingActions.isMessageActionPending(anchorMessage.id) ||
-    list.pendingActions.isThreadActionPending(thread.threadId);
+    pendingActions.isMessageActionPending(anchorMessage.id) ||
+    pendingActions.isThreadActionPending(thread.threadId);
   const selectionAriaLabel = isDraftMailbox ? "Select draft" : "Select conversation";
-  const getSelectionGesture = (event: {
-    ctrlKey: boolean;
-    metaKey: boolean;
-    shiftKey: boolean;
-  }): MessageRowSelectionGesture => ({
-    additive: event.metaKey || event.ctrlKey,
-    range: event.shiftKey,
-  });
   const handleSelectionPress = (event: MouseEvent<HTMLElement>) => {
     if (event.button !== 0) {
       return;
@@ -93,7 +109,7 @@ const MessageRowContent = ({
 
     event.preventDefault();
     event.stopPropagation();
-    selection.handleThreadSelectionPress(thread, getSelectionGesture(event));
+    onThreadSelectionPress(thread, getSelectionGesture(event));
   };
   const handleSelectionKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== " " && event.key !== "Enter") {
@@ -102,7 +118,7 @@ const MessageRowContent = ({
 
     event.preventDefault();
     event.stopPropagation();
-    selection.handleThreadSelectionPress(thread, getSelectionGesture(event));
+    onThreadSelectionPress(thread, getSelectionGesture(event));
   };
   const handleRowMouseDown = (event: MouseEvent<HTMLButtonElement>) => {
     if (event.button !== 0) {
@@ -116,7 +132,7 @@ const MessageRowContent = ({
     }
 
     event.preventDefault();
-    selection.handleThreadPress(thread, gesture);
+    onThreadPress(thread, gesture);
   };
   const handleRowClick = (event: MouseEvent<HTMLButtonElement>) => {
     const gesture = getSelectionGesture(event);
@@ -125,7 +141,7 @@ const MessageRowContent = ({
       return;
     }
 
-    selection.handleThreadPress(thread, gesture);
+    onThreadPress(thread, gesture);
   };
 
   return (
@@ -212,12 +228,12 @@ const MessageRowContent = ({
 
       <MessageActionsContextMenu
         actions={createMailboxThreadMessageActionHandlers({
-          mailboxActions: list.mailboxActions,
-          onOpenDraft: list.onOpenDraft,
+          mailboxActions,
+          onOpenDraft,
         })}
         isPending={isActionPending}
-        mailboxId={list.mailboxId}
-        mailbox={list.activeMailbox}
+        mailboxId={mailboxId}
+        mailbox={activeMailbox}
         message={anchorMessage}
         triggerClassName="flex h-full min-w-0 flex-1 active:scale-100"
       >
@@ -308,15 +324,20 @@ const MessageRowContent = ({
 };
 
 export const MessageRow = ({
+  activeMailbox,
   className,
   dataIndex,
   isActive,
   isSelected,
   isSelectionMode,
-  list,
-  selection,
+  mailboxActions,
+  mailboxId,
+  offsetY,
+  onOpenDraft,
+  onThreadPress,
+  onThreadSelectionPress,
+  pendingActions,
   rowRef,
-  style,
   thread,
 }: MessageRowProps) => {
   return (
@@ -324,14 +345,21 @@ export const MessageRow = ({
       className={cn("group relative", className)}
       data-index={dataIndex}
       ref={rowRef}
-      style={style}
+      style={{
+        transform: `translateY(${offsetY}px)`,
+      }}
     >
       <MessageRowContent
+        activeMailbox={activeMailbox}
         isActive={isActive}
         isSelected={isSelected}
         isSelectionMode={isSelectionMode}
-        list={list}
-        selection={selection}
+        mailboxActions={mailboxActions}
+        mailboxId={mailboxId}
+        onOpenDraft={onOpenDraft}
+        onThreadPress={onThreadPress}
+        onThreadSelectionPress={onThreadSelectionPress}
+        pendingActions={pendingActions}
         thread={thread}
       />
     </li>

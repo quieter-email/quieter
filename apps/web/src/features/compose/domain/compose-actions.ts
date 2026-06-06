@@ -2,7 +2,7 @@ import {
   getMailAddressKey,
   splitMailAddressList,
   type ComposeDraftAnchor,
-} from "@quieter/orpc/compose";
+} from "@quieter/mail/compose";
 import type { MessageListItem } from "~/lib/gmail/gmail";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
 import {

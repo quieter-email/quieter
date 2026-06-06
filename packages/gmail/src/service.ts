@@ -1,14 +1,14 @@
-import { z } from "zod";
-import type { ComposeDraftAnchor } from "./gmail/compose/schema";
+import type { ComposeDraftAnchor } from "@quieter/mail/compose";
+import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose";
 import {
   decodePartBody,
   decodeMimeHeaderValue,
   extractMessageAttachments,
   extractMessageContent,
   findRenderablePart,
-} from "./gmail-message-content";
-import { parseDraftAnchorFromHeaderReader } from "./gmail/compose/draft-anchor";
-import { getSenderAvatarUrls } from "./sender-avatar";
+} from "@quieter/mail/message-content";
+import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
+import { z } from "zod";
 
 export const MAILBOX_LABELS = {
   inbox: "INBOX",
@@ -1857,42 +1857,6 @@ export const untrashThread = async (
   );
 
   return toThreadMetadataUpdate(updated);
-};
-
-export const deleteMessagePermanently = async (
-  accessToken: string,
-  messageId: string,
-  signal?: AbortSignal,
-) => {
-  await requestGmail(
-    accessToken,
-    `/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}`,
-    z.object({}).passthrough(),
-    {
-      method: "DELETE",
-      signal,
-    },
-  );
-
-  return { id: messageId };
-};
-
-export const deleteThreadPermanently = async (
-  accessToken: string,
-  threadId: string,
-  signal?: AbortSignal,
-) => {
-  await requestGmail(
-    accessToken,
-    `/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}`,
-    z.object({}).passthrough(),
-    {
-      method: "DELETE",
-      signal,
-    },
-  );
-
-  return { threadId };
 };
 
 export const getDraft = async (

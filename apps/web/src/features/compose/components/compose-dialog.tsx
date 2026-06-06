@@ -11,7 +11,7 @@ import {
   findInvalidMailAddresses,
   getMailAddressKey,
   splitMailAddressList,
-} from "@quieter/orpc/compose";
+} from "@quieter/mail/compose";
 import { Button, Dialog, DialogContent, IconButtonTooltip, cn } from "@quieter/ui";
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import {

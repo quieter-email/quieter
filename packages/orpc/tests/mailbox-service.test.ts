@@ -8,16 +8,17 @@ import {
 } from "../src/mailbox";
 
 const gmailMailbox = (id: string, emailAddress: string): MailboxListItem => ({
-  connectedUserId: "user_1",
+  connectionStatus: "connected",
   displayName: null,
   emailAddress,
+  grantRole: null,
   groupId: "personal",
   groupKind: "personal",
   groupName: "Personal",
   id,
   organizationId: null,
+  ownerUserId: "user_1",
   provider: "gmail",
-  providerAccountId: id.replace("gmail:", ""),
 });
 
 const managedMailbox = (
@@ -26,16 +27,17 @@ const managedMailbox = (
   organizationId: string,
   organizationName: string,
 ): MailboxListItem => ({
-  connectedUserId: null,
+  connectionStatus: "connected",
   displayName: null,
   emailAddress,
+  grantRole: "manager",
   groupId: organizationId,
-  groupKind: "team",
+  groupKind: "organization",
   groupName: organizationName,
   id,
   organizationId,
+  ownerUserId: null,
   provider: "managed",
-  providerAccountId: null,
 });
 
 const mailboxGroups: MailboxGroup[] = [
@@ -43,98 +45,98 @@ const mailboxGroups: MailboxGroup[] = [
     id: "personal",
     kind: "personal",
     mailboxes: [
-      gmailMailbox("gmail:one", "one@example.com"),
-      gmailMailbox("gmail:two", "two@example.com"),
+      gmailMailbox("gmail-one-id", "one@example.com"),
+      gmailMailbox("gmail-two-id", "two@example.com"),
     ],
     name: "Personal",
     slug: null,
   },
   {
-    id: "team_a",
-    kind: "team",
+    id: "org_a",
+    kind: "organization",
     mailboxes: [
-      managedMailbox("a1", "a1@example.com", "team_a", "Team A"),
-      managedMailbox("a2", "a2@example.com", "team_a", "Team A"),
+      managedMailbox("a1", "a1@example.com", "org_a", "Organization A"),
+      managedMailbox("a2", "a2@example.com", "org_a", "Organization A"),
     ],
-    name: "Team A",
-    slug: "team-a",
+    name: "Organization A",
+    slug: "org-a",
   },
   {
-    id: "team_b",
-    kind: "team",
-    mailboxes: [managedMailbox("b1", "b1@example.com", "team_b", "Team B")],
-    name: "Team B",
-    slug: "team-b",
+    id: "org_b",
+    kind: "organization",
+    mailboxes: [managedMailbox("b1", "b1@example.com", "org_b", "Organization B")],
+    name: "Organization B",
+    slug: "org-b",
   },
 ];
 
 describe("resolveDefaultMailboxId", () => {
   test("keeps an accessible global default mailbox", () => {
     expect(
-      resolveDefaultMailboxId([{ id: "gmail:one" }, { id: "managed_one" }], "managed_one"),
+      resolveDefaultMailboxId([{ id: "gmail-one-id" }, { id: "managed_one" }], "managed_one"),
     ).toBe("managed_one");
   });
 
   test("clears a missing global default mailbox", () => {
-    expect(resolveDefaultMailboxId([{ id: "gmail:one" }], "managed_missing")).toBeNull();
+    expect(resolveDefaultMailboxId([{ id: "gmail-one-id" }], "managed_missing")).toBeNull();
   });
 
   test("keeps a null default mailbox unset", () => {
-    expect(resolveDefaultMailboxId([{ id: "gmail:one" }], null)).toBeNull();
+    expect(resolveDefaultMailboxId([{ id: "gmail-one-id" }], null)).toBeNull();
   });
 });
 
 describe("mailbox switcher order", () => {
   test("reorders groups while preserving group mailbox membership", () => {
     const orderedGroups = applyMailboxSwitcherOrder(mailboxGroups, {
-      groupIds: ["team_b", "personal", "team_a"],
+      groupIds: ["org_b", "personal", "org_a"],
       mailboxIdsByGroupId: {},
     });
 
-    expect(orderedGroups.map((group) => group.id)).toEqual(["team_b", "personal", "team_a"]);
+    expect(orderedGroups.map((group) => group.id)).toEqual(["org_b", "personal", "org_a"]);
     expect(orderedGroups[0]?.mailboxes.map((mailbox) => mailbox.id)).toEqual(["b1"]);
     expect(orderedGroups[1]?.mailboxes.map((mailbox) => mailbox.id)).toEqual([
-      "gmail:one",
-      "gmail:two",
+      "gmail-one-id",
+      "gmail-two-id",
     ]);
   });
 
   test("reorders mailboxes within one group", () => {
     const orderedGroups = applyMailboxSwitcherOrder(mailboxGroups, {
-      groupIds: ["personal", "team_a", "team_b"],
+      groupIds: ["personal", "org_a", "org_b"],
       mailboxIdsByGroupId: {
-        team_a: ["a2", "a1"],
+        org_a: ["a2", "a1"],
       },
     });
 
     expect(
-      orderedGroups.find((group) => group.id === "team_a")?.mailboxes.map((mailbox) => mailbox.id),
+      orderedGroups.find((group) => group.id === "org_a")?.mailboxes.map((mailbox) => mailbox.id),
     ).toEqual(["a2", "a1"]);
   });
 
   test("drops mailbox ids listed under the wrong group", () => {
     const canonicalOrder = canonicalizeMailboxSwitcherOrder(mailboxGroups, {
-      groupIds: ["team_a", "team_b", "personal"],
+      groupIds: ["org_a", "org_b", "personal"],
       mailboxIdsByGroupId: {
-        team_a: ["b1", "a2"],
-        team_b: ["a1", "b1"],
+        org_a: ["b1", "a2"],
+        org_b: ["a1", "b1"],
       },
     });
 
-    expect(canonicalOrder.mailboxIdsByGroupId.team_a).toEqual(["a2", "a1"]);
-    expect(canonicalOrder.mailboxIdsByGroupId.team_b).toEqual(["b1"]);
+    expect(canonicalOrder.mailboxIdsByGroupId.org_a).toEqual(["a2", "a1"]);
+    expect(canonicalOrder.mailboxIdsByGroupId.org_b).toEqual(["b1"]);
   });
 
   test("appends accessible groups and mailboxes missing from saved order", () => {
     const canonicalOrder = canonicalizeMailboxSwitcherOrder(mailboxGroups, {
-      groupIds: ["team_a"],
+      groupIds: ["org_a"],
       mailboxIdsByGroupId: {
-        team_a: ["a1"],
+        org_a: ["a1"],
       },
     });
 
-    expect(canonicalOrder.groupIds).toEqual(["team_a", "personal", "team_b"]);
-    expect(canonicalOrder.mailboxIdsByGroupId.team_a).toEqual(["a1", "a2"]);
-    expect(canonicalOrder.mailboxIdsByGroupId.personal).toEqual(["gmail:one", "gmail:two"]);
+    expect(canonicalOrder.groupIds).toEqual(["org_a", "personal", "org_b"]);
+    expect(canonicalOrder.mailboxIdsByGroupId.org_a).toEqual(["a1", "a2"]);
+    expect(canonicalOrder.mailboxIdsByGroupId.personal).toEqual(["gmail-one-id", "gmail-two-id"]);
   });
 });

@@ -5,6 +5,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./google-scopes": "./src/google-scopes.ts",
+    "./organization-api-key": "./src/organization-api-key.ts",
     "./user-status": "./src/user-status.ts",
     "./workspace": "./src/workspace.ts"
   },
@@ -16,6 +17,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*"
   },
   "devDependencies": {

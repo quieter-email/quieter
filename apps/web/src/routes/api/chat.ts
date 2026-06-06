@@ -2,9 +2,14 @@ import {
   chatParamsFromRequest,
   createChatResponse,
   toolDefinition,
+  type ChatMiddleware,
   type ServerTool,
 } from "@quieter/ai";
-import { MAILBOX_LABELS, type MailboxCategory } from "@quieter/orpc/gmail-service";
+import { reportAiUsage } from "@quieter/billing";
+import { hasUserBillingFeature } from "@quieter/billing/entitlements";
+import { BILLING_FEATURES } from "@quieter/billing/plans";
+import { MAILBOX_LABELS, type MailboxCategory } from "@quieter/gmail";
+import { assertAccessibleMailbox } from "@quieter/orpc/mailbox";
 import { createOrpcServerClient } from "@quieter/orpc/server-client";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
@@ -70,9 +75,49 @@ export const Route = createFileRoute("/api/chat")({
         }
 
         const chatContext = parseChatContext(params.forwardedProps);
+        if (!chatContext.mailboxId) {
+          return Response.json({ error: "A mailbox is required for chat." }, { status: 400 });
+        }
+
+        try {
+          const accessibleMailbox = await assertAccessibleMailbox({
+            mailboxId: chatContext.mailboxId,
+            userId: user.id,
+          });
+
+          if (accessibleMailbox.provider !== "gmail") {
+            return Response.json(
+              { error: "AI chat search currently supports Gmail mailboxes only." },
+              { status: 400 },
+            );
+          }
+
+          if (chatContext.chatId) {
+            const rpc = createOrpcServerClient({ headers: request.headers });
+            await rpc.chat.get({
+              chatId: chatContext.chatId,
+              mailboxId: chatContext.mailboxId,
+            });
+          }
+        } catch {
+          return Response.json({ error: "Mailbox or chat not found." }, { status: 404 });
+        }
+
+        const entitlement = await hasUserBillingFeature({
+          feature: "aiChat",
+          userId: user.id,
+        });
+
+        if (!entitlement.hasAccess) {
+          return Response.json(
+            { error: `AI chat requires the ${BILLING_FEATURES.aiChat.requiredPlan} plan.` },
+            { status: 403 },
+          );
+        }
 
         try {
           return createChatResponse({
+            middleware: [createAiUsageMiddleware(user.id, chatContext.chatId)],
             messages: params.messages,
             systemPrompts: [gmailSearchPrompt],
             tools: [createGmailSearchTool(request, chatContext)],
@@ -92,6 +137,7 @@ export const Route = createFileRoute("/api/chat")({
 
 type ChatRequestBody = {
   category: MailboxCategory;
+  chatId: string | null;
   mailboxId: string | null;
 };
 
@@ -148,6 +194,25 @@ const parseChatContext = (forwardedProps: Record<string, unknown>): ChatRequestB
       : "inbox";
   const mailboxId =
     typeof forwardedProps.mailboxId === "string" ? forwardedProps.mailboxId.trim() || null : null;
+  const chatId =
+    typeof forwardedProps.chatId === "string" ? forwardedProps.chatId.trim() || null : null;
 
-  return { category, mailboxId };
+  return { category, chatId, mailboxId };
 };
+
+const createAiUsageMiddleware = (userId: string, chatId: string | null): ChatMiddleware => ({
+  name: "polar-ai-usage",
+  onUsage: (context, usage) => {
+    context.defer(
+      reportAiUsage({
+        chatId,
+        completionTokens: usage.completionTokens,
+        model: context.model,
+        promptTokens: usage.promptTokens,
+        userId,
+      }).catch((error) => {
+        console.error("Could not report AI usage to Polar.", error);
+      }),
+    );
+  },
+});

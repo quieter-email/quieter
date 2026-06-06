@@ -11,9 +11,10 @@ import {
   UserGroupIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { Button } from "@quieter/ui";
 import { useQuery } from "@tanstack/react-query";
-import { teamApiKeysQueryOptions } from "./api-keys";
+import { organizationApiKeysQueryOptions } from "./api-keys";
 import {
   type FullOrganization,
   type OrganizationRoleOption,
@@ -22,15 +23,20 @@ import {
   formatRoleLabel,
   hasOrganizationRole,
 } from "./domain";
-import { teamMailDomainsQueryOptions } from "./mail-domains";
+import { organizationMailDomainsQueryOptions } from "./mail-domains";
+import { DeleteOrganizationDialog, LeaveOrganizationDialog } from "./organization-action-dialogs";
 import { OrganizationFormDialog } from "./organization-form-dialog";
+import { OrganizationMailUsageSettings } from "./organization-mail-usage-settings";
 import { MutedActionButton, SettingsRow } from "./settings-row";
-import { DeleteOrganizationDialog, LeaveOrganizationDialog } from "./team-action-dialogs";
 
-export const TeamOverviewView = ({
+export const OrganizationOverviewView = ({
   activeRole,
+  billingAccessUnknown,
   canDeleteOrganization,
   canUpdateOrganization,
+  canUseOrganizationApiKeys,
+  canUseOrganizationDomains,
+  canUseOrganizationMail,
   onBackToList,
   onOpenApiKeys,
   onOpenDomains,
@@ -40,8 +46,12 @@ export const TeamOverviewView = ({
   fullOrganization,
 }: {
   activeRole: OrganizationRoleOption | null;
+  billingAccessUnknown: boolean;
   canDeleteOrganization: boolean;
   canUpdateOrganization: boolean;
+  canUseOrganizationApiKeys: boolean;
+  canUseOrganizationDomains: boolean;
+  canUseOrganizationMail: boolean;
   onBackToList: () => void;
   onOpenApiKeys: () => void;
   onOpenDomains: () => void;
@@ -50,33 +60,47 @@ export const TeamOverviewView = ({
   pendingInvitationsCount: number;
   fullOrganization: FullOrganization;
 }) => {
-  const apiKeysQuery = useQuery(teamApiKeysQueryOptions(organization.id));
-  const domainsQuery = useQuery(teamMailDomainsQueryOptions(organization.id));
+  const apiKeysQuery = useQuery({
+    ...organizationApiKeysQueryOptions(organization.id),
+    enabled: canUseOrganizationApiKeys && !!organization.id,
+  });
+  const domainsQuery = useQuery({
+    ...organizationMailDomainsQueryOptions(organization.id),
+    enabled: canUseOrganizationDomains && !!organization.id,
+  });
   const ownerCount = fullOrganization.members.filter((member) =>
     hasOrganizationRole(member.role, "owner"),
   ).length;
   const updateOrganizationReason =
-    (!canUpdateOrganization && "Only admins and owners can edit team details.") || null;
+    (!canUpdateOrganization && "Only admins and owners can edit organization details.") || null;
   const leaveOrganizationReason =
     (activeRole === "owner" && ownerCount <= 1 && "Assign another owner before leaving.") || null;
   const deleteOrganizationReason =
-    (!canDeleteOrganization && "Only owners can delete teams.") || null;
+    (!canDeleteOrganization && "Only owners can delete organizations.") || null;
   const peopleSummary = [
     formatCount(fullOrganization.members.length, "Member", "Members"),
     pendingInvitationsCount > 0 && formatCount(pendingInvitationsCount, "pending invitation"),
   ]
     .filter(Boolean)
     .join(", ");
-  const domainsSummary = domainsQuery.isPending
-    ? "Loading domains…"
-    : domainsQuery.isError
-      ? "Could not load domains."
-      : formatCount(domainsQuery.data.domains.length, "Domain", "Domains");
-  const apiKeysSummary = apiKeysQuery.isPending
-    ? "Loading API keys…"
-    : apiKeysQuery.isError
-      ? "Could not load API keys."
-      : formatCount(apiKeysQuery.data.apiKeys.length, "API Key", "API Keys");
+  const domainsSummary = billingAccessUnknown
+    ? "Could not load billing access."
+    : !canUseOrganizationDomains
+      ? `Requires ${BILLING_FEATURES.organizationDomains.requiredPlan}`
+      : domainsQuery.isPending
+        ? "Loading domains…"
+        : domainsQuery.isError
+          ? "Could not load domains."
+          : formatCount(domainsQuery.data.domains.length, "Domain", "Domains");
+  const apiKeysSummary = billingAccessUnknown
+    ? "Could not load billing access."
+    : !canUseOrganizationApiKeys
+      ? `Requires ${BILLING_FEATURES.organizationApiKeys.requiredPlan}`
+      : apiKeysQuery.isPending
+        ? "Loading API keys…"
+        : apiKeysQuery.isError
+          ? "Could not load API keys."
+          : formatCount(apiKeysQuery.data.apiKeys.length, "API Key", "API Keys");
 
   return (
     <section className="space-y-6">
@@ -87,7 +111,7 @@ export const TeamOverviewView = ({
         variant="ghost"
       >
         <HugeiconsIcon aria-hidden className="size-4" icon={ArrowLeft01Icon} />
-        Teams
+        Organizations
       </Button>
 
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -156,6 +180,13 @@ export const TeamOverviewView = ({
           }
         />
 
+        <OrganizationMailUsageSettings
+          billingAccessUnknown={billingAccessUnknown}
+          canManageOrganizationMailUsage={canUpdateOrganization}
+          canUseOrganizationMail={canUseOrganizationMail}
+          organizationId={organization.id}
+        />
+
         <SettingsRow
           action={
             leaveOrganizationReason ? (
@@ -169,7 +200,7 @@ export const TeamOverviewView = ({
             )
           }
           label="Membership"
-          value={activeRole ? formatRoleLabel(activeRole) : "Team member"}
+          value={activeRole ? formatRoleLabel(activeRole) : "Organization member"}
         />
 
         <SettingsRow
@@ -185,7 +216,7 @@ export const TeamOverviewView = ({
               <DeleteOrganizationDialog onDeleted={onBackToList} organization={fullOrganization} />
             )
           }
-          label="Delete team"
+          label="Delete organization"
           value="Permanent"
         />
       </div>

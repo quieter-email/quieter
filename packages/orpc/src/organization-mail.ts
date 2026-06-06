@@ -1,11 +1,18 @@
 import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
+import { ORPCError } from "@orpc/server";
+import { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
+import {
+  assertCanConsumeOrganizationMailUsage,
+  estimateOutboundOrganizationMailUsage,
+  recordOrganizationMailUsage,
+} from "@quieter/billing/organization-mail-usage";
 import { db, mailDomain } from "@quieter/database";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
-export const TEAM_API_KEY_CONFIG_ID = "team";
+export { ORGANIZATION_API_KEY_CONFIG_ID };
 
-export const teamMailMessageSchema = z
+export const organizationMailMessageSchema = z
   .object({
     bcc: z.array(z.email().trim()).optional(),
     cc: z.array(z.email().trim()).optional(),
@@ -21,15 +28,15 @@ export const teamMailMessageSchema = z
     path: ["text"],
   });
 
-export type TeamMailMessageInput = z.infer<typeof teamMailMessageSchema>;
+export type OrganizationMailMessageInput = z.infer<typeof organizationMailMessageSchema>;
 
-export class TeamMailSendError extends Error {
+export class OrganizationMailSendError extends Error {
   constructor(
     message: string,
     readonly status: number,
   ) {
     super(message);
-    this.name = "TeamMailSendError";
+    this.name = "OrganizationMailSendError";
   }
 }
 
@@ -42,7 +49,7 @@ const getSenderDomain = (sender: string) => {
   const domain = sender.trim().toLowerCase().split("@").at(1);
 
   if (!domain) {
-    throw new TeamMailSendError("Sender must be an email address.", 400);
+    throw new OrganizationMailSendError("Sender must be an email address.", 400);
   }
 
   return domain;
@@ -52,7 +59,10 @@ const getAwsRegion = () => {
   const region = process.env.AWS_REGION?.trim() || process.env.AWS_DEFAULT_REGION?.trim();
 
   if (!region) {
-    throw new TeamMailSendError("AWS_REGION or AWS_DEFAULT_REGION is required to send mail.", 500);
+    throw new OrganizationMailSendError(
+      "AWS_REGION or AWS_DEFAULT_REGION is required to send mail.",
+      500,
+    );
   }
 
   return region;
@@ -65,7 +75,7 @@ const getSesv2Client = () => {
   return sesv2Client;
 };
 
-export const assertTeamOwnsVerifiedSenderDomain = async (input: {
+export const assertOrganizationOwnsVerifiedSenderDomain = async (input: {
   organizationId: string;
   sender: string;
 }) => {
@@ -83,17 +93,35 @@ export const assertTeamOwnsVerifiedSenderDomain = async (input: {
     .limit(1);
 
   if (!ownedDomain) {
-    throw new TeamMailSendError("Sender domain is not verified for this team.", 403);
+    throw new OrganizationMailSendError(
+      "Sender domain is not verified for this organization.",
+      403,
+    );
   }
 
   return domain;
 };
 
-export const sendTeamMailMessage = async (input: {
-  message: TeamMailMessageInput;
+export const sendOrganizationMailMessage = async (input: {
+  message: OrganizationMailMessageInput;
   organizationId: string;
 }) => {
-  await assertTeamOwnsVerifiedSenderDomain({
+  const usageEstimate = estimateOutboundOrganizationMailUsage(input.message);
+
+  try {
+    await assertCanConsumeOrganizationMailUsage({
+      estimate: usageEstimate,
+      organizationId: input.organizationId,
+    });
+  } catch (error) {
+    if (error instanceof ORPCError) {
+      throw new OrganizationMailSendError(error.message, error.status ?? 403);
+    }
+
+    throw error;
+  }
+
+  await assertOrganizationOwnsVerifiedSenderDomain({
     organizationId: input.organizationId,
     sender: input.message.sender,
   });
@@ -135,6 +163,23 @@ export const sendTeamMailMessage = async (input: {
       ReplyToAddresses: normalizeAddresses(input.message.replyTo),
     }),
   );
+
+  if (response.MessageId) {
+    recordOrganizationMailUsage({
+      ...usageEstimate,
+      metadata: {
+        sender: input.message.sender.trim().toLowerCase(),
+      },
+      organizationId: input.organizationId,
+      providerMessageId: response.MessageId,
+    }).catch((error) => {
+      console.error("Failed to record Managed Usage after sending.", {
+        error,
+        messageId: response.MessageId,
+        organizationId: input.organizationId,
+      });
+    });
+  }
 
   return {
     messageId: response.MessageId ?? null,

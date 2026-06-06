@@ -131,9 +131,9 @@ const createInitialDemoState = (): DemoMailState => ({
     }),
     createMessage("demo-thread-notion-1", {
       bodyHtml:
-        "<p>Hi team,</p><p>I drafted the customer onboarding checklist in Notion. The sections that still need owner names are highlighted in yellow.</p>",
+        "<p>Hi everyone,</p><p>I drafted the customer onboarding checklist in Notion. The sections that still need owner names are highlighted in yellow.</p>",
       bodyText:
-        "Hi team,\n\nI drafted the customer onboarding checklist in Notion. The sections that still need owner names are highlighted in yellow.",
+        "Hi everyone,\n\nI drafted the customer onboarding checklist in Notion. The sections that still need owner names are highlighted in yellow.",
       date: daysAgo(0.92),
       from: "Maya Patel <maya@notion.so>",
       labelIds: [MAILBOX_LABELS.inbox],
@@ -363,7 +363,7 @@ const createInitialDemoState = (): DemoMailState => ({
       bodyHtml: "<p>Congratulations, your account has been selected for a limited reward.</p>",
       bodyText: "Congratulations, your account has been selected for a limited reward.",
       date: daysAgo(5.6),
-      from: "Rewards Team <promo@temu.com>",
+      from: "Rewards <promo@temu.com>",
       labelIds: [MAILBOX_LABELS.spam],
       senderAvatarUrls: logo("temu.com"),
       snippet: "Congratulations, your account has been selected for a limited reward.",
@@ -439,7 +439,7 @@ const updateDemoState = (updater: (state: DemoMailState) => DemoMailState) => {
 const invalidateDemoMail = async (queryClient: QueryClient) => {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: ["messages", DEMO_MAILBOX_ID] }),
-    queryClient.invalidateQueries({ queryKey: ["message-thread"] }),
+    queryClient.invalidateQueries({ queryKey: ["message-thread", DEMO_MAILBOX_ID] }),
     queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() }),
   ]);
 };
@@ -548,16 +548,17 @@ export const getDemoMailboxes = () => ({
       slug: null,
       mailboxes: [
         {
-          connectedUserId: "demo-user",
+          connectionStatus: "connected" as const,
           displayName: "Demo Mailbox",
           emailAddress: DEMO_EMAIL_ADDRESS,
+          grantRole: null,
           groupId: "demo-personal",
           groupKind: "personal" as const,
           groupName: "Demo",
           id: DEMO_MAILBOX_ID,
           organizationId: null,
+          ownerUserId: "demo-user",
           provider: "gmail" as const,
-          providerAccountId: "demo",
         },
       ],
     },
@@ -688,16 +689,6 @@ export const createDemoMailboxActions = (queryClient: QueryClient) => ({
     await removeDemoThread(queryClient, message.threadId);
   },
   deleteDrafts: async (threads: ThreadListEntry[]) => {
-    await Promise.all(threads.map((thread) => removeDemoThread(queryClient, thread.threadId)));
-  },
-  deleteMessagePermanently: async (messageId: string) => {
-    removeMessages((message) => message.id === messageId);
-    await invalidateDemoMail(queryClient);
-  },
-  deleteThreadPermanently: async (threadId: string) => {
-    await removeDemoThread(queryClient, threadId);
-  },
-  deleteThreadsPermanently: async (threads: ThreadListEntry[]) => {
     await Promise.all(threads.map((thread) => removeDemoThread(queryClient, thread.threadId)));
   },
   markMessageAsRead: async (messageId: string) => {

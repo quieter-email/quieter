@@ -11,8 +11,6 @@ export {
 
 export {
   deleteDraftInMailbox,
-  deleteMessagePermanentlyInMailbox,
-  deleteThreadPermanentlyInMailbox,
   markMessageAsReadInMailbox,
   markMessageAsSpamInMailbox,
   markMessageAsUnreadInMailbox,

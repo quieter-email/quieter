@@ -2,6 +2,8 @@ import * as Sentry from "@sentry/tanstackstart-react";
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 
+const isSentryEnabled = !import.meta.env.DEV && !!import.meta.env.VITE_SENTRY_DSN;
+
 export function getRouter() {
   const router = createRouter({
     defaultPendingMinMs: 0,
@@ -9,7 +11,7 @@ export function getRouter() {
     scrollRestoration: true,
   });
 
-  if (!router.isServer) {
+  if (!router.isServer && isSentryEnabled) {
     Sentry.init({
       dsn: import.meta.env.VITE_SENTRY_DSN,
       enableLogs: false,

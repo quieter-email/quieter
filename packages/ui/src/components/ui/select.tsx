@@ -7,7 +7,7 @@ import { cn } from "../../lib/cn";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "./icons";
 
 const selectTriggerVariants = cva(
-  "squircle inline-flex shrink-0 items-center justify-between gap-2 rounded-md font-normal whitespace-nowrap transition-transform duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "squircle inline-flex shrink-0 items-center justify-between text-left gap-2 rounded-md font-normal whitespace-nowrap transition-transform duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {

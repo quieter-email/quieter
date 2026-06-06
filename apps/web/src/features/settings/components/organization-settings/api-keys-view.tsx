@@ -9,6 +9,8 @@ import {
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
+import { BILLING_FEATURES } from "@quieter/billing/plans";
 import {
   AlertDialog,
   AlertDialogBody,
@@ -45,15 +47,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
-import {
-  getTeamApiKeysQueryKey,
-  teamApiKeysQueryOptions,
-  TEAM_API_KEY_CONFIG_ID,
-} from "./api-keys";
+import { getOrganizationApiKeysQueryKey, organizationApiKeysQueryOptions } from "./api-keys";
 import { formatCount, type FullOrganization } from "./domain";
 import { MutedActionButton } from "./settings-row";
 
-type TeamApiKey = {
+type OrganizationApiKey = {
   createdAt: Date;
   enabled: boolean;
   expiresAt: Date | null;
@@ -109,7 +107,7 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
       prefix: string;
     }) => {
       const response = await authClient.apiKey.create({
-        configId: TEAM_API_KEY_CONFIG_ID,
+        configId: ORGANIZATION_API_KEY_CONFIG_ID,
         expiresIn: input.expiresIn,
         name: input.name,
         organizationId: input.organizationId,
@@ -126,11 +124,11 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
 
       return response.data;
     },
-    mutationKey: ["team-api-keys", organizationId, "create"],
+    mutationKey: ["organization-api-keys", organizationId, "create"],
     onSuccess: async (data) => {
       setCreatedKey(data.key);
       await queryClient.invalidateQueries({
-        queryKey: getTeamApiKeysQueryKey(organizationId),
+        queryKey: getOrganizationApiKeysQueryKey(organizationId),
       });
     },
   });
@@ -351,7 +349,7 @@ const DeleteApiKeyDialog = ({
   apiKey,
   organizationId,
 }: {
-  apiKey: TeamApiKey;
+  apiKey: OrganizationApiKey;
   organizationId: string;
 }) => {
   const [open, setOpen] = useState(false);
@@ -359,7 +357,7 @@ const DeleteApiKeyDialog = ({
   const deleteMutation = useMutation({
     mutationFn: async () => {
       const response = await authClient.apiKey.delete({
-        configId: TEAM_API_KEY_CONFIG_ID,
+        configId: ORGANIZATION_API_KEY_CONFIG_ID,
         keyId: apiKey.id,
       });
 
@@ -369,11 +367,11 @@ const DeleteApiKeyDialog = ({
 
       return response.data;
     },
-    mutationKey: ["team-api-keys", organizationId, apiKey.id, "delete"],
+    mutationKey: ["organization-api-keys", organizationId, apiKey.id, "delete"],
     onSuccess: async () => {
       setOpen(false);
       await queryClient.invalidateQueries({
-        queryKey: getTeamApiKeysQueryKey(organizationId),
+        queryKey: getOrganizationApiKeysQueryKey(organizationId),
       });
       toast.success("API key removed.");
     },
@@ -433,7 +431,7 @@ const ApiKeyRow = ({
   canManageApiKeys,
   organizationId,
 }: {
-  apiKey: TeamApiKey;
+  apiKey: OrganizationApiKey;
   canManageApiKeys: boolean;
   organizationId: string;
 }) => (
@@ -469,18 +467,26 @@ const ApiKeyRow = ({
 );
 
 export const ApiKeysView = ({
+  billingAccessUnknown,
   canManageApiKeys,
+  canUseOrganizationApiKeys,
   onBack,
   organization,
 }: {
+  billingAccessUnknown: boolean;
   canManageApiKeys: boolean;
+  canUseOrganizationApiKeys: boolean;
   onBack: () => void;
   organization: FullOrganization;
 }) => {
-  const apiKeysQuery = useQuery(teamApiKeysQueryOptions(organization.id));
-  const apiKeys = (apiKeysQuery.data?.apiKeys ?? []) as TeamApiKey[];
+  const apiKeysQuery = useQuery(organizationApiKeysQueryOptions(organization.id));
+  const apiKeys = (apiKeysQuery.data?.apiKeys ?? []) as OrganizationApiKey[];
   const manageApiKeysReason =
-    (!canManageApiKeys && "Only admins and owners can create API keys.") || null;
+    (billingAccessUnknown && "Could not load billing access.") ||
+    (!canUseOrganizationApiKeys &&
+      `Creating API keys requires the ${BILLING_FEATURES.organizationApiKeys.requiredPlan} plan.`) ||
+    (!canManageApiKeys && "Only admins and owners can create API keys.") ||
+    null;
 
   return (
     <div className="space-y-6">

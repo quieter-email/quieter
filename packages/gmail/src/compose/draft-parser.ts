@@ -1,10 +1,10 @@
-import type { GmailDraft } from "../../gmail-service";
+import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose";
 import {
   extractInlineMessageAttachments,
   extractMessageAttachments,
   extractMessageContent,
-} from "../../gmail-message-content";
-import { parseDraftAnchorFromHeaderReader } from "./draft-anchor";
+} from "@quieter/mail/message-content";
+import type { GmailDraft } from "../service";
 
 export const parseDraftMessage = (draft: GmailDraft) => {
   const message = draft.message;

@@ -1,6 +1,7 @@
 import type { GetEmailIdentityCommandOutput } from "@aws-sdk/client-sesv2";
 import type { MailDomainCheckResult } from "@quieter/database";
 import { ORPCError } from "@orpc/server";
+import { assertUserBillingFeature } from "@quieter/billing/entitlements";
 import { db, mailDomain } from "@quieter/database";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -72,6 +73,10 @@ export const mailDomainsRouter = {
         organizationId: input.organizationId,
         userId: context.userId,
       });
+      await assertUserBillingFeature({
+        feature: "organizationDomains",
+        userId: context.userId,
+      });
 
       const domain = normalizeMailDomain(input.domain);
       const [existingDomain] = await db
@@ -88,7 +93,7 @@ export const mailDomainsRouter = {
 
       if (existingDomain && existingDomain.organizationId !== input.organizationId) {
         throw new ORPCError("BAD_REQUEST", {
-          message: "This domain is already registered to another team.",
+          message: "This domain is already registered to another organization.",
         });
       }
 
@@ -178,6 +183,10 @@ export const mailDomainsRouter = {
         organizationId: input.organizationId,
         userId: context.userId,
       });
+      await assertUserBillingFeature({
+        feature: "organizationDomains",
+        userId: context.userId,
+      });
 
       const domain = normalizeMailDomain(input.domain);
       const [storedDomain] = await db
@@ -194,7 +203,7 @@ export const mailDomainsRouter = {
 
       if (!storedDomain) {
         throw new ORPCError("NOT_FOUND", {
-          message: "Mail domain setup was not found in the active team.",
+          message: "Mail domain setup was not found in the active organization.",
         });
       }
 
@@ -310,7 +319,7 @@ export const mailDomainsRouter = {
 
       if (!storedDomain) {
         throw new ORPCError("NOT_FOUND", {
-          message: "Mail domain was not found in the active team.",
+          message: "Mail domain was not found in the active organization.",
         });
       }
 

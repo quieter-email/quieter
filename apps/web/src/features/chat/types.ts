@@ -5,7 +5,7 @@ export type ChatViewProps = {
   activeMailbox: MailboxCategory;
   chatId: string | null;
   draftChatKey: string;
-  mailboxId: string | null;
+  mailboxId: string;
   onChatIdChange: (chatId: string) => void;
   onOpenSidebar: () => void;
 };

@@ -1,8 +1,4 @@
-import {
-  GMAIL_UNREAD_LABEL,
-  MAILBOX_LABELS,
-  type MailboxCategory,
-} from "@quieter/orpc/gmail-service";
+import { GMAIL_UNREAD_LABEL, MAILBOX_LABELS, type MailboxCategory } from "@quieter/gmail";
 
 export {
   MAILBOX_LABELS,
@@ -13,7 +9,7 @@ export {
   type MessageInspectorResult,
   type MessageListItem,
   type ThreadMessagesResult,
-} from "@quieter/orpc/gmail-service";
+} from "@quieter/gmail";
 
 export const GMAIL_QUERY_STALE_TIME_MS = 1000 * 60 * 2;
 export const GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS = 1000 * 60;

@@ -53,7 +53,7 @@ export const OrganizationFormDialog = ({
       if (response.error) {
         throw new Error(
           response.error.message ??
-            (organization ? "Could not update team." : "Could not create team."),
+            (organization ? "Could not update organization." : "Could not create organization."),
         );
       }
       return response;
@@ -89,7 +89,7 @@ export const OrganizationFormDialog = ({
       } catch (mutationError) {
         setSubmitError(
           (mutationError as { message?: string })?.message ??
-            (organization ? "Could not update team." : "Could not create team."),
+            (organization ? "Could not update organization." : "Could not create organization."),
         );
       }
     },
@@ -108,7 +108,7 @@ export const OrganizationFormDialog = ({
     setSubmitError(null);
     form.reset(defaultValues);
   };
-  const title = isEditing ? "Edit team" : "Create team";
+  const title = isEditing ? "Edit organization" : "Create organization";
   const submitLabel = isEditing ? "Save" : "Create";
 
   return (
@@ -158,7 +158,7 @@ export const OrganizationFormDialog = ({
                         setSubmitError(null);
                         field.handleChange(event.target.value);
                       }}
-                      placeholder="Team name"
+                      placeholder="Organization name"
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
@@ -181,7 +181,7 @@ export const OrganizationFormDialog = ({
                         setSubmitError(null);
                         field.handleChange(event.target.value);
                       }}
-                      placeholder="team-slug"
+                      placeholder="organization-slug"
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (

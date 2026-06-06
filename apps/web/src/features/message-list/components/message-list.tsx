@@ -133,19 +133,19 @@ export const MessageList = (props: MessageListProps) => {
                 } satisfies MessageListBulkAction,
               ]
             : []),
-          {
-            destructive: true,
-            icon: props.activeMailbox === "trash" ? Delete02Icon : Delete01Icon,
-            id: props.activeMailbox === "trash" ? "delete-threads" : "move-threads-trash",
-            label: props.activeMailbox === "trash" ? "Delete permanently" : "Move to Trash",
-            onSelect: async () => {
-              await runBulkAction(
-                props.activeMailbox === "trash"
-                  ? props.mailboxActions.deleteThreadsPermanently
-                  : props.mailboxActions.moveThreadsToTrash,
-              );
-            },
-          },
+          ...(props.activeMailbox === "trash"
+            ? []
+            : [
+                {
+                  destructive: true,
+                  icon: Delete01Icon,
+                  id: "move-threads-trash",
+                  label: "Move to Trash",
+                  onSelect: async () => {
+                    await runBulkAction(props.mailboxActions.moveThreadsToTrash);
+                  },
+                } satisfies MessageListBulkAction,
+              ]),
         ];
 
   const scrollPaneKey = `${props.activeMailbox}:${props.searchQuery}`;

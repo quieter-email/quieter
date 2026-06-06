@@ -1,10 +1,10 @@
 import { auth } from "@quieter/auth";
 import {
-  sendTeamMailMessage,
-  TEAM_API_KEY_CONFIG_ID,
-  teamMailMessageSchema,
-  TeamMailSendError,
-} from "@quieter/orpc/team-mail";
+  sendOrganizationMailMessage,
+  ORGANIZATION_API_KEY_CONFIG_ID,
+  organizationMailMessageSchema,
+  OrganizationMailSendError,
+} from "@quieter/orpc/organization-mail";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
@@ -20,7 +20,7 @@ export const Route = createFileRoute("/api/messages")({
 
         const verifiedApiKey = await auth.api.verifyApiKey({
           body: {
-            configId: TEAM_API_KEY_CONFIG_ID,
+            configId: ORGANIZATION_API_KEY_CONFIG_ID,
             key: apiKey,
           },
         });
@@ -28,7 +28,7 @@ export const Route = createFileRoute("/api/messages")({
         if (
           !verifiedApiKey.valid ||
           !verifiedApiKey.key ||
-          verifiedApiKey.key.configId !== TEAM_API_KEY_CONFIG_ID
+          verifiedApiKey.key.configId !== ORGANIZATION_API_KEY_CONFIG_ID
         ) {
           return Response.json({ error: "Unauthorized" }, { status: 401 });
         }
@@ -43,7 +43,7 @@ export const Route = createFileRoute("/api/messages")({
           );
         }
 
-        const parsedMessage = teamMailMessageSchema.safeParse(json);
+        const parsedMessage = organizationMailMessageSchema.safeParse(json);
 
         if (!parsedMessage.success) {
           return Response.json(
@@ -56,14 +56,14 @@ export const Route = createFileRoute("/api/messages")({
         }
 
         try {
-          const result = await sendTeamMailMessage({
+          const result = await sendOrganizationMailMessage({
             message: parsedMessage.data,
             organizationId: verifiedApiKey.key.referenceId,
           });
 
           return Response.json(result, { status: 201 });
         } catch (error) {
-          if (error instanceof TeamMailSendError) {
+          if (error instanceof OrganizationMailSendError) {
             return Response.json({ error: error.message }, { status: error.status });
           }
 

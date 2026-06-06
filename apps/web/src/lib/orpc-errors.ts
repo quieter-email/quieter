@@ -22,27 +22,9 @@ export const isMailboxScopeRepairRequiredError = (
     !!data &&
     typeof data === "object" &&
     typeof (data as Partial<MailboxScopeRepairRequiredErrorData>).mailboxId === "string" &&
-    typeof (data as Partial<MailboxScopeRepairRequiredErrorData>).providerAccountId === "string" &&
     typeof (data as Partial<MailboxScopeRepairRequiredErrorData>).emailAddress === "string"
   );
 };
 
 export const shouldRetryOrpcError = (failureCount: number, error: unknown) =>
   !isMailboxScopeRepairRequiredError(error) && failureCount < 3;
-
-export const redirectToGoogleScopeRepair = (error: unknown) => {
-  if (
-    !isMailboxScopeRepairRequiredError(error) ||
-    window.location.pathname === "/google-scope-repair"
-  ) {
-    return;
-  }
-
-  const from = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  const params = new URLSearchParams({
-    from,
-    targetAccountId: error.data.providerAccountId,
-  });
-
-  window.location.assign(`/google-scope-repair?${params.toString()}`);
-};

@@ -244,7 +244,7 @@ export const assertUserOrganizationMember = async (input: {
 
   if (!membership) {
     throw new ORPCError("NOT_FOUND", {
-      message: "Team not found.",
+      message: "Organization not found.",
     });
   }
 
@@ -265,7 +265,20 @@ export const assertUserCanManageMailDomains = async (input: {
 
   if (!hasOrganizationManagerRole(membership.role)) {
     throw new ORPCError("FORBIDDEN", {
-      message: "Only admins and owners can manage team domains.",
+      message: "Only admins and owners can manage organization domains.",
+    });
+  }
+};
+
+export const assertUserCanManageOrganizationSettings = async (input: {
+  organizationId: string;
+  userId: string;
+}) => {
+  const membership = await assertUserOrganizationMember(input);
+
+  if (!hasOrganizationManagerRole(membership.role)) {
+    throw new ORPCError("FORBIDDEN", {
+      message: "Only admins and owners can manage organization settings.",
     });
   }
 };
@@ -300,7 +313,7 @@ export const getDkimTokens = (identity: GetEmailIdentityCommandOutput) => {
 
   if (tokens.length === 0) {
     throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      message: "SES did not return DKIM records for this domain.",
+      message: "The mail provider did not return DKIM records for this domain.",
     });
   }
 
@@ -562,7 +575,7 @@ export const createSesIdentityCheck = (
       `VerifiedForSendingStatus=${String(identity.VerifiedForSendingStatus)}`,
       `DkimAttributes.Status=${status}`,
     ],
-    message: verified ? "SES identity is verified." : "SES identity is not verified yet.",
+    message: verified ? "Sending identity is verified." : "Sending identity is not verified yet.",
     ok: verified,
     purpose: "ses_identity",
   };
@@ -577,7 +590,7 @@ export const createSesMailFromCheck = (
   return {
     expected: ["MailFromDomainStatus=SUCCESS"],
     found: [`MailFromDomainStatus=${status}`],
-    message: ok ? "SES custom MAIL FROM is verified." : "SES custom MAIL FROM is not verified yet.",
+    message: ok ? "Custom MAIL FROM is verified." : "Custom MAIL FROM is not verified yet.",
     ok,
     purpose: "ses_mail_from",
   };

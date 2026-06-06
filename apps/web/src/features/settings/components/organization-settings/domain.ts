@@ -19,7 +19,6 @@ export type UserInvitation = {
   organizationName: string;
   role: string;
   status: string;
-  teamId?: string | null;
 };
 
 export const organizationRoleOptions = ["owner", "admin", "member"] as const;
@@ -130,10 +129,7 @@ const isUserInvitation = (value: unknown): value is UserInvitation => {
     typeof invitation.status === "string" &&
     invitationStatuses.has(invitation.status) &&
     isInvitationDate(invitation.createdAt) &&
-    isInvitationDate(invitation.expiresAt) &&
-    (invitation.teamId === undefined ||
-      invitation.teamId === null ||
-      typeof invitation.teamId === "string")
+    isInvitationDate(invitation.expiresAt)
   );
 };
 
@@ -173,7 +169,7 @@ const loadFullOrganization = async (organizationId: string): Promise<FullOrganiz
     },
   });
   if (result.error) {
-    throw new Error(result.error.message ?? "Could not load team.");
+    throw new Error(result.error.message ?? "Could not load organization.");
   }
 
   return result.data ? fullOrganizationSchema.parse(result.data) : null;

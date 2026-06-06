@@ -5,8 +5,6 @@ import type { MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import {
   deleteDraftInMailbox,
-  deleteMessagePermanentlyInMailbox,
-  deleteThreadPermanentlyInMailbox,
   markMessageAsReadInMailbox,
   markMessageAsSpamInMailbox,
   markMessageAsUnreadInMailbox,
@@ -22,7 +20,6 @@ import {
   updateMessageLabelsInMailbox,
   updateThreadLabelsInMailbox,
 } from "~/lib/gmail/inbox-query";
-import { redirectToGoogleScopeRepair } from "~/lib/orpc-errors";
 
 type LabelChangeSet = {
   addLabelIds?: string[];
@@ -88,9 +85,6 @@ export const createMailboxActionHandlers = ({
     try {
       await action();
       await refreshSearchResultsIfNeeded();
-    } catch (error) {
-      redirectToGoogleScopeRepair(error);
-      throw error;
     } finally {
       setMessageActionPending(messageId, false);
     }
@@ -103,9 +97,6 @@ export const createMailboxActionHandlers = ({
     try {
       await action();
       await refreshSearchResultsIfNeeded();
-    } catch (error) {
-      redirectToGoogleScopeRepair(error);
-      throw error;
     } finally {
       setThreadActionPending(threadId, false);
     }
@@ -149,14 +140,12 @@ export const createMailboxActionHandlers = ({
         await refreshSearchResultsIfNeeded();
       } catch (refreshError) {
         if (actionError === undefined) {
-          redirectToGoogleScopeRepair(refreshError);
           throw refreshError;
         }
       }
     }
 
     if (actionError) {
-      redirectToGoogleScopeRepair(actionError);
       throw actionError;
     }
   };
@@ -240,12 +229,6 @@ export const createMailboxActionHandlers = ({
   return {
     deleteDraft,
     deleteDrafts,
-    deleteMessagePermanently: (messageId: string) =>
-      runMailboxMessageAction(messageId, deleteMessagePermanentlyInMailbox),
-    deleteThreadPermanently: (threadId: string) =>
-      runMailboxThreadAction(threadId, deleteThreadPermanentlyInMailbox),
-    deleteThreadsPermanently: (threads: ThreadListEntry[]) =>
-      runBulkMailboxThreadAction(threads, deleteThreadPermanentlyInMailbox),
     markMessageAsRead: (messageId: string) =>
       runMailboxMessageAction(messageId, markMessageAsReadInMailbox),
     markMessageAsSpam: (messageId: string) =>

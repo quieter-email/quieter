@@ -9,6 +9,7 @@ import {
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { BILLING_FEATURES } from "@quieter/billing/plans";
 import {
   Button,
   Dialog,
@@ -28,9 +29,9 @@ import { orpc } from "~/lib/orpc";
 import { formatCount, type FullOrganization } from "./domain";
 import {
   formatMailDomainStatus,
-  getTeamMailDomainsQueryKey,
-  teamMailDomainsQueryOptions,
-  type TeamMailDomain,
+  getOrganizationMailDomainsQueryKey,
+  organizationMailDomainsQueryOptions,
+  type OrganizationMailDomain,
 } from "./mail-domains";
 import { RegisterDomainDialog } from "./register-domain-dialog";
 import { MutedActionButton } from "./settings-row";
@@ -44,7 +45,7 @@ const formatDomainDate = (value: Date | string) => {
   return Number.isNaN(date.getTime()) ? "Unknown" : dateFormatter.format(date);
 };
 
-const DomainStatusBadge = ({ domain }: { domain: TeamMailDomain }) => {
+const DomainStatusBadge = ({ domain }: { domain: OrganizationMailDomain }) => {
   const verified = domain.status === "verified";
 
   return (
@@ -66,7 +67,7 @@ const RemoveDomainDialog = ({
   domain,
   organizationId,
 }: {
-  domain: TeamMailDomain;
+  domain: OrganizationMailDomain;
   organizationId: string;
 }) => {
   const queryClient = useQueryClient();
@@ -76,7 +77,7 @@ const RemoveDomainDialog = ({
     mutationKey: ["mail-domains", organizationId, domain.id, "remove"],
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: getTeamMailDomainsQueryKey(organizationId),
+        queryKey: getOrganizationMailDomainsQueryKey(organizationId),
       });
     },
   });
@@ -110,8 +111,8 @@ const RemoveDomainDialog = ({
 
           <DialogBody className="space-y-3 text-sm text-muted-foreground">
             <p>
-              This removes the domain from this team and releases it for future registration in
-              Quieter.
+              This removes the domain from this organization and releases it for future registration
+              in Quieter.
             </p>
             <p>
               Remove the DNS records as soon as possible. Leaving old records in place can keep mail
@@ -146,10 +147,12 @@ const RemoveDomainDialog = ({
 const DomainRow = ({
   canManageDomains,
   domain,
+  manageDomainsReason,
   organizationId,
 }: {
   canManageDomains: boolean;
-  domain: TeamMailDomain;
+  domain: OrganizationMailDomain;
+  manageDomainsReason: string | null;
   organizationId: string;
 }) => (
   <div className="flex flex-col gap-3 border-b border-border/70 py-4 last:border-b-0 md:flex-row md:items-center md:justify-between">
@@ -169,30 +172,46 @@ const DomainRow = ({
 
     <div className="flex items-center gap-2">
       <DomainStatusBadge domain={domain} />
-      {canManageDomains && domain.status !== "verified" && (
-        <RegisterDomainDialog domain={domain} organizationId={organizationId}>
-          <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
-          Continue
-        </RegisterDomainDialog>
-      )}
+      {canManageDomains && domain.status !== "verified" ? (
+        manageDomainsReason ? (
+          <MutedActionButton
+            icon={<HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />}
+            label="Continue"
+            reason={manageDomainsReason}
+          />
+        ) : (
+          <RegisterDomainDialog domain={domain} organizationId={organizationId}>
+            <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
+            Continue
+          </RegisterDomainDialog>
+        )
+      ) : null}
       {canManageDomains && <RemoveDomainDialog domain={domain} organizationId={organizationId} />}
     </div>
   </div>
 );
 
 export const DomainsView = ({
+  billingAccessUnknown,
   canManageDomains,
+  canUseOrganizationDomains,
   onBack,
   organization,
 }: {
+  billingAccessUnknown: boolean;
   canManageDomains: boolean;
+  canUseOrganizationDomains: boolean;
   onBack: () => void;
   organization: FullOrganization;
 }) => {
-  const domainsQuery = useQuery(teamMailDomainsQueryOptions(organization.id));
+  const domainsQuery = useQuery(organizationMailDomainsQueryOptions(organization.id));
   const domains = domainsQuery.data?.domains ?? [];
   const manageDomainsReason =
-    (!canManageDomains && "Only admins and owners can register team domains.") || null;
+    (billingAccessUnknown && "Could not load billing access.") ||
+    (!canUseOrganizationDomains &&
+      `Registering domains requires the ${BILLING_FEATURES.organizationDomains.requiredPlan} plan.`) ||
+    (!canManageDomains && "Only admins and owners can register organization domains.") ||
+    null;
 
   return (
     <div className="space-y-6">
@@ -241,6 +260,7 @@ export const DomainsView = ({
               canManageDomains={canManageDomains}
               domain={domain}
               key={domain.id}
+              manageDomainsReason={manageDomainsReason}
               organizationId={organization.id}
             />
           ))

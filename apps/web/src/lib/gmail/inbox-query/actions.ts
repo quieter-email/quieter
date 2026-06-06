@@ -612,57 +612,6 @@ export const untrashThreadInMailbox = async (
   });
 };
 
-export const deleteMessagePermanentlyInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  mailbox: MailboxCategory,
-  searchQuery: string | null | undefined,
-  messageId: string,
-  signal?: AbortSignal,
-) => {
-  await runOptimisticMessageRemoval({
-    queryClient,
-    mailboxId,
-    mailbox,
-    searchQuery,
-    messageId,
-    signal,
-    mutation: async (mutationSignal) => {
-      await rpc.mail.deleteMessagePermanently({ mailboxId, messageId }, { signal: mutationSignal });
-    },
-  });
-};
-
-export const deleteThreadPermanentlyInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  _mailbox: MailboxCategory,
-  _searchQuery: string | null | undefined,
-  threadId: string,
-  signal?: AbortSignal,
-) => {
-  const threadQueryKey = getThreadQueryKey(mailboxId, threadId);
-  const previousMessagesQueries = snapshotMessagesQueries(queryClient, mailboxId);
-  const previousThreadQuery = snapshotThreadQuery(queryClient, threadQueryKey);
-  const touchedQueryKeys = removeMessagesFromCachedMailboxQueries(
-    queryClient,
-    mailboxId,
-    (message) => message.threadId === threadId,
-  );
-
-  queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
-    removeMessagesFromThreadData(currentData, () => true),
-  );
-  await persistQueryKeys(queryClient, [...touchedQueryKeys, threadQueryKey]);
-
-  try {
-    await rpc.mail.deleteThreadPermanently({ mailboxId, threadId }, { signal });
-  } catch (error) {
-    await restoreSnapshots(queryClient, previousMessagesQueries, previousThreadQuery);
-    throw error;
-  }
-};
-
 export const deleteDraftInMailbox = async (
   queryClient: QueryClient,
   mailboxId: string,

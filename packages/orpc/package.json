@@ -4,29 +4,31 @@
   "type": "module",
   "exports": {
     ".": "./src/client.ts",
-    "./compose": "./src/gmail/compose/schema.ts",
     "./context": "./src/context.ts",
     "./errors": "./src/errors.ts",
     "./mailbox": "./src/mailbox.ts",
     "./mail-domain": "./src/mail-domain.ts",
     "./server": "./src/server.ts",
     "./server-client": "./src/server-client.ts",
-    "./team-mail": "./src/team-mail.ts",
-    "./router": "./src/routers/index.ts",
-    "./gmail-service": "./src/gmail-service.ts"
+    "./organization-mail": "./src/organization-mail.ts",
+    "./router": "./src/routers/index.ts"
   },
   "scripts": {
     "fmt": "oxfmt --config ../../oxfmt.json .",
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
     "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/orpc",
     "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/orpc",
+    "test": "bun test",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
     "@aws-sdk/client-ses": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
     "@quieter/auth": "workspace:*",
-    "@quieter/database": "workspace:*"
+    "@quieter/billing": "workspace:*",
+    "@quieter/database": "workspace:*",
+    "@quieter/gmail": "workspace:*",
+    "@quieter/mail": "workspace:*"
   },
   "devDependencies": {
     "@orpc/client": "catalog:",

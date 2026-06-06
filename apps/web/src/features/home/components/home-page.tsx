@@ -71,7 +71,8 @@ export const HomePage = () => (
             initial={{ opacity: 0, y: 20, filter: "blur(8px)" }}
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
             transition={{ delay: 0.9, duration: 0.8, ease: "easeOut" }}
-            className="w-full max-w-sm will-change-[transform,opacity,filter] min-[2560px]:max-w-104"
+            className="w-full max-w-sm scroll-mt-12 will-change-[transform,opacity,filter] min-[2560px]:max-w-104"
+            id="waitlist"
           >
             <WaitlistForm />
           </m.div>

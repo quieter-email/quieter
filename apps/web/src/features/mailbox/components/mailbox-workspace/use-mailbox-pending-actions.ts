@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { MailboxPendingActions } from "../mailbox-action-handlers";
 
 const updatePendingIds = (
@@ -9,16 +9,19 @@ const updatePendingIds = (
   pending: boolean,
 ): ReadonlySet<string> => {
   const next = new Set(current);
+  let changed = false;
 
   for (const id of ids) {
     if (pending) {
+      changed ||= !next.has(id);
       next.add(id);
     } else {
+      changed ||= next.has(id);
       next.delete(id);
     }
   }
 
-  return next;
+  return changed ? next : current;
 };
 
 export const useMailboxPendingActions = () => {
@@ -29,31 +32,42 @@ export const useMailboxPendingActions = () => {
     () => new Set(),
   );
 
-  const pendingActions: MailboxPendingActions = {
-    isMessageActionPending: (id) => (id ? pendingMessageActionIds.has(id) : false),
-    isThreadActionPending: (id) => (id ? pendingThreadActionIds.has(id) : false),
-  };
+  const isMessageActionPending = useCallback(
+    (id: string | null | undefined) => (id ? pendingMessageActionIds.has(id) : false),
+    [pendingMessageActionIds],
+  );
+  const isThreadActionPending = useCallback(
+    (id: string | null | undefined) => (id ? pendingThreadActionIds.has(id) : false),
+    [pendingThreadActionIds],
+  );
+  const pendingActions: MailboxPendingActions = useMemo(
+    () => ({
+      isMessageActionPending,
+      isThreadActionPending,
+    }),
+    [isMessageActionPending, isThreadActionPending],
+  );
 
-  const setMessageActionsPending = (ids: string[], pending: boolean) => {
+  const setMessageActionsPending = useCallback((ids: string[], pending: boolean) => {
     if (ids.length === 0) return;
 
     setPendingMessageActionIds((current) => {
       return updatePendingIds(current, ids, pending);
     });
-  };
+  }, []);
 
-  const setThreadActionsPending = (ids: string[], pending: boolean) => {
+  const setThreadActionsPending = useCallback((ids: string[], pending: boolean) => {
     if (ids.length === 0) return;
 
     setPendingThreadActionIds((current) => {
       return updatePendingIds(current, ids, pending);
     });
-  };
+  }, []);
 
   return {
     pendingActions,
-    isMessageActionPending: pendingActions.isMessageActionPending,
-    isThreadActionPending: pendingActions.isThreadActionPending,
+    isMessageActionPending,
+    isThreadActionPending,
     setMessageActionsPending,
     setThreadActionsPending,
   };

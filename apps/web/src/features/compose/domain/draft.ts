@@ -1,4 +1,4 @@
-import type { ComposeDraftAnchor } from "@quieter/orpc/compose";
+import type { ComposeDraftAnchor } from "@quieter/mail/compose";
 import { rpc } from "~/lib/orpc";
 
 const MAX_TOTAL_ATTACHMENT_BYTES = 24 * 1024 * 1024;

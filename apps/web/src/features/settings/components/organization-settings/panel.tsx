@@ -4,39 +4,41 @@ import { TooltipGroup } from "@quieter/ui";
 import { useNavigate } from "@tanstack/react-router";
 import { authClient } from "~/lib/auth";
 import { settingsRouteApi } from "~/lib/route-apis";
-import { TeamView } from "./team-view";
-import { TeamsListView } from "./teams-list-view";
+import { OrganizationDetailView } from "./organization-detail-view";
+import { OrganizationsListView } from "./organizations-list-view";
 
 export const OrganizationSettingsPanel = () => {
   const navigate = useNavigate({
     from: "/settings",
   });
-  const { teamId, teamView } = settingsRouteApi.useSearch();
+  const { organizationId, organizationView } = settingsRouteApi.useSearch();
   const sessionState = authClient.useSession();
   const organizationsState = authClient.useListOrganizations();
   const organizations = organizationsState.data ?? [];
   const userId = sessionState.data?.user.id ?? "";
   const loadError = organizationsState.error ?? sessionState.error;
-  const selectedOrganization = organizations.find((organization) => organization.id === teamId);
+  const selectedOrganization = organizations.find(
+    (organization) => organization.id === organizationId,
+  );
 
-  const navigateToTeams = () => {
+  const navigateToOrganizationsList = () => {
     void navigate({
       search: (previous) => ({
         ...previous,
-        teamId: "",
-        teamView: "overview",
+        organizationId: "",
+        organizationView: "overview",
       }),
       to: ".",
     });
   };
 
-  const navigateToTeam = (nextTeamId: string) => {
+  const navigateToOrganization = (nextOrganizationId: string) => {
     void navigate({
       search: (previous) => ({
         ...previous,
         tab: "organization",
-        teamId: nextTeamId,
-        teamView: "overview",
+        organizationId: nextOrganizationId,
+        organizationView: "overview",
       }),
       to: ".",
     });
@@ -46,7 +48,7 @@ export const OrganizationSettingsPanel = () => {
     void navigate({
       search: (previous) => ({
         ...previous,
-        teamView: "members",
+        organizationView: "members",
       }),
       to: ".",
     });
@@ -56,7 +58,7 @@ export const OrganizationSettingsPanel = () => {
     void navigate({
       search: (previous) => ({
         ...previous,
-        teamView: "domains",
+        organizationView: "domains",
       }),
       to: ".",
     });
@@ -66,17 +68,17 @@ export const OrganizationSettingsPanel = () => {
     void navigate({
       search: (previous) => ({
         ...previous,
-        teamView: "api-keys",
+        organizationView: "api-keys",
       }),
       to: ".",
     });
   };
 
-  const navigateToTeamOverview = () => {
+  const navigateToOrganizationOverview = () => {
     void navigate({
       search: (previous) => ({
         ...previous,
-        teamView: "overview",
+        organizationView: "overview",
       }),
       to: ".",
     });
@@ -86,23 +88,28 @@ export const OrganizationSettingsPanel = () => {
     <TooltipGroup>
       <div className="space-y-6">
         {organizationsState.isPending || sessionState.isPending ? (
-          <p className="text-sm text-muted-foreground">Loading teams…</p>
+          <p className="text-sm text-muted-foreground">Loading organizations…</p>
         ) : loadError ? (
-          <p className="text-sm text-destructive">{loadError.message ?? "Could not load teams."}</p>
+          <p className="text-sm text-destructive">
+            {loadError.message ?? "Could not load organizations."}
+          </p>
         ) : selectedOrganization ? (
-          <TeamView
+          <OrganizationDetailView
             key={selectedOrganization.id}
             onOpenApiKeys={navigateToApiKeys}
-            onBackToList={navigateToTeams}
-            onBackToTeam={navigateToTeamOverview}
+            onBackToList={navigateToOrganizationsList}
+            onBackToOrganization={navigateToOrganizationOverview}
             onOpenDomains={navigateToDomains}
             onOpenMembers={navigateToMembers}
             organization={selectedOrganization}
             userId={userId}
-            view={teamView}
+            view={organizationView}
           />
         ) : (
-          <TeamsListView onSelectTeam={navigateToTeam} organizations={organizations} />
+          <OrganizationsListView
+            onSelectOrganization={navigateToOrganization}
+            organizations={organizations}
+          />
         )}
       </div>
     </TooltipGroup>

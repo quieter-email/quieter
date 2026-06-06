@@ -1,7 +1,7 @@
 "use client";
 
 import { type QueryClient, useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { type SetStateAction, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type ListMessagesPageResult,
   type MailboxCategory,
@@ -20,28 +20,50 @@ import { useVisibleMessageRefresh } from "./use-visible-message-refresh";
 type UseMailboxMessagesOptions = {
   activeMailbox: MailboxCategory;
   isDemoMode: boolean;
-  isManualRefreshing: boolean;
-  isWindowActive: boolean;
   messageId?: string;
   queryClient: QueryClient;
   searchQuery: string;
   selectedMailboxId: string | null;
-  setIsManualRefreshing: (action: SetStateAction<boolean>) => void;
 };
 
 const EMPTY_MESSAGE_PAGES: ListMessagesPageResult[] = [];
 
+const useWindowActive = () => {
+  const [isWindowActive, setIsWindowActive] = useState(false);
+
+  useEffect(() => {
+    const updateWindowActivity = () => {
+      const nextIsWindowActive = document.visibilityState === "visible" && document.hasFocus();
+      setIsWindowActive((current) =>
+        current === nextIsWindowActive ? current : nextIsWindowActive,
+      );
+    };
+
+    updateWindowActivity();
+    window.addEventListener("focus", updateWindowActivity);
+    window.addEventListener("blur", updateWindowActivity);
+    document.addEventListener("visibilitychange", updateWindowActivity);
+
+    return () => {
+      window.removeEventListener("focus", updateWindowActivity);
+      window.removeEventListener("blur", updateWindowActivity);
+      document.removeEventListener("visibilitychange", updateWindowActivity);
+    };
+  }, []);
+
+  return isWindowActive;
+};
+
 export const useMailboxMessages = ({
   activeMailbox,
   isDemoMode,
-  isManualRefreshing,
-  isWindowActive,
   messageId,
   queryClient,
   searchQuery,
   selectedMailboxId,
-  setIsManualRefreshing,
 }: UseMailboxMessagesOptions) => {
+  const isWindowActive = useWindowActive();
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const normalizedQuery = searchQuery.trim();
   const messagesQuery = useInfiniteQuery(
     messagesQueryOptions(
@@ -51,8 +73,18 @@ export const useMailboxMessages = ({
       !!selectedMailboxId,
     ),
   );
-  const messages = messagesQuery.data?.pages ?? EMPTY_MESSAGE_PAGES;
-  const hasLoadedMessages = !!messagesQuery.data?.pages.length;
+  const {
+    data: messagesData,
+    error: messagesError,
+    fetchNextPage,
+    hasNextPage,
+    isError,
+    isFetchingNextPage,
+    isPending,
+    isRefetching,
+  } = messagesQuery;
+  const messages = messagesData?.pages ?? EMPTY_MESSAGE_PAGES;
+  const hasLoadedMessages = !!messagesData?.pages.length;
   const isLiveSyncEnabled =
     !!selectedMailboxId &&
     !isDemoMode &&
@@ -72,7 +104,7 @@ export const useMailboxMessages = ({
   );
   const flattenedMessages = useMemo(() => messages.flatMap((page) => page.messages), [messages]);
 
-  const refreshMessages = async () => {
+  const refreshMessages = useCallback(async () => {
     if (!selectedMailboxId) {
       return;
     }
@@ -86,14 +118,12 @@ export const useMailboxMessages = ({
     setIsManualRefreshing(true);
     try {
       await syncMessages(queryClient, selectedMailboxId, activeMailbox, normalizedQuery);
+    } finally {
       setIsManualRefreshing(false);
-    } catch (error) {
-      setIsManualRefreshing(false);
-      throw error;
     }
-  };
+  }, [activeMailbox, normalizedQuery, queryClient, selectedMailboxId]);
 
-  const refreshSearchResultsIfNeeded = async () => {
+  const refreshSearchResultsIfNeeded = useCallback(async () => {
     if (!selectedMailboxId || normalizedQuery.length === 0) return;
     await refreshLoadedMessagesPages(
       queryClient,
@@ -101,7 +131,7 @@ export const useMailboxMessages = ({
       activeMailbox,
       normalizedQuery,
     );
-  };
+  }, [activeMailbox, normalizedQuery, queryClient, selectedMailboxId]);
 
   const handleVisibleMessageIdsChange = useVisibleMessageRefresh({
     activeMailbox,
@@ -122,42 +152,40 @@ export const useMailboxMessages = ({
   }
 
   const isRefreshing =
-    isManualRefreshing ||
-    syncQuery.isFetching ||
-    (messagesQuery.isRefetching && !messagesQuery.isFetchingNextPage);
+    isManualRefreshing || syncQuery.isFetching || (isRefetching && !isFetchingNextPage);
   const isLoadingEmptyMessages =
-    !messages.some((page) => page.messages.length > 0) && (messagesQuery.isPending || isRefreshing);
+    !messages.some((page) => page.messages.length > 0) && (isPending || isRefreshing);
 
-  const loadMoreMessages = () => {
-    if (
-      !messagesQuery.hasNextPage ||
-      messagesQuery.isFetchingNextPage ||
-      messagesQuery.isPending ||
-      messagesQuery.isError
-    ) {
+  const loadMoreMessages = useCallback(() => {
+    if (!hasNextPage || isFetchingNextPage || isPending || isError) {
       return;
     }
 
-    void messagesQuery.fetchNextPage();
-  };
+    void fetchNextPage();
+  }, [fetchNextPage, hasNextPage, isError, isFetchingNextPage, isPending]);
+
+  const listState = useMemo(
+    () => ({
+      error: messagesError ?? null,
+      hasNextPage: !!hasNextPage,
+      isError,
+      isFetchingNextPage,
+      isPending,
+      isRefreshing,
+      messages,
+    }),
+    [hasNextPage, isError, isFetchingNextPage, isPending, isRefreshing, messages, messagesError],
+  );
 
   return {
     flattenedMessages,
     handleVisibleMessageIdsChange,
-    hasMessagePages: !!messagesQuery.data?.pages.length,
+    hasMessagePages: !!messagesData?.pages.length,
     isLoadingEmptyMessages,
     isRefreshing,
-    listState: {
-      error: messagesQuery.error ?? null,
-      hasNextPage: !!messagesQuery.hasNextPage,
-      isError: messagesQuery.isError,
-      isFetchingNextPage: messagesQuery.isFetchingNextPage,
-      isPending: messagesQuery.isPending,
-      isRefreshing,
-      messages,
-    },
+    listState,
     loadMoreMessages,
-    messagesPending: messagesQuery.isPending,
+    messagesPending: isPending,
     refreshMessages,
     refreshSearchResultsIfNeeded,
     selectedMessage,

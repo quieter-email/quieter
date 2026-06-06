@@ -31,9 +31,9 @@ import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { z } from "zod";
 import { orpc } from "~/lib/orpc";
 import {
-  getTeamMailDomainsQueryKey,
-  type TeamMailDomain,
-  type TeamMailDomainDnsRecord,
+  getOrganizationMailDomainsQueryKey,
+  type OrganizationMailDomain,
+  type OrganizationMailDomainDnsRecord,
 } from "./mail-domains";
 
 type DomainSetup = RouterOutputs["mailDomains"]["createSetup"];
@@ -65,14 +65,14 @@ const copyText = async (value: string, message: string) => {
   }
 };
 
-const toDomainSetup = (domain: TeamMailDomain): DomainSetup => ({
+const toDomainSetup = (domain: OrganizationMailDomain): DomainSetup => ({
   domain: domain.domain,
   domainId: domain.id,
   records: domain.requiredDnsRecords,
   status: domain.status,
 });
 
-const toDomainCheck = (domain: TeamMailDomain): DomainCheck | null => {
+const toDomainCheck = (domain: OrganizationMailDomain): DomainCheck | null => {
   if (!domain.lastCheckResult) {
     return null;
   }
@@ -160,7 +160,7 @@ const DnsRecordRow = ({
   record,
 }: {
   check?: MailDomainCheck;
-  record: TeamMailDomainDnsRecord;
+  record: OrganizationMailDomainDnsRecord;
 }) => (
   <div className="grid grid-cols-[1rem_minmax(0,1fr)] gap-3 border-b border-border/70 py-3.5 last:border-b-0 sm:py-4">
     <DnsStatusIcon check={check} />
@@ -207,7 +207,7 @@ export const RegisterDomainDialog = ({
   organizationId,
 }: {
   children?: ReactNode;
-  domain?: TeamMailDomain;
+  domain?: OrganizationMailDomain;
   organizationId: string;
 }) => {
   const queryClient = useQueryClient();
@@ -221,7 +221,7 @@ export const RegisterDomainDialog = ({
     mutationKey: ["mail-domains", organizationId, "create-setup"],
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: getTeamMailDomainsQueryKey(organizationId),
+        queryKey: getOrganizationMailDomainsQueryKey(organizationId),
       });
     },
   });
@@ -230,7 +230,7 @@ export const RegisterDomainDialog = ({
     mutationKey: ["mail-domains", organizationId, "check-setup"],
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: getTeamMailDomainsQueryKey(organizationId),
+        queryKey: getOrganizationMailDomainsQueryKey(organizationId),
       });
     },
   });
@@ -345,7 +345,9 @@ export const RegisterDomainDialog = ({
         <DialogContent className="flex max-h-[88vh] w-[min(94vw,60rem)] flex-col">
           <DialogHeader>
             <DialogTitle>Register domain</DialogTitle>
-            <DialogDescription>Add a team domain for inbound and outbound mail.</DialogDescription>
+            <DialogDescription>
+              Add an organization domain for inbound and outbound mail.
+            </DialogDescription>
           </DialogHeader>
 
           <DialogBody className="min-h-0 space-y-5 overflow-hidden">
@@ -507,7 +509,7 @@ export const RegisterDomainDialog = ({
                     {setup.domain} is verified
                   </h2>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    The domain was added to this team.
+                    The domain was added to this organization.
                   </p>
                 </div>
 
