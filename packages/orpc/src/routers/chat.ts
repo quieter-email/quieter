@@ -6,7 +6,7 @@ import {
   type ChatMessagePart,
   type ChatMessageRole,
 } from "@quieter/database";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { assertAccessibleMailbox } from "../mailbox";
 import { mailboxIdSchema, protectedProcedure } from "./base";
@@ -40,6 +40,8 @@ const getTextContent = (message: ChatMessageInput) =>
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
+
+const TEMP_MESSAGE_POSITION_OFFSET = 1_000_000;
 
 const createFallbackTitle = (messages: ChatMessageInput[]) => {
   const firstUserMessage = messages.find(
@@ -146,7 +148,6 @@ export const chatRouter = {
     .handler(async ({ context, input }) => {
       const authorizedChat = await getAuthorizedChat(input.chatId, input.mailboxId, context.userId);
 
-      await db.delete(chatMessage).where(eq(chatMessage.chatId, authorizedChat.id));
       await db.delete(chat).where(eq(chat.id, authorizedChat.id));
 
       return { deleted: true, id: authorizedChat.id };
@@ -196,11 +197,9 @@ export const chatRouter = {
       const now = new Date();
       const fallbackTitle = createFallbackTitle(input.messages);
 
-      await db.delete(chatMessage).where(eq(chatMessage.chatId, authorizedChat.id));
-
       if (input.messages.length > 0) {
         await db.insert(chatMessage).values(
-          input.messages.map((message, position) => {
+          input.messages.map((message, index) => {
             const createdAt = message.createdAt ?? now;
             const parts = message.parts as ChatMessagePart[];
 
@@ -209,12 +208,34 @@ export const chatRouter = {
               createdAt,
               id: message.id,
               parts,
-              position,
+              position: TEMP_MESSAGE_POSITION_OFFSET + index,
               role: message.role,
               userId: context.userId,
             };
           }),
         );
+
+        await db
+          .delete(chatMessage)
+          .where(
+            and(
+              eq(chatMessage.chatId, authorizedChat.id),
+              lt(chatMessage.position, TEMP_MESSAGE_POSITION_OFFSET),
+            ),
+          );
+
+        await Promise.all(
+          input.messages.map((message, position) =>
+            db
+              .update(chatMessage)
+              .set({ position })
+              .where(
+                and(eq(chatMessage.chatId, authorizedChat.id), eq(chatMessage.id, message.id)),
+              ),
+          ),
+        );
+      } else {
+        await db.delete(chatMessage).where(eq(chatMessage.chatId, authorizedChat.id));
       }
 
       const [updatedChat] = await db

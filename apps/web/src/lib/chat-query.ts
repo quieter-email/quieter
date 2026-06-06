@@ -5,10 +5,12 @@ export const getChatsQueryKey = (mailboxId: string) => ["mailbox", mailboxId, "c
 export const getChatQueryKey = (mailboxId: string, chatId: string | null) =>
   ["mailbox", mailboxId, "chat", chatId] as const;
 
+const disabledChatsQueryKey = ["chats", "disabled"] as const;
+
 export const chatsQueryOptions = (mailboxId: string | null) =>
   queryOptions({
     enabled: !!mailboxId,
-    queryKey: mailboxId ? getChatsQueryKey(mailboxId) : getChatsQueryKey(""),
+    queryKey: mailboxId ? getChatsQueryKey(mailboxId) : disabledChatsQueryKey,
     queryFn: ({ signal }) => {
       if (!mailboxId) {
         throw new Error("Mailbox id is required.");

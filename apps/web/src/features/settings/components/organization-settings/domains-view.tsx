@@ -147,10 +147,12 @@ const RemoveDomainDialog = ({
 const DomainRow = ({
   canManageDomains,
   domain,
+  manageDomainsReason,
   organizationId,
 }: {
   canManageDomains: boolean;
   domain: OrganizationMailDomain;
+  manageDomainsReason: string | null;
   organizationId: string;
 }) => (
   <div className="flex flex-col gap-3 border-b border-border/70 py-4 last:border-b-0 md:flex-row md:items-center md:justify-between">
@@ -170,12 +172,20 @@ const DomainRow = ({
 
     <div className="flex items-center gap-2">
       <DomainStatusBadge domain={domain} />
-      {canManageDomains && domain.status !== "verified" && (
-        <RegisterDomainDialog domain={domain} organizationId={organizationId}>
-          <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
-          Continue
-        </RegisterDomainDialog>
-      )}
+      {canManageDomains && domain.status !== "verified" ? (
+        manageDomainsReason ? (
+          <MutedActionButton
+            icon={<HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />}
+            label="Continue"
+            reason={manageDomainsReason}
+          />
+        ) : (
+          <RegisterDomainDialog domain={domain} organizationId={organizationId}>
+            <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
+            Continue
+          </RegisterDomainDialog>
+        )
+      ) : null}
       {canManageDomains && <RemoveDomainDialog domain={domain} organizationId={organizationId} />}
     </div>
   </div>
@@ -250,6 +260,7 @@ export const DomainsView = ({
               canManageDomains={canManageDomains}
               domain={domain}
               key={domain.id}
+              manageDomainsReason={manageDomainsReason}
               organizationId={organization.id}
             />
           ))

@@ -11,7 +11,8 @@ describe("mailbox-scoped chat queries", () => {
     const options = chatsQueryOptions(null);
 
     expect(options.enabled).toBe(false);
-    expect(options.queryKey[1]).toBe("");
+    expect(options.queryKey[0]).toBe("chats");
+    expect(options.queryKey[1]).toBe("disabled");
   });
 
   test("isolates chat lists and transcripts by mailbox", () => {

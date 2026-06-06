@@ -467,7 +467,7 @@ export const chatMessage = pgTable(
       columns: [table.chatId, table.userId],
       foreignColumns: [chat.id, chat.userId],
       name: "chat_message_chat_id_user_id_fkey",
-    }),
+    }).onDelete("cascade"),
     unique("chat_message_chat_id_position_unique").on(table.chatId, table.position),
   ],
 );
