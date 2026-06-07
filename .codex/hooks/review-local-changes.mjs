@@ -94,7 +94,11 @@ try {
   }
 } catch (error) {
   if (error?.code === "ENOENT" && mode === "review") {
-    respond();
+    respond({
+      decision: "block",
+      reason:
+        "Snapshot state file is missing — unable to verify the working tree is unchanged. Review the complete local diff before finishing.",
+    });
   } else {
     respond({
       systemMessage: `Local-change review hook failed: ${error instanceof Error ? error.message : String(error)}`,

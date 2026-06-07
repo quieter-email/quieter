@@ -346,6 +346,7 @@ export const managedMailMessage = pgTable(
       table.sentAt,
     ),
     index("managed_mail_message_mailbox_thread_id_idx").on(table.mailboxId, table.threadId),
+    index("managed_mail_message_s3_bucket_key_idx").on(table.s3Bucket, table.s3Key),
     unique("managed_mail_message_mailbox_provider_message_unique").on(
       table.mailboxId,
       table.providerMessageId,

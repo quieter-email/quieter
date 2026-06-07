@@ -138,11 +138,6 @@ export const handler = async (event: SnsEvent) => {
         subject: notification.mail?.commonHeaders?.subject?.trim() || null,
       });
     } catch (error) {
-      await deleteMailObjectUnlessTracked({
-        bucket: Resource.MailBucket.name,
-        key: s3Key,
-        s3Client: getS3Client(),
-      });
       console.error("Failed to process SES receipt record.", {
         error,
         providerMessageId,

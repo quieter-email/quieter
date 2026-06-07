@@ -122,7 +122,7 @@ export const sendOrganizationMailMessage = async (input: {
   );
 
   if (response.MessageId) {
-    await recordOutboundManagedMessageForSender({
+    recordOutboundManagedMessageForSender({
       bcc: normalizeAddresses(input.message.bcc),
       bodyHtml: input.message.html,
       bodyText: input.message.text,
@@ -133,6 +133,12 @@ export const sendOrganizationMailMessage = async (input: {
       sender: input.message.sender.trim().toLowerCase(),
       subject: input.message.subject,
       to: normalizeAddresses(input.message.to),
+    }).catch((error) => {
+      console.error("Failed to persist outbound managed message for sender.", {
+        error,
+        messageId: response.MessageId,
+        organizationId: input.organizationId,
+      });
     });
 
     recordOrganizationMailUsage({

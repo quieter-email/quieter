@@ -23,7 +23,7 @@ import {
   splitMailAddressList,
 } from "@quieter/mail/compose";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
-import { and, asc, desc, eq, ilike, inArray, notInArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { getAuthorizedManagedMailbox } from "./mailbox";
 import {
@@ -359,7 +359,6 @@ const deleteManagedMailRecords = async (
   }>,
   condition: SQL,
 ) => {
-  const recordIds = records.map((record) => record.id);
   const objects = new Map<string, { bucket: string; key: string }>();
 
   for (const record of records) {
@@ -371,6 +370,8 @@ const deleteManagedMailRecords = async (
     }
   }
 
+  await db.delete(managedMailMessage).where(condition);
+
   for (const object of objects.values()) {
     const [otherReference] = await db
       .select({ id: managedMailMessage.id })
@@ -379,7 +380,6 @@ const deleteManagedMailRecords = async (
         and(
           eq(managedMailMessage.s3Bucket, object.bucket),
           eq(managedMailMessage.s3Key, object.key),
-          notInArray(managedMailMessage.id, recordIds),
         ),
       )
       .limit(1);
@@ -393,8 +393,6 @@ const deleteManagedMailRecords = async (
       );
     }
   }
-
-  await db.delete(managedMailMessage).where(condition);
 };
 
 export const deleteManagedMessage = async (input: {
@@ -554,6 +552,7 @@ export const sendManagedMailboxMessage = async (input: {
       message: "Managed mailbox organization is missing.",
     });
   }
+  const organizationId = selectedMailbox.organizationId;
 
   const to = splitMailAddressList(input.message.recipients.to).map(extractMailAddress);
   const cc = splitMailAddressList(input.message.recipients.cc).map(extractMailAddress);
@@ -575,10 +574,10 @@ export const sendManagedMailboxMessage = async (input: {
   try {
     await assertCanConsumeOrganizationMailUsage({
       estimate: usageEstimate,
-      organizationId: selectedMailbox.organizationId,
+      organizationId,
     });
     await assertOrganizationOwnsVerifiedSenderDomain({
-      organizationId: selectedMailbox.organizationId,
+      organizationId,
       sender: selectedMailbox.emailAddress,
     });
   } catch (error) {
@@ -628,30 +627,57 @@ export const sendManagedMailboxMessage = async (input: {
     });
   }
 
-  const savedMessage = await recordOutboundManagedMessageForSender({
-    bcc,
-    bodyHtml: input.message.bodyHtml,
-    bodyText: input.message.bodyText,
-    cc,
-    messageHeaderId,
-    organizationId: selectedMailbox.organizationId,
-    providerMessageId,
-    replyTo: [selectedMailbox.emailAddress],
-    sender: selectedMailbox.emailAddress,
-    sentAt,
-    subject: input.message.subject,
-    threadId: input.message.replyContext?.threadId,
-    to,
-  });
-  await recordOrganizationMailUsage({
-    ...usageEstimate,
-    metadata: {
-      mailboxId: selectedMailbox.id,
-      sender: selectedMailbox.emailAddress,
-    },
-    organizationId: selectedMailbox.organizationId,
-    providerMessageId,
-  });
+  const persistSendRecord = async () => {
+    try {
+      return await recordOutboundManagedMessageForSender({
+        bcc,
+        bodyHtml: input.message.bodyHtml,
+        bodyText: input.message.bodyText,
+        cc,
+        messageHeaderId,
+        organizationId,
+        providerMessageId,
+        replyTo: [selectedMailbox.emailAddress],
+        sender: selectedMailbox.emailAddress,
+        sentAt,
+        subject: input.message.subject,
+        threadId: input.message.replyContext?.threadId,
+        to,
+      });
+    } catch (error) {
+      console.error("Failed to persist outbound managed message after send.", {
+        error,
+        mailboxId: selectedMailbox.id,
+        providerMessageId,
+      });
+      return null;
+    }
+  };
+
+  const persistUsage = async () => {
+    try {
+      await recordOrganizationMailUsage({
+        ...usageEstimate,
+        metadata: {
+          mailboxId: selectedMailbox.id,
+          sender: selectedMailbox.emailAddress,
+        },
+        organizationId,
+        providerMessageId,
+      });
+    } catch (error) {
+      console.error("Failed to record organization mail usage after send.", {
+        error,
+        mailboxId: selectedMailbox.id,
+        providerMessageId,
+      });
+    }
+  };
+
+  const savedMessagePromise = persistSendRecord();
+  void persistUsage();
+
+  const savedMessage = await savedMessagePromise;
 
   return {
     id: savedMessage?.id ?? providerMessageId,

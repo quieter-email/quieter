@@ -1,7 +1,7 @@
 import { db, mailbox, managedMailMessage } from "@quieter/database";
 import { parseRawMailMessage, type ParsedRawMailMessage } from "@quieter/mail/raw-message";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 const normalizeEmailAddress = (value: string) => value.trim().toLowerCase();
 
@@ -13,6 +13,9 @@ const getReplyReferenceIds = (message: ParsedRawMailMessage) =>
         .filter((value): value is string => !!value),
     ),
   );
+
+const deriveThreadId = (mailboxId: string, canonicalRef: string) =>
+  createHash("sha256").update(`${mailboxId}\0${canonicalRef}`).digest("hex").slice(0, 32);
 
 const resolveManagedThreadId = async (
   mailboxId: string,
@@ -34,7 +37,7 @@ const resolveManagedThreadId = async (
     .orderBy(desc(managedMailMessage.sentAt))
     .limit(1);
 
-  return referencedMessage?.threadId ?? fallbackThreadId;
+  return referencedMessage?.threadId ?? deriveThreadId(mailboxId, referenceIds[0]);
 };
 
 export const recordInboundManagedMessage = async (input: {
@@ -63,7 +66,12 @@ export const recordInboundManagedMessage = async (input: {
   for (const targetMailbox of targetMailboxes) {
     const id = randomUUID();
     const sentAt = parsed.date ?? input.receivedAt;
-    const threadId = await resolveManagedThreadId(targetMailbox.id, parsed, id);
+    const canonicalRef = parsed.messageHeaderId ?? id;
+    const threadId = await resolveManagedThreadId(
+      targetMailbox.id,
+      parsed,
+      deriveThreadId(targetMailbox.id, canonicalRef),
+    );
     const [inserted] = await db
       .insert(managedMailMessage)
       .values({

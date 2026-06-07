@@ -92,6 +92,14 @@ export const cleanupMailboxesForDeletedOrganization = async (organizationId: str
     }
   }
 
+  await db
+    .delete(mailbox)
+    .where(and(eq(mailbox.organizationId, organizationId), eq(mailbox.provider, "managed")));
+  await db
+    .update(mailbox)
+    .set({ organizationId: null, updatedAt: new Date() })
+    .where(and(eq(mailbox.organizationId, organizationId), eq(mailbox.provider, "gmail")));
+
   for (const object of objects.values()) {
     const [otherReference] = await db
       .select({ id: managedMailMessage.id })
@@ -114,14 +122,6 @@ export const cleanupMailboxesForDeletedOrganization = async (organizationId: str
       );
     }
   }
-
-  await db
-    .delete(mailbox)
-    .where(and(eq(mailbox.organizationId, organizationId), eq(mailbox.provider, "managed")));
-  await db
-    .update(mailbox)
-    .set({ organizationId: null, updatedAt: new Date() })
-    .where(and(eq(mailbox.organizationId, organizationId), eq(mailbox.provider, "gmail")));
 };
 
 export const assertCanLeaveOrganization = async (

@@ -105,8 +105,11 @@ export const MessageListScrollPane = ({
   const visibleMessageIdsKey = visibleMessageIds.join(":");
   const visibleMessageIdsRef = useRef(visibleMessageIds);
   visibleMessageIdsRef.current = visibleMessageIds;
+  const hasMountedPrefetchRef = useRef(false);
 
   useLayoutEffect(() => {
+    if (hasMountedPrefetchRef.current) return;
+    hasMountedPrefetchRef.current = true;
     loadMoreIfNeeded({
       element: selection.scrollRef.current,
       hasNextPage: list.hasNextPage,
