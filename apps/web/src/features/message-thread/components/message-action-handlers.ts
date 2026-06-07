@@ -22,18 +22,27 @@ export type ThreadActionHandlers = {
 export const createMailboxThreadMessageActionHandlers = ({
   mailboxActions,
   onOpenDraft,
+  supportsLabelsAndFolders = true,
+  supportsUnsubscribe = true,
 }: {
   mailboxActions: MailboxActions;
   onOpenDraft?: (message: MessageListItem) => void | Promise<void>;
+  supportsLabelsAndFolders?: boolean;
+  supportsUnsubscribe?: boolean;
 }): ThreadActionHandlers => ({
-  onDeleteDraft: mailboxActions.deleteDraft,
   onMarkAsRead: (threadId) => mailboxActions.markThreadAsRead(threadId),
-  onMarkAsSpam: (threadId) => mailboxActions.markThreadAsSpam(threadId),
   onMarkAsUnread: (threadId) => mailboxActions.markThreadAsUnread(threadId),
-  onMoveToTrash: (threadId) => mailboxActions.moveThreadToTrash(threadId),
-  onOpenDraft,
-  onUnmarkAsSpam: (threadId) => mailboxActions.unmarkThreadAsSpam(threadId),
-  onUnsubscribe: mailboxActions.unsubscribeFromMessage,
-  onUntrash: (threadId) => mailboxActions.untrashThread(threadId),
-  onUpdateLabels: (threadId, changes) => mailboxActions.updateThreadLabels(threadId, changes),
+  ...(supportsUnsubscribe ? { onUnsubscribe: mailboxActions.unsubscribeFromMessage } : {}),
+  ...(supportsLabelsAndFolders
+    ? {
+        onDeleteDraft: mailboxActions.deleteDraft,
+        onMarkAsSpam: (threadId: string) => mailboxActions.markThreadAsSpam(threadId),
+        onMoveToTrash: (threadId: string) => mailboxActions.moveThreadToTrash(threadId),
+        onOpenDraft,
+        onUnmarkAsSpam: (threadId: string) => mailboxActions.unmarkThreadAsSpam(threadId),
+        onUntrash: (threadId: string) => mailboxActions.untrashThread(threadId),
+        onUpdateLabels: (threadId: string, changes: LabelChanges) =>
+          mailboxActions.updateThreadLabels(threadId, changes),
+      }
+    : {}),
 });

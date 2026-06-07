@@ -1,4 +1,5 @@
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { recordInboundManagedMessage } from "@quieter/orpc/managed-mail-storage";
 import { Resource } from "sst";
 import { z } from "zod";
 import {
@@ -8,6 +9,7 @@ import {
   type LambdaFunctionUrlEvent,
   type LambdaFunctionUrlResponse,
 } from "./function-url";
+import { deleteMailObjectUnlessTracked } from "./mail-object-retention";
 
 const inboundPayloadSchema = z
   .object({
@@ -81,30 +83,62 @@ export const handler = async (
       );
     }
 
+    const receivedAt = parsed.data.receivedAt ?? new Date();
+    const s3Key = getMailObjectKey(receivedAt);
+    const providerMessageId =
+      parsed.data.providerMessageId?.trim() ||
+      parsed.data.messageIdHeader?.trim() ||
+      crypto.randomUUID();
+    const rawMessage = parsed.data.rawMimeBase64
+      ? Buffer.from(parsed.data.rawMimeBase64, "base64")
+      : Buffer.from(parsed.data.rawMime ?? "", "utf8");
+
     await getS3Client().send(
       new PutObjectCommand({
-        Body: parsed.data.rawMimeBase64
-          ? Buffer.from(parsed.data.rawMimeBase64, "base64")
-          : Buffer.from(parsed.data.rawMime ?? "", "utf8"),
+        Body: rawMessage,
         Bucket: Resource.MailBucket.name,
         ContentType: "message/rfc822",
-        Key: getMailObjectKey(parsed.data.receivedAt ?? new Date()),
+        Key: s3Key,
       }),
     );
+    const recipients = Array.from(
+      new Set(
+        parsed.data.recipients.map((recipient) => recipient.trim().toLowerCase()).filter(Boolean),
+      ),
+    );
+    let mailboxIds: string[];
+    try {
+      mailboxIds = await recordInboundManagedMessage({
+        providerMessageId,
+        rawMessage,
+        rawSizeBytes: rawMessage.byteLength,
+        receivedAt,
+        recipients,
+        s3Bucket: Resource.MailBucket.name,
+        s3Key,
+      });
+    } catch (error) {
+      await deleteMailObjectUnlessTracked({
+        bucket: Resource.MailBucket.name,
+        key: s3Key,
+        s3Client: getS3Client(),
+      });
+      throw error;
+    }
+    const stored = await deleteMailObjectUnlessTracked({
+      bucket: Resource.MailBucket.name,
+      key: s3Key,
+      s3Client: getS3Client(),
+    });
 
     return toJson(
       {
-        providerMessageId: parsed.data.providerMessageId?.trim() || null,
-        recipients: Array.from(
-          new Set(
-            parsed.data.recipients
-              .map((recipient) => recipient.trim().toLowerCase())
-              .filter(Boolean),
-          ),
-        ),
+        mailboxIds,
+        providerMessageId,
+        recipients,
         s3Bucket: Resource.MailBucket.name,
-        s3Key: getMailObjectKey(parsed.data.receivedAt ?? new Date()),
-        stored: true,
+        s3Key,
+        stored,
       },
       201,
     );

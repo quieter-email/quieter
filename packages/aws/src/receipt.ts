@@ -1,6 +1,8 @@
-import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { recordInboundOrganizationMailUsage } from "@quieter/billing/organization-mail-usage";
+import { recordInboundManagedMessage } from "@quieter/orpc/managed-mail-storage";
 import { Resource } from "sst";
+import { deleteMailObjectUnlessTracked } from "./mail-object-retention";
 
 type SnsRecord = {
   Sns?: {
@@ -89,7 +91,34 @@ export const handler = async (event: SnsEvent) => {
         }),
       );
       const messageSizeBytes = headObject.ContentLength ?? 0;
+      const object = await getS3Client().send(
+        new GetObjectCommand({
+          Bucket: Resource.MailBucket.name,
+          Key: s3Key,
+        }),
+      );
+      if (!object.Body) {
+        throw new Error("The stored inbound message body is missing.");
+      }
+      const rawMessage = Buffer.from(await object.Body.transformToByteArray());
+      const receivedAt = new Date(
+        notification.receipt?.timestamp || notification.mail?.timestamp || Date.now(),
+      );
 
+      const mailboxIds = await recordInboundManagedMessage({
+        providerMessageId,
+        rawMessage,
+        rawSizeBytes: messageSizeBytes,
+        receivedAt,
+        recipients,
+        s3Bucket: Resource.MailBucket.name,
+        s3Key,
+      });
+      const stored = await deleteMailObjectUnlessTracked({
+        bucket: Resource.MailBucket.name,
+        key: s3Key,
+        s3Client: getS3Client(),
+      });
       await recordInboundOrganizationMailUsage({
         messageSizeBytes,
         providerMessageId,
@@ -98,23 +127,29 @@ export const handler = async (event: SnsEvent) => {
 
       console.info("Processed SES receipt notification.", {
         mailFrom: notification.mail?.source?.trim() || null,
+        mailboxIds,
         messageIdHeader: notification.mail?.commonHeaders?.messageId?.trim() || null,
         providerMessageId,
-        receivedAt: new Date(
-          notification.receipt?.timestamp || notification.mail?.timestamp || Date.now(),
-        ),
+        receivedAt,
         recipients,
         s3Bucket: Resource.MailBucket.name,
         s3Key,
+        stored,
         subject: notification.mail?.commonHeaders?.subject?.trim() || null,
       });
     } catch (error) {
+      await deleteMailObjectUnlessTracked({
+        bucket: Resource.MailBucket.name,
+        key: s3Key,
+        s3Client: getS3Client(),
+      });
       console.error("Failed to process SES receipt record.", {
         error,
         providerMessageId,
         recipients,
         s3Key,
       });
+      throw error;
     }
   }
 };

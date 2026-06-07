@@ -57,8 +57,20 @@ import {
   resolveDefaultMailboxId,
   setManagedMailboxGrant,
   startGmailOAuth,
+  assertAccessibleMailbox,
   type MailboxListItem,
 } from "../mailbox";
+import {
+  deleteManagedMessage,
+  deleteManagedThread,
+  getManagedMessageInspector,
+  getManagedThread,
+  listManagedMessages,
+  refreshManagedMessages,
+  sendManagedMailboxMessage,
+  setManagedMessageReadState,
+  setManagedThreadReadState,
+} from "../managed-mail";
 import {
   callGmail,
   historySyncMailboxCategorySchema,
@@ -271,6 +283,17 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return await listManagedMessages({
+          ...input,
+          userId: context.userId,
+        });
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
         return input.category === "drafts"
           ? await listDraftsWithDetails(accessToken, {
@@ -299,6 +322,20 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return {
+          hasChanges: true,
+          refreshFirstPage: true,
+          removedMessageIds: [],
+          requiresFullRefresh: true,
+          updatedMessages: [],
+        };
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
         return await getMailboxSyncDelta(accessToken, {
           mailbox: input.category,
@@ -318,6 +355,18 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return await refreshManagedMessages({
+          mailboxId: input.mailboxId,
+          messageIds: input.messageIds,
+          userId: context.userId,
+        });
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
         return await refreshMailboxMessages(accessToken, {
           mailbox: input.category,
@@ -336,6 +385,17 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return await getManagedThread({
+          ...input,
+          userId: context.userId,
+        });
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
         return await getThreadWithDetails(accessToken, input.threadId, signal);
       });
@@ -350,6 +410,17 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return await getManagedMessageInspector({
+          ...input,
+          userId: context.userId,
+        });
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
         return await getMessageInspector(accessToken, input.messageId, signal);
       });
@@ -363,6 +434,14 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return [];
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
         return await listLabels(accessToken, signal);
       });
@@ -416,6 +495,18 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return await setManagedMessageReadState({
+          ...input,
+          read: true,
+          userId: context.userId,
+        });
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken) => {
         return await markMessageAsRead(accessToken, input.messageId);
       });
@@ -429,6 +520,18 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return await setManagedMessageReadState({
+          ...input,
+          read: false,
+          userId: context.userId,
+        });
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken) => {
         return await markMessageAsUnread(accessToken, input.messageId);
       });
@@ -442,6 +545,18 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return await setManagedThreadReadState({
+          ...input,
+          read: true,
+          userId: context.userId,
+        });
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken) => {
         return await markThreadAsRead(accessToken, input.threadId);
       });
@@ -455,6 +570,18 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return await setManagedThreadReadState({
+          ...input,
+          read: false,
+          userId: context.userId,
+        });
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken) => {
         return await markThreadAsUnread(accessToken, input.threadId);
       });
@@ -504,6 +631,17 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return await deleteManagedMessage({
+          ...input,
+          userId: context.userId,
+        });
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken) => {
         return await moveMessageToTrash(accessToken, input.messageId);
       });
@@ -543,6 +681,17 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return await deleteManagedThread({
+          ...input,
+          userId: context.userId,
+        });
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken) => {
         return await moveThreadToTrash(accessToken, input.threadId);
       });
@@ -598,6 +747,17 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return await sendManagedMailboxMessage({
+          ...input,
+          userId: context.userId,
+        });
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken) => {
         const raw = arrayBufferToBase64Url(
           new TextEncoder().encode(await buildMimeMessage(input.message)),

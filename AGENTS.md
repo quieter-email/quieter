@@ -63,10 +63,12 @@
 - SST owns the standalone SES/S3/SNS mail infrastructure.
 - The web app exposes `POST /api/messages` for organization API-key outbound mail. It verifies the Better Auth `organization` API key, requires the `sender` domain to be a verified `mailDomain` for that organization, and sends through SES from `packages/orpc/src/organization-mail.ts`.
 - Better Auth email hooks call that endpoint from `packages/auth/src/email.ts`. Set `QUIETER_MAIL_API_KEY` to an organization API key for the organization that owns the auth sender domain. Override `QUIETER_AUTH_MAIL_SENDER` or `QUIETER_MAIL_API_URL` only when needed.
-- The mail stack is not currently wired into app-owned DB message records.
+- Managed mailbox messages are persisted in `managedMailMessage`. Inbound SES receipt processing parses the raw S3 object and writes one row per exact managed mailbox recipient; managed app sends and exact-sender `POST /api/messages` sends write outbound rows.
+- Managed mailbox UI currently supports Inbox, Sent, read/unread state, search, threads, replies, forwards, and compose. Gmail-only labels, drafts, spam, and trash are intentionally hidden.
 - Domain registration should not be added back without rebuilding the integration intentionally.
 - Mail ingress/outbound auth tokens come from SST linked secrets.
 - Inbound mail is stored under the fixed `mail/inbound/...` key prefix.
+- Managed inbound S3 objects must have at least one `managedMailMessage` reference. Ingestion deletes untracked objects immediately, and managed message deletion removes the S3 object synchronously when deleting its final database reference.
 - `AWS_REGION` or `AWS_DEFAULT_REGION` is required for the mail S3 uploader.
 - Production SST deploys sync `MAIL_BUCKET`, `MAIL_RECEIPT_TOPIC_ARN`, `MAIL_RECEIPT_ROLE_ARN`, and `MAIL_RECEIPT_RULE_SET_NAME` into Vercel as production-only sensitive env vars from `.sst/outputs.json`, then trigger a Vercel production Deploy Hook from `.github/workflows/sst-deploy.yml`. The GitHub environment must provide `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID`, and `VERCEL_DEPLOY_HOOK_URL`. Commit-triggered Vercel deployments stay disabled through `vercel.json` `git.deploymentEnabled`; do not use an ignored-build command that exits `0`, because it also cancels Deploy Hook builds.
 - Run the combined local dev session with `bun run dev`; Turbo runs the web app and SST mail stack side by side. Run direct SST commands through `bun run sst ...`; the wrapper defaults to `sst.config.ts` and the `mail-dev` stage, and loads AWS credentials from `.env.local`.

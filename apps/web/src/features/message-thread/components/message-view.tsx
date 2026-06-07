@@ -64,6 +64,7 @@ type MessageViewProps = {
   activeMailbox: MailboxCategory;
   currentUserEmail?: string | null;
   mailboxId: string;
+  mailboxProvider: "gmail" | "managed";
   mailboxActions: MailboxActions;
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
@@ -377,7 +378,7 @@ const MessageInspectorPanel = ({
         <DialogHeader>
           <DialogTitle className="text-base font-bold">Full details</DialogTitle>
           <DialogDescription className="text-foreground">
-            Headers, message source, and Gmail payload for this message.
+            Headers and provider source details for this message.
           </DialogDescription>
         </DialogHeader>
 
@@ -768,6 +769,7 @@ const ThreadMessageList = ({
 export const MessageView = ({
   activeMailbox,
   mailboxId,
+  mailboxProvider,
   currentUserEmail,
   mailboxActions,
   message,
@@ -821,7 +823,7 @@ export const MessageView = ({
       messageId: threadMessage.id,
     })),
   );
-  const autoMarkedThreadIdsRef = useRef<Set<string>>(new Set());
+  const [autoMarkedThreadIds] = useState(() => new Set<string>());
   const bodyRefreshRequestKeyRef = useRef<string | null>(null);
   const isActionPending =
     pendingActions.isMessageActionPending(message.id) ||
@@ -858,20 +860,20 @@ export const MessageView = ({
   // react-doctor-disable-next-line react-doctor/no-event-handler
   useEffect(() => {
     if (!threadIsUnread) {
-      autoMarkedThreadIdsRef.current.delete(message.threadId);
+      autoMarkedThreadIds.delete(message.threadId);
       return;
     }
 
-    if (isActionPending || autoMarkedThreadIdsRef.current.has(message.threadId)) {
+    if (isActionPending || autoMarkedThreadIds.has(message.threadId)) {
       return;
     }
 
-    autoMarkedThreadIdsRef.current.add(message.threadId);
+    autoMarkedThreadIds.add(message.threadId);
 
     Promise.resolve(mailboxActions.markThreadAsRead(message.threadId)).catch(() => {
-      autoMarkedThreadIdsRef.current.delete(message.threadId);
+      autoMarkedThreadIds.delete(message.threadId);
     });
-  }, [isActionPending, mailboxActions, message.threadId, threadIsUnread]);
+  }, [autoMarkedThreadIds, isActionPending, mailboxActions, message.threadId, threadIsUnread]);
 
   return (
     <article className="w-full">
@@ -885,6 +887,8 @@ export const MessageView = ({
             <MessageActionsDropdown
               actions={createMailboxThreadMessageActionHandlers({
                 mailboxActions,
+                supportsLabelsAndFolders: mailboxProvider === "gmail",
+                supportsUnsubscribe: mailboxProvider === "gmail",
               })}
               isPending={isActionPending}
               isUnread={threadIsUnread}
@@ -918,7 +922,9 @@ export const MessageView = ({
           mailboxId={mailboxId}
           messages={visibleMessages}
           onComposeDraftRequested={onComposeDraftRequested}
-          onUnsubscribe={mailboxActions.unsubscribeFromMessage}
+          onUnsubscribe={
+            mailboxProvider === "gmail" ? mailboxActions.unsubscribeFromMessage : undefined
+          }
         />
       ) : (
         visibleMessages.map((threadMessage) => (
@@ -931,7 +937,9 @@ export const MessageView = ({
             mailboxId={mailboxId}
             message={threadMessage}
             onComposeDraftRequested={onComposeDraftRequested}
-            onUnsubscribe={mailboxActions.unsubscribeFromMessage}
+            onUnsubscribe={
+              mailboxProvider === "gmail" ? mailboxActions.unsubscribeFromMessage : undefined
+            }
           />
         ))
       )}

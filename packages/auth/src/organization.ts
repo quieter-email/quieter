@@ -1,6 +1,15 @@
-import { db, invitation, mailbox, member, organization, user } from "@quieter/database";
+import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  db,
+  invitation,
+  mailbox,
+  managedMailMessage,
+  member,
+  organization,
+  user,
+} from "@quieter/database";
 import { APIError } from "better-auth/api";
-import { and, eq } from "drizzle-orm";
+import { and, eq, notInArray } from "drizzle-orm";
 
 type AuthUser = typeof user.$inferSelect;
 
@@ -8,6 +17,18 @@ type UserIdentity = Pick<AuthUser, "email" | "id" | "name">;
 
 type EnsureUserOrganizationStateResult = {
   organizationIds: string[];
+};
+
+let s3Client: S3Client | null = null;
+
+const getS3Client = () => {
+  const region = process.env.AWS_REGION?.trim() || process.env.AWS_DEFAULT_REGION?.trim();
+  if (!region) {
+    throw new Error("AWS_REGION or AWS_DEFAULT_REGION is required to delete managed mail.");
+  }
+
+  s3Client ??= new S3Client({ region });
+  return s3Client;
 };
 
 const getUserOrganizationIds = async (userId: string) => {
@@ -50,6 +71,50 @@ export const cleanupOrganizationsForDeletedUser = async (userId: string) => {
 };
 
 export const cleanupMailboxesForDeletedOrganization = async (organizationId: string) => {
+  const managedMessages = await db
+    .select({
+      id: managedMailMessage.id,
+      s3Bucket: managedMailMessage.s3Bucket,
+      s3Key: managedMailMessage.s3Key,
+    })
+    .from(managedMailMessage)
+    .innerJoin(mailbox, eq(mailbox.id, managedMailMessage.mailboxId))
+    .where(and(eq(mailbox.organizationId, organizationId), eq(mailbox.provider, "managed")));
+  const managedMessageIds = managedMessages.map((message) => message.id);
+  const objects = new Map<string, { bucket: string; key: string }>();
+
+  for (const message of managedMessages) {
+    if (message.s3Bucket && message.s3Key) {
+      objects.set(`${message.s3Bucket}\0${message.s3Key}`, {
+        bucket: message.s3Bucket,
+        key: message.s3Key,
+      });
+    }
+  }
+
+  for (const object of objects.values()) {
+    const [otherReference] = await db
+      .select({ id: managedMailMessage.id })
+      .from(managedMailMessage)
+      .where(
+        and(
+          eq(managedMailMessage.s3Bucket, object.bucket),
+          eq(managedMailMessage.s3Key, object.key),
+          notInArray(managedMailMessage.id, managedMessageIds),
+        ),
+      )
+      .limit(1);
+
+    if (!otherReference) {
+      await getS3Client().send(
+        new DeleteObjectCommand({
+          Bucket: object.bucket,
+          Key: object.key,
+        }),
+      );
+    }
+  }
+
   await db
     .delete(mailbox)
     .where(and(eq(mailbox.organizationId, organizationId), eq(mailbox.provider, "managed")));

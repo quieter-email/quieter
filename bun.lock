@@ -113,6 +113,7 @@
     "packages/auth": {
       "name": "@quieter/auth",
       "dependencies": {
+        "@aws-sdk/client-s3": "catalog:",
         "@quieter/billing": "workspace:*",
         "@quieter/database": "workspace:*",
       },
@@ -144,6 +145,7 @@
         "@aws-sdk/client-s3": "catalog:",
         "@aws-sdk/client-sesv2": "catalog:",
         "@quieter/billing": "workspace:*",
+        "@quieter/orpc": "workspace:*",
         "zod": "catalog:",
       },
       "devDependencies": {
@@ -220,6 +222,7 @@
     "packages/mail": {
       "name": "@quieter/mail",
       "dependencies": {
+        "postal-mime": "^2.7.4",
         "zod": "catalog:",
       },
       "devDependencies": {
@@ -235,6 +238,7 @@
     "packages/orpc": {
       "name": "@quieter/orpc",
       "dependencies": {
+        "@aws-sdk/client-s3": "catalog:",
         "@aws-sdk/client-ses": "catalog:",
         "@aws-sdk/client-sesv2": "catalog:",
         "@quieter/auth": "workspace:*",
@@ -2376,6 +2380,8 @@
     "picomatch": ["picomatch@4.0.4", "", {}, "sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A=="],
 
     "pkg-types": ["pkg-types@2.3.0", "", { "dependencies": { "confbox": "^0.2.2", "exsolve": "^1.0.7", "pathe": "^2.0.3" } }, "sha512-SIqCzDRg0s9npO5XQ3tNZioRY1uK06lA41ynBC1YmFTmnY6FjUjVt6s4LoADmwoig1qqD0oK8h1p/8mlMx8Oig=="],
+
+    "postal-mime": ["postal-mime@2.7.4", "", {}, "sha512-0WdnFQYUrPGGTFu1uOqD2s7omwua8xaeYGdO6rb88oD5yJ/4pPHDA4sdWqfD8wQVfCny563n/HQS7zTFft+f/g=="],
 
     "postcss": ["postcss@8.5.14", "", { "dependencies": { "nanoid": "^3.3.11", "picocolors": "^1.1.1", "source-map-js": "^1.2.1" } }, "sha512-SoSL4+OSEtR99LHFZQiJLkT59C5B1amGO1NzTwj7TT1qCUgUO6hxOvzkOYxD+vMrXBM3XJIKzokoERdqQq/Zmg=="],
 

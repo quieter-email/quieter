@@ -53,6 +53,7 @@ type MailboxWorkspaceContentProps = {
   reconnectingMailboxId: string | null;
   searchQuery: string;
   selectedMailboxId: string | null;
+  selectedMailboxProvider: "gmail" | "managed" | null;
   selectedMailboxNeedsReconnect: boolean;
   selectedView: MailboxWorkspaceView;
 };
@@ -159,6 +160,7 @@ export const MailboxWorkspaceContent = ({
   reconnectingMailboxId,
   searchQuery,
   selectedMailboxId,
+  selectedMailboxProvider,
   selectedMailboxNeedsReconnect,
   selectedView,
 }: MailboxWorkspaceContentProps) => (
@@ -189,6 +191,7 @@ export const MailboxWorkspaceContent = ({
             searchQuery={searchQuery}
             selectedMailbox={activeMailbox}
             selectedMailboxId={selectedMailboxId}
+            selectedMailboxProvider={selectedMailboxProvider}
             selectedView={selectedView}
             isMobileOpen={layoutState.isMobileSidebarOpen}
           />
@@ -266,6 +269,7 @@ export const MailboxWorkspaceContent = ({
                   currentUserEmail={currentUserEmail}
                   isDemoMode={isDemoMode}
                   mailboxId={selectedMailboxId}
+                  mailboxProvider={selectedMailboxProvider ?? "gmail"}
                   onComposeDraftRequested={onComposeDraftRequested}
                   onOpenSidebar={onOpenSidebar}
                   onSearchQueryChange={onSearch}

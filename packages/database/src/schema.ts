@@ -18,6 +18,11 @@ export type MailDomainStatus = "failed" | "pending_dns" | "verified";
 export type MailboxConnectionStatus = "connected" | "needs_reconnect";
 export type MailboxGrantRole = "manager" | "reader" | "responder";
 export type MailboxProvider = "gmail" | "managed";
+export type ManagedMailDirection = "inbound" | "outbound";
+export type ManagedMailHeader = {
+  name: string;
+  value: string;
+};
 export type BillingPlan = "managed" | "pro";
 export type BillingProvider = "polar";
 export type BillingSubscriptionStatus =
@@ -299,6 +304,55 @@ export const mailboxGrant = pgTable(
   ],
 );
 
+export const managedMailMessage = pgTable(
+  "managedMailMessage",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    direction: text("direction").$type<ManagedMailDirection>().notNull(),
+    providerMessageId: text("providerMessageId").notNull(),
+    threadId: text("threadId").notNull(),
+    messageHeaderId: text("messageHeaderId"),
+    inReplyTo: text("inReplyTo"),
+    references: text("references"),
+    from: text("from").notNull(),
+    to: text("to"),
+    cc: text("cc"),
+    bcc: text("bcc"),
+    replyTo: text("replyTo"),
+    subject: text("subject"),
+    snippet: text("snippet"),
+    bodyHtml: text("bodyHtml"),
+    bodyText: text("bodyText"),
+    headers: jsonb("headers").$type<ManagedMailHeader[]>().notNull().default([]),
+    isRead: boolean("isRead").notNull().default(false),
+    sentAt: timestamp("sentAt").notNull(),
+    s3Bucket: text("s3Bucket"),
+    s3Key: text("s3Key"),
+    rawSizeBytes: integer("rawSizeBytes"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "managed_mail_message_direction_check",
+      sql`${table.direction} in ('inbound', 'outbound')`,
+    ),
+    index("managed_mail_message_mailbox_direction_sent_at_idx").on(
+      table.mailboxId,
+      table.direction,
+      table.sentAt,
+    ),
+    index("managed_mail_message_mailbox_thread_id_idx").on(table.mailboxId, table.threadId),
+    unique("managed_mail_message_mailbox_provider_message_unique").on(
+      table.mailboxId,
+      table.providerMessageId,
+    ),
+  ],
+);
+
 export const mailDomain = pgTable(
   "mailDomain",
   {
@@ -527,6 +581,7 @@ export const tables = {
   gmailOAuthState,
   mailbox,
   mailboxGrant,
+  managedMailMessage,
   mailDomain,
   organizationMailUsageAlertEvent,
   organizationMailUsageEvent,
@@ -662,6 +717,10 @@ export const authRelations = defineRelations(tables, (r) => ({
       optional: true,
     }),
     grants: r.many.mailboxGrant({ from: r.mailbox.id, to: r.mailboxGrant.mailboxId }),
+    managedMessages: r.many.managedMailMessage({
+      from: r.mailbox.id,
+      to: r.managedMailMessage.mailboxId,
+    }),
     owner: r.one.user({
       from: r.mailbox.ownerUserId,
       to: r.user.id,
@@ -706,6 +765,13 @@ export const authRelations = defineRelations(tables, (r) => ({
     user: r.one.user({
       from: r.mailboxGrant.userId,
       to: r.user.id,
+      optional: false,
+    }),
+  },
+  managedMailMessage: {
+    mailbox: r.one.mailbox({
+      from: r.managedMailMessage.mailboxId,
+      to: r.mailbox.id,
       optional: false,
     }),
   },

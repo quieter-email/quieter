@@ -42,10 +42,11 @@ const createDialogState = (): ComposeDialogState => ({
   showCc: false,
 });
 
-export const getDraftStatusMessage = (draft: ComposeDraftState) => {
+export const getDraftStatusMessage = (draft: ComposeDraftState, persistDrafts = true) => {
   if (draft.saveStatus === "sending") return "Sending message…";
-  if (draft.saveStatus === "saving") return "Saving draft…";
   if (draft.saveStatus === "error") return "Draft needs attention";
+  if (!persistDrafts) return "Drafts are kept only while this window is open";
+  if (draft.saveStatus === "saving") return "Saving draft…";
   if (draft.draftId || draft.lastSavedAt) return "Draft saved";
   return "Draft saved when you close";
 };
@@ -53,9 +54,11 @@ export const getDraftStatusMessage = (draft: ComposeDraftState) => {
 export const useComposeDialogController = ({
   demoMode = false,
   mailboxId,
+  persistDrafts = true,
 }: {
   demoMode?: boolean;
   mailboxId: string | null;
+  persistDrafts?: boolean;
 }) => {
   const queryClient = useQueryClient();
   const [state, setState] = useState(createDialogState);
@@ -119,6 +122,7 @@ export const useComposeDialogController = ({
 
   const shouldSaveDraft = (draft: ComposeDraftState, values: ComposeFormValues) =>
     !!mailboxId &&
+    persistDrafts &&
     shouldPersistComposeDraft({
       currentDraft: activeDraftRef.current,
       nextDraft: draft,

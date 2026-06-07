@@ -40,6 +40,7 @@ export type ComposeDialogHandle = {
 type ComposeDialogProps = {
   demoMode?: boolean;
   mailboxId: string | null;
+  persistDrafts?: boolean;
   ref?: Ref<ComposeDialogHandle>;
 };
 
@@ -452,8 +453,13 @@ const AnimatedRecipientField = ({
   );
 };
 
-export const ComposeDialog = ({ demoMode = false, mailboxId, ref }: ComposeDialogProps) => {
-  const compose = useComposeDialogController({ demoMode, mailboxId });
+export const ComposeDialog = ({
+  demoMode = false,
+  mailboxId,
+  persistDrafts = true,
+  ref,
+}: ComposeDialogProps) => {
+  const compose = useComposeDialogController({ demoMode, mailboxId, persistDrafts });
   const {
     state,
     addInlineImageFiles,
@@ -489,7 +495,7 @@ export const ComposeDialog = ({ demoMode = false, mailboxId, ref }: ComposeDialo
               <div className="space-y-1">
                 <p className="text-sm font-semibold tracking-tight text-foreground">New message</p>
                 <p className="text-xs text-muted-foreground">
-                  {getDraftStatusMessage(compose.state.draft)}
+                  {getDraftStatusMessage(compose.state.draft, persistDrafts)}
                 </p>
               </div>
             </div>

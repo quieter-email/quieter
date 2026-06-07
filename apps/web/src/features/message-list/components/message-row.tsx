@@ -36,6 +36,7 @@ type MessageRowProps = {
   isSelectionMode?: boolean;
   mailboxActions: MessageListProps["mailboxActions"];
   mailboxId: string;
+  mailboxProvider: MessageListProps["mailboxProvider"];
   offsetY: number;
   onOpenDraft: MessageListProps["onOpenDraft"];
   onThreadPress: ReturnType<typeof useMessageListSelection>["handleThreadPress"];
@@ -77,6 +78,7 @@ const MessageRowContent = ({
   isSelectionMode,
   mailboxActions,
   mailboxId,
+  mailboxProvider,
   onOpenDraft,
   onThreadPress,
   onThreadSelectionPress,
@@ -230,6 +232,8 @@ const MessageRowContent = ({
         actions={createMailboxThreadMessageActionHandlers({
           mailboxActions,
           onOpenDraft,
+          supportsLabelsAndFolders: mailboxProvider === "gmail",
+          supportsUnsubscribe: mailboxProvider === "gmail",
         })}
         isPending={isActionPending}
         mailboxId={mailboxId}
@@ -332,6 +336,7 @@ export const MessageRow = ({
   isSelectionMode,
   mailboxActions,
   mailboxId,
+  mailboxProvider,
   offsetY,
   onOpenDraft,
   onThreadPress,
@@ -356,6 +361,7 @@ export const MessageRow = ({
         isSelectionMode={isSelectionMode}
         mailboxActions={mailboxActions}
         mailboxId={mailboxId}
+        mailboxProvider={mailboxProvider}
         onOpenDraft={onOpenDraft}
         onThreadPress={onThreadPress}
         onThreadSelectionPress={onThreadSelectionPress}

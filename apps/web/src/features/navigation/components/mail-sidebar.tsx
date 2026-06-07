@@ -62,6 +62,7 @@ type MailSidebarProps = {
     name: string;
   }>;
   selectedMailboxId: string | null;
+  selectedMailboxProvider: "gmail" | "managed" | null;
   selectedMailbox: MailboxCategory;
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
   onReconnectMailbox: (mailbox: { emailAddress: string; id: string }) => void;
@@ -234,6 +235,7 @@ const SidebarContent = ({
   searchQuery,
   selectedMailboxId,
   selectedMailbox,
+  selectedMailboxProvider,
   selectedView,
   switcherSide = "right",
 }: SidebarContentProps) => {
@@ -414,18 +416,21 @@ const SidebarContent = ({
         <div className="mt-2 min-h-0 flex-1 p-1">
           <SidebarMailboxNav
             animateEntrance={animateEntrance}
+            mailboxProvider={selectedMailboxProvider}
             onSelectMailbox={handleSelectMailbox}
             selectedMailbox={selectedMailbox}
           />
-          <SidebarLabelNav
-            animateEntrance={animateEntrance}
-            mailboxId={selectedMailboxId}
-            onSearch={(query) => {
-              onSearch(query);
-              onRequestClose?.();
-            }}
-            searchQuery={searchQuery}
-          />
+          {selectedMailboxProvider !== "managed" && (
+            <SidebarLabelNav
+              animateEntrance={animateEntrance}
+              mailboxId={selectedMailboxId}
+              onSearch={(query) => {
+                onSearch(query);
+                onRequestClose?.();
+              }}
+              searchQuery={searchQuery}
+            />
+          )}
         </div>
       )}
 

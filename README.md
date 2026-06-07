@@ -1,6 +1,6 @@
 # Quieter
 
-Private/experimental Gmail-oriented email client. **Deep alpha, very work-in-progress, many gaps and TODOs. Not recommended for use.**
+Private/experimental email client with Gmail and organization-managed SES mailboxes. **Deep alpha, very work-in-progress, many gaps and TODOs. Not recommended for use.**
 
 This repo is published under the MIT license (see `LICENSE`). **We do not accept contributions.** **Do not open issues here.**
 

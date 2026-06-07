@@ -108,6 +108,9 @@ export default $config({
     });
 
     const mailIngress = new sst.aws.Function("MailIngress", {
+      environment: {
+        DATABASE_URL: databaseUrl,
+      },
       handler: "packages/aws/src/inbound.handler",
       link: [mailBucket, mailIngestToken],
       timeout: "30 seconds",

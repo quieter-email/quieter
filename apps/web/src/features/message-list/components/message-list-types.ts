@@ -14,6 +14,7 @@ export type MessageListProps = {
   activeMailbox: MailboxCategory;
   activeMessageId?: string | null;
   mailboxId: string;
+  mailboxProvider: "gmail" | "managed";
   error: unknown;
   hasNextPage: boolean;
   isError: boolean;

@@ -8,9 +8,12 @@
     "./errors": "./src/errors.ts",
     "./mailbox": "./src/mailbox.ts",
     "./mail-domain": "./src/mail-domain.ts",
+    "./managed-mail": "./src/managed-mail.ts",
+    "./managed-mail-storage": "./src/managed-mail-storage.ts",
     "./server": "./src/server.ts",
     "./server-client": "./src/server-client.ts",
     "./organization-mail": "./src/organization-mail.ts",
+    "./organization-mail-policy": "./src/organization-mail-policy.ts",
     "./router": "./src/routers/index.ts"
   },
   "scripts": {
@@ -22,6 +25,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "catalog:",
     "@aws-sdk/client-ses": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
     "@quieter/auth": "workspace:*",

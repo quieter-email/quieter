@@ -9,6 +9,7 @@
   },
   "rules": {
     "react-doctor/no-giant-component": "off",
+    "react-doctor/no-large-animated-blur": "off",
     "react-doctor/prefer-useReducer": "off",
     "react-doctor/tanstack-start-missing-head-content": "off"
   }
