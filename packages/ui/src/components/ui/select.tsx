@@ -13,7 +13,7 @@ const selectTriggerVariants = cva(
       variant: {
         default: "w-full border border-input bg-background text-foreground shadow-sm",
         ghost:
-          "w-auto bg-transparent text-foreground-dark hover:bg-secondary/50 hover:text-foreground active:bg-secondary active:text-foreground-light",
+          "w-auto bg-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground active:bg-muted/80 active:text-foreground",
       },
       size: {
         sm: "h-8 px-3 text-[13px] [&_svg]:size-3.5",

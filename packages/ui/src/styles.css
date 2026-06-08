@@ -12,8 +12,6 @@
   --foreground: oklch(0.15 0 0);
   --background-light: oklch(0.97 0 0);
   --background-dark: oklch(0.98 0 0);
-  --foreground-light: oklch(0 0 0);
-  --foreground-dark: oklch(0.5 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(0.975 0 0);
@@ -23,7 +21,7 @@
   --secondary: oklch(0.875 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.925 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  --muted-foreground: oklch(0.45 0 0);
   --accent: oklch(0.952 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.5 0.23 27.33);
@@ -44,7 +42,7 @@
   --font-sans: "Geist", ui-sans-serif, sans-serif;
   --font-serif: "Times New Roman", Georgia, ui-serif, serif;
   --font-mono: "Geist Mono", ui-monospace, monospace;
-  --radius: 0.625rem;
+  --radius: 0.5rem;
   --shadow-x: 0px;
   --shadow-y: 1px;
   --shadow-blur: 2px;
@@ -68,23 +66,21 @@
 .dark,
 :root[data-theme="dark"],
 :root[data-kb-theme="dark"] {
-  --background: oklch(0.15 0 0);
-  --background-light: oklch(0.175 0 0);
-  --background-dark: oklch(0 0 0);
-  --foreground: oklch(0.9 0 0);
-  --foreground-light: oklch(1 0 0);
-  --foreground-dark: oklch(0.7 0 0);
-  --card: oklch(0.18 0 0);
+  --background: oklch(0.218 0 0);
+  --background-light: oklch(0.248 0 0);
+  --background-dark: oklch(0.202 0 0);
+  --foreground: oklch(1 0 0);
+  --card: oklch(0.252 0 0);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.15 0 0);
+  --popover: oklch(0.235 0 0);
   --popover-foreground: oklch(0.9 0 0);
   --primary: oklch(0.95 0 0);
   --primary-foreground: oklch(0.141 0 0);
-  --secondary: oklch(0.275 0 0);
+  --secondary: oklch(0.26 0 0);
   --secondary-foreground: oklch(1 0 0);
-  --muted: oklch(0.22 0 0);
-  --muted-foreground: oklch(0.656 0 0);
-  --accent: oklch(0.22 0 0);
+  --muted: oklch(0.3 0 0);
+  --muted-foreground: oklch(0.74 0 0);
+  --accent: oklch(0.285 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.577 0.245 27.33);
   --destructive-foreground: oklch(0.985 0 0);
@@ -92,8 +88,8 @@
   --success-foreground: oklch(0.985 0 0);
   --warning: oklch(0.769 0.189 70.08);
   --warning-foreground: oklch(0.12 0 0);
-  --border: oklch(0.27 0 0);
-  --input: oklch(0.27 0 0);
+  --border: oklch(0.256 0 0);
+  --input: oklch(0.256 0 0);
   --ring: oklch(0.44 0 0);
   --scrollbar-thumb: var(--secondary);
   --chart-1: oklch(0.42 0 0);
@@ -118,8 +114,6 @@
   --color-foreground: var(--foreground);
   --color-background-light: var(--background-light);
   --color-background-dark: var(--background-dark);
-  --color-foreground-light: var(--foreground-light);
-  --color-foreground-dark: var(--foreground-dark);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);

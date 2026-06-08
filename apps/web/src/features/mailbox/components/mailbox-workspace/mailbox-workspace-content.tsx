@@ -85,7 +85,7 @@ const NoMailboxWorkspace = ({
     >
       <LinkButton
         aria-label="Settings"
-        className="group absolute bottom-5 left-5 justify-start transition-[font-weight,scale] hover:font-extrabold active:font-extrabold [&_svg_*]:transition-[stroke-width] hover:[&_svg_*]:stroke-3 active:[&_svg_*]:stroke-3"
+        className="group absolute bottom-5 left-5 justify-start"
         search={{ from: "/", tab: "general" }}
         to="/settings"
         variant="ghost"
@@ -222,9 +222,9 @@ export const MailboxWorkspaceContent = ({
               />
             </m.div>
           ) : (
-            <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden bg-transparent lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-1 lg:py-1 lg:pr-1">
+            <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden bg-transparent lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
               {selectedMailboxNeedsReconnect ? (
-                <section className="flex min-h-0 flex-1 items-center justify-center bg-background-light/75 px-8">
+                <section className="flex min-h-0 flex-1 items-center justify-center bg-background px-8">
                   <m.div className="max-w-md space-y-3 text-center" {...workspaceContentMotion}>
                     <h1 className="text-lg font-semibold tracking-tight text-foreground">
                       Reconnect Google

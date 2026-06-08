@@ -102,6 +102,7 @@ export const SidebarLabelNav = ({
   onSearch,
   searchQuery,
 }: SidebarLabelNavProps) => {
+  const [shouldAnimateEntrance] = useState(animateEntrance);
   const queryClient = useQueryClient();
   const [editingLabel, setEditingLabel] = useState<EditingLabel>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -236,7 +237,7 @@ export const SidebarLabelNav = ({
     <section className="mt-4">
       <m.div
         className="mb-1 flex items-center justify-between px-2 will-change-[transform,opacity,filter]"
-        initial={getSidebarEntranceInitial(animateEntrance)}
+        initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
         animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
         transition={{ delay: getSidebarEntranceDelay(8), duration: 0.5, ease: "easeOut" }}
       >
@@ -258,11 +259,11 @@ export const SidebarLabelNav = ({
         </IconButtonTooltip>
       </m.div>
 
-      <nav aria-label="Labels" className="flex flex-col gap-1">
+      <nav aria-label="Labels" className="flex flex-col gap-0.5">
         {labelsQuery.isPending ? (
           <m.p
             className="px-2 py-1 text-xs text-muted-foreground will-change-[transform,opacity,filter]"
-            initial={getSidebarEntranceInitial(animateEntrance)}
+            initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
             animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
             transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
           >
@@ -271,7 +272,7 @@ export const SidebarLabelNav = ({
         ) : labelsQuery.isError ? (
           <m.p
             className="px-2 py-1 text-xs text-destructive will-change-[transform,opacity,filter]"
-            initial={getSidebarEntranceInitial(animateEntrance)}
+            initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
             animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
             transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
           >
@@ -280,7 +281,7 @@ export const SidebarLabelNav = ({
         ) : visibleUserLabels.length === 0 ? (
           <m.p
             className="px-2 py-1 text-xs text-muted-foreground will-change-[transform,opacity,filter]"
-            initial={getSidebarEntranceInitial(animateEntrance)}
+            initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
             animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
             transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
           >
@@ -293,7 +294,7 @@ export const SidebarLabelNav = ({
               <m.div
                 key={label.id}
                 className="w-full will-change-[transform,opacity,filter]"
-                initial={getSidebarEntranceInitial(animateEntrance)}
+                initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
                 animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
                 transition={{
                   delay: getSidebarEntranceDelay(index + 9),
@@ -304,18 +305,15 @@ export const SidebarLabelNav = ({
                 <Button
                   aria-pressed={isActive}
                   className={cn(
-                    "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md border border-transparent px-2.5 text-left text-xs font-normal transition-[font-weight,scale] hover:font-bold [&_svg]:size-3.5",
+                    "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light text-foreground",
                     {
-                      "border-primary/20 bg-primary/10 font-bold text-foreground hover:bg-primary/15":
-                        isActive,
-                      "text-foreground-light hover:bg-muted/70 hover:text-foreground": !isActive,
-                      "hover:[&_svg_*]:stroke-3": !isActive,
+                      "bg-muted hover:bg-muted": isActive,
                     },
-                    "[&_svg_*]:transition-[stroke-width]",
                   )}
                   onClick={() => onSearch(updateLabelFilter(searchQuery, label.name, !isActive))}
                   type="button"
                   variant="ghost"
+                  size="sm"
                 >
                   <HugeiconsIcon
                     aria-hidden
@@ -324,7 +322,7 @@ export const SidebarLabelNav = ({
                       "text-muted-foreground": !isActive,
                     })}
                     icon={Tag01Icon}
-                    strokeWidth={isActive ? 3 : 1.5}
+                    strokeWidth={1.5}
                   />
                   <span className="min-w-0 truncate">{label.name}</span>
                 </Button>

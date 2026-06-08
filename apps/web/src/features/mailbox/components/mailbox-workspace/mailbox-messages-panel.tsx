@@ -158,13 +158,10 @@ export const MailboxMessagesPanel = ({
   return (
     <>
       <section
-        className={cn(
-          "min-h-0 min-w-0 flex-col overflow-hidden border border-border/60 bg-background-light/75 lg:flex lg:rounded-lg",
-          {
-            "flex flex-1": !isMessageRouteOpen,
-            hidden: isMessageRouteOpen,
-          },
-        )}
+        className={cn("min-h-0 min-w-0 flex-col overflow-hidden border lg:flex", {
+          "flex flex-1": !isMessageRouteOpen,
+          hidden: isMessageRouteOpen,
+        })}
       >
         <MessageList
           activeMailbox={activeMailbox}
@@ -193,13 +190,10 @@ export const MailboxMessagesPanel = ({
       </section>
 
       <div
-        className={cn(
-          "min-h-0 min-w-0 flex-col overflow-hidden border border-border/60 bg-background-light/75 lg:flex lg:rounded-lg",
-          {
-            "flex flex-1": isMessageRouteOpen,
-            hidden: !isMessageRouteOpen,
-          },
-        )}
+        className={cn("min-h-0 min-w-0 flex-col overflow-hidden lg:flex", {
+          "flex flex-1": isMessageRouteOpen,
+          hidden: !isMessageRouteOpen,
+        })}
       >
         <MessageDetail
           activeMailbox={activeMailbox}

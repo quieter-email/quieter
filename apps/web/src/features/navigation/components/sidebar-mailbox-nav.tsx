@@ -46,7 +46,7 @@ export const SidebarMailboxNav = ({
   onSelectMailbox,
   selectedMailbox,
 }: SidebarMailboxNavProps) => (
-  <nav aria-label="Mailboxes" className="flex flex-col gap-1.5">
+  <nav aria-label="Mailboxes" className="flex flex-col gap-0.5">
     {(mailboxProvider === "managed" ? MANAGED_MAILBOX_ITEMS : SIDEBAR_MAILBOX_ITEMS).map(
       (item, index) => {
         const isActive = selectedMailbox === item.id;
@@ -65,26 +65,17 @@ export const SidebarMailboxNav = ({
           >
             <Button
               aria-current={isActive ? "page" : undefined}
-              className={cn(
-                "group relative w-full justify-start gap-3 rounded-md border border-transparent px-3 text-left text-sm font-medium transition-[font-weight,scale] hover:font-extrabold",
-                {
-                  "border-primary/20 bg-primary/10 font-extrabold text-foreground hover:bg-primary/15":
-                    isActive,
-                  "hover:[&_svg_*]:stroke-3": !isActive,
-                },
-                "[&_svg_*]:transition-[stroke-width]",
-              )}
+              className={cn("w-full justify-start gap-3 px-3 text-left text-foreground", {
+                "bg-muted hover:bg-muted": isActive,
+              })}
               onClick={() => onSelectMailbox(item.id)}
               type="button"
               size="sm"
               variant="ghost"
             >
               <HugeiconsIcon
-                strokeWidth={isActive ? 3 : 1.5}
-                className={cn("size-4 shrink-0", {
-                  "text-foreground": isActive,
-                  "text-foreground-light": !isActive,
-                })}
+                strokeWidth={1.5}
+                className="shrink-0 text-foreground"
                 icon={item.icon}
               />
               {item.label}

@@ -365,7 +365,7 @@ export const MailboxSwitcherDropdown = ({
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Switch mailbox"
-        className="squircle w-full min-w-0 flex-1 rounded-md px-4 py-3 text-left outline-none hover:bg-secondary/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-100"
+        className="squircle w-full min-w-0 flex-1 rounded-md px-4 py-3 text-left outline-none hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-100"
       >
         <VerticalSlot className="min-w-0">
           <div>
