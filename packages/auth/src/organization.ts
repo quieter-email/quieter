@@ -1,4 +1,3 @@
-import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import {
   db,
   invitation,
@@ -17,18 +16,6 @@ type UserIdentity = Pick<AuthUser, "email" | "id" | "name">;
 
 type EnsureUserOrganizationStateResult = {
   organizationIds: string[];
-};
-
-let s3Client: S3Client | null = null;
-
-const getS3Client = () => {
-  const region = process.env.AWS_REGION?.trim() || process.env.AWS_DEFAULT_REGION?.trim();
-  if (!region) {
-    throw new Error("AWS_REGION or AWS_DEFAULT_REGION is required to delete managed mail.");
-  }
-
-  s3Client ??= new S3Client({ region });
-  return s3Client;
 };
 
 const getUserOrganizationIds = async (userId: string) => {
@@ -68,6 +55,23 @@ export const getUserById = async (userId: string) => {
 export const cleanupOrganizationsForDeletedUser = async (userId: string) => {
   await db.delete(invitation).where(eq(invitation.inviterId, userId));
   await db.delete(member).where(eq(member.userId, userId));
+};
+
+const deleteUntrackedManagedMailObject = async (input: { bucket: string; key: string }) => {
+  const region = process.env.AWS_REGION?.trim() || process.env.AWS_DEFAULT_REGION?.trim();
+  if (!region) {
+    throw new Error("AWS_REGION or AWS_DEFAULT_REGION is required to delete managed mail.");
+  }
+
+  const { DeleteObjectCommand, S3Client } = await import("@aws-sdk/client-s3");
+  const s3Client = new S3Client({ region });
+
+  await s3Client.send(
+    new DeleteObjectCommand({
+      Bucket: input.bucket,
+      Key: input.key,
+    }),
+  );
 };
 
 export const cleanupMailboxesForDeletedOrganization = async (organizationId: string) => {
@@ -114,12 +118,7 @@ export const cleanupMailboxesForDeletedOrganization = async (organizationId: str
       .limit(1);
 
     if (!otherReference) {
-      await getS3Client().send(
-        new DeleteObjectCommand({
-          Bucket: object.bucket,
-          Key: object.key,
-        }),
-      );
+      await deleteUntrackedManagedMailObject(object);
     }
   }
 };
