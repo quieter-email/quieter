@@ -19,6 +19,7 @@
     "@aws-sdk/client-s3": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
     "@quieter/billing": "workspace:*",
+    "@quieter/orpc": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

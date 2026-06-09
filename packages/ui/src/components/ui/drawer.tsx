@@ -115,7 +115,7 @@ const drawerCloseButtonVariants = cva(
         outline:
           "h-8 border border-input bg-background text-foreground shadow-sm hover:bg-muted/60 active:bg-muted/80",
         ghost:
-          "h-8 bg-transparent text-foreground hover:bg-muted/60 hover:text-foreground active:bg-muted/80",
+          "h-8 bg-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground active:bg-muted/80 active:text-foreground",
         destructive:
           "h-8 bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
       },

@@ -24,9 +24,7 @@ export const RootErrorComponent = ({
   return (
     <div className="grid min-h-dvh place-items-center bg-background px-6 py-10">
       <div className="w-full max-w-xl rounded-2xl border bg-background-light p-8 shadow-sm">
-        <h1 className="text-3xl font-medium tracking-tight text-foreground-dark">
-          Something broke.
-        </h1>
+        <h1 className="text-3xl font-medium tracking-tight text-foreground">Something broke.</h1>
         <p className="mt-3 text-sm text-muted-foreground">{message}</p>
 
         <div className="mt-6 flex flex-wrap gap-3">

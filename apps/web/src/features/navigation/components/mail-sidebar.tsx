@@ -62,6 +62,7 @@ type MailSidebarProps = {
     name: string;
   }>;
   selectedMailboxId: string | null;
+  selectedMailboxProvider: "gmail" | "managed" | null;
   selectedMailbox: MailboxCategory;
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
   onReconnectMailbox: (mailbox: { emailAddress: string; id: string }) => void;
@@ -94,6 +95,15 @@ const getSidebarEntranceInitial = (animateEntrance: boolean) =>
   animateEntrance ? { opacity: 0, x: -20, filter: "blur(8px)" } : false;
 
 let hasPlayedSidebarEntrance = false;
+
+const WORKSPACE_VIEW_OPTIONS: {
+  id: MailboxWorkspaceView;
+  label: string;
+  icon: typeof InboxIcon;
+}[] = [
+  { id: "inbox", label: "Inbox", icon: InboxIcon },
+  { id: "chat", label: "Chat", icon: Chat01Icon },
+];
 
 type SidebarChat = MailSidebarProps["chats"][number];
 
@@ -167,8 +177,8 @@ const SidebarChatRow = ({
           <Button
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "h-8 min-w-0 flex-1 justify-start bg-transparent px-3 text-left text-sm font-medium hover:bg-transparent active:bg-transparent",
-              isActive ? "font-extrabold text-foreground" : "hover:font-extrabold",
+              "h-8 min-w-0 flex-1 justify-start bg-transparent px-3 text-left text-sm font-medium",
+              isActive ? "text-foreground" : "text-muted-foreground",
             )}
             onClick={() => onSelect(chat.id)}
             size="sm"
@@ -234,6 +244,7 @@ const SidebarContent = ({
   searchQuery,
   selectedMailboxId,
   selectedMailbox,
+  selectedMailboxProvider,
   selectedView,
   switcherSide = "right",
 }: SidebarContentProps) => {
@@ -326,69 +337,54 @@ const SidebarContent = ({
       </m.div>
 
       <m.div
-        aria-label="Workspace view"
-        className="relative mt-3 grid grid-cols-2 rounded-lg bg-muted/70 p-px will-change-[transform,opacity,filter]"
-        role="group"
+        className="mt-2.5 will-change-[transform,opacity,filter]"
         initial={getSidebarEntranceInitial(animateEntrance)}
         animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
         transition={{ delay: getSidebarEntranceDelay(1), duration: 0.5, ease: "easeOut" }}
       >
-        <button
-          aria-pressed={isInboxView}
-          className={cn(
-            "relative z-10 flex h-7 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium transition-[color,transform] duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/40 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100",
-            {
-              "text-foreground": isInboxView,
-              "text-muted-foreground hover:text-foreground": !isInboxView,
-            },
-          )}
-          onClick={() => handleSelectView("inbox")}
-          type="button"
+        <div
+          aria-label="Workspace view"
+          className="grid grid-cols-2 rounded-lg bg-muted/40 p-0.5"
+          role="group"
         >
-          {isInboxView && (
-            <m.div
-              aria-hidden
-              className="pointer-events-none absolute inset-px -z-10 rounded-md bg-background/60 shadow-sm"
-              initial={false}
-              layoutId="sidebar-view-background"
-              transition={{ type: "spring", stiffness: 420, damping: 36 }}
-            />
-          )}
-          <HugeiconsIcon
-            className="size-3.5 shrink-0"
-            icon={InboxIcon}
-            strokeWidth={isInboxView ? 2.25 : 1.5}
-          />
-          <span>Inbox</span>
-        </button>
-        <button
-          aria-pressed={!isInboxView}
-          className={cn(
-            "relative z-10 flex h-7 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium transition-[color,transform] duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/40 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100",
-            {
-              "text-foreground": !isInboxView,
-              "text-muted-foreground hover:text-foreground": isInboxView,
-            },
-          )}
-          onClick={() => handleSelectView("chat")}
-          type="button"
-        >
-          {!isInboxView && (
-            <m.div
-              aria-hidden
-              className="pointer-events-none absolute inset-px -z-10 rounded-md bg-background/60 shadow-sm"
-              initial={false}
-              layoutId="sidebar-view-background"
-              transition={{ type: "spring", stiffness: 420, damping: 36 }}
-            />
-          )}
-          <HugeiconsIcon
-            className="size-3.5 shrink-0"
-            icon={Chat01Icon}
-            strokeWidth={isInboxView ? 1.5 : 2.25}
-          />
-          <span>Chat</span>
-        </button>
+          {WORKSPACE_VIEW_OPTIONS.map(({ id, label, icon }) => {
+            const isActive = selectedView === id;
+
+            return (
+              <button
+                key={id}
+                aria-pressed={isActive}
+                className={cn(
+                  "relative z-10 flex h-8 touch-manipulation items-center justify-center gap-1.5 rounded-md text-[13px] font-medium outline-none select-none",
+                  "transition-[color,transform] duration-150 ease-out",
+                  "active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100",
+                  "focus-visible:ring-2 focus-visible:ring-ring/30",
+                  {
+                    "text-foreground": isActive,
+                    "text-muted-foreground hover:text-foreground/90": !isActive,
+                  },
+                )}
+                onClick={() => handleSelectView(id)}
+                type="button"
+              >
+                {isActive ? (
+                  <m.div
+                    aria-hidden
+                    className="absolute inset-0 rounded-md bg-background shadow-sm will-change-transform"
+                    layoutId="sidebar-workspace-view"
+                    transition={{ type: "spring", stiffness: 520, damping: 38, mass: 0.75 }}
+                  />
+                ) : null}
+                <HugeiconsIcon
+                  className="relative size-3.5 shrink-0"
+                  icon={icon}
+                  strokeWidth={1.5}
+                />
+                <span className="relative">{label}</span>
+              </button>
+            );
+          })}
+        </div>
       </m.div>
 
       {isInboxView && (
@@ -399,7 +395,7 @@ const SidebarContent = ({
           transition={{ delay: getSidebarEntranceDelay(2), duration: 0.5, ease: "easeOut" }}
         >
           <Button
-            className="w-full justify-start rounded-md px-4 transition-[font-weight,scale] hover:font-bold active:font-bold [&_svg_*]:transition-[stroke-width] hover:[&_svg_*]:stroke-3 active:[&_svg_*]:stroke-3"
+            className="w-full justify-start rounded-md px-4"
             disabled={!selectedMailboxId}
             onClick={handleComposeNewMail}
             type="button"
@@ -414,18 +410,21 @@ const SidebarContent = ({
         <div className="mt-2 min-h-0 flex-1 p-1">
           <SidebarMailboxNav
             animateEntrance={animateEntrance}
+            mailboxProvider={selectedMailboxProvider}
             onSelectMailbox={handleSelectMailbox}
             selectedMailbox={selectedMailbox}
           />
-          <SidebarLabelNav
-            animateEntrance={animateEntrance}
-            mailboxId={selectedMailboxId}
-            onSearch={(query) => {
-              onSearch(query);
-              onRequestClose?.();
-            }}
-            searchQuery={searchQuery}
-          />
+          {selectedMailboxProvider !== "managed" && (
+            <SidebarLabelNav
+              animateEntrance={animateEntrance}
+              mailboxId={selectedMailboxId}
+              onSearch={(query) => {
+                onSearch(query);
+                onRequestClose?.();
+              }}
+              searchQuery={searchQuery}
+            />
+          )}
         </div>
       )}
 
@@ -488,7 +487,7 @@ const SidebarContent = ({
       >
         <LinkButton
           aria-label="Settings"
-          className="group w-full justify-start transition-[font-weight,scale] hover:font-extrabold active:font-extrabold [&_svg_*]:transition-[stroke-width] hover:[&_svg_*]:stroke-3 active:[&_svg_*]:stroke-3"
+          className="group w-full justify-start"
           onClick={onRequestClose}
           search={{
             from: "/",

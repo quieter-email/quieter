@@ -38,7 +38,7 @@ export const MutedActionButton = ({
       <Button
         className={
           buttonClassName ??
-          "pointer-events-none border-border/60 bg-transparent text-muted-foreground opacity-100 hover:bg-transparent hover:text-muted-foreground"
+          "pointer-events-none bg-transparent text-muted-foreground opacity-100 hover:bg-transparent hover:text-muted-foreground"
         }
         disabled
         size="sm"

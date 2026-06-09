@@ -6,11 +6,15 @@ import {
   estimateOutboundOrganizationMailUsage,
   recordOrganizationMailUsage,
 } from "@quieter/billing/organization-mail-usage";
-import { db, mailDomain } from "@quieter/database";
-import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { recordOutboundManagedMessageForSender } from "./managed-mail";
+import {
+  assertOrganizationOwnsVerifiedSenderDomain,
+  OrganizationMailSendError,
+} from "./organization-mail-policy";
 
 export { ORGANIZATION_API_KEY_CONFIG_ID };
+export { assertOrganizationOwnsVerifiedSenderDomain, OrganizationMailSendError };
 
 export const organizationMailMessageSchema = z
   .object({
@@ -30,30 +34,10 @@ export const organizationMailMessageSchema = z
 
 export type OrganizationMailMessageInput = z.infer<typeof organizationMailMessageSchema>;
 
-export class OrganizationMailSendError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-    this.name = "OrganizationMailSendError";
-  }
-}
-
 const normalizeAddresses = (addresses: string[] | undefined) =>
   Array.from(
     new Set((addresses ?? []).map((address) => address.trim().toLowerCase()).filter(Boolean)),
   );
-
-const getSenderDomain = (sender: string) => {
-  const domain = sender.trim().toLowerCase().split("@").at(1);
-
-  if (!domain) {
-    throw new OrganizationMailSendError("Sender must be an email address.", 400);
-  }
-
-  return domain;
-};
 
 const getAwsRegion = () => {
   const region = process.env.AWS_REGION?.trim() || process.env.AWS_DEFAULT_REGION?.trim();
@@ -73,33 +57,6 @@ let sesv2Client: SESv2Client | null = null;
 const getSesv2Client = () => {
   sesv2Client ??= new SESv2Client({ region: getAwsRegion() });
   return sesv2Client;
-};
-
-export const assertOrganizationOwnsVerifiedSenderDomain = async (input: {
-  organizationId: string;
-  sender: string;
-}) => {
-  const domain = getSenderDomain(input.sender);
-  const [ownedDomain] = await db
-    .select({ id: mailDomain.id })
-    .from(mailDomain)
-    .where(
-      and(
-        eq(mailDomain.organizationId, input.organizationId),
-        eq(mailDomain.domain, domain),
-        eq(mailDomain.status, "verified"),
-      ),
-    )
-    .limit(1);
-
-  if (!ownedDomain) {
-    throw new OrganizationMailSendError(
-      "Sender domain is not verified for this organization.",
-      403,
-    );
-  }
-
-  return domain;
 };
 
 export const sendOrganizationMailMessage = async (input: {
@@ -165,6 +122,25 @@ export const sendOrganizationMailMessage = async (input: {
   );
 
   if (response.MessageId) {
+    recordOutboundManagedMessageForSender({
+      bcc: normalizeAddresses(input.message.bcc),
+      bodyHtml: input.message.html,
+      bodyText: input.message.text,
+      cc: normalizeAddresses(input.message.cc),
+      organizationId: input.organizationId,
+      providerMessageId: response.MessageId,
+      replyTo: normalizeAddresses(input.message.replyTo),
+      sender: input.message.sender.trim().toLowerCase(),
+      subject: input.message.subject,
+      to: normalizeAddresses(input.message.to),
+    }).catch((error) => {
+      console.error("Failed to persist outbound managed message for sender.", {
+        error,
+        messageId: response.MessageId,
+        organizationId: input.organizationId,
+      });
+    });
+
     recordOrganizationMailUsage({
       ...usageEstimate,
       metadata: {

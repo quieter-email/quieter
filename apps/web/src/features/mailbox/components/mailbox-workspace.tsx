@@ -109,6 +109,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     mailboxes,
     mailboxesQuery,
     selectedMailboxId,
+    selectedMailboxProvider,
     selectedMailboxNeedsReconnect,
     setDefaultMailboxMutation,
     updateMailboxSwitcherOrderMutation,
@@ -156,6 +157,18 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       });
     }
   }, [chatId, chatsQuery.data, chatsQuery.isPending, selectedMailboxId, setMailboxSearch, view]);
+
+  useLayoutEffect(() => {
+    if (
+      selectedMailboxProvider !== "managed" ||
+      activeMailbox === "inbox" ||
+      activeMailbox === "sent"
+    ) {
+      return;
+    }
+
+    void setMailboxSearch({ mailbox: "inbox", messageId: null });
+  }, [activeMailbox, selectedMailboxProvider, setMailboxSearch]);
 
   const openComposeDraft = (draft: ComposeDraftState) => {
     composeDialogRef.current?.openDraft(draft);
@@ -251,6 +264,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
           key={selectedMailboxId ?? user.id ?? "signed-out"}
           demoMode={isDemoMode}
           mailboxId={selectedMailboxId}
+          persistDrafts={selectedMailboxProvider !== "managed"}
           ref={composeDialogRef}
         />
       </>
@@ -313,10 +327,14 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         onSelectMailbox={selectMailbox}
         onSelectMailboxId={(nextMailboxId) => {
           if (nextMailboxId === selectedMailboxId) return;
+          const nextMailboxProvider = mailboxes.find(
+            (availableMailbox) => availableMailbox.id === nextMailboxId,
+          )?.provider;
           void setMailboxSearch({
             chatId: view === "chat" ? null : undefined,
             mailboxId: nextMailboxId,
             messageId: null,
+            query: nextMailboxProvider !== selectedMailboxProvider ? null : undefined,
           });
         }}
         onSelectView={selectView}
@@ -334,6 +352,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         reconnectingMailboxId={reconnectingMailboxId}
         searchQuery={query.trim()}
         selectedMailboxId={selectedMailboxId}
+        selectedMailboxProvider={selectedMailboxProvider}
         selectedMailboxNeedsReconnect={selectedMailboxNeedsReconnect}
         selectedView={view}
       />
@@ -341,6 +360,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         key={selectedMailboxId ?? user.id ?? "signed-out"}
         demoMode={isDemoMode}
         mailboxId={selectedMailboxId}
+        persistDrafts={selectedMailboxProvider !== "managed"}
         ref={composeDialogRef}
       />
     </>

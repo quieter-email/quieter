@@ -11,6 +11,7 @@ export {
   invitation,
   mailbox,
   mailboxGrant,
+  managedMailMessage,
   mailDomain,
   member,
   organization,
@@ -35,6 +36,8 @@ export {
   type MailboxGrantRole,
   type MailboxProvider,
   type MailboxSwitcherOrder,
+  type ManagedMailDirection,
+  type ManagedMailHeader,
   type OrganizationMailUsageAlertTarget,
   type OrganizationMailUsageDirection,
 } from "./schema";

@@ -17,6 +17,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "catalog:",
     "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*"
   },

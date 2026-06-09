@@ -348,6 +348,11 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
   const [openLabelsDialog, setOpenLabelsDialog] = useState(false);
   const showMarkAsSpam = props.mailbox === "inbox";
   const unsubscribeTarget = getMessageUnsubscribeTarget(props.message);
+  const hasFolderAction =
+    (showMarkAsSpam && !!actions.onMarkAsSpam) ||
+    (isSpamMailbox && !!actions.onUnmarkAsSpam) ||
+    (isTrashMailbox && !!actions.onUntrash) ||
+    (!isTrashMailbox && !!actions.onMoveToTrash);
 
   if (isDraftMailbox) {
     return {
@@ -399,14 +404,18 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
         void actions.onMarkAsUnread?.(props.message.threadId);
       },
     },
-    {
-      type: "item",
-      id: "modify-labels",
-      disabled: isBusy || !actions.onUpdateLabels,
-      icon: Tag01Icon,
-      label: "Modify Labels",
-      onSelect: () => setOpenLabelsDialog(true),
-    },
+    ...(actions.onUpdateLabels
+      ? [
+          {
+            type: "item" as const,
+            id: "modify-labels",
+            disabled: isBusy,
+            icon: Tag01Icon,
+            label: "Modify Labels",
+            onSelect: () => setOpenLabelsDialog(true),
+          },
+        ]
+      : []),
     ...(unsubscribeTarget
       ? [
           {
@@ -427,17 +436,14 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
           },
         ]
       : []),
-    {
-      type: "separator",
-      id: "separator",
-    },
-    ...(showMarkAsSpam
+    ...(hasFolderAction ? [{ type: "separator" as const, id: "separator" }] : []),
+    ...(showMarkAsSpam && actions.onMarkAsSpam
       ? [
           {
             type: "item" as const,
             id: "mark-as-spam",
             destructive: true,
-            disabled: isBusy || !actions.onMarkAsSpam,
+            disabled: isBusy,
             icon: Delete02Icon,
             label: "Mark as Spam",
             onSelect: () => {
@@ -446,12 +452,12 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
           },
         ]
       : []),
-    ...(isSpamMailbox
+    ...(isSpamMailbox && actions.onUnmarkAsSpam
       ? [
           {
             type: "item" as const,
             id: "unmark-as-spam",
-            disabled: isBusy || !actions.onUnmarkAsSpam,
+            disabled: isBusy,
             icon: Mail01Icon,
             label: "Unmark as Spam",
             onSelect: () => {
@@ -460,12 +466,12 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
           },
         ]
       : []),
-    ...(isTrashMailbox
+    ...(isTrashMailbox && actions.onUntrash
       ? [
           {
             type: "item" as const,
             id: "remove-from-trash",
-            disabled: isBusy || !actions.onUntrash,
+            disabled: isBusy,
             icon: InboxIcon,
             label: "Move to Inbox",
             onSelect: () => {
@@ -474,13 +480,13 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
           },
         ]
       : []),
-    ...(!isTrashMailbox
+    ...(!isTrashMailbox && actions.onMoveToTrash
       ? [
           {
             type: "item" as const,
             id: "move-to-trash",
             destructive: true,
-            disabled: isBusy || !actions.onMoveToTrash,
+            disabled: isBusy,
             icon: Delete01Icon,
             label: "Move to Trash",
             onSelect: () => {
@@ -491,7 +497,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
       : []),
   ];
 
-  const dialogs = (
+  const dialogs = actions.onUpdateLabels ? (
     <MessageActionsDialogs
       isPending={isBusy}
       mailboxId={props.mailboxId}
@@ -500,7 +506,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
       onUpdateLabels={actions.onUpdateLabels}
       openLabelsDialog={openLabelsDialog}
     />
-  );
+  ) : null;
 
   return {
     dialogs,

@@ -20,6 +20,7 @@ uniform vec2 uCssSize;
 uniform float uStep;
 uniform float uDpr;
 uniform vec3 uColor;
+uniform float uAlphaScale;
 
 float hashAt(vec2 cell) {
   return fract(sin(cell.x * 127.1 + cell.y * 311.7) * 43758.5453123);
@@ -54,7 +55,7 @@ void main() {
 
   vec2 center = vec2(column * uStep, row * uStep);
   float coverage = 1.0 - smoothstep(radius - 0.5, radius + 0.5, distance(cssPixel, center));
-  float finalAlpha = alpha * coverage;
+  float finalAlpha = min(alpha * coverage * uAlphaScale, 1.0);
 
   gl_FragColor = vec4(uColor * finalAlpha, finalAlpha);
 }
@@ -125,17 +126,24 @@ export const WorkspaceDitherBackground = () => {
     const stepLocation = gl.getUniformLocation(program, "uStep");
     const dprLocation = gl.getUniformLocation(program, "uDpr");
     const colorLocation = gl.getUniformLocation(program, "uColor");
+    const alphaScaleLocation = gl.getUniformLocation(program, "uAlphaScale");
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.uniform1f(stepLocation, DITHER_STEP);
 
-    const applyColor = () => {
-      const raw = getComputedStyle(canvas).getPropertyValue("--workspace-dither-dot-rgb").trim();
-      const [red, green, blue] = (raw || "255, 255, 255")
+    const applyTheme = () => {
+      const style = getComputedStyle(canvas);
+      const raw = style.getPropertyValue("--workspace-dither-dot-rgb").trim();
+      const [red, green, blue] = (raw || "0, 0, 0")
         .split(",")
         .map((channel) => Number.parseFloat(channel) / 255);
       gl.uniform3f(colorLocation, red || 0, green || 0, blue || 0);
+
+      const strength = Number.parseFloat(
+        style.getPropertyValue("--workspace-dither-strength").trim(),
+      );
+      gl.uniform1f(alphaScaleLocation, Number.isFinite(strength) ? strength : 1);
     };
 
     const draw = () => {
@@ -155,7 +163,7 @@ export const WorkspaceDitherBackground = () => {
       gl.uniform2f(resolutionLocation, deviceWidth, deviceHeight);
       gl.uniform2f(cssSizeLocation, width, height);
       gl.uniform1f(dprLocation, pixelRatio);
-      applyColor();
+      applyTheme();
 
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -187,6 +195,7 @@ export const WorkspaceDitherBackground = () => {
     <canvas
       className="pointer-events-none absolute inset-0 z-0 size-full overflow-hidden"
       ref={canvasRef}
+      style={{ opacity: "var(--workspace-dither-opacity, 0.25)" }}
     />
   );
 };

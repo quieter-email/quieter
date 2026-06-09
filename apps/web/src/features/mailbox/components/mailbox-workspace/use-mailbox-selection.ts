@@ -87,6 +87,7 @@ export const useMailboxSelection = ({
     mailboxes[0] ??
     null;
   const selectedMailboxId = selectedMailbox?.id ?? null;
+  const selectedMailboxProvider = selectedMailbox?.provider ?? null;
   const selectedMailboxNeedsReconnect = selectedMailbox?.connectionStatus === "needs_reconnect";
 
   const setDefaultMailboxMutation = useMutation({
@@ -132,6 +133,7 @@ export const useMailboxSelection = ({
     mailboxes,
     mailboxesQuery,
     selectedMailboxId,
+    selectedMailboxProvider,
     selectedMailboxNeedsReconnect,
     setDefaultMailboxMutation,
     updateMailboxSwitcherOrderMutation,

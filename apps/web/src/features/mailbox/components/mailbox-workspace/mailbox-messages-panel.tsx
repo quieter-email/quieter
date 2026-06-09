@@ -2,7 +2,7 @@
 
 import { cn } from "@quieter/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useLayoutEffect, useMemo } from "react";
+import { useLayoutEffect } from "react";
 import { type ComposeDraftState, buildComposeDraftFromSavedDraftMessage } from "~/features/compose";
 import { MessageList } from "~/features/message-list/components/message-list";
 import { MessageDetail } from "~/features/message-thread/components/message-detail";
@@ -19,6 +19,7 @@ type MailboxMessagesPanelProps = {
   currentUserEmail: string | null;
   isDemoMode: boolean;
   mailboxId: string;
+  mailboxProvider: "gmail" | "managed";
   onComposeDraftRequested: (draft: ComposeDraftState) => void;
   onOpenSidebar: () => void;
   onSearchQueryChange: (query: string) => void;
@@ -30,6 +31,7 @@ export const MailboxMessagesPanel = ({
   currentUserEmail,
   isDemoMode,
   mailboxId,
+  mailboxProvider,
   onComposeDraftRequested,
   onOpenSidebar,
   onSearchQueryChange,
@@ -91,114 +93,81 @@ export const MailboxMessagesPanel = ({
     setMailboxSearch,
   ]);
 
-  const setMessageActionPending = useCallback(
-    (id: string, pending: boolean) => setMessageActionsPending([id], pending),
-    [setMessageActionsPending],
-  );
-  const setThreadActionPending = useCallback(
-    (id: string, pending: boolean) => setThreadActionsPending([id], pending),
-    [setThreadActionsPending],
-  );
-  const mailboxActions = useMemo(
-    () =>
-      isDemoMode
-        ? createDemoMailboxActions(queryClient)
-        : createMailboxActionHandlers({
-            activeMailbox,
-            activeSearchQuery: normalizedSearchQuery,
-            queryClient,
-            refreshSearchResultsIfNeeded,
-            isMessageActionPending,
-            isThreadActionPending,
-            setMessageActionPending,
-            setMessageActionsPending,
-            setThreadActionPending,
-            setThreadActionsPending,
-            unsubscribeFromMessageMutation: async (messageId) => {
-              await unsubscribeFromMessage({ mailboxId, messageId });
-            },
-            mailboxId,
-          }),
-    [
-      activeMailbox,
-      isDemoMode,
-      isMessageActionPending,
-      isThreadActionPending,
-      mailboxId,
-      normalizedSearchQuery,
-      queryClient,
-      refreshSearchResultsIfNeeded,
-      setMessageActionPending,
-      setMessageActionsPending,
-      setThreadActionPending,
-      setThreadActionsPending,
-      unsubscribeFromMessage,
-    ],
-  );
+  const setMessageActionPending = (id: string, pending: boolean) =>
+    setMessageActionsPending([id], pending);
+  const setThreadActionPending = (id: string, pending: boolean) =>
+    setThreadActionsPending([id], pending);
+  const mailboxActions = isDemoMode
+    ? createDemoMailboxActions(queryClient)
+    : createMailboxActionHandlers({
+        activeMailbox,
+        activeSearchQuery: normalizedSearchQuery,
+        queryClient,
+        refreshSearchResultsIfNeeded,
+        isMessageActionPending,
+        isThreadActionPending,
+        setMessageActionPending,
+        setMessageActionsPending,
+        setThreadActionPending,
+        setThreadActionsPending,
+        unsubscribeFromMessageMutation: async (messageId) => {
+          await unsubscribeFromMessage({ mailboxId, messageId });
+        },
+        mailboxId,
+      });
 
-  const openDraft = useCallback(
-    (message: MessageListItem) => {
-      if (!message.draftId) {
-        return;
-      }
+  const openDraft = (message: MessageListItem) => {
+    if (!message.draftId) {
+      return;
+    }
 
-      void setMailboxSearch({ messageId: null });
-      onComposeDraftRequested(buildComposeDraftFromSavedDraftMessage(message));
-    },
-    [onComposeDraftRequested, setMailboxSearch],
-  );
-
-  const activateMessage = useCallback(
-    (nextMessageId: string) => {
-      if (activeMailbox === "drafts") {
-        const draftMessage = flattenedMessages.find((message) => message.id === nextMessageId);
-        if (draftMessage) {
-          openDraft(draftMessage);
-        }
-        return;
-      }
-
-      const shouldPushMobileHistory =
-        !messageId && window.matchMedia("(max-width: 1023.98px)").matches;
-      void setMailboxSearch({ messageId: nextMessageId }, { replace: !shouldPushMobileHistory });
-    },
-    [activeMailbox, flattenedMessages, messageId, openDraft, setMailboxSearch],
-  );
-
-  const applySearch = useCallback(
-    (nextQuery: string) => {
-      const normalizedQuery = nextQuery.trim();
-
-      if (normalizedQuery === normalizedSearchQuery) {
-        void setMailboxSearch({ messageId: null });
-        void refreshMessages();
-        return;
-      }
-
-      onSearchQueryChange(normalizedQuery);
-    },
-    [normalizedSearchQuery, onSearchQueryChange, refreshMessages, setMailboxSearch],
-  );
-
-  const backToList = useCallback(() => {
     void setMailboxSearch({ messageId: null });
-  }, [setMailboxSearch]);
+    onComposeDraftRequested(buildComposeDraftFromSavedDraftMessage(message));
+  };
+
+  const activateMessage = (nextMessageId: string) => {
+    if (activeMailbox === "drafts") {
+      const draftMessage = flattenedMessages.find((message) => message.id === nextMessageId);
+      if (draftMessage) {
+        openDraft(draftMessage);
+      }
+      return;
+    }
+
+    const shouldPushMobileHistory =
+      !messageId && window.matchMedia("(max-width: 1023.98px)").matches;
+    void setMailboxSearch({ messageId: nextMessageId }, { replace: !shouldPushMobileHistory });
+  };
+
+  const applySearch = (nextQuery: string) => {
+    const normalizedQuery = nextQuery.trim();
+
+    if (normalizedQuery === normalizedSearchQuery) {
+      void setMailboxSearch({ messageId: null });
+      void refreshMessages();
+      return;
+    }
+
+    onSearchQueryChange(normalizedQuery);
+  };
+
+  const backToList = () => {
+    void setMailboxSearch({ messageId: null });
+  };
 
   return (
     <>
       <section
-        className={cn(
-          "min-h-0 min-w-0 flex-col overflow-hidden border border-border/60 bg-background-light/75 lg:flex lg:rounded-lg",
-          {
-            "flex flex-1": !isMessageRouteOpen,
-            hidden: isMessageRouteOpen,
-          },
-        )}
+        className={cn("min-h-0 min-w-0 flex-col overflow-hidden border lg:flex", {
+          "flex flex-1": !isMessageRouteOpen,
+          hidden: isMessageRouteOpen,
+        })}
       >
         <MessageList
           activeMailbox={activeMailbox}
           activeMessageId={messageId}
           mailboxId={mailboxId}
+          mailboxProvider={mailboxProvider}
           error={listState.error}
           hasNextPage={listState.hasNextPage}
           isError={listState.isError}
@@ -221,18 +190,16 @@ export const MailboxMessagesPanel = ({
       </section>
 
       <div
-        className={cn(
-          "min-h-0 min-w-0 flex-col overflow-hidden border border-border/60 bg-background-light/75 lg:flex lg:rounded-lg",
-          {
-            "flex flex-1": isMessageRouteOpen,
-            hidden: !isMessageRouteOpen,
-          },
-        )}
+        className={cn("min-h-0 min-w-0 flex-col overflow-hidden lg:flex", {
+          "flex flex-1": isMessageRouteOpen,
+          hidden: !isMessageRouteOpen,
+        })}
       >
         <MessageDetail
           activeMailbox={activeMailbox}
           currentUserEmail={currentUserEmail}
           mailboxId={mailboxId}
+          mailboxProvider={mailboxProvider}
           mailboxActions={mailboxActions}
           onComposeDraftRequested={onComposeDraftRequested}
           pendingActions={pendingActions}

@@ -89,7 +89,13 @@ const addQuieterDraftHeaders = (headers: string[], draft: ComposeDraftInput) => 
 
 export const buildMimeMessage = async (
   draft: ComposeDraftInput,
-  options?: { includeQuieterDraftHeaders?: boolean },
+  options?: {
+    from?: string;
+    includeQuieterDraftHeaders?: boolean;
+    messageId?: string;
+    omitBccHeader?: boolean;
+    sentAt?: Date;
+  },
 ) => {
   const headers: string[] = [];
   const toRecipients = collectRecipients(draft.recipients.to);
@@ -97,10 +103,15 @@ export const buildMimeMessage = async (
   const bccRecipients = collectRecipients(draft.recipients.bcc);
   const replyReferences = collectReplyReferences(draft);
 
+  if (options?.from?.trim()) headers.push(`From: ${options.from.trim()}`);
   if (toRecipients.length > 0) headers.push(`To: ${toRecipients.join(", ")}`);
   if (ccRecipients.length > 0) headers.push(`Cc: ${ccRecipients.join(", ")}`);
-  if (bccRecipients.length > 0) headers.push(`Bcc: ${bccRecipients.join(", ")}`);
+  if (bccRecipients.length > 0 && !options?.omitBccHeader) {
+    headers.push(`Bcc: ${bccRecipients.join(", ")}`);
+  }
   if (draft.subject.trim()) headers.push(`Subject: ${encodeMimeHeaderValue(draft.subject)}`);
+  if (options?.messageId?.trim()) headers.push(`Message-ID: ${options.messageId.trim()}`);
+  if (options?.sentAt) headers.push(`Date: ${options.sentAt.toUTCString()}`);
   if (draft.replyContext?.messageHeaderId) {
     headers.push(`In-Reply-To: ${draft.replyContext.messageHeaderId}`);
   }

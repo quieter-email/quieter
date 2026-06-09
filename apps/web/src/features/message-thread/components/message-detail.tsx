@@ -20,6 +20,7 @@ type MessageDetailProps = {
   isPending?: boolean;
   mailboxActions: MailboxActions;
   mailboxId: string;
+  mailboxProvider: "gmail" | "managed";
   onBackToList?: () => void;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   pendingActions: MailboxPendingActions;
@@ -35,6 +36,7 @@ const messageDetailContentMotion = {
 } as const;
 
 const MessageDetailLoadingSkeleton = () => (
+  // react-doctor-disable-next-line react-doctor/prefer-tag-over-role
   <div aria-live="polite" className="mx-auto block w-full max-w-3xl space-y-6 py-6" role="status">
     <span className="sr-only">Loading message…</span>
     <div aria-hidden="true" className="animate-pulse space-y-8">
@@ -71,6 +73,7 @@ export const MessageDetail = ({
   pendingActions,
   selectedMessage,
   mailboxId,
+  mailboxProvider,
 }: MessageDetailProps) => {
   const emptyState =
     activeMailbox === "drafts" ? (
@@ -120,6 +123,7 @@ export const MessageDetail = ({
                 currentUserEmail={currentUserEmail}
                 mailboxActions={mailboxActions}
                 mailboxId={mailboxId}
+                mailboxProvider={mailboxProvider}
                 message={selectedMessage}
                 onComposeDraftRequested={onComposeDraftRequested}
                 pendingActions={pendingActions}

@@ -25,6 +25,9 @@ const SIDEBAR_MAILBOX_ITEMS: ReadonlyArray<{
   { id: "trash", label: "Trash", icon: Delete01Icon },
   { id: "spam", label: "Spam", icon: Delete02Icon },
 ];
+const MANAGED_MAILBOX_ITEMS = SIDEBAR_MAILBOX_ITEMS.filter(
+  (item) => item.id === "inbox" || item.id === "sent",
+);
 
 const getSidebarEntranceDelay = (step: number) => step * 0.1;
 const getSidebarEntranceInitial = (animateEntrance: boolean) =>
@@ -32,55 +35,54 @@ const getSidebarEntranceInitial = (animateEntrance: boolean) =>
 
 type SidebarMailboxNavProps = {
   animateEntrance: boolean;
+  mailboxProvider: "gmail" | "managed" | null;
   selectedMailbox: MailboxCategory;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
 };
 
 export const SidebarMailboxNav = ({
   animateEntrance,
+  mailboxProvider,
   onSelectMailbox,
   selectedMailbox,
 }: SidebarMailboxNavProps) => (
-  <nav aria-label="Mailboxes" className="flex flex-col gap-1.5">
-    {SIDEBAR_MAILBOX_ITEMS.map((item, index) => {
-      const isActive = selectedMailbox === item.id;
+  <nav aria-label="Mailboxes" className="flex flex-col gap-0.5">
+    {(mailboxProvider === "managed" ? MANAGED_MAILBOX_ITEMS : SIDEBAR_MAILBOX_ITEMS).map(
+      (item, index) => {
+        const isActive = selectedMailbox === item.id;
 
-      return (
-        <m.div
-          key={item.id}
-          className="w-full will-change-[transform,opacity,filter]"
-          initial={getSidebarEntranceInitial(animateEntrance)}
-          animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-          transition={{ delay: getSidebarEntranceDelay(index + 2), duration: 0.5, ease: "easeOut" }}
-        >
-          <Button
-            aria-current={isActive ? "page" : undefined}
-            className={cn(
-              "group relative w-full justify-start gap-3 rounded-md border border-transparent px-3 text-left text-sm font-medium transition-[font-weight,scale] hover:font-extrabold",
-              {
-                "border-primary/20 bg-primary/10 font-extrabold text-foreground hover:bg-primary/15":
-                  isActive,
-                "hover:[&_svg_*]:stroke-3": !isActive,
-              },
-              "[&_svg_*]:transition-[stroke-width]",
-            )}
-            onClick={() => onSelectMailbox(item.id)}
-            type="button"
-            size="sm"
-            variant="ghost"
+        return (
+          <m.div
+            key={item.id}
+            className="w-full will-change-[transform,opacity,filter]"
+            initial={getSidebarEntranceInitial(animateEntrance)}
+            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+            transition={{
+              delay: getSidebarEntranceDelay(index + 2),
+              duration: 0.5,
+              ease: "easeOut",
+            }}
           >
-            <HugeiconsIcon
-              strokeWidth={isActive ? 3 : 1.5}
-              className={cn("size-4 shrink-0", {
-                "text-foreground": isActive,
-                "text-foreground-light": !isActive,
+            <Button
+              aria-current={isActive ? "page" : undefined}
+              className={cn("w-full justify-start gap-3 px-3 text-left text-foreground", {
+                "bg-muted hover:bg-muted": isActive,
               })}
-              icon={item.icon}
-            />
-            {item.label}
-          </Button>
-        </m.div>
-      );
-    })}
+              onClick={() => onSelectMailbox(item.id)}
+              type="button"
+              size="sm"
+              variant="ghost"
+            >
+              <HugeiconsIcon
+                strokeWidth={1.5}
+                className="shrink-0 text-foreground"
+                icon={item.icon}
+              />
+              {item.label}
+            </Button>
+          </m.div>
+        );
+      },
+    )}
   </nav>
 );

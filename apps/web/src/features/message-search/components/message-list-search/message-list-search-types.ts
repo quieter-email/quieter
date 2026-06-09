@@ -1,6 +1,7 @@
 export type MessageListSearchProps = {
   isRefreshing: boolean;
   mailboxId: string;
+  mailboxProvider: "gmail" | "managed";
   onRefresh: () => void | Promise<void>;
   onOpenSidebar?: () => void;
   onScrollToTop: () => boolean | Promise<boolean> | void | Promise<void>;

@@ -3,7 +3,6 @@
 import { Delete01Icon, Delete02Icon, Mail01Icon, MailOpen02Icon } from "@hugeicons/core-free-icons";
 import { toast } from "@quieter/ui";
 import { m } from "motion/react";
-import { useMemo } from "react";
 import type { MessageListItem } from "~/lib/gmail/gmail";
 import { MessageListSearch } from "~/features/message-search/components/message-list-search";
 import { buildThreadListEntries, type ThreadListEntry } from "~/lib/gmail/thread-list";
@@ -33,24 +32,16 @@ const buildDraftListEntry = (message: MessageListItem): ThreadListEntry => ({
 });
 
 export const MessageList = (props: MessageListProps) => {
-  const flattenedMessages = useMemo(
-    () => props.messages.flatMap((page) => page.messages),
-    [props.messages],
-  );
-  const threadedMessages = useMemo(
-    () =>
-      props.activeMailbox === "drafts"
-        ? flattenedMessages.map((message) => buildDraftListEntry(message))
-        : buildThreadListEntries(flattenedMessages),
-    [flattenedMessages, props.activeMailbox],
-  );
-  const activeThreadId = useMemo(() => {
-    if (props.activeMailbox === "drafts" || !props.activeMessageId) return null;
-
-    return (
-      flattenedMessages.find((message) => message.id === props.activeMessageId)?.threadId ?? null
-    );
-  }, [flattenedMessages, props.activeMailbox, props.activeMessageId]);
+  const flattenedMessages = props.messages.flatMap((page) => page.messages);
+  const threadedMessages =
+    props.activeMailbox === "drafts"
+      ? flattenedMessages.map((message) => buildDraftListEntry(message))
+      : buildThreadListEntries(flattenedMessages);
+  const activeThreadId =
+    props.activeMailbox === "drafts" || !props.activeMessageId
+      ? null
+      : (flattenedMessages.find((message) => message.id === props.activeMessageId)?.threadId ??
+        null);
   const selection = useMessageListSelection({
     activeMailbox: props.activeMailbox,
     activeThreadId,
@@ -108,43 +99,47 @@ export const MessageList = (props: MessageListProps) => {
               await runBulkAction(props.mailboxActions.markThreadsAsUnread);
             },
           },
-          ...(props.activeMailbox === "inbox"
-            ? [
-                {
-                  destructive: true,
-                  icon: Delete02Icon,
-                  id: "mark-threads-spam",
-                  label: "Mark as Spam",
-                  onSelect: async () => {
-                    await runBulkAction(props.mailboxActions.markThreadsAsSpam);
-                  },
-                } satisfies MessageListBulkAction,
-              ]
-            : []),
-          ...(props.activeMailbox === "spam"
-            ? [
-                {
-                  icon: Mail01Icon,
-                  id: "unmark-threads-spam",
-                  label: "Unmark as Spam",
-                  onSelect: async () => {
-                    await runBulkAction(props.mailboxActions.unmarkThreadsAsSpam);
-                  },
-                } satisfies MessageListBulkAction,
-              ]
-            : []),
-          ...(props.activeMailbox === "trash"
+          ...(props.mailboxProvider === "managed"
             ? []
             : [
-                {
-                  destructive: true,
-                  icon: Delete01Icon,
-                  id: "move-threads-trash",
-                  label: "Move to Trash",
-                  onSelect: async () => {
-                    await runBulkAction(props.mailboxActions.moveThreadsToTrash);
-                  },
-                } satisfies MessageListBulkAction,
+                ...(props.activeMailbox === "inbox"
+                  ? [
+                      {
+                        destructive: true,
+                        icon: Delete02Icon,
+                        id: "mark-threads-spam",
+                        label: "Mark as Spam",
+                        onSelect: async () => {
+                          await runBulkAction(props.mailboxActions.markThreadsAsSpam);
+                        },
+                      } satisfies MessageListBulkAction,
+                    ]
+                  : []),
+                ...(props.activeMailbox === "spam"
+                  ? [
+                      {
+                        icon: Mail01Icon,
+                        id: "unmark-threads-spam",
+                        label: "Unmark as Spam",
+                        onSelect: async () => {
+                          await runBulkAction(props.mailboxActions.unmarkThreadsAsSpam);
+                        },
+                      } satisfies MessageListBulkAction,
+                    ]
+                  : []),
+                ...(props.activeMailbox === "trash"
+                  ? []
+                  : [
+                      {
+                        destructive: true,
+                        icon: Delete01Icon,
+                        id: "move-threads-trash",
+                        label: "Move to Trash",
+                        onSelect: async () => {
+                          await runBulkAction(props.mailboxActions.moveThreadsToTrash);
+                        },
+                      } satisfies MessageListBulkAction,
+                    ]),
               ]),
         ];
 
@@ -167,6 +162,7 @@ export const MessageList = (props: MessageListProps) => {
         <MessageListSearch
           isRefreshing={props.isRefreshing}
           mailboxId={props.mailboxId}
+          mailboxProvider={props.mailboxProvider}
           onOpenSidebar={props.onOpenSidebar}
           onRefresh={props.onRefresh}
           onScrollToTop={selection.scrollListToTop}
