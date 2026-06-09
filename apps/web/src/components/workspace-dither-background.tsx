@@ -140,8 +140,10 @@ export const WorkspaceDitherBackground = () => {
         .map((channel) => Number.parseFloat(channel) / 255);
       gl.uniform3f(colorLocation, red || 0, green || 0, blue || 0);
 
-      const strength = style.getPropertyValue("--workspace-dither-strength").trim();
-      gl.uniform1f(alphaScaleLocation, strength ? Number.parseFloat(strength) : 1);
+      const strength = Number.parseFloat(
+        style.getPropertyValue("--workspace-dither-strength").trim(),
+      );
+      gl.uniform1f(alphaScaleLocation, Number.isFinite(strength) ? strength : 1);
     };
 
     const draw = () => {

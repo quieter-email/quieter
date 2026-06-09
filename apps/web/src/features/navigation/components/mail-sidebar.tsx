@@ -96,64 +96,14 @@ const getSidebarEntranceInitial = (animateEntrance: boolean) =>
 
 let hasPlayedSidebarEntrance = false;
 
-const WORKSPACE_VIEW_OPTIONS = [
-  { id: "inbox", label: "Inbox", icon: InboxIcon },
-  { id: "chat", label: "Chat", icon: Chat01Icon },
-] as const satisfies ReadonlyArray<{
+const WORKSPACE_VIEW_OPTIONS: {
   id: MailboxWorkspaceView;
   label: string;
   icon: typeof InboxIcon;
-}>;
-
-type SidebarWorkspaceViewSwitchProps = {
-  onSelectView: (view: MailboxWorkspaceView) => void;
-  selectedView: MailboxWorkspaceView;
-};
-
-const SidebarWorkspaceViewSwitch = ({
-  onSelectView,
-  selectedView,
-}: SidebarWorkspaceViewSwitchProps) => (
-  <div
-    aria-label="Workspace view"
-    className="grid grid-cols-2 rounded-lg bg-muted/40 p-0.5"
-    role="group"
-  >
-    {WORKSPACE_VIEW_OPTIONS.map(({ id, label, icon }) => {
-      const isActive = selectedView === id;
-
-      return (
-        <button
-          key={id}
-          aria-pressed={isActive}
-          className={cn(
-            "relative z-10 flex h-8 touch-manipulation items-center justify-center gap-1.5 rounded-md text-[13px] font-medium outline-none select-none",
-            "transition-[color,transform] duration-150 ease-out",
-            "active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100",
-            "focus-visible:ring-2 focus-visible:ring-ring/30",
-            {
-              "text-foreground": isActive,
-              "text-muted-foreground hover:text-foreground/90": !isActive,
-            },
-          )}
-          onClick={() => onSelectView(id)}
-          type="button"
-        >
-          {isActive ? (
-            <m.div
-              aria-hidden
-              className="absolute inset-0 rounded-md bg-background shadow-sm will-change-transform"
-              layoutId="sidebar-workspace-view"
-              transition={{ type: "spring", stiffness: 520, damping: 38, mass: 0.75 }}
-            />
-          ) : null}
-          <HugeiconsIcon className="relative size-3.5 shrink-0" icon={icon} strokeWidth={1.5} />
-          <span className="relative">{label}</span>
-        </button>
-      );
-    })}
-  </div>
-);
+}[] = [
+  { id: "inbox", label: "Inbox", icon: InboxIcon },
+  { id: "chat", label: "Chat", icon: Chat01Icon },
+];
 
 type SidebarChat = MailSidebarProps["chats"][number];
 
@@ -392,7 +342,49 @@ const SidebarContent = ({
         animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
         transition={{ delay: getSidebarEntranceDelay(1), duration: 0.5, ease: "easeOut" }}
       >
-        <SidebarWorkspaceViewSwitch onSelectView={handleSelectView} selectedView={selectedView} />
+        <div
+          aria-label="Workspace view"
+          className="grid grid-cols-2 rounded-lg bg-muted/40 p-0.5"
+          role="group"
+        >
+          {WORKSPACE_VIEW_OPTIONS.map(({ id, label, icon }) => {
+            const isActive = selectedView === id;
+
+            return (
+              <button
+                key={id}
+                aria-pressed={isActive}
+                className={cn(
+                  "relative z-10 flex h-8 touch-manipulation items-center justify-center gap-1.5 rounded-md text-[13px] font-medium outline-none select-none",
+                  "transition-[color,transform] duration-150 ease-out",
+                  "active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100",
+                  "focus-visible:ring-2 focus-visible:ring-ring/30",
+                  {
+                    "text-foreground": isActive,
+                    "text-muted-foreground hover:text-foreground/90": !isActive,
+                  },
+                )}
+                onClick={() => handleSelectView(id)}
+                type="button"
+              >
+                {isActive ? (
+                  <m.div
+                    aria-hidden
+                    className="absolute inset-0 rounded-md bg-background shadow-sm will-change-transform"
+                    layoutId="sidebar-workspace-view"
+                    transition={{ type: "spring", stiffness: 520, damping: 38, mass: 0.75 }}
+                  />
+                ) : null}
+                <HugeiconsIcon
+                  className="relative size-3.5 shrink-0"
+                  icon={icon}
+                  strokeWidth={1.5}
+                />
+                <span className="relative">{label}</span>
+              </button>
+            );
+          })}
+        </div>
       </m.div>
 
       {isInboxView && (

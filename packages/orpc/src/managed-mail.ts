@@ -385,12 +385,20 @@ const deleteManagedMailRecords = async (
       .limit(1);
 
     if (!otherReference) {
-      await getS3Client().send(
-        new DeleteObjectCommand({
-          Bucket: object.bucket,
-          Key: object.key,
-        }),
-      );
+      try {
+        await getS3Client().send(
+          new DeleteObjectCommand({
+            Bucket: object.bucket,
+            Key: object.key,
+          }),
+        );
+      } catch (error) {
+        console.error("Failed to delete managed mail object from S3.", {
+          bucket: object.bucket,
+          error,
+          key: object.key,
+        });
+      }
     }
   }
 };
@@ -674,10 +682,7 @@ export const sendManagedMailboxMessage = async (input: {
     }
   };
 
-  const savedMessagePromise = persistSendRecord();
-  void persistUsage();
-
-  const savedMessage = await savedMessagePromise;
+  const [savedMessage] = await Promise.all([persistSendRecord(), persistUsage()]);
 
   return {
     id: savedMessage?.id ?? providerMessageId,
