@@ -4,18 +4,10 @@ import type { RouterOutputs } from "@quieter/orpc";
 import type { UIMessage } from "@tanstack/ai";
 import { BILLING_FEATURES, hasBillingPlanAccess } from "@quieter/billing/plans";
 import { Button, toast } from "@quieter/ui";
-import { fetchServerSentEvents, useChat } from "@tanstack/ai-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { LayoutGroup } from "motion/react";
-import {
-  type FormEvent,
-  type KeyboardEvent,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type FormEvent, type KeyboardEvent, useMemo, useRef, useState } from "react";
 import {
   formatBillingPlan,
   normalizeBillingPlan,
@@ -28,24 +20,30 @@ import { createChatTurns } from "../domain/chat-turns";
 import { ChatComposer } from "./chat-composer";
 import { ChatTranscript } from "./chat-transcript";
 
-const isVisibleChatMessage = (message: UIMessage): message is UIMessage =>
-  message.role === "user" || message.role === "assistant";
-
-const getMessagesSnapshotKey = (messages: UIMessage[]) => JSON.stringify(messages);
-
 type StoredChatMessage = RouterOutputs["chat"]["get"]["messages"][number];
+type ActiveChatRun = RouterOutputs["chat"]["get"]["activeRun"];
+
+const isActiveRun = (activeRun: ActiveChatRun | null | undefined) =>
+  !!activeRun &&
+  (activeRun.status === "queued" ||
+    activeRun.status === "running" ||
+    activeRun.status === "waiting_on_tool");
+
+const getPollInterval = (activeRun: ActiveChatRun | null | undefined) => {
+  if (!isActiveRun(activeRun)) {
+    return false;
+  }
+
+  return 2_000;
+};
 
 const normalizeChatMessages = (messages: StoredChatMessage[]): UIMessage[] =>
   messages.map((message) => ({
-    ...message,
     createdAt: message.createdAt ? new Date(message.createdAt) : undefined,
+    id: message.id,
     parts: message.parts as UIMessage["parts"],
+    role: message.role,
   }));
-
-const waitForCommittedMessageState = () =>
-  new Promise<void>((resolve) => {
-    window.requestAnimationFrame(() => resolve());
-  });
 
 export const ChatView = ({
   activeMailbox,
@@ -55,65 +53,25 @@ export const ChatView = ({
   onChatIdChange,
   onOpenSidebar,
 }: ChatViewProps) => {
-  const chatQuery = useQuery(chatQueryOptions(mailboxId, chatId));
-  const initialMessages = useMemo(
-    () => (chatQuery.data ? normalizeChatMessages(chatQuery.data.messages) : []),
-    [chatQuery.data],
-  );
-  const initialSnapshotKey = useMemo(
-    () => getMessagesSnapshotKey(initialMessages),
-    [initialMessages],
-  );
-  const sessionKey = chatId
-    ? `chat-${chatId}-${chatQuery.data ? "loaded" : "loading"}`
-    : draftChatKey;
-
-  return (
-    <ChatSession
-      key={sessionKey}
-      activeMailbox={activeMailbox}
-      chatId={chatId}
-      draftChatKey={draftChatKey}
-      initialMessages={initialMessages}
-      initialSnapshotKey={initialSnapshotKey}
-      mailboxId={mailboxId}
-      onChatIdChange={onChatIdChange}
-      onOpenSidebar={onOpenSidebar}
-    />
-  );
-};
-
-type ChatSessionProps = ChatViewProps & {
-  initialMessages: UIMessage[];
-  initialSnapshotKey: string;
-};
-
-const ChatSession = ({
-  activeMailbox,
-  chatId,
-  draftChatKey,
-  initialMessages,
-  initialSnapshotKey,
-  mailboxId,
-  onChatIdChange,
-  onOpenSidebar,
-}: ChatSessionProps) => {
   const queryClient = useQueryClient();
   const billingQuery = useQuery(userBillingQueryOptions());
   const [input, setInput] = useState("");
-  const persistedSnapshotKeyRef = useRef(initialSnapshotKey);
-  const activeChatKey = chatId ?? draftChatKey;
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
-  const visibleMessagesRef = useRef<UIMessage[]>([]);
+  const chatQuery = useQuery({
+    ...chatQueryOptions(mailboxId, chatId),
+    refetchInterval: (query) => getPollInterval(query.state.data?.activeRun ?? null),
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+  });
   const createChatMutation = useMutation({
     ...orpc.chat.create.mutationOptions(),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: getChatsQueryKey(mailboxId) });
     },
   });
-  const saveMessagesMutation = useMutation({
-    ...orpc.chat.saveMessages.mutationOptions(),
-    onSuccess: async (_updatedChat, variables) => {
+  const sendMessageMutation = useMutation({
+    ...orpc.chat.sendMessage.mutationOptions(),
+    onSuccess: async (_result, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: getChatsQueryKey(mailboxId) }),
         queryClient.invalidateQueries({
@@ -122,49 +80,38 @@ const ChatSession = ({
       ]);
     },
   });
-  const { error, isLoading, messages, sendMessage, stop } = useChat({
-    connection: fetchServerSentEvents("/api/chat"),
-    forwardedProps: { category: activeMailbox, chatId, mailboxId },
-    id: activeChatKey,
-    initialMessages,
-    threadId: chatId ?? activeChatKey,
+  const cancelGenerationMutation = useMutation({
+    ...orpc.chat.cancelGeneration.mutationOptions(),
+    onSuccess: async (_result, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: getChatQueryKey(mailboxId, variables.chatId),
+      });
+    },
   });
+
   const visibleMessages = useMemo(
-    () => messages.filter((message): message is UIMessage => isVisibleChatMessage(message)),
-    [messages],
+    () => (chatQuery.data ? normalizeChatMessages(chatQuery.data.messages) : []),
+    [chatQuery.data],
   );
-  useLayoutEffect(() => {
-    visibleMessagesRef.current = visibleMessages;
-  }, [visibleMessages]);
   const turns = useMemo(() => createChatTurns(visibleMessages), [visibleMessages]);
+  const activeRun = chatQuery.data?.activeRun ?? null;
+  const isStreaming = isActiveRun(activeRun);
   const hasMessages = visibleMessages.length > 0 || !!chatId;
   const isComposerLoading =
-    isLoading || createChatMutation.isPending || saveMessagesMutation.isPending;
+    isStreaming ||
+    createChatMutation.isPending ||
+    sendMessageMutation.isPending ||
+    cancelGenerationMutation.isPending;
   const currentPlan = normalizeBillingPlan(billingQuery.data?.plan);
   const aiRequirement = BILLING_FEATURES.aiChat;
   const canUseAiChat =
     !!billingQuery.data?.hasUnlimitedAccess ||
     hasBillingPlanAccess(currentPlan, aiRequirement.requiredPlan);
   const composerDisabled = billingQuery.isPending || !canUseAiChat;
-
-  const saveVisibleMessages = async (nextChatId: string) => {
-    const nextMessages = visibleMessagesRef.current;
-    if (nextMessages.length === 0) {
-      return;
-    }
-
-    const snapshotKey = getMessagesSnapshotKey(nextMessages);
-    if (snapshotKey === persistedSnapshotKeyRef.current) {
-      return;
-    }
-
-    await saveMessagesMutation.mutateAsync({
-      chatId: nextChatId,
-      mailboxId,
-      messages: nextMessages,
-    });
-    persistedSnapshotKeyRef.current = snapshotKey;
-  };
+  const errorMessage =
+    activeRun?.error ??
+    chatQuery.data?.messages.find((message) => message.error)?.error ??
+    undefined;
 
   const submitPrompt = async () => {
     const prompt = input.trim();
@@ -175,12 +122,15 @@ const ChatSession = ({
       if (!nextChatId) {
         const createdChat = await createChatMutation.mutateAsync({ mailboxId });
         nextChatId = createdChat.id;
-        onChatIdChange(createdChat.id);
+        onChatIdChange(nextChatId);
       }
 
-      await sendMessage(prompt);
-      await waitForCommittedMessageState();
-      await saveVisibleMessages(nextChatId);
+      await sendMessageMutation.mutateAsync({
+        category: activeMailbox,
+        chatId: nextChatId,
+        mailboxId,
+        message: prompt,
+      });
       setInput("");
     } catch (error) {
       toast.error(
@@ -201,6 +151,14 @@ const ChatSession = ({
     void submitPrompt();
   };
 
+  const handleStop = () => {
+    if (!chatId || !isStreaming) {
+      return;
+    }
+
+    void cancelGenerationMutation.mutateAsync({ chatId, mailboxId });
+  };
+
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden border-l">
       <header className="flex min-h-14 items-center px-3 lg:hidden">
@@ -208,13 +166,13 @@ const ChatSession = ({
           Sidebar
         </Button>
       </header>
-      <LayoutGroup>
+      <LayoutGroup id={chatId ?? draftChatKey}>
         <div className="flex min-h-0 flex-1 flex-col">
           {hasMessages ? (
             <>
               <ChatTranscript
-                errorMessage={error?.message}
-                isLoading={isLoading}
+                errorMessage={errorMessage ?? undefined}
+                isLoading={isStreaming}
                 transcriptEndRef={transcriptEndRef}
                 turns={turns}
               />
@@ -233,7 +191,7 @@ const ChatSession = ({
                     isLoading={isComposerLoading}
                     onInputChange={setInput}
                     onInputKeyDown={handleInputKeyDown}
-                    onStop={stop}
+                    onStop={handleStop}
                     onSubmit={handleSubmit}
                   />
                 </div>
@@ -254,7 +212,7 @@ const ChatSession = ({
                   isLoading={isComposerLoading}
                   onInputChange={setInput}
                   onInputKeyDown={handleInputKeyDown}
-                  onStop={stop}
+                  onStop={handleStop}
                   onSubmit={handleSubmit}
                 />
               </div>

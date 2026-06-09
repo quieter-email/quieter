@@ -22,6 +22,7 @@ import {
   cleanupOrganizationsForDeletedUser,
 } from "./organization";
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "./organization-api-key";
+import { readTermsAcceptedAtFromRequest } from "./terms-acceptance";
 
 const appName = process.env.BETTER_AUTH_APP_NAME ?? "quieter";
 const organizationAccessControl = createAccessControl({
@@ -108,6 +109,24 @@ export const auth = betterAuth({
   },
   databaseHooks: {
     user: {
+      create: {
+        before: async (createdUser, context) => {
+          const termsAcceptedAt = readTermsAcceptedAtFromRequest(context?.request);
+
+          if (!termsAcceptedAt) {
+            throw new APIError("BAD_REQUEST", {
+              message: "Accept the Terms of Service and Privacy Policy to create an account.",
+            });
+          }
+
+          return {
+            data: {
+              ...createdUser,
+              termsAcceptedAt,
+            },
+          };
+        },
+      },
       delete: {
         before: async (deletedUser) => {
           await cleanupOrganizationsForDeletedUser(deletedUser.id);
@@ -119,6 +138,13 @@ export const auth = betterAuth({
     updateAccountOnSignIn: true,
   },
   user: {
+    additionalFields: {
+      termsAcceptedAt: {
+        input: false,
+        required: false,
+        type: "date",
+      },
+    },
     changeEmail: {
       enabled: true,
     },

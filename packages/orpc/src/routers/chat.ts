@@ -1,57 +1,21 @@
 import { ORPCError } from "@orpc/server";
-import {
-  chat,
-  chatMessage,
-  db,
-  type ChatMessagePart,
-  type ChatMessageRole,
-} from "@quieter/database";
-import { and, desc, eq, lt, sql } from "drizzle-orm";
+import { hasUserBillingFeature } from "@quieter/billing/entitlements";
+import { BILLING_FEATURES } from "@quieter/billing/plans";
+import { chat, chatMessage, chatRun, db, type ChatMessagePart } from "@quieter/database";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
+import {
+  createChatRunRecords,
+  enqueueChatRun,
+  getActiveChatRunSummary,
+  hasActiveChatRun,
+} from "../chat-generation";
 import { assertAccessibleMailbox } from "../mailbox";
-import { mailboxIdSchema, protectedProcedure } from "./base";
+import { mailboxCategorySchema, mailboxIdSchema, protectedProcedure } from "./base";
 
 const chatIdSchema = z.string().trim().min(1);
 const chatTitleSchema = z.string().trim().min(1).max(120);
-const chatMessagePartSchema = z.custom<ChatMessagePart>(
-  (value) =>
-    typeof value === "object" &&
-    value !== null &&
-    "type" in value &&
-    typeof value.type === "string" &&
-    value.type.trim().length > 0,
-);
-const chatMessageSchema = z.object({
-  id: z.string().trim().min(1),
-  role: z.enum(["system", "user", "assistant"] satisfies ChatMessageRole[]),
-  parts: z.array(chatMessagePartSchema),
-  createdAt: z.coerce.date().optional(),
-});
-
-type ChatMessageInput = z.infer<typeof chatMessageSchema>;
-
-const getTextContent = (message: ChatMessageInput) =>
-  message.parts
-    .flatMap((part) =>
-      part.type === "text" && "content" in part && typeof part.content === "string"
-        ? [part.content]
-        : [],
-    )
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const TEMP_MESSAGE_POSITION_OFFSET = 1_000_000;
-
-const createFallbackTitle = (messages: ChatMessageInput[]) => {
-  const firstUserMessage = messages.find(
-    (message) => message.role === "user" && getTextContent(message),
-  );
-  const firstMessage = firstUserMessage ?? messages.find((message) => getTextContent(message));
-  const title = firstMessage ? getTextContent(firstMessage) : "";
-
-  return title ? title.slice(0, 80) : null;
-};
+const chatPromptSchema = z.string().trim().min(1).max(10_000);
 
 const getAuthorizedChat = async (chatId: string, mailboxId: string, userId: string) => {
   await assertAccessibleMailbox({ mailboxId, userId });
@@ -161,97 +125,173 @@ export const chatRouter = {
       const messages = await db
         .select({
           createdAt: chatMessage.createdAt,
+          error: chatMessage.error,
           id: chatMessage.id,
           parts: chatMessage.parts,
           position: chatMessage.position,
           role: chatMessage.role,
+          status: chatMessage.status,
         })
         .from(chatMessage)
         .where(eq(chatMessage.chatId, authorizedChat.id))
         .orderBy(chatMessage.position);
+      const activeRun = await getActiveChatRunSummary(authorizedChat.id);
 
       return {
+        activeRun,
         createdAt: authorizedChat.createdAt,
         id: authorizedChat.id,
         messages: messages.map((message) => ({
           createdAt: message.createdAt,
+          error: message.error,
           id: message.id,
           parts: message.parts,
           role: message.role,
+          status: message.status,
         })),
         title: authorizedChat.title,
         updatedAt: authorizedChat.updatedAt,
       };
     }),
 
-  saveMessages: protectedProcedure
+  sendMessage: protectedProcedure
     .input(
       z.object({
+        category: mailboxCategorySchema,
         chatId: chatIdSchema,
         mailboxId: mailboxIdSchema,
-        messages: z.array(chatMessageSchema).max(200),
+        message: chatPromptSchema,
       }),
     )
     .handler(async ({ context, input }) => {
       const authorizedChat = await getAuthorizedChat(input.chatId, input.mailboxId, context.userId);
-      const now = new Date();
-      const fallbackTitle = createFallbackTitle(input.messages);
+      const accessibleMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
 
-      if (input.messages.length > 0) {
-        await db.insert(chatMessage).values(
-          input.messages.map((message, index) => {
-            const createdAt = message.createdAt ?? now;
-            const parts = message.parts as ChatMessagePart[];
-
-            return {
-              chatId: authorizedChat.id,
-              createdAt,
-              id: message.id,
-              parts,
-              position: TEMP_MESSAGE_POSITION_OFFSET + index,
-              role: message.role,
-              userId: context.userId,
-            };
-          }),
-        );
-
-        await db
-          .delete(chatMessage)
-          .where(
-            and(
-              eq(chatMessage.chatId, authorizedChat.id),
-              lt(chatMessage.position, TEMP_MESSAGE_POSITION_OFFSET),
-            ),
-          );
-
-        await Promise.all(
-          input.messages.map((message, position) =>
-            db
-              .update(chatMessage)
-              .set({ position })
-              .where(
-                and(eq(chatMessage.chatId, authorizedChat.id), eq(chatMessage.id, message.id)),
-              ),
-          ),
-        );
-      } else {
-        await db.delete(chatMessage).where(eq(chatMessage.chatId, authorizedChat.id));
+      if (accessibleMailbox.provider !== "gmail") {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "AI chat search currently supports Gmail mailboxes only.",
+        });
       }
 
-      const [updatedChat] = await db
-        .update(chat)
-        .set({
-          title: sql<string | null>`coalesce(${chat.title}, ${fallbackTitle})`,
-          updatedAt: now,
-        })
-        .where(eq(chat.id, authorizedChat.id))
-        .returning({
-          createdAt: chat.createdAt,
-          id: chat.id,
-          title: chat.title,
-          updatedAt: chat.updatedAt,
-        });
+      const entitlement = await hasUserBillingFeature({
+        feature: "aiChat",
+        userId: context.userId,
+      });
 
-      return updatedChat!;
+      if (!entitlement.hasAccess) {
+        throw new ORPCError("FORBIDDEN", {
+          message: `AI chat requires the ${BILLING_FEATURES.aiChat.requiredPlan} plan.`,
+        });
+      }
+
+      if (await hasActiveChatRun(authorizedChat.id)) {
+        throw new ORPCError("CONFLICT", {
+          message: "This chat already has a generation in progress.",
+        });
+      }
+
+      const [lastMessage] = await db
+        .select({ position: chatMessage.position })
+        .from(chatMessage)
+        .where(eq(chatMessage.chatId, authorizedChat.id))
+        .orderBy(desc(chatMessage.position))
+        .limit(1);
+      const nextPosition = (lastMessage?.position ?? -1) + 1;
+      const runId = crypto.randomUUID();
+      const userMessageId = crypto.randomUUID();
+      const assistantMessageId = crypto.randomUUID();
+      const userParts = [{ content: input.message, type: "text" }] as ChatMessagePart[];
+
+      await createChatRunRecords({
+        assistantMessageId,
+        chatId: authorizedChat.id,
+        mailboxCategory: input.category,
+        mailboxId: input.mailboxId,
+        runId,
+        userId: context.userId,
+        userMessage: {
+          id: userMessageId,
+          parts: userParts,
+          position: nextPosition,
+        },
+      });
+
+      try {
+        await enqueueChatRun(runId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not start chat generation.";
+
+        await db
+          .update(chatRun)
+          .set({
+            error: message,
+            status: "failed",
+            updatedAt: new Date(),
+          })
+          .where(eq(chatRun.id, runId));
+
+        await db
+          .update(chatMessage)
+          .set({
+            error: message,
+            status: "failed",
+          })
+          .where(eq(chatMessage.id, assistantMessageId));
+
+        throw new ORPCError("INTERNAL_SERVER_ERROR", { message });
+      }
+
+      const activeRun = await getActiveChatRunSummary(authorizedChat.id);
+      const messages = await db
+        .select({
+          createdAt: chatMessage.createdAt,
+          error: chatMessage.error,
+          id: chatMessage.id,
+          parts: chatMessage.parts,
+          role: chatMessage.role,
+          status: chatMessage.status,
+        })
+        .from(chatMessage)
+        .where(eq(chatMessage.chatId, authorizedChat.id))
+        .orderBy(chatMessage.position);
+
+      return {
+        activeRun,
+        assistantMessageId,
+        messages: messages.map((message) => ({
+          createdAt: message.createdAt,
+          error: message.error,
+          id: message.id,
+          parts: message.parts,
+          role: message.role,
+          status: message.status,
+        })),
+        runId,
+        userMessageId,
+      };
+    }),
+
+  cancelGeneration: protectedProcedure
+    .input(z.object({ chatId: chatIdSchema, mailboxId: mailboxIdSchema }))
+    .handler(async ({ context, input }) => {
+      const authorizedChat = await getAuthorizedChat(input.chatId, input.mailboxId, context.userId);
+      const activeRun = await getActiveChatRunSummary(authorizedChat.id);
+
+      if (!activeRun) {
+        return { cancelled: false };
+      }
+
+      await db
+        .update(chatRun)
+        .set({
+          cancelRequestedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(chatRun.id, activeRun.id));
+
+      return { cancelled: true, runId: activeRun.id };
     }),
 };

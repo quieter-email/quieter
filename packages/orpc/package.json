@@ -14,7 +14,8 @@
     "./server-client": "./src/server-client.ts",
     "./organization-mail": "./src/organization-mail.ts",
     "./organization-mail-policy": "./src/organization-mail-policy.ts",
-    "./router": "./src/routers/index.ts"
+    "./router": "./src/routers/index.ts",
+    "./chat-generation": "./src/chat-generation.ts"
   },
   "scripts": {
     "fmt": "oxfmt --config ../../oxfmt.json .",
@@ -28,6 +29,7 @@
     "@aws-sdk/client-s3": "catalog:",
     "@aws-sdk/client-ses": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
+    "@quieter/ai": "workspace:*",
     "@quieter/auth": "workspace:*",
     "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*",

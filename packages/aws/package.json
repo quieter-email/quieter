@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./chat-generation-enqueue": "./src/chat-generation-enqueue.ts",
+    "./chat-generation-starter": "./src/chat-generation-starter.ts",
+    "./chat-generation-workflow": "./src/chat-generation-workflow.ts",
     "./inbound": "./src/inbound.ts",
     "./outbound": "./src/outbound.ts",
     "./receipt": "./src/receipt.ts"
@@ -18,6 +21,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
+    "@aws-sdk/client-sqs": "catalog:",
     "@quieter/billing": "workspace:*",
     "@quieter/orpc": "workspace:*",
     "zod": "catalog:"

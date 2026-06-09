@@ -70,8 +70,19 @@ export type MailboxSwitcherOrder = {
 };
 
 export type ChatMessageRole = "system" | "user" | "assistant";
+export type ChatMessageStatus = "draft" | "streaming" | "complete" | "failed";
+export type ChatRunStatus =
+  | "queued"
+  | "running"
+  | "waiting_on_tool"
+  | "complete"
+  | "failed"
+  | "cancelled"
+  | "paused_budget";
 export type ChatMessagePart = {
   type: string;
+  content?: string;
+  [key: string]: unknown;
 };
 
 export const user = pgTable("user", {
@@ -82,6 +93,7 @@ export const user = pgTable("user", {
   image: text("image"),
   defaultMailboxId: text("defaultMailboxId"),
   mailboxSwitcherOrder: jsonb("mailboxSwitcherOrder").$type<MailboxSwitcherOrder>(),
+  termsAcceptedAt: timestamp("termsAcceptedAt"),
   createdAt: timestamp("createdAt").notNull(),
   updatedAt: timestamp("updatedAt").notNull(),
 });
@@ -515,6 +527,8 @@ export const chatMessage = pgTable(
     position: integer("position").notNull(),
     role: text("role").$type<ChatMessageRole>().notNull(),
     parts: jsonb("parts").$type<ChatMessagePart[]>().notNull(),
+    status: text("status").$type<ChatMessageStatus>().notNull().default("complete"),
+    error: text("error"),
     createdAt: timestamp("createdAt").notNull(),
   },
   (table) => [
@@ -524,6 +538,39 @@ export const chatMessage = pgTable(
       name: "chat_message_chat_id_user_id_fkey",
     }).onDelete("cascade"),
     unique("chat_message_chat_id_position_unique").on(table.chatId, table.position),
+  ],
+);
+
+export const chatRun = pgTable(
+  "chatRun",
+  {
+    id: text("id").primaryKey(),
+    chatId: text("chatId")
+      .notNull()
+      .references(() => chat.id, { onDelete: "cascade" }),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id),
+    assistantMessageId: text("assistantMessageId")
+      .notNull()
+      .references(() => chatMessage.id, { onDelete: "cascade" }),
+    status: text("status").$type<ChatRunStatus>().notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    mailboxCategory: text("mailboxCategory").notNull(),
+    executionName: text("executionName").notNull(),
+    cancelRequestedAt: timestamp("cancelRequestedAt"),
+    lastHeartbeatAt: timestamp("lastHeartbeatAt"),
+    maxIterations: integer("maxIterations"),
+    maxTotalTokens: integer("maxTotalTokens"),
+    error: text("error"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    index("chat_run_chat_id_status_idx").on(table.chatId, table.status),
+    unique("chat_run_execution_name_unique").on(table.executionName),
   ],
 );
 
@@ -570,6 +617,7 @@ export const tables = {
   billingSubscription,
   chat,
   chatMessage,
+  chatRun,
   user,
   organization,
   session,
@@ -616,8 +664,31 @@ export const authRelations = defineRelations(tables, (r) => ({
       optional: false,
     }),
     messages: r.many.chatMessage({ from: r.chat.id, to: r.chatMessage.chatId }),
+    runs: r.many.chatRun({ from: r.chat.id, to: r.chatRun.chatId }),
     user: r.one.user({
       from: r.chat.userId,
+      to: r.user.id,
+      optional: false,
+    }),
+  },
+  chatRun: {
+    assistantMessage: r.one.chatMessage({
+      from: r.chatRun.assistantMessageId,
+      to: r.chatMessage.id,
+      optional: false,
+    }),
+    chat: r.one.chat({
+      from: r.chatRun.chatId,
+      to: r.chat.id,
+      optional: false,
+    }),
+    mailbox: r.one.mailbox({
+      from: r.chatRun.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+    user: r.one.user({
+      from: r.chatRun.userId,
       to: r.user.id,
       optional: false,
     }),

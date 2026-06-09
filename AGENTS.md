@@ -35,12 +35,16 @@
 - Auth emails send through `POST /api/messages` using `QUIETER_MAIL_API_KEY` and `auth@quieter.email` by default.
 - If Gmail exposes `List-Unsubscribe` mailto, use the single unsubscribe action that sends the email.
 - Mailbox list selection supports Shift range, Ctrl/Cmd toggle, `Mod+A`, and `Escape`.
+- Cookie consent is self-hosted [c15t](https://c15t.com/) at `/api/c15t` with geo-based policies. PostHog and Vercel Speed Insights load only after `measurement` consent (`@c15t/scripts`, `loadMode: 'after-consent'`). Client Sentry stays on in production; disclose in the Privacy Policy.
+- Signup requires explicit Terms + Privacy acceptance (`user.termsAcceptedAt` via `quieter_terms_accepted_at` cookie). Do not bundle analytics consent into signup or login.
+- Legal pages: `/privacy`, `/cookies`, `/terms`. Footer and Settings expose “Manage privacy preferences” (`ConsentDialog`).
 
 ## Data + Routing
 
 - App router: [apps/web/src/router.tsx](/E:/Coding/quieter/apps/web/src/router.tsx)
 - Root providers/document: [apps/web/src/routes/\_\_root.tsx](/E:/Coding/quieter/apps/web/src/routes/__root.tsx)
 - API handlers stay under `apps/web/src/routes/api/**`.
+- Consent backend: `apps/web/src/lib/c15t.server.ts` + `apps/web/src/routes/api/c15t.$.ts`. Kysely adapter on Neon with `c15t_` table prefix; migrations run on first API request. Exempt `/api/c15t` and legal routes from the site-password gate.
 - Use route loaders / TanStack Start server functions for auth guards and request-scoped SSR data.
 - Validate search params with `validateSearch` + Zod (colocated on the route file; settings tab ids are shared via `apps/web/src/features/settings/domain/settings-tab.ts`).
 - Keep inbox `loaderDeps` limited to `mailboxId`.
@@ -53,6 +57,7 @@
 - Keep Better Auth reactive hooks (`useSession`, `useListOrganizations`, `useListPasskeys`) as the source of truth for auth state. Do not use Better Auth active organization state for Quieter product context.
 - Compose state is mailbox-scoped. Persisted compose sessions and Gmail cache must stay isolated per mailbox.
 - Chats are mailbox-scoped. Chat lists, transcripts, mutations, and AI requests require an accessible `mailboxId`.
+- Chat generation is server-side: `chat.sendMessage` persists the user message, creates a `chatRun` plus draft assistant row, enqueues work to SST (`ChatGenerationQueue` → starter → `ChatGenerationWorkflow`), and returns immediately. Postgres is canonical; the browser polls `chat.get` while a run is active. `chat.cancelGeneration` sets a cooperative cancel flag.
 - Bulk mailbox actions and conversation spam/trash actions operate on the loaded row set for the current mailbox.
 - History-based live sync applies to unfiltered mailbox views; filtered search and Drafts refresh manually.
 - Message-list prefetch on mount is capped to one extra page.
@@ -70,7 +75,7 @@
 - Inbound mail is stored under the fixed `mail/inbound/...` key prefix.
 - Managed inbound S3 objects must have at least one `managedMailMessage` reference. Ingestion deletes untracked objects immediately, and managed message deletion removes the S3 object synchronously when deleting its final database reference.
 - `AWS_REGION` or `AWS_DEFAULT_REGION` is required for the mail S3 uploader.
-- Production SST deploys sync `MAIL_BUCKET`, `MAIL_RECEIPT_TOPIC_ARN`, `MAIL_RECEIPT_ROLE_ARN`, and `MAIL_RECEIPT_RULE_SET_NAME` into Vercel as production-only sensitive env vars from `.sst/outputs.json`, then trigger a Vercel production Deploy Hook from `.github/workflows/sst-deploy.yml`. The GitHub environment must provide `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID`, and `VERCEL_DEPLOY_HOOK_URL`. Commit-triggered Vercel deployments stay disabled through `vercel.json` `git.deploymentEnabled`; do not use an ignored-build command that exits `0`, because it also cancels Deploy Hook builds.
+- Production SST deploys sync `MAIL_BUCKET`, `MAIL_RECEIPT_TOPIC_ARN`, `MAIL_RECEIPT_ROLE_ARN`, `MAIL_RECEIPT_RULE_SET_NAME`, and `CHAT_GENERATION_START_URL` into Vercel as production-only sensitive env vars from `.sst/outputs.json`, then trigger a Vercel production Deploy Hook from `.github/workflows/sst-deploy.yml`. Set `CHAT_GENERATION_START_TOKEN` on Vercel from the `ChatGenerationStartToken` SST secret (`bun run sst secret get ChatGenerationStartToken`). The GitHub environment must provide `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID`, and `VERCEL_DEPLOY_HOOK_URL`. Commit-triggered Vercel deployments stay disabled through `vercel.json` `git.deploymentEnabled`; do not use an ignored-build command that exits `0`, because it also cancels Deploy Hook builds.
 - Run the combined local dev session with `bun run dev`; Turbo runs the web app and SST mail stack side by side. Run direct SST commands through `bun run sst ...`; the wrapper defaults to `sst.config.ts` and the `mail-dev` stage, and loads AWS credentials from `.env.local`.
 
 ## Billing

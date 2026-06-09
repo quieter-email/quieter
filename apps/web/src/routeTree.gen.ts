@@ -9,21 +9,29 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SitePasswordRouteImport } from './routes/site-password'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as HomeRouteImport } from './routes/home'
+import { Route as CookiesRouteImport } from './routes/cookies'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
 import { Route as ApiSitePasswordRouteImport } from './routes/api/site-password'
 import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
 import { Route as ApiMessagesRouteImport } from './routes/api/messages'
-import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
 import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callback'
+import { Route as ApiC15tSplatRouteImport } from './routes/api/c15t.$'
 import { Route as ApiBillingPolarWebhookRouteImport } from './routes/api/billing.polar-webhook'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SitePasswordRoute = SitePasswordRouteImport.update({
   id: '/site-password',
   path: '/site-password',
@@ -34,9 +42,19 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HomeRoute = HomeRouteImport.update({
   id: '/home',
   path: '/home',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CookiesRoute = CookiesRouteImport.update({
+  id: '/cookies',
+  path: '/cookies',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -69,11 +87,6 @@ const ApiMessagesRoute = ApiMessagesRouteImport.update({
   path: '/api/messages',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiChatRoute = ApiChatRouteImport.update({
-  id: '/api/chat',
-  path: '/api/chat',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiOrpcSplatRoute = ApiOrpcSplatRouteImport.update({
   id: '/api/orpc/$',
   path: '/api/orpc/$',
@@ -82,6 +95,11 @@ const ApiOrpcSplatRoute = ApiOrpcSplatRouteImport.update({
 const ApiGmailCallbackRoute = ApiGmailCallbackRouteImport.update({
   id: '/api/gmail/callback',
   path: '/api/gmail/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiC15tSplatRoute = ApiC15tSplatRouteImport.update({
+  id: '/api/c15t/$',
+  path: '/api/c15t/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiBillingPolarWebhookRoute = ApiBillingPolarWebhookRouteImport.update({
@@ -98,32 +116,38 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/cookies': typeof CookiesRoute
   '/home': typeof HomeRoute
+  '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
-  '/api/chat': typeof ApiChatRoute
+  '/terms': typeof TermsRoute
   '/api/messages': typeof ApiMessagesRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/billing/polar-webhook': typeof ApiBillingPolarWebhookRoute
+  '/api/c15t/$': typeof ApiC15tSplatRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/cookies': typeof CookiesRoute
   '/home': typeof HomeRoute
+  '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
-  '/api/chat': typeof ApiChatRoute
+  '/terms': typeof TermsRoute
   '/api/messages': typeof ApiMessagesRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/billing/polar-webhook': typeof ApiBillingPolarWebhookRoute
+  '/api/c15t/$': typeof ApiC15tSplatRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
 }
@@ -131,16 +155,19 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/cookies': typeof CookiesRoute
   '/home': typeof HomeRoute
+  '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
-  '/api/chat': typeof ApiChatRoute
+  '/terms': typeof TermsRoute
   '/api/messages': typeof ApiMessagesRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/billing/polar-webhook': typeof ApiBillingPolarWebhookRoute
+  '/api/c15t/$': typeof ApiC15tSplatRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
 }
@@ -149,48 +176,57 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/cookies'
     | '/home'
+    | '/privacy'
     | '/settings'
     | '/site-password'
-    | '/api/chat'
+    | '/terms'
     | '/api/messages'
     | '/api/openapi'
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
     | '/api/billing/polar-webhook'
+    | '/api/c15t/$'
     | '/api/gmail/callback'
     | '/api/orpc/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
+    | '/cookies'
     | '/home'
+    | '/privacy'
     | '/settings'
     | '/site-password'
-    | '/api/chat'
+    | '/terms'
     | '/api/messages'
     | '/api/openapi'
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
     | '/api/billing/polar-webhook'
+    | '/api/c15t/$'
     | '/api/gmail/callback'
     | '/api/orpc/$'
   id:
     | '__root__'
     | '/'
     | '/auth'
+    | '/cookies'
     | '/home'
+    | '/privacy'
     | '/settings'
     | '/site-password'
-    | '/api/chat'
+    | '/terms'
     | '/api/messages'
     | '/api/openapi'
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
     | '/api/billing/polar-webhook'
+    | '/api/c15t/$'
     | '/api/gmail/callback'
     | '/api/orpc/$'
   fileRoutesById: FileRoutesById
@@ -198,22 +234,32 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
+  CookiesRoute: typeof CookiesRoute
   HomeRoute: typeof HomeRoute
+  PrivacyRoute: typeof PrivacyRoute
   SettingsRoute: typeof SettingsRoute
   SitePasswordRoute: typeof SitePasswordRoute
-  ApiChatRoute: typeof ApiChatRoute
+  TermsRoute: typeof TermsRoute
   ApiMessagesRoute: typeof ApiMessagesRoute
   ApiOpenapiRoute: typeof ApiOpenapiRoute
   ApiSitePasswordRoute: typeof ApiSitePasswordRoute
   ApiWaitlistRoute: typeof ApiWaitlistRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiBillingPolarWebhookRoute: typeof ApiBillingPolarWebhookRoute
+  ApiC15tSplatRoute: typeof ApiC15tSplatRoute
   ApiGmailCallbackRoute: typeof ApiGmailCallbackRoute
   ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/site-password': {
       id: '/site-password'
       path: '/site-password'
@@ -228,11 +274,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/home': {
       id: '/home'
       path: '/home'
       fullPath: '/home'
       preLoaderRoute: typeof HomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cookies': {
+      id: '/cookies'
+      path: '/cookies'
+      fullPath: '/cookies'
+      preLoaderRoute: typeof CookiesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -277,13 +337,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMessagesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/chat': {
-      id: '/api/chat'
-      path: '/api/chat'
-      fullPath: '/api/chat'
-      preLoaderRoute: typeof ApiChatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/orpc/$': {
       id: '/api/orpc/$'
       path: '/api/orpc/$'
@@ -296,6 +349,13 @@ declare module '@tanstack/react-router' {
       path: '/api/gmail/callback'
       fullPath: '/api/gmail/callback'
       preLoaderRoute: typeof ApiGmailCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/c15t/$': {
+      id: '/api/c15t/$'
+      path: '/api/c15t/$'
+      fullPath: '/api/c15t/$'
+      preLoaderRoute: typeof ApiC15tSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/billing/polar-webhook': {
@@ -318,16 +378,19 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
+  CookiesRoute: CookiesRoute,
   HomeRoute: HomeRoute,
+  PrivacyRoute: PrivacyRoute,
   SettingsRoute: SettingsRoute,
   SitePasswordRoute: SitePasswordRoute,
-  ApiChatRoute: ApiChatRoute,
+  TermsRoute: TermsRoute,
   ApiMessagesRoute: ApiMessagesRoute,
   ApiOpenapiRoute: ApiOpenapiRoute,
   ApiSitePasswordRoute: ApiSitePasswordRoute,
   ApiWaitlistRoute: ApiWaitlistRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiBillingPolarWebhookRoute: ApiBillingPolarWebhookRoute,
+  ApiC15tSplatRoute: ApiC15tSplatRoute,
   ApiGmailCallbackRoute: ApiGmailCallbackRoute,
   ApiOrpcSplatRoute: ApiOrpcSplatRoute,
 }

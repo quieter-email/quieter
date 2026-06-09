@@ -1,13 +1,9 @@
-import {
-  chat,
-  toServerSentEventsResponse,
-  type ModelMessage,
-  type ServerTool,
-  type ChatMiddleware,
-  type UIMessage,
-} from "@tanstack/ai";
+import type { ModelMessage, UIMessage } from "@tanstack/ai";
 import { createOpenRouterText } from "@tanstack/ai-openrouter";
 
+export { createGmailSearchServerTool, gmailSearchPrompt, gmailSearchToolDef } from "./chat-agent";
+export type { GmailSearchResult, GmailSearchToolContext } from "./chat-agent";
+export { runChatStream } from "./run-chat-stream";
 export { chatParamsFromRequest, toolDefinition } from "@tanstack/ai";
 export type { ChatMiddleware, ModelMessage, ServerTool, UIMessage } from "@tanstack/ai";
 
@@ -27,24 +23,3 @@ export const createOpenRouterAdapter = () => {
 
   return createOpenRouterText(model, apiKey, { appTitle, httpReferer });
 };
-
-export const createChatResponse = ({
-  messages,
-  systemPrompts,
-  tools,
-  middleware,
-}: {
-  middleware?: ChatMiddleware[];
-  messages: ChatMessages;
-  systemPrompts?: string[];
-  tools?: ServerTool[];
-}) =>
-  toServerSentEventsResponse(
-    chat({
-      adapter: createOpenRouterAdapter(),
-      messages,
-      middleware,
-      systemPrompts,
-      tools,
-    }),
-  );

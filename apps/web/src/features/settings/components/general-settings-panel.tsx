@@ -3,6 +3,7 @@
 import { ComputerIcon, Moon01Icon, Sun01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, Switch, SwitchThumb, useColorMode } from "@quieter/ui";
+import { ConsentPreferencesLink } from "~/components/consent-preferences-link";
 import {
   isDemoModeAvailable,
   setDemoModeEnabled,
@@ -71,6 +72,16 @@ export const GeneralSettingsPanel = () => {
           >
             <SwitchThumb className="size-4 bg-background-light data-checked:translate-x-4 data-checked:bg-primary-foreground" />
           </Switch>
+        </div>
+      </section>
+
+      <section className="border-t border-border/70 pt-6">
+        <div className="space-y-1">
+          <h2 className="text-sm font-medium text-foreground">Privacy</h2>
+          <p className="max-w-xl text-sm/6 text-muted-foreground">
+            Review cookie and analytics preferences for this browser.
+          </p>
+          <ConsentPreferencesLink className="text-sm text-foreground underline" />
         </div>
       </section>
 

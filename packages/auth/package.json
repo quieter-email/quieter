@@ -6,6 +6,7 @@
     ".": "./src/index.ts",
     "./google-scopes": "./src/google-scopes.ts",
     "./organization-api-key": "./src/organization-api-key.ts",
+    "./terms-acceptance": "./src/terms-acceptance.ts",
     "./user-status": "./src/user-status.ts",
     "./workspace": "./src/workspace.ts"
   },

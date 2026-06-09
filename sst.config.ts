@@ -107,6 +107,53 @@ export default $config({
       timeout: "30 seconds",
     });
 
+    const openRouterApiKey = process.env.OPENROUTER_API_KEY;
+    const googleGmailClientId = process.env.GOOGLE_GMAIL_CLIENT_ID;
+    const googleGmailClientSecret = process.env.GOOGLE_GMAIL_CLIENT_SECRET;
+    const gmailTokenEncryptionKey = process.env.GMAIL_TOKEN_ENCRYPTION_KEY;
+
+    if (!openRouterApiKey)
+      throw new Error("OPENROUTER_API_KEY is required for ChatGenerationWorkflow.");
+    if (!googleGmailClientId) {
+      throw new Error("GOOGLE_GMAIL_CLIENT_ID is required for ChatGenerationWorkflow.");
+    }
+    if (!googleGmailClientSecret) {
+      throw new Error("GOOGLE_GMAIL_CLIENT_SECRET is required for ChatGenerationWorkflow.");
+    }
+    if (!gmailTokenEncryptionKey) {
+      throw new Error("GMAIL_TOKEN_ENCRYPTION_KEY is required for ChatGenerationWorkflow.");
+    }
+
+    const chatGenerationStartToken = new sst.Secret("ChatGenerationStartToken");
+    const chatGenerationQueue = new sst.aws.Queue("ChatGenerationQueue");
+    const chatGenerationWorkflow = new sst.aws.Workflow("ChatGenerationWorkflow", {
+      environment: {
+        DATABASE_URL: databaseUrl,
+        GMAIL_TOKEN_ENCRYPTION_KEY: gmailTokenEncryptionKey,
+        GOOGLE_GMAIL_CLIENT_ID: googleGmailClientId,
+        GOOGLE_GMAIL_CLIENT_SECRET: googleGmailClientSecret,
+        OPENROUTER_API_KEY: openRouterApiKey,
+        POLAR_ACCESS_TOKEN: polarAccessToken,
+        POLAR_ORGANIZATION_ID: process.env.POLAR_ORGANIZATION_ID ?? "",
+        POLAR_SANDBOX: process.env.POLAR_SANDBOX ?? "",
+      },
+      handler: "packages/aws/src/chat-generation-workflow.handler",
+      timeout: {
+        execution: "2 hours",
+        invocation: "15 minutes",
+      },
+    });
+    chatGenerationQueue.subscribe("packages/aws/src/chat-generation-starter.handler", {
+      link: [chatGenerationWorkflow],
+      timeout: "30 seconds",
+    });
+    const chatGenerationEnqueue = new sst.aws.Function("ChatGenerationEnqueue", {
+      handler: "packages/aws/src/chat-generation-enqueue.handler",
+      link: [chatGenerationQueue, chatGenerationStartToken],
+      timeout: "30 seconds",
+      url: true,
+    });
+
     const mailIngress = new sst.aws.Function("MailIngress", {
       environment: {
         DATABASE_URL: databaseUrl,
@@ -131,6 +178,8 @@ export default $config({
     });
 
     return {
+      chatGenerationEnqueueUrl: chatGenerationEnqueue.url,
+      chatGenerationStartTokenSecretName: chatGenerationStartToken.name,
       mailBucket: mailBucket.name,
       mailIngressUrl: mailIngress.url,
       mailOutboundUrl: mailOutbound.url,

@@ -35,3 +35,18 @@ export const getPolarClient = async () => {
 };
 
 export const getPolarOrganizationId = () => process.env.POLAR_ORGANIZATION_ID?.trim() || undefined;
+
+const POLAR_ORGANIZATION_ACCESS_TOKEN_PREFIX = "polar_oat_";
+
+export const usesPolarOrganizationAccessToken = () =>
+  process.env.POLAR_ACCESS_TOKEN?.trim().startsWith(POLAR_ORGANIZATION_ACCESS_TOKEN_PREFIX) ??
+  false;
+
+/** Polar API request scope; omit when the access token is already org-scoped. */
+export const getPolarApiOrganizationId = (): string | undefined => {
+  if (usesPolarOrganizationAccessToken()) {
+    return undefined;
+  }
+
+  return getPolarOrganizationId();
+};

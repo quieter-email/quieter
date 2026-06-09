@@ -2,7 +2,7 @@
 
 import { Key02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, TextField, TextFieldInput } from "@quieter/ui";
+import { Button, Checkbox, CheckboxIndicator, TextField, TextFieldInput } from "@quieter/ui";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
@@ -12,6 +12,7 @@ import { z } from "zod";
 import { AuthVisual } from "~/components/auth-visual";
 import { GoogleLogo } from "~/components/google-logo";
 import { authClient } from "~/lib/auth";
+import { setTermsAcceptanceCookie } from "~/lib/terms-acceptance";
 
 const authRouteApi = getRouteApi("/auth");
 const AUTHENTICATION_ERROR_MESSAGE =
@@ -58,9 +59,31 @@ const AuthCredentials = ({
   const [errors, setErrors] = useState<{
     google?: string;
     passkey?: string;
+    terms?: string;
   }>({});
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const isSignup = mode === "signup";
+
+  const ensureTermsAccepted = () => {
+    if (!isSignup || termsAccepted) {
+      return true;
+    }
+
+    setErrors((prev) => ({
+      ...prev,
+      terms: "Accept the Terms of Service and Privacy Policy to continue.",
+    }));
+    return false;
+  };
+
+  const markTermsAccepted = () => {
+    if (!isSignup) {
+      return;
+    }
+
+    setTermsAcceptanceCookie();
+  };
 
   const errorCallbackHref =
     typeof globalThis.window !== "undefined"
@@ -69,6 +92,12 @@ const AuthCredentials = ({
 
   const googleMutation = useMutation({
     mutationFn: async () => {
+      if (!ensureTermsAccepted()) {
+        throw new Error("Terms acceptance is required.");
+      }
+
+      markTermsAccepted();
+
       const response = await authClient.signIn.social({
         provider: "google",
         callbackURL: "/",
@@ -95,6 +124,12 @@ const AuthCredentials = ({
 
   const passkeyMutation = useMutation({
     mutationFn: async () => {
+      if (!ensureTermsAccepted()) {
+        throw new Error("Terms acceptance is required.");
+      }
+
+      markTermsAccepted();
+
       const response = await authClient.signIn.passkey();
       if (response.error) {
         throw new Error(response.error.message ?? "Could not sign in with a passkey.");
@@ -127,6 +162,14 @@ const AuthCredentials = ({
     validationLogic: revalidateLogic(),
     validators: {
       onSubmitAsync: async ({ value }) => {
+        if (!ensureTermsAccepted()) {
+          return {
+            form: "Accept the Terms of Service and Privacy Policy to continue.",
+          };
+        }
+
+        markTermsAccepted();
+
         const normalizedEmail = value.email.trim().toLowerCase();
 
         try {
@@ -223,6 +266,41 @@ const AuthCredentials = ({
           }}
         </form.Field>
 
+        {isSignup ? (
+          <label className="flex items-start gap-3 text-sm text-muted-foreground">
+            <Checkbox
+              checked={termsAccepted}
+              className="mt-0.5"
+              onCheckedChange={(checked) => {
+                const accepted = checked === true;
+                setTermsAccepted(accepted);
+                if (accepted) {
+                  setErrors((prev) => ({ ...prev, terms: undefined }));
+                }
+              }}
+            >
+              <CheckboxIndicator />
+            </Checkbox>
+            <span>
+              I agree to the{" "}
+              <Link className="text-foreground underline" target="_blank" to="/terms">
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link className="text-foreground underline" target="_blank" to="/privacy">
+                Privacy Policy
+              </Link>
+              .
+            </span>
+          </label>
+        ) : null}
+
+        {errors.terms ? (
+          <p aria-live="assertive" className="text-sm text-destructive" role="status">
+            {errors.terms}
+          </p>
+        ) : null}
+
         <form.Subscribe
           selector={(state) => ({
             canSubmit: state.canSubmit,
@@ -234,7 +312,7 @@ const AuthCredentials = ({
           {({ canSubmit, email, isSubmitted, isSubmitting }) => (
             <Button
               className="group relative w-full justify-center gap-3"
-              disabled={!canSubmit}
+              disabled={!canSubmit || (isSignup && !termsAccepted)}
               type="submit"
             >
               {authClient.isLastUsedLoginMethod("magic-link") && <AuthLastUsedHint />}
@@ -270,7 +348,7 @@ const AuthCredentials = ({
 
       <Button
         className="group relative mt-3 w-full cursor-pointer justify-center gap-3"
-        disabled={googleMutation.isPending}
+        disabled={googleMutation.isPending || (isSignup && !termsAccepted)}
         onClick={() => void googleMutation.mutateAsync()}
         type="button"
         variant="outline"
@@ -282,7 +360,7 @@ const AuthCredentials = ({
 
       <Button
         className="group relative mt-3 w-full justify-center gap-3"
-        disabled={passkeyMutation.isPending}
+        disabled={passkeyMutation.isPending || (isSignup && !termsAccepted)}
         onClick={() => void passkeyMutation.mutateAsync()}
         type="button"
         variant="outline"

@@ -11,11 +11,12 @@ import {
 } from "~/lib/site-password.server";
 
 const sitePasswordPaths = new Set([
-  "/api/chat",
+  "/api/c15t",
   "/api/messages",
   "/api/site-password",
   "/api/waitlist",
 ]);
+const publicLegalPaths = new Set(["/cookies", "/privacy", "/terms"]);
 const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
 const publicPathPrefixes = ["/_build/", "/assets/"];
@@ -72,6 +73,14 @@ const shouldGatePath = (pathname: string) => {
   }
 
   if (pathname === homePagePath) {
+    return false;
+  }
+
+  if (publicLegalPaths.has(pathname)) {
+    return false;
+  }
+
+  if (pathname.startsWith("/api/c15t/")) {
     return false;
   }
 

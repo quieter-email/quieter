@@ -74,6 +74,7 @@ jobs:
           bun run - <<'EOF'
           const outputs = await Bun.file(".sst/outputs.json").json();
           const values = [
+            ["CHAT_GENERATION_START_URL", outputs.chatGenerationEnqueueUrl],
             ["MAIL_BUCKET", outputs.mailBucket],
             ["MAIL_RECEIPT_TOPIC_ARN", outputs.mailReceiptTopicArn],
             ["MAIL_RECEIPT_ROLE_ARN", outputs.mailReceiptRoleArn],
