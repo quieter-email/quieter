@@ -1,21 +1,5 @@
-import {
-  AlreadyExistsException as SesAlreadyExistsException,
-  CreateReceiptRuleCommand,
-  CreateReceiptRuleSetCommand,
-  DeleteReceiptRuleCommand,
-  SESClient,
-  SetActiveReceiptRuleSetCommand,
-  UpdateReceiptRuleCommand,
-} from "@aws-sdk/client-ses";
-import {
-  AlreadyExistsException as SesV2AlreadyExistsException,
-  CreateEmailIdentityCommand,
-  DeleteEmailIdentityCommand,
-  GetEmailIdentityCommand,
-  PutEmailIdentityMailFromAttributesCommand,
-  SESv2Client,
-  type GetEmailIdentityCommandOutput,
-} from "@aws-sdk/client-sesv2";
+import type { SESClient } from "@aws-sdk/client-ses";
+import type { SESv2Client, GetEmailIdentityCommandOutput } from "@aws-sdk/client-sesv2";
 import { ORPCError } from "@orpc/server";
 import {
   db,
@@ -88,12 +72,14 @@ export const getAwsRegion = () => {
   return region;
 };
 
-const getSesClient = () => {
+const getSesClient = async (): Promise<SESClient> => {
+  const { SESClient } = await import("@aws-sdk/client-ses");
   sesClient ??= new SESClient({ region: getAwsRegion() });
   return sesClient;
 };
 
-const getSesv2Client = () => {
+const getSesv2Client = async (): Promise<SESv2Client> => {
+  const { SESv2Client } = await import("@aws-sdk/client-sesv2");
   sesv2Client ??= new SESv2Client({ region: getAwsRegion() });
   return sesv2Client;
 };
@@ -103,12 +89,10 @@ const toLookupName = (name: string) => name.replace(/\.$/, "").toLowerCase();
 const normalizeDnsValue = (value: string) => value.replace(/\.$/, "").toLowerCase();
 
 const isAwsAlreadyExistsError = (error: unknown) =>
-  error instanceof SesAlreadyExistsException ||
-  error instanceof SesV2AlreadyExistsException ||
-  (typeof error === "object" &&
-    error != null &&
-    "name" in error &&
-    (error.name === "AlreadyExistsException" || error.name === "AlreadyExists"));
+  typeof error === "object" &&
+  error != null &&
+  "name" in error &&
+  (error.name === "AlreadyExistsException" || error.name === "AlreadyExists");
 
 const isAwsNotFoundError = (error: unknown) =>
   typeof error === "object" &&
@@ -283,12 +267,17 @@ export const assertUserCanManageOrganizationSettings = async (input: {
   }
 };
 
-export const getEmailIdentity = async (domain: string) =>
-  await getSesv2Client().send(new GetEmailIdentityCommand({ EmailIdentity: domain }));
+export const getEmailIdentity = async (domain: string) => {
+  const { GetEmailIdentityCommand } = await import("@aws-sdk/client-sesv2");
+  const client = await getSesv2Client();
+  return await client.send(new GetEmailIdentityCommand({ EmailIdentity: domain }));
+};
 
 export const createOrLoadEmailIdentity = async (domain: string) => {
   try {
-    return await getSesv2Client().send(new CreateEmailIdentityCommand({ EmailIdentity: domain }));
+    const { CreateEmailIdentityCommand } = await import("@aws-sdk/client-sesv2");
+    const client = await getSesv2Client();
+    return await client.send(new CreateEmailIdentityCommand({ EmailIdentity: domain }));
   } catch (error) {
     if (!isAwsAlreadyExistsError(error)) {
       throw error;
@@ -299,7 +288,9 @@ export const createOrLoadEmailIdentity = async (domain: string) => {
 };
 
 export const ensureMailFromDomain = async (input: { domain: string; mailFromDomain: string }) => {
-  await getSesv2Client().send(
+  const { PutEmailIdentityMailFromAttributesCommand } = await import("@aws-sdk/client-sesv2");
+  const client = await getSesv2Client();
+  await client.send(
     new PutEmailIdentityMailFromAttributesCommand({
       BehaviorOnMxFailure: "REJECT_MESSAGE",
       EmailIdentity: input.domain,
@@ -406,20 +397,26 @@ export const ensureReceiptRule = async (domain: string) => {
     TlsPolicy: "Optional" as const,
   };
 
+  const {
+    CreateReceiptRuleSetCommand,
+    SetActiveReceiptRuleSetCommand,
+    CreateReceiptRuleCommand,
+    UpdateReceiptRuleCommand,
+  } = await import("@aws-sdk/client-ses");
+  const client = await getSesClient();
+
   try {
-    await getSesClient().send(new CreateReceiptRuleSetCommand({ RuleSetName: config.ruleSetName }));
+    await client.send(new CreateReceiptRuleSetCommand({ RuleSetName: config.ruleSetName }));
   } catch (error) {
     if (!isAwsAlreadyExistsError(error)) {
       throw error;
     }
   }
 
-  await getSesClient().send(
-    new SetActiveReceiptRuleSetCommand({ RuleSetName: config.ruleSetName }),
-  );
+  await client.send(new SetActiveReceiptRuleSetCommand({ RuleSetName: config.ruleSetName }));
 
   try {
-    await getSesClient().send(
+    await client.send(
       new CreateReceiptRuleCommand({
         Rule: rule,
         RuleSetName: config.ruleSetName,
@@ -430,7 +427,7 @@ export const ensureReceiptRule = async (domain: string) => {
       throw error;
     }
 
-    await getSesClient().send(
+    await client.send(
       new UpdateReceiptRuleCommand({
         Rule: rule,
         RuleSetName: config.ruleSetName,
@@ -445,7 +442,10 @@ export const deleteMailDomainAwsResources = async (domain: string) => {
   try {
     const config = await getReceiptRuleConfig();
 
-    await getSesClient().send(
+    const { DeleteReceiptRuleCommand } = await import("@aws-sdk/client-ses");
+    const client = await getSesClient();
+
+    await client.send(
       new DeleteReceiptRuleCommand({
         RuleName: createReceiptRuleName(domain),
         RuleSetName: config.ruleSetName,
@@ -456,7 +456,9 @@ export const deleteMailDomainAwsResources = async (domain: string) => {
   }
 
   try {
-    await getSesv2Client().send(new DeleteEmailIdentityCommand({ EmailIdentity: domain }));
+    const { DeleteEmailIdentityCommand } = await import("@aws-sdk/client-sesv2");
+    const client = await getSesv2Client();
+    await client.send(new DeleteEmailIdentityCommand({ EmailIdentity: domain }));
   } catch (error) {
     cleanupSucceeded = cleanupSucceeded && isAwsNotFoundError(error);
   }

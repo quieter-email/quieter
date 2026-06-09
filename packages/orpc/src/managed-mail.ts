@@ -1,6 +1,6 @@
+import type { S3Client } from "@aws-sdk/client-s3";
+import type { SESv2Client } from "@aws-sdk/client-sesv2";
 import type { z } from "zod";
-import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
 import { ORPCError } from "@orpc/server";
 import {
   assertCanConsumeOrganizationMailUsage,
@@ -50,12 +50,14 @@ const getAwsRegion = () => {
 let sesv2Client: SESv2Client | null = null;
 let s3Client: S3Client | null = null;
 
-const getSesv2Client = () => {
+const getSesv2Client = async (): Promise<SESv2Client> => {
+  const { SESv2Client } = await import("@aws-sdk/client-sesv2");
   sesv2Client ??= new SESv2Client({ region: getAwsRegion() });
   return sesv2Client;
 };
 
-const getS3Client = () => {
+const getS3Client = async (): Promise<S3Client> => {
+  const { S3Client } = await import("@aws-sdk/client-s3");
   s3Client ??= new S3Client({ region: getAwsRegion() });
   return s3Client;
 };
@@ -386,7 +388,9 @@ const deleteManagedMailRecords = async (
 
     if (!otherReference) {
       try {
-        await getS3Client().send(
+        const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
+        const client = await getS3Client();
+        await client.send(
           new DeleteObjectCommand({
             Bucket: object.bucket,
             Key: object.key,
@@ -612,7 +616,9 @@ export const sendManagedMailboxMessage = async (input: {
     omitBccHeader: true,
     sentAt,
   });
-  const response = await getSesv2Client().send(
+  const { SendEmailCommand } = await import("@aws-sdk/client-sesv2");
+  const client = await getSesv2Client();
+  const response = await client.send(
     new SendEmailCommand({
       Content: {
         Raw: {

@@ -1,4 +1,4 @@
-import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
+import type { SESv2Client } from "@aws-sdk/client-sesv2";
 import { ORPCError } from "@orpc/server";
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
 import {
@@ -54,7 +54,8 @@ const getAwsRegion = () => {
 
 let sesv2Client: SESv2Client | null = null;
 
-const getSesv2Client = () => {
+const getSesv2Client = async (): Promise<SESv2Client> => {
+  const { SESv2Client } = await import("@aws-sdk/client-sesv2");
   sesv2Client ??= new SESv2Client({ region: getAwsRegion() });
   return sesv2Client;
 };
@@ -83,7 +84,9 @@ export const sendOrganizationMailMessage = async (input: {
     sender: input.message.sender,
   });
 
-  const response = await getSesv2Client().send(
+  const { SendEmailCommand } = await import("@aws-sdk/client-sesv2");
+  const client = await getSesv2Client();
+  const response = await client.send(
     new SendEmailCommand({
       Content: {
         Simple: {
