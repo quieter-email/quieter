@@ -38,8 +38,20 @@ const getRunEntry = (runId: string) => {
   return entry;
 };
 
+const getRunEntryIfExists = (runId: string) => runEntries.get(runId);
+
 export const publishChatRunEvent = (runId: string, event: ChatRunStreamEvent) => {
-  for (const subscriber of getRunEntry(runId).subscribers) {
+  const entry = getRunEntryIfExists(runId);
+
+  if (!entry || entry.subscribers.size === 0) {
+    if (entry) {
+      runEntries.delete(runId);
+    }
+
+    return;
+  }
+
+  for (const subscriber of entry.subscribers) {
     subscriber(event);
   }
 };
@@ -64,6 +76,11 @@ export const subscribeChatRunEvents = (runId: string, subscriber: RunSubscriber)
 
 export const waitForChatRunStream = (runId: string, onEvent: RunSubscriber, signal?: AbortSignal) =>
   new Promise<void>((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+
     const unsubscribe = subscribeChatRunEvents(runId, (event) => {
       onEvent(event);
 

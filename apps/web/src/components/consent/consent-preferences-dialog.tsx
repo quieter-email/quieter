@@ -35,10 +35,12 @@ export const ConsentPreferencesDialog = () => {
   const { closeUI, dialog, openDialog, performDialogAction, saveCustomPreferences } =
     useHeadlessConsentUI();
 
-  const visibleCategories = consentCategories.filter((category) => {
-    const config = consentTypes.find((type) => type.name === category);
-    return config?.display !== false;
-  });
+  const visibleCategories = consentCategories
+    .map((category) => ({
+      category,
+      config: consentTypes.find((type) => type.name === category),
+    }))
+    .filter((entry) => entry.config?.display !== false);
 
   return (
     <Dialog
@@ -59,8 +61,7 @@ export const ConsentPreferencesDialog = () => {
         </DialogHeader>
 
         <DialogBody className="space-y-4 pt-0">
-          {visibleCategories.map((category) => {
-            const config = consentTypes.find((type) => type.name === category);
+          {visibleCategories.map(({ category, config }) => {
             const { description, title } = getCategoryCopy(category, translations);
             const isDisabled = category === "necessary" || config?.disabled === true;
 

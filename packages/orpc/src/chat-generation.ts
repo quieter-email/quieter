@@ -246,6 +246,15 @@ export const getAuthorizedChatRun = async (runId: string, userId: string) => {
   return run;
 };
 
+const hasVisibleAssistantContent = (parts: ChatMessagePart[]) =>
+  parts.some((part) => {
+    if (part.type !== "text") {
+      return true;
+    }
+
+    return typeof part.content === "string" && part.content.length > 0;
+  });
+
 export const ensureChatRunGeneration = (runId: string) => {
   const existing = inFlightGenerations.get(runId);
 
@@ -330,6 +339,21 @@ export const runChatGeneration = async (runId: string) => {
   }
 
   if (!ACTIVE_CHAT_RUN_STATUSES.includes(run.status as (typeof ACTIVE_CHAT_RUN_STATUSES)[number])) {
+    return;
+  }
+
+  const now = new Date();
+  const [claimed] = await db
+    .update(chatRun)
+    .set({
+      lastHeartbeatAt: now,
+      status: "running",
+      updatedAt: now,
+    })
+    .where(and(eq(chatRun.id, runId), eq(chatRun.status, "queued")))
+    .returning({ id: chatRun.id });
+
+  if (!claimed) {
     return;
   }
 
@@ -463,7 +487,6 @@ export const runChatGeneration = async (runId: string) => {
   };
 
   try {
-    await updateRunStatus(runId, "running");
     await updateAssistantMessage({
       assistantMessageId: run.assistantMessageId,
       parts: pendingParts,
@@ -621,8 +644,9 @@ export const getActiveChatRunSummary = async (chatId: string) => {
     .from(chatMessage)
     .where(eq(chatMessage.id, activeRun.assistantMessageId))
     .limit(1);
-  const hasAssistantContent =
-    getTextContent((assistantMessage?.parts ?? []) as ChatMessagePart[]).length > 0;
+  const hasAssistantContent = hasVisibleAssistantContent(
+    (assistantMessage?.parts ?? []) as ChatMessagePart[],
+  );
   const lastActivity = activeRun.lastHeartbeatAt ?? activeRun.updatedAt ?? activeRun.createdAt;
   const isHeartbeatStale = Date.now() - lastActivity.getTime() > STALE_CHAT_RUN_MS;
   const isOrphanedEmptyRun =
@@ -696,7 +720,14 @@ export const createChatRunRecords = async (input: {
       userId: input.userId,
     });
   } catch (error) {
-    throwIfActiveChatRunConflict(error);
+    if (isActiveChatRunConflict(error)) {
+      await db
+        .delete(chatMessage)
+        .where(inArray(chatMessage.id, [input.userMessage.id, input.assistantMessageId]));
+      throw new ActiveChatRunConflictError();
+    }
+
+    throw error;
   }
 
   await db.update(chat).set({ updatedAt: now }).where(eq(chat.id, input.chatId));

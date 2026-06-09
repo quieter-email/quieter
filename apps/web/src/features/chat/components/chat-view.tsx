@@ -90,12 +90,12 @@ export const ChatView = ({
   const editUserMessageMutation = useMutation(orpc.chat.editUserMessage.mutationOptions());
   const regenerateResponseMutation = useMutation(orpc.chat.regenerateResponse.mutationOptions());
 
-  const beginAssistantStream = (result: ChatRunStartResult) => {
-    if (!chatId) {
-      return;
-    }
+  const streamChatIdRef = useRef<string | null>(null);
 
-    queryClient.setQueryData<ChatQueryData>(getChatQueryKey(mailboxId, chatId), (current) =>
+  const beginAssistantStream = (result: ChatRunStartResult) => {
+    streamChatIdRef.current = result.chatId;
+
+    queryClient.setQueryData<ChatQueryData>(getChatQueryKey(mailboxId, result.chatId), (current) =>
       current
         ? {
             ...current,
@@ -116,11 +116,13 @@ export const ChatView = ({
   const liveRunId = streamRunId ?? (isActiveRun(activeRun) ? (activeRun?.id ?? null) : null);
 
   const commitStreamResult = (result: ChatRunStreamDone) => {
-    if (!chatId || !result.assistantMessageId) {
+    const resolvedChatId = streamChatIdRef.current ?? chatId;
+
+    if (!resolvedChatId || !result.assistantMessageId) {
       return;
     }
 
-    const queryKey = getChatQueryKey(mailboxId, chatId);
+    const queryKey = getChatQueryKey(mailboxId, resolvedChatId);
     const messageStatus =
       result.status === "failed" || result.status === "cancelled" ? "failed" : "complete";
 
@@ -150,10 +152,12 @@ export const ChatView = ({
     enabled: !!liveRunId,
     onDone: (result) => {
       commitStreamResult(result);
+      const resolvedChatId = streamChatIdRef.current ?? chatId;
       setStreamRunId(null);
       setStreamingAssistant(null);
+      streamChatIdRef.current = null;
 
-      if (chatId) {
+      if (resolvedChatId) {
         void queryClient.invalidateQueries({ queryKey: getChatsQueryKey(mailboxId) });
       }
     },
@@ -162,6 +166,9 @@ export const ChatView = ({
     },
     onError: (message) => {
       toast.error(message);
+      setStreamRunId(null);
+      setStreamingAssistant(null);
+      streamChatIdRef.current = null;
     },
     runId: liveRunId,
   });

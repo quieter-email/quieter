@@ -80,6 +80,8 @@ export const consumeChatRunStream = async ({
     }
   }
 
+  buffer += decoder.decode();
+
   if (buffer.trim()) {
     const event = parseSseEvent(buffer);
 

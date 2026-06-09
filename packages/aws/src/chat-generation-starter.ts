@@ -20,10 +20,6 @@ const isDuplicateWorkflowStart = async (error: unknown) => {
     return false;
   }
 
-  if (error.response.status === 400) {
-    return true;
-  }
-
   const body = await error.response.text().catch(() => "");
   return body.includes("ExecutionAlreadyExists");
 };

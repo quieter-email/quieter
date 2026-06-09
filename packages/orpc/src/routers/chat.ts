@@ -126,6 +126,7 @@ const buildRunResponse = async (input: {
 }) => ({
   activeRun: await getActiveChatRunSummary(input.chatId),
   assistantMessageId: input.assistantMessageId,
+  chatId: input.chatId,
   messages: await listChatMessages(input.chatId),
   runId: input.runId,
   userMessageId: input.userMessageId,
@@ -345,11 +346,6 @@ export const chatRouter = {
 
       const userParts = [{ content: input.message, type: "text" }] as ChatMessagePart[];
 
-      await db
-        .update(chatMessage)
-        .set({ parts: userParts })
-        .where(eq(chatMessage.id, userMessage.id));
-
       const { assistantMessageId, runId } = await startAssistantRunOrThrow({
         chatId: authorizedChat.id,
         mailboxCategory: input.category,
@@ -357,6 +353,11 @@ export const chatRouter = {
         userId: context.userId,
         userMessagePosition: userMessage.position,
       });
+
+      await db
+        .update(chatMessage)
+        .set({ parts: userParts })
+        .where(eq(chatMessage.id, userMessage.id));
 
       return buildRunResponse({
         assistantMessageId,
