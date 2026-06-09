@@ -16,7 +16,8 @@ import {
   type ChatRunStatus,
 } from "@quieter/database";
 import { isGmailServiceError, listMessagesWithDetails, type MailboxCategory } from "@quieter/gmail";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { publishChatRunEvent } from "./chat-run-stream";
 import {
   getAuthorizedGmailMailbox,
   markGmailMailboxNeedsReconnect,
@@ -28,9 +29,57 @@ const ACTIVE_CHAT_RUN_STATUSES = [
   "running",
   "waiting_on_tool",
 ] as const satisfies ChatRunStatus[];
-const DRAFT_PERSIST_INTERVAL_MS = 400;
+const CHAT_RUN_ACTIVE_CONFLICT_INDEX = "chat_run_one_active_per_chat";
+const ENQUEUE_CHAT_RUN_TIMEOUT_MS = 10_000;
+
+export class ActiveChatRunConflictError extends Error {
+  constructor() {
+    super("This chat already has a generation in progress.");
+    this.name = "ActiveChatRunConflictError";
+  }
+}
+
+const getPostgresErrorField = (error: unknown, field: "code" | "constraint") => {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+
+  if (field in error && typeof error[field as keyof typeof error] === "string") {
+    return error[field as keyof typeof error] as string;
+  }
+
+  if ("cause" in error && error.cause && typeof error.cause === "object" && field in error.cause) {
+    const value = error.cause[field as keyof typeof error.cause];
+    return typeof value === "string" ? value : undefined;
+  }
+
+  return undefined;
+};
+
+const isActiveChatRunConflict = (error: unknown) => {
+  if (getPostgresErrorField(error, "code") !== "23505") {
+    return false;
+  }
+
+  const constraint = getPostgresErrorField(error, "constraint");
+  return !constraint || constraint === CHAT_RUN_ACTIVE_CONFLICT_INDEX;
+};
+
+const throwIfActiveChatRunConflict = (error: unknown) => {
+  if (isActiveChatRunConflict(error)) {
+    throw new ActiveChatRunConflictError();
+  }
+
+  throw error;
+};
+const DRAFT_PERSIST_INTERVAL_MS = 750;
 const CANCEL_POLL_INTERVAL_MS = 1_000;
 const DEFAULT_MAX_ITERATIONS = 20;
+const STALE_CHAT_RUN_MS = 3 * 60 * 1_000;
+const STALE_CHAT_RUN_ERROR = "Generation stopped unexpectedly. Send your message again.";
+const HEARTBEAT_TOUCH_INTERVAL_MS = 5_000;
+
+const inFlightGenerations = new Map<string, Promise<void>>();
 
 const isGmailAuthError = (error: unknown) =>
   isGmailServiceError(error) &&
@@ -112,6 +161,24 @@ const getTextContent = (parts: ChatMessagePart[]) =>
     .replace(/\s+/g, " ")
     .trim();
 
+/** StreamProcessor appends a new assistant message; use the latest one for draft persistence. */
+const getStreamingAssistantParts = (messages: UIMessage[]): ChatMessagePart[] | null => {
+  const assistants = messages.filter((message) => message.role === "assistant");
+  const streaming = [...assistants].reverse().find((message) =>
+    message.parts.some((part) => {
+      if (part.type !== "text") {
+        return true;
+      }
+
+      return "content" in part && typeof part.content === "string" && part.content.length > 0;
+    }),
+  );
+
+  const parts = (streaming ?? assistants.at(-1))?.parts;
+
+  return parts ? (parts as ChatMessagePart[]) : null;
+};
+
 const toUiMessages = (
   messages: Array<{
     createdAt: Date;
@@ -169,13 +236,50 @@ const isCancelRequested = async (runId: string) => {
   return !!row?.cancelRequestedAt;
 };
 
+export const getAuthorizedChatRun = async (runId: string, userId: string) => {
+  const [run] = await db.select().from(chatRun).where(eq(chatRun.id, runId)).limit(1);
+
+  if (!run || run.userId !== userId) {
+    return null;
+  }
+
+  return run;
+};
+
+export const ensureChatRunGeneration = (runId: string) => {
+  const existing = inFlightGenerations.get(runId);
+
+  if (existing) {
+    return existing;
+  }
+
+  const generation = runChatGeneration(runId)
+    .catch((error) => {
+      console.error("Chat generation failed.", error);
+    })
+    .finally(() => {
+      inFlightGenerations.delete(runId);
+    });
+
+  inFlightGenerations.set(runId, generation);
+  return generation;
+};
+
+export const handoffChatRunToBackground = (runId: string) => {
+  if (inFlightGenerations.has(runId)) {
+    return;
+  }
+
+  void enqueueChatRun(runId).catch((error) => {
+    console.error("Could not hand off chat generation to the background worker.", error);
+  });
+};
+
 export const enqueueChatRun = async (runId: string) => {
   const startUrl = process.env.CHAT_GENERATION_START_URL?.trim();
 
   if (!startUrl) {
-    void runChatGeneration(runId).catch((error) => {
-      console.error("Inline chat generation failed.", error);
-    });
+    void ensureChatRunGeneration(runId);
     return;
   }
 
@@ -187,18 +291,34 @@ export const enqueueChatRun = async (runId: string) => {
     );
   }
 
-  const response = await fetch(startUrl, {
-    body: JSON.stringify({ runId }),
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), ENQUEUE_CHAT_RUN_TIMEOUT_MS);
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Failed to enqueue chat generation (${response.status}): ${body}`);
+  try {
+    const response = await fetch(startUrl, {
+      body: JSON.stringify({ runId }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Failed to enqueue chat generation (${response.status}): ${body}`);
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(
+        `Timed out enqueueing chat generation after ${ENQUEUE_CHAT_RUN_TIMEOUT_MS}ms.`,
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 };
 
@@ -238,6 +358,8 @@ export const runChatGeneration = async (runId: string) => {
   let persistTimeout: ReturnType<typeof setTimeout> | undefined;
   let pendingParts: ChatMessagePart[] = assistantDraft.parts;
   let cancelled = false;
+  let hasPersistedStreamingDraft = false;
+  let lastHeartbeatTouchAt = 0;
 
   const cancelPoll = setInterval(() => {
     void isCancelRequested(runId).then((shouldCancel) => {
@@ -264,8 +386,56 @@ export const runChatGeneration = async (runId: string) => {
     });
   };
 
+  const persistStreamingDraft = () => {
+    void updateAssistantMessage({
+      assistantMessageId: run.assistantMessageId,
+      parts: pendingParts,
+      status: "streaming",
+    });
+    void updateRunStatus(runId, "running");
+  };
+
+  const touchRunHeartbeat = () => {
+    const now = Date.now();
+
+    if (now - lastHeartbeatTouchAt < HEARTBEAT_TOUCH_INTERVAL_MS) {
+      return;
+    }
+
+    lastHeartbeatTouchAt = now;
+    void updateRunStatus(runId, "running");
+  };
+
+  const emitDraft = (parts: ChatMessagePart[]) => {
+    pendingParts = parts;
+    publishChatRunEvent(runId, {
+      assistantMessageId: run.assistantMessageId,
+      parts,
+      type: "draft",
+    });
+    touchRunHeartbeat();
+    scheduleAssistantDraftPersist(parts);
+  };
+
   const scheduleAssistantDraftPersist = (parts: ChatMessagePart[]) => {
     pendingParts = parts;
+
+    const hasVisibleContent = parts.some((part) => {
+      if (part.type === "tool-call" || part.type === "tool-result") {
+        return true;
+      }
+
+      if (part.type === "text" || part.type === "thinking") {
+        return typeof part.content === "string" && part.content.length > 0;
+      }
+
+      return false;
+    });
+
+    if (hasVisibleContent && !hasPersistedStreamingDraft) {
+      hasPersistedStreamingDraft = true;
+      persistStreamingDraft();
+    }
 
     if (persistTimeout) {
       return;
@@ -273,12 +443,7 @@ export const runChatGeneration = async (runId: string) => {
 
     persistTimeout = setTimeout(() => {
       persistTimeout = undefined;
-      void updateAssistantMessage({
-        assistantMessageId: run.assistantMessageId,
-        parts: pendingParts,
-        status: "streaming",
-      });
-      void updateRunStatus(runId, "running");
+      persistStreamingDraft();
     }, DRAFT_PERSIST_INTERVAL_MS);
   };
 
@@ -307,21 +472,22 @@ export const runChatGeneration = async (runId: string) => {
 
     const { messages: finalMessages } = await runChatStream({
       abortController,
-      initialMessages: toUiMessages(visibleMessages),
+      initialMessages: toUiMessages(
+        visibleMessages.filter((message) => message.id !== run.assistantMessageId),
+      ),
       middleware: [usageMiddleware],
       onMessagesChange: (nextMessages) => {
-        const assistantMessage =
-          nextMessages.find((message) => message.id === run.assistantMessageId) ??
-          [...nextMessages].reverse().find((message) => message.role === "assistant");
+        const parts = getStreamingAssistantParts(nextMessages);
 
-        if (!assistantMessage) {
+        if (!parts) {
           return;
         }
 
-        scheduleAssistantDraftPersist(assistantMessage.parts as ChatMessagePart[]);
+        emitDraft(parts);
       },
       onToolCall: () => {
         void updateRunStatus(runId, "waiting_on_tool");
+        publishChatRunEvent(runId, { status: "waiting_on_tool", type: "status" });
       },
       systemPrompts: [gmailSearchPrompt],
       tools: [
@@ -341,13 +507,18 @@ export const runChatGeneration = async (runId: string) => {
       ],
     });
 
-    const finalAssistant =
-      finalMessages.find((message) => message.id === run.assistantMessageId) ??
-      [...finalMessages].reverse().find((message) => message.role === "assistant");
-    const finalParts = (finalAssistant?.parts ?? pendingParts) as ChatMessagePart[];
+    if (persistTimeout) {
+      clearTimeout(persistTimeout);
+      persistTimeout = undefined;
+    }
+
+    const finalParts = (getStreamingAssistantParts(finalMessages) ??
+      pendingParts) as ChatMessagePart[];
     const fallbackTitle = getTextContent(
       visibleMessages.find((message) => message.role === "user")?.parts ?? [],
     );
+
+    const terminalStatus = cancelled ? "cancelled" : "complete";
 
     await updateAssistantMessage({
       assistantMessageId: run.assistantMessageId,
@@ -355,7 +526,14 @@ export const runChatGeneration = async (runId: string) => {
       parts: finalParts,
       status: cancelled ? "failed" : "complete",
     });
-    await updateRunStatus(runId, cancelled ? "cancelled" : "complete");
+    await updateRunStatus(runId, terminalStatus);
+    publishChatRunEvent(runId, {
+      assistantMessageId: run.assistantMessageId,
+      error: cancelled ? "Generation cancelled." : null,
+      parts: finalParts,
+      status: terminalStatus,
+      type: "done",
+    });
     await db
       .update(chat)
       .set({
@@ -371,11 +549,25 @@ export const runChatGeneration = async (runId: string) => {
     if (cancelled || abortController.signal.aborted) {
       await flushAssistantDraft("failed", "Generation cancelled.");
       await updateRunStatus(runId, "cancelled", { error: "Generation cancelled." });
+      publishChatRunEvent(runId, {
+        assistantMessageId: run.assistantMessageId,
+        error: "Generation cancelled.",
+        parts: pendingParts,
+        status: "cancelled",
+        type: "done",
+      });
       return;
     }
 
     await flushAssistantDraft("failed", message);
     await updateRunStatus(runId, "failed", { error: message });
+    publishChatRunEvent(runId, {
+      assistantMessageId: run.assistantMessageId,
+      error: message,
+      parts: pendingParts,
+      status: "failed",
+      type: "done",
+    });
   } finally {
     clearInterval(cancelPoll);
 
@@ -385,31 +577,69 @@ export const runChatGeneration = async (runId: string) => {
   }
 };
 
-export const hasActiveChatRun = async (chatId: string) => {
-  const [activeRun] = await db
-    .select({ id: chatRun.id })
-    .from(chatRun)
-    .where(and(eq(chatRun.chatId, chatId), inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])))
+const failStaleChatRun = async (run: { assistantMessageId: string; id: string }) => {
+  const [assistantMessage] = await db
+    .select({ parts: chatMessage.parts })
+    .from(chatMessage)
+    .where(eq(chatMessage.id, run.assistantMessageId))
     .limit(1);
 
-  return !!activeRun;
+  await updateAssistantMessage({
+    assistantMessageId: run.assistantMessageId,
+    error: STALE_CHAT_RUN_ERROR,
+    parts: (assistantMessage?.parts ?? [{ content: "", type: "text" }]) as ChatMessagePart[],
+    status: "failed",
+  });
+  await updateRunStatus(run.id, "failed", { error: STALE_CHAT_RUN_ERROR });
 };
+
+export const hasActiveChatRun = async (chatId: string) => !!(await getActiveChatRunSummary(chatId));
 
 export const getActiveChatRunSummary = async (chatId: string) => {
   const [activeRun] = await db
     .select({
       assistantMessageId: chatRun.assistantMessageId,
       cancelRequestedAt: chatRun.cancelRequestedAt,
+      createdAt: chatRun.createdAt,
       error: chatRun.error,
       id: chatRun.id,
+      lastHeartbeatAt: chatRun.lastHeartbeatAt,
       status: chatRun.status,
+      updatedAt: chatRun.updatedAt,
     })
     .from(chatRun)
     .where(and(eq(chatRun.chatId, chatId), inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])))
     .orderBy(desc(chatRun.createdAt))
     .limit(1);
 
-  return activeRun ?? null;
+  if (!activeRun) {
+    return null;
+  }
+
+  const [assistantMessage] = await db
+    .select({ parts: chatMessage.parts })
+    .from(chatMessage)
+    .where(eq(chatMessage.id, activeRun.assistantMessageId))
+    .limit(1);
+  const hasAssistantContent =
+    getTextContent((assistantMessage?.parts ?? []) as ChatMessagePart[]).length > 0;
+  const lastActivity = activeRun.lastHeartbeatAt ?? activeRun.updatedAt ?? activeRun.createdAt;
+  const isHeartbeatStale = Date.now() - lastActivity.getTime() > STALE_CHAT_RUN_MS;
+  const isOrphanedEmptyRun =
+    Date.now() - activeRun.createdAt.getTime() > STALE_CHAT_RUN_MS && !hasAssistantContent;
+
+  if (isHeartbeatStale || isOrphanedEmptyRun) {
+    await failStaleChatRun(activeRun);
+    return null;
+  }
+
+  return {
+    assistantMessageId: activeRun.assistantMessageId,
+    cancelRequestedAt: activeRun.cancelRequestedAt,
+    error: activeRun.error,
+    id: activeRun.id,
+    status: activeRun.status,
+  };
 };
 
 export const createChatRunRecords = async (input: {
@@ -427,30 +657,31 @@ export const createChatRunRecords = async (input: {
 }) => {
   const now = new Date();
 
-  await db.transaction(async (tx) => {
-    await tx.insert(chatMessage).values({
-      chatId: input.chatId,
-      createdAt: now,
-      id: input.userMessage.id,
-      parts: input.userMessage.parts,
-      position: input.userMessage.position,
-      role: "user",
-      status: "complete",
-      userId: input.userId,
-    });
+  // Neon HTTP driver does not support db.transaction(); keep writes ordered by FK deps.
+  await db.insert(chatMessage).values({
+    chatId: input.chatId,
+    createdAt: now,
+    id: input.userMessage.id,
+    parts: input.userMessage.parts,
+    position: input.userMessage.position,
+    role: "user",
+    status: "complete",
+    userId: input.userId,
+  });
 
-    await tx.insert(chatMessage).values({
-      chatId: input.chatId,
-      createdAt: now,
-      id: input.assistantMessageId,
-      parts: [{ content: "", type: "text" }] as ChatMessagePart[],
-      position: input.userMessage.position + 1,
-      role: "assistant",
-      status: "draft",
-      userId: input.userId,
-    });
+  await db.insert(chatMessage).values({
+    chatId: input.chatId,
+    createdAt: now,
+    id: input.assistantMessageId,
+    parts: [{ content: "", type: "text" }] as ChatMessagePart[],
+    position: input.userMessage.position + 1,
+    role: "assistant",
+    status: "draft",
+    userId: input.userId,
+  });
 
-    await tx.insert(chatRun).values({
+  try {
+    await db.insert(chatRun).values({
       assistantMessageId: input.assistantMessageId,
       chatId: input.chatId,
       createdAt: now,
@@ -464,7 +695,65 @@ export const createChatRunRecords = async (input: {
       updatedAt: now,
       userId: input.userId,
     });
+  } catch (error) {
+    throwIfActiveChatRunConflict(error);
+  }
 
-    await tx.update(chat).set({ updatedAt: now }).where(eq(chat.id, input.chatId));
+  await db.update(chat).set({ updatedAt: now }).where(eq(chat.id, input.chatId));
+};
+
+export const startAssistantRun = async (input: {
+  chatId: string;
+  mailboxCategory: string;
+  mailboxId: string;
+  runId?: string;
+  userId: string;
+  userMessagePosition: number;
+}) => {
+  const runId = input.runId ?? crypto.randomUUID();
+  const assistantMessageId = crypto.randomUUID();
+  const now = new Date();
+
+  await db
+    .delete(chatMessage)
+    .where(
+      and(
+        eq(chatMessage.chatId, input.chatId),
+        gt(chatMessage.position, input.userMessagePosition),
+      ),
+    );
+
+  await db.insert(chatMessage).values({
+    chatId: input.chatId,
+    createdAt: now,
+    id: assistantMessageId,
+    parts: [{ content: "", type: "text" }] as ChatMessagePart[],
+    position: input.userMessagePosition + 1,
+    role: "assistant",
+    status: "draft",
+    userId: input.userId,
   });
+
+  try {
+    await db.insert(chatRun).values({
+      assistantMessageId,
+      chatId: input.chatId,
+      createdAt: now,
+      executionName: runId,
+      id: runId,
+      lastHeartbeatAt: now,
+      mailboxCategory: input.mailboxCategory,
+      mailboxId: input.mailboxId,
+      maxIterations: DEFAULT_MAX_ITERATIONS,
+      status: "queued",
+      updatedAt: now,
+      userId: input.userId,
+    });
+  } catch (error) {
+    throwIfActiveChatRunConflict(error);
+  }
+
+  await db.update(chat).set({ updatedAt: now }).where(eq(chat.id, input.chatId));
+
+  return { assistantMessageId, runId };
 };

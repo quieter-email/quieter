@@ -15,7 +15,7 @@ export const ToolResultPart = ({
 
   if (!result?.messages?.length) {
     if (result?.error) {
-      return <p className="text-xs text-destructive/80">{result.error}</p>;
+      return <p className="text-xs text-destructive">{result.error}</p>;
     }
     return null;
   }
@@ -27,38 +27,38 @@ export const ToolResultPart = ({
       initial={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
     >
-      <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <HugeiconsIcon aria-hidden className="size-3 shrink-0" icon={Mail01Icon} />
         <span>
           {result.messages.length} result{result.messages.length !== 1 ? "s" : ""}
         </span>
       </div>
-      <div className="flex flex-col">
+      <div className="flex flex-col gap-0.5">
         {result.messages.map((message) => (
           <div
-            className="rounded-md px-3 py-1.5 transition-colors hover:bg-muted/30"
+            className="rounded-md border border-transparent px-2 py-1.5 transition-colors hover:border-border hover:bg-muted"
             key={message.id}
           >
             <div className="flex min-w-0 items-baseline gap-2">
               <span
                 className={cn("min-w-0 flex-1 truncate text-xs", {
                   "font-medium text-foreground": message.isUnread,
-                  "text-foreground/75": !message.isUnread,
+                  "text-foreground/90": !message.isUnread,
                 })}
               >
                 {message.subject || "(no subject)"}
               </span>
               {message.date && (
-                <span className="shrink-0 text-[10px] text-muted-foreground/50">
+                <span className="shrink-0 text-[10px] text-muted-foreground">
                   {formatMessageDate(message.date)}
                 </span>
               )}
             </div>
             {message.from && (
-              <p className="mt-0.5 truncate text-[11px] text-muted-foreground/60">{message.from}</p>
+              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{message.from}</p>
             )}
             {message.snippet && (
-              <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground/40">
+              <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
                 {message.snippet}
               </p>
             )}

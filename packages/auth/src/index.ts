@@ -111,9 +111,9 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (createdUser, context) => {
-          const termsAcceptedAt = readTermsAcceptedAtFromRequest(context?.request);
+          const hasAcceptedTerms = readTermsAcceptedAtFromRequest(context?.request);
 
-          if (!termsAcceptedAt) {
+          if (!hasAcceptedTerms) {
             throw new APIError("BAD_REQUEST", {
               message: "Accept the Terms of Service and Privacy Policy to create an account.",
             });
@@ -122,7 +122,7 @@ export const auth = betterAuth({
           return {
             data: {
               ...createdUser,
-              termsAcceptedAt,
+              termsAcceptedAt: new Date(),
             },
           };
         },

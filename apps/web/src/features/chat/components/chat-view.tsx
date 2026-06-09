@@ -1,5 +1,6 @@
 "use client";
 
+import type { ChatMessagePart } from "@quieter/database";
 import type { RouterOutputs } from "@quieter/orpc";
 import type { UIMessage } from "@tanstack/ai";
 import { BILLING_FEATURES, hasBillingPlanAccess } from "@quieter/billing/plans";
@@ -17,25 +18,20 @@ import { chatQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-
 import { orpc } from "~/lib/orpc";
 import type { ChatViewProps } from "../types";
 import { createChatTurns } from "../domain/chat-turns";
+import { useChatRunStream, type ChatRunStreamDone } from "../hooks/use-chat-run-stream";
 import { ChatComposer } from "./chat-composer";
 import { ChatTranscript } from "./chat-transcript";
 
-type StoredChatMessage = RouterOutputs["chat"]["get"]["messages"][number];
-type ActiveChatRun = RouterOutputs["chat"]["get"]["activeRun"];
+type ChatQueryData = RouterOutputs["chat"]["get"];
+type StoredChatMessage = ChatQueryData["messages"][number];
+type ActiveChatRun = ChatQueryData["activeRun"];
+type ChatRunStartResult = RouterOutputs["chat"]["sendMessage"];
 
 const isActiveRun = (activeRun: ActiveChatRun | null | undefined) =>
   !!activeRun &&
   (activeRun.status === "queued" ||
     activeRun.status === "running" ||
     activeRun.status === "waiting_on_tool");
-
-const getPollInterval = (activeRun: ActiveChatRun | null | undefined) => {
-  if (!isActiveRun(activeRun)) {
-    return false;
-  }
-
-  return 2_000;
-};
 
 const normalizeChatMessages = (messages: StoredChatMessage[]): UIMessage[] =>
   messages.map((message) => ({
@@ -56,11 +52,14 @@ export const ChatView = ({
   const queryClient = useQueryClient();
   const billingQuery = useQuery(userBillingQueryOptions());
   const [input, setInput] = useState("");
+  const [streamRunId, setStreamRunId] = useState<string | null>(null);
+  const [streamingAssistant, setStreamingAssistant] = useState<{
+    messageId: string;
+    parts: ChatMessagePart[];
+  } | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const chatQuery = useQuery({
     ...chatQueryOptions(mailboxId, chatId),
-    refetchInterval: (query) => getPollInterval(query.state.data?.activeRun ?? null),
-    refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
   });
   const createChatMutation = useMutation({
@@ -88,30 +87,116 @@ export const ChatView = ({
       });
     },
   });
+  const editUserMessageMutation = useMutation(orpc.chat.editUserMessage.mutationOptions());
+  const regenerateResponseMutation = useMutation(orpc.chat.regenerateResponse.mutationOptions());
 
-  const visibleMessages = useMemo(
-    () => (chatQuery.data ? normalizeChatMessages(chatQuery.data.messages) : []),
-    [chatQuery.data],
-  );
-  const turns = useMemo(() => createChatTurns(visibleMessages), [visibleMessages]);
+  const beginAssistantStream = (result: ChatRunStartResult) => {
+    if (!chatId) {
+      return;
+    }
+
+    queryClient.setQueryData<ChatQueryData>(getChatQueryKey(mailboxId, chatId), (current) =>
+      current
+        ? {
+            ...current,
+            activeRun: result.activeRun,
+            messages: result.messages,
+          }
+        : current,
+    );
+
+    setStreamRunId(result.runId);
+    setStreamingAssistant({
+      messageId: result.assistantMessageId,
+      parts: [{ content: "", type: "text" }],
+    });
+  };
+
   const activeRun = chatQuery.data?.activeRun ?? null;
-  const isStreaming = isActiveRun(activeRun);
+  const liveRunId = streamRunId ?? (isActiveRun(activeRun) ? (activeRun?.id ?? null) : null);
+
+  const commitStreamResult = (result: ChatRunStreamDone) => {
+    if (!chatId || !result.assistantMessageId) {
+      return;
+    }
+
+    const queryKey = getChatQueryKey(mailboxId, chatId);
+    const messageStatus =
+      result.status === "failed" || result.status === "cancelled" ? "failed" : "complete";
+
+    queryClient.setQueryData<ChatQueryData>(queryKey, (current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        activeRun: null,
+        messages: current.messages.map((message: StoredChatMessage) =>
+          message.id === result.assistantMessageId
+            ? {
+                ...message,
+                error: result.error ?? null,
+                parts: result.parts,
+                status: messageStatus,
+              }
+            : message,
+        ),
+      };
+    });
+  };
+
+  useChatRunStream({
+    enabled: !!liveRunId,
+    onDone: (result) => {
+      commitStreamResult(result);
+      setStreamRunId(null);
+      setStreamingAssistant(null);
+
+      if (chatId) {
+        void queryClient.invalidateQueries({ queryKey: getChatsQueryKey(mailboxId) });
+      }
+    },
+    onDraft: ({ assistantMessageId, parts }) => {
+      setStreamingAssistant({ messageId: assistantMessageId, parts });
+    },
+    onError: (message) => {
+      toast.error(message);
+    },
+    runId: liveRunId,
+  });
+
+  const visibleMessages = useMemo(() => {
+    const messages = chatQuery.data ? normalizeChatMessages(chatQuery.data.messages) : [];
+
+    if (!streamingAssistant) {
+      return messages;
+    }
+
+    return messages.map((message) =>
+      message.id === streamingAssistant.messageId
+        ? { ...message, parts: streamingAssistant.parts as UIMessage["parts"] }
+        : message,
+    );
+  }, [chatQuery.data, streamingAssistant]);
+
+  const turns = useMemo(() => createChatTurns(visibleMessages), [visibleMessages]);
+  const isStreaming = !!liveRunId;
   const hasMessages = visibleMessages.length > 0 || !!chatId;
   const isComposerLoading =
     isStreaming ||
     createChatMutation.isPending ||
     sendMessageMutation.isPending ||
-    cancelGenerationMutation.isPending;
+    cancelGenerationMutation.isPending ||
+    editUserMessageMutation.isPending ||
+    regenerateResponseMutation.isPending;
   const currentPlan = normalizeBillingPlan(billingQuery.data?.plan);
   const aiRequirement = BILLING_FEATURES.aiChat;
   const canUseAiChat =
     !!billingQuery.data?.hasUnlimitedAccess ||
     hasBillingPlanAccess(currentPlan, aiRequirement.requiredPlan);
   const composerDisabled = billingQuery.isPending || !canUseAiChat;
-  const errorMessage =
-    activeRun?.error ??
-    chatQuery.data?.messages.find((message) => message.error)?.error ??
-    undefined;
+  const errorMessage = activeRun?.error ?? chatQuery.data?.messages.at(-1)?.error ?? undefined;
 
   const submitPrompt = async () => {
     const prompt = input.trim();
@@ -125,12 +210,14 @@ export const ChatView = ({
         onChatIdChange(nextChatId);
       }
 
-      await sendMessageMutation.mutateAsync({
+      const result = await sendMessageMutation.mutateAsync({
         category: activeMailbox,
         chatId: nextChatId,
         mailboxId,
         message: prompt,
       });
+
+      beginAssistantStream(result);
       setInput("");
     } catch (error) {
       toast.error(
@@ -159,6 +246,60 @@ export const ChatView = ({
     void cancelGenerationMutation.mutateAsync({ chatId, mailboxId });
   };
 
+  const handleCopy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied to clipboard.");
+    } catch {
+      toast.error("Could not copy to clipboard.");
+    }
+  };
+
+  const handleEditSubmit = async (userMessageId: string, message: string) => {
+    if (!chatId || isComposerLoading || composerDisabled) {
+      return;
+    }
+
+    try {
+      const result = await editUserMessageMutation.mutateAsync({
+        category: activeMailbox,
+        chatId,
+        mailboxId,
+        message,
+        userMessageId,
+      });
+
+      beginAssistantStream(result);
+      void queryClient.invalidateQueries({ queryKey: getChatsQueryKey(mailboxId) });
+    } catch (error) {
+      toast.error(
+        error instanceof Error && error.message ? error.message : "Could not edit message.",
+      );
+    }
+  };
+
+  const handleRegenerate = async (assistantMessageId: string) => {
+    if (!chatId || isComposerLoading || composerDisabled) {
+      return;
+    }
+
+    try {
+      const result = await regenerateResponseMutation.mutateAsync({
+        assistantMessageId,
+        category: activeMailbox,
+        chatId,
+        mailboxId,
+      });
+
+      beginAssistantStream(result);
+      void queryClient.invalidateQueries({ queryKey: getChatsQueryKey(mailboxId) });
+    } catch (error) {
+      toast.error(
+        error instanceof Error && error.message ? error.message : "Could not regenerate response.",
+      );
+    }
+  };
+
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden border-l">
       <header className="flex min-h-14 items-center px-3 lg:hidden">
@@ -171,8 +312,14 @@ export const ChatView = ({
           {hasMessages ? (
             <>
               <ChatTranscript
-                errorMessage={errorMessage ?? undefined}
-                isLoading={isStreaming}
+                actionsDisabled={composerDisabled}
+                errorMessage={errorMessage}
+                isStreaming={isStreaming}
+                onCopy={(text) => void handleCopy(text)}
+                onEditSubmit={(userMessageId, message) =>
+                  void handleEditSubmit(userMessageId, message)
+                }
+                onRegenerate={(assistantMessageId) => void handleRegenerate(assistantMessageId)}
                 transcriptEndRef={transcriptEndRef}
                 turns={turns}
               />

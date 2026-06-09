@@ -144,6 +144,9 @@ export default $config({
       },
     });
     chatGenerationQueue.subscribe("packages/aws/src/chat-generation-starter.handler", {
+      batch: {
+        partialResponses: true,
+      },
       link: [chatGenerationWorkflow],
       timeout: "30 seconds",
     });

@@ -15,7 +15,9 @@
     "./organization-mail": "./src/organization-mail.ts",
     "./organization-mail-policy": "./src/organization-mail-policy.ts",
     "./router": "./src/routers/index.ts",
-    "./chat-generation": "./src/chat-generation.ts"
+    "./chat-generation": "./src/chat-generation.ts",
+    "./chat-run-stream": "./src/chat-run-stream.ts",
+    "./stream-chat-run": "./src/stream-chat-run.ts"
   },
   "scripts": {
     "fmt": "oxfmt --config ../../oxfmt.json .",

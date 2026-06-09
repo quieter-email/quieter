@@ -28,20 +28,20 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
       >
         {isActive ? (
           <m.span
-            animate={{ opacity: [0.45, 0.85, 0.45] }}
+            animate={{ opacity: [0.55, 1, 0.55] }}
             className="text-xs text-muted-foreground"
             transition={{ duration: 1.8, ease: "easeInOut", repeat: Number.POSITIVE_INFINITY }}
           >
             Thinking
           </m.span>
         ) : (
-          <span className="text-xs text-muted-foreground/50">Thought</span>
+          <span className="text-xs text-muted-foreground">Thought</span>
         )}
         {hasReasoning ? (
           <HugeiconsIcon
             aria-hidden
             className={cn(
-              "size-3 shrink-0 text-muted-foreground/40 transition-transform duration-200 ease-out",
+              "size-3 shrink-0 text-muted-foreground transition-transform duration-200 ease-out",
               "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
               { "rotate-90 opacity-100": expanded },
             )}
@@ -60,7 +60,7 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
           >
             <div className="py-1">
               <MarkdownContent
-                className="prose-sm prose-headings:text-muted-foreground/60 prose-p:text-xs/5 prose-p:text-muted-foreground/50 prose-p:italic prose-code:text-muted-foreground/60"
+                className="prose-headings:text-muted-foreground prose-p:text-xs/5 prose-p:text-muted-foreground prose-p:italic prose-code:text-muted-foreground"
                 markdown={content}
               />
             </div>

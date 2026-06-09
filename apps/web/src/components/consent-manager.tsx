@@ -1,8 +1,11 @@
 "use client";
 
-import { ConsentBanner, ConsentDialog, ConsentManagerProvider } from "@c15t/react";
+import { ConsentManagerProvider } from "@c15t/react";
 import { posthog } from "@c15t/scripts/posthog";
 import { type PropsWithChildren, useMemo } from "react";
+import { ConsentBanner } from "~/components/consent/consent-banner";
+import { consentEnglishI18n, consentLegalLinks } from "~/components/consent/consent-i18n";
+import { ConsentPreferencesDialog } from "~/components/consent/consent-preferences-dialog";
 
 const posthogToken =
   import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN?.trim() ||
@@ -45,13 +48,15 @@ export const ConsentManager = ({ children }: PropsWithChildren) => {
       options={{
         backendURL: consentBackendUrl,
         consentCategories: ["necessary", "measurement", "marketing"],
+        i18n: consentEnglishI18n,
+        legalLinks: consentLegalLinks,
         mode: "hosted",
         scripts,
-        ...(import.meta.env.DEV ? { overrides: { country: "DE" } } : {}),
+        ...(import.meta.env.DEV ? { overrides: { country: "DE", language: "en" } } : {}),
       }}
     >
       <ConsentBanner />
-      <ConsentDialog />
+      <ConsentPreferencesDialog />
       {children}
     </ConsentManagerProvider>
   );

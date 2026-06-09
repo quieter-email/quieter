@@ -26,6 +26,7 @@ import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callbac
 import { Route as ApiC15tSplatRouteImport } from './routes/api/c15t.$'
 import { Route as ApiBillingPolarWebhookRouteImport } from './routes/api/billing.polar-webhook'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
+import { Route as ApiChatRunsRunIdStreamRouteImport } from './routes/api/chat.runs.$runId.stream'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -112,6 +113,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiChatRunsRunIdStreamRoute = ApiChatRunsRunIdStreamRouteImport.update({
+  id: '/api/chat/runs/$runId/stream',
+  path: '/api/chat/runs/$runId/stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -131,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/api/c15t/$': typeof ApiC15tSplatRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
+  '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -150,6 +157,7 @@ export interface FileRoutesByTo {
   '/api/c15t/$': typeof ApiC15tSplatRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
+  '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -170,6 +178,7 @@ export interface FileRoutesById {
   '/api/c15t/$': typeof ApiC15tSplatRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
+  '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -191,6 +200,7 @@ export interface FileRouteTypes {
     | '/api/c15t/$'
     | '/api/gmail/callback'
     | '/api/orpc/$'
+    | '/api/chat/runs/$runId/stream'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -210,6 +220,7 @@ export interface FileRouteTypes {
     | '/api/c15t/$'
     | '/api/gmail/callback'
     | '/api/orpc/$'
+    | '/api/chat/runs/$runId/stream'
   id:
     | '__root__'
     | '/'
@@ -229,6 +240,7 @@ export interface FileRouteTypes {
     | '/api/c15t/$'
     | '/api/gmail/callback'
     | '/api/orpc/$'
+    | '/api/chat/runs/$runId/stream'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -249,6 +261,7 @@ export interface RootRouteChildren {
   ApiC15tSplatRoute: typeof ApiC15tSplatRoute
   ApiGmailCallbackRoute: typeof ApiGmailCallbackRoute
   ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
+  ApiChatRunsRunIdStreamRoute: typeof ApiChatRunsRunIdStreamRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -372,6 +385,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/chat/runs/$runId/stream': {
+      id: '/api/chat/runs/$runId/stream'
+      path: '/api/chat/runs/$runId/stream'
+      fullPath: '/api/chat/runs/$runId/stream'
+      preLoaderRoute: typeof ApiChatRunsRunIdStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -393,6 +413,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiC15tSplatRoute: ApiC15tSplatRoute,
   ApiGmailCallbackRoute: ApiGmailCallbackRoute,
   ApiOrpcSplatRoute: ApiOrpcSplatRoute,
+  ApiChatRunsRunIdStreamRoute: ApiChatRunsRunIdStreamRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

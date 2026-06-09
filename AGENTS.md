@@ -57,7 +57,7 @@
 - Keep Better Auth reactive hooks (`useSession`, `useListOrganizations`, `useListPasskeys`) as the source of truth for auth state. Do not use Better Auth active organization state for Quieter product context.
 - Compose state is mailbox-scoped. Persisted compose sessions and Gmail cache must stay isolated per mailbox.
 - Chats are mailbox-scoped. Chat lists, transcripts, mutations, and AI requests require an accessible `mailboxId`.
-- Chat generation is server-side: `chat.sendMessage` persists the user message, creates a `chatRun` plus draft assistant row, enqueues work to SST (`ChatGenerationQueue` → starter → `ChatGenerationWorkflow`), and returns immediately. Postgres is canonical; the browser polls `chat.get` while a run is active. `chat.cancelGeneration` sets a cooperative cancel flag.
+- Chat generation is server-side: `chat.sendMessage` persists the user message and creates a `chatRun` plus draft assistant row, then returns. The browser opens `GET /api/chat/runs/$runId/stream` (SSE) to run generation and receive token-by-token draft events while the tab is connected. Postgres draft writes are debounced for rejoin, other tabs, and tab-close durability. If the stream disconnects before completion, generation continues in-process or hands off to SST (`ChatGenerationQueue` → starter → `ChatGenerationWorkflow`) when `CHAT_GENERATION_START_URL` is set. `chat.get` is for initial/historical state, not polling. `chat.cancelGeneration` sets a cooperative cancel flag.
 - Bulk mailbox actions and conversation spam/trash actions operate on the loaded row set for the current mailbox.
 - History-based live sync applies to unfiltered mailbox views; filtered search and Drafts refresh manually.
 - Message-list prefetch on mount is capped to one extra page.

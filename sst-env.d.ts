@@ -6,6 +6,11 @@
 
 declare module "sst" {
   export interface Resource {
+    "ChatGenerationEnqueue": {
+      "name": string
+      "type": "sst.aws.Function"
+      "url": string
+    }
     "ChatGenerationQueue": {
       "type": "sst.aws.Queue"
       "url": string

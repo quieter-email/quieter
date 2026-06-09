@@ -57,7 +57,7 @@ const getConsentAdapter = () => {
   });
   consentKysely ??= createConsentKysely(consentPool);
   consentAdapter ??= kyselyAdapter({
-    db: consentKysely as unknown as Parameters<typeof kyselyAdapter>[0]["db"],
+    db: consentKysely,
     provider: "postgresql",
   });
 
@@ -66,10 +66,15 @@ const getConsentAdapter = () => {
 
 const ensureConsentMigrations = async () => {
   consentMigrationPromise ??= (async () => {
-    const adapter = getConsentAdapter();
-    const client = DB.names.prefix(consentTablePrefix).client(adapter);
-    const migration = await client.createMigrator().migrateToLatest();
-    await migration.execute();
+    try {
+      const adapter = getConsentAdapter();
+      const client = DB.names.prefix(consentTablePrefix).client(adapter);
+      const migration = await client.createMigrator().migrateToLatest();
+      await migration.execute();
+    } catch (error) {
+      consentMigrationPromise = undefined;
+      throw error;
+    }
   })();
 
   await consentMigrationPromise;

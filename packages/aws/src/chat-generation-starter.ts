@@ -8,19 +8,49 @@ const queuePayloadSchema = z.object({
 
 type SqsRecord = {
   body: string;
+  messageId: string;
 };
 
 type SqsEvent = {
   Records: SqsRecord[];
 };
 
-export const handler = async (event: SqsEvent) => {
-  for (const record of event.Records) {
-    const { runId } = queuePayloadSchema.parse(JSON.parse(record.body));
-
-    await workflow.start(Resource.ChatGenerationWorkflow, {
-      name: runId,
-      payload: { runId },
-    });
+const isDuplicateWorkflowStart = async (error: unknown) => {
+  if (!(error instanceof workflow.StartError)) {
+    return false;
   }
+
+  if (error.response.status === 400) {
+    return true;
+  }
+
+  const body = await error.response.text().catch(() => "");
+  return body.includes("ExecutionAlreadyExists");
+};
+
+export const handler = async (event: SqsEvent) => {
+  const batchItemFailures: { itemIdentifier: string }[] = [];
+
+  for (const record of event.Records) {
+    try {
+      const { runId } = queuePayloadSchema.parse(JSON.parse(record.body));
+
+      try {
+        await workflow.start(Resource.ChatGenerationWorkflow, {
+          name: runId,
+          payload: { runId },
+        });
+      } catch (error) {
+        if (await isDuplicateWorkflowStart(error)) {
+          continue;
+        }
+
+        throw error;
+      }
+    } catch {
+      batchItemFailures.push({ itemIdentifier: record.messageId });
+    }
+  }
+
+  return { batchItemFailures };
 };

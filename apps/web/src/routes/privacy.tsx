@@ -28,8 +28,12 @@ function PrivacyPage() {
         </li>
         <li>Billing and subscription data when you purchase a paid plan through Polar.</li>
         <li>
-          Technical data such as error reports, performance metrics, and limited product analytics
-          when you consent to measurement cookies.
+          Error and reliability reports (Sentry) in production to keep the service secure and
+          stable. This monitoring is not consent-gated.
+        </li>
+        <li>
+          Performance metrics and limited product analytics only when you consent to measurement
+          cookies.
         </li>
       </ul>
 
@@ -38,7 +42,8 @@ function PrivacyPage() {
         <li>Google for identity sign-in and Gmail mailbox authorization.</li>
         <li>Polar for checkout and subscription management.</li>
         <li>PostHog (EU) for product analytics when measurement consent is granted.</li>
-        <li>Sentry and Vercel for error monitoring and performance insights.</li>
+        <li>Sentry for error and reliability monitoring.</li>
+        <li>Vercel Speed Insights for performance metrics when measurement consent is granted.</li>
         <li>Neon, AWS, and other infrastructure providers that host the service.</li>
         <li>OpenRouter for server-side AI chat generation when you use chat features.</li>
       </ul>

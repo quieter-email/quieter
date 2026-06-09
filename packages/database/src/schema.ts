@@ -11,6 +11,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { defineRelations } from "drizzle-orm/relations";
 
@@ -571,6 +572,9 @@ export const chatRun = pgTable(
   (table) => [
     index("chat_run_chat_id_status_idx").on(table.chatId, table.status),
     unique("chat_run_execution_name_unique").on(table.executionName),
+    uniqueIndex("chat_run_one_active_per_chat")
+      .on(table.chatId)
+      .where(sql`${table.status} in ('queued', 'running', 'waiting_on_tool')`),
   ],
 );
 

@@ -15,7 +15,13 @@ const parseCookieHeader = (cookieHeader: string | null) => {
       continue;
     }
 
-    cookies[name] = decodeURIComponent(rawValue.join("=").trim());
+    const rawCookieValue = rawValue.join("=").trim();
+
+    try {
+      cookies[name] = decodeURIComponent(rawCookieValue);
+    } catch {
+      cookies[name] = rawCookieValue;
+    }
   }
 
   return cookies;

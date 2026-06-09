@@ -1,5 +1,4 @@
 @import "@quieter/ui/styles.css";
-@import "@c15t/react/styles.css";
 @source "./**/*.{ts,tsx}";
 
 .quieter-workspace-background {
