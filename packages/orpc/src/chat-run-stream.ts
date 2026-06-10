@@ -81,7 +81,21 @@ export const waitForChatRunStream = (runId: string, onEvent: RunSubscriber, sign
       return;
     }
 
-    const unsubscribe = subscribeChatRunEvents(runId, (event) => {
+    let unsubscribe: (() => void) | undefined;
+
+    const onAbort = () => {
+      cleanup();
+      resolve();
+    };
+
+    const cleanup = () => {
+      unsubscribe?.();
+      signal?.removeEventListener("abort", onAbort);
+    };
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+
+    unsubscribe = subscribeChatRunEvents(runId, (event) => {
       onEvent(event);
 
       if (event.type === "done") {
@@ -90,17 +104,10 @@ export const waitForChatRunStream = (runId: string, onEvent: RunSubscriber, sign
       }
     });
 
-    const cleanup = () => {
-      unsubscribe();
-      signal?.removeEventListener("abort", onAbort);
-    };
-
-    const onAbort = () => {
+    if (signal?.aborted) {
       cleanup();
       resolve();
-    };
-
-    signal?.addEventListener("abort", onAbort, { once: true });
+    }
   });
 
 export const formatChatRunSse = (event: ChatRunStreamEvent) => `data: ${JSON.stringify(event)}\n\n`;
