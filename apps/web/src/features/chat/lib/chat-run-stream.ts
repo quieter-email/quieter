@@ -1,5 +1,51 @@
 import type { ChatRunStreamEvent } from "@quieter/orpc/chat-run-stream";
 
+const chatRunStatuses = new Set([
+  "queued",
+  "running",
+  "waiting_on_tool",
+  "complete",
+  "failed",
+  "cancelled",
+]);
+
+const isChatMessageParts = (value: unknown) =>
+  Array.isArray(value) &&
+  value.every(
+    (part) =>
+      part !== null && typeof part === "object" && "type" in part && typeof part.type === "string",
+  );
+
+const hasValidError = (event: Record<string, unknown>) =>
+  !("error" in event) || event.error === null || typeof event.error === "string";
+
+const isChatRunStreamEvent = (value: unknown): value is ChatRunStreamEvent => {
+  if (!value || typeof value !== "object" || !("type" in value)) {
+    return false;
+  }
+
+  const event = value as Record<string, unknown>;
+
+  if (event.type === "draft") {
+    return typeof event.assistantMessageId === "string" && isChatMessageParts(event.parts);
+  }
+
+  if (event.type === "status") {
+    return (
+      typeof event.status === "string" && chatRunStatuses.has(event.status) && hasValidError(event)
+    );
+  }
+
+  return (
+    event.type === "done" &&
+    typeof event.assistantMessageId === "string" &&
+    isChatMessageParts(event.parts) &&
+    typeof event.status === "string" &&
+    chatRunStatuses.has(event.status) &&
+    hasValidError(event)
+  );
+};
+
 const parseSseEvent = (chunk: string): ChatRunStreamEvent | null => {
   const dataLine = chunk.split("\n").find((line) => line.startsWith("data: "));
 
@@ -10,16 +56,7 @@ const parseSseEvent = (chunk: string): ChatRunStreamEvent | null => {
   try {
     const event: unknown = JSON.parse(dataLine.slice("data: ".length));
 
-    if (
-      !event ||
-      typeof event !== "object" ||
-      !("type" in event) ||
-      !["done", "draft", "status"].includes(String(event.type))
-    ) {
-      return null;
-    }
-
-    return event as ChatRunStreamEvent;
+    return isChatRunStreamEvent(event) ? event : null;
   } catch {
     return null;
   }

@@ -80,8 +80,13 @@ export const ensureChatRunGeneration = (runId: string) => {
   }
 
   const generation = runChatGeneration(runId)
-    .catch((error) => {
+    .catch(async (error) => {
       console.error("Chat generation failed.", error);
+      await updateRunStatus(runId, "failed", {
+        error: error instanceof Error ? error.message : "Chat generation failed.",
+      }).catch((updateError) => {
+        console.error("Could not mark the failed chat generation.", updateError);
+      });
     })
     .finally(() => {
       inFlightGenerations.delete(runId);
@@ -98,6 +103,7 @@ export const handoffChatRunToBackground = (runId: string) => {
 
   void enqueueChatRun(runId).catch((error) => {
     console.error("Could not hand off chat generation to the background worker.", error);
+    return ensureChatRunGeneration(runId);
   });
 };
 
@@ -220,7 +226,7 @@ export const runChatGeneration = async (runId: string) => {
       persistTimeout = undefined;
     }
 
-    await pendingPersist;
+    await pendingPersist.catch(() => undefined);
     await updateAssistantMessage({
       assistantMessageId: run.assistantMessageId,
       error,
@@ -231,16 +237,18 @@ export const runChatGeneration = async (runId: string) => {
 
   const persistStreamingDraft = () => {
     const parts = pendingParts;
-    pendingPersist = pendingPersist.then(async () => {
-      await Promise.all([
-        updateAssistantMessage({
-          assistantMessageId: run.assistantMessageId,
-          parts,
-          status: "streaming",
-        }),
-        updateRunStatus(runId, "running"),
-      ]);
-    });
+    pendingPersist = pendingPersist
+      .catch(() => undefined)
+      .then(async () => {
+        await Promise.all([
+          updateAssistantMessage({
+            assistantMessageId: run.assistantMessageId,
+            parts,
+            status: "streaming",
+          }),
+          updateRunStatus(runId, "running"),
+        ]);
+      });
 
     void pendingPersist.catch((error) => {
       console.error("Could not persist the chat generation draft.", error);

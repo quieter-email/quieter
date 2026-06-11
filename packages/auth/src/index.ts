@@ -111,7 +111,7 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (createdUser, context) => {
-          const hasAcceptedTerms = readTermsAcceptedAtFromRequest(context?.request);
+          const hasAcceptedTerms = !!readTermsAcceptedAtFromRequest(context?.request);
 
           if (!hasAcceptedTerms) {
             throw new APIError("BAD_REQUEST", {
@@ -122,7 +122,7 @@ export const auth = betterAuth({
           return {
             data: {
               ...createdUser,
-              termsAcceptedAt: hasAcceptedTerms,
+              termsAcceptedAt: new Date(),
             },
           };
         },

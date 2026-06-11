@@ -515,6 +515,7 @@ export const chat = pgTable(
       table.updatedAt,
     ),
     unique("chat_id_user_id_unique").on(table.id, table.userId),
+    unique("chat_id_mailbox_id_user_id_unique").on(table.id, table.mailboxId, table.userId),
   ],
 );
 
@@ -537,6 +538,7 @@ export const chatMessage = pgTable(
       foreignColumns: [chat.id, chat.userId],
       name: "chat_message_chat_id_user_id_fkey",
     }).onDelete("cascade"),
+    unique("chat_message_id_chat_id_unique").on(table.id, table.chatId),
     unique("chat_message_chat_id_position_unique").on(table.chatId, table.position),
   ],
 );
@@ -545,19 +547,11 @@ export const chatRun = pgTable(
   "chatRun",
   {
     id: text("id").primaryKey(),
-    chatId: text("chatId")
-      .notNull()
-      .references(() => chat.id, { onDelete: "cascade" }),
-    userId: text("userId")
-      .notNull()
-      .references(() => user.id),
-    assistantMessageId: text("assistantMessageId")
-      .notNull()
-      .references(() => chatMessage.id, { onDelete: "cascade" }),
+    chatId: text("chatId").notNull(),
+    userId: text("userId").notNull(),
+    assistantMessageId: text("assistantMessageId").notNull(),
     status: text("status").$type<ChatRunStatus>().notNull(),
-    mailboxId: text("mailboxId")
-      .notNull()
-      .references(() => mailbox.id, { onDelete: "cascade" }),
+    mailboxId: text("mailboxId").notNull(),
     mailboxCategory: text("mailboxCategory").notNull(),
     cancelRequestedAt: timestamp("cancelRequestedAt"),
     lastHeartbeatAt: timestamp("lastHeartbeatAt"),
@@ -566,6 +560,16 @@ export const chatRun = pgTable(
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
+    foreignKey({
+      columns: [table.assistantMessageId, table.chatId],
+      foreignColumns: [chatMessage.id, chatMessage.chatId],
+      name: "chat_run_assistant_message_id_chat_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.chatId, table.mailboxId, table.userId],
+      foreignColumns: [chat.id, chat.mailboxId, chat.userId],
+      name: "chat_run_chat_id_mailbox_id_user_id_fkey",
+    }).onDelete("cascade"),
     index("chat_run_chat_id_status_idx").on(table.chatId, table.status),
     uniqueIndex("chat_run_one_active_per_chat")
       .on(table.chatId)

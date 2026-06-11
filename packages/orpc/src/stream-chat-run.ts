@@ -64,9 +64,26 @@ export const createChatRunStreamResponse = async (input: {
       input.requestSignal.addEventListener("abort", onAbort, { once: true });
 
       try {
+        if (input.requestSignal.aborted) {
+          resolveFinished();
+          handoffChatRunToBackground(input.runId);
+          return;
+        }
+
         const latestRun = (await getAuthorizedChatRun(input.runId, input.userId)) ?? run;
+
+        if (input.requestSignal.aborted) {
+          handoffChatRunToBackground(input.runId);
+          return;
+        }
+
         const assistantMessage = await getAssistantMessage(latestRun.assistantMessageId);
         const assistantParts = assistantMessage?.parts ?? [{ content: "", type: "text" }];
+
+        if (input.requestSignal.aborted) {
+          handoffChatRunToBackground(input.runId);
+          return;
+        }
 
         if (!isActiveChatRunStatus(latestRun.status)) {
           send({

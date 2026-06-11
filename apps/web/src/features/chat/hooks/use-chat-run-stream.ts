@@ -13,6 +13,11 @@ export type ChatRunStreamDone = {
 
 const waitForRetry = (attempt: number, signal: AbortSignal) =>
   new Promise<void>((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+
     const finish = () => {
       window.clearTimeout(timeout);
       signal.removeEventListener("abort", finish);
@@ -49,6 +54,7 @@ export const useChatRunStream = ({
       return;
     }
 
+    assistantMessageIdRef.current = null;
     const controller = new AbortController();
 
     void (async () => {
@@ -100,6 +106,7 @@ export const useChatRunStream = ({
     })();
 
     return () => {
+      assistantMessageIdRef.current = null;
       controller.abort();
     };
   }, [enabled, runId]);
