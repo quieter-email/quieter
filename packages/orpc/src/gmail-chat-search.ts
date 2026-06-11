@@ -4,7 +4,7 @@ import {
   getAuthorizedGmailMailbox,
   markGmailMailboxNeedsReconnect,
   refreshAuthorizedGmailAccessToken,
-} from "./mailbox";
+} from "./gmail-mailbox-access";
 
 const isGmailAuthError = (error: unknown) =>
   isGmailServiceError(error) &&
