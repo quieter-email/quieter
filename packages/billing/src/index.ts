@@ -368,7 +368,6 @@ export const reportAiUsage = async (input: {
         },
         name: AI_USAGE_EVENT_NAME,
         organizationId: getPolarApiOrganizationId(),
-        timestamp: new Date(),
       },
     ],
   });

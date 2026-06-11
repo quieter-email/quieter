@@ -309,7 +309,10 @@ export const runChatGeneration = async (runId: string) => {
         promptTokens: usage.promptTokens,
         userId: run.userId,
       }).catch((error) => {
-        console.error("Could not report AI usage to Polar.", error);
+        console.error(
+          "Could not report AI usage to Polar.",
+          error instanceof Error ? error.message : "Unknown error.",
+        );
       });
     },
   };

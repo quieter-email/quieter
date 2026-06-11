@@ -578,7 +578,6 @@ export const recordOrganizationMailUsage = async (input: OrganizationMailUsageIn
         },
         name: ORGANIZATION_MAIL_POLAR_EVENT_NAME,
         organizationId: getPolarApiOrganizationId(),
-        timestamp: now,
       },
     ],
   });
