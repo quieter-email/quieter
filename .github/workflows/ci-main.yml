@@ -88,3 +88,13 @@ jobs:
 
       - name: Verify a repeated migration run is a no-op
         run: bun run db:deploy
+
+      - name: Apply consent migrations to temporary PostgreSQL
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/quieter
+        run: bun run consent:migrate
+
+      - name: Verify a repeated consent migration run is a no-op
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/quieter
+        run: bun run consent:migrate

@@ -58,6 +58,12 @@ jobs:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
         run: bun run db:deploy
 
+      - name: Apply production consent migrations
+        if: ${{ env.SST_STAGE == 'production' }}
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+        run: bun run consent:migrate
+
       - name: Deploy SST
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

@@ -109,6 +109,11 @@
       "outputs": [],
       "interactive": true
     },
+    "consent:migrate": {
+      "env": ["DATABASE_MIGRATION_URL", "DATABASE_URL"],
+      "cache": false,
+      "outputs": []
+    },
     "dev": {
       "env": [
         "BETTER_AUTH_SECRET",

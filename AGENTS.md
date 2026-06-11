@@ -44,7 +44,7 @@
 - App router: [apps/web/src/router.tsx](/E:/Coding/quieter/apps/web/src/router.tsx)
 - Root providers/document: [apps/web/src/routes/\_\_root.tsx](/E:/Coding/quieter/apps/web/src/routes/__root.tsx)
 - API handlers stay under `apps/web/src/routes/api/**`.
-- Consent backend: `apps/web/src/lib/c15t.server.ts` + `apps/web/src/routes/api/c15t.$.ts`. Kysely adapter on Neon with `c15t_` table prefix; migrations run on first API request. Exempt `/api/c15t` and legal routes from the site-password gate.
+- Consent backend: `apps/web/src/lib/c15t.server.ts` + `apps/web/src/routes/api/c15t.$.ts`. Kysely adapter on Neon with `c15t_` table prefix. Production consent migrations run in `.github/workflows/sst-deploy.yml` via `bun run consent:migrate`; runtime requests still call the same migrator behind a Postgres advisory lock. Exempt `/api/c15t` and legal routes from the site-password gate.
 - Use route loaders / TanStack Start server functions for auth guards and request-scoped SSR data.
 - Validate search params with `validateSearch` + Zod (colocated on the route file; settings tab ids are shared via `apps/web/src/features/settings/domain/settings-tab.ts`).
 - Keep inbox `loaderDeps` limited to `mailboxId`.
