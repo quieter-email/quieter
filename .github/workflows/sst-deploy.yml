@@ -20,7 +20,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.stage || 'production' }}
+  group: quieter-deploy-${{ inputs.stage || 'production' }}
   cancel-in-progress: false
 
 jobs:
@@ -28,7 +28,7 @@ jobs:
     name: Deploy ${{ inputs.stage || 'production' }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     environment: ${{ inputs.stage || 'production' }}
-    timeout-minutes: 10
+    timeout-minutes: 25
     env:
       SST_STAGE: ${{ inputs.stage || 'production' }}
     steps:
@@ -48,6 +48,27 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Format check
+        run: bun run fmt:check
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
+
+      - name: Check migration history and schema drift
+        run: bun run db:check
+
+      - name: Apply production database migrations
+        if: ${{ env.SST_STAGE == 'production' }}
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+        run: bun run db:deploy
 
       - name: Deploy SST
         env:
@@ -134,12 +155,7 @@ jobs:
         if: ${{ env.SST_STAGE == 'production' }}
         env:
           VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "${VERCEL_DEPLOY_HOOK_URL}" ]; then
-            echo "VERCEL_DEPLOY_HOOK_URL is required to trigger the Vercel production deploy." >&2
-            exit 1
-          fi
-
-          curl --fail --show-error --silent --request POST "$VERCEL_DEPLOY_HOOK_URL"
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID || secrets.VERCEL_TEAM_ID || vars.VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: bun packages/deployment/src/wait-for-vercel-deployment.ts

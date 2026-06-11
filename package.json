@@ -60,6 +60,8 @@
   },
   "scripts": {
     "build": "turbo run build",
+    "db:check": "turbo run db:check --filter=@quieter/database",
+    "db:deploy": "turbo run db:deploy --filter=@quieter/database",
     "db:generate": "turbo run db:generate --filter=@quieter/database",
     "db:migrate": "turbo run db:migrate --filter=@quieter/database",
     "db:push": "turbo run db:push --filter=@quieter/database",

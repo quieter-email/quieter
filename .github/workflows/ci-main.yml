@@ -20,7 +20,21 @@ jobs:
   quality:
     name: Format, lint, typecheck, test
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 5
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: quieter
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d quieter"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,3 +58,26 @@ jobs:
 
       - name: Test
         run: bun run test
+
+      - name: Check migration history and schema drift
+        run: bun run db:check
+
+      - name: Deploy migrations to an empty database
+        env:
+          DATABASE_MIGRATION_URL: postgresql://postgres:postgres@localhost:5432/quieter
+        run: bun run db:deploy
+
+      - name: Simulate a legacy production database
+        env:
+          DATABASE_MIGRATION_URL: postgresql://postgres:postgres@localhost:5432/quieter
+        run: bun -e 'import { neon } from "@neondatabase/serverless"; await neon(process.env.DATABASE_MIGRATION_URL)`DROP SCHEMA drizzle CASCADE`'
+
+      - name: Automatically adopt the legacy schema
+        env:
+          DATABASE_MIGRATION_URL: postgresql://postgres:postgres@localhost:5432/quieter
+        run: bun run db:deploy
+
+      - name: Verify migrations are idempotent
+        env:
+          DATABASE_MIGRATION_URL: postgresql://postgres:postgres@localhost:5432/quieter
+        run: bun run db:deploy

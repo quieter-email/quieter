@@ -210,6 +210,18 @@
         "typescript": "catalog:",
       },
     },
+    "packages/deployment": {
+      "name": "@quieter/deployment",
+      "devDependencies": {
+        "@quieter/config": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "oxfmt": "catalog:",
+        "oxlint": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/gmail": {
       "name": "@quieter/gmail",
       "dependencies": {
@@ -1207,6 +1219,8 @@
     "@quieter/config": ["@quieter/config@workspace:packages/config"],
 
     "@quieter/database": ["@quieter/database@workspace:packages/database"],
+
+    "@quieter/deployment": ["@quieter/deployment@workspace:packages/deployment"],
 
     "@quieter/gmail": ["@quieter/gmail@workspace:packages/gmail"],
 

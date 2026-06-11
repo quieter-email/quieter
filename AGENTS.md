@@ -75,7 +75,7 @@
 - Inbound mail is stored under the fixed `mail/inbound/...` key prefix.
 - Managed inbound S3 objects must have at least one `managedMailMessage` reference. Ingestion deletes untracked objects immediately, and managed message deletion removes the S3 object synchronously when deleting its final database reference.
 - `AWS_REGION` or `AWS_DEFAULT_REGION` is required for the mail S3 uploader.
-- Production SST deploys sync `MAIL_BUCKET`, `MAIL_RECEIPT_TOPIC_ARN`, `MAIL_RECEIPT_ROLE_ARN`, `MAIL_RECEIPT_RULE_SET_NAME`, and `CHAT_GENERATION_START_URL` into Vercel as production-only sensitive env vars from `.sst/outputs.json`, then trigger a Vercel production Deploy Hook from `.github/workflows/sst-deploy.yml`. Set `CHAT_GENERATION_START_TOKEN` on Vercel from the `ChatGenerationStartToken` SST secret (`bun run sst secret get ChatGenerationStartToken`). The GitHub environment must provide the SST runtime secrets (`DATABASE_URL`, `GMAIL_TOKEN_ENCRYPTION_KEY`, `GOOGLE_GMAIL_CLIENT_ID`, `GOOGLE_GMAIL_CLIENT_SECRET`, `OPENROUTER_API_KEY`, `POLAR_ACCESS_TOKEN`) plus `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID`, and `VERCEL_DEPLOY_HOOK_URL`. Commit-triggered Vercel deployments stay disabled through `vercel.json` `git.deploymentEnabled`; do not use an ignored-build command that exits `0`, because it also cancels Deploy Hook builds.
+- Production deploys automatically adopt an existing matching schema into Drizzle migration history when needed, then apply committed migrations through `DATABASE_MIGRATION_URL` before updating SST or triggering Vercel. The workflow then syncs `MAIL_BUCKET`, `MAIL_RECEIPT_TOPIC_ARN`, `MAIL_RECEIPT_ROLE_ARN`, `MAIL_RECEIPT_RULE_SET_NAME`, and `CHAT_GENERATION_START_URL` into Vercel as production-only sensitive env vars from `.sst/outputs.json`, triggers the Vercel production Deploy Hook, and waits for the deployment result. Set `CHAT_GENERATION_START_TOKEN` on Vercel from the `ChatGenerationStartToken` SST secret (`bun run sst secret get ChatGenerationStartToken`). The GitHub environment must provide the SST runtime secrets (`DATABASE_URL`, `DATABASE_MIGRATION_URL`, `GMAIL_TOKEN_ENCRYPTION_KEY`, `GOOGLE_GMAIL_CLIENT_ID`, `GOOGLE_GMAIL_CLIENT_SECRET`, `OPENROUTER_API_KEY`, `POLAR_ACCESS_TOKEN`) plus `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID`, and `VERCEL_DEPLOY_HOOK_URL`. Commit-triggered Vercel deployments stay disabled through `vercel.json` `git.deploymentEnabled`; do not use an ignored-build command that exits `0`, because it also cancels Deploy Hook builds.
 - Run the combined local dev session with `bun run dev`; Turbo runs the web app and SST mail stack side by side. Run direct SST commands through `bun run sst ...`; the wrapper defaults to `sst.config.ts` and the `mail-dev` stage, and loads AWS credentials from `.env.local`.
 
 ## Billing
@@ -89,8 +89,11 @@
 ## Schema + Generated Files
 
 - Schema changes go in `packages/database/src/schema.ts`.
-- Use `bun run db:push --force` by default.
-- Only generate/apply migrations when explicitly needed.
+- Generate and commit a Drizzle migration for every schema change with `bun run db:generate`.
+- Run `bun run db:check` to validate migration history and confirm `schema.ts` has no uncommitted drift.
+- `bun run db:push --force` is only for disposable local databases. Never use `db:push` against production.
+- Production migrations run automatically in `.github/workflows/sst-deploy.yml`; do not apply production migrations locally.
+- Keep migrations compatible with the currently running release. Use expand/contract deployments for renames, required columns, destructive changes, type rewrites, and large backfills. Use reviewed custom SQL with concurrent index creation for large indexes.
 - Do not hand-edit Drizzle migration snapshots unless repairing generated output.
 - Do not hand-edit `apps/web/src/routeTree.gen.ts`.
 

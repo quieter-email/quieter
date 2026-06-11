@@ -7,8 +7,10 @@
     "./schema": "./src/schema.ts"
   },
   "scripts": {
-    "db:generate": "bun --env-file=../../.env.local drizzle-kit generate",
-    "db:migrate": "bun --env-file=../../.env.local drizzle-kit migrate",
+    "db:check": "drizzle-kit check && bun scripts/check-schema-drift.ts",
+    "db:deploy": "bun scripts/deploy-migrations.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun scripts/run-migrations.ts",
     "db:push": "bun --env-file=../../.env.local drizzle-kit push",
     "fmt": "oxfmt --config ../../oxfmt.json .",
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
