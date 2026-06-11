@@ -24,10 +24,90 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  changes:
+    name: Detect migration changes
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    outputs:
+      consent: ${{ steps.changes.outputs.consent }}
+      database: ${{ steps.changes.outputs.database }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect migration-related changes
+        id: changes
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "consent=true" >> "$GITHUB_OUTPUT"
+            echo "database=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git diff --quiet "$BEFORE_SHA...HEAD" -- \
+            apps/web/package.json \
+            apps/web/scripts/migrate-consent.ts \
+            apps/web/src/lib/c15t.server.ts \
+            bun.lock \
+            package.json \
+            turbo.json; then
+            echo "consent=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "consent=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          if git diff --quiet "$BEFORE_SHA...HEAD" -- \
+            bun.lock \
+            package.json \
+            packages/database/drizzle \
+            packages/database/drizzle.config.ts \
+            packages/database/package.json \
+            packages/database/scripts \
+            packages/database/src/schema.ts \
+            turbo.json; then
+            echo "database=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "database=true" >> "$GITHUB_OUTPUT"
+          fi
+
   verify:
     name: Verify release
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Format check
+        run: bun run fmt:check
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
+
+  migration-integration:
+    name: Migration integration tests
+    needs: changes
+    if: ${{ needs.changes.outputs.database == 'true' || needs.changes.outputs.consent == 'true' }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
     services:
       postgres:
         image: postgres:16
@@ -56,33 +136,34 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Format check
-        run: bun run fmt:check
-
-      - name: Lint
-        run: bun run lint
-
-      - name: Typecheck
-        run: bun run typecheck
-
-      - name: Test
-        run: bun run test
-
       - name: Check committed migrations match the schema
+        if: ${{ needs.changes.outputs.database == 'true' }}
         run: bun run db:check
 
       - name: Test committed database migrations
+        if: ${{ needs.changes.outputs.database == 'true' }}
         run: bun run db:test-migrations
 
       - name: Apply consent migrations
+        if: ${{ needs.changes.outputs.consent == 'true' }}
         run: bun run consent:migrate
 
       - name: Verify repeated consent migrations are a no-op
+        if: ${{ needs.changes.outputs.consent == 'true' }}
         run: bun run consent:migrate
 
   deploy:
     name: Deploy ${{ inputs.stage || 'production' }}
-    needs: verify
+    needs:
+      - migration-integration
+      - verify
+    if: >-
+      ${{
+        always() &&
+        needs.verify.result == 'success' &&
+        (needs.migration-integration.result == 'success' ||
+          needs.migration-integration.result == 'skipped')
+      }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     environment: ${{ inputs.stage || 'production' }}
     timeout-minutes: 25

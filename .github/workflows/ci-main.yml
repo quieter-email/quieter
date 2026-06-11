@@ -14,6 +14,56 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect migration changes
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    outputs:
+      consent: ${{ steps.changes.outputs.consent }}
+      database: ${{ steps.changes.outputs.database }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect migration-related changes
+        id: changes
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "consent=true" >> "$GITHUB_OUTPUT"
+            echo "database=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git diff --quiet "origin/$BASE_REF...HEAD" -- \
+            apps/web/package.json \
+            apps/web/scripts/migrate-consent.ts \
+            apps/web/src/lib/c15t.server.ts \
+            bun.lock \
+            package.json \
+            turbo.json; then
+            echo "consent=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "consent=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          if git diff --quiet "origin/$BASE_REF...HEAD" -- \
+            bun.lock \
+            package.json \
+            packages/database/drizzle \
+            packages/database/drizzle.config.ts \
+            packages/database/package.json \
+            packages/database/scripts \
+            packages/database/src/schema.ts \
+            turbo.json; then
+            echo "database=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "database=true" >> "$GITHUB_OUTPUT"
+          fi
+
   quality:
     name: Format, lint, typecheck, test
     runs-on: blacksmith-2vcpu-ubuntu-2404
@@ -44,6 +94,8 @@ jobs:
 
   migration-integration:
     name: Migration integration tests
+    needs: changes
+    if: ${{ needs.changes.outputs.database == 'true' || needs.changes.outputs.consent == 'true' }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     services:
@@ -75,13 +127,17 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Check committed migrations match the schema
+        if: ${{ needs.changes.outputs.database == 'true' }}
         run: bun run db:check
 
       - name: Test committed database migrations
+        if: ${{ needs.changes.outputs.database == 'true' }}
         run: bun run db:test-migrations
 
       - name: Apply consent migrations to temporary PostgreSQL
+        if: ${{ needs.changes.outputs.consent == 'true' }}
         run: bun run consent:migrate
 
       - name: Verify a repeated consent migration run is a no-op
+        if: ${{ needs.changes.outputs.consent == 'true' }}
         run: bun run consent:migrate
