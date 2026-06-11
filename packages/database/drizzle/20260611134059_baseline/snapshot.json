@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "feef570d-a515-40b0-b7e9-4f98aa7dec9c",
+  "id": "7314cf2f-aba9-48aa-b2cf-81a4cd0f58df",
   "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
@@ -31,12 +31,6 @@
     {
       "isRlsEnabled": false,
       "name": "chatMessage",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "chatRun",
       "entityType": "tables",
       "schema": "public"
     },
@@ -923,32 +917,6 @@
       "table": "chatMessage"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'complete'",
-      "generated": null,
-      "identity": null,
-      "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatMessage"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "error",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatMessage"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -960,162 +928,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "chatMessage"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatRun"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "chatId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatRun"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "userId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatRun"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "assistantMessageId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatRun"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatRun"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "mailboxId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatRun"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "mailboxCategory",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatRun"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "cancelRequestedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatRun"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "lastHeartbeatAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatRun"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "error",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatRun"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatRun"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatRun"
     },
     {
       "type": "text",
@@ -3018,19 +2830,6 @@
     {
       "type": "timestamp",
       "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "termsAcceptedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
@@ -3297,55 +3096,6 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "chat"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "chatId",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "status",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_run_chat_id_status_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chatRun"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "chatId",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"status\" in ('queued', 'running', 'waiting_on_tool')",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_run_one_active_per_chat",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chatRun"
     },
     {
       "nameExplicit": true,
@@ -3812,32 +3562,6 @@
       "table": "chatMessage"
     },
     {
-      "nameExplicit": true,
-      "columns": ["assistantMessageId", "chatId"],
-      "schemaTo": "public",
-      "tableTo": "chatMessage",
-      "columnsTo": ["id", "chatId"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "chat_run_assistant_message_id_chat_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chatRun"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["chatId", "mailboxId", "userId"],
-      "schemaTo": "public",
-      "tableTo": "chat",
-      "columnsTo": ["id", "mailboxId", "userId"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "chat_run_chat_id_mailbox_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chatRun"
-    },
-    {
       "nameExplicit": false,
       "columns": ["mailboxId"],
       "schemaTo": "public",
@@ -4138,14 +3862,6 @@
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "chatRun_pkey",
-      "schema": "public",
-      "table": "chatRun",
-      "entityType": "pks"
-    },
-    {
       "columns": ["mailboxId"],
       "nameExplicit": false,
       "name": "gmailCredential_pkey",
@@ -4307,24 +4023,6 @@
       "entityType": "uniques",
       "schema": "public",
       "table": "chat"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["id", "mailboxId", "userId"],
-      "nullsNotDistinct": false,
-      "name": "chat_id_mailbox_id_user_id_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "chat"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["id", "chatId"],
-      "nullsNotDistinct": false,
-      "name": "chat_message_id_chat_id_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "chatMessage"
     },
     {
       "nameExplicit": true,
