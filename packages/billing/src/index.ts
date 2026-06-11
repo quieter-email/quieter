@@ -28,6 +28,15 @@ type Paykit = PayKit<PolarProvider>;
 let paykit: Paykit | null = null;
 const billingProductIdCache = new Map<PaidBillingPlan, string>();
 let aiUsageMeterId: string | null = null;
+const aiUsageRates = {
+  "anthropic/claude-haiku-4.5": { completion: 500, prompt: 100 },
+  "google/gemini-3.1-flash-lite": { completion: 150, prompt: 25 },
+  "google/gemini-3.5-flash": { completion: 900, prompt: 150 },
+  "openai/gpt-5-nano": { completion: 40, prompt: 5 },
+  "openai/gpt-5.4-mini": { completion: 450, prompt: 75 },
+  "openai/gpt-5.4-nano": { completion: 125, prompt: 20 },
+  "openai/gpt-5.5": { completion: 3_000, prompt: 500 },
+} as const;
 
 const getPaykit = async () => {
   if (paykit) return paykit;
@@ -342,12 +351,14 @@ const getAiUsageMeterId = async () => {
 export const reportAiUsage = async (input: {
   chatId?: string | null;
   completionTokens: number;
-  model: string;
+  model: keyof typeof aiUsageRates;
   promptTokens: number;
   userId: string;
 }) => {
-  const promptCostCents = (input.promptTokens / 1_000_000) * 20;
-  const completionCostCents = (input.completionTokens / 1_000_000) * 125;
+  const rates = aiUsageRates[input.model];
+
+  const promptCostCents = (input.promptTokens / 1_000_000) * rates.prompt;
+  const completionCostCents = (input.completionTokens / 1_000_000) * rates.completion;
   const costCents = Number((promptCostCents + completionCostCents).toFixed(8));
 
   if (costCents <= 0) return;

@@ -1,5 +1,6 @@
 import type { MailboxCategory } from "@quieter/gmail";
 import {
+  chatModelSchema,
   composeEmailToolDef,
   createGmailLabelListServerTool,
   createGmailMessageServerTool,
@@ -15,14 +16,13 @@ import {
 } from "@quieter/ai";
 import { reportAiUsage } from "@quieter/billing";
 import {
-  chat,
   chatMessage,
   chatRun,
   db,
   type ChatMessagePart,
   type ChatMessageStatus,
 } from "@quieter/database";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { isCancelRequested, updateAssistantMessage, updateRunStatus } from "./chat-run-store";
 import { isActiveChatRunStatus, publishChatRunEvent } from "./chat-run-stream";
 import {
@@ -40,17 +40,6 @@ const HEARTBEAT_TOUCH_INTERVAL_MS = 5_000;
 const ENQUEUE_CHAT_RUN_TIMEOUT_MS = 10_000;
 
 const inFlightGenerations = new Map<string, Promise<void>>();
-
-const getTextContent = (parts: ChatMessagePart[]) =>
-  parts
-    .flatMap((part) =>
-      part.type === "text" && "content" in part && typeof part.content === "string"
-        ? [part.content]
-        : [],
-    )
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
 
 /** StreamProcessor may append multiple assistant messages across tool continuations. */
 const getStreamingAssistantParts = (
@@ -223,6 +212,7 @@ export const runChatGeneration = async (runId: string) => {
     return;
   }
 
+  const model = chatModelSchema.parse(run.model);
   const now = new Date();
   const [claimed] = await db
     .update(chatRun)
@@ -371,11 +361,11 @@ export const runChatGeneration = async (runId: string) => {
 
   const usageMiddleware: ChatMiddleware = {
     name: "polar-ai-usage",
-    onUsage: (context, usage) => {
+    onUsage: (_context, usage) => {
       void reportAiUsage({
         chatId: run.chatId,
         completionTokens: usage.completionTokens,
-        model: context.model,
+        model,
         promptTokens: usage.promptTokens,
         userId: run.userId,
       }).catch((error) => {
@@ -403,6 +393,7 @@ export const runChatGeneration = async (runId: string) => {
       abortController,
       initialMessages: streamInitialMessages,
       middleware: [usageMiddleware],
+      model,
       onMessagesChange: (nextMessages) => {
         const parts = getStreamingAssistantParts(nextMessages, streamStartMessageCount);
 
@@ -486,9 +477,6 @@ export const runChatGeneration = async (runId: string) => {
 
     const finalParts = (getStreamingAssistantParts(finalMessages, streamStartMessageCount) ??
       pendingParts) as ChatMessagePart[];
-    const fallbackTitle = getTextContent(
-      visibleMessages.find((message) => message.role === "user")?.parts ?? [],
-    );
     const terminalStatus = cancelled ? "cancelled" : "complete";
 
     pendingParts = finalParts;
@@ -497,18 +485,6 @@ export const runChatGeneration = async (runId: string) => {
       cancelled ? "Generation cancelled." : null,
     );
     await updateRunStatus(runId, terminalStatus);
-    await db
-      .update(chat)
-      .set({
-        title: sql<
-          string | null
-        >`coalesce(${chat.title}, ${fallbackTitle ? fallbackTitle.slice(0, 80) : null})`,
-        updatedAt: new Date(),
-      })
-      .where(eq(chat.id, run.chatId))
-      .catch((error) => {
-        console.error("Could not update the generated chat title.", error);
-      });
     publishChatRunEvent(runId, {
       assistantMessageId: run.assistantMessageId,
       error: cancelled ? "Generation cancelled." : null,

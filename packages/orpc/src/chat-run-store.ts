@@ -1,3 +1,4 @@
+import type { ChatModel } from "@quieter/ai";
 import {
   chat,
   chatMessage,
@@ -202,6 +203,7 @@ const createRun = (input: {
   createdAt: Date;
   mailboxCategory: string;
   mailboxId: string;
+  model: ChatModel;
   runId: string;
   userId: string;
 }) =>
@@ -213,6 +215,7 @@ const createRun = (input: {
     lastHeartbeatAt: input.createdAt,
     mailboxCategory: input.mailboxCategory,
     mailboxId: input.mailboxId,
+    model: input.model,
     status: "queued",
     updatedAt: input.createdAt,
     userId: input.userId,
@@ -223,6 +226,7 @@ export const createChatRunRecords = async (input: {
   chatId: string;
   mailboxCategory: string;
   mailboxId: string;
+  model: ChatModel;
   runId: string;
   userId: string;
   userMessage: {
@@ -267,6 +271,7 @@ export const startAssistantRun = async (input: {
   chatId: string;
   mailboxCategory: string;
   mailboxId: string;
+  model: ChatModel;
   userId: string;
   userMessage?: {
     id: string;
@@ -315,6 +320,7 @@ export const startAssistantRun = async (input: {
         createdAt: now,
         mailboxCategory: input.mailboxCategory,
         mailboxId: input.mailboxId,
+        model: input.model,
         runId,
         userId: input.userId,
       }),
@@ -331,6 +337,7 @@ export const continueAssistantRun = async (input: {
   chatId: string;
   mailboxCategory: string;
   mailboxId: string;
+  model: ChatModel;
   previousAssistant: {
     id: string;
     parts: ChatMessagePart[];
@@ -372,6 +379,7 @@ export const continueAssistantRun = async (input: {
         createdAt: now,
         mailboxCategory: input.mailboxCategory,
         mailboxId: input.mailboxId,
+        model: input.model,
         runId,
         userId: input.userId,
       }),

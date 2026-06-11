@@ -3,6 +3,7 @@
 import type { ChatMessagePart } from "@quieter/database";
 import type { RouterOutputs } from "@quieter/orpc";
 import type { UIMessage } from "@tanstack/ai";
+import { defaultChatModel, type ChatModel } from "@quieter/ai";
 import { BILLING_FEATURES, hasBillingPlanAccess } from "@quieter/billing/plans";
 import { Button, toast } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -24,6 +25,7 @@ import { ChatComposer } from "./chat-composer";
 import { ChatTranscript } from "./chat-transcript";
 
 type ChatQueryData = RouterOutputs["chat"]["get"];
+type ChatsQueryData = RouterOutputs["chat"]["list"];
 type StoredChatMessage = ChatQueryData["messages"][number];
 type ActiveChatRun = ChatQueryData["activeRun"];
 type ChatRunStartResult = RouterOutputs["chat"]["sendMessage"];
@@ -62,6 +64,7 @@ export const ChatView = ({
   const queryClient = useQueryClient();
   const { data: billing, isPending: isBillingPending } = useQuery(userBillingQueryOptions());
   const [input, setInput] = useState("");
+  const [model, setModel] = useState<ChatModel>(defaultChatModel);
   const [streamRunId, setStreamRunId] = useState<string | null>(null);
   const [streamingAssistant, setStreamingAssistant] = useState<{
     messageId: string;
@@ -86,6 +89,20 @@ export const ChatView = ({
           queryKey: getChatQueryKey(mailboxId, variables.chatId),
         }),
       ]);
+    },
+  });
+  const generateTitleMutation = useMutation({
+    ...orpc.chat.generateTitle.mutationOptions(),
+    onSuccess: (updatedChat, variables) => {
+      queryClient.setQueryData<ChatsQueryData>(getChatsQueryKey(variables.mailboxId), (current) =>
+        current?.map((chat) =>
+          chat.id === updatedChat.id ? { ...chat, title: updatedChat.title } : chat,
+        ),
+      );
+      queryClient.setQueryData<ChatQueryData>(
+        getChatQueryKey(variables.mailboxId, variables.chatId),
+        (current) => (current ? { ...current, title: updatedChat.title } : current),
+      );
     },
   });
   const cancelGenerationMutation = useMutation({
@@ -238,8 +255,14 @@ export const ChatView = ({
         chatId: nextChatId,
         mailboxId,
         message: prompt,
+        model,
       });
 
+      generateTitleMutation.mutate({
+        chatId: nextChatId,
+        mailboxId,
+        message: prompt,
+      });
       beginAssistantStream(result);
       setInput("");
     } catch (error) {
@@ -282,6 +305,7 @@ export const ChatView = ({
         chatId,
         mailboxId,
         message,
+        model,
         userMessageId,
       });
 
@@ -305,6 +329,7 @@ export const ChatView = ({
         category: activeMailbox,
         chatId,
         mailboxId,
+        model,
       });
 
       beginAssistantStream(result);
@@ -330,6 +355,7 @@ export const ChatView = ({
               category: activeMailbox,
               chatId,
               mailboxId,
+              model,
               toolCallId: input.toolCallId,
             })
           : await resolveComposeToolMutation.mutateAsync({
@@ -339,6 +365,7 @@ export const ChatView = ({
               chatId,
               mailboxId,
               message: input.message,
+              model,
               toolCallId: input.toolCallId,
             });
 
@@ -387,8 +414,10 @@ export const ChatView = ({
                     busy={isComposerLoading}
                     disabled={composerDisabled}
                     input={input}
+                    model={model}
                     onInputChange={setInput}
                     onInputKeyDown={handleInputKeyDown}
+                    onModelChange={setModel}
                     onStop={handleStop}
                     onSubmit={handleSubmit}
                     streaming={isStreaming}
@@ -409,8 +438,10 @@ export const ChatView = ({
                   busy={isComposerLoading}
                   disabled={composerDisabled}
                   input={input}
+                  model={model}
                   onInputChange={setInput}
                   onInputKeyDown={handleInputKeyDown}
+                  onModelChange={setModel}
                   onStop={handleStop}
                   onSubmit={handleSubmit}
                   streaming={isStreaming}

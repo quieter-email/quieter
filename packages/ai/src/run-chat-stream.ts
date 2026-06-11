@@ -7,6 +7,7 @@ import {
   type ToolDefinitionInstance,
   type UIMessage,
 } from "@tanstack/ai";
+import type { ChatModel } from "./chat-models";
 import { createOpenRouterAdapter } from "./openrouter";
 
 const CHAT_AGENT_MAX_ITERATIONS = 15;
@@ -15,6 +16,7 @@ export const runChatStream = async ({
   abortController,
   initialMessages,
   middleware,
+  model,
   onMessagesChange,
   onToolCall,
   systemPrompts,
@@ -23,6 +25,7 @@ export const runChatStream = async ({
   abortController?: AbortController;
   initialMessages: UIMessage[];
   middleware?: ChatMiddleware[];
+  model: ChatModel;
   onMessagesChange?: (messages: UIMessage[]) => void;
   onToolCall?: (input: { toolCallId: string; toolName: string }) => void;
   systemPrompts?: string[];
@@ -40,7 +43,7 @@ export const runChatStream = async ({
 
   const stream = chat({
     abortController,
-    adapter: createOpenRouterAdapter(),
+    adapter: createOpenRouterAdapter(model),
     agentLoopStrategy: maxIterations(CHAT_AGENT_MAX_ITERATIONS),
     maxTokens: 16_384,
     messages: processor.getMessages(),

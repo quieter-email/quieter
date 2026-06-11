@@ -1,9 +1,13 @@
 import { ORPCError } from "@orpc/server";
 import {
+  chatModelSchema,
   composeEmailInputSchema,
   composeEmailResultSchema,
+  generateChatTitle,
+  type ChatMiddleware,
   type ComposeEmailResult,
 } from "@quieter/ai";
+import { reportAiUsage } from "@quieter/billing";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { chat, chatMessage, chatRun, db, type ChatMessagePart } from "@quieter/database";
@@ -13,7 +17,7 @@ import {
   composeMessageInputSchema,
   composeSendFormValuesSchema,
 } from "@quieter/mail/compose";
-import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   ActiveChatRunConflictError,
@@ -38,6 +42,7 @@ const resolveComposeToolInputSchema = z.discriminatedUnion("action", [
     category: mailboxCategorySchema,
     chatId: chatIdSchema,
     mailboxId: mailboxIdSchema,
+    model: chatModelSchema,
     toolCallId: z.string().trim().min(1),
   }),
   z.object({
@@ -47,6 +52,7 @@ const resolveComposeToolInputSchema = z.discriminatedUnion("action", [
     chatId: chatIdSchema,
     mailboxId: mailboxIdSchema,
     message: composeDraftFormValuesSchema,
+    model: chatModelSchema,
     toolCallId: z.string().trim().min(1),
   }),
   z.object({
@@ -56,6 +62,7 @@ const resolveComposeToolInputSchema = z.discriminatedUnion("action", [
     chatId: chatIdSchema,
     mailboxId: mailboxIdSchema,
     message: composeSendFormValuesSchema,
+    model: chatModelSchema,
     toolCallId: z.string().trim().min(1),
   }),
 ]);
@@ -295,6 +302,75 @@ export const chatRouter = {
       return updatedChat!;
     }),
 
+  generateTitle: protectedProcedure
+    .input(
+      z.object({
+        chatId: chatIdSchema,
+        mailboxId: mailboxIdSchema,
+        message: chatPromptSchema,
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      const [authorizedChat, entitlement] = await Promise.all([
+        getAuthorizedChat(input.chatId, input.mailboxId, context.userId),
+        hasUserBillingFeature({
+          feature: "aiChat",
+          userId: context.userId,
+        }),
+      ]);
+
+      if (!entitlement.hasAccess) {
+        throw new ORPCError("FORBIDDEN", {
+          message: `AI chat requires the ${BILLING_FEATURES.aiChat.requiredPlan} plan.`,
+        });
+      }
+
+      if (authorizedChat.title) {
+        return authorizedChat;
+      }
+
+      const usageMiddleware: ChatMiddleware = {
+        name: "polar-ai-title-usage",
+        onUsage: (usageContext, usage) => {
+          usageContext.defer(
+            reportAiUsage({
+              chatId: authorizedChat.id,
+              completionTokens: usage.completionTokens,
+              model: "openai/gpt-5-nano",
+              promptTokens: usage.promptTokens,
+              userId: context.userId,
+            }).catch((error) => {
+              console.error(
+                "Could not report chat title AI usage to Polar.",
+                error instanceof Error ? error.message : "Unknown error.",
+              );
+            }),
+          );
+        },
+      };
+      const title = await generateChatTitle({
+        middleware: [usageMiddleware],
+        prompt: input.message,
+      });
+
+      if (!title) {
+        return authorizedChat;
+      }
+
+      const [updatedChat] = await db
+        .update(chat)
+        .set({
+          title,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(chat.id, authorizedChat.id), isNull(chat.title)))
+        .returning();
+
+      return (
+        updatedChat ?? (await findAuthorizedChat(input.chatId, input.mailboxId, context.userId))
+      );
+    }),
+
   delete: protectedProcedure
     .input(z.object({ chatId: chatIdSchema, mailboxId: mailboxIdSchema }))
     .handler(async ({ context, input }) => {
@@ -349,6 +425,7 @@ export const chatRouter = {
         chatId: chatIdSchema,
         mailboxId: mailboxIdSchema,
         message: chatPromptSchema,
+        model: chatModelSchema,
       }),
     )
     .handler(async ({ context, input }) => {
@@ -376,6 +453,7 @@ export const chatRouter = {
           chatId: authorizedChat.id,
           mailboxCategory: input.category,
           mailboxId: input.mailboxId,
+          model: input.model,
           runId,
           userId: context.userId,
           userMessage: {
@@ -403,6 +481,7 @@ export const chatRouter = {
         chatId: chatIdSchema,
         mailboxId: mailboxIdSchema,
         message: chatPromptSchema,
+        model: chatModelSchema,
         userMessageId: z.string().trim().min(1),
       }),
     )
@@ -440,6 +519,7 @@ export const chatRouter = {
         chatId: authorizedChat.id,
         mailboxCategory: input.category,
         mailboxId: input.mailboxId,
+        model: input.model,
         userId: context.userId,
         userMessage: {
           id: userMessage.id,
@@ -463,6 +543,7 @@ export const chatRouter = {
         category: mailboxCategorySchema,
         chatId: chatIdSchema,
         mailboxId: mailboxIdSchema,
+        model: chatModelSchema,
       }),
     )
     .handler(async ({ context, input }) => {
@@ -522,6 +603,7 @@ export const chatRouter = {
         chatId: authorizedChat.id,
         mailboxCategory: input.category,
         mailboxId: input.mailboxId,
+        model: input.model,
         userId: context.userId,
         userMessagePosition: userMessage.position,
       });
@@ -738,6 +820,7 @@ export const chatRouter = {
         chatId: authorizedChat.id,
         mailboxCategory: input.category,
         mailboxId: input.mailboxId,
+        model: input.model,
         previousAssistant: {
           id: assistantMessage.id,
           parts: resolvedParts,

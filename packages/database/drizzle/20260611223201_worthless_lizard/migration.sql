@@ -1,0 +1,1 @@
+ALTER TABLE "chatRun" ADD COLUMN "model" text DEFAULT 'openai/gpt-5.4-nano' NOT NULL;

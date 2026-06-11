@@ -553,6 +553,7 @@ export const chatRun = pgTable(
     status: text("status").$type<ChatRunStatus>().notNull(),
     mailboxId: text("mailboxId").notNull(),
     mailboxCategory: text("mailboxCategory").notNull(),
+    model: text("model").notNull().default("openai/gpt-5.4-nano"),
     cancelRequestedAt: timestamp("cancelRequestedAt"),
     lastHeartbeatAt: timestamp("lastHeartbeatAt"),
     error: text("error"),

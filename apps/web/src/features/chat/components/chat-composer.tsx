@@ -1,6 +1,7 @@
 import type { FormEvent, KeyboardEvent } from "react";
 import { SentIcon, StopIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { chatModels, type ChatModel } from "@quieter/ai";
 import {
   Button,
   IconButtonTooltip,
@@ -16,9 +17,11 @@ type ChatComposerProps = {
   busy: boolean;
   disabled?: boolean;
   input: string;
+  model: ChatModel;
   streaming: boolean;
   onInputChange: (value: string) => void;
   onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onModelChange: (model: ChatModel) => void;
   onStop: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
@@ -27,9 +30,11 @@ export const ChatComposer = ({
   busy,
   disabled,
   input,
+  model,
   streaming,
   onInputChange,
   onInputKeyDown,
+  onModelChange,
   onStop,
   onSubmit,
 }: ChatComposerProps) => (
@@ -51,12 +56,21 @@ export const ChatComposer = ({
         value={input}
       />
       <div className="flex items-center justify-between gap-1 px-2 pb-2">
-        <Select value="openai/gpt-5.4-nano">
-          <SelectTrigger aria-label="Model" disabled variant="ghost">
+        <Select
+          onValueChange={(value) => {
+            if (value) onModelChange(value);
+          }}
+          value={model}
+        >
+          <SelectTrigger aria-label="Model" disabled={disabled || busy} variant="ghost">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="openai/gpt-5.4-nano">GPT-5.4 nano</SelectItem>
+            {chatModels.map((model) => (
+              <SelectItem key={model.value} value={model.value}>
+                {model.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         {streaming ? (
