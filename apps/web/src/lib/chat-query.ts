@@ -18,6 +18,8 @@ export const chatsQueryOptions = (mailboxId: string | null) =>
 
       return rpc.chat.list({ mailboxId }, { signal });
     },
+    refetchInterval: (query) =>
+      query.state.data?.some((chat) => chat.isGenerating) ? 2_000 : false,
   });
 
 export const chatQueryOptions = (mailboxId: string, chatId: string | null) =>

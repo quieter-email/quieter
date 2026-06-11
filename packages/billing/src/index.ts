@@ -12,7 +12,7 @@ import {
 } from "./entitlements";
 import { getOrganizationMailMeteredPrice } from "./organization-mail-usage";
 import { BILLING_PRODUCTS, paidBillingPlanSchema, type PaidBillingPlan } from "./plans";
-import { getPolarClient, getPolarOrganizationId, getPolarSandboxMode } from "./polar";
+import { getPolarApiOrganizationId, getPolarClient, getPolarSandboxMode } from "./polar";
 
 const BILLING_PROVIDER = "polar" as const;
 const BILLING_METADATA_PLAN = "quieterPlan";
@@ -58,7 +58,7 @@ const getBillingProductId = async (plan: PaidBillingPlan) => {
 
   const product = BILLING_PRODUCTS[plan];
   const polar = await getPolarClient();
-  const organizationId = getPolarOrganizationId();
+  const organizationId = getPolarApiOrganizationId();
   const products = await polar.products.list({
     isArchived: false,
     isRecurring: true,
@@ -296,7 +296,7 @@ const getAiUsageMeterId = async () => {
   if (aiUsageMeterId) return aiUsageMeterId;
 
   const polar = await getPolarClient();
-  const organizationId = getPolarOrganizationId();
+  const organizationId = getPolarApiOrganizationId();
   const meters = await polar.meters.list({
     limit: 100,
     metadata: {
@@ -367,8 +367,7 @@ export const reportAiUsage = async (input: {
           promptTokens: input.promptTokens,
         },
         name: AI_USAGE_EVENT_NAME,
-        organizationId: getPolarOrganizationId(),
-        timestamp: new Date(),
+        organizationId: getPolarApiOrganizationId(),
       },
     ],
   });

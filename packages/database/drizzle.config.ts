@@ -1,12 +1,37 @@
 import { defineConfig } from "drizzle-kit";
 
+const databaseUrl = process.env.DATABASE_URL?.trim();
+
 export default defineConfig({
   schema: "./src/schema.ts",
   out: "./drizzle",
   dialect: "postgresql",
-  dbCredentials: {
-    url: process.env.DATABASE_URL!,
-  },
+  tablesFilter: [
+    "account",
+    "apikey",
+    "billingSubscription",
+    "chat",
+    "chatMessage",
+    "chatRun",
+    "gmailCredential",
+    "gmailOAuthState",
+    "invitation",
+    "mailDomain",
+    "mailbox",
+    "mailboxGrant",
+    "managedMailMessage",
+    "member",
+    "organization",
+    "organizationMailUsageAlertEvent",
+    "organizationMailUsageEvent",
+    "organizationMailUsageSettings",
+    "passkey",
+    "session",
+    "user",
+    "verification",
+    "waitlistSignup",
+  ],
+  ...(databaseUrl ? { dbCredentials: { url: databaseUrl } } : {}),
   strict: true,
   verbose: true,
 });

@@ -7,6 +7,7 @@ import {
   Delete01Icon,
   Edit01Icon,
   InboxIcon,
+  Loading03Icon,
   MoreVerticalIcon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
@@ -44,6 +45,7 @@ type MailSidebarProps = {
   activeChatId: string | null;
   chats: Array<{
     id: string;
+    isGenerating: boolean;
     title: string | null;
     updatedAt: Date;
   }>;
@@ -167,41 +169,35 @@ const SidebarChatRow = ({
         </form>
       ) : (
         <div
-          className={cn(
-            "group flex h-8 w-full items-center rounded-md border border-transparent transition-colors",
-            isActive
-              ? "border-primary/20 bg-primary/10 hover:bg-primary/15"
-              : "hover:bg-secondary/50",
-          )}
+          className={cn("group flex w-full items-center rounded-md", {
+            "bg-muted hover:bg-muted": isActive,
+            "hover:bg-muted/60": !isActive,
+          })}
         >
           <Button
             aria-current={isActive ? "page" : undefined}
-            className={cn(
-              "h-8 min-w-0 flex-1 justify-start bg-transparent px-3 text-left text-sm font-medium",
-              isActive ? "text-foreground" : "text-muted-foreground",
-            )}
+            className="min-w-0 flex-1 justify-start gap-3 bg-transparent px-3 text-left text-foreground hover:bg-transparent active:bg-transparent"
             onClick={() => onSelect(chat.id)}
             size="sm"
             type="button"
             variant="ghost"
           >
+            {chat.isGenerating && (
+              <HugeiconsIcon
+                aria-hidden
+                className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+                icon={Loading03Icon}
+              />
+            )}
             <span className="truncate">{title}</span>
           </Button>
           <DropdownMenu>
             <IconButtonTooltip label={`Options for "${title}"`}>
               <DropdownMenuTrigger
                 aria-label={`Options for "${title}"`}
-                className="pointer-events-none shrink-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 data-popup-open:pointer-events-auto data-popup-open:opacity-100"
-                render={
-                  <Button
-                    className="bg-transparent hover:bg-transparent active:bg-transparent [&_svg]:opacity-60 hover:[&_svg]:opacity-100"
-                    size="icon-sm"
-                    type="button"
-                    variant="ghost"
-                  />
-                }
+                className="pointer-events-none mr-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity outline-none group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-background/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/20 data-popup-open:pointer-events-auto data-popup-open:opacity-100"
               >
-                <HugeiconsIcon aria-hidden className="size-4" icon={MoreVerticalIcon} />
+                <HugeiconsIcon aria-hidden className="size-3.5" icon={MoreVerticalIcon} />
               </DropdownMenuTrigger>
             </IconButtonTooltip>
             <DropdownMenuContent align="end">
@@ -437,7 +433,7 @@ const SidebarContent = ({
             transition={{ delay: getSidebarEntranceDelay(2), duration: 0.5, ease: "easeOut" }}
           >
             <Button
-              className="w-full justify-start rounded-md px-4 transition-[font-weight,scale] hover:font-bold active:font-bold [&_svg_*]:transition-[stroke-width] hover:[&_svg_*]:stroke-3 active:[&_svg_*]:stroke-3"
+              className="w-full justify-start rounded-md px-4"
               onClick={() => {
                 onCreateChat();
                 onRequestClose?.();
@@ -451,7 +447,7 @@ const SidebarContent = ({
 
           <nav
             aria-label="Chats"
-            className="mt-2 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-1"
+            className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1"
           >
             {chats.map((chat, index) => {
               const isActive = chat.id === activeChatId;

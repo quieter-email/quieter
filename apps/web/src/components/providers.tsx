@@ -5,6 +5,8 @@ import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@ta
 import { useLocation } from "@tanstack/react-router";
 import { MotionConfig } from "motion/react";
 import { type PropsWithChildren, useState } from "react";
+import { ConsentManager } from "~/components/consent-manager";
+import { SiteFooter } from "~/components/site-footer";
 import { TelemetryProvider } from "~/components/telemetry-provider";
 import { shouldRetryOrpcError } from "~/lib/orpc-errors";
 
@@ -36,12 +38,15 @@ export const Providers = ({ children }: PropsWithChildren) => {
       initialColorMode="system"
     >
       <MotionConfig reducedMotion="user">
-        <TelemetryProvider>
-          <QueryClientProvider client={queryClient}>
-            {children}
-            <Toaster />
-          </QueryClientProvider>
-        </TelemetryProvider>
+        <ConsentManager>
+          <TelemetryProvider>
+            <QueryClientProvider client={queryClient}>
+              {children}
+              <Toaster />
+            </QueryClientProvider>
+          </TelemetryProvider>
+          <SiteFooter />
+        </ConsentManager>
       </MotionConfig>
     </ColorModeProvider>
   );

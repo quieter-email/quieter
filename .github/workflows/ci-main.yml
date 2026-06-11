@@ -20,7 +20,7 @@ jobs:
   quality:
     name: Format, lint, typecheck, test
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,3 +44,50 @@ jobs:
 
       - name: Test
         run: bun run test
+
+  migration-integration:
+    name: Migration integration tests
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: quieter
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d quieter"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_MIGRATION_URL: postgresql://postgres:postgres@localhost:5432/quieter
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check migration history and schema drift
+        run: bun run db:check
+
+      - name: Apply migrations to temporary PostgreSQL
+        run: bun run db:deploy
+
+      - name: Remove temporary migration history
+        run: bun --cwd packages/database scripts/drop-drizzle-schema.ts
+
+      - name: Test automatic adoption of an existing schema
+        run: bun run db:deploy
+
+      - name: Verify a repeated migration run is a no-op
+        run: bun run db:deploy

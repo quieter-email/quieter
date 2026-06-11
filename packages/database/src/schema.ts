@@ -11,6 +11,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { defineRelations } from "drizzle-orm/relations";
 
@@ -70,8 +71,18 @@ export type MailboxSwitcherOrder = {
 };
 
 export type ChatMessageRole = "system" | "user" | "assistant";
+export type ChatMessageStatus = "draft" | "streaming" | "complete" | "failed";
+export type ChatRunStatus =
+  | "queued"
+  | "running"
+  | "waiting_on_tool"
+  | "complete"
+  | "failed"
+  | "cancelled";
 export type ChatMessagePart = {
   type: string;
+  content?: string;
+  [key: string]: unknown;
 };
 
 export const user = pgTable("user", {
@@ -82,6 +93,7 @@ export const user = pgTable("user", {
   image: text("image"),
   defaultMailboxId: text("defaultMailboxId"),
   mailboxSwitcherOrder: jsonb("mailboxSwitcherOrder").$type<MailboxSwitcherOrder>(),
+  termsAcceptedAt: timestamp("termsAcceptedAt"),
   createdAt: timestamp("createdAt").notNull(),
   updatedAt: timestamp("updatedAt").notNull(),
 });
@@ -503,6 +515,7 @@ export const chat = pgTable(
       table.updatedAt,
     ),
     unique("chat_id_user_id_unique").on(table.id, table.userId),
+    unique("chat_id_mailbox_id_user_id_unique").on(table.id, table.mailboxId, table.userId),
   ],
 );
 
@@ -515,6 +528,8 @@ export const chatMessage = pgTable(
     position: integer("position").notNull(),
     role: text("role").$type<ChatMessageRole>().notNull(),
     parts: jsonb("parts").$type<ChatMessagePart[]>().notNull(),
+    status: text("status").$type<ChatMessageStatus>().notNull().default("complete"),
+    error: text("error"),
     createdAt: timestamp("createdAt").notNull(),
   },
   (table) => [
@@ -523,7 +538,42 @@ export const chatMessage = pgTable(
       foreignColumns: [chat.id, chat.userId],
       name: "chat_message_chat_id_user_id_fkey",
     }).onDelete("cascade"),
+    unique("chat_message_id_chat_id_unique").on(table.id, table.chatId),
     unique("chat_message_chat_id_position_unique").on(table.chatId, table.position),
+  ],
+);
+
+export const chatRun = pgTable(
+  "chatRun",
+  {
+    id: text("id").primaryKey(),
+    chatId: text("chatId").notNull(),
+    userId: text("userId").notNull(),
+    assistantMessageId: text("assistantMessageId").notNull(),
+    status: text("status").$type<ChatRunStatus>().notNull(),
+    mailboxId: text("mailboxId").notNull(),
+    mailboxCategory: text("mailboxCategory").notNull(),
+    cancelRequestedAt: timestamp("cancelRequestedAt"),
+    lastHeartbeatAt: timestamp("lastHeartbeatAt"),
+    error: text("error"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.assistantMessageId, table.chatId],
+      foreignColumns: [chatMessage.id, chatMessage.chatId],
+      name: "chat_run_assistant_message_id_chat_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.chatId, table.mailboxId, table.userId],
+      foreignColumns: [chat.id, chat.mailboxId, chat.userId],
+      name: "chat_run_chat_id_mailbox_id_user_id_fkey",
+    }).onDelete("cascade"),
+    index("chat_run_chat_id_status_idx").on(table.chatId, table.status),
+    uniqueIndex("chat_run_one_active_per_chat")
+      .on(table.chatId)
+      .where(sql`${table.status} in ('queued', 'running', 'waiting_on_tool')`),
   ],
 );
 
@@ -570,6 +620,7 @@ export const tables = {
   billingSubscription,
   chat,
   chatMessage,
+  chatRun,
   user,
   organization,
   session,
@@ -616,8 +667,31 @@ export const authRelations = defineRelations(tables, (r) => ({
       optional: false,
     }),
     messages: r.many.chatMessage({ from: r.chat.id, to: r.chatMessage.chatId }),
+    runs: r.many.chatRun({ from: r.chat.id, to: r.chatRun.chatId }),
     user: r.one.user({
       from: r.chat.userId,
+      to: r.user.id,
+      optional: false,
+    }),
+  },
+  chatRun: {
+    assistantMessage: r.one.chatMessage({
+      from: r.chatRun.assistantMessageId,
+      to: r.chatMessage.id,
+      optional: false,
+    }),
+    chat: r.one.chat({
+      from: r.chatRun.chatId,
+      to: r.chat.id,
+      optional: false,
+    }),
+    mailbox: r.one.mailbox({
+      from: r.chatRun.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+    user: r.one.user({
+      from: r.chatRun.userId,
       to: r.user.id,
       optional: false,
     }),

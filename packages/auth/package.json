@@ -6,6 +6,7 @@
     ".": "./src/index.ts",
     "./google-scopes": "./src/google-scopes.ts",
     "./organization-api-key": "./src/organization-api-key.ts",
+    "./terms-acceptance": "./src/terms-acceptance.ts",
     "./user-status": "./src/user-status.ts",
     "./workspace": "./src/workspace.ts"
   },
@@ -14,6 +15,7 @@
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
     "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/auth",
     "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/auth",
+    "test": "bun test",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {

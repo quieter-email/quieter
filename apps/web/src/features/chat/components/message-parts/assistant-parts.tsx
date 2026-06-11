@@ -31,6 +31,10 @@ export const AssistantParts = ({
     <>
       {parts.map((part, index) => {
         if (part.type === "text") {
+          if (!part.content.trim()) {
+            return null;
+          }
+
           return <TextPart key={getPartKey(part, index)} text={part.content} />;
         }
 

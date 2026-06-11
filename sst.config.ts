@@ -1,6 +1,16 @@
 // oxlint-disable-next-line typescript-eslint/triple-slash-reference
 /// <reference path="./.sst/platform/config.d.ts" />
 
+const requireEnvironmentVariable = (name: string) => {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(`${name} is required to deploy the SST stack.`);
+  }
+
+  return value;
+};
+
 export default $config({
   app(input) {
     return {
@@ -88,12 +98,8 @@ export default $config({
       role: mailReceiptRole.id,
     });
 
-    const databaseUrl = process.env.DATABASE_URL;
-    const polarAccessToken = process.env.POLAR_ACCESS_TOKEN;
-
-    if (!databaseUrl) throw new Error("DATABASE_URL is required for MailReceiptProcessor.");
-    if (!polarAccessToken)
-      throw new Error("POLAR_ACCESS_TOKEN is required for MailReceiptProcessor.");
+    const databaseUrl = requireEnvironmentVariable("DATABASE_URL");
+    const polarAccessToken = requireEnvironmentVariable("POLAR_ACCESS_TOKEN");
 
     mailReceiptTopic.subscribe("MailReceiptProcessor", {
       environment: {
@@ -105,6 +111,44 @@ export default $config({
       handler: "packages/aws/src/receipt.handler",
       link: [mailBucket],
       timeout: "30 seconds",
+    });
+
+    const openRouterApiKey = requireEnvironmentVariable("OPENROUTER_API_KEY");
+    const googleGmailClientId = requireEnvironmentVariable("GOOGLE_GMAIL_CLIENT_ID");
+    const googleGmailClientSecret = requireEnvironmentVariable("GOOGLE_GMAIL_CLIENT_SECRET");
+    const gmailTokenEncryptionKey = requireEnvironmentVariable("GMAIL_TOKEN_ENCRYPTION_KEY");
+
+    const chatGenerationStartToken = new sst.Secret("ChatGenerationStartToken");
+    const chatGenerationQueue = new sst.aws.Queue("ChatGenerationQueue");
+    const chatGenerationWorkflow = new sst.aws.Workflow("ChatGenerationWorkflow", {
+      environment: {
+        DATABASE_URL: databaseUrl,
+        GMAIL_TOKEN_ENCRYPTION_KEY: gmailTokenEncryptionKey,
+        GOOGLE_GMAIL_CLIENT_ID: googleGmailClientId,
+        GOOGLE_GMAIL_CLIENT_SECRET: googleGmailClientSecret,
+        OPENROUTER_API_KEY: openRouterApiKey,
+        POLAR_ACCESS_TOKEN: polarAccessToken,
+        POLAR_ORGANIZATION_ID: process.env.POLAR_ORGANIZATION_ID ?? "",
+        POLAR_SANDBOX: process.env.POLAR_SANDBOX ?? "",
+      },
+      handler: "packages/aws/src/chat-generation-workflow.handler",
+      timeout: {
+        execution: "2 hours",
+        invocation: "15 minutes",
+      },
+    });
+    chatGenerationQueue.subscribe("packages/aws/src/chat-generation-starter.handler", {
+      batch: {
+        partialResponses: true,
+      },
+      link: [chatGenerationWorkflow],
+      timeout: "30 seconds",
+    });
+    const chatGenerationEnqueue = new sst.aws.Function("ChatGenerationEnqueue", {
+      handler: "packages/aws/src/chat-generation-enqueue.handler",
+      link: [chatGenerationQueue, chatGenerationStartToken],
+      timeout: "30 seconds",
+      url: true,
     });
 
     const mailIngress = new sst.aws.Function("MailIngress", {
@@ -131,6 +175,8 @@ export default $config({
     });
 
     return {
+      chatGenerationEnqueueUrl: chatGenerationEnqueue.url,
+      chatGenerationStartTokenSecretName: chatGenerationStartToken.name,
       mailBucket: mailBucket.name,
       mailIngressUrl: mailIngress.url,
       mailOutboundUrl: mailOutbound.url,

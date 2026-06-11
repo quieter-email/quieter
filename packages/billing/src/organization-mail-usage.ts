@@ -11,7 +11,7 @@ import {
 import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { PaidBillingPlan } from "./plans";
 import { getOrganizationBillingEntitlement } from "./entitlements";
-import { getPolarClient, getPolarOrganizationId } from "./polar";
+import { getPolarApiOrganizationId, getPolarClient } from "./polar";
 import {
   getManagedUsageMarkupBasisPoints,
   getManagedUsageRates,
@@ -272,7 +272,7 @@ const getOrganizationMailUsageMeterId = async () => {
   if (organizationMailUsageMeterId) return organizationMailUsageMeterId;
 
   const polar = await getPolarClient();
-  const organizationId = getPolarOrganizationId();
+  const organizationId = getPolarApiOrganizationId();
   const meters = await polar.meters.list({
     limit: 100,
     metadata: {
@@ -577,8 +577,7 @@ export const recordOrganizationMailUsage = async (input: OrganizationMailUsageIn
           usageEventId: usageEvent.id,
         },
         name: ORGANIZATION_MAIL_POLAR_EVENT_NAME,
-        organizationId: getPolarOrganizationId(),
-        timestamp: now,
+        organizationId: getPolarApiOrganizationId(),
       },
     ],
   });

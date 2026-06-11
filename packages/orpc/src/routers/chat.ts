@@ -1,61 +1,25 @@
 import { ORPCError } from "@orpc/server";
-import {
-  chat,
-  chatMessage,
-  db,
-  type ChatMessagePart,
-  type ChatMessageRole,
-} from "@quieter/database";
-import { and, desc, eq, lt, sql } from "drizzle-orm";
+import { hasUserBillingFeature } from "@quieter/billing/entitlements";
+import { BILLING_FEATURES } from "@quieter/billing/plans";
+import { chat, chatMessage, chatRun, db, type ChatMessagePart } from "@quieter/database";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
+import {
+  ActiveChatRunConflictError,
+  createChatRunRecords,
+  getActiveChatRunSummary,
+  hasActiveChatRun,
+  startAssistantRun,
+} from "../chat-run-store";
+import { ACTIVE_CHAT_RUN_STATUSES } from "../chat-run-stream";
 import { assertAccessibleMailbox } from "../mailbox";
-import { mailboxIdSchema, protectedProcedure } from "./base";
+import { mailboxCategorySchema, mailboxIdSchema, protectedProcedure } from "./base";
 
 const chatIdSchema = z.string().trim().min(1);
 const chatTitleSchema = z.string().trim().min(1).max(120);
-const chatMessagePartSchema = z.custom<ChatMessagePart>(
-  (value) =>
-    typeof value === "object" &&
-    value !== null &&
-    "type" in value &&
-    typeof value.type === "string" &&
-    value.type.trim().length > 0,
-);
-const chatMessageSchema = z.object({
-  id: z.string().trim().min(1),
-  role: z.enum(["system", "user", "assistant"] satisfies ChatMessageRole[]),
-  parts: z.array(chatMessagePartSchema),
-  createdAt: z.coerce.date().optional(),
-});
+const chatPromptSchema = z.string().trim().min(1).max(10_000);
 
-type ChatMessageInput = z.infer<typeof chatMessageSchema>;
-
-const getTextContent = (message: ChatMessageInput) =>
-  message.parts
-    .flatMap((part) =>
-      part.type === "text" && "content" in part && typeof part.content === "string"
-        ? [part.content]
-        : [],
-    )
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const TEMP_MESSAGE_POSITION_OFFSET = 1_000_000;
-
-const createFallbackTitle = (messages: ChatMessageInput[]) => {
-  const firstUserMessage = messages.find(
-    (message) => message.role === "user" && getTextContent(message),
-  );
-  const firstMessage = firstUserMessage ?? messages.find((message) => getTextContent(message));
-  const title = firstMessage ? getTextContent(firstMessage) : "";
-
-  return title ? title.slice(0, 80) : null;
-};
-
-const getAuthorizedChat = async (chatId: string, mailboxId: string, userId: string) => {
-  await assertAccessibleMailbox({ mailboxId, userId });
-
+const findAuthorizedChat = async (chatId: string, mailboxId: string, userId: string) => {
   const [authorizedChat] = await db
     .select()
     .from(chat)
@@ -71,6 +35,115 @@ const getAuthorizedChat = async (chatId: string, mailboxId: string, userId: stri
   return authorizedChat;
 };
 
+const getAuthorizedChat = async (chatId: string, mailboxId: string, userId: string) => {
+  const [, authorizedChat] = await Promise.all([
+    assertAccessibleMailbox({ mailboxId, userId }),
+    findAuthorizedChat(chatId, mailboxId, userId),
+  ]);
+  return authorizedChat;
+};
+
+const listChatMessages = async (chatId: string) => {
+  const messages = await db
+    .select({
+      createdAt: chatMessage.createdAt,
+      error: chatMessage.error,
+      id: chatMessage.id,
+      parts: chatMessage.parts,
+      role: chatMessage.role,
+      status: chatMessage.status,
+    })
+    .from(chatMessage)
+    .where(eq(chatMessage.chatId, chatId))
+    .orderBy(chatMessage.position);
+
+  return messages.map((message) => ({
+    createdAt: message.createdAt,
+    error: message.error,
+    id: message.id,
+    parts: message.parts,
+    role: message.role,
+    status: message.status,
+  }));
+};
+
+const assertCanRunChatGeneration = async (input: {
+  chatId: string;
+  mailboxId: string;
+  userId: string;
+}) => {
+  const [authorizedChat, accessibleMailbox, entitlement] = await Promise.all([
+    findAuthorizedChat(input.chatId, input.mailboxId, input.userId),
+    assertAccessibleMailbox({
+      mailboxId: input.mailboxId,
+      userId: input.userId,
+    }),
+    hasUserBillingFeature({
+      feature: "aiChat",
+      userId: input.userId,
+    }),
+  ]);
+
+  if (accessibleMailbox.provider !== "gmail") {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "AI chat search currently supports Gmail mailboxes only.",
+    });
+  }
+
+  if (!entitlement.hasAccess) {
+    throw new ORPCError("FORBIDDEN", {
+      message: `AI chat requires the ${BILLING_FEATURES.aiChat.requiredPlan} plan.`,
+    });
+  }
+
+  if (await hasActiveChatRun(authorizedChat.id)) {
+    throw new ORPCError("CONFLICT", {
+      message: "This chat already has a generation in progress.",
+    });
+  }
+
+  return authorizedChat;
+};
+
+const rethrowChatRunConflict = (error: unknown): never => {
+  if (error instanceof ActiveChatRunConflictError) {
+    throw new ORPCError("CONFLICT", {
+      message: error.message,
+    });
+  }
+
+  throw error;
+};
+
+const startAssistantRunOrThrow = (input: Parameters<typeof startAssistantRun>[0]) =>
+  startAssistantRun(input).catch(rethrowChatRunConflict);
+
+const buildRunResponse = async ({
+  assistantMessageId,
+  chatId,
+  runId,
+  userMessageId,
+}: {
+  assistantMessageId: string;
+  chatId: string;
+  runId: string;
+  userMessageId: string;
+}) => {
+  const [activeRun, messages] = await Promise.all([
+    getActiveChatRunSummary(chatId),
+    listChatMessages(chatId),
+  ]);
+
+  return {
+    activeRun,
+    assistantMessageId,
+    chatId,
+    messages,
+    runId,
+    userMessageId,
+  };
+};
+
 export const chatRouter = {
   list: protectedProcedure
     .route({ method: "GET" })
@@ -82,10 +155,15 @@ export const chatRouter = {
         .select({
           createdAt: chat.createdAt,
           id: chat.id,
+          isGenerating: sql<boolean>`${chatRun.id} is not null`,
           title: chat.title,
           updatedAt: chat.updatedAt,
         })
         .from(chat)
+        .leftJoin(
+          chatRun,
+          and(eq(chatRun.chatId, chat.id), inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])),
+        )
         .where(and(eq(chat.mailboxId, input.mailboxId), eq(chat.userId, context.userId)))
         .orderBy(desc(chat.updatedAt));
     }),
@@ -161,97 +239,245 @@ export const chatRouter = {
       const messages = await db
         .select({
           createdAt: chatMessage.createdAt,
+          error: chatMessage.error,
           id: chatMessage.id,
           parts: chatMessage.parts,
           position: chatMessage.position,
           role: chatMessage.role,
+          status: chatMessage.status,
         })
         .from(chatMessage)
         .where(eq(chatMessage.chatId, authorizedChat.id))
         .orderBy(chatMessage.position);
+      const activeRun = await getActiveChatRunSummary(authorizedChat.id);
 
       return {
+        activeRun,
         createdAt: authorizedChat.createdAt,
         id: authorizedChat.id,
         messages: messages.map((message) => ({
           createdAt: message.createdAt,
+          error: message.error,
           id: message.id,
           parts: message.parts,
           role: message.role,
+          status: message.status,
         })),
         title: authorizedChat.title,
         updatedAt: authorizedChat.updatedAt,
       };
     }),
 
-  saveMessages: protectedProcedure
+  sendMessage: protectedProcedure
     .input(
       z.object({
+        category: mailboxCategorySchema,
         chatId: chatIdSchema,
         mailboxId: mailboxIdSchema,
-        messages: z.array(chatMessageSchema).max(200),
+        message: chatPromptSchema,
       }),
     )
     .handler(async ({ context, input }) => {
-      const authorizedChat = await getAuthorizedChat(input.chatId, input.mailboxId, context.userId);
-      const now = new Date();
-      const fallbackTitle = createFallbackTitle(input.messages);
+      const authorizedChat = await assertCanRunChatGeneration({
+        chatId: input.chatId,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
 
-      if (input.messages.length > 0) {
-        await db.insert(chatMessage).values(
-          input.messages.map((message, index) => {
-            const createdAt = message.createdAt ?? now;
-            const parts = message.parts as ChatMessagePart[];
+      const [lastMessage] = await db
+        .select({ position: chatMessage.position })
+        .from(chatMessage)
+        .where(eq(chatMessage.chatId, authorizedChat.id))
+        .orderBy(desc(chatMessage.position))
+        .limit(1);
+      const nextPosition = (lastMessage?.position ?? -1) + 1;
+      const runId = crypto.randomUUID();
+      const userMessageId = crypto.randomUUID();
+      const assistantMessageId = crypto.randomUUID();
+      const userParts: ChatMessagePart[] = [{ content: input.message, type: "text" }];
 
-            return {
-              chatId: authorizedChat.id,
-              createdAt,
-              id: message.id,
-              parts,
-              position: TEMP_MESSAGE_POSITION_OFFSET + index,
-              role: message.role,
-              userId: context.userId,
-            };
-          }),
-        );
-
-        await db
-          .delete(chatMessage)
-          .where(
-            and(
-              eq(chatMessage.chatId, authorizedChat.id),
-              lt(chatMessage.position, TEMP_MESSAGE_POSITION_OFFSET),
-            ),
-          );
-
-        await Promise.all(
-          input.messages.map((message, position) =>
-            db
-              .update(chatMessage)
-              .set({ position })
-              .where(
-                and(eq(chatMessage.chatId, authorizedChat.id), eq(chatMessage.id, message.id)),
-              ),
-          ),
-        );
-      } else {
-        await db.delete(chatMessage).where(eq(chatMessage.chatId, authorizedChat.id));
+      try {
+        await createChatRunRecords({
+          assistantMessageId,
+          chatId: authorizedChat.id,
+          mailboxCategory: input.category,
+          mailboxId: input.mailboxId,
+          runId,
+          userId: context.userId,
+          userMessage: {
+            id: userMessageId,
+            parts: userParts,
+            position: nextPosition,
+          },
+        });
+      } catch (error) {
+        rethrowChatRunConflict(error);
       }
 
-      const [updatedChat] = await db
-        .update(chat)
-        .set({
-          title: sql<string | null>`coalesce(${chat.title}, ${fallbackTitle})`,
-          updatedAt: now,
-        })
-        .where(eq(chat.id, authorizedChat.id))
-        .returning({
-          createdAt: chat.createdAt,
-          id: chat.id,
-          title: chat.title,
-          updatedAt: chat.updatedAt,
-        });
+      return buildRunResponse({
+        assistantMessageId,
+        chatId: authorizedChat.id,
+        runId,
+        userMessageId,
+      });
+    }),
 
-      return updatedChat!;
+  editUserMessage: protectedProcedure
+    .input(
+      z.object({
+        category: mailboxCategorySchema,
+        chatId: chatIdSchema,
+        mailboxId: mailboxIdSchema,
+        message: chatPromptSchema,
+        userMessageId: z.string().trim().min(1),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      const authorizedChat = await assertCanRunChatGeneration({
+        chatId: input.chatId,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+
+      const [userMessage] = await db
+        .select({
+          id: chatMessage.id,
+          position: chatMessage.position,
+        })
+        .from(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.id, input.userMessageId),
+            eq(chatMessage.chatId, authorizedChat.id),
+            eq(chatMessage.role, "user"),
+          ),
+        )
+        .limit(1);
+
+      if (!userMessage) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "User message not found.",
+        });
+      }
+
+      const userParts: ChatMessagePart[] = [{ content: input.message, type: "text" }];
+
+      const { assistantMessageId, runId } = await startAssistantRunOrThrow({
+        chatId: authorizedChat.id,
+        mailboxCategory: input.category,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+        userMessage: {
+          id: userMessage.id,
+          parts: userParts,
+        },
+        userMessagePosition: userMessage.position,
+      });
+
+      return buildRunResponse({
+        assistantMessageId,
+        chatId: authorizedChat.id,
+        runId,
+        userMessageId: userMessage.id,
+      });
+    }),
+
+  regenerateResponse: protectedProcedure
+    .input(
+      z.object({
+        assistantMessageId: z.string().trim().min(1),
+        category: mailboxCategorySchema,
+        chatId: chatIdSchema,
+        mailboxId: mailboxIdSchema,
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      const authorizedChat = await assertCanRunChatGeneration({
+        chatId: input.chatId,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+
+      const [assistantMessage] = await db
+        .select({
+          id: chatMessage.id,
+          position: chatMessage.position,
+          status: chatMessage.status,
+        })
+        .from(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.id, input.assistantMessageId),
+            eq(chatMessage.chatId, authorizedChat.id),
+            eq(chatMessage.role, "assistant"),
+          ),
+        )
+        .limit(1);
+
+      if (!assistantMessage) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "Assistant message not found.",
+        });
+      }
+
+      if (assistantMessage.status === "draft") {
+        throw new ORPCError("CONFLICT", {
+          message: "This response is still generating.",
+        });
+      }
+
+      const [userMessage] = await db
+        .select({ id: chatMessage.id, position: chatMessage.position })
+        .from(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.chatId, authorizedChat.id),
+            eq(chatMessage.position, assistantMessage.position - 1),
+            eq(chatMessage.role, "user"),
+          ),
+        )
+        .limit(1);
+
+      if (!userMessage) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "Could not find the user message for this response.",
+        });
+      }
+
+      const { assistantMessageId, runId } = await startAssistantRunOrThrow({
+        chatId: authorizedChat.id,
+        mailboxCategory: input.category,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+        userMessagePosition: userMessage.position,
+      });
+
+      return buildRunResponse({
+        assistantMessageId,
+        chatId: authorizedChat.id,
+        runId,
+        userMessageId: userMessage.id,
+      });
+    }),
+
+  cancelGeneration: protectedProcedure
+    .input(z.object({ chatId: chatIdSchema, mailboxId: mailboxIdSchema }))
+    .handler(async ({ context, input }) => {
+      const authorizedChat = await getAuthorizedChat(input.chatId, input.mailboxId, context.userId);
+      const activeRun = await getActiveChatRunSummary(authorizedChat.id);
+
+      if (!activeRun) {
+        return { cancelled: false };
+      }
+
+      await db
+        .update(chatRun)
+        .set({
+          cancelRequestedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(chatRun.id, activeRun.id));
+
+      return { cancelled: true, runId: activeRun.id };
     }),
 };

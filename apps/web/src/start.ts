@@ -10,12 +10,8 @@ import {
   sitePasswordCookieName,
 } from "~/lib/site-password.server";
 
-const sitePasswordPaths = new Set([
-  "/api/chat",
-  "/api/messages",
-  "/api/site-password",
-  "/api/waitlist",
-]);
+const sitePasswordPaths = new Set(["/api/messages", "/api/site-password", "/api/waitlist"]);
+const publicLegalPaths = new Set(["/cookies", "/privacy", "/terms"]);
 const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
 const publicPathPrefixes = ["/_build/", "/assets/"];
@@ -62,20 +58,40 @@ export const startInstance = createStart(() => ({
   ],
 }));
 
+const normalizePathname = (pathname: string) => {
+  const collapsed = pathname.replace(/\/{2,}/g, "/");
+
+  if (collapsed.length <= 1) {
+    return collapsed;
+  }
+
+  return collapsed.endsWith("/") ? collapsed.slice(0, -1) : collapsed;
+};
+
 const shouldGatePath = (pathname: string) => {
-  if (sitePasswordPaths.has(pathname)) {
+  const normalizedPath = normalizePathname(pathname);
+
+  if (sitePasswordPaths.has(normalizedPath)) {
     return false;
   }
 
-  if (pathname === sitePasswordPagePath) {
+  if (normalizedPath === sitePasswordPagePath) {
     return false;
   }
 
-  if (pathname === homePagePath) {
+  if (normalizedPath === homePagePath) {
     return false;
   }
 
-  return !publicPathPrefixes.some((pathPrefix) => pathname.startsWith(pathPrefix));
+  if (publicLegalPaths.has(normalizedPath)) {
+    return false;
+  }
+
+  if (normalizedPath === "/api/c15t" || normalizedPath.startsWith("/api/c15t/")) {
+    return false;
+  }
+
+  return !publicPathPrefixes.some((pathPrefix) => normalizedPath.startsWith(pathPrefix));
 };
 
 const parseCookieHeader = (cookieHeader: string | null) => {

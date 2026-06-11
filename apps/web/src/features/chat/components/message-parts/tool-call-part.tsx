@@ -15,7 +15,7 @@ export const ToolCallPart = ({ part }: { part: Extract<MessagePart, { type: "too
   return (
     <m.p
       animate={{ opacity: 1 }}
-      className="text-xs text-muted-foreground/50"
+      className="text-xs text-muted-foreground"
       initial={{ opacity: 0 }}
       transition={{ duration: 0.15 }}
     >

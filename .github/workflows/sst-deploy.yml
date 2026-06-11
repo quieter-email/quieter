@@ -1,4 +1,4 @@
-name: Deploy SST Mail Stack
+name: Deploy SST Stack
 
 on:
   push:
@@ -20,7 +20,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.stage || 'production' }}
+  group: quieter-deploy-${{ inputs.stage || 'production' }}
   cancel-in-progress: false
 
 jobs:
@@ -28,7 +28,7 @@ jobs:
     name: Deploy ${{ inputs.stage || 'production' }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     environment: ${{ inputs.stage || 'production' }}
-    timeout-minutes: 10
+    timeout-minutes: 25
     env:
       SST_STAGE: ${{ inputs.stage || 'production' }}
     steps:
@@ -49,15 +49,40 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Format check
+        run: bun run fmt:check
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
+
+      - name: Check migration history and schema drift
+        run: bun run db:check
+
+      - name: Apply production database migrations
+        if: ${{ env.SST_STAGE == 'production' }}
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+        run: bun run db:deploy
+
       - name: Deploy SST
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GMAIL_TOKEN_ENCRYPTION_KEY: ${{ secrets.GMAIL_TOKEN_ENCRYPTION_KEY }}
+          GOOGLE_GMAIL_CLIENT_ID: ${{ secrets.GOOGLE_GMAIL_CLIENT_ID }}
+          GOOGLE_GMAIL_CLIENT_SECRET: ${{ secrets.GOOGLE_GMAIL_CLIENT_SECRET }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
           POLAR_ORGANIZATION_ID: ${{ vars.POLAR_ORGANIZATION_ID || secrets.POLAR_ORGANIZATION_ID }}
           POLAR_SANDBOX: ${{ vars.POLAR_SANDBOX }}
         run: bunx sst deploy --config sst.config.ts --stage "$SST_STAGE"
 
-      - name: Sync mail stack outputs to Vercel
+      - name: Sync SST outputs to Vercel
         if: ${{ env.SST_STAGE == 'production' }}
         env:
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || secrets.VERCEL_PROJECT_ID }}
@@ -74,6 +99,7 @@ jobs:
           bun run - <<'EOF'
           const outputs = await Bun.file(".sst/outputs.json").json();
           const values = [
+            ["CHAT_GENERATION_START_URL", outputs.chatGenerationEnqueueUrl],
             ["MAIL_BUCKET", outputs.mailBucket],
             ["MAIL_RECEIPT_TOPIC_ARN", outputs.mailReceiptTopicArn],
             ["MAIL_RECEIPT_ROLE_ARN", outputs.mailReceiptRoleArn],
@@ -100,7 +126,7 @@ jobs:
                 value,
                 type: "sensitive",
                 target: ["production"],
-                comment: "Synced from SST mail stack production outputs.",
+                comment: "Synced from SST production outputs.",
               })),
             ),
             headers: {
@@ -122,19 +148,14 @@ jobs:
             throw new Error(`Vercel env sync failed: ${JSON.stringify(failed)}`);
           }
 
-          console.log("Synced SST mail outputs to Vercel production sensitive env vars.");
+          console.log("Synced SST outputs to Vercel production sensitive env vars.");
           EOF
 
       - name: Trigger Vercel production deploy
         if: ${{ env.SST_STAGE == 'production' }}
         env:
           VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "${VERCEL_DEPLOY_HOOK_URL}" ]; then
-            echo "VERCEL_DEPLOY_HOOK_URL is required to trigger the Vercel production deploy." >&2
-            exit 1
-          fi
-
-          curl --fail --show-error --silent --request POST "$VERCEL_DEPLOY_HOOK_URL"
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID || secrets.VERCEL_TEAM_ID || vars.VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: bun packages/deployment/src/wait-for-vercel-deployment.ts

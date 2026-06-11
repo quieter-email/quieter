@@ -1,5 +1,5 @@
 {
-  "$schema": "https://v2-9-16.turborepo.dev/schema.json",
+  "$schema": "https://v2-9-17.turborepo.dev/schema.json",
   "ui": "tui",
   "envMode": "strict",
   "globalDependencies": [".env*"],
@@ -82,16 +82,24 @@
       "cache": false
     },
     "db:generate": {
-      "env": ["DATABASE_URL"],
       "cache": false,
       "outputs": ["drizzle/**"],
       "interactive": true
     },
+    "db:check": {
+      "cache": false,
+      "outputs": []
+    },
+    "db:deploy": {
+      "env": ["DATABASE_MIGRATION_URL"],
+      "cache": false,
+      "outputs": []
+    },
     "db:migrate": {
-      "env": ["DATABASE_URL"],
+      "env": ["DATABASE_MIGRATION_URL", "DATABASE_URL"],
       "cache": false,
       "outputs": [],
-      "interactive": true
+      "interactive": false
     },
     "db:push": {
       "env": ["DATABASE_URL"],

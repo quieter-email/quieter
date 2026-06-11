@@ -13,9 +13,10 @@ import {
 import { domMax, LazyMotion, m } from "motion/react";
 
 type ChatComposerProps = {
+  busy: boolean;
   disabled?: boolean;
   input: string;
-  isLoading: boolean;
+  streaming: boolean;
   onInputChange: (value: string) => void;
   onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   onStop: () => void;
@@ -23,9 +24,10 @@ type ChatComposerProps = {
 };
 
 export const ChatComposer = ({
+  busy,
   disabled,
   input,
-  isLoading,
+  streaming,
   onInputChange,
   onInputKeyDown,
   onStop,
@@ -42,7 +44,7 @@ export const ChatComposer = ({
       <textarea
         aria-label="Message"
         className="max-h-40 min-h-18 w-full grow resize-none bg-transparent px-4 pt-4 pb-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-        disabled={disabled || isLoading}
+        disabled={disabled || busy}
         onChange={(event) => onInputChange(event.target.value)}
         onKeyDown={onInputKeyDown}
         placeholder="Ask me anything..."
@@ -57,7 +59,7 @@ export const ChatComposer = ({
             <SelectItem value="openai/gpt-5.4-nano">GPT-5.4 nano</SelectItem>
           </SelectContent>
         </Select>
-        {isLoading ? (
+        {streaming ? (
           <IconButtonTooltip label="Stop">
             <Button
               aria-label="Stop"
@@ -75,7 +77,7 @@ export const ChatComposer = ({
             <Button
               aria-label="Send"
               className="ml-auto shrink-0 transition-opacity"
-              disabled={disabled || !input.trim()}
+              disabled={disabled || busy || !input.trim()}
               size="icon"
               type="submit"
               variant="ghost"
