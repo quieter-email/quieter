@@ -34,11 +34,9 @@ export const getPolarClient = async () => {
   return polarClient;
 };
 
-export const getPolarOrganizationId = () => process.env.POLAR_ORGANIZATION_ID?.trim() || undefined;
-
 const POLAR_ORGANIZATION_ACCESS_TOKEN_PREFIX = "polar_oat_";
 
-export const usesPolarOrganizationAccessToken = () =>
+const usesPolarOrganizationAccessToken = () =>
   process.env.POLAR_ACCESS_TOKEN?.trim().startsWith(POLAR_ORGANIZATION_ACCESS_TOKEN_PREFIX) ??
   false;
 
@@ -48,5 +46,5 @@ export const getPolarApiOrganizationId = (): string | undefined => {
     return undefined;
   }
 
-  return getPolarOrganizationId();
+  return process.env.POLAR_ORGANIZATION_ID?.trim() || undefined;
 };

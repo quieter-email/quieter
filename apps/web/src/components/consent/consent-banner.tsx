@@ -13,10 +13,9 @@ export const ConsentBanner = () => {
   }
 
   return (
-    <div
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-border/70 bg-background-light/95 shadow-lg backdrop-blur-sm"
-      role="region"
+    <section
       aria-label="Cookie consent"
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-border/70 bg-background-light/95 shadow-lg backdrop-blur-sm"
     >
       <div className="mx-auto flex max-w-4xl flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
         <div className="min-w-0 space-y-1">
@@ -58,6 +57,6 @@ export const ConsentBanner = () => {
           </Button>
         </div>
       </div>
-    </div>
+    </section>
   );
 };

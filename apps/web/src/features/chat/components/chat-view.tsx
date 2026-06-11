@@ -8,7 +8,7 @@ import { Button, toast } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { LayoutGroup } from "motion/react";
-import { type FormEvent, type KeyboardEvent, useMemo, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useRef, useState } from "react";
 import {
   formatBillingPlan,
   normalizeBillingPlan,
@@ -16,6 +16,7 @@ import {
 } from "~/features/settings/domain/billing";
 import { chatQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-query";
 import { orpc } from "~/lib/orpc";
+import { queryPersister } from "~/lib/query-persister";
 import type { ChatViewProps } from "../types";
 import { createChatTurns } from "../domain/chat-turns";
 import { useChatRunStream, type ChatRunStreamDone } from "../hooks/use-chat-run-stream";
@@ -41,6 +42,15 @@ const normalizeChatMessages = (messages: StoredChatMessage[]): UIMessage[] =>
     role: message.role,
   }));
 
+const copyToClipboard = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard.");
+  } catch {
+    toast.error("Could not copy to clipboard.");
+  }
+};
+
 export const ChatView = ({
   activeMailbox,
   chatId,
@@ -50,15 +60,14 @@ export const ChatView = ({
   onOpenSidebar,
 }: ChatViewProps) => {
   const queryClient = useQueryClient();
-  const billingQuery = useQuery(userBillingQueryOptions());
+  const { data: billing, isPending: isBillingPending } = useQuery(userBillingQueryOptions());
   const [input, setInput] = useState("");
   const [streamRunId, setStreamRunId] = useState<string | null>(null);
   const [streamingAssistant, setStreamingAssistant] = useState<{
     messageId: string;
     parts: ChatMessagePart[];
   } | null>(null);
-  const transcriptEndRef = useRef<HTMLDivElement | null>(null);
-  const chatQuery = useQuery({
+  const { data: chatData } = useQuery({
     ...chatQueryOptions(mailboxId, chatId),
     refetchOnWindowFocus: true,
   });
@@ -94,8 +103,9 @@ export const ChatView = ({
 
   const beginAssistantStream = (result: ChatRunStartResult) => {
     streamChatIdRef.current = result.chatId;
+    const queryKey = getChatQueryKey(mailboxId, result.chatId);
 
-    queryClient.setQueryData<ChatQueryData>(getChatQueryKey(mailboxId, result.chatId), (current) =>
+    queryClient.setQueryData<ChatQueryData>(queryKey, (current) =>
       current
         ? {
             ...current,
@@ -104,6 +114,7 @@ export const ChatView = ({
           }
         : current,
     );
+    void queryPersister.persistQueryByKey(queryKey, queryClient);
 
     setStreamRunId(result.runId);
     setStreamingAssistant({
@@ -112,7 +123,7 @@ export const ChatView = ({
     });
   };
 
-  const activeRun = chatQuery.data?.activeRun ?? null;
+  const activeRun = chatData?.activeRun ?? null;
   const liveRunId = streamRunId ?? (isActiveRun(activeRun) ? (activeRun?.id ?? null) : null);
 
   const commitStreamResult = (result: ChatRunStreamDone) => {
@@ -146,6 +157,7 @@ export const ChatView = ({
         ),
       };
     });
+    void queryPersister.persistQueryByKey(queryKey, queryClient);
   };
 
   useChatRunStream({
@@ -166,6 +178,17 @@ export const ChatView = ({
     },
     onError: (message) => {
       toast.error(message);
+      const resolvedChatId = streamChatIdRef.current ?? chatId;
+
+      if (resolvedChatId) {
+        const queryKey = getChatQueryKey(mailboxId, resolvedChatId);
+        queryClient.setQueryData<ChatQueryData>(queryKey, (current) =>
+          current ? { ...current, activeRun: null } : current,
+        );
+        void queryPersister.persistQueryByKey(queryKey, queryClient);
+        void queryClient.invalidateQueries({ queryKey });
+      }
+
       setStreamRunId(null);
       setStreamingAssistant(null);
       streamChatIdRef.current = null;
@@ -173,21 +196,14 @@ export const ChatView = ({
     runId: liveRunId,
   });
 
-  const visibleMessages = useMemo(() => {
-    const messages = chatQuery.data ? normalizeChatMessages(chatQuery.data.messages) : [];
-
-    if (!streamingAssistant) {
-      return messages;
-    }
-
-    return messages.map((message) =>
-      message.id === streamingAssistant.messageId
+  const visibleMessages = (chatData ? normalizeChatMessages(chatData.messages) : []).map(
+    (message) =>
+      message.id === streamingAssistant?.messageId
         ? { ...message, parts: streamingAssistant.parts as UIMessage["parts"] }
         : message,
-    );
-  }, [chatQuery.data, streamingAssistant]);
+  );
 
-  const turns = useMemo(() => createChatTurns(visibleMessages), [visibleMessages]);
+  const turns = createChatTurns(visibleMessages);
   const isStreaming = !!liveRunId;
   const hasMessages = visibleMessages.length > 0 || !!chatId;
   const isComposerLoading =
@@ -197,13 +213,12 @@ export const ChatView = ({
     cancelGenerationMutation.isPending ||
     editUserMessageMutation.isPending ||
     regenerateResponseMutation.isPending;
-  const currentPlan = normalizeBillingPlan(billingQuery.data?.plan);
+  const currentPlan = normalizeBillingPlan(billing?.plan);
   const aiRequirement = BILLING_FEATURES.aiChat;
   const canUseAiChat =
-    !!billingQuery.data?.hasUnlimitedAccess ||
-    hasBillingPlanAccess(currentPlan, aiRequirement.requiredPlan);
-  const composerDisabled = billingQuery.isPending || !canUseAiChat;
-  const errorMessage = activeRun?.error ?? chatQuery.data?.messages.at(-1)?.error ?? undefined;
+    !!billing?.hasUnlimitedAccess || hasBillingPlanAccess(currentPlan, aiRequirement.requiredPlan);
+  const composerDisabled = isBillingPending || !canUseAiChat;
+  const errorMessage = activeRun?.error ?? chatData?.messages.at(-1)?.error ?? undefined;
 
   const submitPrompt = async () => {
     const prompt = input.trim();
@@ -246,20 +261,13 @@ export const ChatView = ({
   };
 
   const handleStop = () => {
-    if (!chatId || !isStreaming) {
+    const activeChatId = streamChatIdRef.current ?? chatId;
+
+    if (!activeChatId || !isStreaming) {
       return;
     }
 
-    void cancelGenerationMutation.mutateAsync({ chatId, mailboxId });
-  };
-
-  const handleCopy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success("Copied to clipboard.");
-    } catch {
-      toast.error("Could not copy to clipboard.");
-    }
+    void cancelGenerationMutation.mutateAsync({ chatId: activeChatId, mailboxId });
   };
 
   const handleEditSubmit = async (userMessageId: string, message: string) => {
@@ -319,34 +327,34 @@ export const ChatView = ({
           {hasMessages ? (
             <>
               <ChatTranscript
-                actionsDisabled={composerDisabled}
+                actionsDisabled={isComposerLoading || composerDisabled}
                 errorMessage={errorMessage}
                 isStreaming={isStreaming}
-                onCopy={(text) => void handleCopy(text)}
+                onCopy={(text) => void copyToClipboard(text)}
                 onEditSubmit={(userMessageId, message) =>
                   void handleEditSubmit(userMessageId, message)
                 }
                 onRegenerate={(assistantMessageId) => void handleRegenerate(assistantMessageId)}
-                transcriptEndRef={transcriptEndRef}
                 turns={turns}
               />
 
               <div className="w-full px-4 pb-5">
                 <div className="mx-auto w-full max-w-2xl">
-                  {!canUseAiChat && !billingQuery.isPending && (
+                  {!canUseAiChat && !isBillingPending && (
                     <PlanRequiredBlock
                       currentPlan={currentPlan}
                       requiredPlan={aiRequirement.requiredPlan}
                     />
                   )}
                   <ChatComposer
+                    busy={isComposerLoading}
                     disabled={composerDisabled}
                     input={input}
-                    isLoading={isComposerLoading}
                     onInputChange={setInput}
                     onInputKeyDown={handleInputKeyDown}
                     onStop={handleStop}
                     onSubmit={handleSubmit}
+                    streaming={isStreaming}
                   />
                 </div>
               </div>
@@ -354,20 +362,21 @@ export const ChatView = ({
           ) : (
             <div className="flex min-h-0 flex-1 items-center justify-center px-4">
               <div className="w-full max-w-xl">
-                {!canUseAiChat && !billingQuery.isPending && (
+                {!canUseAiChat && !isBillingPending && (
                   <PlanRequiredBlock
                     currentPlan={currentPlan}
                     requiredPlan={aiRequirement.requiredPlan}
                   />
                 )}
                 <ChatComposer
+                  busy={isComposerLoading}
                   disabled={composerDisabled}
                   input={input}
-                  isLoading={isComposerLoading}
                   onInputChange={setInput}
                   onInputKeyDown={handleInputKeyDown}
                   onStop={handleStop}
                   onSubmit={handleSubmit}
+                  streaming={isStreaming}
                 />
               </div>
             </div>

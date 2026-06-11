@@ -78,8 +78,7 @@ export type ChatRunStatus =
   | "waiting_on_tool"
   | "complete"
   | "failed"
-  | "cancelled"
-  | "paused_budget";
+  | "cancelled";
 export type ChatMessagePart = {
   type: string;
   content?: string;
@@ -560,18 +559,14 @@ export const chatRun = pgTable(
       .notNull()
       .references(() => mailbox.id, { onDelete: "cascade" }),
     mailboxCategory: text("mailboxCategory").notNull(),
-    executionName: text("executionName").notNull(),
     cancelRequestedAt: timestamp("cancelRequestedAt"),
     lastHeartbeatAt: timestamp("lastHeartbeatAt"),
-    maxIterations: integer("maxIterations"),
-    maxTotalTokens: integer("maxTotalTokens"),
     error: text("error"),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
     index("chat_run_chat_id_status_idx").on(table.chatId, table.status),
-    unique("chat_run_execution_name_unique").on(table.executionName),
     uniqueIndex("chat_run_one_active_per_chat")
       .on(table.chatId)
       .where(sql`${table.status} in ('queued', 'running', 'waiting_on_tool')`),

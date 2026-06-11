@@ -1,15 +1,26 @@
 "use client";
 
-import type { ChatMessagePart } from "@quieter/database";
+import type { ChatMessagePart, ChatRunStatus } from "@quieter/database";
 import { useEffect, useRef } from "react";
-import { consumeChatRunStream } from "../lib/chat-run-stream";
+import { ChatRunStreamError, consumeChatRunStream } from "../lib/chat-run-stream";
 
 export type ChatRunStreamDone = {
   assistantMessageId: string;
   error?: string | null;
   parts: ChatMessagePart[];
-  status: string;
+  status: ChatRunStatus;
 };
+
+const waitForRetry = (attempt: number, signal: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const finish = () => {
+      window.clearTimeout(timeout);
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
+    const timeout = window.setTimeout(finish, Math.min(1_000 * 2 ** attempt, 5_000));
+    signal.addEventListener("abort", finish, { once: true });
+  });
 
 export const useChatRunStream = ({
   enabled,
@@ -41,42 +52,50 @@ export const useChatRunStream = ({
     const controller = new AbortController();
 
     void (async () => {
-      try {
-        await consumeChatRunStream({
-          onEvent: (event) => {
-            if (event.type === "draft") {
-              assistantMessageIdRef.current = event.assistantMessageId;
-              onDraftRef.current({
-                assistantMessageId: event.assistantMessageId,
-                parts: event.parts,
-              });
-              return;
-            }
+      let attempt = 0;
 
-            if (event.type === "done") {
-              if (event.error) {
-                onErrorRef.current(event.error);
+      while (!controller.signal.aborted) {
+        try {
+          await consumeChatRunStream({
+            onEvent: (event) => {
+              if (event.type === "draft") {
+                assistantMessageIdRef.current = event.assistantMessageId;
+                onDraftRef.current({
+                  assistantMessageId: event.assistantMessageId,
+                  parts: event.parts,
+                });
+                return;
               }
 
-              onDoneRef.current({
-                assistantMessageId: event.assistantMessageId || assistantMessageIdRef.current || "",
-                error: event.error,
-                parts: event.parts,
-                status: event.status,
-              });
-            }
-          },
-          runId,
-          signal: controller.signal,
-        });
-      } catch (error) {
-        if (controller.signal.aborted) {
+              if (event.type === "done") {
+                onDoneRef.current({
+                  assistantMessageId:
+                    event.assistantMessageId || assistantMessageIdRef.current || "",
+                  error: event.error,
+                  parts: event.parts,
+                  status: event.status,
+                });
+              }
+            },
+            runId,
+            signal: controller.signal,
+          });
+          return;
+        } catch (error) {
+          if (controller.signal.aborted) {
+            return;
+          }
+
+          if (error instanceof ChatRunStreamError && error.retryable) {
+            await waitForRetry(attempt++, controller.signal);
+            continue;
+          }
+
+          onErrorRef.current(
+            error instanceof Error && error.message ? error.message : "Could not open chat stream.",
+          );
           return;
         }
-
-        onErrorRef.current(
-          error instanceof Error && error.message ? error.message : "Chat stream disconnected.",
-        );
       }
     })();
 

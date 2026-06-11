@@ -10,7 +10,7 @@ import {
   getActiveChatRunSummary,
   hasActiveChatRun,
   startAssistantRun,
-} from "../chat-generation";
+} from "../chat-run-store";
 import { assertAccessibleMailbox } from "../mailbox";
 import { mailboxCategorySchema, mailboxIdSchema, protectedProcedure } from "./base";
 
@@ -18,9 +18,7 @@ const chatIdSchema = z.string().trim().min(1);
 const chatTitleSchema = z.string().trim().min(1).max(120);
 const chatPromptSchema = z.string().trim().min(1).max(10_000);
 
-const getAuthorizedChat = async (chatId: string, mailboxId: string, userId: string) => {
-  await assertAccessibleMailbox({ mailboxId, userId });
-
+const findAuthorizedChat = async (chatId: string, mailboxId: string, userId: string) => {
   const [authorizedChat] = await db
     .select()
     .from(chat)
@@ -33,6 +31,14 @@ const getAuthorizedChat = async (chatId: string, mailboxId: string, userId: stri
     });
   }
 
+  return authorizedChat;
+};
+
+const getAuthorizedChat = async (chatId: string, mailboxId: string, userId: string) => {
+  const [, authorizedChat] = await Promise.all([
+    assertAccessibleMailbox({ mailboxId, userId }),
+    findAuthorizedChat(chatId, mailboxId, userId),
+  ]);
   return authorizedChat;
 };
 
@@ -65,22 +71,23 @@ const assertCanRunChatGeneration = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
-  const authorizedChat = await getAuthorizedChat(input.chatId, input.mailboxId, input.userId);
-  const accessibleMailbox = await assertAccessibleMailbox({
-    mailboxId: input.mailboxId,
-    userId: input.userId,
-  });
+  const [authorizedChat, accessibleMailbox, entitlement] = await Promise.all([
+    findAuthorizedChat(input.chatId, input.mailboxId, input.userId),
+    assertAccessibleMailbox({
+      mailboxId: input.mailboxId,
+      userId: input.userId,
+    }),
+    hasUserBillingFeature({
+      feature: "aiChat",
+      userId: input.userId,
+    }),
+  ]);
 
   if (accessibleMailbox.provider !== "gmail") {
     throw new ORPCError("BAD_REQUEST", {
       message: "AI chat search currently supports Gmail mailboxes only.",
     });
   }
-
-  const entitlement = await hasUserBillingFeature({
-    feature: "aiChat",
-    userId: input.userId,
-  });
 
   if (!entitlement.hasAccess) {
     throw new ORPCError("FORBIDDEN", {
@@ -97,7 +104,7 @@ const assertCanRunChatGeneration = async (input: {
   return authorizedChat;
 };
 
-const throwIfActiveChatRunConflict = (error: unknown): never => {
+const rethrowChatRunConflict = (error: unknown): never => {
   if (error instanceof ActiveChatRunConflictError) {
     throw new ORPCError("CONFLICT", {
       message: error.message,
@@ -108,29 +115,33 @@ const throwIfActiveChatRunConflict = (error: unknown): never => {
 };
 
 const startAssistantRunOrThrow = (input: Parameters<typeof startAssistantRun>[0]) =>
-  startAssistantRun(input).catch((error: unknown) => {
-    if (error instanceof ActiveChatRunConflictError) {
-      throw new ORPCError("CONFLICT", {
-        message: error.message,
-      });
-    }
+  startAssistantRun(input).catch(rethrowChatRunConflict);
 
-    throw error;
-  });
-
-const buildRunResponse = async (input: {
+const buildRunResponse = async ({
+  assistantMessageId,
+  chatId,
+  runId,
+  userMessageId,
+}: {
   assistantMessageId: string;
   chatId: string;
   runId: string;
   userMessageId: string;
-}) => ({
-  activeRun: await getActiveChatRunSummary(input.chatId),
-  assistantMessageId: input.assistantMessageId,
-  chatId: input.chatId,
-  messages: await listChatMessages(input.chatId),
-  runId: input.runId,
-  userMessageId: input.userMessageId,
-});
+}) => {
+  const [activeRun, messages] = await Promise.all([
+    getActiveChatRunSummary(chatId),
+    listChatMessages(chatId),
+  ]);
+
+  return {
+    activeRun,
+    assistantMessageId,
+    chatId,
+    messages,
+    runId,
+    userMessageId,
+  };
+};
 
 export const chatRouter = {
   list: protectedProcedure
@@ -277,7 +288,7 @@ export const chatRouter = {
       const runId = crypto.randomUUID();
       const userMessageId = crypto.randomUUID();
       const assistantMessageId = crypto.randomUUID();
-      const userParts = [{ content: input.message, type: "text" }] as ChatMessagePart[];
+      const userParts: ChatMessagePart[] = [{ content: input.message, type: "text" }];
 
       try {
         await createChatRunRecords({
@@ -294,7 +305,7 @@ export const chatRouter = {
           },
         });
       } catch (error) {
-        throwIfActiveChatRunConflict(error);
+        rethrowChatRunConflict(error);
       }
 
       return buildRunResponse({
@@ -326,7 +337,6 @@ export const chatRouter = {
         .select({
           id: chatMessage.id,
           position: chatMessage.position,
-          role: chatMessage.role,
         })
         .from(chatMessage)
         .where(
@@ -344,20 +354,19 @@ export const chatRouter = {
         });
       }
 
-      const userParts = [{ content: input.message, type: "text" }] as ChatMessagePart[];
+      const userParts: ChatMessagePart[] = [{ content: input.message, type: "text" }];
 
       const { assistantMessageId, runId } = await startAssistantRunOrThrow({
         chatId: authorizedChat.id,
         mailboxCategory: input.category,
         mailboxId: input.mailboxId,
         userId: context.userId,
+        userMessage: {
+          id: userMessage.id,
+          parts: userParts,
+        },
         userMessagePosition: userMessage.position,
       });
-
-      await db
-        .update(chatMessage)
-        .set({ parts: userParts })
-        .where(eq(chatMessage.id, userMessage.id));
 
       return buildRunResponse({
         assistantMessageId,
@@ -387,7 +396,6 @@ export const chatRouter = {
         .select({
           id: chatMessage.id,
           position: chatMessage.position,
-          role: chatMessage.role,
           status: chatMessage.status,
         })
         .from(chatMessage)
@@ -413,7 +421,7 @@ export const chatRouter = {
       }
 
       const [userMessage] = await db
-        .select({ id: chatMessage.id, position: chatMessage.position, role: chatMessage.role })
+        .select({ id: chatMessage.id, position: chatMessage.position })
         .from(chatMessage)
         .where(
           and(

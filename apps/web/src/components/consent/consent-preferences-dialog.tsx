@@ -14,20 +14,6 @@ import {
   SwitchThumb,
 } from "@quieter/ui";
 
-type ConsentTranslations = ReturnType<typeof useTranslations>;
-
-const getCategoryCopy = (
-  category: keyof ConsentTranslations["consentTypes"],
-  translations: ConsentTranslations,
-) => {
-  const copy = translations.consentTypes[category];
-
-  return {
-    description: copy?.description ?? "",
-    title: copy?.title ?? category,
-  };
-};
-
 export const ConsentPreferencesDialog = () => {
   const translations = useTranslations();
   const { consentCategories, consentTypes, selectedConsents, setSelectedConsent } =
@@ -35,12 +21,10 @@ export const ConsentPreferencesDialog = () => {
   const { closeUI, dialog, openDialog, performDialogAction, saveCustomPreferences } =
     useHeadlessConsentUI();
 
-  const visibleCategories = consentCategories
-    .map((category) => ({
-      category,
-      config: consentTypes.find((type) => type.name === category),
-    }))
-    .filter((entry) => entry.config?.display !== false);
+  const visibleCategories = consentCategories.flatMap((category) => {
+    const config = consentTypes.find((type) => type.name === category);
+    return config?.display === false ? [] : [{ category, config }];
+  });
 
   return (
     <Dialog
@@ -62,7 +46,7 @@ export const ConsentPreferencesDialog = () => {
 
         <DialogBody className="space-y-4 pt-0">
           {visibleCategories.map(({ category, config }) => {
-            const { description, title } = getCategoryCopy(category, translations);
+            const copy = translations.consentTypes[category];
             const isDisabled = category === "necessary" || config?.disabled === true;
 
             return (
@@ -71,11 +55,12 @@ export const ConsentPreferencesDialog = () => {
                 key={category}
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">{title}</p>
-                  <p className="mt-1 text-sm/6 text-muted-foreground">{description}</p>
+                  <p className="text-sm font-medium text-foreground">{copy?.title ?? category}</p>
+                  <p className="mt-1 text-sm/6 text-muted-foreground">{copy?.description ?? ""}</p>
                 </div>
 
                 <Switch
+                  aria-label={copy?.title ?? category}
                   checked={selectedConsents[category]}
                   className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
                   disabled={isDisabled}

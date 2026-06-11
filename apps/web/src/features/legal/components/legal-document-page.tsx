@@ -21,9 +21,7 @@ export const LegalDocumentPage = ({
         </p>
         <h1 className="text-3xl font-medium tracking-tight">{title}</h1>
         <p className="text-sm text-muted-foreground">{description}</p>
-        <p className="text-xs text-muted-foreground">
-          Draft for legal review. Last updated June 9, 2026.
-        </p>
+        <p className="text-xs text-muted-foreground">Last updated June 9, 2026.</p>
       </header>
 
       <article className="prose mt-10 max-w-none space-y-6 text-sm/7 text-foreground prose-neutral dark:prose-invert [&_h2]:mt-10 [&_h2]:text-base [&_h2]:font-medium [&_li]:text-muted-foreground [&_p]:text-muted-foreground [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:ps-5">

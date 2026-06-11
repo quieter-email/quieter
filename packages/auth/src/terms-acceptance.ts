@@ -1,4 +1,5 @@
 export const termsAcceptanceCookieName = "quieter_terms_accepted_at";
+const termsAcceptanceMaxAgeMs = 10 * 60 * 1_000;
 
 const parseCookieHeader = (cookieHeader: string | null) => {
   const cookies: Record<string, string> = {};
@@ -34,7 +35,8 @@ export const readTermsAcceptedAtFromCookieHeader = (cookieHeader: string | null)
   }
 
   const parsed = new Date(rawValue);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  const age = Date.now() - parsed.getTime();
+  return Number.isNaN(age) || age < 0 || age > termsAcceptanceMaxAgeMs ? null : parsed;
 };
 
 export const readTermsAcceptedAtFromRequest = (request: Request | undefined) =>

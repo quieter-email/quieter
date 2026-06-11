@@ -1,6 +1,6 @@
 import { termsAcceptanceCookieName } from "@quieter/auth/terms-acceptance";
 
-const termsAcceptanceMaxAgeSeconds = 60 * 60 * 24 * 7;
+const termsAcceptanceMaxAgeSeconds = 10 * 60;
 
 export const setTermsAcceptanceCookie = () => {
   const value = encodeURIComponent(new Date().toISOString());

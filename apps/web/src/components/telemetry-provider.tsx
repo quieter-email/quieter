@@ -37,7 +37,12 @@ export const TelemetryProvider = ({ children }: PropsWithChildren) => {
   const trackedLocationHref = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!measurementConsented || trackedLocationHref.current === locationHref) {
+    if (!measurementConsented) {
+      trackedLocationHref.current = null;
+      return;
+    }
+
+    if (trackedLocationHref.current === locationHref) {
       return;
     }
 
@@ -55,6 +60,8 @@ export const TelemetryProvider = ({ children }: PropsWithChildren) => {
 
   useEffect(() => {
     if (!measurementConsented) {
+      getPosthogClient()?.reset?.();
+      identifiedUserId.current = null;
       return;
     }
 

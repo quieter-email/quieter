@@ -1,5 +1,16 @@
 import type { ChatMessagePart, ChatRunStatus } from "@quieter/database";
 
+export const ACTIVE_CHAT_RUN_STATUSES = [
+  "queued",
+  "running",
+  "waiting_on_tool",
+] as const satisfies ChatRunStatus[];
+
+export const isActiveChatRunStatus = (
+  status: ChatRunStatus,
+): status is (typeof ACTIVE_CHAT_RUN_STATUSES)[number] =>
+  ACTIVE_CHAT_RUN_STATUSES.includes(status as (typeof ACTIVE_CHAT_RUN_STATUSES)[number]);
+
 export type ChatRunStreamEvent =
   | {
       assistantMessageId: string;
@@ -52,7 +63,11 @@ export const publishChatRunEvent = (runId: string, event: ChatRunStreamEvent) =>
   }
 
   for (const subscriber of entry.subscribers) {
-    subscriber(event);
+    try {
+      subscriber(event);
+    } catch (error) {
+      console.error("Could not publish a chat run stream event.", error);
+    }
   }
 };
 
@@ -73,41 +88,5 @@ export const subscribeChatRunEvents = (runId: string, subscriber: RunSubscriber)
     }
   };
 };
-
-export const waitForChatRunStream = (runId: string, onEvent: RunSubscriber, signal?: AbortSignal) =>
-  new Promise<void>((resolve) => {
-    if (signal?.aborted) {
-      resolve();
-      return;
-    }
-
-    let unsubscribe: (() => void) | undefined;
-
-    const onAbort = () => {
-      cleanup();
-      resolve();
-    };
-
-    const cleanup = () => {
-      unsubscribe?.();
-      signal?.removeEventListener("abort", onAbort);
-    };
-
-    signal?.addEventListener("abort", onAbort, { once: true });
-
-    unsubscribe = subscribeChatRunEvents(runId, (event) => {
-      onEvent(event);
-
-      if (event.type === "done") {
-        cleanup();
-        resolve();
-      }
-    });
-
-    if (signal?.aborted) {
-      cleanup();
-      resolve();
-    }
-  });
 
 export const formatChatRunSse = (event: ChatRunStreamEvent) => `data: ${JSON.stringify(event)}\n\n`;

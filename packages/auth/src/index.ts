@@ -122,7 +122,7 @@ export const auth = betterAuth({
           return {
             data: {
               ...createdUser,
-              termsAcceptedAt: new Date(),
+              termsAcceptedAt: hasAcceptedTerms,
             },
           };
         },

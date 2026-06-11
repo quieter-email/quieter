@@ -1,23 +1,4 @@
-import type { ChatMessagePart } from "@quieter/database";
-
-export type ChatRunStreamEvent =
-  | {
-      assistantMessageId: string;
-      parts: ChatMessagePart[];
-      type: "draft";
-    }
-  | {
-      error?: string | null;
-      status: string;
-      type: "status";
-    }
-  | {
-      assistantMessageId: string;
-      error?: string | null;
-      parts: ChatMessagePart[];
-      status: string;
-      type: "done";
-    };
+import type { ChatRunStreamEvent } from "@quieter/orpc/chat-run-stream";
 
 const parseSseEvent = (chunk: string): ChatRunStreamEvent | null => {
   const dataLine = chunk.split("\n").find((line) => line.startsWith("data: "));
@@ -27,7 +8,18 @@ const parseSseEvent = (chunk: string): ChatRunStreamEvent | null => {
   }
 
   try {
-    return JSON.parse(dataLine.slice("data: ".length)) as ChatRunStreamEvent;
+    const event: unknown = JSON.parse(dataLine.slice("data: ".length));
+
+    if (
+      !event ||
+      typeof event !== "object" ||
+      !("type" in event) ||
+      !["done", "draft", "status"].includes(String(event.type))
+    ) {
+      return null;
+    }
+
+    return event as ChatRunStreamEvent;
   } catch {
     return null;
   }
@@ -48,16 +40,29 @@ export const consumeChatRunStream = async ({
   });
 
   if (!response.ok) {
-    throw new Error("Could not open the chat stream.");
+    throw new ChatRunStreamError(
+      "Could not open the chat stream.",
+      response.status !== 401 && response.status !== 403,
+    );
   }
 
   if (!response.body) {
-    throw new Error("The chat stream did not return a body.");
+    throw new ChatRunStreamError("The chat stream did not return a body.");
   }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let completed = false;
+
+  const emitEvent = (event: ChatRunStreamEvent | null) => {
+    if (!event) {
+      return;
+    }
+
+    onEvent(event);
+    completed ||= event.type === "done";
+  };
 
   while (true) {
     const { done, value } = await reader.read();
@@ -72,21 +77,27 @@ export const consumeChatRunStream = async ({
     buffer = chunks.pop() ?? "";
 
     for (const chunk of chunks) {
-      const event = parseSseEvent(chunk);
-
-      if (event) {
-        onEvent(event);
-      }
+      emitEvent(parseSseEvent(chunk));
     }
   }
 
   buffer += decoder.decode();
 
   if (buffer.trim()) {
-    const event = parseSseEvent(buffer);
+    emitEvent(parseSseEvent(buffer));
+  }
 
-    if (event) {
-      onEvent(event);
-    }
+  if (!completed && !signal?.aborted) {
+    throw new ChatRunStreamError("Chat stream disconnected.");
   }
 };
+
+export class ChatRunStreamError extends Error {
+  constructor(
+    message: string,
+    readonly retryable = true,
+  ) {
+    super(message);
+    this.name = "ChatRunStreamError";
+  }
+}

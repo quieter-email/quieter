@@ -46,21 +46,11 @@ export const gmailSearchToolDef = toolDefinition({
 
 export type GmailSearchToolContext = {
   category: MailboxCategory;
-  mailboxId: string;
   searchGmail: (input: { maxResults: number; query: string }) => Promise<GmailSearchResult>;
 };
 
 export const createGmailSearchServerTool = (context: GmailSearchToolContext): ServerTool =>
   gmailSearchToolDef.server(async ({ query, maxResults }) => {
-    if (!context.mailboxId) {
-      return {
-        category: context.category,
-        error: "No Gmail mailbox is selected.",
-        messages: [],
-        query,
-      };
-    }
-
     try {
       return await context.searchGmail({ maxResults: maxResults ?? 5, query });
     } catch (error) {

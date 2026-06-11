@@ -7,16 +7,16 @@ import pg from "pg";
 const consentTablePrefix = "c15t_";
 
 const getTrustedOrigins = () => {
-  const origins = new Set<string>(["localhost:3000"]);
+  const origins = new Set(["localhost:3000"]);
 
-  const betterAuthUrl = process.env.BETTER_AUTH_URL?.trim();
-  if (betterAuthUrl) {
-    origins.add(betterAuthUrl.replace(/^https?:\/\//, ""));
-  }
-
-  const vercelUrl = process.env.VERCEL_URL?.trim();
-  if (vercelUrl) {
-    origins.add(vercelUrl);
+  for (const value of [process.env.BETTER_AUTH_URL, process.env.VERCEL_URL]) {
+    const origin = value
+      ?.trim()
+      .replace(/^https?:\/\//, "")
+      .replace(/\/$/, "");
+    if (origin) {
+      origins.add(origin);
+    }
   }
 
   return [...origins];
@@ -28,18 +28,13 @@ const policyPacks = policyBuilder.composePacks(
   [policyPackPresets.worldNoBanner()],
 );
 
-const createConsentKysely = (pool: pg.Pool) =>
-  new Kysely({
-    dialect: new PostgresDialect({
-      pool,
-    }),
-  });
-
-let consentBackend: ReturnType<typeof c15tInstance> | undefined;
 let consentMigrationPromise: Promise<void> | undefined;
-let consentPool: pg.Pool | undefined;
-let consentKysely: ReturnType<typeof createConsentKysely> | undefined;
-let consentAdapter: ReturnType<typeof kyselyAdapter> | undefined;
+let consentState:
+  | {
+      adapter: ReturnType<typeof kyselyAdapter>;
+      backend: ReturnType<typeof c15tInstance>;
+    }
+  | undefined;
 
 const getConsentDatabaseUrl = () => {
   const databaseUrl = process.env.DATABASE_URL?.trim();
@@ -51,23 +46,40 @@ const getConsentDatabaseUrl = () => {
   return databaseUrl;
 };
 
-const getConsentAdapter = () => {
-  consentPool ??= new pg.Pool({
-    connectionString: getConsentDatabaseUrl(),
-  });
-  consentKysely ??= createConsentKysely(consentPool);
-  consentAdapter ??= kyselyAdapter({
-    db: consentKysely,
+const getConsentState = () => {
+  if (consentState) {
+    return consentState;
+  }
+
+  const adapter = kyselyAdapter({
+    db: new Kysely({
+      dialect: new PostgresDialect({
+        pool: new pg.Pool({
+          connectionString: getConsentDatabaseUrl(),
+        }),
+      }),
+    }),
     provider: "postgresql",
   });
 
-  return consentAdapter;
+  consentState = {
+    adapter,
+    backend: c15tInstance({
+      adapter,
+      appName: "quieter",
+      basePath: "/api/c15t",
+      policyPacks,
+      tablePrefix: consentTablePrefix,
+      trustedOrigins: getTrustedOrigins(),
+    }),
+  };
+  return consentState;
 };
 
 const ensureConsentMigrations = async () => {
   consentMigrationPromise ??= (async () => {
     try {
-      const adapter = getConsentAdapter();
+      const { adapter } = getConsentState();
       const client = DB.names.prefix(consentTablePrefix).client(adapter);
       const migration = await client.createMigrator().migrateToLatest();
       await migration.execute();
@@ -80,20 +92,7 @@ const ensureConsentMigrations = async () => {
   await consentMigrationPromise;
 };
 
-export const getConsentBackend = () => {
-  consentBackend ??= c15tInstance({
-    adapter: getConsentAdapter(),
-    appName: "quieter",
-    basePath: "/api/c15t",
-    policyPacks,
-    tablePrefix: consentTablePrefix,
-    trustedOrigins: getTrustedOrigins(),
-  });
-
-  return consentBackend;
-};
-
 export const initializeConsentBackend = async () => {
   await ensureConsentMigrations();
-  return getConsentBackend();
+  return getConsentState().backend;
 };

@@ -74,7 +74,6 @@
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
-    "@c15t/cli": "^2.1.0",
     "@quieter/config": "workspace:*",
     "@react-scan/vite-plugin-react-scan": "^0.2.7",
     "@rolldown/plugin-babel": "^0.2.3",

@@ -1,3 +1,4 @@
+import type { MailboxCategory } from "@quieter/gmail";
 import {
   createGmailSearchServerTool,
   gmailSearchPrompt,
@@ -13,142 +14,18 @@ import {
   db,
   type ChatMessagePart,
   type ChatMessageStatus,
-  type ChatRunStatus,
 } from "@quieter/database";
-import { isGmailServiceError, listMessagesWithDetails, type MailboxCategory } from "@quieter/gmail";
-import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
-import { publishChatRunEvent } from "./chat-run-stream";
-import {
-  getAuthorizedGmailMailbox,
-  markGmailMailboxNeedsReconnect,
-  refreshAuthorizedGmailAccessToken,
-} from "./mailbox";
+import { and, eq, sql } from "drizzle-orm";
+import { isCancelRequested, updateAssistantMessage, updateRunStatus } from "./chat-run-store";
+import { isActiveChatRunStatus, publishChatRunEvent } from "./chat-run-stream";
+import { searchGmailForUser } from "./gmail-chat-search";
 
-const ACTIVE_CHAT_RUN_STATUSES = [
-  "queued",
-  "running",
-  "waiting_on_tool",
-] as const satisfies ChatRunStatus[];
-const CHAT_RUN_ACTIVE_CONFLICT_INDEX = "chat_run_one_active_per_chat";
-const ENQUEUE_CHAT_RUN_TIMEOUT_MS = 10_000;
-
-export class ActiveChatRunConflictError extends Error {
-  constructor() {
-    super("This chat already has a generation in progress.");
-    this.name = "ActiveChatRunConflictError";
-  }
-}
-
-const getPostgresErrorField = (error: unknown, field: "code" | "constraint") => {
-  if (!error || typeof error !== "object") {
-    return undefined;
-  }
-
-  if (field in error && typeof error[field as keyof typeof error] === "string") {
-    return error[field as keyof typeof error] as string;
-  }
-
-  if ("cause" in error && error.cause && typeof error.cause === "object" && field in error.cause) {
-    const value = error.cause[field as keyof typeof error.cause];
-    return typeof value === "string" ? value : undefined;
-  }
-
-  return undefined;
-};
-
-const isActiveChatRunConflict = (error: unknown) => {
-  if (getPostgresErrorField(error, "code") !== "23505") {
-    return false;
-  }
-
-  const constraint = getPostgresErrorField(error, "constraint");
-  return !constraint || constraint === CHAT_RUN_ACTIVE_CONFLICT_INDEX;
-};
-
-const throwIfActiveChatRunConflict = (error: unknown) => {
-  if (isActiveChatRunConflict(error)) {
-    throw new ActiveChatRunConflictError();
-  }
-
-  throw error;
-};
 const DRAFT_PERSIST_INTERVAL_MS = 750;
 const CANCEL_POLL_INTERVAL_MS = 1_000;
-const DEFAULT_MAX_ITERATIONS = 20;
-const STALE_CHAT_RUN_MS = 3 * 60 * 1_000;
-const STALE_CHAT_RUN_ERROR = "Generation stopped unexpectedly. Send your message again.";
 const HEARTBEAT_TOUCH_INTERVAL_MS = 5_000;
+const ENQUEUE_CHAT_RUN_TIMEOUT_MS = 10_000;
 
 const inFlightGenerations = new Map<string, Promise<void>>();
-
-const isGmailAuthError = (error: unknown) =>
-  isGmailServiceError(error) &&
-  error.status === 401 &&
-  ((typeof error.googleReason === "string" && error.googleReason.toLowerCase() === "autherror") ||
-    (typeof error.googleStatus === "string" &&
-      error.googleStatus.toUpperCase() === "UNAUTHENTICATED"));
-
-const searchGmailForUser = async (input: {
-  category: MailboxCategory;
-  mailboxId: string;
-  maxResults: number;
-  query: string;
-  signal?: AbortSignal;
-  userId: string;
-}) => {
-  const runSearch = async (accessToken: string) => {
-    const result = await listMessagesWithDetails(accessToken, {
-      mailbox: input.category,
-      maxResults: input.maxResults,
-      query: input.query,
-      signal: input.signal,
-    });
-
-    return {
-      category: input.category,
-      messages: result.messages.map((message) => ({
-        date: message.date ?? message.internalDate,
-        from: message.from,
-        id: message.id,
-        isUnread: message.isUnread,
-        labelIds: message.labelIds,
-        snippet: message.snippet,
-        subject: message.subject,
-        threadId: message.threadId,
-      })),
-      query: input.query,
-      resultSizeEstimate: result.resultSizeEstimate,
-    };
-  };
-
-  const { accessToken, mailbox } = await getAuthorizedGmailMailbox({
-    mailboxId: input.mailboxId,
-    userId: input.userId,
-  });
-
-  try {
-    return await runSearch(accessToken);
-  } catch (error) {
-    if (!isGmailAuthError(error)) {
-      throw error;
-    }
-
-    const refreshedAccessToken = await refreshAuthorizedGmailAccessToken({
-      mailboxId: input.mailboxId,
-      userId: input.userId,
-    });
-
-    try {
-      return await runSearch(refreshedAccessToken);
-    } catch (retryError) {
-      if (isGmailAuthError(retryError)) {
-        await markGmailMailboxNeedsReconnect(mailbox.id);
-      }
-
-      throw retryError;
-    }
-  }
-};
 
 const getTextContent = (parts: ChatMessagePart[]) =>
   parts
@@ -163,20 +40,21 @@ const getTextContent = (parts: ChatMessagePart[]) =>
 
 /** StreamProcessor appends a new assistant message; use the latest one for draft persistence. */
 const getStreamingAssistantParts = (messages: UIMessage[]): ChatMessagePart[] | null => {
-  const assistants = messages.filter((message) => message.role === "assistant");
-  const streaming = [...assistants].reverse().find((message) =>
-    message.parts.some((part) => {
-      if (part.type !== "text") {
-        return true;
-      }
+  let latestAssistant: UIMessage | undefined;
 
-      return "content" in part && typeof part.content === "string" && part.content.length > 0;
-    }),
-  );
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (message?.role !== "assistant") {
+      continue;
+    }
 
-  const parts = (streaming ?? assistants.at(-1))?.parts;
+    latestAssistant ??= message;
+    if (message.parts.some((part) => part.type !== "text" || Boolean(part.content))) {
+      return message.parts as ChatMessagePart[];
+    }
+  }
 
-  return parts ? (parts as ChatMessagePart[]) : null;
+  return latestAssistant ? (latestAssistant.parts as ChatMessagePart[]) : null;
 };
 
 const toUiMessages = (
@@ -193,67 +71,6 @@ const toUiMessages = (
     parts: message.parts as UIMessage["parts"],
     role: message.role,
   }));
-
-const updateRunStatus = async (
-  runId: string,
-  status: ChatRunStatus,
-  extra?: { error?: string | null; lastHeartbeatAt?: Date },
-) => {
-  await db
-    .update(chatRun)
-    .set({
-      error: extra?.error,
-      lastHeartbeatAt: extra?.lastHeartbeatAt ?? new Date(),
-      status,
-      updatedAt: new Date(),
-    })
-    .where(eq(chatRun.id, runId));
-};
-
-const updateAssistantMessage = async (input: {
-  assistantMessageId: string;
-  error?: string | null;
-  parts: ChatMessagePart[];
-  status: ChatMessageStatus;
-}) => {
-  await db
-    .update(chatMessage)
-    .set({
-      error: input.error,
-      parts: input.parts,
-      status: input.status,
-    })
-    .where(eq(chatMessage.id, input.assistantMessageId));
-};
-
-const isCancelRequested = async (runId: string) => {
-  const [row] = await db
-    .select({ cancelRequestedAt: chatRun.cancelRequestedAt })
-    .from(chatRun)
-    .where(eq(chatRun.id, runId))
-    .limit(1);
-
-  return !!row?.cancelRequestedAt;
-};
-
-export const getAuthorizedChatRun = async (runId: string, userId: string) => {
-  const [run] = await db.select().from(chatRun).where(eq(chatRun.id, runId)).limit(1);
-
-  if (!run || run.userId !== userId) {
-    return null;
-  }
-
-  return run;
-};
-
-const hasVisibleAssistantContent = (parts: ChatMessagePart[]) =>
-  parts.some((part) => {
-    if (part.type !== "text") {
-      return true;
-    }
-
-    return typeof part.content === "string" && part.content.length > 0;
-  });
 
 export const ensureChatRunGeneration = (runId: string) => {
   const existing = inFlightGenerations.get(runId);
@@ -338,7 +155,7 @@ export const runChatGeneration = async (runId: string) => {
     throw new Error(`Chat run ${runId} was not found.`);
   }
 
-  if (!ACTIVE_CHAT_RUN_STATUSES.includes(run.status as (typeof ACTIVE_CHAT_RUN_STATUSES)[number])) {
+  if (!isActiveChatRunStatus(run.status)) {
     return;
   }
 
@@ -381,6 +198,7 @@ export const runChatGeneration = async (runId: string) => {
   const abortController = new AbortController();
   let persistTimeout: ReturnType<typeof setTimeout> | undefined;
   let pendingParts: ChatMessagePart[] = assistantDraft.parts;
+  let pendingPersist = Promise.resolve();
   let cancelled = false;
   let hasPersistedStreamingDraft = false;
   let lastHeartbeatTouchAt = 0;
@@ -402,6 +220,7 @@ export const runChatGeneration = async (runId: string) => {
       persistTimeout = undefined;
     }
 
+    await pendingPersist;
     await updateAssistantMessage({
       assistantMessageId: run.assistantMessageId,
       error,
@@ -411,12 +230,21 @@ export const runChatGeneration = async (runId: string) => {
   };
 
   const persistStreamingDraft = () => {
-    void updateAssistantMessage({
-      assistantMessageId: run.assistantMessageId,
-      parts: pendingParts,
-      status: "streaming",
+    const parts = pendingParts;
+    pendingPersist = pendingPersist.then(async () => {
+      await Promise.all([
+        updateAssistantMessage({
+          assistantMessageId: run.assistantMessageId,
+          parts,
+          status: "streaming",
+        }),
+        updateRunStatus(runId, "running"),
+      ]);
     });
-    void updateRunStatus(runId, "running");
+
+    void pendingPersist.catch((error) => {
+      console.error("Could not persist the chat generation draft.", error);
+    });
   };
 
   const touchRunHeartbeat = () => {
@@ -493,7 +321,7 @@ export const runChatGeneration = async (runId: string) => {
       status: "streaming",
     });
 
-    const { messages: finalMessages } = await runChatStream({
+    const finalMessages = await runChatStream({
       abortController,
       initialMessages: toUiMessages(
         visibleMessages.filter((message) => message.id !== run.assistantMessageId),
@@ -516,7 +344,6 @@ export const runChatGeneration = async (runId: string) => {
       tools: [
         createGmailSearchServerTool({
           category: run.mailboxCategory as MailboxCategory,
-          mailboxId: run.mailboxId,
           searchGmail: ({ maxResults, query }) =>
             searchGmailForUser({
               category: run.mailboxCategory as MailboxCategory,
@@ -530,33 +357,19 @@ export const runChatGeneration = async (runId: string) => {
       ],
     });
 
-    if (persistTimeout) {
-      clearTimeout(persistTimeout);
-      persistTimeout = undefined;
-    }
-
     const finalParts = (getStreamingAssistantParts(finalMessages) ??
       pendingParts) as ChatMessagePart[];
     const fallbackTitle = getTextContent(
       visibleMessages.find((message) => message.role === "user")?.parts ?? [],
     );
-
     const terminalStatus = cancelled ? "cancelled" : "complete";
 
-    await updateAssistantMessage({
-      assistantMessageId: run.assistantMessageId,
-      error: cancelled ? "Generation cancelled." : null,
-      parts: finalParts,
-      status: cancelled ? "failed" : "complete",
-    });
+    pendingParts = finalParts;
+    await flushAssistantDraft(
+      cancelled ? "failed" : "complete",
+      cancelled ? "Generation cancelled." : null,
+    );
     await updateRunStatus(runId, terminalStatus);
-    publishChatRunEvent(runId, {
-      assistantMessageId: run.assistantMessageId,
-      error: cancelled ? "Generation cancelled." : null,
-      parts: finalParts,
-      status: terminalStatus,
-      type: "done",
-    });
     await db
       .update(chat)
       .set({
@@ -565,7 +378,17 @@ export const runChatGeneration = async (runId: string) => {
         >`coalesce(${chat.title}, ${fallbackTitle ? fallbackTitle.slice(0, 80) : null})`,
         updatedAt: new Date(),
       })
-      .where(eq(chat.id, run.chatId));
+      .where(eq(chat.id, run.chatId))
+      .catch((error) => {
+        console.error("Could not update the generated chat title.", error);
+      });
+    publishChatRunEvent(runId, {
+      assistantMessageId: run.assistantMessageId,
+      error: cancelled ? "Generation cancelled." : null,
+      parts: finalParts,
+      status: terminalStatus,
+      type: "done",
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Chat generation failed.";
 
@@ -598,193 +421,4 @@ export const runChatGeneration = async (runId: string) => {
       clearTimeout(persistTimeout);
     }
   }
-};
-
-const failStaleChatRun = async (run: { assistantMessageId: string; id: string }) => {
-  const [assistantMessage] = await db
-    .select({ parts: chatMessage.parts })
-    .from(chatMessage)
-    .where(eq(chatMessage.id, run.assistantMessageId))
-    .limit(1);
-
-  await updateAssistantMessage({
-    assistantMessageId: run.assistantMessageId,
-    error: STALE_CHAT_RUN_ERROR,
-    parts: (assistantMessage?.parts ?? [{ content: "", type: "text" }]) as ChatMessagePart[],
-    status: "failed",
-  });
-  await updateRunStatus(run.id, "failed", { error: STALE_CHAT_RUN_ERROR });
-};
-
-export const hasActiveChatRun = async (chatId: string) => !!(await getActiveChatRunSummary(chatId));
-
-export const getActiveChatRunSummary = async (chatId: string) => {
-  const [activeRun] = await db
-    .select({
-      assistantMessageId: chatRun.assistantMessageId,
-      cancelRequestedAt: chatRun.cancelRequestedAt,
-      createdAt: chatRun.createdAt,
-      error: chatRun.error,
-      id: chatRun.id,
-      lastHeartbeatAt: chatRun.lastHeartbeatAt,
-      status: chatRun.status,
-      updatedAt: chatRun.updatedAt,
-    })
-    .from(chatRun)
-    .where(and(eq(chatRun.chatId, chatId), inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])))
-    .orderBy(desc(chatRun.createdAt))
-    .limit(1);
-
-  if (!activeRun) {
-    return null;
-  }
-
-  const [assistantMessage] = await db
-    .select({ parts: chatMessage.parts })
-    .from(chatMessage)
-    .where(eq(chatMessage.id, activeRun.assistantMessageId))
-    .limit(1);
-  const hasAssistantContent = hasVisibleAssistantContent(
-    (assistantMessage?.parts ?? []) as ChatMessagePart[],
-  );
-  const lastActivity = activeRun.lastHeartbeatAt ?? activeRun.updatedAt ?? activeRun.createdAt;
-  const isHeartbeatStale = Date.now() - lastActivity.getTime() > STALE_CHAT_RUN_MS;
-  const isOrphanedEmptyRun =
-    Date.now() - activeRun.createdAt.getTime() > STALE_CHAT_RUN_MS && !hasAssistantContent;
-
-  if (isHeartbeatStale || isOrphanedEmptyRun) {
-    await failStaleChatRun(activeRun);
-    return null;
-  }
-
-  return {
-    assistantMessageId: activeRun.assistantMessageId,
-    cancelRequestedAt: activeRun.cancelRequestedAt,
-    error: activeRun.error,
-    id: activeRun.id,
-    status: activeRun.status,
-  };
-};
-
-export const createChatRunRecords = async (input: {
-  assistantMessageId: string;
-  chatId: string;
-  mailboxCategory: string;
-  mailboxId: string;
-  runId: string;
-  userId: string;
-  userMessage: {
-    id: string;
-    parts: ChatMessagePart[];
-    position: number;
-  };
-}) => {
-  const now = new Date();
-
-  // Neon HTTP driver does not support db.transaction(); keep writes ordered by FK deps.
-  await db.insert(chatMessage).values({
-    chatId: input.chatId,
-    createdAt: now,
-    id: input.userMessage.id,
-    parts: input.userMessage.parts,
-    position: input.userMessage.position,
-    role: "user",
-    status: "complete",
-    userId: input.userId,
-  });
-
-  await db.insert(chatMessage).values({
-    chatId: input.chatId,
-    createdAt: now,
-    id: input.assistantMessageId,
-    parts: [{ content: "", type: "text" }] as ChatMessagePart[],
-    position: input.userMessage.position + 1,
-    role: "assistant",
-    status: "draft",
-    userId: input.userId,
-  });
-
-  try {
-    await db.insert(chatRun).values({
-      assistantMessageId: input.assistantMessageId,
-      chatId: input.chatId,
-      createdAt: now,
-      executionName: input.runId,
-      id: input.runId,
-      lastHeartbeatAt: now,
-      mailboxCategory: input.mailboxCategory,
-      mailboxId: input.mailboxId,
-      maxIterations: DEFAULT_MAX_ITERATIONS,
-      status: "queued",
-      updatedAt: now,
-      userId: input.userId,
-    });
-  } catch (error) {
-    if (isActiveChatRunConflict(error)) {
-      await db
-        .delete(chatMessage)
-        .where(inArray(chatMessage.id, [input.userMessage.id, input.assistantMessageId]));
-      throw new ActiveChatRunConflictError();
-    }
-
-    throw error;
-  }
-
-  await db.update(chat).set({ updatedAt: now }).where(eq(chat.id, input.chatId));
-};
-
-export const startAssistantRun = async (input: {
-  chatId: string;
-  mailboxCategory: string;
-  mailboxId: string;
-  runId?: string;
-  userId: string;
-  userMessagePosition: number;
-}) => {
-  const runId = input.runId ?? crypto.randomUUID();
-  const assistantMessageId = crypto.randomUUID();
-  const now = new Date();
-
-  await db
-    .delete(chatMessage)
-    .where(
-      and(
-        eq(chatMessage.chatId, input.chatId),
-        gt(chatMessage.position, input.userMessagePosition),
-      ),
-    );
-
-  await db.insert(chatMessage).values({
-    chatId: input.chatId,
-    createdAt: now,
-    id: assistantMessageId,
-    parts: [{ content: "", type: "text" }] as ChatMessagePart[],
-    position: input.userMessagePosition + 1,
-    role: "assistant",
-    status: "draft",
-    userId: input.userId,
-  });
-
-  try {
-    await db.insert(chatRun).values({
-      assistantMessageId,
-      chatId: input.chatId,
-      createdAt: now,
-      executionName: runId,
-      id: runId,
-      lastHeartbeatAt: now,
-      mailboxCategory: input.mailboxCategory,
-      mailboxId: input.mailboxId,
-      maxIterations: DEFAULT_MAX_ITERATIONS,
-      status: "queued",
-      updatedAt: now,
-      userId: input.userId,
-    });
-  } catch (error) {
-    throwIfActiveChatRunConflict(error);
-  }
-
-  await db.update(chat).set({ updatedAt: now }).where(eq(chat.id, input.chatId));
-
-  return { assistantMessageId, runId };
 };

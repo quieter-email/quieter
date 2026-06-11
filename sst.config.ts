@@ -1,6 +1,16 @@
 // oxlint-disable-next-line typescript-eslint/triple-slash-reference
 /// <reference path="./.sst/platform/config.d.ts" />
 
+const requireEnvironmentVariable = (name: string) => {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(`${name} is required to deploy the SST stack.`);
+  }
+
+  return value;
+};
+
 export default $config({
   app(input) {
     return {
@@ -88,12 +98,8 @@ export default $config({
       role: mailReceiptRole.id,
     });
 
-    const databaseUrl = process.env.DATABASE_URL;
-    const polarAccessToken = process.env.POLAR_ACCESS_TOKEN;
-
-    if (!databaseUrl) throw new Error("DATABASE_URL is required for MailReceiptProcessor.");
-    if (!polarAccessToken)
-      throw new Error("POLAR_ACCESS_TOKEN is required for MailReceiptProcessor.");
+    const databaseUrl = requireEnvironmentVariable("DATABASE_URL");
+    const polarAccessToken = requireEnvironmentVariable("POLAR_ACCESS_TOKEN");
 
     mailReceiptTopic.subscribe("MailReceiptProcessor", {
       environment: {
@@ -107,22 +113,10 @@ export default $config({
       timeout: "30 seconds",
     });
 
-    const openRouterApiKey = process.env.OPENROUTER_API_KEY;
-    const googleGmailClientId = process.env.GOOGLE_GMAIL_CLIENT_ID;
-    const googleGmailClientSecret = process.env.GOOGLE_GMAIL_CLIENT_SECRET;
-    const gmailTokenEncryptionKey = process.env.GMAIL_TOKEN_ENCRYPTION_KEY;
-
-    if (!openRouterApiKey)
-      throw new Error("OPENROUTER_API_KEY is required for ChatGenerationWorkflow.");
-    if (!googleGmailClientId) {
-      throw new Error("GOOGLE_GMAIL_CLIENT_ID is required for ChatGenerationWorkflow.");
-    }
-    if (!googleGmailClientSecret) {
-      throw new Error("GOOGLE_GMAIL_CLIENT_SECRET is required for ChatGenerationWorkflow.");
-    }
-    if (!gmailTokenEncryptionKey) {
-      throw new Error("GMAIL_TOKEN_ENCRYPTION_KEY is required for ChatGenerationWorkflow.");
-    }
+    const openRouterApiKey = requireEnvironmentVariable("OPENROUTER_API_KEY");
+    const googleGmailClientId = requireEnvironmentVariable("GOOGLE_GMAIL_CLIENT_ID");
+    const googleGmailClientSecret = requireEnvironmentVariable("GOOGLE_GMAIL_CLIENT_SECRET");
+    const gmailTokenEncryptionKey = requireEnvironmentVariable("GMAIL_TOKEN_ENCRYPTION_KEY");
 
     const chatGenerationStartToken = new sst.Secret("ChatGenerationStartToken");
     const chatGenerationQueue = new sst.aws.Queue("ChatGenerationQueue");

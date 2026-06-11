@@ -5,7 +5,7 @@ import {
   type ServerTool,
   type UIMessage,
 } from "@tanstack/ai";
-import { createOpenRouterAdapter } from "./index";
+import { createOpenRouterAdapter } from "./openrouter";
 
 export const runChatStream = async ({
   abortController,
@@ -43,10 +43,6 @@ export const runChatStream = async ({
     tools,
   });
 
-  const result = await processor.process(stream);
-
-  return {
-    messages: processor.getMessages(),
-    result,
-  };
+  await processor.process(stream);
+  return processor.getMessages();
 };

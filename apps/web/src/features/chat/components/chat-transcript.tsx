@@ -1,6 +1,5 @@
 "use client";
 
-import type { RefObject } from "react";
 import {
   ScrollArea,
   ScrollAreaContent,
@@ -8,7 +7,7 @@ import {
   ScrollAreaThumb,
   ScrollAreaViewport,
 } from "@quieter/ui";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { ChatTurn } from "../types";
 import { hasVisibleAssistantContent } from "../domain/assistant-content";
 import { ChatError } from "./chat-error";
@@ -22,7 +21,6 @@ type ChatTranscriptProps = {
   onCopy: (text: string) => void;
   onEditSubmit: (userMessageId: string, message: string) => void;
   onRegenerate: (assistantMessageId: string) => void;
-  transcriptEndRef: RefObject<HTMLDivElement | null>;
   turns: ChatTurn[];
 };
 
@@ -64,46 +62,33 @@ export const ChatTranscript = ({
   onCopy,
   onEditSubmit,
   onRegenerate,
-  transcriptEndRef,
   turns,
 }: ChatTranscriptProps) => {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = useRef(true);
-  const scrollSignature = useMemo(() => getTurnScrollSignature(turns), [turns]);
+  const scrollSignature = getTurnScrollSignature(turns);
   const lastTurn = turns.at(-1);
   const showThinkingIndicator =
     isStreaming && !!lastTurn?.assistant && !hasVisibleAssistantContent(lastTurn.assistant.parts);
-
-  const scrollToBottom = useCallback((behavior: ScrollBehavior) => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    viewport.scrollTo({ behavior, top: viewport.scrollHeight });
-  }, []);
-
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-
-    const onScroll = () => {
-      const { scrollHeight, scrollTop, clientHeight } = viewport;
-      isNearBottomRef.current = scrollHeight - scrollTop - clientHeight < SCROLL_THRESHOLD;
-    };
-
-    viewport.addEventListener("scroll", onScroll, { passive: true });
-    return () => viewport.removeEventListener("scroll", onScroll);
-  }, []);
 
   useEffect(() => {
     if (!isNearBottomRef.current) {
       return;
     }
 
-    scrollToBottom("auto");
-  }, [scrollSignature, scrollToBottom]);
+    const viewport = viewportRef.current;
+    viewport?.scrollTo({ behavior: "auto", top: viewport.scrollHeight });
+  }, [scrollSignature]);
 
   return (
     <ScrollArea className="min-h-0 flex-1">
-      <ScrollAreaViewport ref={viewportRef}>
+      <ScrollAreaViewport
+        onScroll={(event) => {
+          const { clientHeight, scrollHeight, scrollTop } = event.currentTarget;
+          isNearBottomRef.current = scrollHeight - scrollTop - clientHeight < SCROLL_THRESHOLD;
+        }}
+        ref={viewportRef}
+      >
         <ScrollAreaContent>
           <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-8 pb-8 sm:px-6">
             {turns.map((turn, index) => (
@@ -120,7 +105,6 @@ export const ChatTranscript = ({
             ))}
             {showThinkingIndicator ? <ThinkingIndicator /> : null}
             {errorMessage ? <ChatError message={errorMessage} /> : null}
-            <div ref={transcriptEndRef} />
           </div>
         </ScrollAreaContent>
       </ScrollAreaViewport>

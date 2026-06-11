@@ -35,6 +35,7 @@ export const ConversationTurn = ({
   const showActions = !actionsDisabled && (!isLastTurn || !isStreaming);
   const userCopyText = turn.user ? getCopyableMessageText(turn.user.parts) : "";
   const assistantCopyText = turn.assistant ? getCopyableMessageText(turn.assistant.parts) : "";
+  const assistantMessageId = turn.assistant?.id;
 
   const startEditing = () => {
     if (!turn.user) {
@@ -82,7 +83,6 @@ export const ConversationTurn = ({
             <div className="flex w-full max-w-[85%] flex-col gap-2 sm:max-w-[75%]">
               <textarea
                 aria-label="Edit message"
-                autoFocus
                 className="min-h-20 w-full resize-none rounded-lg border border-border bg-muted px-3.5 py-2 text-sm/relaxed text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
                 onChange={(event) => setEditDraft(event.target.value)}
                 onKeyDown={handleEditKeyDown}
@@ -156,7 +156,11 @@ export const ConversationTurn = ({
               <IconButtonTooltip label="Regenerate">
                 <Button
                   aria-label="Regenerate"
-                  onClick={() => onRegenerate(turn.assistant!.id)}
+                  onClick={() => {
+                    if (assistantMessageId) {
+                      onRegenerate(assistantMessageId);
+                    }
+                  }}
                   size="icon-sm"
                   type="button"
                   variant="ghost"
