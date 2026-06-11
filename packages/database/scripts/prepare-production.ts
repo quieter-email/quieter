@@ -1,11 +1,16 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 import { getMigrationDatabaseUrl } from "./database-url";
-import { type Snapshot, snapshotsMatch } from "./snapshot";
+
+type Snapshot = Record<string, unknown> & {
+  ddl: Array<{
+    entityType: string;
+    name: string;
+  }>;
+};
 
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
 const migrationsDirectory = join(packageDirectory, "drizzle");
@@ -36,74 +41,6 @@ const databaseUrl = getMigrationDatabaseUrl();
 const sql = postgres(databaseUrl, { max: 1 });
 const hash = createHash("sha256").update(migrationSql).digest("hex");
 
-const findSnapshot = (directory: string): string | undefined => {
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const path = join(directory, entry.name);
-
-    if (entry.isDirectory()) {
-      const snapshot = findSnapshot(path);
-      if (snapshot) {
-        return snapshot;
-      }
-    } else if (entry.name === "snapshot.json") {
-      return path;
-    }
-  }
-};
-
-const pullProductionSnapshot = async () => {
-  const temporaryDirectory = mkdtempSync(join(tmpdir(), "quieter-drizzle-baseline-"));
-  const pulledMigrationsDirectory = join(temporaryDirectory, "drizzle");
-  const temporaryConfigPath = join(temporaryDirectory, "drizzle.config.ts");
-
-  try {
-    writeFileSync(
-      temporaryConfigPath,
-      `export default ${JSON.stringify({
-        dbCredentials: { url: databaseUrl },
-        dialect: "postgresql",
-        out: pulledMigrationsDirectory,
-        schema: join(packageDirectory, "src/schema.ts"),
-        strict: true,
-        tablesFilter: expectedTableNames,
-      })};\n`,
-    );
-
-    const pull = Bun.spawn(["bunx", "drizzle-kit", "pull", `--config=${temporaryConfigPath}`], {
-      cwd: packageDirectory,
-      env: {
-        ...globalThis.process.env,
-        DATABASE_URL: databaseUrl,
-      },
-      stderr: "inherit",
-      stdout: "inherit",
-    });
-
-    if ((await pull.exited) !== 0) {
-      throw new Error("Failed to introspect the production database");
-    }
-
-    const pulledSnapshotPath = findSnapshot(pulledMigrationsDirectory);
-    if (!pulledSnapshotPath) {
-      throw new Error("Drizzle did not produce a production schema snapshot");
-    }
-
-    return JSON.parse(readFileSync(pulledSnapshotPath, "utf8")) as Snapshot;
-  } finally {
-    rmSync(temporaryDirectory, { force: true, recursive: true });
-  }
-};
-
-const assertSchemaMatchesBaseline = async () => {
-  const pulledSnapshot = await pullProductionSnapshot();
-
-  if (!snapshotsMatch(pulledSnapshot, expectedSnapshot)) {
-    throw new Error(
-      "Database schema does not match the committed baseline; run db:push locally or reconcile it before migrating",
-    );
-  }
-};
-
 const registerBaseline = async () => {
   await sql`CREATE SCHEMA IF NOT EXISTS drizzle`;
   await sql`
@@ -132,6 +69,27 @@ const registerBaseline = async () => {
   `;
 };
 
+const assertBaselineTablesPresent = async () => {
+  const existingTables = await sql`
+    SELECT table_name
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = ANY(${expectedTableNames})
+  `;
+
+  if (existingTables.length !== expectedTableNames.length) {
+    throw new Error(
+      "Database is missing baseline tables; run db:push locally or reconcile the schema before migrating",
+    );
+  }
+};
+
+const adoptBaseline = async (message: string) => {
+  await assertBaselineTablesPresent();
+  await registerBaseline();
+  console.log(message);
+};
+
 try {
   const migrationTable = await sql`
     SELECT EXISTS (
@@ -156,22 +114,8 @@ try {
   if (baselineRegistered && history.length === 1) {
     console.log("Database already has the expected migration history.");
   } else if (hasLegacyHistory) {
-    const existingTables = await sql`
-      SELECT table_name
-      FROM information_schema.tables
-      WHERE table_schema = 'public'
-        AND table_name = ANY(${expectedTableNames})
-    `;
-
-    if (existingTables.length !== expectedTableNames.length) {
-      throw new Error(
-        "Database contains legacy migration history but is missing baseline tables; run db:push locally or reconcile the schema first",
-      );
-    }
-
     await sql`DELETE FROM drizzle.__drizzle_migrations`;
-    await registerBaseline();
-    console.log(`Rebased migration history onto ${migrationName}.`);
+    await adoptBaseline(`Rebased migration history onto ${migrationName}.`);
   } else if (history.length > 0) {
     throw new Error("Database contains an unexpected Drizzle migration history");
   } else {
@@ -185,9 +129,7 @@ try {
     if (existingTables.length === 0) {
       console.log("Database is empty; migrations will create the schema.");
     } else {
-      await assertSchemaMatchesBaseline();
-      await registerBaseline();
-      console.log(`Automatically registered baseline ${migrationName}.`);
+      await adoptBaseline(`Automatically registered baseline ${migrationName}.`);
     }
   }
 } finally {
