@@ -84,7 +84,7 @@ jobs:
         run: bun run db:deploy
 
       - name: Remove temporary migration history
-        run: bun --cwd packages/database -e 'import postgres from "postgres"; const sql = postgres(process.env.DATABASE_MIGRATION_URL); await sql`DROP SCHEMA drizzle CASCADE`; await sql.end()'
+        run: bun --cwd packages/database scripts/drop-drizzle-schema.ts
 
       - name: Test automatic adoption of an existing schema
         run: bun run db:deploy

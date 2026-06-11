@@ -57,7 +57,7 @@ while (Date.now() < deadline) {
 
     if (state === "READY") {
       console.log(`Vercel production deployment is ready: https://${deployment.url}`);
-      globalThis.process.exit(0);
+      process.exit(0);
     }
 
     if (state === "ERROR" || state === "CANCELED") {
