@@ -65,6 +65,7 @@
     "db:deploy": "turbo run db:deploy --filter=@quieter/database",
     "db:generate": "turbo run db:generate --filter=@quieter/database",
     "db:migrate": "turbo run db:migrate --filter=@quieter/database",
+    "db:test-migrations": "turbo run db:test-migrations --filter=@quieter/database",
     "db:push": "turbo run db:push --filter=@quieter/database",
     "dev": "turbo run dev",
     "fmt": "turbo run fmt",

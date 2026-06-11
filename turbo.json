@@ -103,6 +103,11 @@
       "outputs": [],
       "interactive": false
     },
+    "db:test-migrations": {
+      "env": ["DATABASE_MIGRATION_URL"],
+      "cache": false,
+      "outputs": []
+    },
     "db:push": {
       "env": ["DATABASE_URL"],
       "cache": false,

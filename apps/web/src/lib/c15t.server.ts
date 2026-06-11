@@ -70,9 +70,10 @@ const getConsentMigrationDatabaseUrl = () => {
   return toDirectPostgresUrl(value);
 };
 
-const withConsentMigrationLock = async <T>(callback: () => Promise<T>) => {
+const withConsentMigrationLock = async <T>(callback: (databaseUrl: string) => Promise<T>) => {
+  const databaseUrl = getConsentMigrationDatabaseUrl();
   const pool = new pg.Pool({
-    connectionString: getConsentMigrationDatabaseUrl(),
+    connectionString: databaseUrl,
     max: 1,
   });
   const client = await pool.connect();
@@ -82,7 +83,7 @@ const withConsentMigrationLock = async <T>(callback: () => Promise<T>) => {
       consentMigrationLockKey1,
       consentMigrationLockKey2,
     ]);
-    return await callback();
+    return await callback(databaseUrl);
   } finally {
     try {
       await client.query("SELECT pg_advisory_unlock($1, $2)", [
@@ -96,21 +97,30 @@ const withConsentMigrationLock = async <T>(callback: () => Promise<T>) => {
   }
 };
 
+const createConsentAdapter = (databaseUrl: string) => {
+  const database = new Kysely({
+    dialect: new PostgresDialect({
+      pool: new pg.Pool({
+        connectionString: databaseUrl,
+      }),
+    }),
+  });
+
+  return {
+    adapter: kyselyAdapter({
+      db: database,
+      provider: "postgresql",
+    }),
+    database,
+  };
+};
+
 const getConsentState = () => {
   if (consentState) {
     return consentState;
   }
 
-  const adapter = kyselyAdapter({
-    db: new Kysely({
-      dialect: new PostgresDialect({
-        pool: new pg.Pool({
-          connectionString: getConsentDatabaseUrl(),
-        }),
-      }),
-    }),
-    provider: "postgresql",
-  });
+  const { adapter } = createConsentAdapter(getConsentDatabaseUrl());
 
   consentState = {
     adapter,
@@ -126,11 +136,16 @@ const getConsentState = () => {
   return consentState;
 };
 
-const executeConsentMigrations = async () => {
-  const { adapter } = getConsentState();
-  const client = DB.names.prefix(consentTablePrefix).client(adapter);
-  const migration = await client.createMigrator().migrateToLatest();
-  await migration.execute();
+const executeConsentMigrations = async (databaseUrl: string) => {
+  const { adapter, database } = createConsentAdapter(databaseUrl);
+
+  try {
+    const client = DB.names.prefix(consentTablePrefix).client(adapter);
+    const migration = await client.createMigrator().migrateToLatest();
+    await migration.execute();
+  } finally {
+    await database.destroy();
+  }
 };
 
 export const runConsentMigrations = async () => {

@@ -74,27 +74,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Check migration history and schema drift
+      - name: Check committed migrations match the schema
         run: bun run db:check
 
-      - name: Apply migrations to temporary PostgreSQL
-        run: bun run db:deploy
-
-      - name: Remove temporary migration history
-        run: bun --cwd packages/database scripts/drop-drizzle-schema.ts
-
-      - name: Test automatic adoption of an existing schema
-        run: bun run db:deploy
-
-      - name: Verify a repeated migration run is a no-op
-        run: bun run db:deploy
+      - name: Test committed database migrations
+        run: bun run db:test-migrations
 
       - name: Apply consent migrations to temporary PostgreSQL
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/quieter
         run: bun run consent:migrate
 
       - name: Verify a repeated consent migration run is a no-op
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/quieter
         run: bun run consent:migrate

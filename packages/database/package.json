@@ -8,10 +8,11 @@
   },
   "scripts": {
     "db:check": "drizzle-kit check && bun scripts/check-schema-drift.ts",
-    "db:deploy": "bun --env-file=../../.env.local scripts/deploy-migrations.ts",
+    "db:deploy": "bun --env-file=../../.env.local scripts/run-migrations.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun --env-file=../../.env.local scripts/run-migrations.ts",
     "db:push": "bun --env-file=../../.env.local drizzle-kit push",
+    "db:test-migrations": "bun scripts/test-migrations.ts",
     "fmt": "oxfmt --config ../../oxfmt.json .",
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
     "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/database",
