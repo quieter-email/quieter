@@ -29,17 +29,25 @@ if (migrationDirectories.length === 0) {
 
 const migrationName = migrationDirectories[0]!.name;
 const migrationDirectory = join(migrationsDirectory, migrationName);
-const migrationSql = readFileSync(join(migrationDirectory, "migration.sql"), "utf8");
 const expectedSnapshot = JSON.parse(
   readFileSync(join(migrationDirectory, "snapshot.json"), "utf8"),
 ) as Snapshot;
 const committedMigrationNames = new Set(migrationDirectories.map((entry) => entry.name));
+const migrationHashByName = new Map(
+  migrationDirectories.map((entry) => {
+    const sql = readFileSync(join(migrationsDirectory, entry.name, "migration.sql"), "utf8");
+    return [entry.name, createHash("sha256").update(sql).digest("hex")] as const;
+  }),
+);
 const expectedTableNames = expectedSnapshot.ddl
   .filter((entity) => entity.entityType === "tables")
   .map((entity) => entity.name);
 const databaseUrl = getMigrationDatabaseUrl();
 const sql = postgres(databaseUrl, { max: 1 });
-const hash = createHash("sha256").update(migrationSql).digest("hex");
+const hash = migrationHashByName.get(migrationName)!;
+
+const isCommittedMigration = (name: string | null): name is string =>
+  name !== null && committedMigrationNames.has(name);
 
 const registerBaseline = async () => {
   await sql`CREATE SCHEMA IF NOT EXISTS drizzle`;
@@ -106,13 +114,20 @@ try {
         ORDER BY id
       `
     : [];
-  const baselineRegistered = history.some(
-    (entry) => entry.name === migrationName && entry.hash === hash,
+  const hasLegacyHistory = history.some(
+    (entry) =>
+      !isCommittedMigration(entry.name) || entry.hash !== migrationHashByName.get(entry.name),
   );
-  const hasLegacyHistory = history.some((entry) => !committedMigrationNames.has(entry.name));
+  const historyMatchesCommittedMigrations =
+    history.length > 0 &&
+    history.every(
+      (entry) =>
+        isCommittedMigration(entry.name) && entry.hash === migrationHashByName.get(entry.name),
+    ) &&
+    history.some((entry) => entry.name === migrationName && entry.hash === hash);
 
-  if (baselineRegistered && history.length === 1) {
-    console.log("Database already has the expected migration history.");
+  if (historyMatchesCommittedMigrations) {
+    console.log("Database migration history matches committed migrations.");
   } else if (hasLegacyHistory) {
     await sql`DELETE FROM drizzle.__drizzle_migrations`;
     await adoptBaseline(`Rebased migration history onto ${migrationName}.`);

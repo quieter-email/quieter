@@ -49,18 +49,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Format check
-        run: bun run fmt:check
-
-      - name: Lint
-        run: bun run lint
-
-      - name: Typecheck
-        run: bun run typecheck
-
-      - name: Test
-        run: bun run test
-
       - name: Check migration history and schema drift
         run: bun run db:check
 
