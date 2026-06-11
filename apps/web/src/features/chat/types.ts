@@ -1,5 +1,16 @@
 import type { UIMessage } from "@tanstack/ai";
+import type { ComposeFormValues } from "~/features/compose/domain/compose-form";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
+export type {
+  ComposeEmailInput,
+  ComposeEmailResult,
+  GmailLabelListResult as GmailLabelListToolResult,
+  GmailMessageResult as GmailMessageToolResult,
+  GmailSearchResult as GmailSearchToolResult,
+  GmailThreadResult as GmailThreadToolResult,
+  MailboxOverviewResult as MailboxOverviewToolResult,
+  ModifyMailResult as ModifyMailToolResult,
+} from "@quieter/ai";
 
 export type ChatViewProps = {
   activeMailbox: MailboxCategory;
@@ -10,25 +21,25 @@ export type ChatViewProps = {
   onOpenSidebar: () => void;
 };
 
+export type InlineComposeAction = "decline" | "save_draft" | "send";
+
+export type ResolveComposeToolInput =
+  | {
+      action: "decline";
+      assistantMessageId: string;
+      toolCallId: string;
+    }
+  | {
+      action: "save_draft" | "send";
+      assistantMessageId: string;
+      message: ComposeFormValues;
+      toolCallId: string;
+    };
+
+export type ResolveComposeTool = (input: ResolveComposeToolInput) => Promise<void>;
+
 export type ChatTurn = {
   assistant: UIMessage | null;
   id: string;
   user: UIMessage | null;
-};
-
-export type GmailSearchToolResult = {
-  category?: MailboxCategory;
-  error?: string;
-  messages?: Array<{
-    date?: string;
-    from?: string;
-    id: string;
-    isUnread?: boolean;
-    labelIds?: string[];
-    snippet?: string;
-    subject?: string;
-    threadId: string;
-  }>;
-  query?: string;
-  resultSizeEstimate?: number;
 };

@@ -36,19 +36,23 @@ const ComposeImage = Image.extend({
 type ComposeEditorProps = {
   html: string;
   className?: string;
+  compact?: boolean;
   disabled?: boolean;
   onChange: (payload: { html: string; text: string }) => void;
   onBlur?: () => void;
   onInlineImageFiles: (files: File[]) => void | Promise<void>;
+  showToolbar?: boolean;
 };
 
 export const ComposeEditor = ({
   className,
+  compact = false,
   disabled,
   html,
   onBlur,
   onChange,
   onInlineImageFiles,
+  showToolbar = true,
 }: ComposeEditorProps) => {
   const lastSyncedHtmlRef = useRef(html);
 
@@ -58,8 +62,15 @@ export const ComposeEditor = ({
     editable: !disabled,
     editorProps: {
       attributes: {
-        class:
-          "min-h-72 bg-transparent text-[15px] leading-[1.75] text-foreground outline-none [&_.is-editor-empty:first-child::before]:pointer-events-none [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:h-0 [&_.is-editor-empty:first-child::before]:text-[15px] [&_.is-editor-empty:first-child::before]:leading-[1.75] [&_.is-editor-empty:first-child::before]:text-muted-foreground/75 [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_a]:text-foreground [&_a]:underline [&_blockquote]:my-4 [&_blockquote]:border-l [&_blockquote]:border-border/70 [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground [&_img]:my-4 [&_img]:max-h-64 [&_img]:max-w-full [&_img]:rounded-xl [&_img]:object-contain [&_li]:my-1 [&_ol]:my-4 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0 [&_p+p]:mt-3 [&_s]:text-muted-foreground [&_strong]:font-semibold [&_u]:underline [&_ul]:my-4 [&_ul]:list-disc [&_ul]:pl-5",
+        class: cn(
+          "bg-transparent text-foreground outline-none [&_.is-editor-empty:first-child::before]:pointer-events-none [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:h-0 [&_.is-editor-empty:first-child::before]:text-muted-foreground/75 [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_a]:text-foreground [&_a]:underline [&_blockquote]:border-l [&_blockquote]:border-border/70 [&_blockquote]:text-muted-foreground [&_img]:max-w-full [&_img]:object-contain [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0 [&_s]:text-muted-foreground [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5",
+          {
+            "min-h-28 text-sm/relaxed [&_.is-editor-empty:first-child::before]:text-sm/relaxed [&_blockquote]:my-3 [&_blockquote]:pl-3 [&_img]:my-3 [&_img]:max-h-48 [&_img]:rounded-lg [&_li]:my-0.5 [&_ol]:my-3 [&_p+p]:mt-2 [&_ul]:my-3":
+              compact,
+            "min-h-72 text-[15px] leading-[1.75] [&_.is-editor-empty:first-child::before]:text-[15px] [&_.is-editor-empty:first-child::before]:leading-[1.75] [&_blockquote]:my-4 [&_blockquote]:pl-4 [&_img]:my-4 [&_img]:max-h-64 [&_img]:rounded-xl [&_li]:my-1 [&_ol]:my-4 [&_p+p]:mt-3 [&_ul]:my-4":
+              !compact,
+          },
+        ),
       },
     },
     extensions: [
@@ -195,43 +206,51 @@ export const ComposeEditor = ({
         { "pointer-events-none opacity-80": disabled },
       )}
     >
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      <div className={cn("min-h-0 flex-1 overflow-y-auto", compact ? "p-3" : "p-4")}>
         {editor ? (
           <EditorContent editor={editor} />
         ) : (
-          <div aria-hidden className="min-h-72 text-[15px] leading-[1.75] text-muted-foreground/75">
+          <div
+            aria-hidden
+            className={cn("text-muted-foreground/75", {
+              "min-h-28 text-sm/relaxed": compact,
+              "min-h-72 text-[15px] leading-[1.75]": !compact,
+            })}
+          >
             Write your message…
           </div>
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1 px-3 pb-3">
-        <TooltipGroup>
-          {toolbarActions.map((action) => {
-            const isDisabled = !!(disabled || action.disabled);
+      {showToolbar ? (
+        <div className="flex shrink-0 items-center gap-1 px-3 pb-3">
+          <TooltipGroup>
+            {toolbarActions.map((action) => {
+              const isDisabled = !!(disabled || action.disabled);
 
-            return (
-              <IconButtonTooltip key={action.id} label={action.label}>
-                <Button
-                  aria-label={action.label}
-                  aria-pressed={"active" in action ? action.active : undefined}
-                  className={cn("text-muted-foreground hover:bg-muted/55 hover:text-foreground", {
-                    "bg-muted/75 text-foreground": action.active,
-                  })}
-                  disabled={isDisabled}
-                  onClick={() => action.onClick()}
-                  onMouseDown={(event) => event.preventDefault()}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <HugeiconsIcon className="size-4" icon={action.icon} />
-                </Button>
-              </IconButtonTooltip>
-            );
-          })}
-        </TooltipGroup>
-      </div>
+              return (
+                <IconButtonTooltip key={action.id} label={action.label}>
+                  <Button
+                    aria-label={action.label}
+                    aria-pressed={"active" in action ? action.active : undefined}
+                    className={cn("text-muted-foreground hover:bg-muted/55 hover:text-foreground", {
+                      "bg-muted/75 text-foreground": action.active,
+                    })}
+                    disabled={isDisabled}
+                    onClick={() => action.onClick()}
+                    onMouseDown={(event) => event.preventDefault()}
+                    size="icon-sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <HugeiconsIcon className="size-4" icon={action.icon} />
+                  </Button>
+                </IconButtonTooltip>
+              );
+            })}
+          </TooltipGroup>
+        </div>
+      ) : null}
     </div>
   );
 };

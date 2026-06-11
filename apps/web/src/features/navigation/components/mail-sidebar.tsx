@@ -340,9 +340,16 @@ const SidebarContent = ({
       >
         <div
           aria-label="Workspace view"
-          className="grid grid-cols-2 rounded-lg bg-muted/40 p-0.5"
+          className="relative grid grid-cols-2 rounded-lg bg-muted/40 p-0.5"
           role="group"
         >
+          <m.div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0.5 w-[calc(50%-2px)] rounded-md bg-background shadow-sm will-change-transform"
+            initial={false}
+            animate={{ left: selectedView === "inbox" ? 2 : "50%" }}
+            transition={{ type: "spring", stiffness: 520, damping: 38, mass: 0.75 }}
+          />
           {WORKSPACE_VIEW_OPTIONS.map(({ id, label, icon }) => {
             const isActive = selectedView === id;
 
@@ -363,14 +370,6 @@ const SidebarContent = ({
                 onClick={() => handleSelectView(id)}
                 type="button"
               >
-                {isActive ? (
-                  <m.div
-                    aria-hidden
-                    className="absolute inset-0 rounded-md bg-background shadow-sm will-change-transform"
-                    layoutId="sidebar-workspace-view"
-                    transition={{ type: "spring", stiffness: 520, damping: 38, mass: 0.75 }}
-                  />
-                ) : null}
                 <HugeiconsIcon
                   className="relative size-3.5 shrink-0"
                   icon={icon}

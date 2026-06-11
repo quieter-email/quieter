@@ -1,22 +1,28 @@
 "use client";
 
-import { Delete01Icon, Edit01Icon, MoreVerticalIcon, Tag01Icon } from "@hugeicons/core-free-icons";
+import {
+  ArrowLeft02Icon,
+  Delete01Icon,
+  Edit01Icon,
+  MoreVerticalIcon,
+  Tag01Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Button,
-  Dialog,
-  DialogBody,
-  DialogCloseButton,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   EyeIcon,
   EyeOffIcon,
+  FullPageDialog,
+  FullPageDialogBody,
+  FullPageDialogClose,
+  FullPageDialogContent,
+  FullPageDialogDescription,
+  FullPageDialogHeader,
+  FullPageDialogTitle,
   IconButtonTooltip,
   Input,
   cn,
@@ -24,7 +30,7 @@ import {
 } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { m } from "motion/react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 import { serializeStructuredSearchState } from "~/features/message-search/components/message-list-search/message-list-search-utils";
 import {
@@ -110,8 +116,12 @@ export const SidebarLabelNav = ({
     mailboxId,
     value: readHiddenLabelIds(mailboxId),
   }));
-  const labelsQuery = useQuery(labelsQueryOptions(mailboxId ?? "", !!mailboxId));
-  const userLabels = getUserLabels(labelsQuery.data ?? []);
+  const {
+    data: labels,
+    isError: areLabelsError,
+    isPending: areLabelsPending,
+  } = useQuery(labelsQueryOptions(mailboxId ?? "", !!mailboxId));
+  const userLabels = getUserLabels(labels ?? []);
   const hiddenLabelIds =
     hiddenLabelState.mailboxId === mailboxId
       ? hiddenLabelState.value
@@ -123,14 +133,10 @@ export const SidebarLabelNav = ({
     effectiveHiddenLabelIds.add(label.id);
   }
   const visibleUserLabels = userLabels.filter((label) => !effectiveHiddenLabelIds.has(label.id));
-  const selectedLabelKeys = useMemo(
-    () =>
-      new Set(
-        parseStructuredSearchQuery(searchQuery).filters.flatMap((filter) =>
-          filter.type === "label" ? [normalizeLabelSelectionKey(filter.value)] : [],
-        ),
-      ),
-    [searchQuery],
+  const selectedLabelKeys = new Set(
+    parseStructuredSearchQuery(searchQuery).filters.flatMap((filter) =>
+      filter.type === "label" ? [normalizeLabelSelectionKey(filter.value)] : [],
+    ),
   );
 
   const setMailboxHiddenLabelIds = (updater: (current: Set<string>) => Set<string>) => {
@@ -260,7 +266,7 @@ export const SidebarLabelNav = ({
       </m.div>
 
       <nav aria-label="Labels" className="flex flex-col gap-0.5">
-        {labelsQuery.isPending ? (
+        {areLabelsPending ? (
           <m.p
             className="px-2 py-1 text-xs text-muted-foreground will-change-[transform,opacity,filter]"
             initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
@@ -269,7 +275,7 @@ export const SidebarLabelNav = ({
           >
             Loading labels…
           </m.p>
-        ) : labelsQuery.isError ? (
+        ) : areLabelsError ? (
           <m.p
             className="px-2 py-1 text-xs text-destructive will-change-[transform,opacity,filter]"
             initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
@@ -332,138 +338,150 @@ export const SidebarLabelNav = ({
         )}
       </nav>
 
-      <Dialog
+      <FullPageDialog
         onOpenChange={(open) => {
           setIsEditDialogOpen(open);
           if (!open) resetEditForm();
         }}
         open={isEditDialogOpen}
       >
-        <DialogContent className="w-[min(92vw,34rem)]">
-          <DialogHeader>
-            <DialogTitle>Edit labels</DialogTitle>
-          </DialogHeader>
-          <DialogBody className="space-y-4 pt-0">
-            <form
-              action={() => {
-                void submitLabelEdit();
-              }}
-              className="flex items-center gap-2"
-            >
-              <Input
-                aria-label={editingLabel?.mode === "rename" ? "Rename label" : "New label name"}
-                autoFocus
-                disabled={isSavingLabel}
-                onChange={(event) => {
-                  const nextName =
-                    event.target instanceof HTMLInputElement ? event.target.value : "";
-                  if (editingLabel) {
-                    setEditingLabel({ ...editingLabel, name: nextName });
-                  } else {
-                    setEditingLabel({ mode: "create", name: nextName });
-                  }
+        <FullPageDialogContent>
+          <FullPageDialogHeader>
+            <IconButtonTooltip label="Close label editor">
+              <FullPageDialogClose aria-label="Close label editor">
+                <HugeiconsIcon aria-hidden icon={ArrowLeft02Icon} />
+              </FullPageDialogClose>
+            </IconButtonTooltip>
+            <FullPageDialogTitle>Edit labels</FullPageDialogTitle>
+          </FullPageDialogHeader>
+          <FullPageDialogBody>
+            <div className="mx-auto w-full max-w-3xl px-5 py-8 sm:px-8 sm:py-10">
+              <div className="mb-8">
+                <h2 className="text-xl font-semibold tracking-tight">Labels</h2>
+                <FullPageDialogDescription className="mt-1">
+                  Create labels and choose which ones appear in your sidebar.
+                </FullPageDialogDescription>
+              </div>
+              <form
+                action={() => {
+                  void submitLabelEdit();
                 }}
-                placeholder={editingLabel?.mode === "rename" ? "Rename label" : "New label"}
-                value={editingLabel?.name ?? ""}
-                size="sm"
-              />
-              <Button
-                disabled={isSavingLabel || !editingLabel?.name.trim()}
-                size="sm"
-                variant="outline"
-                type="submit"
+                className="mb-8 flex items-center gap-2 border-b pb-8"
               >
-                {editingLabel?.mode === "rename" ? "Save" : "Create"}
-              </Button>
-            </form>
+                <Input
+                  aria-label={editingLabel?.mode === "rename" ? "Rename label" : "New label name"}
+                  autoFocus
+                  disabled={isSavingLabel}
+                  onChange={(event) => {
+                    const nextName =
+                      event.target instanceof HTMLInputElement ? event.target.value : "";
+                    if (editingLabel) {
+                      setEditingLabel({ ...editingLabel, name: nextName });
+                    } else {
+                      setEditingLabel({ mode: "create", name: nextName });
+                    }
+                  }}
+                  placeholder={editingLabel?.mode === "rename" ? "Rename label" : "New label"}
+                  value={editingLabel?.name ?? ""}
+                  size="sm"
+                />
+                <Button
+                  disabled={isSavingLabel || !editingLabel?.name.trim()}
+                  size="sm"
+                  variant="outline"
+                  type="submit"
+                >
+                  {editingLabel?.mode === "rename" ? "Save" : "Create"}
+                </Button>
+              </form>
 
-            <div className="max-h-[min(24rem,48vh)] overflow-y-auto pr-1">
-              {labelsQuery.isPending ? (
-                <p className="py-3 text-sm text-muted-foreground">Loading labels…</p>
-              ) : labelsQuery.isError ? (
-                <p className="py-3 text-sm text-destructive">Could not load labels.</p>
-              ) : userLabels.length === 0 ? (
-                <p className="py-3 text-sm text-muted-foreground">No labels yet.</p>
-              ) : (
-                <div className="flex flex-col">
-                  {userLabels.map((label) => {
-                    const isShown = !effectiveHiddenLabelIds.has(label.id);
-                    return (
-                      <div
-                        className="flex min-h-10 items-center gap-3 rounded-md px-2 hover:bg-muted/60"
-                        key={label.id}
-                      >
-                        <HugeiconsIcon
-                          aria-hidden
-                          className="size-4 shrink-0 text-muted-foreground"
-                          icon={Tag01Icon}
-                        />
-                        <span className="min-w-0 flex-1 truncate text-sm">{label.name}</span>
-                        <IconButtonTooltip label={isShown ? "Hide in sidebar" : "Show in sidebar"}>
-                          <Button
-                            aria-label={isShown ? "Hide in sidebar" : "Show in sidebar"}
-                            aria-pressed={isShown}
-                            className={cn(
-                              "-mr-3 size-7 text-muted-foreground hover:text-foreground",
-                              {
-                                "text-foreground": isShown,
-                              },
-                            )}
-                            onClick={() => toggleSidebarVisibility(label.id)}
-                            size="icon-sm"
-                            type="button"
-                            variant="ghost"
+              <div>
+                {areLabelsPending ? (
+                  <p className="py-3 text-sm text-muted-foreground">Loading labels…</p>
+                ) : areLabelsError ? (
+                  <p className="py-3 text-sm text-destructive">Could not load labels.</p>
+                ) : userLabels.length === 0 ? (
+                  <p className="py-3 text-sm text-muted-foreground">No labels yet.</p>
+                ) : (
+                  <div className="flex flex-col">
+                    {userLabels.map((label) => {
+                      const isShown = !effectiveHiddenLabelIds.has(label.id);
+                      return (
+                        <div
+                          className="flex min-h-12 items-center gap-3 border-b px-2 last:border-b-0 hover:bg-muted/60"
+                          key={label.id}
+                        >
+                          <HugeiconsIcon
+                            aria-hidden
+                            className="size-4 shrink-0 text-muted-foreground"
+                            icon={Tag01Icon}
+                          />
+                          <span className="min-w-0 flex-1 truncate text-sm">{label.name}</span>
+                          <IconButtonTooltip
+                            label={isShown ? "Hide in sidebar" : "Show in sidebar"}
                           >
-                            {isShown ? (
-                              <EyeIcon aria-hidden className="size-4" />
-                            ) : (
-                              <EyeOffIcon aria-hidden className="size-4" />
-                            )}
-                          </Button>
-                        </IconButtonTooltip>
-                        <DropdownMenu>
-                          <IconButtonTooltip label={`${label.name} options`}>
-                            <DropdownMenuTrigger
-                              aria-label={`${label.name} options`}
-                              className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/20"
+                            <Button
+                              aria-label={isShown ? "Hide in sidebar" : "Show in sidebar"}
+                              aria-pressed={isShown}
+                              className={cn(
+                                "-mr-3 size-7 text-muted-foreground hover:text-foreground",
+                                {
+                                  "text-foreground": isShown,
+                                },
+                              )}
+                              onClick={() => toggleSidebarVisibility(label.id)}
+                              size="icon-sm"
+                              type="button"
+                              variant="ghost"
                             >
-                              <HugeiconsIcon
-                                aria-hidden
-                                className="size-3.5"
-                                icon={MoreVerticalIcon}
-                              />
-                            </DropdownMenuTrigger>
+                              {isShown ? (
+                                <EyeIcon aria-hidden className="size-4" />
+                              ) : (
+                                <EyeOffIcon aria-hidden className="size-4" />
+                              )}
+                            </Button>
                           </IconButtonTooltip>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onSelect={() =>
-                                setEditingLabel({ label, mode: "rename", name: label.name })
-                              }
-                            >
-                              <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
-                              Rename
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onSelect={() => void deleteLabel(label)}
-                            >
-                              <HugeiconsIcon aria-hidden className="size-4" icon={Delete01Icon} />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                          <DropdownMenu>
+                            <IconButtonTooltip label={`${label.name} options`}>
+                              <DropdownMenuTrigger
+                                aria-label={`${label.name} options`}
+                                className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/20"
+                              >
+                                <HugeiconsIcon
+                                  aria-hidden
+                                  className="size-3.5"
+                                  icon={MoreVerticalIcon}
+                                />
+                              </DropdownMenuTrigger>
+                            </IconButtonTooltip>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onSelect={() =>
+                                  setEditingLabel({ label, mode: "rename", name: label.name })
+                                }
+                              >
+                                <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
+                                Rename
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onSelect={() => void deleteLabel(label)}
+                              >
+                                <HugeiconsIcon aria-hidden className="size-4" icon={Delete01Icon} />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
-          </DialogBody>
-          <DialogFooter className="pt-0">
-            <DialogCloseButton>Done</DialogCloseButton>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </FullPageDialogBody>
+        </FullPageDialogContent>
+      </FullPageDialog>
     </section>
   );
 };

@@ -1,23 +1,64 @@
 import { ORPCError } from "@orpc/server";
+import {
+  composeEmailInputSchema,
+  composeEmailResultSchema,
+  type ComposeEmailResult,
+} from "@quieter/ai";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { chat, chatMessage, chatRun, db, type ChatMessagePart } from "@quieter/database";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import {
+  composeDraftFormValuesSchema,
+  composeDraftInputSchema,
+  composeMessageInputSchema,
+  composeSendFormValuesSchema,
+} from "@quieter/mail/compose";
+import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   ActiveChatRunConflictError,
+  continueAssistantRun,
   createChatRunRecords,
   getActiveChatRunSummary,
   hasActiveChatRun,
   startAssistantRun,
 } from "../chat-run-store";
 import { ACTIVE_CHAT_RUN_STATUSES } from "../chat-run-stream";
+import { saveGmailDraft, sendGmailMessage } from "../gmail-compose";
 import { assertAccessibleMailbox } from "../mailbox";
-import { mailboxCategorySchema, mailboxIdSchema, protectedProcedure } from "./base";
+import { callGmail, mailboxCategorySchema, mailboxIdSchema, protectedProcedure } from "./base";
 
 const chatIdSchema = z.string().trim().min(1);
 const chatTitleSchema = z.string().trim().min(1).max(120);
 const chatPromptSchema = z.string().trim().min(1).max(10_000);
+const resolveComposeToolInputSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("decline"),
+    assistantMessageId: z.string().trim().min(1),
+    category: mailboxCategorySchema,
+    chatId: chatIdSchema,
+    mailboxId: mailboxIdSchema,
+    toolCallId: z.string().trim().min(1),
+  }),
+  z.object({
+    action: z.literal("save_draft"),
+    assistantMessageId: z.string().trim().min(1),
+    category: mailboxCategorySchema,
+    chatId: chatIdSchema,
+    mailboxId: mailboxIdSchema,
+    message: composeDraftFormValuesSchema,
+    toolCallId: z.string().trim().min(1),
+  }),
+  z.object({
+    action: z.literal("send"),
+    assistantMessageId: z.string().trim().min(1),
+    category: mailboxCategorySchema,
+    chatId: chatIdSchema,
+    mailboxId: mailboxIdSchema,
+    message: composeSendFormValuesSchema,
+    toolCallId: z.string().trim().min(1),
+  }),
+]);
 
 const findAuthorizedChat = async (chatId: string, mailboxId: string, userId: string) => {
   const [authorizedChat] = await db
@@ -68,6 +109,7 @@ const listChatMessages = async (chatId: string) => {
 };
 
 const assertCanRunChatGeneration = async (input: {
+  allowPendingCompose?: boolean;
   chatId: string;
   mailboxId: string;
   userId: string;
@@ -102,6 +144,35 @@ const assertCanRunChatGeneration = async (input: {
     });
   }
 
+  if (!input.allowPendingCompose) {
+    const assistantMessages = await db
+      .select({ parts: chatMessage.parts })
+      .from(chatMessage)
+      .where(and(eq(chatMessage.chatId, authorizedChat.id), eq(chatMessage.role, "assistant")));
+    const hasPendingCompose = assistantMessages.some(({ parts }) => {
+      const completedToolCalls = new Set(
+        parts.flatMap((part) =>
+          part.type === "tool-result" && typeof part.toolCallId === "string"
+            ? [part.toolCallId]
+            : [],
+        ),
+      );
+      return parts.some(
+        (part) =>
+          part.type === "tool-call" &&
+          part.name === "compose_email" &&
+          typeof part.id === "string" &&
+          !completedToolCalls.has(part.id),
+      );
+    });
+
+    if (hasPendingCompose) {
+      throw new ORPCError("CONFLICT", {
+        message: "Resolve the pending email before continuing this chat.",
+      });
+    }
+  }
+
   return authorizedChat;
 };
 
@@ -117,6 +188,9 @@ const rethrowChatRunConflict = (error: unknown): never => {
 
 const startAssistantRunOrThrow = (input: Parameters<typeof startAssistantRun>[0]) =>
   startAssistantRun(input).catch(rethrowChatRunConflict);
+
+const continueAssistantRunOrThrow = (input: Parameters<typeof continueAssistantRun>[0]) =>
+  continueAssistantRun(input).catch(rethrowChatRunConflict);
 
 const buildRunResponse = async ({
   assistantMessageId,
@@ -450,6 +524,226 @@ export const chatRouter = {
         mailboxId: input.mailboxId,
         userId: context.userId,
         userMessagePosition: userMessage.position,
+      });
+
+      return buildRunResponse({
+        assistantMessageId,
+        chatId: authorizedChat.id,
+        runId,
+        userMessageId: userMessage.id,
+      });
+    }),
+
+  resolveComposeTool: protectedProcedure
+    .input(resolveComposeToolInputSchema)
+    .handler(async ({ context, input }) => {
+      const authorizedChat = await assertCanRunChatGeneration({
+        allowPendingCompose: true,
+        chatId: input.chatId,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+
+      const [assistantMessage] = await db
+        .select({
+          id: chatMessage.id,
+          parts: chatMessage.parts,
+          position: chatMessage.position,
+        })
+        .from(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.id, input.assistantMessageId),
+            eq(chatMessage.chatId, authorizedChat.id),
+            eq(chatMessage.userId, context.userId),
+            eq(chatMessage.role, "assistant"),
+          ),
+        )
+        .limit(1);
+
+      if (!assistantMessage) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "The compose request was not found.",
+        });
+      }
+
+      const toolCallIndex = assistantMessage.parts.findIndex(
+        (part) =>
+          part.type === "tool-call" &&
+          part.id === input.toolCallId &&
+          part.name === "compose_email",
+      );
+      const toolCall = assistantMessage.parts[toolCallIndex];
+      let proposedMessage: unknown = toolCall?.input;
+
+      if (proposedMessage === undefined && typeof toolCall?.arguments === "string") {
+        try {
+          proposedMessage = JSON.parse(toolCall.arguments);
+        } catch {
+          proposedMessage = null;
+        }
+      }
+
+      if (!toolCall || !composeEmailInputSchema.safeParse(proposedMessage).success) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "The compose request is invalid.",
+        });
+      }
+
+      if (
+        assistantMessage.parts.some(
+          (part) => part.type === "tool-result" && part.toolCallId === input.toolCallId,
+        )
+      ) {
+        throw new ORPCError("CONFLICT", {
+          message: "This email action has already been completed.",
+        });
+      }
+
+      const [userMessage] = await db
+        .select({ id: chatMessage.id })
+        .from(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.chatId, authorizedChat.id),
+            eq(chatMessage.role, "user"),
+            lt(chatMessage.position, assistantMessage.position),
+          ),
+        )
+        .orderBy(desc(chatMessage.position))
+        .limit(1);
+
+      if (!userMessage) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "Could not find the message that started this compose request.",
+        });
+      }
+
+      const approved = input.action !== "decline";
+      const claimedParts = assistantMessage.parts.map((part, index) =>
+        index === toolCallIndex
+          ? {
+              ...part,
+              approval: {
+                approved,
+                id:
+                  typeof part.approval === "object" &&
+                  part.approval &&
+                  typeof Reflect.get(part.approval, "id") === "string"
+                    ? Reflect.get(part.approval, "id")
+                    : `approval_${input.toolCallId}`,
+                needsApproval: true,
+              },
+              state: "approval-responded",
+            }
+          : part,
+      );
+      const [claimedMessage] = await db
+        .update(chatMessage)
+        .set({ parts: claimedParts })
+        .where(
+          and(
+            eq(chatMessage.id, assistantMessage.id),
+            eq(chatMessage.parts, assistantMessage.parts),
+          ),
+        )
+        .returning({ id: chatMessage.id });
+
+      if (!claimedMessage) {
+        throw new ORPCError("CONFLICT", {
+          message: "This email action is already being handled.",
+        });
+      }
+
+      const proposed = composeEmailInputSchema.parse(proposedMessage);
+      let result: ComposeEmailResult;
+
+      if (input.action === "decline") {
+        result = composeEmailResultSchema.parse({
+          status: "declined",
+          subject: proposed.subject || undefined,
+          to: proposed.to || undefined,
+        });
+      } else {
+        const now = Date.now();
+        const draft = composeDraftInputSchema.parse({
+          attachments: [],
+          bodyHtml: input.message.bodyHtml,
+          bodyText: input.message.bodyText,
+          draftAnchor: null,
+          errorMessage: null,
+          inlineImages: [],
+          localId: crypto.randomUUID(),
+          recipients: {
+            bcc: input.message.bcc,
+            cc: input.message.cc,
+            to: input.message.to,
+          },
+          replyContext: null,
+          saveStatus: "idle",
+          subject: input.message.subject,
+          updatedAt: now,
+        });
+
+        try {
+          result = await callGmail(context, input.mailboxId, async (accessToken) => {
+            if (input.action === "save_draft") {
+              const saved = await saveGmailDraft(accessToken, draft, context.signal);
+              return {
+                draftId: saved.draftId,
+                messageId: saved.messageId ?? undefined,
+                status: "draft_saved" as const,
+                subject: saved.subject,
+                to: saved.recipients.to,
+              };
+            }
+
+            const sent = await sendGmailMessage(
+              accessToken,
+              composeMessageInputSchema.parse(draft),
+              context.signal,
+            );
+            return {
+              messageId: sent.id,
+              status: "sent" as const,
+              subject: input.message.subject,
+              threadId: sent.threadId,
+              to: input.message.to,
+            };
+          });
+          result = composeEmailResultSchema.parse(result);
+        } catch (error) {
+          await db
+            .update(chatMessage)
+            .set({ parts: assistantMessage.parts })
+            .where(
+              and(eq(chatMessage.id, assistantMessage.id), eq(chatMessage.parts, claimedParts)),
+            )
+            .catch(() => undefined);
+          throw error;
+        }
+      }
+
+      const resolvedParts = claimedParts.map((part, index) =>
+        index === toolCallIndex ? { ...part, output: result } : part,
+      );
+      resolvedParts.push({
+        content: JSON.stringify(result),
+        state: "complete",
+        toolCallId: input.toolCallId,
+        type: "tool-result",
+      });
+
+      const { assistantMessageId, runId } = await continueAssistantRunOrThrow({
+        chatId: authorizedChat.id,
+        mailboxCategory: input.category,
+        mailboxId: input.mailboxId,
+        previousAssistant: {
+          id: assistantMessage.id,
+          parts: resolvedParts,
+          position: assistantMessage.position,
+        },
+        userId: context.userId,
       });
 
       return buildRunResponse({

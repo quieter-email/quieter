@@ -326,3 +326,60 @@ export const startAssistantRun = async (input: {
 
   return { assistantMessageId, runId };
 };
+
+export const continueAssistantRun = async (input: {
+  chatId: string;
+  mailboxCategory: string;
+  mailboxId: string;
+  previousAssistant: {
+    id: string;
+    parts: ChatMessagePart[];
+    position: number;
+  };
+  userId: string;
+}) => {
+  const runId = crypto.randomUUID();
+  const assistantMessageId = crypto.randomUUID();
+  const now = new Date();
+
+  try {
+    await db.batch([
+      db
+        .update(chatMessage)
+        .set({
+          error: null,
+          parts: input.previousAssistant.parts,
+          status: "complete",
+        })
+        .where(
+          and(
+            eq(chatMessage.id, input.previousAssistant.id),
+            eq(chatMessage.chatId, input.chatId),
+            eq(chatMessage.userId, input.userId),
+            eq(chatMessage.role, "assistant"),
+          ),
+        ),
+      createAssistantMessage({
+        chatId: input.chatId,
+        createdAt: now,
+        id: assistantMessageId,
+        position: input.previousAssistant.position + 1,
+        userId: input.userId,
+      }),
+      createRun({
+        assistantMessageId,
+        chatId: input.chatId,
+        createdAt: now,
+        mailboxCategory: input.mailboxCategory,
+        mailboxId: input.mailboxId,
+        runId,
+        userId: input.userId,
+      }),
+      db.update(chat).set({ updatedAt: now }).where(eq(chat.id, input.chatId)),
+    ]);
+  } catch (error) {
+    rethrowChatRunConflict(error);
+  }
+
+  return { assistantMessageId, runId };
+};

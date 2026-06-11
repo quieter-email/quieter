@@ -87,6 +87,16 @@ export {
   FieldError,
   FieldLabel,
 } from "./components/ui/field";
+export {
+  FullPageDialog,
+  FullPageDialogBody,
+  FullPageDialogClose,
+  FullPageDialogContent,
+  FullPageDialogDescription,
+  FullPageDialogHeader,
+  FullPageDialogTitle,
+  FullPageDialogTrigger,
+} from "./components/ui/full-page-dialog";
 export { Fieldset, FieldsetLegend } from "./components/ui/fieldset";
 export { Input } from "./components/ui/input";
 export { IconButtonTooltip } from "./components/ui/icon-button-tooltip";

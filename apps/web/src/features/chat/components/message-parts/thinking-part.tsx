@@ -16,6 +16,10 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
   const [expanded, setExpanded] = useState(false);
   const hasReasoning = Boolean(content.trim());
 
+  if (!isActive) {
+    return null;
+  }
+
   return (
     <div className="flex flex-col">
       <button
@@ -26,17 +30,14 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
         onClick={() => setExpanded((prev) => !prev)}
         type="button"
       >
-        {isActive ? (
-          <m.span
-            animate={{ opacity: [0.55, 1, 0.55] }}
-            className="text-xs text-muted-foreground"
-            transition={{ duration: 1.8, ease: "easeInOut", repeat: Number.POSITIVE_INFINITY }}
-          >
-            Thinking
-          </m.span>
-        ) : (
-          <span className="text-xs text-muted-foreground">Thought</span>
-        )}
+        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="inline-flex gap-0.5">
+            <span className="size-1 animate-pulse rounded-full bg-muted-foreground/60 [animation-delay:0ms]" />
+            <span className="size-1 animate-pulse rounded-full bg-muted-foreground/60 [animation-delay:150ms]" />
+            <span className="size-1 animate-pulse rounded-full bg-muted-foreground/60 [animation-delay:300ms]" />
+          </span>
+          Thinking
+        </span>
         {hasReasoning ? (
           <HugeiconsIcon
             aria-hidden

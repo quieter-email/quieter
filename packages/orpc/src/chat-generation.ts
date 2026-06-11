@@ -1,9 +1,16 @@
 import type { MailboxCategory } from "@quieter/gmail";
 import {
+  composeEmailToolDef,
+  createGmailLabelListServerTool,
+  createGmailMessageServerTool,
   createGmailSearchServerTool,
-  gmailSearchPrompt,
+  createGmailThreadServerTool,
+  createMailboxOverviewServerTool,
+  createModifyMailServerTool,
+  gmailToolsPrompt,
   runChatStream,
   type ChatMiddleware,
+  type GmailToolsContext,
   type UIMessage,
 } from "@quieter/ai";
 import { reportAiUsage } from "@quieter/billing";
@@ -18,7 +25,14 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 import { isCancelRequested, updateAssistantMessage, updateRunStatus } from "./chat-run-store";
 import { isActiveChatRunStatus, publishChatRunEvent } from "./chat-run-stream";
-import { searchGmailForUser } from "./gmail-chat-search";
+import {
+  getMailboxOverviewForUser,
+  listGmailLabelsForUser,
+  modifyMailForUser,
+  readGmailMessageForUser,
+  readGmailThreadForUser,
+  searchGmailForUser,
+} from "./gmail-chat-search";
 
 const DRAFT_PERSIST_INTERVAL_MS = 750;
 const CANCEL_POLL_INTERVAL_MS = 1_000;
@@ -38,23 +52,18 @@ const getTextContent = (parts: ChatMessagePart[]) =>
     .replace(/\s+/g, " ")
     .trim();
 
-/** StreamProcessor appends a new assistant message; use the latest one for draft persistence. */
-const getStreamingAssistantParts = (messages: UIMessage[]): ChatMessagePart[] | null => {
-  let latestAssistant: UIMessage | undefined;
+/** StreamProcessor may append multiple assistant messages across tool continuations. */
+const getStreamingAssistantParts = (
+  messages: UIMessage[],
+  streamStartMessageCount: number,
+): ChatMessagePart[] | null => {
+  const parts = messages
+    .slice(streamStartMessageCount)
+    .flatMap((message) =>
+      message.role === "assistant" ? (message.parts as ChatMessagePart[]) : [],
+    );
 
-  for (let index = messages.length - 1; index >= 0; index--) {
-    const message = messages[index];
-    if (message?.role !== "assistant") {
-      continue;
-    }
-
-    latestAssistant ??= message;
-    if (message.parts.some((part) => part.type !== "text" || Boolean(part.content))) {
-      return message.parts as ChatMessagePart[];
-    }
-  }
-
-  return latestAssistant ? (latestAssistant.parts as ChatMessagePart[]) : null;
+  return parts.length > 0 ? parts : null;
 };
 
 const toUiMessages = (
@@ -385,14 +394,17 @@ export const runChatGeneration = async (runId: string) => {
       status: "streaming",
     });
 
+    const streamInitialMessages = toUiMessages(
+      visibleMessages.filter((message) => message.id !== run.assistantMessageId),
+    );
+    const streamStartMessageCount = streamInitialMessages.length;
+
     const finalMessages = await runChatStream({
       abortController,
-      initialMessages: toUiMessages(
-        visibleMessages.filter((message) => message.id !== run.assistantMessageId),
-      ),
+      initialMessages: streamInitialMessages,
       middleware: [usageMiddleware],
       onMessagesChange: (nextMessages) => {
-        const parts = getStreamingAssistantParts(nextMessages);
+        const parts = getStreamingAssistantParts(nextMessages, streamStartMessageCount);
 
         if (!parts) {
           return;
@@ -404,24 +416,75 @@ export const runChatGeneration = async (runId: string) => {
         void updateRunStatus(runId, "waiting_on_tool");
         publishChatRunEvent(runId, { status: "waiting_on_tool", type: "status" });
       },
-      systemPrompts: [gmailSearchPrompt],
-      tools: [
-        createGmailSearchServerTool({
-          category: run.mailboxCategory as MailboxCategory,
+      systemPrompts: [gmailToolsPrompt],
+      tools: (() => {
+        const category = run.mailboxCategory as MailboxCategory;
+        const context: GmailToolsContext = {
+          category,
+          getMailboxOverview: () =>
+            getMailboxOverviewForUser({
+              category,
+              mailboxId: run.mailboxId,
+              signal: abortController.signal,
+              userId: run.userId,
+            }),
+          listGmailLabels: () =>
+            listGmailLabelsForUser({
+              category,
+              mailboxId: run.mailboxId,
+              signal: abortController.signal,
+              userId: run.userId,
+            }),
+          modifyMail: ({ action, id, target }) =>
+            modifyMailForUser({
+              action,
+              category,
+              id,
+              mailboxId: run.mailboxId,
+              signal: abortController.signal,
+              target,
+              userId: run.userId,
+            }),
+          readGmailMessage: ({ messageId }) =>
+            readGmailMessageForUser({
+              category,
+              mailboxId: run.mailboxId,
+              messageId,
+              signal: abortController.signal,
+              userId: run.userId,
+            }),
+          readGmailThread: ({ threadId }: { threadId: string }) =>
+            readGmailThreadForUser({
+              category,
+              mailboxId: run.mailboxId,
+              signal: abortController.signal,
+              threadId,
+              userId: run.userId,
+            }),
           searchGmail: ({ maxResults, query }) =>
             searchGmailForUser({
-              category: run.mailboxCategory as MailboxCategory,
+              category,
               mailboxId: run.mailboxId,
               maxResults,
               query,
               signal: abortController.signal,
               userId: run.userId,
             }),
-        }),
-      ],
+        };
+
+        return [
+          composeEmailToolDef,
+          createGmailLabelListServerTool(context),
+          createGmailMessageServerTool(context),
+          createGmailSearchServerTool(context),
+          createGmailThreadServerTool(context),
+          createMailboxOverviewServerTool(context),
+          createModifyMailServerTool(context),
+        ];
+      })(),
     });
 
-    const finalParts = (getStreamingAssistantParts(finalMessages) ??
+    const finalParts = (getStreamingAssistantParts(finalMessages, streamStartMessageCount) ??
       pendingParts) as ChatMessagePart[];
     const fallbackTitle = getTextContent(
       visibleMessages.find((message) => message.role === "user")?.parts ?? [],

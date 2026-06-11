@@ -6,7 +6,6 @@ import {
   deleteDraft,
   deleteLabel,
   extractListUnsubscribeTargets,
-  getDraft,
   getGmailMessageMetadata,
   getMailboxSyncDelta,
   getMessageAttachment,
@@ -26,18 +25,14 @@ import {
   sendRawMessage,
   untrashMessage,
   untrashThread,
-  updateDraft,
   updateLabel,
   updateMessageLabels,
   updateThreadLabels,
 } from "@quieter/gmail";
-import { parseDraftMessage } from "@quieter/gmail/compose";
 import {
   arrayBufferToBase64Url,
   buildMimeMessage,
   buildPlainTextMessage,
-} from "@quieter/mail/compose";
-import {
   composeDraftInputSchema,
   composeMessageInputSchema,
   composeSendDraftInputSchema,
@@ -45,6 +40,7 @@ import {
 } from "@quieter/mail/compose";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { saveGmailDraft, sendGmailMessage } from "../gmail-compose";
 import {
   applyMailboxSwitcherOrder,
   canonicalizeMailboxSwitcherOrder,
@@ -706,36 +702,7 @@ export const mailRouter = {
     )
     .handler(async ({ context, input }) => {
       return await callGmail(context, input.mailboxId, async (accessToken) => {
-        const raw = arrayBufferToBase64Url(
-          new TextEncoder().encode(
-            await buildMimeMessage(input.draft, { includeQuieterDraftHeaders: true }),
-          ),
-        );
-        const response = input.draft.draftId
-          ? await updateDraft(
-              accessToken,
-              input.draft.draftId,
-              raw,
-              input.draft.replyContext?.threadId,
-            )
-          : await createDraft(accessToken, raw, input.draft.replyContext?.threadId);
-
-        const savedDraft = await getDraft(accessToken, response.id);
-        const parsed = parseDraftMessage(savedDraft);
-        return {
-          draftId: savedDraft.id,
-          draftAnchor: parsed.draftAnchor ?? input.draft.draftAnchor ?? null,
-          messageId: savedDraft.message?.id ?? response.message?.id ?? parsed.messageId,
-          bodyHtml: parsed.bodyHtml || input.draft.bodyHtml,
-          bodyText: parsed.bodyText || input.draft.bodyText,
-          replyContext: parsed.replyContext ?? input.draft.replyContext ?? null,
-          subject: parsed.subject || input.draft.subject,
-          recipients: {
-            to: parsed.recipients.to || input.draft.recipients.to,
-            cc: parsed.recipients.cc || input.draft.recipients.cc,
-            bcc: parsed.recipients.bcc || input.draft.recipients.bcc,
-          },
-        };
+        return await saveGmailDraft(accessToken, input.draft, context.signal);
       });
     }),
 
@@ -759,10 +726,7 @@ export const mailRouter = {
       }
 
       return await callGmail(context, input.mailboxId, async (accessToken) => {
-        const raw = arrayBufferToBase64Url(
-          new TextEncoder().encode(await buildMimeMessage(input.message)),
-        );
-        return await sendRawMessage(accessToken, raw, input.message.replyContext?.threadId);
+        return await sendGmailMessage(accessToken, input.message, context.signal);
       });
     }),
 

@@ -1,5 +1,38 @@
-export { createGmailSearchServerTool, gmailSearchPrompt, gmailSearchToolDef } from "./chat-agent";
-export type { GmailSearchResult, GmailSearchToolContext } from "./chat-agent";
+export {
+  composeEmailInputSchema,
+  composeEmailResultSchema,
+  composeEmailToolDef,
+  createGmailLabelListServerTool,
+  createGmailMessageServerTool,
+  createGmailSearchServerTool,
+  createGmailThreadServerTool,
+  createMailboxOverviewServerTool,
+  createModifyMailServerTool,
+  gmailLabelListResultSchema,
+  gmailLabelListToolDef,
+  gmailMessageResultSchema,
+  gmailMessageToolDef,
+  gmailSearchResultSchema,
+  gmailSearchToolDef,
+  gmailThreadResultSchema,
+  gmailThreadToolDef,
+  gmailToolsPrompt,
+  mailboxOverviewResultSchema,
+  mailboxOverviewToolDef,
+  modifyMailResultSchema,
+  modifyMailToolDef,
+} from "./chat-agent";
+export type {
+  ComposeEmailInput,
+  ComposeEmailResult,
+  GmailLabelListResult,
+  GmailMessageResult,
+  GmailSearchResult,
+  GmailThreadResult,
+  GmailToolsContext,
+  MailboxOverviewResult,
+  ModifyMailResult,
+} from "./chat-agent";
 export { createOpenRouterAdapter } from "./openrouter";
 export { runChatStream } from "./run-chat-stream";
 export { chatParamsFromRequest, toolDefinition } from "@tanstack/ai";

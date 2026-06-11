@@ -17,7 +17,7 @@ import {
 import { chatQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-query";
 import { orpc } from "~/lib/orpc";
 import { queryPersister } from "~/lib/query-persister";
-import type { ChatViewProps } from "../types";
+import type { ChatViewProps, ResolveComposeToolInput } from "../types";
 import { createChatTurns } from "../domain/chat-turns";
 import { useChatRunStream, type ChatRunStreamDone } from "../hooks/use-chat-run-stream";
 import { ChatComposer } from "./chat-composer";
@@ -98,6 +98,7 @@ export const ChatView = ({
   });
   const editUserMessageMutation = useMutation(orpc.chat.editUserMessage.mutationOptions());
   const regenerateResponseMutation = useMutation(orpc.chat.regenerateResponse.mutationOptions());
+  const resolveComposeToolMutation = useMutation(orpc.chat.resolveComposeTool.mutationOptions());
 
   const streamChatIdRef = useRef<string | null>(null);
 
@@ -202,7 +203,6 @@ export const ChatView = ({
         ? { ...message, parts: streamingAssistant.parts as UIMessage["parts"] }
         : message,
   );
-
   const turns = createChatTurns(visibleMessages);
   const isStreaming = !!liveRunId;
   const hasMessages = visibleMessages.length > 0 || !!chatId;
@@ -212,7 +212,8 @@ export const ChatView = ({
     sendMessageMutation.isPending ||
     cancelGenerationMutation.isPending ||
     editUserMessageMutation.isPending ||
-    regenerateResponseMutation.isPending;
+    regenerateResponseMutation.isPending ||
+    resolveComposeToolMutation.isPending;
   const currentPlan = normalizeBillingPlan(billing?.plan);
   const aiRequirement = BILLING_FEATURES.aiChat;
   const canUseAiChat =
@@ -315,6 +316,41 @@ export const ChatView = ({
     }
   };
 
+  const handleResolveCompose = async (input: ResolveComposeToolInput) => {
+    if (!chatId || isComposerLoading || composerDisabled) {
+      return;
+    }
+
+    try {
+      const result =
+        input.action === "decline"
+          ? await resolveComposeToolMutation.mutateAsync({
+              action: input.action,
+              assistantMessageId: input.assistantMessageId,
+              category: activeMailbox,
+              chatId,
+              mailboxId,
+              toolCallId: input.toolCallId,
+            })
+          : await resolveComposeToolMutation.mutateAsync({
+              action: input.action,
+              assistantMessageId: input.assistantMessageId,
+              category: activeMailbox,
+              chatId,
+              mailboxId,
+              message: input.message,
+              toolCallId: input.toolCallId,
+            });
+
+      beginAssistantStream(result);
+      void queryClient.invalidateQueries({ queryKey: getChatsQueryKey(mailboxId) });
+    } catch (error) {
+      toast.error(
+        error instanceof Error && error.message ? error.message : "Could not complete the email.",
+      );
+    }
+  };
+
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden border-l">
       <header className="flex min-h-14 items-center px-3 lg:hidden">
@@ -335,6 +371,7 @@ export const ChatView = ({
                   void handleEditSubmit(userMessageId, message)
                 }
                 onRegenerate={(assistantMessageId) => void handleRegenerate(assistantMessageId)}
+                onResolveCompose={handleResolveCompose}
                 turns={turns}
               />
 

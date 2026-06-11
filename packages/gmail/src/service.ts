@@ -801,6 +801,22 @@ const listMessages = async (
   });
 };
 
+export const getGmailMessageCount = async (
+  accessToken: string,
+  options?: {
+    mailbox?: MailboxCategory;
+    query?: string;
+    signal?: AbortSignal;
+  },
+) => {
+  const result = await listMessages(accessToken, {
+    ...options,
+    maxResults: 1,
+  });
+
+  return result.resultSizeEstimate;
+};
+
 const listDrafts = async (
   accessToken: string,
   options?: {
@@ -1298,6 +1314,21 @@ export const getThreadWithDetails = async (
         : message,
     ),
   };
+};
+
+export const getMessageWithDetails = async (
+  accessToken: string,
+  messageId: string,
+  signal?: AbortSignal,
+): Promise<MessageListItem> => {
+  const message = await getGmailMessageMetadata(accessToken, messageId, signal);
+
+  return await toMessageListItem(
+    accessToken,
+    message,
+    { includeAttachmentMetadata: true, includeBody: true },
+    signal,
+  );
 };
 
 export const getMessageInspector = async (

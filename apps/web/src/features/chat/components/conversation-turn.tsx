@@ -4,7 +4,7 @@ import { Copy01Icon, Edit01Icon, Refresh01Icon } from "@hugeicons/core-free-icon
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, IconButtonTooltip } from "@quieter/ui";
 import { type KeyboardEvent, useState } from "react";
-import type { ChatTurn } from "../types";
+import type { ChatTurn, ResolveComposeTool } from "../types";
 import { getCopyableMessageText } from "../domain/copy-message-text";
 import { MessageActions } from "./message-actions";
 import { AssistantParts } from "./message-parts/assistant-parts";
@@ -17,6 +17,7 @@ type ConversationTurnProps = {
   onCopy: (text: string) => void;
   onEditSubmit: (userMessageId: string, message: string) => void;
   onRegenerate: (assistantMessageId: string) => void;
+  onResolveCompose: ResolveComposeTool;
   turn: ChatTurn;
 };
 
@@ -27,6 +28,7 @@ export const ConversationTurn = ({
   onCopy,
   onEditSubmit,
   onRegenerate,
+  onResolveCompose,
   turn,
 }: ConversationTurnProps) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -36,7 +38,6 @@ export const ConversationTurn = ({
   const userCopyText = turn.user ? getCopyableMessageText(turn.user.parts) : "";
   const assistantCopyText = turn.assistant ? getCopyableMessageText(turn.assistant.parts) : "";
   const assistantMessageId = turn.assistant?.id;
-
   const startEditing = () => {
     if (!turn.user) {
       return;
@@ -137,7 +138,13 @@ export const ConversationTurn = ({
 
       {turn.assistant ? (
         <div className="group/message flex flex-col gap-1">
-          <AssistantParts isStreaming={isStreaming} parts={turn.assistant.parts} />
+          <AssistantParts
+            actionsDisabled={actionsDisabled}
+            assistantMessageId={turn.assistant.id}
+            isStreaming={isStreaming}
+            onResolveCompose={onResolveCompose}
+            parts={turn.assistant.parts}
+          />
           {showActions ? (
             <MessageActions align="start">
               {assistantCopyText ? (

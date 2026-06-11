@@ -1,21 +1,12 @@
-import { domAnimation, LazyMotion, m } from "motion/react";
-
 export const ThinkingIndicator = () => (
-  <LazyMotion features={domAnimation}>
-    <m.div
-      animate={{ opacity: 1 }}
-      className="flex items-center gap-1.5 py-1"
-      initial={{ opacity: 0 }}
-      transition={{ duration: 0.15 }}
-    >
-      {[0, 0.15, 0.3].map((delay) => (
-        <m.span
-          animate={{ opacity: [0.2, 0.8, 0.2] }}
-          className="size-1 rounded-full bg-muted-foreground"
-          key={delay}
-          transition={{ delay, duration: 1.6, ease: "easeInOut", repeat: Number.POSITIVE_INFINITY }}
-        />
-      ))}
-    </m.div>
-  </LazyMotion>
+  <p className="min-h-5 text-xs text-muted-foreground">
+    <span className="inline-flex items-center gap-1">
+      <span className="inline-flex gap-0.5">
+        <span className="size-1 animate-pulse rounded-full bg-muted-foreground/60 [animation-delay:0ms]" />
+        <span className="size-1 animate-pulse rounded-full bg-muted-foreground/60 [animation-delay:150ms]" />
+        <span className="size-1 animate-pulse rounded-full bg-muted-foreground/60 [animation-delay:300ms]" />
+      </span>
+      <span>Thinking</span>
+    </span>
+  </p>
 );
