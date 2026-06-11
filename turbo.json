@@ -36,7 +36,9 @@
         "MAIL_BUCKET",
         "MAIL_RECEIPT_TOPIC_ARN",
         "MAIL_RECEIPT_ROLE_ARN",
-        "MAIL_RECEIPT_RULE_SET_NAME"
+        "MAIL_RECEIPT_RULE_SET_NAME",
+        "CHAT_GENERATION_START_URL",
+        "CHAT_GENERATION_START_TOKEN"
       ],
       "passThroughEnv": [
         "GOOGLE_API_KEY",
@@ -147,7 +149,9 @@
         "MAIL_BUCKET",
         "MAIL_RECEIPT_TOPIC_ARN",
         "MAIL_RECEIPT_ROLE_ARN",
-        "MAIL_RECEIPT_RULE_SET_NAME"
+        "MAIL_RECEIPT_RULE_SET_NAME",
+        "CHAT_GENERATION_START_URL",
+        "CHAT_GENERATION_START_TOKEN"
       ],
       "passThroughEnv": ["BUN_INSTALL_CACHE_DIR", "SST_BUN_PATH"],
       "cache": false,
