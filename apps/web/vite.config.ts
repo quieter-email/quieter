@@ -12,6 +12,22 @@ const motionPackages = ["motion", "framer-motion", "motion-dom", "motion-utils"]
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
   const isSentryEnabled = !isDev && !!process.env.SENTRY_AUTH_TOKEN;
+  const sentryPlugins = isSentryEnabled
+    ? sentryTanstackStart({
+        authToken: process.env.SENTRY_AUTH_TOKEN,
+        autoInstrumentMiddleware: false,
+        org: process.env.SENTRY_ORG,
+        project: process.env.SENTRY_PROJECT,
+        sourcemaps: {
+          assets: ["./.vercel/output/static/**/*.js"],
+          filesToDeleteAfterUpload: ["./.vercel/output/static/**/*.map"],
+        },
+        telemetry: false,
+      }).map((plugin) => ({
+        ...plugin,
+        applyToEnvironment: (environment) => environment.name === "client",
+      }))
+    : [];
 
   return {
     build: {
@@ -27,28 +43,7 @@ export default defineConfig(({ command }) => {
       }),
       tailwindcss(),
       nitro({ preset: "vercel", traceDeps: ["react"] }),
-      ...(isSentryEnabled
-        ? [
-            {
-              name: "sentry-client-build",
-              applyToEnvironment(environment) {
-                return environment.name === "client"
-                  ? sentryTanstackStart({
-                      authToken: process.env.SENTRY_AUTH_TOKEN,
-                      autoInstrumentMiddleware: false,
-                      org: process.env.SENTRY_ORG,
-                      project: process.env.SENTRY_PROJECT,
-                      sourcemaps: {
-                        assets: ["./.vercel/output/static/**/*.js"],
-                        filesToDeleteAfterUpload: ["./.vercel/output/static/**/*.map"],
-                      },
-                      telemetry: false,
-                    })
-                  : false;
-              },
-            },
-          ]
-        : []),
+      ...sentryPlugins,
     ],
     optimizeDeps: {
       include: [...motionPackages, "motion/react"],
