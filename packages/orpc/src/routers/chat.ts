@@ -2,7 +2,7 @@ import { ORPCError } from "@orpc/server";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { chat, chatMessage, chatRun, db, type ChatMessagePart } from "@quieter/database";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   ActiveChatRunConflictError,
@@ -11,6 +11,7 @@ import {
   hasActiveChatRun,
   startAssistantRun,
 } from "../chat-run-store";
+import { ACTIVE_CHAT_RUN_STATUSES } from "../chat-run-stream";
 import { assertAccessibleMailbox } from "../mailbox";
 import { mailboxCategorySchema, mailboxIdSchema, protectedProcedure } from "./base";
 
@@ -154,10 +155,15 @@ export const chatRouter = {
         .select({
           createdAt: chat.createdAt,
           id: chat.id,
+          isGenerating: sql<boolean>`${chatRun.id} is not null`,
           title: chat.title,
           updatedAt: chat.updatedAt,
         })
         .from(chat)
+        .leftJoin(
+          chatRun,
+          and(eq(chatRun.chatId, chat.id), inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])),
+        )
         .where(and(eq(chat.mailboxId, input.mailboxId), eq(chat.userId, context.userId)))
         .orderBy(desc(chat.updatedAt));
     }),

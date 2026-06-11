@@ -7,6 +7,7 @@ import {
   Delete01Icon,
   Edit01Icon,
   InboxIcon,
+  Loading03Icon,
   MoreVerticalIcon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
@@ -44,6 +45,7 @@ type MailSidebarProps = {
   activeChatId: string | null;
   chats: Array<{
     id: string;
+    isGenerating: boolean;
     title: string | null;
     updatedAt: Date;
   }>;
@@ -180,6 +182,13 @@ const SidebarChatRow = ({
             type="button"
             variant="ghost"
           >
+            {chat.isGenerating && (
+              <HugeiconsIcon
+                aria-hidden
+                className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+                icon={Loading03Icon}
+              />
+            )}
             <span className="truncate">{title}</span>
           </Button>
           <DropdownMenu>
