@@ -29,17 +29,24 @@ export default defineConfig(({ command }) => {
       nitro({ preset: "vercel", traceDeps: ["react"] }),
       ...(isSentryEnabled
         ? [
-            sentryTanstackStart({
-              authToken: process.env.SENTRY_AUTH_TOKEN,
-              autoInstrumentMiddleware: false,
-              org: process.env.SENTRY_ORG,
-              project: process.env.SENTRY_PROJECT,
-              sourcemaps: {
-                assets: ["./.vercel/output/static/**/*.js"],
-                filesToDeleteAfterUpload: ["./.vercel/output/static/**/*.map"],
+            {
+              name: "sentry-client-build",
+              applyToEnvironment(environment) {
+                return environment.name === "client"
+                  ? sentryTanstackStart({
+                      authToken: process.env.SENTRY_AUTH_TOKEN,
+                      autoInstrumentMiddleware: false,
+                      org: process.env.SENTRY_ORG,
+                      project: process.env.SENTRY_PROJECT,
+                      sourcemaps: {
+                        assets: ["./.vercel/output/static/**/*.js"],
+                        filesToDeleteAfterUpload: ["./.vercel/output/static/**/*.map"],
+                      },
+                      telemetry: false,
+                    })
+                  : false;
               },
-              telemetry: false,
-            }),
+            },
           ]
         : []),
     ],
