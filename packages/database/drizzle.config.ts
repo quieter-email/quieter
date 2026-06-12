@@ -14,6 +14,7 @@ export default defineConfig({
     "chatMessage",
     "chatRun",
     "gmailCredential",
+    "gmailLabel",
     "gmailOAuthState",
     "invitation",
     "mailDomain",

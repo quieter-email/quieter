@@ -298,7 +298,9 @@ export const gmailLabelListResultSchema = z.discriminatedUnion("status", [
     category: z.enum(mailboxCategories),
     labels: z.array(
       z.object({
+        description: z.string().nullable().optional(),
         id: z.string(),
+        inclusionCriteria: z.string().nullable().optional(),
         name: z.string(),
         type: z.enum(["system", "user"]),
       }),

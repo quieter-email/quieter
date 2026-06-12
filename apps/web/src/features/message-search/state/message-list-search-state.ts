@@ -150,7 +150,7 @@ const readStructuredToken = (query: string, start: number) => {
 };
 
 export const normalizeLabelSelectionKey = (value: string) => value.trim().toLocaleLowerCase();
-export const getUserLabels = (labels: readonly GmailLabelListItem[]) =>
+export const getUserLabels = <TLabel extends GmailLabelListItem>(labels: readonly TLabel[]) =>
   labels.filter((label) => label.type === "user");
 
 export const parseStructuredSearchFilterToken = (token: string): SearchFilterChip | null => {

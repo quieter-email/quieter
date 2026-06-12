@@ -272,6 +272,25 @@ export const gmailCredential = pgTable(
   (table) => [unique("gmail_credential_google_subject_unique").on(table.googleSubject)],
 );
 
+export const gmailLabel = pgTable(
+  "gmailLabel",
+  {
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    labelId: text("labelId").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    inclusionCriteria: text("inclusionCriteria"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    index("gmail_label_mailbox_id_idx").on(table.mailboxId),
+    unique("gmail_label_mailbox_id_label_id_unique").on(table.mailboxId, table.labelId),
+  ],
+);
+
 export const gmailOAuthState = pgTable(
   "gmailOAuthState",
   {
@@ -631,6 +650,7 @@ export const tables = {
   member,
   invitation,
   gmailCredential,
+  gmailLabel,
   gmailOAuthState,
   mailbox,
   mailboxGrant,
@@ -792,6 +812,7 @@ export const authRelations = defineRelations(tables, (r) => ({
       to: r.gmailCredential.mailboxId,
       optional: true,
     }),
+    gmailLabels: r.many.gmailLabel({ from: r.mailbox.id, to: r.gmailLabel.mailboxId }),
     grants: r.many.mailboxGrant({ from: r.mailbox.id, to: r.mailboxGrant.mailboxId }),
     managedMessages: r.many.managedMailMessage({
       from: r.mailbox.id,
@@ -811,6 +832,13 @@ export const authRelations = defineRelations(tables, (r) => ({
   gmailCredential: {
     mailbox: r.one.mailbox({
       from: r.gmailCredential.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+  },
+  gmailLabel: {
+    mailbox: r.one.mailbox({
+      from: r.gmailLabel.mailboxId,
       to: r.mailbox.id,
       optional: false,
     }),
