@@ -8,6 +8,7 @@ export {
   chatMessage,
   chatRun,
   gmailCredential,
+  gmailLabel,
   gmailOAuthState,
   invitation,
   mailbox,

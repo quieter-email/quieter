@@ -42,6 +42,12 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { saveGmailDraft, sendGmailMessage } from "../gmail-compose";
 import {
+  deleteSyncedGmailLabel,
+  saveGmailLabelDetails,
+  syncGmailLabels,
+  upsertSyncedGmailLabel,
+} from "../gmail-labels";
+import {
   applyMailboxSwitcherOrder,
   canonicalizeMailboxSwitcherOrder,
   createManagedMailbox,
@@ -439,7 +445,7 @@ export const mailRouter = {
       }
 
       return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
-        return await listLabels(accessToken, signal);
+        return await syncGmailLabels(input.mailboxId, await listLabels(accessToken, signal));
       });
     }),
 
@@ -452,7 +458,10 @@ export const mailRouter = {
     )
     .handler(async ({ context, input }) => {
       return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
-        return await createLabel(accessToken, input.name, signal);
+        return await upsertSyncedGmailLabel(
+          input.mailboxId,
+          await createLabel(accessToken, input.name, signal),
+        );
       });
     }),
 
@@ -466,8 +475,32 @@ export const mailRouter = {
     )
     .handler(async ({ context, input }) => {
       return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
-        return await updateLabel(accessToken, input.labelId, input.name, signal);
+        return await upsertSyncedGmailLabel(
+          input.mailboxId,
+          await updateLabel(accessToken, input.labelId, input.name, signal),
+        );
       });
+    }),
+
+  updateLabelDetails: protectedProcedure
+    .input(
+      z.object({
+        description: z.string().trim().max(2_000).nullable(),
+        inclusionCriteria: z.string().trim().max(4_000).nullable(),
+        labelId: z.string().trim().min(1),
+        mailboxId: mailboxIdSchema,
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      const updatedLabel = await saveGmailLabelDetails(input);
+      if (!updatedLabel) {
+        throw new ORPCError("NOT_FOUND", { message: "Label not found." });
+      }
+      return updatedLabel;
     }),
 
   deleteLabel: protectedProcedure
@@ -479,7 +512,9 @@ export const mailRouter = {
     )
     .handler(async ({ context, input }) => {
       return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
-        return await deleteLabel(accessToken, input.labelId, signal);
+        const result = await deleteLabel(accessToken, input.labelId, signal);
+        await deleteSyncedGmailLabel(input.mailboxId, input.labelId);
+        return result;
       });
     }),
 

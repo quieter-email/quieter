@@ -26,6 +26,7 @@ import {
   updateMessageLabels,
   updateThreadLabels,
 } from "@quieter/gmail";
+import { syncGmailLabels } from "./gmail-labels";
 import {
   getAuthorizedGmailMailbox,
   markGmailMailboxNeedsReconnect,
@@ -177,13 +178,18 @@ export const listGmailLabelsForUser = async (
   input: GmailChatRequest & { category: MailboxCategory },
 ): Promise<GmailLabelListResult> =>
   runAuthorizedGmailChatRequest(input, async (accessToken) => {
-    const labels = await listLabels(accessToken, input.signal);
+    const labels = await syncGmailLabels(
+      input.mailboxId,
+      await listLabels(accessToken, input.signal),
+    );
 
     return {
       category: input.category,
       labels: labels.map((label) => ({
         id: label.id,
         name: label.name,
+        description: label.description,
+        inclusionCriteria: label.inclusionCriteria,
         type: label.type === "user" ? "user" : "system",
       })),
       status: "success",

@@ -602,9 +602,23 @@ export const getDemoThread = (threadId: string): ThreadMessagesResult => {
   };
 };
 
-export const getDemoLabels = (): GmailLabelListItem[] => [
-  { id: "Label_Clients", name: "Clients", type: "user" },
-  { id: "Label_Product", name: "Product", type: "user" },
+export const getDemoLabels = (): Array<
+  GmailLabelListItem & { description: string | null; inclusionCriteria: string | null }
+> => [
+  {
+    description: "Client conversations and account activity.",
+    id: "Label_Clients",
+    inclusionCriteria: "Messages from clients about active work, requests, and account updates.",
+    name: "Clients",
+    type: "user",
+  },
+  {
+    description: "Product planning, feedback, and release work.",
+    id: "Label_Product",
+    inclusionCriteria: "Product feedback, feature discussions, bug reports, and release updates.",
+    name: "Product",
+    type: "user",
+  },
 ];
 
 export const getDemoMessageInspector = (messageId: string): MessageInspectorResult => {
