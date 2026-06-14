@@ -39,12 +39,18 @@ const deleteConnection = async (connectionId: string) => {
   );
 };
 
-const notifyConnection = async (connectionId: string, mailboxId: string) => {
+export type GmailLiveSyncEventType = "mailbox-details-dirty" | "mailbox-dirty";
+
+const notifyConnection = async (
+  connectionId: string,
+  mailboxId: string,
+  type: GmailLiveSyncEventType,
+) => {
   try {
     await connections.send(
       new PostToConnectionCommand({
         ConnectionId: connectionId,
-        Data: Buffer.from(JSON.stringify({ mailboxId, type: "mailbox-dirty" })),
+        Data: Buffer.from(JSON.stringify({ mailboxId, type })),
       }),
     );
   } catch (error) {
@@ -60,7 +66,10 @@ const notifyConnection = async (connectionId: string, mailboxId: string) => {
   }
 };
 
-export const notifyGmailLiveSyncConnections = async (mailboxId: string) => {
+export const notifyGmailLiveSyncConnections = async (
+  mailboxId: string,
+  type: GmailLiveSyncEventType = "mailbox-dirty",
+) => {
   let exclusiveStartKey: QueryCommandOutput["LastEvaluatedKey"];
 
   do {
@@ -85,7 +94,7 @@ export const notifyGmailLiveSyncConnections = async (mailboxId: string) => {
       ) ?? [];
 
     await Promise.all(
-      connectionIds.map((connectionId) => notifyConnection(connectionId, mailboxId)),
+      connectionIds.map((connectionId) => notifyConnection(connectionId, mailboxId, type)),
     );
     exclusiveStartKey = page.LastEvaluatedKey;
   } while (exclusiveStartKey);

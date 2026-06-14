@@ -39,6 +39,11 @@ export {
   GMAIL_AUTO_LABEL_MODEL,
   type GmailAutoLabelCandidate,
 } from "./classify-gmail-message";
+export {
+  extractGmailUsefulDetail,
+  GMAIL_USEFUL_DETAIL_MODEL,
+  type GmailUsefulDetailCandidate,
+} from "./extract-gmail-useful-detail";
 export { createOpenRouterAdapter } from "./openrouter";
 export { generateChatTitle } from "./generate-chat-title";
 export { runChatStream } from "./run-chat-stream";

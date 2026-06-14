@@ -553,6 +553,8 @@ export const getDemoMailboxes = () => ({
           displayName: "Demo Mailbox",
           emailAddress: DEMO_EMAIL_ADDRESS,
           grantRole: null,
+          gmailAutoLabelEnabled: false,
+          gmailUsefulDetailsEnabled: false,
           groupId: "demo-personal",
           groupKind: "personal" as const,
           groupName: "Demo",

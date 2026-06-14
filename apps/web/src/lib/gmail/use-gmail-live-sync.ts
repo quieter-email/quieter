@@ -5,21 +5,26 @@ import { useEffect } from "react";
 import type { MailboxCategory } from "./gmail";
 import { rpc } from "../orpc";
 import { getLiveSyncQueryKey } from "./inbox-query";
+import { getGmailUsefulDetailsQueryKey } from "./useful-details-query";
 
 const KEEPALIVE_INTERVAL_MS = 1000 * 60 * 5;
 const MAX_CONNECTION_ATTEMPTS = 12;
 const MAX_RECONNECT_DELAY_MS = 1000 * 30;
 
-const isMailboxDirtyEvent = (
-  value: unknown,
-  mailboxId: string,
-): value is { mailboxId: string; type: "mailbox-dirty" } =>
-  typeof value === "object" &&
-  value !== null &&
-  "mailboxId" in value &&
-  value.mailboxId === mailboxId &&
-  "type" in value &&
-  value.type === "mailbox-dirty";
+const parseMailboxEvent = (value: unknown, mailboxId: string) => {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("mailboxId" in value) ||
+    value.mailboxId !== mailboxId ||
+    !("type" in value) ||
+    (value.type !== "mailbox-dirty" && value.type !== "mailbox-details-dirty")
+  ) {
+    return null;
+  }
+
+  return value.type;
+};
 
 export const useGmailLiveSync = (input: {
   enabled: boolean;
@@ -57,6 +62,15 @@ export const useGmailLiveSync = (input: {
         { cancelRefetch: false },
       );
     };
+    const requestUsefulDetails = () => {
+      void queryClient.invalidateQueries(
+        {
+          exact: true,
+          queryKey: getGmailUsefulDetailsQueryKey(mailboxId),
+        },
+        { cancelRefetch: false },
+      );
+    };
     const scheduleReconnect = () => {
       clearKeepalive();
       if (disposed || connectionAttempts >= MAX_CONNECTION_ATTEMPTS) {
@@ -81,6 +95,7 @@ export const useGmailLiveSync = (input: {
         socket.addEventListener("open", () => {
           reconnectDelay = 1000;
           requestSync();
+          requestUsefulDetails();
           clearKeepalive();
           keepaliveTimer = window.setInterval(() => {
             if (socket?.readyState === WebSocket.OPEN) {
@@ -90,8 +105,11 @@ export const useGmailLiveSync = (input: {
         });
         socket.addEventListener("message", (event) => {
           try {
-            if (isMailboxDirtyEvent(JSON.parse(String(event.data)), mailboxId)) {
+            const eventType = parseMailboxEvent(JSON.parse(String(event.data)), mailboxId);
+            if (eventType === "mailbox-dirty") {
               requestSync();
+            } else if (eventType === "mailbox-details-dirty") {
+              requestUsefulDetails();
             }
           } catch {
             // Ignore malformed server messages and keep the connection alive.

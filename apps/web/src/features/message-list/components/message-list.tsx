@@ -7,6 +7,7 @@ import type { MessageListItem } from "~/lib/gmail/gmail";
 import { MessageListSearch } from "~/features/message-search/components/message-list-search";
 import { buildThreadListEntries, type ThreadListEntry } from "~/lib/gmail/thread-list";
 import type { MessageListBulkAction, MessageListProps } from "./message-list-types";
+import { GmailUsefulDetails } from "./gmail-useful-details";
 import { MessageListScrollPane } from "./message-list-scroll-pane";
 import { MessageListSelectionToolbar } from "./message-list-selection-toolbar";
 import { useMessageListSelection } from "./use-message-list-selection";
@@ -170,6 +171,15 @@ export const MessageList = (props: MessageListProps) => {
           searchQuery={props.searchQuery}
         />
       )}
+
+      {props.mailboxProvider === "gmail" &&
+        props.activeMailbox === "inbox" &&
+        !props.searchQuery && (
+          <GmailUsefulDetails
+            mailboxId={props.mailboxId}
+            onActivateMessage={props.onActivateMessage}
+          />
+        )}
 
       <m.div className="flex min-h-0 flex-1 flex-col" {...messageListContentMotion}>
         <MessageListScrollPane

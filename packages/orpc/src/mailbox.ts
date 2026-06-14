@@ -6,6 +6,7 @@ import {
   gmailAutoLabelSettings,
   gmailCredential,
   gmailOAuthState,
+  gmailUsefulDetailSettings,
   mailbox,
   mailboxGrant,
   member,
@@ -48,6 +49,7 @@ export type MailboxListItem = MailboxGroupMetadata & {
   emailAddress: string;
   grantRole: MailboxGrantRole | null;
   gmailAutoLabelEnabled: boolean;
+  gmailUsefulDetailsEnabled: boolean;
   id: string;
   organizationId: string | null;
   ownerUserId: string | null;
@@ -149,6 +151,7 @@ const toMailboxListItem = (
     emailAddress: string;
     grantRole: MailboxGrantRole | null;
     gmailAutoLabelEnabled?: boolean | null;
+    gmailUsefulDetailsEnabled?: boolean | null;
     id: string;
     organizationId: string | null;
     ownerUserId: string | null;
@@ -162,6 +165,7 @@ const toMailboxListItem = (
   emailAddress: record.emailAddress,
   grantRole: record.grantRole,
   gmailAutoLabelEnabled: record.gmailAutoLabelEnabled ?? false,
+  gmailUsefulDetailsEnabled: record.gmailUsefulDetailsEnabled ?? false,
   groupId: group.groupId,
   groupKind: group.groupKind,
   groupName: group.groupName,
@@ -184,6 +188,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         displayName: mailbox.displayName,
         emailAddress: mailbox.emailAddress,
         gmailAutoLabelEnabled: gmailAutoLabelSettings.enabled,
+        gmailUsefulDetailsEnabled: gmailUsefulDetailSettings.enabled,
         id: mailbox.id,
         organizationId: mailbox.organizationId,
         ownerUserId: mailbox.ownerUserId,
@@ -192,6 +197,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
       })
       .from(mailbox)
       .leftJoin(gmailAutoLabelSettings, eq(gmailAutoLabelSettings.mailboxId, mailbox.id))
+      .leftJoin(gmailUsefulDetailSettings, eq(gmailUsefulDetailSettings.mailboxId, mailbox.id))
       .where(
         and(eq(mailbox.ownerUserId, input.userId), eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)),
       )
@@ -202,6 +208,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         emailAddress: mailbox.emailAddress,
         grantRole: mailboxGrant.role,
         gmailAutoLabelEnabled: gmailAutoLabelSettings.enabled,
+        gmailUsefulDetailsEnabled: gmailUsefulDetailSettings.enabled,
         id: mailbox.id,
         organizationId: mailbox.organizationId,
         ownerUserId: mailbox.ownerUserId,
@@ -211,6 +218,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
       .from(mailboxGrant)
       .innerJoin(mailbox, eq(mailbox.id, mailboxGrant.mailboxId))
       .leftJoin(gmailAutoLabelSettings, eq(gmailAutoLabelSettings.mailboxId, mailbox.id))
+      .leftJoin(gmailUsefulDetailSettings, eq(gmailUsefulDetailSettings.mailboxId, mailbox.id))
       .innerJoin(
         member,
         and(eq(member.userId, input.userId), eq(member.organizationId, mailbox.organizationId)),

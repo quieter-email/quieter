@@ -44,12 +44,25 @@ export const handler = async (event: SqsEvent) => {
               );
             }
           },
+          onProcessed: async ({ mailboxId }) => {
+            try {
+              await notifyGmailLiveSyncConnections(mailboxId, "mailbox-details-dirty");
+            } catch (error) {
+              console.error(
+                `Could not fan out Gmail details notification for mailbox ${mailboxId}.`,
+                error instanceof Error ? error.message : "Unknown error.",
+              );
+            }
+          },
         });
       } else {
-        await maintainGmailPubSubMailbox({
+        const result = await maintainGmailPubSubMailbox({
           mailboxId: message.mailboxId,
           topicName: requireServerEnv("GMAIL_PUBSUB_TOPIC"),
         });
+        if (result.status === "maintained") {
+          await notifyGmailLiveSyncConnections(message.mailboxId, "mailbox-details-dirty");
+        }
       }
     } catch (error) {
       console.error(

@@ -45,7 +45,10 @@ function PrivacyPage() {
         <li>Error and reliability monitoring services.</li>
         <li>Performance measurement services when measurement consent is granted.</li>
         <li>Cloud hosting and database services that operate Quieter.</li>
-        <li>AI processing services for chat generation and, when enabled, Gmail auto-labeling.</li>
+        <li>
+          AI processing services for chat generation and, when enabled, Gmail auto-labeling and
+          useful detail extraction.
+        </li>
       </ul>
 
       <h2>Your rights</h2>

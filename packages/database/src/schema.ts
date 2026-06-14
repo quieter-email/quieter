@@ -19,6 +19,16 @@ export type MailDomainStatus = "failed" | "pending_dns" | "verified";
 export type MailboxConnectionStatus = "connected" | "needs_reconnect";
 export type MailboxGrantRole = "manager" | "reader" | "responder";
 export type MailboxProvider = "gmail" | "managed";
+export type GmailDeliveryStatus =
+  | "delayed"
+  | "delivered"
+  | "in_transit"
+  | "ordered"
+  | "out_for_delivery"
+  | "ready_for_pickup"
+  | "shipped"
+  | "unknown";
+export type GmailUsefulDetailKind = "delivery" | "verification_code";
 export type ManagedMailDirection = "inbound" | "outbound";
 export type ManagedMailHeader = {
   name: string;
@@ -359,6 +369,102 @@ export const gmailAutoLabelEvent = pgTable(
     unique("gmail_auto_label_event_mailbox_message_unique").on(
       table.mailboxId,
       table.gmailMessageId,
+    ),
+  ],
+);
+
+export const gmailUsefulDetailSettings = pgTable("gmailUsefulDetailSettings", {
+  mailboxId: text("mailboxId")
+    .primaryKey()
+    .references(() => mailbox.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(false),
+  createdAt: timestamp("createdAt").notNull(),
+  updatedAt: timestamp("updatedAt").notNull(),
+});
+
+export const gmailUsefulDetailEvent = pgTable(
+  "gmailUsefulDetailEvent",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    gmailMessageId: text("gmailMessageId").notNull(),
+    model: text("model"),
+    promptTokens: integer("promptTokens"),
+    completionTokens: integer("completionTokens"),
+    attemptCount: integer("attemptCount").notNull().default(0),
+    nextAttemptAt: timestamp("nextAttemptAt"),
+    processedAt: timestamp("processedAt"),
+    usageReportedAt: timestamp("usageReportedAt"),
+    lastError: text("lastError"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    index("gmail_useful_detail_event_mailbox_created_at_idx").on(table.mailboxId, table.createdAt),
+    index("gmail_useful_detail_event_mailbox_retry_idx").on(
+      table.mailboxId,
+      table.processedAt,
+      table.nextAttemptAt,
+    ),
+    unique("gmail_useful_detail_event_mailbox_message_unique").on(
+      table.mailboxId,
+      table.gmailMessageId,
+    ),
+  ],
+);
+
+export const gmailUsefulDetail = pgTable(
+  "gmailUsefulDetail",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<GmailUsefulDetailKind>().notNull(),
+    dedupeKey: text("dedupeKey").notNull(),
+    gmailMessageId: text("gmailMessageId").notNull(),
+    gmailThreadId: text("gmailThreadId"),
+    title: text("title").notNull(),
+    summary: text("summary"),
+    encryptedCode: text("encryptedCode"),
+    carrier: text("carrier"),
+    trackingNumber: text("trackingNumber"),
+    deliveryStatus: text("deliveryStatus").$type<GmailDeliveryStatus>(),
+    expectedAt: timestamp("expectedAt"),
+    receivedAt: timestamp("receivedAt").notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    dismissedAt: timestamp("dismissedAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "gmail_useful_detail_kind_check",
+      sql`${table.kind} in ('delivery', 'verification_code')`,
+    ),
+    check(
+      "gmail_useful_detail_delivery_status_check",
+      sql`${table.deliveryStatus} is null or ${table.deliveryStatus} in ('delayed', 'delivered', 'in_transit', 'ordered', 'out_for_delivery', 'ready_for_pickup', 'shipped', 'unknown')`,
+    ),
+    check(
+      "gmail_useful_detail_payload_check",
+      sql`(
+        (${table.kind} = 'verification_code' and ${table.encryptedCode} is not null and ${table.deliveryStatus} is null)
+        or
+        (${table.kind} = 'delivery' and ${table.encryptedCode} is null and ${table.deliveryStatus} is not null)
+      )`,
+    ),
+    index("gmail_useful_detail_mailbox_active_idx").on(
+      table.mailboxId,
+      table.dismissedAt,
+      table.expiresAt,
+    ),
+    unique("gmail_useful_detail_mailbox_kind_dedupe_unique").on(
+      table.mailboxId,
+      table.kind,
+      table.dedupeKey,
     ),
   ],
 );
@@ -724,6 +830,9 @@ export const tables = {
   gmailCredential,
   gmailAutoLabelEvent,
   gmailAutoLabelSettings,
+  gmailUsefulDetail,
+  gmailUsefulDetailEvent,
+  gmailUsefulDetailSettings,
   gmailLabel,
   gmailOAuthState,
   gmailWatchState,
@@ -891,6 +1000,19 @@ export const authRelations = defineRelations(tables, (r) => ({
       to: r.gmailAutoLabelSettings.mailboxId,
       optional: true,
     }),
+    gmailUsefulDetailEvents: r.many.gmailUsefulDetailEvent({
+      from: r.mailbox.id,
+      to: r.gmailUsefulDetailEvent.mailboxId,
+    }),
+    gmailUsefulDetailSettings: r.one.gmailUsefulDetailSettings({
+      from: r.mailbox.id,
+      to: r.gmailUsefulDetailSettings.mailboxId,
+      optional: true,
+    }),
+    gmailUsefulDetails: r.many.gmailUsefulDetail({
+      from: r.mailbox.id,
+      to: r.gmailUsefulDetail.mailboxId,
+    }),
     gmailCredential: r.one.gmailCredential({
       from: r.mailbox.id,
       to: r.gmailCredential.mailboxId,
@@ -935,6 +1057,27 @@ export const authRelations = defineRelations(tables, (r) => ({
   gmailAutoLabelSettings: {
     mailbox: r.one.mailbox({
       from: r.gmailAutoLabelSettings.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+  },
+  gmailUsefulDetail: {
+    mailbox: r.one.mailbox({
+      from: r.gmailUsefulDetail.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+  },
+  gmailUsefulDetailEvent: {
+    mailbox: r.one.mailbox({
+      from: r.gmailUsefulDetailEvent.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+  },
+  gmailUsefulDetailSettings: {
+    mailbox: r.one.mailbox({
+      from: r.gmailUsefulDetailSettings.mailboxId,
       to: r.mailbox.id,
       optional: false,
     }),

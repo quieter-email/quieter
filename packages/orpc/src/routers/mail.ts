@@ -50,6 +50,11 @@ import {
 import { createGmailLiveSyncConnection } from "../gmail-live-sync";
 import { setGmailAutoLabeling } from "../gmail-pubsub";
 import {
+  dismissGmailUsefulDetail,
+  listGmailUsefulDetails,
+  setGmailUsefulDetails,
+} from "../gmail-useful-details";
+import {
   applyMailboxSwitcherOrder,
   canonicalizeMailboxSwitcherOrder,
   createManagedMailbox,
@@ -168,6 +173,46 @@ export const mailRouter = {
     .handler(async ({ context, input }) => {
       return await setGmailAutoLabeling({
         enabled: input.enabled,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+    }),
+
+  setGmailUsefulDetails: protectedProcedure
+    .input(
+      z.object({
+        enabled: z.boolean(),
+        mailboxId: mailboxIdSchema,
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      return await setGmailUsefulDetails({
+        enabled: input.enabled,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+    }),
+
+  listGmailUsefulDetails: protectedProcedure
+    .route({ method: "GET" })
+    .input(z.object({ mailboxId: mailboxIdSchema }))
+    .handler(async ({ context, input }) => {
+      return await listGmailUsefulDetails({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+    }),
+
+  dismissGmailUsefulDetail: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().trim().min(1),
+        mailboxId: mailboxIdSchema,
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      return await dismissGmailUsefulDetail({
+        id: input.id,
         mailboxId: input.mailboxId,
         userId: context.userId,
       });

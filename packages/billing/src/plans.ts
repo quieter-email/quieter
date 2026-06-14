@@ -28,7 +28,7 @@ export const BILLING_FEATURES = {
     requiredPlan: "pro",
   },
   gmailAutomation: {
-    description: "Instant Gmail updates and AI auto-labeling",
+    description: "Live Gmail updates and AI assistance",
     requiredPlan: "pro",
   },
   organizationApiKeys: {
@@ -66,7 +66,7 @@ export const BILLING_PRODUCTS = {
     polarMetadataKey: "quieter_managed",
   },
   pro: {
-    description: "Managed mail plus AI chat, instant Gmail updates, and automatic organization.",
+    description: "Managed mail plus AI chat, live Gmail updates, and automatic organization.",
     features: [
       "Everything in Managed",
       formatManagedUsagePriceFeature("pro"),
@@ -74,6 +74,7 @@ export const BILLING_PRODUCTS = {
       "$10 AI credits included",
       "Instant Gmail updates",
       "AI auto-labeling",
+      "Verification codes and delivery updates",
     ],
     highlight: true,
     monthlyPriceCents: 2_000,

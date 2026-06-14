@@ -34,6 +34,8 @@ import { orpc } from "~/lib/orpc";
 
 const getSettingsReturnTo = () => "/settings?tab=mailboxes";
 const personalPlacementValue = "personal";
+const getMutationErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
 
 export const MailboxesSettingsPanel = () => {
   const queryClient = useQueryClient();
@@ -43,14 +45,18 @@ export const MailboxesSettingsPanel = () => {
   const [managedLocalPart, setManagedLocalPart] = useState("");
   const [managedDomain, setManagedDomain] = useState<string | undefined>(undefined);
   const [isStartingGmail, setIsStartingGmail] = useState(false);
-  const mailboxesQuery = useQuery(mailboxesQueryOptions());
+  const {
+    data: mailboxesData,
+    error: mailboxesError,
+    isError: isMailboxesError,
+  } = useQuery(mailboxesQueryOptions());
   const { data: billing, isSuccess: isBillingSuccess } = useQuery(userBillingQueryOptions());
   const currentPlan = normalizeBillingPlan(billing?.plan);
   const hasGmailAutomationAccess =
     isBillingSuccess &&
     (!!billing?.hasUnlimitedAccess ||
       hasBillingPlanAccess(currentPlan, BILLING_FEATURES.gmailAutomation.requiredPlan));
-  const groups = mailboxesQuery.data?.groups ?? [];
+  const groups = mailboxesData?.groups ?? [];
   const gmailGroups = groups.map((group) => ({
     ...group,
     mailboxes: group.mailboxes.filter((mailbox) => mailbox.provider === "gmail"),
@@ -59,7 +65,7 @@ export const MailboxesSettingsPanel = () => {
     ...group,
     mailboxes: group.mailboxes.filter((mailbox) => mailbox.provider === "managed"),
   }));
-  const defaultMailboxId = mailboxesQuery.data?.defaultMailboxId ?? null;
+  const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
   const placementItems = [
     { value: personalPlacementValue, label: "Personal" },
     ...organizations.map((organization) => ({
@@ -71,11 +77,11 @@ export const MailboxesSettingsPanel = () => {
     value: organization.id,
     label: organization.name,
   }));
-  const managedDomainsQuery = useQuery({
+  const { data: managedDomainsData, isLoading: areManagedDomainsLoading } = useQuery({
     ...organizationMailDomainsQueryOptions(managedOrganizationId),
     enabled: managedOrganizationId.length > 0,
   });
-  const verifiedDomains = (managedDomainsQuery.data?.domains ?? []).filter(
+  const verifiedDomains = (managedDomainsData?.domains ?? []).filter(
     (domain) => domain.status === "verified",
   );
   const selectedDomain = managedDomain ?? verifiedDomains[0]?.domain ?? "";
@@ -112,6 +118,11 @@ export const MailboxesSettingsPanel = () => {
     mutationKey: ["mail", "set-gmail-auto-labeling"],
     onSuccess: invalidateMailboxes,
   });
+  const setGmailUsefulDetailsMutation = useMutation({
+    ...orpc.mail.setGmailUsefulDetails.mutationOptions(),
+    mutationKey: ["mail", "set-gmail-useful-details"],
+    onSuccess: invalidateMailboxes,
+  });
 
   const startGmailConnection = async (input?: {
     mailboxId?: string;
@@ -130,9 +141,6 @@ export const MailboxesSettingsPanel = () => {
       toast.error(error instanceof Error ? error.message : "Could not start Gmail connection.");
     }
   };
-  const getMutationErrorMessage = (error: unknown, fallback: string) =>
-    error instanceof Error ? error.message : fallback;
-
   return (
     <div className="space-y-8">
       <section className="space-y-4">
@@ -141,7 +149,7 @@ export const MailboxesSettingsPanel = () => {
           <p className="mt-1 text-sm text-muted-foreground">
             Connect an existing personal or Google Workspace inbox. Organization placement does not
             share the mailbox with other members. Pro keeps your inbox current as mail arrives and
-            can use AI to apply your existing Gmail labels automatically.
+            can use AI to apply your existing Gmail labels and surface useful details from new mail.
           </p>
         </div>
 
@@ -180,9 +188,9 @@ export const MailboxesSettingsPanel = () => {
           </Button>
         </div>
 
-        {mailboxesQuery.isError && (
+        {isMailboxesError && (
           <p className="text-sm text-destructive">
-            {mailboxesQuery.error.message ?? "Could not load mailboxes."}
+            {mailboxesError.message ?? "Could not load mailboxes."}
           </p>
         )}
 
@@ -195,7 +203,43 @@ export const MailboxesSettingsPanel = () => {
                 return (
                   <MailboxSettingsRow
                     action={
-                      <div className="flex items-center gap-1">
+                      <div className="flex flex-wrap items-center justify-end gap-1">
+                        <label className="mr-2 flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>
+                            Codes & deliveries
+                            {!hasGmailAutomationAccess && " · Pro"}
+                          </span>
+                          <Switch
+                            aria-label={`Find verification codes and delivery updates for ${mailbox.emailAddress}`}
+                            checked={mailbox.gmailUsefulDetailsEnabled}
+                            disabled={
+                              !hasGmailAutomationAccess ||
+                              setGmailUsefulDetailsMutation.isPending ||
+                              mailbox.connectionStatus !== "connected"
+                            }
+                            onCheckedChange={(enabled) => {
+                              setGmailUsefulDetailsMutation.mutate(
+                                {
+                                  enabled,
+                                  mailboxId: mailbox.id,
+                                },
+                                {
+                                  onError: (error) => {
+                                    toast.error(
+                                      getMutationErrorMessage(
+                                        error,
+                                        "Could not update useful details.",
+                                      ),
+                                    );
+                                  },
+                                },
+                              );
+                            }}
+                          >
+                            <SwitchThumb />
+                          </Switch>
+                        </label>
+
                         <label className="mr-2 flex items-center gap-2 text-xs text-muted-foreground">
                           <span>
                             Auto-label with AI
@@ -431,7 +475,7 @@ export const MailboxesSettingsPanel = () => {
                 <span className="px-2.5 text-sm text-muted-foreground">
                   {!managedOrganizationId
                     ? "domain"
-                    : managedDomainsQuery.isLoading
+                    : areManagedDomainsLoading
                       ? "loading…"
                       : "no verified domain"}
                 </span>
@@ -473,7 +517,7 @@ export const MailboxesSettingsPanel = () => {
         )}
         {organizations.length > 0 &&
           managedOrganizationId.length > 0 &&
-          !managedDomainsQuery.isLoading &&
+          !areManagedDomainsLoading &&
           verifiedDomains.length === 0 && (
             <p className="text-sm text-muted-foreground">
               This organization has no verified domain yet. Add and verify one in the organization
