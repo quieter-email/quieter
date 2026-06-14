@@ -141,13 +141,18 @@ export default $config({
         invocation: "15 minutes",
       },
     });
-    chatGenerationQueue.subscribe("packages/aws/src/chat-generation-starter.handler", {
-      batch: {
-        partialResponses: true,
+    chatGenerationQueue.subscribe(
+      {
+        handler: "packages/aws/src/chat-generation-starter.handler",
+        link: [chatGenerationWorkflow],
+        timeout: "30 seconds",
       },
-      link: [chatGenerationWorkflow],
-      timeout: "30 seconds",
-    });
+      {
+        batch: {
+          partialResponses: true,
+        },
+      },
+    );
     const chatGenerationEnqueue = new sst.aws.Function("ChatGenerationEnqueue", {
       handler: "packages/aws/src/chat-generation-enqueue.handler",
       link: [chatGenerationQueue, chatGenerationStartToken],
