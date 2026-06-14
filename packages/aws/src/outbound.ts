@@ -1,4 +1,5 @@
 import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
+import { serverEnv } from "@quieter/env/server";
 import { Resource } from "sst";
 import { z } from "zod";
 import {
@@ -34,7 +35,7 @@ let sesv2Client: SESv2Client | null = null;
 
 const getSesv2Client = () => {
   sesv2Client ??= new SESv2Client({
-    region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION,
+    region: serverEnv.AWS_REGION || serverEnv.AWS_DEFAULT_REGION,
   });
 
   return sesv2Client;

@@ -24,6 +24,19 @@ declare module "sst" {
       "qualifier": string
       "type": "sst.aws.Workflow"
     }
+    "GmailLiveSyncApi": {
+      "managementEndpoint": string
+      "type": "sst.aws.ApiGatewayWebSocket"
+      "url": string
+    }
+    "GmailLiveSyncConnections": {
+      "name": string
+      "type": "sst.aws.Dynamo"
+    }
+    "GmailLiveSyncTokenSecret": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "MailBucket": {
       "name": string
       "type": "sst.aws.Bucket"

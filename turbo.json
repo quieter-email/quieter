@@ -7,12 +7,14 @@
     "build": {
       "dependsOn": ["^build"],
       "env": [
+        "BETTER_AUTH_APP_NAME",
         "BETTER_AUTH_SECRET",
         "GOOGLE_AUTH_CLIENT_ID",
         "GOOGLE_AUTH_CLIENT_SECRET",
         "GOOGLE_GMAIL_CLIENT_ID",
         "GOOGLE_GMAIL_CLIENT_SECRET",
         "GMAIL_TOKEN_ENCRYPTION_KEY",
+        "DATABASE_MIGRATION_URL",
         "DATABASE_URL",
         "VITE_LOGO_DEV_PUBLISHABLE_KEY",
         "OPENROUTER_API_KEY",
@@ -22,6 +24,7 @@
         "POLAR_WEBHOOK_SECRET",
         "QUIETER_UNLIMITED_BILLING_EMAILS",
         "BETTER_AUTH_URL",
+        "VITE_PUBLIC_C15T_URL",
         "VITE_PUBLIC_POSTHOG_PROJECT_TOKEN",
         "VITE_PUBLIC_POSTHOG_HOST",
         "VITE_SENTRY_DSN",
@@ -38,7 +41,9 @@
         "MAIL_RECEIPT_ROLE_ARN",
         "MAIL_RECEIPT_RULE_SET_NAME",
         "CHAT_GENERATION_START_URL",
-        "CHAT_GENERATION_START_TOKEN"
+        "CHAT_GENERATION_START_TOKEN",
+        "GMAIL_LIVE_SYNC_URL",
+        "GMAIL_LIVE_SYNC_TOKEN_SECRET"
       ],
       "passThroughEnv": [
         "GOOGLE_API_KEY",
@@ -48,7 +53,9 @@
         "AWS_REGION",
         "AWS_DEFAULT_REGION",
         "AWS_PROFILE",
-        "AWS_EC2_METADATA_DISABLED"
+        "AWS_EC2_METADATA_DISABLED",
+        "VERCEL_ENV",
+        "VERCEL_URL"
       ],
       "inputs": ["$TURBO_DEFAULT$"],
       "outputs": ["dist/**", ".output/**", "!.output/cache/**", ".vercel/output/**"]
@@ -120,13 +127,16 @@
       "outputs": []
     },
     "dev": {
+      "dependsOn": ["^build"],
       "env": [
+        "BETTER_AUTH_APP_NAME",
         "BETTER_AUTH_SECRET",
         "GOOGLE_AUTH_CLIENT_ID",
         "GOOGLE_AUTH_CLIENT_SECRET",
         "GOOGLE_GMAIL_CLIENT_ID",
         "GOOGLE_GMAIL_CLIENT_SECRET",
         "GMAIL_TOKEN_ENCRYPTION_KEY",
+        "DATABASE_MIGRATION_URL",
         "DATABASE_URL",
         "AWS_REGION",
         "AWS_DEFAULT_REGION",
@@ -148,6 +158,7 @@
         "POLAR_WEBHOOK_SECRET",
         "QUIETER_UNLIMITED_BILLING_EMAILS",
         "BETTER_AUTH_URL",
+        "VITE_PUBLIC_C15T_URL",
         "VITE_PUBLIC_POSTHOG_PROJECT_TOKEN",
         "VITE_PUBLIC_POSTHOG_HOST",
         "VITE_SENTRY_DSN",
@@ -161,7 +172,11 @@
         "MAIL_RECEIPT_ROLE_ARN",
         "MAIL_RECEIPT_RULE_SET_NAME",
         "CHAT_GENERATION_START_URL",
-        "CHAT_GENERATION_START_TOKEN"
+        "CHAT_GENERATION_START_TOKEN",
+        "GMAIL_LIVE_SYNC_URL",
+        "GMAIL_LIVE_SYNC_TOKEN_SECRET",
+        "VERCEL_ENV",
+        "VERCEL_URL"
       ],
       "passThroughEnv": ["BUN_INSTALL_CACHE_DIR", "SST_BUN_PATH"],
       "cache": false,

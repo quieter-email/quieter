@@ -1,0 +1,55 @@
+{
+  "name": "@quieter/env",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./client": {
+      "types": "./src/client.ts",
+      "bun": "./src/client.ts",
+      "default": "./dist/client.js"
+    },
+    "./deployment": {
+      "types": "./src/deployment.ts",
+      "bun": "./src/deployment.ts",
+      "default": "./dist/deployment.js"
+    },
+    "./public": {
+      "types": "./src/public.ts",
+      "bun": "./src/public.ts",
+      "default": "./dist/public.js"
+    },
+    "./server": {
+      "types": "./src/server.ts",
+      "bun": "./src/server.ts",
+      "default": "./dist/server.js"
+    },
+    "./sst": {
+      "types": "./src/sst.ts",
+      "bun": "./src/sst.ts",
+      "default": "./dist/sst.js"
+    }
+  },
+  "scripts": {
+    "build": "bun build src/client.ts src/deployment.ts src/public.ts src/server.ts src/sst.ts --outdir dist --target node --format esm --packages external",
+    "fmt": "oxfmt --config ../../oxfmt.json .",
+    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
+    "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/env",
+    "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/env",
+    "test": "bun test",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@t3-oss/env-core": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@quieter/config": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -8,6 +8,7 @@ import {
   type MailDomainDnsRecord,
   type MailDomainStatus,
 } from "@quieter/database";
+import { serverEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
 import { resolveCname, resolveMx, resolveTxt } from "node:dns/promises";
@@ -61,11 +62,11 @@ export const defaultDnsLookup = {
 } satisfies MailDomainDnsLookup;
 
 export const getAwsRegion = () => {
-  const region = process.env.AWS_REGION?.trim() || process.env.AWS_DEFAULT_REGION?.trim();
+  const region = serverEnv.AWS_REGION || serverEnv.AWS_DEFAULT_REGION;
 
   if (!region) {
     throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      message: "AWS_REGION or AWS_DEFAULT_REGION is required for mail domain setup.",
+      message: "Mail domain setup is temporarily unavailable.",
     });
   }
 
@@ -304,7 +305,7 @@ export const getDkimTokens = (identity: GetEmailIdentityCommandOutput) => {
 
   if (tokens.length === 0) {
     throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      message: "The mail provider did not return DKIM records for this domain.",
+      message: "Could not prepare the required domain records.",
     });
   }
 
@@ -346,12 +347,11 @@ const loadSstOutputs = async (): Promise<SstOutputs | null> => {
 
 const getReceiptRuleConfig = async (): Promise<ReceiptRuleConfig> => {
   const outputs = await loadSstOutputs();
-  const bucketName = process.env.MAIL_BUCKET?.trim() || outputs?.mailBucket?.trim();
-  const topicArn =
-    process.env.MAIL_RECEIPT_TOPIC_ARN?.trim() || outputs?.mailReceiptTopicArn?.trim();
-  const roleArn = process.env.MAIL_RECEIPT_ROLE_ARN?.trim() || outputs?.mailReceiptRoleArn?.trim();
+  const bucketName = serverEnv.MAIL_BUCKET || outputs?.mailBucket?.trim();
+  const topicArn = serverEnv.MAIL_RECEIPT_TOPIC_ARN || outputs?.mailReceiptTopicArn?.trim();
+  const roleArn = serverEnv.MAIL_RECEIPT_ROLE_ARN || outputs?.mailReceiptRoleArn?.trim();
   const ruleSetName =
-    process.env.MAIL_RECEIPT_RULE_SET_NAME?.trim() ||
+    serverEnv.MAIL_RECEIPT_RULE_SET_NAME ||
     outputs?.mailReceiptRuleSetName?.trim() ||
     DEFAULT_RECEIPT_RULE_SET_NAME;
 

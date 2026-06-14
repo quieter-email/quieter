@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { ComposeDraftState } from "~/features/compose";
+import { clientEnv } from "~/env";
 import { parseStructuredSearchQuery } from "~/features/message-search/state/message-list-search-state";
 import { getMailboxesQueryKey } from "~/lib/mailboxes-query";
 import type { ThreadListEntry } from "./thread-list";
@@ -34,7 +35,7 @@ const now = Date.now();
 const daysAgo = (days: number) => new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
 
 const logo = (domain: string) => {
-  const token = import.meta.env.VITE_LOGO_DEV_PUBLISHABLE_KEY as string | undefined;
+  const token = clientEnv.VITE_LOGO_DEV_PUBLISHABLE_KEY;
   const createUrl = (theme: "dark" | "light") => {
     const url = new URL(`https://img.logo.dev/${domain}`);
     url.searchParams.set("size", "64");
@@ -42,8 +43,8 @@ const logo = (domain: string) => {
     url.searchParams.set("format", "webp");
     url.searchParams.set("fallback", "404");
 
-    if (token?.trim()) {
-      url.searchParams.set("token", token.trim());
+    if (token) {
+      url.searchParams.set("token", token);
     }
 
     return url.toString();

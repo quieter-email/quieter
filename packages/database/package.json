@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
+    "@quieter/env": "workspace:*",
     "drizzle-orm": "catalog:",
     "postgres": "^3.4.7"
   },

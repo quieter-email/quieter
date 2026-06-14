@@ -1,3 +1,4 @@
+import { serverEnv } from "@quieter/env/server";
 import reactScan from "@react-scan/vite-plugin-react-scan";
 import babel from "@rolldown/plugin-babel";
 import { sentryTanstackStart } from "@sentry/tanstackstart-react/vite";
@@ -11,13 +12,13 @@ const motionPackages = ["motion", "framer-motion", "motion-dom", "motion-utils"]
 
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
-  const isSentryEnabled = !isDev && !!process.env.SENTRY_AUTH_TOKEN;
+  const isSentryEnabled = !isDev && !!serverEnv.SENTRY_AUTH_TOKEN;
   const sentryPlugins = isSentryEnabled
     ? sentryTanstackStart({
-        authToken: process.env.SENTRY_AUTH_TOKEN,
+        authToken: serverEnv.SENTRY_AUTH_TOKEN,
         autoInstrumentMiddleware: false,
-        org: process.env.SENTRY_ORG,
-        project: process.env.SENTRY_PROJECT,
+        org: serverEnv.SENTRY_ORG,
+        project: serverEnv.SENTRY_PROJECT,
         sourcemaps: {
           assets: ["./.vercel/output/static/**/*.js"],
           filesToDeleteAfterUpload: ["./.vercel/output/static/**/*.map"],

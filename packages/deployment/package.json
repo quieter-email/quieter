@@ -9,6 +9,9 @@
     "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/deployment",
     "typecheck": "tsgo --noEmit"
   },
+  "dependencies": {
+    "@quieter/env": "workspace:*"
+  },
   "devDependencies": {
     "@quieter/config": "workspace:*",
     "@types/bun": "catalog:",

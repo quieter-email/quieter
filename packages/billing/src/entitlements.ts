@@ -6,6 +6,7 @@ import {
   user,
   type BillingSubscriptionStatus,
 } from "@quieter/database";
+import { serverEnv } from "@quieter/env/server";
 import { desc, eq, inArray } from "drizzle-orm";
 import {
   BILLING_FEATURES,
@@ -26,10 +27,7 @@ const BUILT_IN_UNLIMITED_EMAILS = ["riefel.leander@gmail.com"];
 
 const unlimitedBillingEmails = () =>
   new Set(
-    [
-      ...BUILT_IN_UNLIMITED_EMAILS,
-      ...(process.env.QUIETER_UNLIMITED_BILLING_EMAILS ?? "").split(","),
-    ]
+    [...BUILT_IN_UNLIMITED_EMAILS, ...(serverEnv.QUIETER_UNLIMITED_BILLING_EMAILS ?? "").split(",")]
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean),
   );

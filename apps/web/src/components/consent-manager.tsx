@@ -6,12 +6,11 @@ import { posthog } from "@c15t/scripts/posthog";
 import { ConsentBanner } from "~/components/consent/consent-banner";
 import { consentEnglishI18n, consentLegalLinks } from "~/components/consent/consent-i18n";
 import { ConsentPreferencesDialog } from "~/components/consent/consent-preferences-dialog";
+import { clientEnv } from "~/env";
 
-const posthogToken =
-  import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN?.trim() ||
-  import.meta.env.VITE_PUBLIC_POSTHOG_TOKEN?.trim();
-const posthogHost = import.meta.env.VITE_PUBLIC_POSTHOG_HOST?.trim() || "https://eu.i.posthog.com";
-const consentBackendUrl = import.meta.env.VITE_PUBLIC_C15T_URL?.trim() || "/api/c15t";
+const posthogToken = clientEnv.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN;
+const posthogHost = clientEnv.VITE_PUBLIC_POSTHOG_HOST;
+const consentBackendUrl = clientEnv.VITE_PUBLIC_C15T_URL;
 
 export const ConsentManager = ({ children }: PropsWithChildren) => {
   const scripts = posthogToken

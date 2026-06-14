@@ -116,7 +116,7 @@ const RemoveDomainDialog = ({
             </p>
             <p>
               Remove the DNS records as soon as possible. Leaving old records in place can keep mail
-              routing or provider verification active outside Quieter.
+              routing or ownership checks active outside Quieter.
             </p>
           </DialogBody>
 

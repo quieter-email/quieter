@@ -7,6 +7,7 @@ import {
   organization,
   user,
 } from "@quieter/database";
+import { serverEnv } from "@quieter/env/server";
 import { APIError } from "better-auth/api";
 import { and, eq, notInArray } from "drizzle-orm";
 
@@ -58,9 +59,9 @@ export const cleanupOrganizationsForDeletedUser = async (userId: string) => {
 };
 
 const deleteUntrackedManagedMailObject = async (input: { bucket: string; key: string }) => {
-  const region = process.env.AWS_REGION?.trim() || process.env.AWS_DEFAULT_REGION?.trim();
+  const region = serverEnv.AWS_REGION || serverEnv.AWS_DEFAULT_REGION;
   if (!region) {
-    throw new Error("AWS_REGION or AWS_DEFAULT_REGION is required to delete managed mail.");
+    throw new Error("Managed mail cleanup is temporarily unavailable.");
   }
 
   const { DeleteObjectCommand, S3Client } = await import("@aws-sdk/client-s3");

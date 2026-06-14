@@ -34,6 +34,11 @@ export type {
   ModifyMailResult,
 } from "./chat-agent";
 export { chatModels, chatModelSchema, defaultChatModel, type ChatModel } from "./chat-models";
+export {
+  classifyGmailMessage,
+  GMAIL_AUTO_LABEL_MODEL,
+  type GmailAutoLabelCandidate,
+} from "./classify-gmail-message";
 export { createOpenRouterAdapter } from "./openrouter";
 export { generateChatTitle } from "./generate-chat-title";
 export { runChatStream } from "./run-chat-stream";

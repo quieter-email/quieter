@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { extractListUnsubscribeTargets, refreshMailboxMessages } from "../src/service";
+import {
+  extractListUnsubscribeTargets,
+  listGmailAddedMessageHistoryPage,
+  refreshMailboxMessages,
+  stopGmailWatch,
+  watchGmailMailbox,
+} from "../src/service";
 
 const createBatchResponse = (boundary: string, bodies: readonly unknown[]) => {
   return [
@@ -129,6 +135,126 @@ describe("refreshMailboxMessages", () => {
         labelIds: ["INBOX"],
         subject: "Subject 0",
         threadMessageCount: 2,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("Gmail watch and history", () => {
+  test("starts and stops a mailbox watch", async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: Array<{ body?: BodyInit | null; method?: string; url: string }> = [];
+
+    globalThis.fetch = async (input, init) => {
+      calls.push({
+        body: init?.body,
+        method: init?.method,
+        url: String(input),
+      });
+      return calls.length === 1
+        ? Response.json({
+            expiration: "1780000000000",
+            historyId: "123",
+          })
+        : new Response(null, { status: 204 });
+    };
+
+    try {
+      const watch = await watchGmailMailbox("token", "projects/project/topics/gmail");
+      await stopGmailWatch("token");
+
+      expect(watch).toEqual({
+        expiration: new Date(1_780_000_000_000),
+        historyId: "123",
+      });
+      expect(calls[0]).toMatchObject({
+        method: "POST",
+        url: "https://gmail.googleapis.com/gmail/v1/users/me/watch",
+      });
+      expect(JSON.parse(String(calls[0]?.body))).toEqual({
+        topicName: "projects/project/topics/gmail",
+      });
+      expect(calls[1]).toMatchObject({
+        method: "POST",
+        url: "https://gmail.googleapis.com/gmail/v1/users/me/stop",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("returns a resumable cursor for a paginated added-message history page", async () => {
+    const originalFetch = globalThis.fetch;
+    let requestedUrl = "";
+
+    globalThis.fetch = async (input) => {
+      requestedUrl = String(input);
+      return Response.json({
+        history: [
+          {
+            id: "101",
+            messagesAdded: [{ message: { id: "message-1", threadId: "thread-1" } }],
+          },
+          {
+            id: "105",
+            messagesAdded: [
+              { message: { id: "message-1", threadId: "thread-1" } },
+              { message: { id: "message-2", threadId: "thread-2" } },
+            ],
+          },
+        ],
+        historyId: "110",
+        nextPageToken: "next",
+      });
+    };
+
+    try {
+      expect(
+        await listGmailAddedMessageHistoryPage("token", {
+          pageToken: "page",
+          startHistoryId: "100",
+        }),
+      ).toEqual({
+        hasMore: true,
+        historyExpired: false,
+        historyId: "110",
+        messageIds: ["message-1", "message-2"],
+        nextPageToken: "next",
+      });
+      expect(new URL(requestedUrl).searchParams.get("pageToken")).toBe("page");
+      expect(new URL(requestedUrl).searchParams.get("startHistoryId")).toBe("100");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("marks an expired Gmail history cursor for recovery", async () => {
+    const originalFetch = globalThis.fetch;
+
+    globalThis.fetch = async () =>
+      Response.json(
+        {
+          error: {
+            code: 404,
+            message: "Requested entity was not found.",
+            status: "NOT_FOUND",
+          },
+        },
+        { status: 404 },
+      );
+
+    try {
+      expect(
+        await listGmailAddedMessageHistoryPage("token", {
+          startHistoryId: "expired",
+        }),
+      ).toEqual({
+        hasMore: false,
+        historyExpired: true,
+        historyId: "expired",
+        messageIds: [],
       });
     } finally {
       globalThis.fetch = originalFetch;

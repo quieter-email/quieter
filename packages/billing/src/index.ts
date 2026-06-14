@@ -4,6 +4,7 @@ import type { BillingPlan } from "@quieter/database";
 import { ORPCError } from "@orpc/server";
 import { PayKit } from "@paykit-sdk/core";
 import { billingSubscription, db } from "@quieter/database";
+import { serverEnv } from "@quieter/env/server";
 import { desc, eq, and } from "drizzle-orm";
 import {
   getUserBillingPlan,
@@ -12,7 +13,12 @@ import {
 } from "./entitlements";
 import { getOrganizationMailMeteredPrice } from "./organization-mail-usage";
 import { BILLING_PRODUCTS, paidBillingPlanSchema, type PaidBillingPlan } from "./plans";
-import { getPolarApiOrganizationId, getPolarClient, getPolarSandboxMode } from "./polar";
+import {
+  getPolarApiOrganizationId,
+  getPolarClient,
+  getPolarSandboxMode,
+  ingestPolarEvents,
+} from "./polar";
 
 const BILLING_PROVIDER = "polar" as const;
 const BILLING_METADATA_PLAN = "quieterPlan";
@@ -41,7 +47,7 @@ const aiUsageRates = {
 const getPaykit = async () => {
   if (paykit) return paykit;
 
-  const accessToken = process.env.POLAR_ACCESS_TOKEN?.trim();
+  const accessToken = serverEnv.POLAR_ACCESS_TOKEN;
 
   if (!accessToken) {
     throw new ORPCError("INTERNAL_SERVER_ERROR", {
@@ -144,7 +150,7 @@ const getPlanForProductId = (productId: string) => {
 };
 
 const getBaseUrl = (headers: Headers) => {
-  const configured = process.env.BETTER_AUTH_URL?.trim();
+  const configured = serverEnv.BETTER_AUTH_URL;
 
   if (configured) return configured.replace(/\/$/, "");
 
@@ -351,6 +357,7 @@ const getAiUsageMeterId = async () => {
 export const reportAiUsage = async (input: {
   chatId?: string | null;
   completionTokens: number;
+  externalId?: string;
   model: keyof typeof aiUsageRates;
   promptTokens: number;
   userId: string;
@@ -364,24 +371,25 @@ export const reportAiUsage = async (input: {
   if (costCents <= 0) return;
 
   await getAiUsageMeterId();
-  await (
-    await getPolarClient()
-  ).events.ingest({
-    events: [
-      {
-        externalCustomerId: `user:${input.userId}`,
-        metadata: {
-          chatId: input.chatId ?? "",
-          completionTokens: input.completionTokens,
-          costCents,
-          model: input.model,
-          promptTokens: input.promptTokens,
-        },
-        name: AI_USAGE_EVENT_NAME,
-        organizationId: getPolarApiOrganizationId(),
-      },
-    ],
-  });
+  const event = {
+    externalCustomerId: `user:${input.userId}`,
+    metadata: {
+      chatId: input.chatId ?? "",
+      completionTokens: input.completionTokens,
+      costCents,
+      model: input.model,
+      promptTokens: input.promptTokens,
+    },
+    name: AI_USAGE_EVENT_NAME,
+    organizationId: getPolarApiOrganizationId(),
+  };
+
+  if (input.externalId) {
+    await ingestPolarEvents([{ ...event, externalId: input.externalId }]);
+    return;
+  }
+
+  await (await getPolarClient()).events.ingest({ events: [event] });
 };
 
 export const handlePolarBillingWebhook = async (input: {
@@ -389,7 +397,7 @@ export const handlePolarBillingWebhook = async (input: {
   fullUrl: string;
   headers: Headers;
 }) => {
-  const webhookSecret = process.env.POLAR_WEBHOOK_SECRET?.trim();
+  const webhookSecret = serverEnv.POLAR_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
     throw new ORPCError("INTERNAL_SERVER_ERROR", {

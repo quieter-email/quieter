@@ -1,3 +1,5 @@
+import { serverEnv } from "@quieter/env/server";
+
 type AuthMailInput = {
   html?: string;
   subject: string;
@@ -5,18 +7,18 @@ type AuthMailInput = {
   to: string;
 };
 
-const authMailSender = process.env.QUIETER_AUTH_MAIL_SENDER?.trim() || "auth@quieter.email";
+const authMailSender = serverEnv.QUIETER_AUTH_MAIL_SENDER;
 
 const getAuthMailApiUrl = () => {
-  const configuredUrl = process.env.QUIETER_MAIL_API_URL?.trim();
+  const configuredUrl = serverEnv.QUIETER_MAIL_API_URL;
 
   if (configuredUrl) {
     return configuredUrl;
   }
 
   const baseUrl =
-    process.env.BETTER_AUTH_URL ||
-    (process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`) ||
+    serverEnv.BETTER_AUTH_URL ||
+    (serverEnv.VERCEL_URL && `https://${serverEnv.VERCEL_URL}`) ||
     "http://localhost:3000";
 
   return new URL("/api/messages", baseUrl).href;
@@ -41,7 +43,7 @@ const createLinkEmailHtml = (input: { body: string; cta: string; url: string }) 
 };
 
 export const sendAuthMail = async (input: AuthMailInput) => {
-  const apiKey = process.env.QUIETER_MAIL_API_KEY?.trim();
+  const apiKey = serverEnv.QUIETER_MAIL_API_KEY;
 
   if (!apiKey) {
     throw new Error("QUIETER_MAIL_API_KEY is required to send auth email.");

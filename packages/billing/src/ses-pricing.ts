@@ -57,5 +57,5 @@ export const formatManagedUsagePriceFeature = (plan: ManagedUsagePlan) => {
     rates.messagesPerThousandDollars,
   )}/1K messages, ${formatRate(rates.attachmentDataPerGbDollars)}/GB attachments, ${formatRate(
     rates.inboundProcessingPerThousandDollars,
-  )}/1K inbound chunks`;
+  )}/1K incoming mail units`;
 };

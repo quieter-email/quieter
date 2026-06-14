@@ -20,6 +20,7 @@
 - `packages/billing` owns PayKit/Polar billing plans, checkout, subscription sync, and webhook handling.
 - `packages/database` owns schema and migrations.
 - `packages/auth` owns Better Auth config.
+- `packages/env` owns T3 Env schemas and runtime normalization. Use its client/public/server/SST/deployment subpaths instead of reading custom variables directly; bootstrap files that must execute before workspace TypeScript can load are the exception.
 
 ## Product Invariants
 
@@ -62,6 +63,8 @@
 - History-based live sync applies to unfiltered mailbox views; filtered search and Drafts refresh manually.
 - Message-list prefetch on mount is capped to one extra page.
 - Sender avatars are derived at request time, not persisted.
+- Gmail Pub/Sub is Pro-only. Google authenticated push lands at the stable `https://gmail-events.quieter.email` SST API Gateway endpoint, whose certificate and Vercel DNS record are managed by SST. The ingress verifies the OIDC audience and service-account email before a FIFO SQS handoff. `GmailPubSubMaintenance` fans one job per Gmail mailbox into that queue every 15 minutes; mailbox jobs renew watches daily and reconcile history because Gmail notifications can be delayed or dropped. Focused, visible browser tabs use the SST `GmailLiveSyncApi` API Gateway WebSocket to receive mailbox-dirty signals and run the existing Gmail history sync immediately; the foreground polling path remains the fallback.
+- Gmail AI auto-labeling is an explicit per-mailbox opt-in. It processes only newly added Inbox messages and applies existing custom Gmail labels with `openai/gpt-5-nano`; persisted label descriptions and inclusion criteria guide classification, while labels without either are inferred from their names. It never creates labels. Tokens report through the user AI usage meter, and persisted per-message decisions make queue retries idempotent.
 
 ## Mail Infra
 
@@ -75,8 +78,9 @@
 - Inbound mail is stored under the fixed `mail/inbound/...` key prefix.
 - Managed inbound S3 objects must have at least one `managedMailMessage` reference. Ingestion deletes untracked objects immediately, and managed message deletion removes the S3 object synchronously when deleting its final database reference.
 - `AWS_REGION` or `AWS_DEFAULT_REGION` is required for the mail S3 uploader.
-- Production deploys always verify quality checks. Schema drift and temporary-Postgres migration tests run only when their Drizzle or consent inputs changed, while manual workflow runs execute the full suite. After verification, production always applies committed forward migrations through `DATABASE_MIGRATION_URL` so an earlier failed deployment cannot leave migrations unapplied before SST or Vercel updates. Production migration history is never adopted or rewritten automatically. The workflow then syncs `MAIL_BUCKET`, `MAIL_RECEIPT_TOPIC_ARN`, `MAIL_RECEIPT_ROLE_ARN`, `MAIL_RECEIPT_RULE_SET_NAME`, and `CHAT_GENERATION_START_URL` into Vercel as production-only sensitive env vars from `.sst/outputs.json`, triggers the Vercel production Deploy Hook, and waits for the deployment result. Set `CHAT_GENERATION_START_TOKEN` on Vercel from the `ChatGenerationStartToken` SST secret (`bun run sst secret get ChatGenerationStartToken`). The GitHub environment must provide the SST runtime secrets (`DATABASE_URL`, `DATABASE_MIGRATION_URL`, `GMAIL_TOKEN_ENCRYPTION_KEY`, `GOOGLE_GMAIL_CLIENT_ID`, `GOOGLE_GMAIL_CLIENT_SECRET`, `OPENROUTER_API_KEY`, `POLAR_ACCESS_TOKEN`) plus `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID`, and `VERCEL_DEPLOY_HOOK_URL`. Commit-triggered Vercel deployments stay disabled through `vercel.json` `git.deploymentEnabled`; do not use an ignored-build command that exits `0`, because it also cancels Deploy Hook builds.
+- Production deploys always verify quality checks. Schema drift and temporary-Postgres migration tests run only when their Drizzle or consent inputs changed, while manual workflow runs execute the full suite. After verification, production always applies committed forward migrations through `DATABASE_MIGRATION_URL` so an earlier failed deployment cannot leave migrations unapplied before SST or Vercel updates. Production migration history is never adopted or rewritten automatically. The workflow then syncs `MAIL_BUCKET`, `MAIL_RECEIPT_TOPIC_ARN`, `MAIL_RECEIPT_ROLE_ARN`, `MAIL_RECEIPT_RULE_SET_NAME`, `CHAT_GENERATION_START_URL`, and `GMAIL_LIVE_SYNC_URL` into Vercel as production-only sensitive env vars from `.sst/outputs.json`, triggers the Vercel production Deploy Hook, and waits for the deployment result. Set `CHAT_GENERATION_START_TOKEN` on Vercel from the `ChatGenerationStartToken` SST secret (`bun run sst secret get ChatGenerationStartToken`). Set the same high-entropy value in the SST `GmailLiveSyncTokenSecret` and Vercel `GMAIL_LIVE_SYNC_TOKEN_SECRET`. The GitHub environment must provide the SST runtime secrets (`DATABASE_URL`, `DATABASE_MIGRATION_URL`, `GMAIL_TOKEN_ENCRYPTION_KEY`, `GOOGLE_GMAIL_CLIENT_ID`, `GOOGLE_GMAIL_CLIENT_SECRET`, `GMAIL_PUBSUB_TOPIC`, `GMAIL_PUBSUB_SUBSCRIPTION`, `GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT`, `GMAIL_PUBSUB_PUSH_AUDIENCE`, `OPENROUTER_API_KEY`, `POLAR_ACCESS_TOKEN`) plus `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID`, and `VERCEL_DEPLOY_HOOK_URL`. Commit-triggered Vercel deployments stay disabled through `vercel.json` `git.deploymentEnabled`; do not use an ignored-build command that exits `0`, because it also cancels Deploy Hook builds.
 - Run the combined local dev session with `bun run dev`; Turbo runs the web app and SST mail stack side by side. Run direct SST commands through `bun run sst ...`; the wrapper defaults to `sst.config.ts` and the `mail-dev` stage, and loads AWS credentials from `.env.local`.
+- Keep `turbo.json` environment allowlists aligned with `packages/env`; `.env*` remains a global task input, and `@quieter/env` must build before Node-loaded Vite configuration runs.
 
 ## Billing
 
@@ -100,6 +104,7 @@
 ## Style Rules
 
 - Primary cleanup priority: before finishing any implementation, make the code the cleanest minimal shape and remove obsolete paths in the same change.
+- User-facing copy describes capabilities and outcomes, not implementation details. Never expose infrastructure or provider terms such as Pub/Sub, AWS, SES, S3, SQS, SST, API Gateway, or model identifiers in product UI or user-facing errors. Keep technical names only where the user must configure or interoperate with them, such as DNS records and API keys.
 - Never couple app code directly to the DB; go through `@quieter/orpc`.
 - Keep types strict. Avoid `any` and unnecessary casts.
 - Use object syntax for conditional classes inside `cn(...)`.

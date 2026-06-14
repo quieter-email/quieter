@@ -1,0 +1,118 @@
+"use client";
+
+import type { QueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
+import type { MailboxCategory } from "./gmail";
+import { rpc } from "../orpc";
+import { getLiveSyncQueryKey } from "./inbox-query";
+
+const KEEPALIVE_INTERVAL_MS = 1000 * 60 * 5;
+const MAX_CONNECTION_ATTEMPTS = 12;
+const MAX_RECONNECT_DELAY_MS = 1000 * 30;
+
+const isMailboxDirtyEvent = (
+  value: unknown,
+  mailboxId: string,
+): value is { mailboxId: string; type: "mailbox-dirty" } =>
+  typeof value === "object" &&
+  value !== null &&
+  "mailboxId" in value &&
+  value.mailboxId === mailboxId &&
+  "type" in value &&
+  value.type === "mailbox-dirty";
+
+export const useGmailLiveSync = (input: {
+  enabled: boolean;
+  mailbox: MailboxCategory;
+  mailboxId: string;
+  queryClient: QueryClient;
+  searchQuery: string;
+}) => {
+  const { enabled, mailbox, mailboxId, queryClient, searchQuery } = input;
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    let connectionAttempts = 0;
+    let disposed = false;
+    let keepaliveTimer: number | undefined;
+    let reconnectDelay = 1000;
+    let reconnectTimer: number | undefined;
+    let socket: WebSocket | null = null;
+
+    const clearKeepalive = () => {
+      if (keepaliveTimer !== undefined) {
+        window.clearInterval(keepaliveTimer);
+        keepaliveTimer = undefined;
+      }
+    };
+    const requestSync = () => {
+      void queryClient.invalidateQueries(
+        {
+          exact: true,
+          queryKey: getLiveSyncQueryKey(mailboxId, mailbox, searchQuery),
+        },
+        { cancelRefetch: false },
+      );
+    };
+    const scheduleReconnect = () => {
+      clearKeepalive();
+      if (disposed || connectionAttempts >= MAX_CONNECTION_ATTEMPTS) {
+        return;
+      }
+
+      reconnectTimer = window.setTimeout(() => {
+        void connect();
+      }, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY_MS);
+    };
+    const connect = async () => {
+      connectionAttempts += 1;
+
+      try {
+        const connection = await rpc.mail.createGmailLiveSyncConnection({ mailboxId });
+        if (disposed || !connection.url) {
+          return;
+        }
+
+        socket = new WebSocket(connection.url);
+        socket.addEventListener("open", () => {
+          reconnectDelay = 1000;
+          requestSync();
+          clearKeepalive();
+          keepaliveTimer = window.setInterval(() => {
+            if (socket?.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ action: "ping" }));
+            }
+          }, KEEPALIVE_INTERVAL_MS);
+        });
+        socket.addEventListener("message", (event) => {
+          try {
+            if (isMailboxDirtyEvent(JSON.parse(String(event.data)), mailboxId)) {
+              requestSync();
+            }
+          } catch {
+            // Ignore malformed server messages and keep the connection alive.
+          }
+        });
+        socket.addEventListener("close", scheduleReconnect);
+        socket.addEventListener("error", () => socket?.close());
+      } catch {
+        scheduleReconnect();
+      }
+    };
+
+    void connect();
+
+    return () => {
+      disposed = true;
+      clearKeepalive();
+      if (reconnectTimer !== undefined) {
+        window.clearTimeout(reconnectTimer);
+      }
+      socket?.close();
+    };
+  }, [enabled, mailbox, mailboxId, queryClient, searchQuery]);
+};

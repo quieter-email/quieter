@@ -14,7 +14,7 @@ const toDirectPostgresUrl = (value: string) => {
 };
 
 export const getMigrationDatabaseUrl = () => {
-  const value = (process.env.DATABASE_MIGRATION_URL ?? process.env.DATABASE_URL)?.trim();
+  const value = serverEnv.DATABASE_MIGRATION_URL ?? serverEnv.DATABASE_URL;
 
   if (!value) {
     throw new Error(
@@ -34,3 +34,4 @@ export const getMigrationDatabaseUrl = () => {
   url.searchParams.set("options", options);
   return url.toString();
 };
+import { serverEnv } from "@quieter/env/server";

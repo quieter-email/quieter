@@ -1,4 +1,5 @@
 import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
+import { serverEnv } from "@quieter/env/server";
 import { Resource } from "sst";
 import { z } from "zod";
 import {
@@ -17,7 +18,7 @@ let sqsClient: SQSClient | null = null;
 
 const getSqsClient = () => {
   sqsClient ??= new SQSClient({
-    region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION,
+    region: serverEnv.AWS_REGION || serverEnv.AWS_DEFAULT_REGION,
   });
 
   return sqsClient;

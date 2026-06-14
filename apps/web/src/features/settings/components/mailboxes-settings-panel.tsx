@@ -8,6 +8,7 @@ import {
   PinOffIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { BILLING_FEATURES, hasBillingPlanAccess } from "@quieter/billing/plans";
 import {
   Button,
   Select,
@@ -15,6 +16,8 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Switch,
+  SwitchThumb,
   TextFieldInput,
   cn,
   toast,
@@ -23,6 +26,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { MailboxSettingsRow } from "~/features/navigation/components/mailbox-switcher";
 import { organizationMailDomainsQueryOptions } from "~/features/settings/components/organization-settings/mail-domains";
+import { normalizeBillingPlan, userBillingQueryOptions } from "~/features/settings/domain/billing";
 import { authClient } from "~/lib/auth";
 import { openGoogleAccountLink } from "~/lib/google-account-link";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
@@ -40,6 +44,12 @@ export const MailboxesSettingsPanel = () => {
   const [managedDomain, setManagedDomain] = useState<string | undefined>(undefined);
   const [isStartingGmail, setIsStartingGmail] = useState(false);
   const mailboxesQuery = useQuery(mailboxesQueryOptions());
+  const { data: billing, isSuccess: isBillingSuccess } = useQuery(userBillingQueryOptions());
+  const currentPlan = normalizeBillingPlan(billing?.plan);
+  const hasGmailAutomationAccess =
+    isBillingSuccess &&
+    (!!billing?.hasUnlimitedAccess ||
+      hasBillingPlanAccess(currentPlan, BILLING_FEATURES.gmailAutomation.requiredPlan));
   const groups = mailboxesQuery.data?.groups ?? [];
   const gmailGroups = groups.map((group) => ({
     ...group,
@@ -97,6 +107,11 @@ export const MailboxesSettingsPanel = () => {
       toast.success("Managed mailbox created.");
     },
   });
+  const setGmailAutoLabelingMutation = useMutation({
+    ...orpc.mail.setGmailAutoLabeling.mutationOptions(),
+    mutationKey: ["mail", "set-gmail-auto-labeling"],
+    onSuccess: invalidateMailboxes,
+  });
 
   const startGmailConnection = async (input?: {
     mailboxId?: string;
@@ -125,7 +140,8 @@ export const MailboxesSettingsPanel = () => {
           <h2 className="text-sm font-medium text-foreground">Connected Gmail</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Connect an existing personal or Google Workspace inbox. Organization placement does not
-            share the mailbox with other members.
+            share the mailbox with other members. Pro keeps your inbox current as mail arrives and
+            can use AI to apply your existing Gmail labels automatically.
           </p>
         </div>
 
@@ -180,6 +196,42 @@ export const MailboxesSettingsPanel = () => {
                   <MailboxSettingsRow
                     action={
                       <div className="flex items-center gap-1">
+                        <label className="mr-2 flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>
+                            Auto-label with AI
+                            {!hasGmailAutomationAccess && " · Pro"}
+                          </span>
+                          <Switch
+                            aria-label={`Automatically label new mail for ${mailbox.emailAddress}`}
+                            checked={mailbox.gmailAutoLabelEnabled}
+                            disabled={
+                              !hasGmailAutomationAccess ||
+                              setGmailAutoLabelingMutation.isPending ||
+                              mailbox.connectionStatus !== "connected"
+                            }
+                            onCheckedChange={(enabled) => {
+                              setGmailAutoLabelingMutation.mutate(
+                                {
+                                  enabled,
+                                  mailboxId: mailbox.id,
+                                },
+                                {
+                                  onError: (error) => {
+                                    toast.error(
+                                      getMutationErrorMessage(
+                                        error,
+                                        "Could not update auto-labeling.",
+                                      ),
+                                    );
+                                  },
+                                },
+                              );
+                            }}
+                          >
+                            <SwitchThumb />
+                          </Switch>
+                        </label>
+
                         <Button
                           aria-label={
                             isDefault ? "Unset default mailbox" : "Set as default mailbox"

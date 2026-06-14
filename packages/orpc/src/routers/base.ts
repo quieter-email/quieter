@@ -1,14 +1,10 @@
 import { ORPCError, os } from "@orpc/server";
 import { auth } from "@quieter/auth";
-import { isGmailRateLimitedError, isGmailServiceError, type MailboxCategory } from "@quieter/gmail";
+import { isGmailRateLimitedError, type MailboxCategory } from "@quieter/gmail";
 import { z } from "zod";
 import { getRequestHeaders, type OrpcContext } from "../context";
 import { orpcErrorMap } from "../errors";
-import {
-  getAuthorizedGmailMailbox,
-  markGmailMailboxNeedsReconnect,
-  refreshAuthorizedGmailAccessToken,
-} from "../mailbox";
+import { runAuthorizedGmailMailbox } from "../mailbox";
 
 export const base = os.errors(orpcErrorMap).$context<OrpcContext>();
 export const publicProcedure = base;
@@ -98,47 +94,20 @@ export const callWithRateLimitHandling = async <TValue>(
   }
 };
 
-const isGmailAuthError = (error: unknown) =>
-  isGmailServiceError(error) &&
-  error.status === 401 &&
-  ((typeof error.googleReason === "string" && error.googleReason.toLowerCase() === "autherror") ||
-    (typeof error.googleStatus === "string" &&
-      error.googleStatus.toUpperCase() === "UNAUTHENTICATED"));
-
 export const callGmail = async <TValue>(
   context: ProtectedContext,
   mailboxId: string,
   runner: (accessToken: string, signal?: AbortSignal) => Promise<TValue>,
 ): Promise<TValue> => {
-  const { accessToken, mailbox } = await getAuthorizedGmailMailbox({
-    mailboxId,
-    userId: context.userId,
-  });
-
   try {
-    return await runner(accessToken, context.signal);
+    return await runAuthorizedGmailMailbox(
+      {
+        mailboxId,
+        userId: context.userId,
+      },
+      (accessToken) => runner(accessToken, context.signal),
+    );
   } catch (error) {
-    if (!isGmailAuthError(error)) {
-      return rethrowKnownRateLimit(context, error);
-    }
-
-    const refreshedAccessToken = await refreshAuthorizedGmailAccessToken({
-      mailboxId,
-      userId: context.userId,
-    });
-
-    try {
-      return await runner(refreshedAccessToken, context.signal);
-    } catch (retryError) {
-      if (isGmailAuthError(retryError)) {
-        await markGmailMailboxNeedsReconnect(mailbox.id);
-        await getAuthorizedGmailMailbox({
-          mailboxId,
-          userId: context.userId,
-        });
-        throw retryError;
-      }
-      return rethrowKnownRateLimit(context, retryError);
-    }
+    return rethrowKnownRateLimit(context, error);
   }
 };

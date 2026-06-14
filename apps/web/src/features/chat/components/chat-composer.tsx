@@ -62,7 +62,7 @@ export const ChatComposer = ({
           }}
           value={model}
         >
-          <SelectTrigger aria-label="Model" disabled={disabled || busy} variant="ghost">
+          <SelectTrigger aria-label="Response style" disabled={disabled || busy} variant="ghost">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

@@ -66,6 +66,7 @@ export const MailboxMessagesPanel = ({
   } = useMailboxMessages({
     activeMailbox,
     isDemoMode,
+    mailboxProvider,
     messageId: messageId ?? undefined,
     queryClient,
     searchQuery: normalizedSearchQuery,
