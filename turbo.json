@@ -91,11 +91,13 @@
       "cache": false
     },
     "db:generate": {
+      "dependsOn": ["^build"],
       "cache": false,
       "outputs": ["drizzle/**"],
       "interactive": true
     },
     "db:check": {
+      "dependsOn": ["^build"],
       "cache": false,
       "outputs": []
     },
@@ -116,6 +118,7 @@
       "outputs": []
     },
     "db:push": {
+      "dependsOn": ["^build"],
       "env": ["DATABASE_URL"],
       "cache": false,
       "outputs": [],
