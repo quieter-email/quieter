@@ -26,6 +26,7 @@ import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callbac
 import { Route as ApiC15tSplatRouteImport } from './routes/api/c15t.$'
 import { Route as ApiBillingPolarWebhookRouteImport } from './routes/api/billing.polar-webhook'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
+import { Route as ApiInternalGmailCredentialsRotateRouteImport } from './routes/api.internal.gmail-credentials.rotate'
 import { Route as ApiChatRunsRunIdStreamRouteImport } from './routes/api/chat.runs.$runId.stream'
 
 const TermsRoute = TermsRouteImport.update({
@@ -113,6 +114,12 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiInternalGmailCredentialsRotateRoute =
+  ApiInternalGmailCredentialsRotateRouteImport.update({
+    id: '/api/internal/gmail-credentials/rotate',
+    path: '/api/internal/gmail-credentials/rotate',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiChatRunsRunIdStreamRoute = ApiChatRunsRunIdStreamRouteImport.update({
   id: '/api/chat/runs/$runId/stream',
   path: '/api/chat/runs/$runId/stream',
@@ -137,6 +144,7 @@ export interface FileRoutesByFullPath {
   '/api/c15t/$': typeof ApiC15tSplatRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
+  '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
 export interface FileRoutesByTo {
@@ -157,6 +165,7 @@ export interface FileRoutesByTo {
   '/api/c15t/$': typeof ApiC15tSplatRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
+  '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
 export interface FileRoutesById {
@@ -178,6 +187,7 @@ export interface FileRoutesById {
   '/api/c15t/$': typeof ApiC15tSplatRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
+  '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
 export interface FileRouteTypes {
@@ -200,6 +210,7 @@ export interface FileRouteTypes {
     | '/api/c15t/$'
     | '/api/gmail/callback'
     | '/api/orpc/$'
+    | '/api/internal/gmail-credentials/rotate'
     | '/api/chat/runs/$runId/stream'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -220,6 +231,7 @@ export interface FileRouteTypes {
     | '/api/c15t/$'
     | '/api/gmail/callback'
     | '/api/orpc/$'
+    | '/api/internal/gmail-credentials/rotate'
     | '/api/chat/runs/$runId/stream'
   id:
     | '__root__'
@@ -240,6 +252,7 @@ export interface FileRouteTypes {
     | '/api/c15t/$'
     | '/api/gmail/callback'
     | '/api/orpc/$'
+    | '/api/internal/gmail-credentials/rotate'
     | '/api/chat/runs/$runId/stream'
   fileRoutesById: FileRoutesById
 }
@@ -261,6 +274,7 @@ export interface RootRouteChildren {
   ApiC15tSplatRoute: typeof ApiC15tSplatRoute
   ApiGmailCallbackRoute: typeof ApiGmailCallbackRoute
   ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
+  ApiInternalGmailCredentialsRotateRoute: typeof ApiInternalGmailCredentialsRotateRoute
   ApiChatRunsRunIdStreamRoute: typeof ApiChatRunsRunIdStreamRoute
 }
 
@@ -385,6 +399,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/internal/gmail-credentials/rotate': {
+      id: '/api/internal/gmail-credentials/rotate'
+      path: '/api/internal/gmail-credentials/rotate'
+      fullPath: '/api/internal/gmail-credentials/rotate'
+      preLoaderRoute: typeof ApiInternalGmailCredentialsRotateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/chat/runs/$runId/stream': {
       id: '/api/chat/runs/$runId/stream'
       path: '/api/chat/runs/$runId/stream'
@@ -413,6 +434,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiC15tSplatRoute: ApiC15tSplatRoute,
   ApiGmailCallbackRoute: ApiGmailCallbackRoute,
   ApiOrpcSplatRoute: ApiOrpcSplatRoute,
+  ApiInternalGmailCredentialsRotateRoute:
+    ApiInternalGmailCredentialsRotateRoute,
   ApiChatRunsRunIdStreamRoute: ApiChatRunsRunIdStreamRoute,
 }
 export const routeTree = rootRouteImport

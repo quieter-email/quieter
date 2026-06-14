@@ -19,6 +19,7 @@
     "./chat-run-stream": "./src/chat-run-stream.ts",
     "./gmail-live-sync": "./src/gmail-live-sync.ts",
     "./gmail-live-sync-token": "./src/gmail-live-sync-token.ts",
+    "./gmail-credential-rotation": "./src/gmail-credential-rotation.ts",
     "./gmail-pubsub": "./src/gmail-pubsub.ts",
     "./stream-chat-run": "./src/stream-chat-run.ts"
   },

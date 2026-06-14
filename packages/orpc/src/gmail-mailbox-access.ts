@@ -55,20 +55,21 @@ export const encryptSecret = (value: string) =>
 export const decryptSecret = (value: string) =>
   decryptGmailCredentialSecret(value, getGmailCredentialEncryptionKeys());
 
-const rotateGmailCredentialSecrets = async (record: {
-  accessTokenExpiresAt: Date | null;
-  emailAddress: string;
-  encryptedAccessToken: string | null;
-  encryptedRefreshToken: string | null;
-  id: string;
-  status: "connected" | "needs_reconnect";
-}) => {
+export const rotateGmailCredentialSecrets = async <
+  TRecord extends {
+    encryptedAccessToken: string | null;
+    encryptedRefreshToken: string | null;
+    id: string;
+  },
+>(
+  record: TRecord,
+) => {
   if (
     !serverEnv.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT ||
     (!record.encryptedAccessToken?.startsWith("v1.") &&
       !record.encryptedRefreshToken?.startsWith("v1."))
   ) {
-    return record;
+    return { record, rotated: false };
   }
 
   const encryptedAccessToken = record.encryptedAccessToken?.startsWith("v1.")
@@ -78,7 +79,7 @@ const rotateGmailCredentialSecrets = async (record: {
     ? encryptSecret(decryptSecret(record.encryptedRefreshToken))
     : record.encryptedRefreshToken;
 
-  await db
+  const [rotatedCredential] = await db
     .update(gmailCredential)
     .set({
       encryptedAccessToken,
@@ -95,12 +96,16 @@ const rotateGmailCredentialSecrets = async (record: {
           ? isNull(gmailCredential.encryptedRefreshToken)
           : eq(gmailCredential.encryptedRefreshToken, record.encryptedRefreshToken),
       ),
-    );
+    )
+    .returning({ id: gmailCredential.mailboxId });
 
   return {
-    ...record,
-    encryptedAccessToken,
-    encryptedRefreshToken,
+    record: {
+      ...record,
+      encryptedAccessToken,
+      encryptedRefreshToken,
+    },
+    rotated: Boolean(rotatedCredential),
   };
 };
 
@@ -199,7 +204,7 @@ const getOwnedGmailCredential = async (mailboxId: string, userId: string) => {
   if (!record) {
     throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
   }
-  return await rotateGmailCredentialSecrets(record);
+  return (await rotateGmailCredentialSecrets(record)).record;
 };
 
 export const getAuthorizedGmailMailbox = async (input: { mailboxId: string; userId: string }) => {

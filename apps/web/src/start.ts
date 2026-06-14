@@ -10,7 +10,12 @@ import {
   sitePasswordCookieName,
 } from "~/lib/site-password.server";
 
-const sitePasswordPaths = new Set(["/api/messages", "/api/site-password", "/api/waitlist"]);
+const sitePasswordPaths = new Set([
+  "/api/internal/gmail-credentials/rotate",
+  "/api/messages",
+  "/api/site-password",
+  "/api/waitlist",
+]);
 const publicLegalPaths = new Set(["/cookies", "/privacy", "/terms"]);
 const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";

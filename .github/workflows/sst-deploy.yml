@@ -296,3 +296,31 @@ jobs:
           VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID || secrets.VERCEL_TEAM_ID || vars.VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: bun packages/deployment/src/wait-for-vercel-deployment.ts
+
+      - name: Rotate legacy Gmail credentials
+        if: ${{ env.SST_STAGE == 'production' }}
+        env:
+          GMAIL_CREDENTIAL_ROTATION_TOKEN: ${{ secrets.GMAIL_CREDENTIAL_ROTATION_TOKEN }}
+        run: |
+          bun run - <<'EOF'
+          const token = process.env.GMAIL_CREDENTIAL_ROTATION_TOKEN;
+          if (!token) {
+            throw new Error("GMAIL_CREDENTIAL_ROTATION_TOKEN is required.");
+          }
+
+          const response = await fetch(
+            "https://quieter.email/api/internal/gmail-credentials/rotate",
+            {
+              headers: { Authorization: `Bearer ${token}` },
+              method: "POST",
+            },
+          );
+          const body = await response.text();
+
+          if (!response.ok) {
+            throw new Error(`Gmail credential rotation failed with ${response.status}: ${body}`);
+          }
+
+          const result = JSON.parse(body);
+          console.log(`Rotated ${result.rotated ?? 0} legacy Gmail credential records.`);
+          EOF
