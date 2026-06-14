@@ -102,11 +102,13 @@
       "outputs": []
     },
     "db:deploy": {
+      "dependsOn": ["^build"],
       "env": ["DATABASE_MIGRATION_URL"],
       "cache": false,
       "outputs": []
     },
     "db:migrate": {
+      "dependsOn": ["^build"],
       "env": ["DATABASE_MIGRATION_URL", "DATABASE_URL"],
       "cache": false,
       "outputs": [],
@@ -125,6 +127,7 @@
       "interactive": true
     },
     "consent:migrate": {
+      "dependsOn": ["^build"],
       "env": ["DATABASE_MIGRATION_URL", "DATABASE_URL"],
       "cache": false,
       "outputs": []
