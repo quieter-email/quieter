@@ -22,6 +22,7 @@ export const createSstEnv = (
       GMAIL_PUBSUB_SUBSCRIPTION: runtimeEnv.GMAIL_PUBSUB_SUBSCRIPTION,
       GMAIL_PUBSUB_TOPIC: runtimeEnv.GMAIL_PUBSUB_TOPIC,
       GMAIL_TOKEN_ENCRYPTION_KEY: runtimeEnv.GMAIL_TOKEN_ENCRYPTION_KEY,
+      GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: runtimeEnv.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT,
       GOOGLE_GMAIL_CLIENT_ID: runtimeEnv.GOOGLE_GMAIL_CLIENT_ID,
       GOOGLE_GMAIL_CLIENT_SECRET: runtimeEnv.GOOGLE_GMAIL_CLIENT_SECRET,
       OPENROUTER_API_KEY: runtimeEnv.OPENROUTER_API_KEY,
@@ -37,6 +38,7 @@ export const createSstEnv = (
       GMAIL_PUBSUB_SUBSCRIPTION: optionalString,
       GMAIL_PUBSUB_TOPIC: optionalString,
       GMAIL_TOKEN_ENCRYPTION_KEY: z.string().trim().min(1),
+      GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: optionalString,
       GOOGLE_GMAIL_CLIENT_ID: z.string().trim().min(1),
       GOOGLE_GMAIL_CLIENT_SECRET: z.string().trim().min(1),
       OPENROUTER_API_KEY: z.string().trim().min(1),
@@ -60,6 +62,9 @@ export const createSstEnv = (
     throw new Error(
       `Gmail Pub/Sub configuration is required in production: ${missingGmailPubSubVariables.join(", ")}`,
     );
+  }
+  if (options.production && !env.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT) {
+    throw new Error("GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT is required in production.");
   }
 
   return {

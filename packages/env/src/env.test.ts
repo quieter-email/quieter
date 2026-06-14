@@ -7,6 +7,7 @@ import { createSstEnv } from "./sst";
 const requiredSstEnvironment = {
   DATABASE_URL: "postgresql://user:password@example.com/database",
   GMAIL_TOKEN_ENCRYPTION_KEY: "gmail-encryption-secret",
+  GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: "current-gmail-encryption-secret",
   GOOGLE_GMAIL_CLIENT_ID: "gmail-client-id",
   GOOGLE_GMAIL_CLIENT_SECRET: "gmail-client-secret",
   OPENROUTER_API_KEY: "openrouter-key",
@@ -59,6 +60,23 @@ describe("SST environment", () => {
     expect(() => createSstEnv({ production: true }, requiredSstEnvironment)).toThrow(
       "Gmail Pub/Sub configuration is required in production",
     );
+  });
+
+  test("requires the current Gmail credential key in production", () => {
+    const { GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: _, ...environment } = requiredSstEnvironment;
+
+    expect(() =>
+      createSstEnv(
+        { production: true },
+        {
+          ...environment,
+          GMAIL_PUBSUB_PUSH_AUDIENCE: "https://example.com/gmail",
+          GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: "gmail@example.iam.gserviceaccount.com",
+          GMAIL_PUBSUB_SUBSCRIPTION: "projects/example/subscriptions/gmail",
+          GMAIL_PUBSUB_TOPIC: "projects/example/topics/gmail",
+        },
+      ),
+    ).toThrow("GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT is required in production");
   });
 });
 

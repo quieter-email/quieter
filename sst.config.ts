@@ -111,6 +111,7 @@ export default $config({
     const googleGmailClientId = env.GOOGLE_GMAIL_CLIENT_ID;
     const googleGmailClientSecret = env.GOOGLE_GMAIL_CLIENT_SECRET;
     const gmailTokenEncryptionKey = env.GMAIL_TOKEN_ENCRYPTION_KEY;
+    const gmailTokenEncryptionKeyCurrent = env.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT ?? "";
     const gmailPubSubEnvironment = {
       GMAIL_PUBSUB_PUSH_AUDIENCE: env.GMAIL_PUBSUB_PUSH_AUDIENCE ?? "",
       GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: env.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT ?? "",
@@ -126,6 +127,7 @@ export default $config({
       environment: {
         DATABASE_URL: databaseUrl,
         GMAIL_TOKEN_ENCRYPTION_KEY: gmailTokenEncryptionKey,
+        GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: gmailTokenEncryptionKeyCurrent,
         GOOGLE_GMAIL_CLIENT_ID: googleGmailClientId,
         GOOGLE_GMAIL_CLIENT_SECRET: googleGmailClientSecret,
         OPENROUTER_API_KEY: openRouterApiKey,
@@ -212,6 +214,7 @@ export default $config({
             DATABASE_URL: databaseUrl,
             GMAIL_PUBSUB_TOPIC: gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
             GMAIL_TOKEN_ENCRYPTION_KEY: gmailTokenEncryptionKey,
+            GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: gmailTokenEncryptionKeyCurrent,
             GOOGLE_GMAIL_CLIENT_ID: googleGmailClientId,
             GOOGLE_GMAIL_CLIENT_SECRET: googleGmailClientSecret,
             OPENROUTER_API_KEY: openRouterApiKey,

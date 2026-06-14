@@ -1,10 +1,13 @@
 import { ORPCError } from "@orpc/server";
 import { db, gmailCredential, mailbox } from "@quieter/database";
-import { requireServerEnv } from "@quieter/env/server";
+import { requireServerEnv, serverEnv } from "@quieter/env/server";
 import { isGmailServiceError } from "@quieter/gmail";
-import { and, eq } from "drizzle-orm";
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
+import {
+  decryptGmailCredentialSecret,
+  encryptGmailCredentialSecret,
+} from "./gmail-credential-crypto";
 
 export const GMAIL_SCOPES = [
   "openid",
@@ -41,37 +44,64 @@ export const getGmailOAuthConfig = () => {
   };
 };
 
-const getEncryptionKey = () =>
-  createHash("sha256").update(requireServerEnv("GMAIL_TOKEN_ENCRYPTION_KEY")).digest();
+const getGmailCredentialEncryptionKeys = () => ({
+  currentKey: serverEnv.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT,
+  legacyKey: requireServerEnv("GMAIL_TOKEN_ENCRYPTION_KEY"),
+});
 
-export const encryptSecret = (value: string) => {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", getEncryptionKey(), iv);
-  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
-  return [
-    "v1",
-    iv.toString("base64url"),
-    cipher.getAuthTag().toString("base64url"),
-    encrypted.toString("base64url"),
-  ].join(".");
-};
+export const encryptSecret = (value: string) =>
+  encryptGmailCredentialSecret(value, getGmailCredentialEncryptionKeys());
 
-export const decryptSecret = (value: string) => {
-  const [version, iv, tag, encrypted] = value.split(".");
-  if (version !== "v1" || !iv || !tag || !encrypted) {
-    throw new Error("Stored Gmail credential is invalid.");
+export const decryptSecret = (value: string) =>
+  decryptGmailCredentialSecret(value, getGmailCredentialEncryptionKeys());
+
+const rotateGmailCredentialSecrets = async (record: {
+  accessTokenExpiresAt: Date | null;
+  emailAddress: string;
+  encryptedAccessToken: string | null;
+  encryptedRefreshToken: string | null;
+  id: string;
+  status: "connected" | "needs_reconnect";
+}) => {
+  if (
+    !serverEnv.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT ||
+    (!record.encryptedAccessToken?.startsWith("v1.") &&
+      !record.encryptedRefreshToken?.startsWith("v1."))
+  ) {
+    return record;
   }
 
-  const decipher = createDecipheriv(
-    "aes-256-gcm",
-    getEncryptionKey(),
-    Buffer.from(iv, "base64url"),
-  );
-  decipher.setAuthTag(Buffer.from(tag, "base64url"));
-  return Buffer.concat([
-    decipher.update(Buffer.from(encrypted, "base64url")),
-    decipher.final(),
-  ]).toString("utf8");
+  const encryptedAccessToken = record.encryptedAccessToken?.startsWith("v1.")
+    ? encryptSecret(decryptSecret(record.encryptedAccessToken))
+    : record.encryptedAccessToken;
+  const encryptedRefreshToken = record.encryptedRefreshToken?.startsWith("v1.")
+    ? encryptSecret(decryptSecret(record.encryptedRefreshToken))
+    : record.encryptedRefreshToken;
+
+  await db
+    .update(gmailCredential)
+    .set({
+      encryptedAccessToken,
+      encryptedRefreshToken,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(gmailCredential.mailboxId, record.id),
+        record.encryptedAccessToken === null
+          ? isNull(gmailCredential.encryptedAccessToken)
+          : eq(gmailCredential.encryptedAccessToken, record.encryptedAccessToken),
+        record.encryptedRefreshToken === null
+          ? isNull(gmailCredential.encryptedRefreshToken)
+          : eq(gmailCredential.encryptedRefreshToken, record.encryptedRefreshToken),
+      ),
+    );
+
+  return {
+    ...record,
+    encryptedAccessToken,
+    encryptedRefreshToken,
+  };
 };
 
 const getGmailRepairRequiredError = (record: { emailAddress: string; id: string }) =>
@@ -169,7 +199,7 @@ const getOwnedGmailCredential = async (mailboxId: string, userId: string) => {
   if (!record) {
     throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
   }
-  return record;
+  return await rotateGmailCredentialSecrets(record);
 };
 
 export const getAuthorizedGmailMailbox = async (input: { mailboxId: string; userId: string }) => {
