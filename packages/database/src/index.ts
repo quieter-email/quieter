@@ -41,6 +41,7 @@ export {
   type ChatRunStatus,
   type GmailDeliveryStatus,
   type GmailUsefulDetailKind,
+  type GmailUsefulDetailRelevanceSource,
   type MailDomainCheckResult,
   type MailDomainDnsRecord,
   type MailDomainStatus,

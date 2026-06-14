@@ -14,19 +14,30 @@ import {
   gmailUsefulDetailSettings,
   mailbox,
   type GmailDeliveryStatus,
+  type GmailUsefulDetailKind,
+  type GmailUsefulDetailRelevanceSource,
 } from "@quieter/database";
 import { MAILBOX_LABELS, type MessageListItem } from "@quieter/gmail";
 import { and, asc, eq, gt, isNull, lte, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { decryptSecret, encryptSecret } from "./gmail-mailbox-access";
 
-const VERIFICATION_CODE_LIFETIME_MS = 1000 * 60 * 10;
-const DELIVERED_LIFETIME_MS = 1000 * 60 * 60 * 48;
-const PICKUP_LIFETIME_MS = 1000 * 60 * 60 * 24 * 7;
-const DELIVERY_DEFAULT_LIFETIME_MS = 1000 * 60 * 60 * 24 * 30;
-const DELIVERY_MAX_LIFETIME_MS = 1000 * 60 * 60 * 24 * 45;
 const RETRY_BASE_MS = 1000 * 60 * 5;
 const RETRY_MAX_MS = 1000 * 60 * 60 * 24;
+const DAY_MS = 1000 * 60 * 60 * 24;
+const MAX_RELEVANCE_HORIZON_MS = {
+  application: DAY_MS * 180,
+  appointment: DAY_MS * 365,
+  bill: DAY_MS * 90,
+  delivery: DAY_MS * 60,
+  document_expiry: DAY_MS * 730,
+  reservation: DAY_MS * 365,
+  return: DAY_MS * 90,
+  security_alert: DAY_MS * 7,
+  task: DAY_MS * 90,
+  travel: DAY_MS * 365,
+  verification_code: 1000 * 60 * 30,
+} as const satisfies Record<GmailUsefulDetailKind, number>;
 
 const excludedLabels = new Set<string>([
   MAILBOX_LABELS.drafts,
@@ -72,55 +83,71 @@ const parseExpectedAt = (value: string | null) => {
   return Number.isFinite(timestamp) ? new Date(timestamp) : null;
 };
 
-export type MaterializedGmailUsefulDetail =
-  | {
-      code: string;
-      dedupeKey: string;
-      expiresAt: Date;
-      kind: "verification_code";
-      receivedAt: Date;
-      summary: null;
-      title: string;
-    }
-  | {
-      carrier: string | null;
-      dedupeKey: string;
-      expiresAt: Date;
-      expectedAt: Date | null;
-      kind: "delivery";
-      receivedAt: Date;
-      status: GmailDeliveryStatus;
-      summary: string | null;
-      title: string;
-      trackingNumber: string | null;
-    }
-  | null;
+const parseTimestamp = (value: string | null) => {
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp) : null;
+};
 
-export type GmailUsefulDetailListItem =
-  | {
-      code: string;
-      expiresAt: Date;
-      gmailMessageId: string;
-      gmailThreadId: string | null;
-      id: string;
-      kind: "verification_code";
-      receivedAt: Date;
-      title: string;
-    }
-  | {
-      carrier: string | null;
-      expectedAt: Date | null;
-      expiresAt: Date;
-      gmailMessageId: string;
-      gmailThreadId: string | null;
-      id: string;
-      kind: "delivery";
-      receivedAt: Date;
-      status: GmailDeliveryStatus;
-      summary: string | null;
-      title: string;
-      trackingNumber: string | null;
-    };
+const normalizeReferenceKey = (value: string) =>
+  value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 120);
+
+const defaultTitles = {
+  application: "Application update",
+  appointment: "Appointment",
+  bill: "Payment due",
+  delivery: "Delivery update",
+  document_expiry: "Document expiring",
+  reservation: "Reservation",
+  return: "Return update",
+  security_alert: "Security alert",
+  task: "Task",
+  travel: "Travel update",
+  verification_code: "Verification code",
+} as const satisfies Record<GmailUsefulDetailKind, string>;
+
+export type MaterializedGmailUsefulDetail = {
+  carrier: string | null;
+  code: string | null;
+  dedupeKey: string;
+  eventAt: Date | null;
+  expectedAt: Date | null;
+  expiresAt: Date;
+  kind: GmailUsefulDetailKind;
+  location: string | null;
+  receivedAt: Date;
+  reference: string | null;
+  relevanceSource: GmailUsefulDetailRelevanceSource;
+  relevantFrom: Date;
+  status: GmailDeliveryStatus | null;
+  summary: string | null;
+  title: string;
+  trackingNumber: string | null;
+} | null;
+
+export type GmailUsefulDetailListItem = {
+  carrier: string | null;
+  code: string | null;
+  eventAt: Date | null;
+  expectedAt: Date | null;
+  expiresAt: Date;
+  gmailMessageId: string;
+  gmailThreadId: string | null;
+  id: string;
+  kind: GmailUsefulDetailKind;
+  location: string | null;
+  receivedAt: Date;
+  reference: string | null;
+  relevanceSource: GmailUsefulDetailRelevanceSource;
+  relevantFrom: Date;
+  status: GmailDeliveryStatus | null;
+  summary: string | null;
+  title: string;
+  trackingNumber: string | null;
+};
 
 export const materializeGmailUsefulDetail = ({
   candidate,
@@ -132,70 +159,80 @@ export const materializeGmailUsefulDetail = ({
   now?: Date;
 }): MaterializedGmailUsefulDetail => {
   const receivedAt = getMessageReceivedAt(message, now);
-
-  if (candidate.kind === "verification_code") {
-    const code = normalizeCode(candidate.code);
-    const expiresAt = new Date(receivedAt.getTime() + VERIFICATION_CODE_LIFETIME_MS);
-    if (!code || expiresAt <= now) {
-      return null;
-    }
-
-    return {
-      code,
-      dedupeKey: `message:${message.id}`,
-      expiresAt,
-      kind: "verification_code",
-      receivedAt,
-      summary: null,
-      title: trimText(candidate.service, 80) ?? "Verification code",
-    };
+  if (candidate.kind === "none" || candidate.confidence !== "high") {
+    return null;
   }
 
-  if (candidate.kind !== "delivery") {
+  const relevantFrom = parseTimestamp(candidate.relevantFrom);
+  const expiresAt = parseTimestamp(candidate.relevantUntil);
+  if (
+    !relevantFrom ||
+    !expiresAt ||
+    expiresAt <= now ||
+    relevantFrom >= expiresAt ||
+    relevantFrom < receivedAt ||
+    expiresAt.getTime() - receivedAt.getTime() > MAX_RELEVANCE_HORIZON_MS[candidate.kind] ||
+    !candidate.relevanceSource
+  ) {
+    return null;
+  }
+
+  const code = candidate.kind === "verification_code" ? normalizeCode(candidate.code) : null;
+  if (candidate.kind === "verification_code" && !code) {
     return null;
   }
 
   const carrier = trimText(candidate.carrier, 80);
   const merchant = trimText(candidate.merchant, 80);
-  const trackingNumber = trimText(candidate.trackingNumber, 80);
+  const trackingNumber =
+    candidate.kind === "delivery" ? trimText(candidate.trackingNumber, 80) : null;
   const normalizedTrackingNumber = trackingNumber ? normalizeTrackingKey(trackingNumber) : "";
-  const expectedAt = parseExpectedAt(candidate.expectedAt);
+  const expectedAt = candidate.kind === "delivery" ? parseExpectedAt(candidate.expectedAt) : null;
   const summary = trimText(candidate.summary, 160);
+  const reference = trimText(candidate.reference, 120);
+  const location = trimText(candidate.location, 160);
+  const eventAt = parseTimestamp(candidate.eventAt) ?? expectedAt;
+  const status = candidate.kind === "delivery" ? (candidate.status ?? "unknown") : null;
+  if (candidate.kind === "delivery" && !carrier && !merchant && !trackingNumber && !summary) {
+    return null;
+  }
   if (
-    !carrier &&
-    !merchant &&
-    !normalizedTrackingNumber &&
-    !expectedAt &&
+    candidate.kind !== "delivery" &&
+    candidate.kind !== "verification_code" &&
     !summary &&
-    candidate.status == null
+    !eventAt &&
+    !reference &&
+    !location
   ) {
     return null;
   }
 
-  const dedupeKey = normalizedTrackingNumber
-    ? `tracking:${normalizedTrackingNumber}`
-    : `thread:${message.threadId ?? message.id}`;
-  const status = candidate.status ?? "unknown";
-  const maximumExpiry = now.getTime() + DELIVERY_MAX_LIFETIME_MS;
-  const expiresAt =
-    status === "delivered"
-      ? new Date(now.getTime() + DELIVERED_LIFETIME_MS)
-      : status === "ready_for_pickup"
-        ? new Date(now.getTime() + PICKUP_LIFETIME_MS)
-        : expectedAt && expectedAt.getTime() > now.getTime() - DELIVERED_LIFETIME_MS
-          ? new Date(Math.min(expectedAt.getTime() + DELIVERED_LIFETIME_MS, maximumExpiry))
-          : new Date(now.getTime() + DELIVERY_DEFAULT_LIFETIME_MS);
+  const normalizedReference = reference ? normalizeReferenceKey(reference) : "";
+  const dedupeKey =
+    candidate.kind === "verification_code"
+      ? `message:${message.id}`
+      : normalizedTrackingNumber
+        ? `tracking:${normalizedTrackingNumber}`
+        : normalizedReference.length >= 4
+          ? `reference:${normalizedReference}`
+          : `thread:${message.threadId ?? message.id}`;
 
   return {
     carrier,
+    code,
     dedupeKey,
+    eventAt,
     expectedAt,
     expiresAt,
-    kind: "delivery",
+    kind: candidate.kind,
+    location,
     receivedAt,
+    reference,
+    relevanceSource: candidate.relevanceSource,
+    relevantFrom,
     status,
     summary,
-    title: merchant ?? carrier ?? "Delivery update",
+    title: trimText(candidate.service, 80) ?? merchant ?? carrier ?? defaultTitles[candidate.kind],
     trackingNumber,
   };
 };
@@ -350,7 +387,14 @@ export const processGmailUsefulDetailMessage = async ({
       message,
       middleware: [usageMiddleware],
     });
-    const detail = materializeGmailUsefulDetail({ candidate, message });
+    const [currentSettings] = await db
+      .select({ enabled: gmailUsefulDetailSettings.enabled })
+      .from(gmailUsefulDetailSettings)
+      .where(eq(gmailUsefulDetailSettings.mailboxId, mailboxId))
+      .limit(1);
+    const detail = currentSettings?.enabled
+      ? materializeGmailUsefulDetail({ candidate, message })
+      : null;
     const now = new Date();
     const eventUpdate = db
       .update(gmailUsefulDetailEvent)
@@ -368,51 +412,8 @@ export const processGmailUsefulDetailMessage = async ({
     if (!detail) {
       const [processed] = await eventUpdate.returning();
       event = processed ?? event;
-    } else if (detail.kind === "verification_code") {
-      const encryptedCode = encryptSecret(detail.code);
-      await db.batch([
-        db
-          .insert(gmailUsefulDetail)
-          .values({
-            createdAt: now,
-            dedupeKey: detail.dedupeKey,
-            encryptedCode,
-            expiresAt: detail.expiresAt,
-            gmailMessageId,
-            gmailThreadId: message.threadId ?? null,
-            id: randomUUID(),
-            kind: detail.kind,
-            mailboxId,
-            receivedAt: detail.receivedAt,
-            title: detail.title,
-            updatedAt: now,
-          })
-          .onConflictDoUpdate({
-            set: {
-              encryptedCode,
-              expiresAt: detail.expiresAt,
-              gmailMessageId,
-              gmailThreadId: message.threadId ?? null,
-              receivedAt: detail.receivedAt,
-              title: detail.title,
-              updatedAt: now,
-            },
-            target: [
-              gmailUsefulDetail.mailboxId,
-              gmailUsefulDetail.kind,
-              gmailUsefulDetail.dedupeKey,
-            ],
-          }),
-        eventUpdate,
-      ]);
-      event = {
-        ...event,
-        completionTokens,
-        model: GMAIL_USEFUL_DETAIL_MODEL,
-        processedAt: now,
-        promptTokens,
-      };
     } else {
+      const encryptedCode = detail.code ? encryptSecret(detail.code) : null;
       await db.batch([
         db
           .insert(gmailUsefulDetail)
@@ -421,14 +422,20 @@ export const processGmailUsefulDetailMessage = async ({
             createdAt: now,
             dedupeKey: detail.dedupeKey,
             deliveryStatus: detail.status,
+            encryptedCode,
+            eventAt: detail.eventAt,
             expectedAt: detail.expectedAt,
             expiresAt: detail.expiresAt,
             gmailMessageId,
             gmailThreadId: message.threadId ?? null,
             id: randomUUID(),
             kind: detail.kind,
+            location: detail.location,
             mailboxId,
             receivedAt: detail.receivedAt,
+            reference: detail.reference,
+            relevanceSource: detail.relevanceSource,
+            relevantFrom: detail.relevantFrom,
             summary: detail.summary,
             title: detail.title,
             trackingNumber: detail.trackingNumber,
@@ -438,11 +445,17 @@ export const processGmailUsefulDetailMessage = async ({
             set: {
               carrier: detail.carrier,
               deliveryStatus: detail.status,
+              encryptedCode,
+              eventAt: detail.eventAt,
               expectedAt: detail.expectedAt,
               expiresAt: detail.expiresAt,
               gmailMessageId,
               gmailThreadId: message.threadId ?? null,
+              location: detail.location,
               receivedAt: detail.receivedAt,
+              reference: detail.reference,
+              relevanceSource: detail.relevanceSource,
+              relevantFrom: detail.relevantFrom,
               summary: detail.summary,
               title: detail.title,
               trackingNumber: detail.trackingNumber,
@@ -463,6 +476,14 @@ export const processGmailUsefulDetailMessage = async ({
         processedAt: now,
         promptTokens,
       };
+      const [latestSettings] = await db
+        .select({ enabled: gmailUsefulDetailSettings.enabled })
+        .from(gmailUsefulDetailSettings)
+        .where(eq(gmailUsefulDetailSettings.mailboxId, mailboxId))
+        .limit(1);
+      if (!latestSettings?.enabled) {
+        await db.delete(gmailUsefulDetail).where(eq(gmailUsefulDetail.mailboxId, mailboxId));
+      }
     }
 
     await reportUsage({ ...event, userId });
@@ -592,62 +613,84 @@ export const listGmailUsefulDetails = async (input: { mailboxId: string; userId:
   ]);
   const enabled = !!settings?.enabled && entitlement.hasAccess;
   if (!enabled) {
-    return { enabled, items: [] as GmailUsefulDetailListItem[] };
+    return {
+      enabled,
+      items: [] as GmailUsefulDetailListItem[],
+      nextRelevantAt: null as Date | null,
+    };
   }
 
   await cleanupExpiredGmailUsefulDetails(input.mailboxId);
-  const items = await db
-    .select()
-    .from(gmailUsefulDetail)
-    .where(
-      and(
-        eq(gmailUsefulDetail.mailboxId, input.mailboxId),
-        isNull(gmailUsefulDetail.dismissedAt),
-        gt(gmailUsefulDetail.expiresAt, new Date()),
-      ),
-    )
-    .orderBy(asc(gmailUsefulDetail.expiresAt))
-    .limit(6);
+  const now = new Date();
+  const [items, [nextItem]] = await Promise.all([
+    db
+      .select()
+      .from(gmailUsefulDetail)
+      .where(
+        and(
+          eq(gmailUsefulDetail.mailboxId, input.mailboxId),
+          isNull(gmailUsefulDetail.dismissedAt),
+          lte(gmailUsefulDetail.relevantFrom, now),
+          gt(gmailUsefulDetail.expiresAt, now),
+        ),
+      )
+      .orderBy(asc(gmailUsefulDetail.expiresAt))
+      .limit(6),
+    db
+      .select({ relevantFrom: gmailUsefulDetail.relevantFrom })
+      .from(gmailUsefulDetail)
+      .where(
+        and(
+          eq(gmailUsefulDetail.mailboxId, input.mailboxId),
+          isNull(gmailUsefulDetail.dismissedAt),
+          gt(gmailUsefulDetail.relevantFrom, now),
+          gt(gmailUsefulDetail.expiresAt, now),
+        ),
+      )
+      .orderBy(asc(gmailUsefulDetail.relevantFrom))
+      .limit(1),
+  ]);
 
   const visibleItems: GmailUsefulDetailListItem[] = [];
 
   for (const item of items) {
-    if (item.kind === "verification_code") {
-      if (!item.encryptedCode) continue;
+    let code: string | null = null;
+    if (item.encryptedCode) {
       try {
-        visibleItems.push({
-          code: decryptSecret(item.encryptedCode),
-          expiresAt: item.expiresAt,
-          gmailMessageId: item.gmailMessageId,
-          gmailThreadId: item.gmailThreadId,
-          id: item.id,
-          kind: item.kind,
-          receivedAt: item.receivedAt,
-          title: item.title,
-        });
+        code = decryptSecret(item.encryptedCode);
       } catch (error) {
         console.error(`Could not decrypt useful detail ${item.id}.`, getErrorMessage(error));
+        continue;
       }
-      continue;
     }
 
     visibleItems.push({
       carrier: item.carrier,
+      code,
+      eventAt: item.eventAt,
       expectedAt: item.expectedAt,
       expiresAt: item.expiresAt,
       gmailMessageId: item.gmailMessageId,
       gmailThreadId: item.gmailThreadId,
       id: item.id,
       kind: item.kind,
+      location: item.location,
       receivedAt: item.receivedAt,
-      status: item.deliveryStatus ?? "unknown",
+      reference: item.reference,
+      relevanceSource: item.relevanceSource,
+      relevantFrom: item.relevantFrom,
+      status: item.deliveryStatus,
       summary: item.summary,
       title: item.title,
       trackingNumber: item.trackingNumber,
     });
   }
 
-  return { enabled, items: visibleItems };
+  return {
+    enabled,
+    items: visibleItems,
+    nextRelevantAt: nextItem?.relevantFrom ?? null,
+  };
 };
 
 export const dismissGmailUsefulDetail = async (input: {

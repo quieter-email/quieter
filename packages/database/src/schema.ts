@@ -28,7 +28,19 @@ export type GmailDeliveryStatus =
   | "ready_for_pickup"
   | "shipped"
   | "unknown";
-export type GmailUsefulDetailKind = "delivery" | "verification_code";
+export type GmailUsefulDetailKind =
+  | "application"
+  | "appointment"
+  | "bill"
+  | "delivery"
+  | "document_expiry"
+  | "reservation"
+  | "return"
+  | "security_alert"
+  | "task"
+  | "travel"
+  | "verification_code";
+export type GmailUsefulDetailRelevanceSource = "explicit" | "inferred";
 export type ManagedMailDirection = "inbound" | "outbound";
 export type ManagedMailHeader = {
   name: string;
@@ -433,6 +445,11 @@ export const gmailUsefulDetail = pgTable(
     trackingNumber: text("trackingNumber"),
     deliveryStatus: text("deliveryStatus").$type<GmailDeliveryStatus>(),
     expectedAt: timestamp("expectedAt"),
+    eventAt: timestamp("eventAt"),
+    relevantFrom: timestamp("relevantFrom").notNull(),
+    relevanceSource: text("relevanceSource").$type<GmailUsefulDetailRelevanceSource>().notNull(),
+    reference: text("reference"),
+    location: text("location"),
     receivedAt: timestamp("receivedAt").notNull(),
     expiresAt: timestamp("expiresAt").notNull(),
     dismissedAt: timestamp("dismissedAt"),
@@ -442,7 +459,11 @@ export const gmailUsefulDetail = pgTable(
   (table) => [
     check(
       "gmail_useful_detail_kind_check",
-      sql`${table.kind} in ('delivery', 'verification_code')`,
+      sql`${table.kind} in ('application', 'appointment', 'bill', 'delivery', 'document_expiry', 'reservation', 'return', 'security_alert', 'task', 'travel', 'verification_code')`,
+    ),
+    check(
+      "gmail_useful_detail_relevance_source_check",
+      sql`${table.relevanceSource} in ('explicit', 'inferred')`,
     ),
     check(
       "gmail_useful_detail_delivery_status_check",
@@ -454,6 +475,8 @@ export const gmailUsefulDetail = pgTable(
         (${table.kind} = 'verification_code' and ${table.encryptedCode} is not null and ${table.deliveryStatus} is null)
         or
         (${table.kind} = 'delivery' and ${table.encryptedCode} is null and ${table.deliveryStatus} is not null)
+        or
+        (${table.kind} not in ('delivery', 'verification_code') and ${table.encryptedCode} is null and ${table.deliveryStatus} is null)
       )`,
     ),
     index("gmail_useful_detail_mailbox_active_idx").on(

@@ -47,7 +47,7 @@ function PrivacyPage() {
         <li>Cloud hosting and database services that operate Quieter.</li>
         <li>
           AI processing services for chat generation and, when enabled, Gmail auto-labeling and
-          useful detail extraction.
+          time-sensitive mail details.
         </li>
       </ul>
 
@@ -61,7 +61,9 @@ function PrivacyPage() {
       <h2>Retention</h2>
       <p>
         We retain account and mailbox data while your account is active and as needed to provide the
-        service, comply with law, and resolve disputes.
+        service, comply with law, and resolve disputes. When time-sensitive mail details are
+        enabled, extracted details are shown only for their relevant period and can be dismissed
+        individually or deleted together by turning the feature off.
       </p>
     </LegalDocumentPage>
   );

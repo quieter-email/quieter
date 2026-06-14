@@ -149,7 +149,8 @@ export const MailboxesSettingsPanel = () => {
           <p className="mt-1 text-sm text-muted-foreground">
             Connect an existing personal or Google Workspace inbox. Organization placement does not
             share the mailbox with other members. Pro keeps your inbox current as mail arrives and
-            can use AI to apply your existing Gmail labels and surface useful details from new mail.
+            can use AI to apply your existing Gmail labels and briefly surface useful details from
+            new mail.
           </p>
         </div>
 
@@ -206,11 +207,11 @@ export const MailboxesSettingsPanel = () => {
                       <div className="flex flex-wrap items-center justify-end gap-1">
                         <label className="mr-2 flex items-center gap-2 text-xs text-muted-foreground">
                           <span>
-                            Codes & deliveries
+                            Helpful reminders
                             {!hasGmailAutomationAccess && " · Pro"}
                           </span>
                           <Switch
-                            aria-label={`Find verification codes and delivery updates for ${mailbox.emailAddress}`}
+                            aria-label={`Find time-sensitive details in new mail for ${mailbox.emailAddress}`}
                             checked={mailbox.gmailUsefulDetailsEnabled}
                             disabled={
                               !hasGmailAutomationAccess ||

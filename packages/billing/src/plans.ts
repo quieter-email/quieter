@@ -74,7 +74,7 @@ export const BILLING_PRODUCTS = {
       "$10 AI credits included",
       "Instant Gmail updates",
       "AI auto-labeling",
-      "Verification codes and delivery updates",
+      "Time-sensitive details from new mail",
     ],
     highlight: true,
     monthlyPriceCents: 2_000,
