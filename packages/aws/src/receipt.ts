@@ -1,5 +1,6 @@
 import { GetObjectCommand, HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { recordInboundOrganizationMailUsage } from "@quieter/billing/organization-mail-usage";
+import { serverEnv } from "@quieter/env/server";
 import { recordInboundManagedMessage } from "@quieter/orpc/managed-mail-storage";
 import { Resource } from "sst";
 import { deleteMailObjectUnlessTracked } from "./mail-object-retention";
@@ -45,7 +46,7 @@ let s3Client: S3Client | null = null;
 
 const getS3Client = () => {
   s3Client ??= new S3Client({
-    region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION,
+    region: serverEnv.AWS_REGION || serverEnv.AWS_DEFAULT_REGION,
   });
 
   return s3Client;

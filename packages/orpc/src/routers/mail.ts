@@ -47,6 +47,8 @@ import {
   syncGmailLabels,
   upsertSyncedGmailLabel,
 } from "../gmail-labels";
+import { createGmailLiveSyncConnection } from "../gmail-live-sync";
+import { setGmailAutoLabeling } from "../gmail-pubsub";
 import {
   applyMailboxSwitcherOrder,
   canonicalizeMailboxSwitcherOrder,
@@ -152,6 +154,30 @@ export const mailRouter = {
         mailboxId: input.mailboxId,
         organizationId: input.organizationId,
         returnTo: input.returnTo,
+        userId: context.userId,
+      });
+    }),
+
+  setGmailAutoLabeling: protectedProcedure
+    .input(
+      z.object({
+        enabled: z.boolean(),
+        mailboxId: mailboxIdSchema,
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      return await setGmailAutoLabeling({
+        enabled: input.enabled,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+    }),
+
+  createGmailLiveSyncConnection: protectedProcedure
+    .input(z.object({ mailboxId: mailboxIdSchema }))
+    .handler(async ({ context, input }) => {
+      return await createGmailLiveSyncConnection({
+        mailboxId: input.mailboxId,
         userId: context.userId,
       });
     }),

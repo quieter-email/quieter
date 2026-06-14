@@ -6,6 +6,11 @@
     "./chat-generation-enqueue": "./src/chat-generation-enqueue.ts",
     "./chat-generation-starter": "./src/chat-generation-starter.ts",
     "./chat-generation-workflow": "./src/chat-generation-workflow.ts",
+    "./gmail-live-sync": "./src/gmail-live-sync.ts",
+    "./gmail-live-sync-websocket": "./src/gmail-live-sync-websocket.ts",
+    "./gmail-pubsub-consumer": "./src/gmail-pubsub-consumer.ts",
+    "./gmail-pubsub-ingress": "./src/gmail-pubsub-ingress.ts",
+    "./gmail-pubsub-maintenance": "./src/gmail-pubsub-maintenance.ts",
     "./inbound": "./src/inbound.ts",
     "./outbound": "./src/outbound.ts",
     "./receipt": "./src/receipt.ts"
@@ -19,11 +24,16 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-apigatewaymanagementapi": "catalog:",
+    "@aws-sdk/client-dynamodb": "catalog:",
     "@aws-sdk/client-s3": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
     "@aws-sdk/client-sqs": "catalog:",
+    "@aws-sdk/lib-dynamodb": "catalog:",
     "@quieter/billing": "workspace:*",
+    "@quieter/env": "workspace:*",
     "@quieter/orpc": "workspace:*",
+    "jose": "5.10.0",
     "zod": "catalog:"
   },
   "devDependencies": {

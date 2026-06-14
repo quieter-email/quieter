@@ -1,9 +1,10 @@
 import { neon } from "@neondatabase/serverless";
+import { serverEnv } from "@quieter/env/server";
 import { drizzle } from "drizzle-orm/neon-http";
 import { authRelations } from "./schema";
 
 const getDatabaseUrl = () => {
-  const databaseUrl = process.env.DATABASE_URL?.trim();
+  const databaseUrl = serverEnv.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error("DATABASE_URL environment variable is missing");
   }

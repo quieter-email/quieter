@@ -1,13 +1,14 @@
+import { serverEnv } from "@quieter/env/server";
 import { createHash, timingSafeEqual } from "node:crypto";
 
 export const sitePasswordCookieName = "quieter_site_unlock";
 export const sitePasswordMaxAgeSeconds = 60 * 60 * 24 * 400;
 
-export const isSitePasswordGateEnabled = () => process.env.NODE_ENV !== "development";
+export const isSitePasswordGateEnabled = () => serverEnv.NODE_ENV !== "development";
 
-const getSitePassword = () => process.env.APP_SITE_PASSWORD?.trim() ?? "";
+const getSitePassword = () => serverEnv.APP_SITE_PASSWORD ?? "";
 
-const getSigningSecret = () => process.env.BETTER_AUTH_SECRET?.trim() || getSitePassword();
+const getSigningSecret = () => serverEnv.BETTER_AUTH_SECRET || getSitePassword();
 
 export const hasSitePasswordConfigured = () => getSitePassword().length > 0;
 

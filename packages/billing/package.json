@@ -22,6 +22,7 @@
     "@paykit-sdk/polar": "^1.2.0",
     "@polar-sh/sdk": "0.37.0",
     "@quieter/database": "workspace:*",
+    "@quieter/env": "workspace:*",
     "drizzle-orm": "catalog:",
     "zod": "catalog:"
   },

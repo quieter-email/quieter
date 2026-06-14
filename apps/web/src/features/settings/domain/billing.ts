@@ -52,8 +52,8 @@ export const formatBillingStatus = (
 
 export const BILLING_PLANS = [
   {
-    description: "Gmail accounts, BYOK provider setup, and the core Quieter inbox.",
-    features: ["Gmail mailboxes", "Personal workspace", "Bring your own keys"],
+    description: "Gmail accounts, your own AI access, and the core Quieter inbox.",
+    features: ["Gmail mailboxes", "Personal workspace", "Connect your own AI account"],
     highlight: false,
     name: "Free",
     plan: "free",

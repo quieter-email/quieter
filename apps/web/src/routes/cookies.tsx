@@ -28,8 +28,8 @@ function CookiesPage() {
 
       <h2>Measurement (consent required)</h2>
       <ul>
-        <li>PostHog analytics cookies for page views and identified usage in production.</li>
-        <li>Vercel Speed Insights for performance measurement.</li>
+        <li>Product analytics cookies for page views and identified usage in production.</li>
+        <li>Performance measurement for understanding page speed and reliability.</li>
       </ul>
 
       <h2>Manage preferences</h2>

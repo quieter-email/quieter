@@ -22,7 +22,8 @@ function TermsPage() {
       <h2>The service</h2>
       <p>
         Quieter provides email client functionality for Gmail and managed mailboxes, including inbox
-        management, compose, search, organization features, and optional AI-assisted chat.
+        management, compose, search, organization features, and optional AI-assisted chat and Gmail
+        labeling.
       </p>
 
       <h2>Your responsibilities</h2>

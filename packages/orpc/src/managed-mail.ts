@@ -8,6 +8,7 @@ import {
   recordOrganizationMailUsage,
 } from "@quieter/billing/organization-mail-usage";
 import { db, mailbox, managedMailMessage } from "@quieter/database";
+import { serverEnv } from "@quieter/env/server";
 import {
   MAILBOX_LABELS,
   type ListMessagesPageResult,
@@ -38,10 +39,10 @@ const MANAGED_MESSAGE_PAGE_SIZE = 50;
 const normalizeEmailAddress = (value: string) => value.trim().toLowerCase();
 
 const getAwsRegion = () => {
-  const region = process.env.AWS_REGION?.trim() || process.env.AWS_DEFAULT_REGION?.trim();
+  const region = serverEnv.AWS_REGION || serverEnv.AWS_DEFAULT_REGION;
   if (!region) {
     throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      message: "AWS_REGION or AWS_DEFAULT_REGION is required to send mail.",
+      message: "Mail sending is temporarily unavailable.",
     });
   }
   return region;
@@ -637,7 +638,7 @@ export const sendManagedMailboxMessage = async (input: {
   const providerMessageId = response.MessageId;
   if (!providerMessageId) {
     throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      message: "SES accepted the message without returning a message id.",
+      message: "The message was accepted, but no delivery reference was returned.",
     });
   }
 

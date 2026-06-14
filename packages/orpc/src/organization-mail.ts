@@ -6,6 +6,7 @@ import {
   estimateOutboundOrganizationMailUsage,
   recordOrganizationMailUsage,
 } from "@quieter/billing/organization-mail-usage";
+import { serverEnv } from "@quieter/env/server";
 import { z } from "zod";
 import { recordOutboundManagedMessageForSender } from "./managed-mail";
 import {
@@ -40,13 +41,10 @@ const normalizeAddresses = (addresses: string[] | undefined) =>
   );
 
 const getAwsRegion = () => {
-  const region = process.env.AWS_REGION?.trim() || process.env.AWS_DEFAULT_REGION?.trim();
+  const region = serverEnv.AWS_REGION || serverEnv.AWS_DEFAULT_REGION;
 
   if (!region) {
-    throw new OrganizationMailSendError(
-      "AWS_REGION or AWS_DEFAULT_REGION is required to send mail.",
-      500,
-    );
+    throw new OrganizationMailSendError("Mail sending is temporarily unavailable.", 500);
   }
 
   return region;

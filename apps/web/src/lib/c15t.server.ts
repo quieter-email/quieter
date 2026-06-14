@@ -1,6 +1,7 @@
 import { c15tInstance, policyBuilder, policyPackPresets } from "@c15t/backend";
 import { kyselyAdapter } from "@c15t/backend/db/adapters/kysely";
 import { DB } from "@c15t/backend/db/schema";
+import { serverEnv } from "@quieter/env/server";
 import { Kysely, PostgresDialect } from "kysely";
 import pg from "pg";
 
@@ -11,7 +12,7 @@ const consentMigrationLockKey2 = 0x745f6d69;
 const getTrustedOrigins = () => {
   const origins = new Set(["localhost:3000"]);
 
-  for (const value of [process.env.BETTER_AUTH_URL, process.env.VERCEL_URL]) {
+  for (const value of [serverEnv.BETTER_AUTH_URL, serverEnv.VERCEL_URL]) {
     const origin = value
       ?.trim()
       .replace(/^https?:\/\//, "")
@@ -39,7 +40,7 @@ let consentState:
   | undefined;
 
 const getConsentDatabaseUrl = () => {
-  const databaseUrl = process.env.DATABASE_URL?.trim();
+  const databaseUrl = serverEnv.DATABASE_URL;
 
   if (!databaseUrl) {
     throw new Error("DATABASE_URL is required for the consent backend.");
@@ -61,7 +62,7 @@ const toDirectPostgresUrl = (value: string) => {
 };
 
 const getConsentMigrationDatabaseUrl = () => {
-  const value = (process.env.DATABASE_MIGRATION_URL ?? process.env.DATABASE_URL)?.trim();
+  const value = serverEnv.DATABASE_MIGRATION_URL ?? serverEnv.DATABASE_URL;
 
   if (!value) {
     throw new Error("DATABASE_MIGRATION_URL or DATABASE_URL is required for consent migrations.");

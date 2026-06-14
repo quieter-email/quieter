@@ -21,7 +21,8 @@
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",
     "@quieter/billing": "workspace:*",
-    "@quieter/database": "workspace:*"
+    "@quieter/database": "workspace:*",
+    "@quieter/env": "workspace:*"
   },
   "devDependencies": {
     "@better-auth/api-key": "1.5.0",

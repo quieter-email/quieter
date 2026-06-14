@@ -202,6 +202,10 @@ jobs:
       - name: Deploy SST
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GMAIL_PUBSUB_PUSH_AUDIENCE: ${{ vars.GMAIL_PUBSUB_PUSH_AUDIENCE || secrets.GMAIL_PUBSUB_PUSH_AUDIENCE }}
+          GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: ${{ vars.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT || secrets.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT }}
+          GMAIL_PUBSUB_SUBSCRIPTION: ${{ vars.GMAIL_PUBSUB_SUBSCRIPTION || secrets.GMAIL_PUBSUB_SUBSCRIPTION }}
+          GMAIL_PUBSUB_TOPIC: ${{ vars.GMAIL_PUBSUB_TOPIC || secrets.GMAIL_PUBSUB_TOPIC }}
           GMAIL_TOKEN_ENCRYPTION_KEY: ${{ secrets.GMAIL_TOKEN_ENCRYPTION_KEY }}
           GOOGLE_GMAIL_CLIENT_ID: ${{ secrets.GOOGLE_GMAIL_CLIENT_ID }}
           GOOGLE_GMAIL_CLIENT_SECRET: ${{ secrets.GOOGLE_GMAIL_CLIENT_SECRET }}
@@ -209,6 +213,8 @@ jobs:
           POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
           POLAR_ORGANIZATION_ID: ${{ vars.POLAR_ORGANIZATION_ID || secrets.POLAR_ORGANIZATION_ID }}
           POLAR_SANDBOX: ${{ vars.POLAR_SANDBOX }}
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID || secrets.VERCEL_TEAM_ID || vars.VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
         run: bunx sst deploy --config sst.config.ts --stage "$SST_STAGE"
 
       - name: Sync SST outputs to Vercel
@@ -229,6 +235,7 @@ jobs:
           const outputs = await Bun.file(".sst/outputs.json").json();
           const values = [
             ["CHAT_GENERATION_START_URL", outputs.chatGenerationEnqueueUrl],
+            ["GMAIL_LIVE_SYNC_URL", outputs.gmailLiveSyncUrl],
             ["MAIL_BUCKET", outputs.mailBucket],
             ["MAIL_RECEIPT_TOPIC_ARN", outputs.mailReceiptTopicArn],
             ["MAIL_RECEIPT_ROLE_ARN", outputs.mailReceiptRoleArn],

@@ -267,8 +267,8 @@ const ManagedUsageSettingsForm = ({
           value={overview.managedUsageRates.attachmentDataPerGbDollars}
         />
         <Price
-          label="Inbound processing"
-          suffix="/ 1K chunks"
+          label="Incoming mail processing"
+          suffix="/ 1K units"
           value={overview.managedUsageRates.inboundProcessingPerThousandDollars}
         />
       </div>

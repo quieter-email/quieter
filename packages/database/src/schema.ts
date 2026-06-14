@@ -291,6 +291,78 @@ export const gmailLabel = pgTable(
   ],
 );
 
+export const gmailWatchState = pgTable(
+  "gmailWatchState",
+  {
+    mailboxId: text("mailboxId")
+      .primaryKey()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    historyId: text("historyId"),
+    historyPageToken: text("historyPageToken"),
+    watchExpirationAt: timestamp("watchExpirationAt"),
+    watchRenewedAt: timestamp("watchRenewedAt"),
+    lastNotificationAt: timestamp("lastNotificationAt"),
+    lastProcessedAt: timestamp("lastProcessedAt"),
+    lastReconciledAt: timestamp("lastReconciledAt"),
+    recoveryAfter: timestamp("recoveryAfter"),
+    recoveryBefore: timestamp("recoveryBefore"),
+    recoveryPageToken: text("recoveryPageToken"),
+    processingLeaseId: text("processingLeaseId"),
+    processingLeaseExpiresAt: timestamp("processingLeaseExpiresAt"),
+    lastError: text("lastError"),
+    lastErrorAt: timestamp("lastErrorAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    index("gmail_watch_state_watch_expiration_at_idx").on(table.watchExpirationAt),
+    index("gmail_watch_state_processing_lease_expires_at_idx").on(table.processingLeaseExpiresAt),
+  ],
+);
+
+export const gmailAutoLabelSettings = pgTable("gmailAutoLabelSettings", {
+  mailboxId: text("mailboxId")
+    .primaryKey()
+    .references(() => mailbox.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(false),
+  createdAt: timestamp("createdAt").notNull(),
+  updatedAt: timestamp("updatedAt").notNull(),
+});
+
+export const gmailAutoLabelEvent = pgTable(
+  "gmailAutoLabelEvent",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    gmailMessageId: text("gmailMessageId").notNull(),
+    labelIds: jsonb("labelIds").$type<string[]>(),
+    model: text("model"),
+    promptTokens: integer("promptTokens"),
+    completionTokens: integer("completionTokens"),
+    attemptCount: integer("attemptCount").notNull().default(0),
+    nextAttemptAt: timestamp("nextAttemptAt"),
+    appliedAt: timestamp("appliedAt"),
+    usageReportedAt: timestamp("usageReportedAt"),
+    lastError: text("lastError"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    index("gmail_auto_label_event_mailbox_created_at_idx").on(table.mailboxId, table.createdAt),
+    index("gmail_auto_label_event_mailbox_retry_idx").on(
+      table.mailboxId,
+      table.appliedAt,
+      table.nextAttemptAt,
+    ),
+    unique("gmail_auto_label_event_mailbox_message_unique").on(
+      table.mailboxId,
+      table.gmailMessageId,
+    ),
+  ],
+);
+
 export const gmailOAuthState = pgTable(
   "gmailOAuthState",
   {
@@ -650,8 +722,11 @@ export const tables = {
   member,
   invitation,
   gmailCredential,
+  gmailAutoLabelEvent,
+  gmailAutoLabelSettings,
   gmailLabel,
   gmailOAuthState,
+  gmailWatchState,
   mailbox,
   mailboxGrant,
   managedMailMessage,
@@ -807,12 +882,26 @@ export const authRelations = defineRelations(tables, (r) => ({
   },
   mailbox: {
     chats: r.many.chat({ from: r.mailbox.id, to: r.chat.mailboxId }),
+    gmailAutoLabelEvents: r.many.gmailAutoLabelEvent({
+      from: r.mailbox.id,
+      to: r.gmailAutoLabelEvent.mailboxId,
+    }),
+    gmailAutoLabelSettings: r.one.gmailAutoLabelSettings({
+      from: r.mailbox.id,
+      to: r.gmailAutoLabelSettings.mailboxId,
+      optional: true,
+    }),
     gmailCredential: r.one.gmailCredential({
       from: r.mailbox.id,
       to: r.gmailCredential.mailboxId,
       optional: true,
     }),
     gmailLabels: r.many.gmailLabel({ from: r.mailbox.id, to: r.gmailLabel.mailboxId }),
+    gmailWatchState: r.one.gmailWatchState({
+      from: r.mailbox.id,
+      to: r.gmailWatchState.mailboxId,
+      optional: true,
+    }),
     grants: r.many.mailboxGrant({ from: r.mailbox.id, to: r.mailboxGrant.mailboxId }),
     managedMessages: r.many.managedMailMessage({
       from: r.mailbox.id,
@@ -832,6 +921,20 @@ export const authRelations = defineRelations(tables, (r) => ({
   gmailCredential: {
     mailbox: r.one.mailbox({
       from: r.gmailCredential.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+  },
+  gmailAutoLabelEvent: {
+    mailbox: r.one.mailbox({
+      from: r.gmailAutoLabelEvent.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+  },
+  gmailAutoLabelSettings: {
+    mailbox: r.one.mailbox({
+      from: r.gmailAutoLabelSettings.mailboxId,
       to: r.mailbox.id,
       optional: false,
     }),
@@ -857,6 +960,13 @@ export const authRelations = defineRelations(tables, (r) => ({
     user: r.one.user({
       from: r.gmailOAuthState.userId,
       to: r.user.id,
+      optional: false,
+    }),
+  },
+  gmailWatchState: {
+    mailbox: r.one.mailbox({
+      from: r.gmailWatchState.mailboxId,
+      to: r.mailbox.id,
       optional: false,
     }),
   },

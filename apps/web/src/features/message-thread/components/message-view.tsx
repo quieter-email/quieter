@@ -378,7 +378,7 @@ const MessageInspectorPanel = ({
         <DialogHeader>
           <DialogTitle className="text-base font-bold">Full details</DialogTitle>
           <DialogDescription className="text-foreground">
-            Headers and provider source details for this message.
+            Complete information available for this message.
           </DialogDescription>
         </DialogHeader>
 
@@ -398,7 +398,7 @@ const MessageInspectorPanel = ({
                 <section className="space-y-2">
                   <h3 className="text-sm font-semibold text-foreground">Summary</h3>
                   {[
-                    { label: "Message ID", value: inspector.messageHeaderId },
+                    { label: "Reference", value: inspector.messageHeaderId },
                     { label: "Subject", value: inspector.subject },
                     { label: "Date", value: inspector.date },
                     { label: "Snippet", value: inspector.snippet },
@@ -415,7 +415,7 @@ const MessageInspectorPanel = ({
                 </section>
 
                 <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Headers</h3>
+                  <h3 className="text-sm font-semibold text-foreground">Delivery details</h3>
                   {inspector.headers.map((header) => (
                     <p
                       className="text-sm text-foreground"
@@ -429,7 +429,7 @@ const MessageInspectorPanel = ({
 
                 {inspector.rawText && (
                   <section className="space-y-2">
-                    <h3 className="text-sm font-semibold text-foreground">Decoded source</h3>
+                    <h3 className="text-sm font-semibold text-foreground">Original message</h3>
                     <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground">
                       {inspector.rawText}
                     </pre>
@@ -438,7 +438,7 @@ const MessageInspectorPanel = ({
 
                 {inspector.raw && (
                   <section className="space-y-2">
-                    <h3 className="text-sm font-semibold text-foreground">Raw Gmail payload</h3>
+                    <h3 className="text-sm font-semibold text-foreground">Gmail record</h3>
                     <pre className="overflow-x-auto text-sm break-all whitespace-pre-wrap text-foreground">
                       {inspector.raw}
                     </pre>
@@ -447,7 +447,7 @@ const MessageInspectorPanel = ({
 
                 {payloadText && (
                   <section className="space-y-2">
-                    <h3 className="text-sm font-semibold text-foreground">Structured payload</h3>
+                    <h3 className="text-sm font-semibold text-foreground">Message structure</h3>
                     <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground">
                       {payloadText}
                     </pre>

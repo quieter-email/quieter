@@ -15,11 +15,13 @@ import {
   refreshLoadedMessagesPages,
   syncMessages,
 } from "~/lib/gmail/inbox-query";
+import { useGmailLiveSync } from "~/lib/gmail/use-gmail-live-sync";
 import { useVisibleMessageRefresh } from "./use-visible-message-refresh";
 
 type UseMailboxMessagesOptions = {
   activeMailbox: MailboxCategory;
   isDemoMode: boolean;
+  mailboxProvider: "gmail" | "managed";
   messageId?: string;
   queryClient: QueryClient;
   searchQuery: string;
@@ -57,6 +59,7 @@ const useWindowActive = () => {
 export const useMailboxMessages = ({
   activeMailbox,
   isDemoMode,
+  mailboxProvider,
   messageId,
   queryClient,
   searchQuery,
@@ -102,6 +105,13 @@ export const useMailboxMessages = ({
       isLiveSyncEnabled,
     ),
   );
+  useGmailLiveSync({
+    enabled: isLiveSyncEnabled && mailboxProvider === "gmail",
+    mailbox: activeMailbox,
+    mailboxId: selectedMailboxId ?? "",
+    queryClient,
+    searchQuery: normalizedQuery,
+  });
   const flattenedMessages = useMemo(() => messages.flatMap((page) => page.messages), [messages]);
 
   const refreshMessages = useCallback(async () => {

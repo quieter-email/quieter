@@ -22,6 +22,7 @@ import {
   type ChatMessagePart,
   type ChatMessageStatus,
 } from "@quieter/database";
+import { serverEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
 import { isCancelRequested, updateAssistantMessage, updateRunStatus } from "./chat-run-store";
 import { isActiveChatRunStatus, publishChatRunEvent } from "./chat-run-stream";
@@ -155,14 +156,14 @@ export const handoffChatRunToBackground = (runId: string) => {
 };
 
 export const enqueueChatRun = async (runId: string) => {
-  const startUrl = process.env.CHAT_GENERATION_START_URL?.trim();
+  const startUrl = serverEnv.CHAT_GENERATION_START_URL;
 
   if (!startUrl) {
     void ensureChatRunGeneration(runId);
     return;
   }
 
-  const token = process.env.CHAT_GENERATION_START_TOKEN?.trim();
+  const token = serverEnv.CHAT_GENERATION_START_TOKEN;
 
   if (!token) {
     throw new Error(

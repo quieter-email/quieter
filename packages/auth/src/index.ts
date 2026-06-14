@@ -3,6 +3,7 @@ import { passkey } from "@better-auth/passkey";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES, type PaidBillingPlan } from "@quieter/billing/plans";
 import { db, tables } from "@quieter/database";
+import { serverEnv } from "@quieter/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
@@ -24,7 +25,7 @@ import {
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "./organization-api-key";
 import { readTermsAcceptedAtFromRequest } from "./terms-acceptance";
 
-const appName = process.env.BETTER_AUTH_APP_NAME ?? "quieter";
+const appName = serverEnv.BETTER_AUTH_APP_NAME;
 const organizationAccessControl = createAccessControl({
   ...defaultStatements,
   apiKey: ["create", "read", "update", "delete"],
@@ -43,8 +44,8 @@ const memberRole = organizationAccessControl.newRole({
 });
 
 const baseURL =
-  process.env.BETTER_AUTH_URL ||
-  (process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`) ||
+  serverEnv.BETTER_AUTH_URL ||
+  (serverEnv.VERCEL_URL && `https://${serverEnv.VERCEL_URL}`) ||
   "http://localhost:3000";
 
 export const getSessionWithOrganization = async (headers: Headers) => {
@@ -162,8 +163,8 @@ export const auth = betterAuth({
   },
   socialProviders: {
     google: {
-      clientId: process.env.GOOGLE_AUTH_CLIENT_ID as string,
-      clientSecret: process.env.GOOGLE_AUTH_CLIENT_SECRET as string,
+      clientId: serverEnv.GOOGLE_AUTH_CLIENT_ID ?? "",
+      clientSecret: serverEnv.GOOGLE_AUTH_CLIENT_SECRET ?? "",
       scope: [...GOOGLE_AUTH_SCOPES],
     },
   },

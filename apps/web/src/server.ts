@@ -1,4 +1,5 @@
 import "../instrument.server.mjs";
+import { serverEnv } from "@quieter/env/server";
 import { wrapFetchWithSentry } from "@sentry/tanstackstart-react";
 import handler, { createServerEntry } from "@tanstack/react-start/server-entry";
 
@@ -9,7 +10,7 @@ const serverEntry = {
 };
 
 export default createServerEntry(
-  process.env.NODE_ENV !== "development" && process.env.SENTRY_DSN
+  serverEnv.NODE_ENV !== "development" && serverEnv.SENTRY_DSN
     ? wrapFetchWithSentry(serverEntry)
     : serverEntry,
 );

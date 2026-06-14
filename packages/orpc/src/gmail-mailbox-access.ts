@@ -1,5 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { db, gmailCredential, mailbox } from "@quieter/database";
+import { requireServerEnv } from "@quieter/env/server";
+import { isGmailServiceError } from "@quieter/gmail";
 import { and, eq } from "drizzle-orm";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
@@ -26,25 +28,21 @@ const googleTokenErrorResponseSchema = z.object({
   error: z.string().optional(),
 });
 
-const getRequiredEnvironmentValue = (name: string) => {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    throw new Error(`${name} environment variable is missing.`);
-  }
-  return value;
-};
+const getGmailOAuthClient = () => ({
+  clientId: requireServerEnv("GOOGLE_GMAIL_CLIENT_ID"),
+  clientSecret: requireServerEnv("GOOGLE_GMAIL_CLIENT_SECRET"),
+});
 
 export const getGmailOAuthConfig = () => {
-  const baseUrl = getRequiredEnvironmentValue("BETTER_AUTH_URL").replace(/\/+$/, "");
+  const baseUrl = requireServerEnv("BETTER_AUTH_URL").replace(/\/+$/, "");
   return {
-    clientId: getRequiredEnvironmentValue("GOOGLE_GMAIL_CLIENT_ID"),
-    clientSecret: getRequiredEnvironmentValue("GOOGLE_GMAIL_CLIENT_SECRET"),
+    ...getGmailOAuthClient(),
     redirectUri: `${baseUrl}/api/gmail/callback`,
   };
 };
 
 const getEncryptionKey = () =>
-  createHash("sha256").update(getRequiredEnvironmentValue("GMAIL_TOKEN_ENCRYPTION_KEY")).digest();
+  createHash("sha256").update(requireServerEnv("GMAIL_TOKEN_ENCRYPTION_KEY")).digest();
 
 export const encryptSecret = (value: string) => {
   const iv = randomBytes(12);
@@ -95,7 +93,7 @@ const refreshGmailAccessToken = async (record: {
     throw getGmailRepairRequiredError(record);
   }
 
-  const config = getGmailOAuthConfig();
+  const config = getGmailOAuthClient();
   const response = await fetch(GOOGLE_TOKEN_URL, {
     body: new URLSearchParams({
       client_id: config.clientId,
@@ -210,4 +208,40 @@ export const markGmailMailboxNeedsReconnect = async (mailboxId: string) => {
     .update(mailbox)
     .set({ status: "needs_reconnect", updatedAt: new Date() })
     .where(eq(mailbox.id, mailboxId));
+};
+
+const isGmailAuthError = (error: unknown) =>
+  isGmailServiceError(error) &&
+  error.status === 401 &&
+  ((typeof error.googleReason === "string" && error.googleReason.toLowerCase() === "autherror") ||
+    (typeof error.googleStatus === "string" &&
+      error.googleStatus.toUpperCase() === "UNAUTHENTICATED"));
+
+export const runAuthorizedGmailMailbox = async <TValue>(
+  input: { mailboxId: string; userId: string },
+  runner: (accessToken: string) => Promise<TValue>,
+): Promise<TValue> => {
+  const { accessToken, mailbox: authorizedMailbox } = await getAuthorizedGmailMailbox(input);
+
+  try {
+    return await runner(accessToken);
+  } catch (error) {
+    if (!isGmailAuthError(error)) {
+      throw error;
+    }
+  }
+
+  const refreshedAccessToken = await refreshAuthorizedGmailAccessToken(input);
+
+  try {
+    return await runner(refreshedAccessToken);
+  } catch (error) {
+    if (!isGmailAuthError(error)) {
+      throw error;
+    }
+
+    await markGmailMailboxNeedsReconnect(authorizedMailbox.id);
+    await getAuthorizedGmailMailbox(input);
+    throw error;
+  }
 };

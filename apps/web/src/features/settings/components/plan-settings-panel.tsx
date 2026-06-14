@@ -62,8 +62,8 @@ export const PlanSettingsPanel = () => {
       <div className="pb-8">
         <h1 className="text-2xl font-medium tracking-tight text-foreground">Plan</h1>
         <p className="mt-2 max-w-xl text-sm/6 text-muted-foreground">
-          Gmail and BYOK are free forever. Upgrade your account for Quieter-managed mail, AI
-          credits, and live Gmail infrastructure.
+          Gmail and connecting your own AI account are free forever. Upgrade for Quieter-managed
+          mail, AI credits, instant Gmail updates, and automatic organization.
         </p>
 
         {isReady && (

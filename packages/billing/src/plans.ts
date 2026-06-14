@@ -11,6 +11,7 @@ export type BillingPlan = "free" | PaidBillingPlan;
 
 export type BillingFeature =
   | "aiChat"
+  | "gmailAutomation"
   | "organizationApiKeys"
   | "organizationDomains"
   | "organizationMail";
@@ -24,6 +25,10 @@ export const BILLING_PLAN_ORDER = {
 export const BILLING_FEATURES = {
   aiChat: {
     description: "AI chat",
+    requiredPlan: "pro",
+  },
+  gmailAutomation: {
+    description: "Instant Gmail updates and AI auto-labeling",
     requiredPlan: "pro",
   },
   organizationApiKeys: {
@@ -61,13 +66,14 @@ export const BILLING_PRODUCTS = {
     polarMetadataKey: "quieter_managed",
   },
   pro: {
-    description: "Managed mail plus AI chat and live Gmail infrastructure.",
+    description: "Managed mail plus AI chat, instant Gmail updates, and automatic organization.",
     features: [
       "Everything in Managed",
       formatManagedUsagePriceFeature("pro"),
       "AI chat",
       "$10 AI credits included",
-      "Gmail Pub/Sub support",
+      "Instant Gmail updates",
+      "AI auto-labeling",
     ],
     highlight: true,
     monthlyPriceCents: 2_000,

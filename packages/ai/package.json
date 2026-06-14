@@ -13,6 +13,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@quieter/env": "workspace:*",
     "@quieter/gmail": "workspace:*",
     "@tanstack/ai": "catalog:",
     "@tanstack/ai-openrouter": "catalog:",

@@ -17,6 +17,9 @@
     "./router": "./src/routers/index.ts",
     "./chat-generation": "./src/chat-generation.ts",
     "./chat-run-stream": "./src/chat-run-stream.ts",
+    "./gmail-live-sync": "./src/gmail-live-sync.ts",
+    "./gmail-live-sync-token": "./src/gmail-live-sync-token.ts",
+    "./gmail-pubsub": "./src/gmail-pubsub.ts",
     "./stream-chat-run": "./src/stream-chat-run.ts"
   },
   "scripts": {
@@ -35,6 +38,7 @@
     "@quieter/auth": "workspace:*",
     "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*",
+    "@quieter/env": "workspace:*",
     "@quieter/gmail": "workspace:*",
     "@quieter/mail": "workspace:*"
   },

@@ -1,6 +1,7 @@
+import { serverEnv } from "@quieter/env/server";
 import { defineConfig } from "drizzle-kit";
 
-const databaseUrl = process.env.DATABASE_URL?.trim();
+const databaseUrl = serverEnv.DATABASE_URL;
 
 export default defineConfig({
   schema: "./src/schema.ts",

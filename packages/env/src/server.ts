@@ -1,0 +1,124 @@
+import { createEnv } from "@t3-oss/env-core";
+import { z } from "zod";
+import {
+  nodeEnvironment,
+  optionalBooleanString,
+  optionalString,
+  optionalUrl,
+  type RuntimeEnvironment,
+} from "./schema";
+
+export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
+  createEnv({
+    emptyStringAsUndefined: true,
+    runtimeEnvStrict: {
+      APP_SITE_PASSWORD: runtimeEnv.APP_SITE_PASSWORD,
+      AWS_DEFAULT_REGION: runtimeEnv.AWS_DEFAULT_REGION,
+      AWS_REGION: runtimeEnv.AWS_REGION,
+      BETTER_AUTH_APP_NAME: runtimeEnv.BETTER_AUTH_APP_NAME,
+      BETTER_AUTH_SECRET: runtimeEnv.BETTER_AUTH_SECRET,
+      BETTER_AUTH_URL: runtimeEnv.BETTER_AUTH_URL,
+      CHAT_GENERATION_START_TOKEN: runtimeEnv.CHAT_GENERATION_START_TOKEN,
+      CHAT_GENERATION_START_URL: runtimeEnv.CHAT_GENERATION_START_URL,
+      DATABASE_MIGRATION_URL: runtimeEnv.DATABASE_MIGRATION_URL,
+      DATABASE_URL: runtimeEnv.DATABASE_URL,
+      GMAIL_LIVE_SYNC_TOKEN_SECRET: runtimeEnv.GMAIL_LIVE_SYNC_TOKEN_SECRET,
+      GMAIL_LIVE_SYNC_URL: runtimeEnv.GMAIL_LIVE_SYNC_URL,
+      GMAIL_PUBSUB_PUSH_AUDIENCE: runtimeEnv.GMAIL_PUBSUB_PUSH_AUDIENCE,
+      GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: runtimeEnv.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT,
+      GMAIL_PUBSUB_QUEUE_URL: runtimeEnv.GMAIL_PUBSUB_QUEUE_URL,
+      GMAIL_PUBSUB_SUBSCRIPTION: runtimeEnv.GMAIL_PUBSUB_SUBSCRIPTION,
+      GMAIL_PUBSUB_TOPIC: runtimeEnv.GMAIL_PUBSUB_TOPIC,
+      GMAIL_TOKEN_ENCRYPTION_KEY: runtimeEnv.GMAIL_TOKEN_ENCRYPTION_KEY,
+      GOOGLE_AUTH_CLIENT_ID: runtimeEnv.GOOGLE_AUTH_CLIENT_ID,
+      GOOGLE_AUTH_CLIENT_SECRET: runtimeEnv.GOOGLE_AUTH_CLIENT_SECRET,
+      GOOGLE_GMAIL_CLIENT_ID: runtimeEnv.GOOGLE_GMAIL_CLIENT_ID,
+      GOOGLE_GMAIL_CLIENT_SECRET: runtimeEnv.GOOGLE_GMAIL_CLIENT_SECRET,
+      MAIL_BUCKET: runtimeEnv.MAIL_BUCKET,
+      MAIL_RECEIPT_ROLE_ARN: runtimeEnv.MAIL_RECEIPT_ROLE_ARN,
+      MAIL_RECEIPT_RULE_SET_NAME: runtimeEnv.MAIL_RECEIPT_RULE_SET_NAME,
+      MAIL_RECEIPT_TOPIC_ARN: runtimeEnv.MAIL_RECEIPT_TOPIC_ARN,
+      NODE_ENV: runtimeEnv.NODE_ENV,
+      OPENROUTER_API_KEY: runtimeEnv.OPENROUTER_API_KEY,
+      POLAR_ACCESS_TOKEN: runtimeEnv.POLAR_ACCESS_TOKEN,
+      POLAR_ORGANIZATION_ID: runtimeEnv.POLAR_ORGANIZATION_ID,
+      POLAR_SANDBOX: runtimeEnv.POLAR_SANDBOX,
+      POLAR_WEBHOOK_SECRET: runtimeEnv.POLAR_WEBHOOK_SECRET,
+      QUIETER_AUTH_MAIL_SENDER: runtimeEnv.QUIETER_AUTH_MAIL_SENDER,
+      QUIETER_MAIL_API_KEY: runtimeEnv.QUIETER_MAIL_API_KEY,
+      QUIETER_MAIL_API_URL: runtimeEnv.QUIETER_MAIL_API_URL,
+      QUIETER_UNLIMITED_BILLING_EMAILS: runtimeEnv.QUIETER_UNLIMITED_BILLING_EMAILS,
+      SENTRY_AUTH_TOKEN: runtimeEnv.SENTRY_AUTH_TOKEN,
+      SENTRY_DSN: runtimeEnv.SENTRY_DSN,
+      SENTRY_ENVIRONMENT: runtimeEnv.SENTRY_ENVIRONMENT,
+      SENTRY_ORG: runtimeEnv.SENTRY_ORG,
+      SENTRY_PROJECT: runtimeEnv.SENTRY_PROJECT,
+      VERCEL_ENV: runtimeEnv.VERCEL_ENV,
+      VERCEL_URL: runtimeEnv.VERCEL_URL,
+      VITE_LOGO_DEV_PUBLISHABLE_KEY: runtimeEnv.VITE_LOGO_DEV_PUBLISHABLE_KEY,
+    },
+    server: {
+      APP_SITE_PASSWORD: optionalString,
+      AWS_DEFAULT_REGION: optionalString,
+      AWS_REGION: optionalString,
+      BETTER_AUTH_APP_NAME: z.string().trim().min(1).default("quieter"),
+      BETTER_AUTH_SECRET: optionalString,
+      BETTER_AUTH_URL: optionalUrl,
+      CHAT_GENERATION_START_TOKEN: optionalString,
+      CHAT_GENERATION_START_URL: optionalUrl,
+      DATABASE_MIGRATION_URL: optionalUrl,
+      DATABASE_URL: optionalUrl,
+      GMAIL_LIVE_SYNC_TOKEN_SECRET: optionalString,
+      GMAIL_LIVE_SYNC_URL: optionalUrl,
+      GMAIL_PUBSUB_PUSH_AUDIENCE: optionalString,
+      GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: z.string().trim().email().optional(),
+      GMAIL_PUBSUB_QUEUE_URL: optionalUrl,
+      GMAIL_PUBSUB_SUBSCRIPTION: optionalString,
+      GMAIL_PUBSUB_TOPIC: optionalString,
+      GMAIL_TOKEN_ENCRYPTION_KEY: optionalString,
+      GOOGLE_AUTH_CLIENT_ID: optionalString,
+      GOOGLE_AUTH_CLIENT_SECRET: optionalString,
+      GOOGLE_GMAIL_CLIENT_ID: optionalString,
+      GOOGLE_GMAIL_CLIENT_SECRET: optionalString,
+      MAIL_BUCKET: optionalString,
+      MAIL_RECEIPT_ROLE_ARN: optionalString,
+      MAIL_RECEIPT_RULE_SET_NAME: optionalString,
+      MAIL_RECEIPT_TOPIC_ARN: optionalString,
+      NODE_ENV: nodeEnvironment,
+      OPENROUTER_API_KEY: optionalString,
+      POLAR_ACCESS_TOKEN: optionalString,
+      POLAR_ORGANIZATION_ID: optionalString,
+      POLAR_SANDBOX: optionalBooleanString,
+      POLAR_WEBHOOK_SECRET: optionalString,
+      QUIETER_AUTH_MAIL_SENDER: z.string().trim().email().default("auth@quieter.email"),
+      QUIETER_MAIL_API_KEY: optionalString,
+      QUIETER_MAIL_API_URL: optionalUrl,
+      QUIETER_UNLIMITED_BILLING_EMAILS: optionalString,
+      SENTRY_AUTH_TOKEN: optionalString,
+      SENTRY_DSN: optionalUrl,
+      SENTRY_ENVIRONMENT: optionalString,
+      SENTRY_ORG: optionalString,
+      SENTRY_PROJECT: optionalString,
+      VERCEL_ENV: optionalString,
+      VERCEL_URL: optionalString,
+      VITE_LOGO_DEV_PUBLISHABLE_KEY: optionalString,
+    },
+  });
+
+export const serverEnv = createServerEnv();
+
+type ServerStringKey = {
+  [Key in keyof typeof serverEnv]-?: Exclude<(typeof serverEnv)[Key], undefined> extends string
+    ? Key
+    : never;
+}[keyof typeof serverEnv];
+
+export const requireServerEnv = (name: ServerStringKey) => {
+  const value = serverEnv[name];
+
+  if (typeof value !== "string" || !value) {
+    throw new Error(`${name} environment variable is missing.`);
+  }
+
+  return value;
+};

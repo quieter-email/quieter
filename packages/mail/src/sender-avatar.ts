@@ -1,3 +1,5 @@
+import { publicEnv } from "@quieter/env/public";
+
 const EMAIL_ADDRESS_PATTERN = /([a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+)/i;
 const PERSONAL_EMAIL_DOMAINS = new Set([
   "gmail.com",
@@ -24,7 +26,7 @@ const PERSONAL_EMAIL_DOMAINS = new Set([
 ]);
 
 const getLogoDevPublishableKey = (): string => {
-  return (process.env.VITE_LOGO_DEV_PUBLISHABLE_KEY ?? "").trim();
+  return publicEnv.VITE_LOGO_DEV_PUBLISHABLE_KEY ?? "";
 };
 
 const getClampedAvatarSize = (requestedSize: number | undefined): number => {

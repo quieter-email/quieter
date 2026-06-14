@@ -131,6 +131,11 @@ const gmailProfileSchema = z.object({
   threadsTotal: z.number().optional(),
 });
 
+const gmailWatchSchema = z.object({
+  historyId: z.string(),
+  expiration: z.string(),
+});
+
 const listMessagesSchema = z.object({
   messages: z.array(z.object({ id: z.string(), threadId: z.string() })).default([]),
   nextPageToken: z.string().optional(),
@@ -279,6 +284,10 @@ export type ThreadMessagesResult = {
 
 export type GmailLabelListItem = z.infer<typeof gmailLabelSchema>;
 export type GmailProfile = z.infer<typeof gmailProfileSchema>;
+export type GmailWatch = {
+  expiration: Date;
+  historyId: string;
+};
 export type GmailMessage = z.infer<typeof gmailMessageSchema>;
 export type GmailDraft = z.infer<typeof gmailDraftSchema>;
 export type GmailAttachment = z.infer<typeof gmailAttachmentSchema>;
@@ -299,6 +308,17 @@ export type MailboxSyncDelta = {
 export type MailboxMessagesRefreshResult = {
   removedMessageIds: string[];
   updatedMessages: MessageListItem[];
+};
+export type GmailAddedMessageHistoryPage = {
+  hasMore: boolean;
+  historyExpired: boolean;
+  historyId: string;
+  messageIds: string[];
+  nextPageToken?: string;
+};
+export type GmailMessageIdPage = {
+  messageIds: string[];
+  nextPageToken?: string;
 };
 export { decodeMimeHeaderValue, extractMessageContent };
 
@@ -801,6 +821,24 @@ const listMessages = async (
   });
 };
 
+export const listGmailMessageIds = async (
+  accessToken: string,
+  options?: {
+    pageToken?: string;
+    maxResults?: number;
+    mailbox?: MailboxCategory;
+    query?: string;
+    signal?: AbortSignal;
+  },
+): Promise<GmailMessageIdPage> => {
+  const response = await listMessages(accessToken, options);
+
+  return {
+    messageIds: response.messages.map((message) => message.id),
+    nextPageToken: response.nextPageToken,
+  };
+};
+
 export const getGmailMessageCount = async (
   accessToken: string,
   options?: {
@@ -976,6 +1014,83 @@ const getGmailMessagesMetadataBatch = async (
     const parsed = part.body.trim() ? JSON.parse(part.body) : {};
     return gmailMessageSchema.parse(parsed);
   });
+};
+
+export const watchGmailMailbox = async (
+  accessToken: string,
+  topicName: string,
+  signal?: AbortSignal,
+): Promise<GmailWatch> => {
+  const response = await requestGmail(accessToken, "/gmail/v1/users/me/watch", gmailWatchSchema, {
+    method: "POST",
+    body: { topicName },
+    signal,
+  });
+
+  return {
+    expiration: new Date(Number(response.expiration)),
+    historyId: response.historyId,
+  };
+};
+
+export const stopGmailWatch = async (accessToken: string, signal?: AbortSignal): Promise<void> => {
+  await requestGmail(accessToken, "/gmail/v1/users/me/stop", z.object({}).passthrough(), {
+    method: "POST",
+    signal,
+  });
+};
+
+export const listGmailAddedMessageHistoryPage = async (
+  accessToken: string,
+  options: {
+    maxResults?: number;
+    pageToken?: string;
+    signal?: AbortSignal;
+    startHistoryId: string;
+  },
+): Promise<GmailAddedMessageHistoryPage> => {
+  try {
+    const response = await requestGmail(
+      accessToken,
+      "/gmail/v1/users/me/history",
+      listHistorySchema,
+      {
+        query: {
+          fields: "history(id,messagesAdded(message(id,threadId))),historyId,nextPageToken",
+          historyTypes: ["messageAdded"],
+          maxResults: options.maxResults ?? 25,
+          pageToken: options.pageToken,
+          startHistoryId: options.startHistoryId,
+        },
+        signal: options.signal,
+      },
+    );
+    const history = response.history ?? [];
+    const messageIds = Array.from(
+      new Set(
+        history.flatMap((record) => (record.messagesAdded ?? []).map((entry) => entry.message.id)),
+      ),
+    );
+
+    return {
+      hasMore: !!response.nextPageToken,
+      historyExpired: false,
+      historyId: response.historyId ?? options.startHistoryId,
+      messageIds,
+      nextPageToken: response.nextPageToken,
+    };
+  } catch (error) {
+    if (isErrorWithStatus(error) && error.status === 404) {
+      return {
+        hasMore: false,
+        historyExpired: true,
+        historyId: options.startHistoryId,
+        messageIds: [],
+      };
+    }
+
+    throw error;
+  }
 };
 
 const getGmailMessagesMetadata = async (

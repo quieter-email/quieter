@@ -1,15 +1,11 @@
-const requiredEnvironmentVariable = (name: string) => {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    throw new Error(`${name} is required`);
-  }
-  return value;
-};
+import { createDeploymentEnv } from "@quieter/env/deployment";
 
-const deployHookUrl = requiredEnvironmentVariable("VERCEL_DEPLOY_HOOK_URL");
-const projectId = requiredEnvironmentVariable("VERCEL_PROJECT_ID");
-const teamId = requiredEnvironmentVariable("VERCEL_TEAM_ID");
-const token = requiredEnvironmentVariable("VERCEL_TOKEN");
+const {
+  VERCEL_DEPLOY_HOOK_URL: deployHookUrl,
+  VERCEL_PROJECT_ID: projectId,
+  VERCEL_TEAM_ID: teamId,
+  VERCEL_TOKEN: token,
+} = createDeploymentEnv();
 const triggeredAt = Date.now();
 const headers = { Authorization: `Bearer ${token}` };
 
