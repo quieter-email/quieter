@@ -23,8 +23,16 @@ const pubSubEnvelopeSchema = z.object({
 
 const gmailNotificationSchema = z.object({
   emailAddress: z.string().email(),
-  historyId: z.string().min(1),
+  historyId: z
+    .union([
+      z.string().regex(/^\d+$/),
+      z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).transform(String),
+    ])
+    .pipe(z.string().min(1)),
 });
+
+export const parseGmailPubSubNotification = (data: string) =>
+  gmailNotificationSchema.parse(JSON.parse(Buffer.from(data, "base64url").toString("utf8")));
 
 let sqsClient: SQSClient | null = null;
 
@@ -73,9 +81,7 @@ export const handler = async (
       return toJson({ error: "Unexpected subscription" }, 403);
     }
 
-    const notification = gmailNotificationSchema.parse(
-      JSON.parse(Buffer.from(envelope.message.data, "base64url").toString("utf8")),
-    );
+    const notification = parseGmailPubSubNotification(envelope.message.data);
     const emailAddress = notification.emailAddress.trim().toLowerCase();
     await getSqsClient().send(
       new SendMessageCommand({
