@@ -16,6 +16,15 @@ describe("destructive database target guard", () => {
     ).not.toThrow();
   });
 
+  test("accepts an IPv6 loopback database", () => {
+    expect(() =>
+      assertLocalDatabaseUrl(
+        "postgresql://postgres:postgres@[::1]:5432/quieter_migration_test",
+        "quieter_migration_test",
+      ),
+    ).not.toThrow();
+  });
+
   test("rejects remote databases", () => {
     expect(() =>
       assertLocalDatabaseUrl(
@@ -68,6 +77,12 @@ describe("migration execution boundary", () => {
   test("allows local migrations without CI", () => {
     expect(() =>
       assertMigrationExecutionAllowed("postgresql://postgres:postgres@localhost:5432/quieter", {}),
+    ).not.toThrow();
+  });
+
+  test("allows IPv6 loopback migrations without CI", () => {
+    expect(() =>
+      assertMigrationExecutionAllowed("postgresql://postgres:postgres@[::1]:5432/quieter", {}),
     ).not.toThrow();
   });
 

@@ -5,6 +5,8 @@ const STATEMENT_TIMEOUT = "5min";
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
 const PRODUCTION_REPOSITORY = "quieter-email/quieter";
 
+const getHostname = (url: URL) => url.hostname.replace(/^\[(.*)\]$/, "$1");
+
 const toDirectPostgresUrl = (value: string) => {
   const url = new URL(value);
 
@@ -43,7 +45,10 @@ export const assertLocalDatabaseUrl = (value: string, expectedDatabase?: string)
   const url = new URL(value);
   const database = url.pathname.slice(1);
 
-  if (!["postgres:", "postgresql:"].includes(url.protocol) || !LOOPBACK_HOSTS.has(url.hostname)) {
+  if (
+    !["postgres:", "postgresql:"].includes(url.protocol) ||
+    !LOOPBACK_HOSTS.has(getHostname(url))
+  ) {
     throw new Error("Destructive database commands are restricted to loopback PostgreSQL servers");
   }
 
@@ -77,7 +82,7 @@ export const assertMigrationExecutionAllowed = (
 ) => {
   const url = new URL(value);
 
-  if (LOOPBACK_HOSTS.has(url.hostname)) {
+  if (LOOPBACK_HOSTS.has(getHostname(url))) {
     return;
   }
 
