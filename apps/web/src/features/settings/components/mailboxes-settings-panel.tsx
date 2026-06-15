@@ -149,7 +149,7 @@ export const MailboxesSettingsPanel = () => {
           <p className="mt-1 text-sm text-muted-foreground">
             Connect an existing personal or Google Workspace inbox. Organization placement does not
             share the mailbox with other members. Pro keeps your inbox current as mail arrives and
-            can apply your existing Gmail labels or surface useful details from new mail.
+            can apply your existing Gmail labels or surface timely updates from new mail.
           </p>
         </div>
 
@@ -337,7 +337,7 @@ export const MailboxesSettingsPanel = () => {
                       <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5">
                         <span className="min-w-0 flex-1">
                           <span className="block text-xs font-medium text-foreground">
-                            Useful details
+                            Timely mail
                             {!hasGmailAutomationAccess && " · Pro"}
                           </span>
                           <span className="mt-0.5 block text-[11px]/4 text-muted-foreground">
@@ -345,7 +345,7 @@ export const MailboxesSettingsPanel = () => {
                           </span>
                         </span>
                         <Switch
-                          aria-label={`Find time-sensitive details in new mail for ${mailbox.emailAddress}`}
+                          aria-label={`Find time-sensitive updates in new mail for ${mailbox.emailAddress}`}
                           checked={mailbox.gmailUsefulDetailsEnabled}
                           className="h-5 w-9 shrink-0 p-0.5"
                           disabled={
@@ -362,10 +362,7 @@ export const MailboxesSettingsPanel = () => {
                               {
                                 onError: (error) => {
                                   toast.error(
-                                    getMutationErrorMessage(
-                                      error,
-                                      "Could not update useful details.",
-                                    ),
+                                    getMutationErrorMessage(error, "Could not update timely mail."),
                                   );
                                 },
                               },
@@ -383,7 +380,8 @@ export const MailboxesSettingsPanel = () => {
                             {!hasGmailAutomationAccess && " · Pro"}
                           </span>
                           <span className="mt-0.5 block text-[11px]/4 text-muted-foreground">
-                            Apply your existing labels to new Inbox mail.
+                            Apply labels to new Inbox mail when they match the emails-to-include
+                            rules you set on each label.
                           </span>
                         </span>
                         <Switch
@@ -421,9 +419,9 @@ export const MailboxesSettingsPanel = () => {
 
                     {mailbox.gmailUsefulDetailsEnabled && (
                       <p className="border-t border-border/60 px-3 py-2 text-[11px]/4 text-muted-foreground">
-                        Results appear below Inbox search. To test, send a new verification email
-                        from a different account; mail sent from this mailbox is ignored. New
-                        details should appear within seconds.
+                        Updates appear above your inbox. To test, send a new verification email from
+                        a different account; mail sent from this mailbox is ignored. New updates
+                        should appear within seconds.
                       </p>
                     )}
                   </div>
