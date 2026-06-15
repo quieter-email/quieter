@@ -71,7 +71,7 @@
     "db:migrate": "turbo run db:migrate --filter=@quieter/database",
     "db:test-migrations": "turbo run db:test-migrations --filter=@quieter/database",
     "db:push": "turbo run db:push --filter=@quieter/database",
-    "dev": "turbo run dev",
+    "dev": "bun --env-file=.env.local packages/database/scripts/assert-local-development.ts && turbo run dev",
     "fmt": "turbo run fmt",
     "fmt:check": "turbo run fmt:check",
     "generate:assets": "bun scripts/generate-web-assets.ts",

@@ -1,9 +1,6 @@
 name: Deploy SST Stack
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       stage:
@@ -112,18 +109,19 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: quieter
+          POSTGRES_DB: quieter_migration_test
           POSTGRES_PASSWORD: postgres
           POSTGRES_USER: postgres
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d quieter"
+          --health-cmd "pg_isready -U postgres -d quieter_migration_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_MIGRATION_URL: postgresql://postgres:postgres@localhost:5432/quieter
+      DATABASE_MIGRATION_URL: postgresql://postgres:postgres@localhost:5432/quieter_migration_test
+      MIGRATION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/quieter_migration_test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -191,12 +189,14 @@ jobs:
         if: ${{ env.SST_STAGE == 'production' }}
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
         run: bun run db:deploy
 
       - name: Apply production consent migrations
         if: ${{ env.SST_STAGE == 'production' }}
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
         run: bun run consent:migrate
 
       - name: Deploy SST

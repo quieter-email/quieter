@@ -105,19 +105,36 @@
     },
     "db:deploy": {
       "dependsOn": ["^build"],
-      "env": ["DATABASE_MIGRATION_URL"],
+      "env": [
+        "CI",
+        "DATABASE_MIGRATION_URL",
+        "GITHUB_ACTIONS",
+        "GITHUB_REF",
+        "GITHUB_REF_PROTECTED",
+        "GITHUB_REPOSITORY",
+        "QUIETER_ALLOW_REMOTE_MIGRATIONS"
+      ],
       "cache": false,
       "outputs": []
     },
     "db:migrate": {
       "dependsOn": ["^build"],
-      "env": ["DATABASE_MIGRATION_URL", "DATABASE_URL"],
+      "env": [
+        "CI",
+        "DATABASE_MIGRATION_URL",
+        "DATABASE_URL",
+        "GITHUB_ACTIONS",
+        "GITHUB_REF",
+        "GITHUB_REF_PROTECTED",
+        "GITHUB_REPOSITORY",
+        "QUIETER_ALLOW_REMOTE_MIGRATIONS"
+      ],
       "cache": false,
       "outputs": [],
       "interactive": false
     },
     "db:test-migrations": {
-      "env": ["DATABASE_MIGRATION_URL"],
+      "env": ["MIGRATION_TEST_DATABASE_URL"],
       "cache": false,
       "outputs": []
     },
@@ -130,7 +147,16 @@
     },
     "consent:migrate": {
       "dependsOn": ["^build"],
-      "env": ["DATABASE_MIGRATION_URL", "DATABASE_URL"],
+      "env": [
+        "CI",
+        "DATABASE_MIGRATION_URL",
+        "DATABASE_URL",
+        "GITHUB_ACTIONS",
+        "GITHUB_REF",
+        "GITHUB_REF_PROTECTED",
+        "GITHUB_REPOSITORY",
+        "QUIETER_ALLOW_REMOTE_MIGRATIONS"
+      ],
       "cache": false,
       "outputs": []
     },

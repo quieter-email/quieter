@@ -8,6 +8,7 @@ import pg from "pg";
 const consentTablePrefix = "c15t_";
 const consentMigrationLockKey1 = 0x715f6331;
 const consentMigrationLockKey2 = 0x745f6d69;
+const loopbackHosts = new Set(["127.0.0.1", "::1", "localhost"]);
 
 const getTrustedOrigins = () => {
   const origins = new Set(["localhost:3000"]);
@@ -31,7 +32,6 @@ const policyPacks = policyBuilder.composePacks(
   [policyPackPresets.worldNoBanner()],
 );
 
-let consentMigrationPromise: Promise<void> | undefined;
 let consentState:
   | {
       adapter: ReturnType<typeof kyselyAdapter>;
@@ -71,8 +71,29 @@ const getConsentMigrationDatabaseUrl = () => {
   return toDirectPostgresUrl(value);
 };
 
+const assertConsentMigrationExecutionAllowed = (databaseUrl: string) => {
+  if (loopbackHosts.has(new URL(databaseUrl).hostname)) {
+    return;
+  }
+
+  const isApprovedProductionJob =
+    process.env.CI === "true" &&
+    process.env.GITHUB_ACTIONS === "true" &&
+    process.env.GITHUB_REF === "refs/heads/main" &&
+    process.env.GITHUB_REF_PROTECTED === "true" &&
+    process.env.GITHUB_REPOSITORY === "quieter-email/quieter" &&
+    process.env.QUIETER_ALLOW_REMOTE_MIGRATIONS === "production";
+
+  if (!isApprovedProductionJob) {
+    throw new Error(
+      "Remote consent migrations are restricted to the approved production GitHub Actions job.",
+    );
+  }
+};
+
 const withConsentMigrationLock = async <T>(callback: (databaseUrl: string) => Promise<T>) => {
   const databaseUrl = getConsentMigrationDatabaseUrl();
+  assertConsentMigrationExecutionAllowed(databaseUrl);
   const pool = new pg.Pool({
     connectionString: databaseUrl,
     max: 1,
@@ -153,20 +174,4 @@ export const runConsentMigrations = async () => {
   await withConsentMigrationLock(executeConsentMigrations);
 };
 
-const ensureConsentMigrations = async () => {
-  consentMigrationPromise ??= (async () => {
-    try {
-      await runConsentMigrations();
-    } catch (error) {
-      consentMigrationPromise = undefined;
-      throw error;
-    }
-  })();
-
-  await consentMigrationPromise;
-};
-
-export const initializeConsentBackend = async () => {
-  await ensureConsentMigrations();
-  return getConsentState().backend;
-};
+export const initializeConsentBackend = () => getConsentState().backend;
