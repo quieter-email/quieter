@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@orpc/server": "catalog:",
-    "@paykit-sdk/core": "^1.2.1",
+    "@paykit-sdk/core": "^1.2.2",
     "@paykit-sdk/polar": "^1.2.0",
     "@polar-sh/sdk": "0.37.0",
     "@quieter/database": "workspace:*",
