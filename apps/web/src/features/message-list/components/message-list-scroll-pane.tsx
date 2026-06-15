@@ -4,6 +4,7 @@ import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useLayoutEffect, useRef } from "react";
+import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import type { MessageListProps } from "./message-list-types";
 import type { useMessageListSelection } from "./use-message-list-selection";
@@ -24,6 +25,7 @@ const MESSAGE_LIST_SKELETON_ROW_IDS = [
 ] as const;
 
 type MessageListScrollPaneProps = {
+  gmailLabels: GmailLabelListItem[];
   list: MessageListProps;
   selection: ReturnType<typeof useMessageListSelection>;
   threadedMessages: ThreadListEntry[];
@@ -78,6 +80,7 @@ const MessageListLoadingSkeleton = () => (
 );
 
 export const MessageListScrollPane = ({
+  gmailLabels,
   list,
   selection,
   threadedMessages,
@@ -172,6 +175,7 @@ export const MessageListScrollPane = ({
                   activeMailbox={list.activeMailbox}
                   className="absolute top-0 left-0 w-full"
                   dataIndex={virtualItem.index}
+                  gmailLabels={gmailLabels}
                   isActive={activeThreadId === thread.threadId}
                   isSelected={selection.selectedThreadIds.has(thread.threadId)}
                   isSelectionMode={selection.selectedThreadIds.size > 0}

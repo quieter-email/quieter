@@ -149,8 +149,7 @@ export const MailboxesSettingsPanel = () => {
           <p className="mt-1 text-sm text-muted-foreground">
             Connect an existing personal or Google Workspace inbox. Organization placement does not
             share the mailbox with other members. Pro keeps your inbox current as mail arrives and
-            can use AI to apply your existing Gmail labels and briefly surface useful details from
-            new mail.
+            can apply your existing Gmail labels or surface useful details from new mail.
           </p>
         </div>
 
@@ -198,85 +197,24 @@ export const MailboxesSettingsPanel = () => {
         {gmailGroups.map((group) => (
           <div className="space-y-2" key={group.id}>
             <p className="text-xs text-muted-foreground">{group.name}</p>
-            <div className="divide-y divide-border/70">
+            <div className="space-y-2">
               {group.mailboxes.map((mailbox) => {
                 const isDefault = mailbox.id === defaultMailboxId;
                 return (
-                  <MailboxSettingsRow
-                    action={
+                  <div
+                    className="overflow-hidden rounded-lg border border-border/70 bg-muted/15"
+                    key={mailbox.id}
+                  >
+                    <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
+                      <div className="min-w-48 flex-1">
+                        <p className="truncate text-sm text-foreground">{mailbox.emailAddress}</p>
+                        {mailbox.connectionStatus === "needs_reconnect" && (
+                          <p className="mt-0.5 text-xs text-destructive">
+                            This account needs to reconnect through Google.
+                          </p>
+                        )}
+                      </div>
                       <div className="flex flex-wrap items-center justify-end gap-1">
-                        <label className="mr-2 flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>
-                            Helpful reminders
-                            {!hasGmailAutomationAccess && " · Pro"}
-                          </span>
-                          <Switch
-                            aria-label={`Find time-sensitive details in new mail for ${mailbox.emailAddress}`}
-                            checked={mailbox.gmailUsefulDetailsEnabled}
-                            disabled={
-                              !hasGmailAutomationAccess ||
-                              setGmailUsefulDetailsMutation.isPending ||
-                              mailbox.connectionStatus !== "connected"
-                            }
-                            onCheckedChange={(enabled) => {
-                              setGmailUsefulDetailsMutation.mutate(
-                                {
-                                  enabled,
-                                  mailboxId: mailbox.id,
-                                },
-                                {
-                                  onError: (error) => {
-                                    toast.error(
-                                      getMutationErrorMessage(
-                                        error,
-                                        "Could not update useful details.",
-                                      ),
-                                    );
-                                  },
-                                },
-                              );
-                            }}
-                          >
-                            <SwitchThumb />
-                          </Switch>
-                        </label>
-
-                        <label className="mr-2 flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>
-                            Auto-label with AI
-                            {!hasGmailAutomationAccess && " · Pro"}
-                          </span>
-                          <Switch
-                            aria-label={`Automatically label new mail for ${mailbox.emailAddress}`}
-                            checked={mailbox.gmailAutoLabelEnabled}
-                            disabled={
-                              !hasGmailAutomationAccess ||
-                              setGmailAutoLabelingMutation.isPending ||
-                              mailbox.connectionStatus !== "connected"
-                            }
-                            onCheckedChange={(enabled) => {
-                              setGmailAutoLabelingMutation.mutate(
-                                {
-                                  enabled,
-                                  mailboxId: mailbox.id,
-                                },
-                                {
-                                  onError: (error) => {
-                                    toast.error(
-                                      getMutationErrorMessage(
-                                        error,
-                                        "Could not update auto-labeling.",
-                                      ),
-                                    );
-                                  },
-                                },
-                              );
-                            }}
-                          >
-                            <SwitchThumb />
-                          </Switch>
-                        </label>
-
                         <Button
                           aria-label={
                             isDefault ? "Unset default mailbox" : "Set as default mailbox"
@@ -315,88 +253,180 @@ export const MailboxesSettingsPanel = () => {
                           {isDefault ? "Default" : "Set default"}
                         </Button>
 
-                        <>
-                          <Select
-                            disabled={moveGmailMailboxMutation.isPending}
-                            items={placementItems}
-                            onValueChange={(value) => {
-                              moveGmailMailboxMutation.mutate(
-                                {
-                                  mailboxId: mailbox.id,
-                                  organizationId: value === personalPlacementValue ? null : value,
+                        <Select
+                          disabled={moveGmailMailboxMutation.isPending}
+                          items={placementItems}
+                          onValueChange={(value) => {
+                            moveGmailMailboxMutation.mutate(
+                              {
+                                mailboxId: mailbox.id,
+                                organizationId: value === personalPlacementValue ? null : value,
+                              },
+                              {
+                                onError: (error) => {
+                                  toast.error(
+                                    getMutationErrorMessage(error, "Could not move mailbox."),
+                                  );
                                 },
-                                {
-                                  onError: (error) => {
-                                    toast.error(
-                                      getMutationErrorMessage(error, "Could not move mailbox."),
-                                    );
-                                  },
-                                },
-                              );
-                            }}
-                            value={mailbox.organizationId ?? personalPlacementValue}
+                              },
+                            );
+                          }}
+                          value={mailbox.organizationId ?? personalPlacementValue}
+                        >
+                          <SelectTrigger
+                            aria-label={`Placement for ${mailbox.emailAddress}`}
+                            className="max-w-40"
+                            size="sm"
+                            variant="ghost"
                           >
-                            <SelectTrigger
-                              aria-label={`Placement for ${mailbox.emailAddress}`}
-                              size="sm"
-                              variant="ghost"
-                            >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent align="end">
-                              <SelectItem value={personalPlacementValue}>Personal</SelectItem>
-                              {organizations.map((organization) => (
-                                <SelectItem key={organization.id} value={organization.id}>
-                                  {organization.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {mailbox.connectionStatus === "needs_reconnect" && (
-                            <Button
-                              disabled={isStartingGmail}
-                              onClick={() =>
-                                void startGmailConnection({
-                                  mailboxId: mailbox.id,
-                                  organizationId: mailbox.organizationId,
-                                })
-                              }
-                              size="sm"
-                              type="button"
-                              variant="ghost"
-                            >
-                              Reconnect
-                            </Button>
-                          )}
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent align="end">
+                            <SelectItem value={personalPlacementValue}>Personal</SelectItem>
+                            {organizations.map((organization) => (
+                              <SelectItem key={organization.id} value={organization.id}>
+                                {organization.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {mailbox.connectionStatus === "needs_reconnect" && (
                           <Button
-                            disabled={disconnectMailboxMutation.isPending}
-                            onClick={() => {
-                              disconnectMailboxMutation.mutate(
-                                {
-                                  mailboxId: mailbox.id,
-                                },
-                                {
-                                  onError: (error) => {
-                                    toast.error(
-                                      getMutationErrorMessage(error, "Could not remove mailbox."),
-                                    );
-                                  },
-                                },
-                              );
-                            }}
+                            disabled={isStartingGmail}
+                            onClick={() =>
+                              void startGmailConnection({
+                                mailboxId: mailbox.id,
+                                organizationId: mailbox.organizationId,
+                              })
+                            }
                             size="sm"
                             type="button"
                             variant="ghost"
                           >
-                            <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
-                            Remove
+                            Reconnect
                           </Button>
-                        </>
+                        )}
+                        <Button
+                          className="text-destructive hover:text-destructive"
+                          disabled={disconnectMailboxMutation.isPending}
+                          onClick={() => {
+                            disconnectMailboxMutation.mutate(
+                              {
+                                mailboxId: mailbox.id,
+                              },
+                              {
+                                onError: (error) => {
+                                  toast.error(
+                                    getMutationErrorMessage(error, "Could not remove mailbox."),
+                                  );
+                                },
+                              },
+                            );
+                          }}
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+                          Remove
+                        </Button>
                       </div>
-                    }
-                    key={mailbox.id}
-                    mailbox={mailbox}
-                  />
+                    </div>
+
+                    <div className="grid border-t border-border/60 sm:grid-cols-2 sm:divide-x sm:divide-border/60">
+                      <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5">
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-xs font-medium text-foreground">
+                            Useful details
+                            {!hasGmailAutomationAccess && " · Pro"}
+                          </span>
+                          <span className="mt-0.5 block text-[11px]/4 text-muted-foreground">
+                            Codes, deliveries, deadlines, and other timely mail.
+                          </span>
+                        </span>
+                        <Switch
+                          aria-label={`Find time-sensitive details in new mail for ${mailbox.emailAddress}`}
+                          checked={mailbox.gmailUsefulDetailsEnabled}
+                          className="h-5 w-9 shrink-0 p-0.5"
+                          disabled={
+                            !hasGmailAutomationAccess ||
+                            setGmailUsefulDetailsMutation.isPending ||
+                            mailbox.connectionStatus !== "connected"
+                          }
+                          onCheckedChange={(enabled) => {
+                            setGmailUsefulDetailsMutation.mutate(
+                              {
+                                enabled,
+                                mailboxId: mailbox.id,
+                              },
+                              {
+                                onError: (error) => {
+                                  toast.error(
+                                    getMutationErrorMessage(
+                                      error,
+                                      "Could not update useful details.",
+                                    ),
+                                  );
+                                },
+                              },
+                            );
+                          }}
+                        >
+                          <SwitchThumb className="size-4 data-checked:translate-x-4" />
+                        </Switch>
+                      </label>
+
+                      <label className="flex cursor-pointer items-center gap-3 border-t border-border/60 px-3 py-2.5 sm:border-t-0">
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-xs font-medium text-foreground">
+                            Auto-label
+                            {!hasGmailAutomationAccess && " · Pro"}
+                          </span>
+                          <span className="mt-0.5 block text-[11px]/4 text-muted-foreground">
+                            Apply your existing labels to new Inbox mail.
+                          </span>
+                        </span>
+                        <Switch
+                          aria-label={`Automatically label new mail for ${mailbox.emailAddress}`}
+                          checked={mailbox.gmailAutoLabelEnabled}
+                          className="h-5 w-9 shrink-0 p-0.5"
+                          disabled={
+                            !hasGmailAutomationAccess ||
+                            setGmailAutoLabelingMutation.isPending ||
+                            mailbox.connectionStatus !== "connected"
+                          }
+                          onCheckedChange={(enabled) => {
+                            setGmailAutoLabelingMutation.mutate(
+                              {
+                                enabled,
+                                mailboxId: mailbox.id,
+                              },
+                              {
+                                onError: (error) => {
+                                  toast.error(
+                                    getMutationErrorMessage(
+                                      error,
+                                      "Could not update auto-labeling.",
+                                    ),
+                                  );
+                                },
+                              },
+                            );
+                          }}
+                        >
+                          <SwitchThumb className="size-4 data-checked:translate-x-4" />
+                        </Switch>
+                      </label>
+                    </div>
+
+                    {mailbox.gmailUsefulDetailsEnabled && (
+                      <p className="border-t border-border/60 px-3 py-2 text-[11px]/4 text-muted-foreground">
+                        Results appear below Inbox search. To test, send a new verification email
+                        from a different account; mail sent from this mailbox is ignored. New
+                        details should appear within seconds.
+                      </p>
+                    )}
+                  </div>
                 );
               })}
             </div>
