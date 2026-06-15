@@ -92,10 +92,6 @@ const shouldGatePath = (pathname: string) => {
     return false;
   }
 
-  if (normalizedPath === "/api/c15t" || normalizedPath.startsWith("/api/c15t/")) {
-    return false;
-  }
-
   return !publicPathPrefixes.some((pathPrefix) => normalizedPath.startsWith(pathPrefix));
 };
 

@@ -1,99 +1,102 @@
 # Quieter
 
-Private/experimental email client with Gmail and organization-managed SES mailboxes. **Deep alpha, very work-in-progress, many gaps and TODOs. Not recommended for use.**
+Quieter is an experimental email client for Gmail accounts and organization-managed mailboxes. It
+combines a focused mail workspace, compose and search tools, mailbox-scoped AI assistance, managed
+mail delivery, and privacy controls in one application.
 
-This repo is published under the MIT license (see `LICENSE`). **We do not accept contributions.** **Do not open issues here.**
+> [!WARNING]
+> Quieter is deep-alpha software. It is not ready for production users, important mail, or
+> self-hosting without substantial operational work.
 
-For internal maintainer notes, see `AGENTS.md`.
+## Repository Policy
 
-## Stack
+The source is available under the [MIT license](LICENSE), but this is not a community-maintained
+project. General feature contributions, support requests, and public bug reports are not accepted.
 
-- Bun, Turborepo, SST
-- Web: TanStack Start, TanStack Router, React, Vite, Nitro
-- Forms/state: TanStack Form, TanStack Query, TanStack Store, TanStack Hotkeys
-- API: oRPC
-- DB: Drizzle, Postgres
-- UI: Tailwind CSS 4, Tiptap, shadcn/ui base with Base UI, Vaul, Sonner and Hugeicons
-- Tooling: Oxlint, Oxfmt, `tsgo`
+Security reports are the exception. Report vulnerabilities privately through
+[GitHub private vulnerability reporting](https://github.com/quieter-email/quieter/security/advisories/new).
+Read [SECURITY.md](SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md) before contacting the project.
 
-## Environment
+## What Is Here
 
-Copy `.env.example` to `.env.local` for local development. `@quieter/env` validates and
-normalizes configuration with T3 Env:
+- A TanStack Start web application with Gmail and managed mailbox workflows
+- A typed oRPC API boundary between the application and database
+- Better Auth identity, passkey, organization, and API-key integration
+- Gmail OAuth, synchronization, drafts, labels, live updates, and mailbox automation
+- Managed inbound and outbound email through the SST-owned mail stack
+- Mailbox-scoped chat with streamed server-side generation and Gmail tools
+- Polar billing through PayKit
+- Browser-only c15t consent preferences and consent-gated analytics
 
-- `@quieter/env/client` accepts Vite's `import.meta.env` and exposes only declared `VITE_*` values.
-- `@quieter/env/public` contains public values needed by shared packages.
-- `@quieter/env/server` owns application runtime values and typed defaults.
-- `@quieter/env/sst` and `@quieter/env/deployment` enforce deployment-specific requirements.
+## Technology
 
-The package is compiled before Vite loads its Node-based config. Turbo tracks `.env*` as global
-inputs and declares task-visible variables in `turbo.json`; add new variables to both the relevant
-schema and Turbo task when they affect a build or dev process.
+| Area                  | Stack                                               |
+| --------------------- | --------------------------------------------------- |
+| Runtime and workspace | Bun, Turborepo                                      |
+| Web                   | TanStack Start, TanStack Router, React, Vite, Nitro |
+| API and data          | oRPC, TanStack Query, Drizzle, PostgreSQL           |
+| Authentication        | Better Auth                                         |
+| UI                    | Tailwind CSS 4, `@quieter/ui`, Base UI, Tiptap      |
+| Infrastructure        | SST, AWS, Vercel                                    |
+| Quality               | Oxlint, Oxfmt, `tsgo`, Bun Test                     |
 
-## Gmail Pub/Sub
+## Start Here
 
-Pro Gmail mailboxes use an authenticated Google Cloud Pub/Sub push subscription. Gmail push is a
-wake-up signal rather than a complete event log, so the backend persists a Gmail history cursor,
-fans maintenance out through a FIFO queue every 15 minutes, renews every watch daily, and
-reconciles history independently per mailbox. Push requests are acknowledged only after the same
-queue accepts them.
+| Document                                   | Purpose                                                    |
+| ------------------------------------------ | ---------------------------------------------------------- |
+| [Development](docs/development.md)         | Install, configure, run, test, and change the code locally |
+| [Architecture](docs/architecture.md)       | Package boundaries, request flows, and system invariants   |
+| [Database safety](docs/database-safety.md) | Local database rules and production role separation        |
+| [Deployment](docs/deployment.md)           | CI, production deployment, secrets, and operational checks |
+| [Security policy](SECURITY.md)             | Private vulnerability reporting                            |
+| [Contribution policy](CONTRIBUTING.md)     | What external changes may be accepted                      |
+| [Agent instructions](AGENTS.md)            | Detailed repository constraints for coding agents          |
 
-Focused browser tabs receive the wake-up signal through an SST-managed API Gateway WebSocket.
-API Gateway owns the connection; Lambda runs only for connect, disconnect, keepalive, and delivery.
-Connection IDs live in a TTL-backed DynamoDB table. The browser reconnects with a short-lived,
-mailbox-scoped credential, runs the existing Gmail history sync after every signal, and keeps the
-existing foreground poll as the missed-event fallback. Set `GmailLiveSyncTokenSecret` through SST
-and use the same value for `GMAIL_LIVE_SYNC_TOKEN_SECRET` in the web app:
+## Quick Start
 
-```bash
-export GMAIL_LIVE_SYNC_TOKEN_SECRET="$(openssl rand -base64 48)"
-bun run sst secret set GmailLiveSyncTokenSecret "$GMAIL_LIVE_SYNC_TOKEN_SECRET" --stage production
-```
+Prerequisites:
 
-Production deploys sync `gmailLiveSyncUrl` to Vercel as `GMAIL_LIVE_SYNC_URL`. For local development,
-copy that stage output into `.env.local` with the same live-sync token secret.
-
-AI auto-labeling is a separate per-mailbox opt-in. It considers the mailbox's existing custom Gmail
-labels, using each persisted description and inclusion criteria when present and otherwise inferring
-from the label name. The worker only applies current Gmail label IDs and never creates labels.
-
-Create the topic in the same Google Cloud project as the dedicated Gmail OAuth client, then grant
-Gmail permission to publish:
-
-```bash
-gcloud pubsub topics create quieter-gmail
-gcloud pubsub topics add-iam-policy-binding quieter-gmail \
-  --member="serviceAccount:gmail-api-push@system.gserviceaccount.com" \
-  --role="roles/pubsub.publisher"
-```
-
-Create a push-auth service account and allow the Pub/Sub service agent to mint its OIDC tokens:
+- Bun 1.3.9 or newer
+- PostgreSQL 16 or newer running locally
+- Provider credentials only for the integrations you intend to exercise
+- AWS credentials only when running the SST development stack
 
 ```bash
-gcloud iam service-accounts create quieter-gmail-push
-PROJECT_NUMBER="$(gcloud projects describe "$GOOGLE_CLOUD_PROJECT" --format='value(projectNumber)')"
-gcloud projects add-iam-policy-binding "$GOOGLE_CLOUD_PROJECT" \
-  --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-pubsub.iam.gserviceaccount.com" \
-  --role="roles/iam.serviceAccountTokenCreator"
+bun install --frozen-lockfile
+cp .env.example .env.local
+createdb quieter
+bun run db:migrate
+bun run dev
 ```
 
-Set the four `GMAIL_PUBSUB_*` values from `.env.example` and deploy SST. Production provisions
-`https://gmail-events.quieter.email` as an API Gateway custom domain and keeps its Vercel DNS record
-pointed at the current gateway. Create the non-expiring authenticated push subscription against that
-stable endpoint:
+On PowerShell, use `Copy-Item .env.example .env.local`.
+
+`bun run dev` deliberately refuses remote database URLs. Developers use local PostgreSQL, CI uses a
+temporary PostgreSQL service, and production credentials remain in protected deployment secrets.
+See [Development](docs/development.md) for provider setup and alternative commands.
+
+## Common Commands
 
 ```bash
-gcloud pubsub subscriptions create quieter-gmail-push \
-  --topic=quieter-gmail \
-  --push-endpoint="https://gmail-events.quieter.email" \
-  --push-auth-service-account="$GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT" \
-  --push-auth-token-audience="$GMAIL_PUBSUB_PUSH_AUDIENCE" \
-  --ack-deadline=30 \
-  --message-retention-duration=2678400s \
-  --expiration-period=never \
-  --min-retry-delay=10s \
-  --max-retry-delay=600s
+bun run dev              # web app and SST development stack
+bun run test             # all tests
+bun run typecheck        # workspace type checking
+bun run lint:fix         # lint and apply safe fixes
+bun run fmt              # format the workspace
+bun run db:generate      # generate a migration after changing schema.ts
+bun run db:check         # validate migration history and schema drift
 ```
 
-The principal creating or updating the subscription also needs
-`roles/iam.serviceAccountUser` on the push-auth service account.
+Before finishing a change, run:
+
+```bash
+bun run fmt
+bun run lint:fix
+bun run typecheck
+bun run test
+```
+
+## Status
+
+The codebase changes quickly. The committed schema, migrations, tests, workflows, and package
+boundaries are authoritative when documentation and implementation disagree.

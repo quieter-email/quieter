@@ -1,9 +1,6 @@
 name: Deploy SST Stack
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       stage:
@@ -28,7 +25,6 @@ jobs:
     name: Detect migration changes
     runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
-      consent: ${{ steps.changes.outputs.consent }}
       database: ${{ steps.changes.outputs.database }}
     steps:
       - name: Checkout
@@ -39,39 +35,11 @@ jobs:
       - name: Detect migration-related changes
         id: changes
         env:
-          BEFORE_SHA: ${{ github.event.before }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "consent=true" >> "$GITHUB_OUTPUT"
             echo "database=true" >> "$GITHUB_OUTPUT"
             exit 0
-          fi
-
-          if git diff --quiet "$BEFORE_SHA...HEAD" -- \
-            apps/web/package.json \
-            apps/web/scripts/migrate-consent.ts \
-            apps/web/src/lib/c15t.server.ts \
-            bun.lock \
-            package.json \
-            turbo.json; then
-            echo "consent=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "consent=true" >> "$GITHUB_OUTPUT"
-          fi
-
-          if git diff --quiet "$BEFORE_SHA...HEAD" -- \
-            bun.lock \
-            package.json \
-            packages/database/drizzle \
-            packages/database/drizzle.config.ts \
-            packages/database/package.json \
-            packages/database/scripts \
-            packages/database/src/schema.ts \
-            turbo.json; then
-            echo "database=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "database=true" >> "$GITHUB_OUTPUT"
           fi
 
   verify:
@@ -105,25 +73,26 @@ jobs:
   migration-integration:
     name: Migration integration tests
     needs: changes
-    if: ${{ needs.changes.outputs.database == 'true' || needs.changes.outputs.consent == 'true' }}
+    if: ${{ needs.changes.outputs.database == 'true' }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     services:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: quieter
+          POSTGRES_DB: quieter_migration_test
           POSTGRES_PASSWORD: postgres
           POSTGRES_USER: postgres
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d quieter"
+          --health-cmd "pg_isready -U postgres -d quieter_migration_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_MIGRATION_URL: postgresql://postgres:postgres@localhost:5432/quieter
+      DATABASE_MIGRATION_URL: postgresql://postgres:postgres@localhost:5432/quieter_migration_test
+      MIGRATION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/quieter_migration_test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -141,16 +110,7 @@ jobs:
         run: bun run db:check
 
       - name: Test committed database migrations
-        if: ${{ needs.changes.outputs.database == 'true' }}
         run: bun run db:test-migrations
-
-      - name: Apply consent migrations
-        if: ${{ needs.changes.outputs.consent == 'true' }}
-        run: bun run consent:migrate
-
-      - name: Verify repeated consent migrations are a no-op
-        if: ${{ needs.changes.outputs.consent == 'true' }}
-        run: bun run consent:migrate
 
   deploy:
     name: Deploy ${{ inputs.stage || 'production' }}
@@ -191,13 +151,8 @@ jobs:
         if: ${{ env.SST_STAGE == 'production' }}
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
         run: bun run db:deploy
-
-      - name: Apply production consent migrations
-        if: ${{ env.SST_STAGE == 'production' }}
-        env:
-          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
-        run: bun run consent:migrate
 
       - name: Deploy SST
         env:

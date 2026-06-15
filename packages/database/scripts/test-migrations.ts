@@ -2,7 +2,7 @@ import { cpSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
-import { getMigrationDatabaseUrl } from "./database-url";
+import { assertLocalDatabaseUrl } from "./database-url";
 
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
 const migrationsDirectory = join(packageDirectory, "drizzle");
@@ -15,7 +15,12 @@ if (migrationNames.length < 2) {
   throw new Error("Migration integration tests require a baseline and a forward migration");
 }
 
-const databaseUrl = getMigrationDatabaseUrl();
+const databaseUrl = process.env.MIGRATION_TEST_DATABASE_URL?.trim();
+if (!databaseUrl) {
+  throw new Error("MIGRATION_TEST_DATABASE_URL is required for destructive migration tests");
+}
+
+assertLocalDatabaseUrl(databaseUrl, "quieter_migration_test");
 const sql = postgres(databaseUrl, { max: 1 });
 const temporaryDirectory = mkdtempSync(join(packageDirectory, ".migration-test-"));
 

@@ -1,13 +1,18 @@
 import { fileURLToPath } from "node:url";
-import { getMigrationDatabaseUrl } from "./database-url";
+import { assertMigrationExecutionAllowed, getMigrationDatabaseUrl } from "./database-url";
+import { assertMigrationFilesAreDeploySafe } from "./migration-safety";
 
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
+const databaseUrl = getMigrationDatabaseUrl();
+
+assertMigrationFilesAreDeploySafe();
+assertMigrationExecutionAllowed(databaseUrl);
 
 const migrationProcess = Bun.spawn(["bunx", "drizzle-kit", "migrate"], {
   cwd: packageDirectory,
   env: {
     ...globalThis.process.env,
-    DATABASE_URL: getMigrationDatabaseUrl(),
+    DATABASE_URL: databaseUrl,
   },
   stderr: "inherit",
   stdout: "inherit",
