@@ -45,11 +45,10 @@ postgresql://postgres:postgres@localhost:5432/quieter
 Adjust the username, password, or port for your local PostgreSQL installation. Keep the hostname
 loopback-only.
 
-Apply the committed application and consent migrations:
+Apply the committed application migrations:
 
 ```bash
 bun run db:migrate
-bun run consent:migrate
 ```
 
 `db:push` is reserved for disposable local databases. Normal schema changes require a committed
@@ -97,7 +96,8 @@ For UI work that does not need SST, build the environment package and run the we
 
 ```bash
 bun run build --filter=@quieter/env
-bun --cwd apps/web run dev
+cd apps/web
+bun run dev
 ```
 
 ## Where Changes Belong

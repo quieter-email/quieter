@@ -10,7 +10,6 @@ import { clientEnv } from "~/env";
 
 const posthogToken = clientEnv.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN;
 const posthogHost = clientEnv.VITE_PUBLIC_POSTHOG_HOST;
-const consentBackendUrl = clientEnv.VITE_PUBLIC_C15T_URL;
 
 export const ConsentManager = ({ children }: PropsWithChildren) => {
   const scripts = posthogToken
@@ -39,13 +38,11 @@ export const ConsentManager = ({ children }: PropsWithChildren) => {
   return (
     <ConsentManagerProvider
       options={{
-        backendURL: consentBackendUrl,
         consentCategories: ["necessary", "measurement", "marketing"],
         i18n: consentEnglishI18n,
         legalLinks: consentLegalLinks,
-        mode: "hosted",
+        mode: "offline",
         scripts,
-        ...(import.meta.env.DEV ? { overrides: { country: "DE", language: "en" } } : {}),
       }}
     >
       <ConsentBanner />

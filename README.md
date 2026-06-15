@@ -26,7 +26,7 @@ Read [SECURITY.md](SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md) before co
 - Managed inbound and outbound email through the SST-owned mail stack
 - Mailbox-scoped chat with streamed server-side generation and Gmail tools
 - Polar billing through PayKit
-- Self-hosted c15t consent storage and consent-gated analytics
+- Browser-only c15t consent preferences and consent-gated analytics
 
 ## Technology
 
@@ -66,7 +66,6 @@ bun install --frozen-lockfile
 cp .env.example .env.local
 createdb quieter
 bun run db:migrate
-bun run consent:migrate
 bun run dev
 ```
 

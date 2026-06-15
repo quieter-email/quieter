@@ -64,7 +64,6 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "consent:migrate": "turbo run consent:migrate --filter=@quieter/web",
     "db:check": "turbo run db:check --filter=@quieter/database",
     "db:deploy": "turbo run db:deploy --filter=@quieter/database",
     "db:generate": "turbo run db:generate --filter=@quieter/database",
@@ -102,8 +101,7 @@
     "@better-auth/utils": "0.3.1",
     "@tanstack/query-core": "5.100.9",
     "better-auth": "1.5.0",
-    "better-call": "1.3.2",
-    "kysely": "0.28.11"
+    "better-call": "1.3.2"
   },
   "lint-staged": {
     "**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc}": "oxfmt --config oxfmt.json",

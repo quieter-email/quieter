@@ -25,7 +25,6 @@ jobs:
     name: Detect migration changes
     runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
-      consent: ${{ steps.changes.outputs.consent }}
       database: ${{ steps.changes.outputs.database }}
     steps:
       - name: Checkout
@@ -40,21 +39,8 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "consent=true" >> "$GITHUB_OUTPUT"
             echo "database=true" >> "$GITHUB_OUTPUT"
             exit 0
-          fi
-
-          if git diff --quiet "$BEFORE_SHA...HEAD" -- \
-            apps/web/package.json \
-            apps/web/scripts/migrate-consent.ts \
-            apps/web/src/lib/c15t.server.ts \
-            bun.lock \
-            package.json \
-            turbo.json; then
-            echo "consent=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "consent=true" >> "$GITHUB_OUTPUT"
           fi
 
           if git diff --quiet "$BEFORE_SHA...HEAD" -- \
@@ -102,7 +88,7 @@ jobs:
   migration-integration:
     name: Migration integration tests
     needs: changes
-    if: ${{ needs.changes.outputs.database == 'true' || needs.changes.outputs.consent == 'true' }}
+    if: ${{ needs.changes.outputs.database == 'true' }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     services:
@@ -139,16 +125,7 @@ jobs:
         run: bun run db:check
 
       - name: Test committed database migrations
-        if: ${{ needs.changes.outputs.database == 'true' }}
         run: bun run db:test-migrations
-
-      - name: Apply consent migrations
-        if: ${{ needs.changes.outputs.consent == 'true' }}
-        run: bun run consent:migrate
-
-      - name: Verify repeated consent migrations are a no-op
-        if: ${{ needs.changes.outputs.consent == 'true' }}
-        run: bun run consent:migrate
 
   deploy:
     name: Deploy ${{ inputs.stage || 'production' }}
@@ -191,13 +168,6 @@ jobs:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
         run: bun run db:deploy
-
-      - name: Apply production consent migrations
-        if: ${{ env.SST_STAGE == 'production' }}
-        env:
-          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
-          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
-        run: bun run consent:migrate
 
       - name: Deploy SST
         env:

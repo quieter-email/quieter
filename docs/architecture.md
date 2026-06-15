@@ -137,8 +137,8 @@ tokens.
 
 ## Consent and Observability
 
-c15t is self-hosted at `/api/c15t`. Consent migrations run during deployment, never from runtime
-requests.
+c15t runs in offline mode. Consent preferences stay in the browser and do not require an API route,
+database tables, or migrations.
 
 - PostHog and Speed Insights load only after `measurement` consent.
 - Client Sentry remains enabled in production and is disclosed in the privacy policy.

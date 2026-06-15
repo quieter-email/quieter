@@ -25,7 +25,6 @@
         "POLAR_WEBHOOK_SECRET",
         "QUIETER_UNLIMITED_BILLING_EMAILS",
         "BETTER_AUTH_URL",
-        "VITE_PUBLIC_C15T_URL",
         "VITE_PUBLIC_POSTHOG_PROJECT_TOKEN",
         "VITE_PUBLIC_POSTHOG_HOST",
         "VITE_SENTRY_DSN",
@@ -145,21 +144,6 @@
       "outputs": [],
       "interactive": true
     },
-    "consent:migrate": {
-      "dependsOn": ["^build"],
-      "env": [
-        "CI",
-        "DATABASE_MIGRATION_URL",
-        "DATABASE_URL",
-        "GITHUB_ACTIONS",
-        "GITHUB_REF",
-        "GITHUB_REF_PROTECTED",
-        "GITHUB_REPOSITORY",
-        "QUIETER_ALLOW_REMOTE_MIGRATIONS"
-      ],
-      "cache": false,
-      "outputs": []
-    },
     "dev": {
       "dependsOn": ["^build"],
       "env": [
@@ -193,7 +177,6 @@
         "POLAR_WEBHOOK_SECRET",
         "QUIETER_UNLIMITED_BILLING_EMAILS",
         "BETTER_AUTH_URL",
-        "VITE_PUBLIC_C15T_URL",
         "VITE_PUBLIC_POSTHOG_PROJECT_TOKEN",
         "VITE_PUBLIC_POSTHOG_HOST",
         "VITE_SENTRY_DSN",

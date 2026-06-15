@@ -32,7 +32,6 @@ describe("web client environment", () => {
   test("provides public defaults", () => {
     const env = createWebClientEnv({});
 
-    expect(env.VITE_PUBLIC_C15T_URL).toBe("/api/c15t");
     expect(env.VITE_PUBLIC_POSTHOG_HOST).toBe("https://eu.i.posthog.com");
   });
 });

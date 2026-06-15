@@ -8,7 +8,7 @@ Production is not deployed from an ordinary push.
 2. Required CI checks verify formatting, linting, types, tests, schema drift, and migrations.
 3. A maintainer manually dispatches `.github/workflows/sst-deploy.yml`.
 4. The protected GitHub `production` environment requires approval.
-5. Forward database and consent migrations run with the deployment-only migration role.
+5. Forward database migrations run with the deployment-only migration role.
 6. SST updates infrastructure.
 7. SST outputs are synchronized to Vercel.
 8. The Vercel production deploy hook is triggered and monitored.
