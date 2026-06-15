@@ -22,7 +22,6 @@ import {
   getGmailUsefulDetailsQueryKey,
   gmailUsefulDetailsQueryOptions,
 } from "~/lib/gmail/useful-details-query";
-import { getMailboxesQueryKey } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 
 type UsefulDetailsData = RouterOutputs["mail"]["listGmailUsefulDetails"];
@@ -125,15 +124,23 @@ const UsefulDetailCard = ({
         : "Copy reference";
 
   return (
-    <article className="flex min-w-0 items-center gap-2 py-2">
+    <article
+      className={cn(
+        "relative flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 shadow-sm",
+        {
+          "border-border/70 bg-muted/55": detail.kind !== "security_alert",
+          "border-destructive/25 bg-destructive/8": detail.kind === "security_alert",
+        },
+      )}
+    >
       <button
-        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
         onClick={onOpen}
         type="button"
       >
         <span
           className={cn(
-            "flex size-7 shrink-0 items-center justify-center rounded-md bg-muted/60 text-muted-foreground",
+            "flex size-7 shrink-0 items-center justify-center rounded-md bg-background/70 text-muted-foreground",
             {
               "text-destructive": detail.kind === "security_alert",
               "text-foreground":
@@ -159,7 +166,7 @@ const UsefulDetailCard = ({
 
       {verificationCode ? (
         <button
-          className="rounded-md px-2 py-1 font-mono text-base font-semibold tracking-[0.12em] text-foreground outline-none hover:bg-background focus-visible:ring-2 focus-visible:ring-ring/30"
+          className="rounded-md px-2 py-1 font-mono text-base font-semibold tracking-[0.12em] text-foreground outline-none hover:bg-background/80 focus-visible:ring-2 focus-visible:ring-ring/30"
           onClick={() => void copyText(verificationCode, "Code copied.")}
           title="Copy code"
           type="button"
@@ -171,7 +178,7 @@ const UsefulDetailCard = ({
           <IconButtonTooltip label={copyLabel}>
             <button
               aria-label={copyLabel}
-              className="rounded-md p-1.5 text-muted-foreground outline-none hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
+              className="rounded-md p-1.5 text-muted-foreground outline-none hover:bg-background/80 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
               onClick={() => void copyText(copyValue, "Copied.")}
               type="button"
             >
@@ -184,7 +191,7 @@ const UsefulDetailCard = ({
       <IconButtonTooltip label="Dismiss">
         <button
           aria-label={`Dismiss ${kindLabels[detail.kind].toLowerCase()}`}
-          className="rounded-md p-1.5 text-muted-foreground outline-none hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
+          className="rounded-md p-1.5 text-muted-foreground outline-none hover:bg-background/80 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
           onClick={onDismiss}
           type="button"
         >
@@ -204,7 +211,7 @@ export const GmailUsefulDetails = ({
 }) => {
   const queryClient = useQueryClient();
   const queryKey = getGmailUsefulDetailsQueryKey(mailboxId);
-  const { data: detailsData, isFetching } = useQuery(gmailUsefulDetailsQueryOptions(mailboxId));
+  const { data: detailsData } = useQuery(gmailUsefulDetailsQueryOptions(mailboxId));
   const [now, setNow] = useState(() => Date.now());
   const dismissMutation = useMutation({
     ...orpc.mail.dismissGmailUsefulDetail.mutationOptions(),
@@ -225,29 +232,7 @@ export const GmailUsefulDetails = ({
       if (context?.previous) {
         queryClient.setQueryData(queryKey, context.previous);
       }
-      toast.error("Could not dismiss this detail.");
-    },
-  });
-  const stopMutation = useMutation({
-    ...orpc.mail.setGmailUsefulDetails.mutationOptions(),
-    onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<UsefulDetailsData>(queryKey);
-      queryClient.setQueryData<UsefulDetailsData>(queryKey, {
-        enabled: false,
-        items: [],
-        nextRelevantAt: null,
-      });
-      return { previous };
-    },
-    onError: (_error, _variables, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(queryKey, context.previous);
-      }
-      toast.error("Could not stop showing useful details.");
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() });
+      toast.error("Could not dismiss this update.");
     },
   });
 
@@ -279,59 +264,41 @@ export const GmailUsefulDetails = ({
   }, [detailsData?.nextRelevantAt, mailboxId, queryClient]);
 
   const visibleItems = items.filter((item) => new Date(item.expiresAt).getTime() > now);
-  if (!detailsData?.enabled) {
+  if (!detailsData?.enabled || visibleItems.length === 0) {
     return null;
   }
 
-  if (visibleItems.length === 0) {
-    return (
-      <section
-        aria-label="Useful details"
-        className="flex min-h-9 items-center gap-2 border-b border-border/60 px-3 py-2 text-[11px] text-muted-foreground"
-      >
-        <span className="font-medium text-foreground/80">Useful details</span>
-        <span className="min-w-0 flex-1 truncate">
-          {isFetching
-            ? "Checking new mail…"
-            : "Nothing timely found. New codes, deliveries, and deadlines appear here."}
-        </span>
-        <button
-          className="shrink-0 rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
-          disabled={stopMutation.isPending}
-          onClick={() => stopMutation.mutate({ enabled: false, mailboxId })}
-          type="button"
-        >
-          Stop
-        </button>
-      </section>
-    );
-  }
+  const hasStack = visibleItems.length > 1;
 
   return (
-    <section aria-label="Useful details" className="border-b border-border/60 px-3 py-1">
-      <div className="flex items-center justify-between gap-3 py-1">
-        <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-          Useful details
-        </p>
-        <button
-          className="flex items-center gap-1 text-[10px] text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
-          disabled={stopMutation.isPending}
-          onClick={() => stopMutation.mutate({ enabled: false, mailboxId })}
-          type="button"
-        >
-          <HugeiconsIcon aria-hidden className="size-3" icon={Cancel01Icon} />
-          Stop showing
-        </button>
-      </div>
-      <div className="divide-y divide-border/50">
-        {visibleItems.map((detail) => (
-          <UsefulDetailCard
-            detail={detail}
+    <section aria-label="Timely mail updates" className="px-3 pt-1.5 pb-2">
+      <div className="relative flex flex-col gap-1.5">
+        {hasStack && (
+          <>
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-2 top-2 bottom-0 -z-20 rounded-lg border border-border/35 bg-muted/20 shadow-sm"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-1 top-1 bottom-0 -z-10 rounded-lg border border-border/45 bg-muted/30 shadow-sm"
+            />
+          </>
+        )}
+        {visibleItems.map((detail, index) => (
+          <div
+            className={cn("relative", {
+              "z-10": hasStack && index === 0,
+            })}
             key={detail.id}
-            now={now}
-            onDismiss={() => dismissMutation.mutate({ id: detail.id, mailboxId })}
-            onOpen={() => onActivateMessage(detail.gmailMessageId)}
-          />
+          >
+            <UsefulDetailCard
+              detail={detail}
+              now={now}
+              onDismiss={() => dismissMutation.mutate({ id: detail.id, mailboxId })}
+              onOpen={() => onActivateMessage(detail.gmailMessageId)}
+            />
+          </div>
         ))}
       </div>
     </section>

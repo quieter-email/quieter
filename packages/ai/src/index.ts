@@ -37,6 +37,9 @@ export { chatModels, chatModelSchema, defaultChatModel, type ChatModel } from ".
 export {
   classifyGmailMessage,
   GMAIL_AUTO_LABEL_MODEL,
+  getAutoLabelEligibleLabels,
+  resolveAutoLabelDecisions,
+  sanitizeAutoLabelSelection,
   type GmailAutoLabelCandidate,
 } from "./classify-gmail-message";
 export {

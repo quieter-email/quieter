@@ -110,6 +110,11 @@ const MessageRowContent = ({
   const isActionPending =
     pendingActions.isMessageActionPending(anchorMessage.id) ||
     pendingActions.isThreadActionPending(thread.threadId);
+  const metaTextClassName = cn("text-xs tabular-nums", {
+    "font-semibold text-foreground/90": unread,
+    "text-muted-foreground": !unread,
+    "text-foreground/75": isActive && !unread,
+  });
   const selectionAriaLabel = isDraftMailbox ? "Select draft" : "Select conversation";
   const handleSelectionPress = (event: MouseEvent<HTMLElement>) => {
     if (event.button !== 0) {
@@ -298,14 +303,7 @@ const MessageRowContent = ({
                       }
                     />
                   )}
-                  <span
-                    className={cn("text-xs font-medium tabular-nums", {
-                      "font-semibold text-foreground/90": unread,
-                      "text-muted-foreground": !unread,
-                      "text-foreground/75": isActive && !unread,
-                    })}
-                    suppressHydrationWarning
-                  >
+                  <span className={metaTextClassName} suppressHydrationWarning>
                     {date || "--"}
                   </span>
                 </div>

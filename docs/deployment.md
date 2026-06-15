@@ -7,12 +7,11 @@ Production is not deployed from Vercel git pushes.
 1. Changes reach protected `main` through a reviewed pull request.
 2. Required CI checks verify formatting, linting, types, tests, schema drift, and migrations.
 3. Merging to `main` triggers `.github/workflows/sst-deploy.yml`. Maintainers can also dispatch it manually.
-4. The protected GitHub `production` environment requires approval.
-5. Forward database migrations run with the deployment-only migration role.
-6. SST updates infrastructure.
-7. SST outputs are synchronized to Vercel.
-8. The Vercel production deploy hook is triggered and monitored.
-9. The Gmail credential rotation endpoint runs.
+4. Forward database migrations run with the deployment-only migration role.
+5. SST updates infrastructure.
+6. SST outputs are synchronized to Vercel.
+7. The Vercel production deploy hook is triggered and monitored.
+8. The Gmail credential rotation endpoint runs.
 
 `vercel.json` disables commit-triggered deployments.
 
@@ -101,6 +100,5 @@ or infrastructure names in user-facing product copy.
 - Pull request is approved and required checks pass.
 - Migration SQL is reviewed and expand-safe.
 - Runtime and migration credentials remain separate.
-- Production environment approval is expected and assigned.
 - Provider quotas and billing configuration are understood.
 - A recovery point exists before risky schema or infrastructure work.
