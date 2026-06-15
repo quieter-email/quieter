@@ -2,11 +2,11 @@
 
 ## Release Model
 
-Production is not deployed from an ordinary push.
+Production is not deployed from Vercel git pushes.
 
 1. Changes reach protected `main` through a reviewed pull request.
 2. Required CI checks verify formatting, linting, types, tests, schema drift, and migrations.
-3. A maintainer manually dispatches `.github/workflows/sst-deploy.yml`.
+3. Merging to `main` triggers `.github/workflows/sst-deploy.yml`. Maintainers can also dispatch it manually.
 4. The protected GitHub `production` environment requires approval.
 5. Forward database migrations run with the deployment-only migration role.
 6. SST updates infrastructure.
