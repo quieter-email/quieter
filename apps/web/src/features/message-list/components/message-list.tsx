@@ -2,9 +2,11 @@
 
 import { Delete01Icon, Delete02Icon, Mail01Icon, MailOpen02Icon } from "@hugeicons/core-free-icons";
 import { toast } from "@quieter/ui";
+import { useQuery } from "@tanstack/react-query";
 import { m } from "motion/react";
 import type { MessageListItem } from "~/lib/gmail/gmail";
 import { MessageListSearch } from "~/features/message-search/components/message-list-search";
+import { labelsQueryOptions } from "~/lib/gmail/labels-query";
 import { buildThreadListEntries, type ThreadListEntry } from "~/lib/gmail/thread-list";
 import type { MessageListBulkAction, MessageListProps } from "./message-list-types";
 import { GmailUsefulDetails } from "./gmail-useful-details";
@@ -33,6 +35,9 @@ const buildDraftListEntry = (message: MessageListItem): ThreadListEntry => ({
 });
 
 export const MessageList = (props: MessageListProps) => {
+  const { data: gmailLabels = [] } = useQuery(
+    labelsQueryOptions(props.mailboxId, props.mailboxProvider === "gmail"),
+  );
   const flattenedMessages = props.messages.flatMap((page) => page.messages);
   const threadedMessages =
     props.activeMailbox === "drafts"
@@ -183,6 +188,7 @@ export const MessageList = (props: MessageListProps) => {
 
       <m.div className="flex min-h-0 flex-1 flex-col" {...messageListContentMotion}>
         <MessageListScrollPane
+          gmailLabels={gmailLabels}
           key={scrollPaneKey}
           list={props}
           selection={selection}

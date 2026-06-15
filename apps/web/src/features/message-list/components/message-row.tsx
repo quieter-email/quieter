@@ -5,8 +5,10 @@ import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { splitMailAddressList } from "@quieter/mail/compose";
 import { cn } from "@quieter/ui";
 import { type KeyboardEvent, type MouseEvent } from "react";
+import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import { SenderAvatar } from "~/components/sender-avatar";
+import { MessageLabels } from "~/features/message-labels/components/message-labels";
 import { createMailboxThreadMessageActionHandlers } from "~/features/message-thread/components/message-action-handlers";
 import { MessageActionsContextMenu } from "~/features/message-thread/components/message-actions";
 import { formatMessageListDate, parseSender } from "~/lib/gmail/message-utils";
@@ -31,6 +33,7 @@ const getSelectionGesture = (event: MessageRowGestureEvent): MessageRowSelection
 
 type MessageRowProps = {
   activeMailbox: MessageListProps["activeMailbox"];
+  gmailLabels: GmailLabelListItem[];
   isActive?: boolean;
   isSelected?: boolean;
   isSelectionMode?: boolean;
@@ -73,6 +76,7 @@ const MessageRowMetaBadge = ({
 
 const MessageRowContent = ({
   activeMailbox,
+  gmailLabels,
   isActive,
   isSelected,
   isSelectionMode,
@@ -99,6 +103,9 @@ const MessageRowContent = ({
   const unread = !isDraftMailbox && thread.unreadCount > 0;
   const threaded = thread.messageCount > 1;
   const attachmentCount = thread.attachmentCount;
+  const threadLabelIds = Array.from(
+    new Set(thread.messages.flatMap((message) => message.labelIds ?? [])),
+  );
   const showSelectionControl = !!isSelectionMode;
   const isActionPending =
     pendingActions.isMessageActionPending(anchorMessage.id) ||
@@ -304,21 +311,32 @@ const MessageRowContent = ({
                 </div>
               </div>
 
-              <p
-                className={cn("w-full min-w-0 truncate text-left text-[13px]/4.5", {
-                  "font-medium text-foreground": unread,
-                  "text-muted-foreground": !unread,
-                })}
-              >
-                {isDraftMailbox ? (
-                  <>
-                    <span className="mr-2 font-medium text-destructive">Draft</span>
-                    {subject}
-                  </>
-                ) : (
-                  subject
+              <div className="flex w-full min-w-0 items-center gap-1.5">
+                <p
+                  className={cn("min-w-0 flex-1 truncate text-left text-[13px]/4.5", {
+                    "font-medium text-foreground": unread,
+                    "text-muted-foreground": !unread,
+                  })}
+                >
+                  {isDraftMailbox ? (
+                    <>
+                      <span className="mr-2 font-medium text-destructive">Draft</span>
+                      {subject}
+                    </>
+                  ) : (
+                    subject
+                  )}
+                </p>
+                {mailboxProvider === "gmail" && (
+                  <MessageLabels
+                    className="shrink-0 flex-nowrap"
+                    compact
+                    labelIds={threadLabelIds}
+                    labels={gmailLabels}
+                    limit={2}
+                  />
                 )}
-              </p>
+              </div>
             </div>
           </div>
         </button>
@@ -331,6 +349,7 @@ export const MessageRow = ({
   activeMailbox,
   className,
   dataIndex,
+  gmailLabels,
   isActive,
   isSelected,
   isSelectionMode,
@@ -356,6 +375,7 @@ export const MessageRow = ({
     >
       <MessageRowContent
         activeMailbox={activeMailbox}
+        gmailLabels={gmailLabels}
         isActive={isActive}
         isSelected={isSelected}
         isSelectionMode={isSelectionMode}

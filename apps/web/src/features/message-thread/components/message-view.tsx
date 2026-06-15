@@ -40,13 +40,16 @@ import {
   findLinkedDraftForMessage,
   hasDistinctReplyAllRecipients,
 } from "~/features/compose";
+import { MessageLabels } from "~/features/message-labels/components/message-labels";
 import {
   hasRenderableMessageBody,
+  type GmailLabelListItem,
   isMessageUnread,
   type MailboxCategory,
   MAILBOX_LABELS,
   type MessageListItem,
 } from "~/lib/gmail/gmail";
+import { labelsQueryOptions } from "~/lib/gmail/labels-query";
 import { getMessageInspectorOptions } from "~/lib/gmail/message-inspector-query";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
@@ -72,6 +75,7 @@ type MessageViewProps = {
 };
 
 type MessageHeaderContentProps = {
+  gmailLabels: GmailLabelListItem[];
   message: MessageListItem;
   className?: string;
   headerActions?: ReactNode;
@@ -130,6 +134,7 @@ const getMessageUnsubscribeAction = (
 
 const MessageHeaderContent = ({
   className,
+  gmailLabels,
   headerActions,
   isExpanded,
   message,
@@ -181,6 +186,8 @@ const MessageHeaderContent = ({
       </div>
 
       {preview && <p className="mt-1 truncate text-sm text-foreground">{preview}</p>}
+
+      <MessageLabels className="mt-1.5" labelIds={message.labelIds} labels={gmailLabels} />
 
       {showParticipants && (
         <div className="mt-1.5 space-y-1">
@@ -537,6 +544,7 @@ const ThreadMessageCard = ({
   expanded,
   isLoading,
   linkedDraftMessage,
+  gmailLabels,
   mailboxId,
   message,
   onComposeDraftRequested,
@@ -549,6 +557,7 @@ const ThreadMessageCard = ({
   isLoading?: boolean;
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
+  gmailLabels: GmailLabelListItem[];
   mailboxId: string;
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
@@ -588,6 +597,7 @@ const ThreadMessageCard = ({
     >
       <MessageHeaderContent
         className="p-4 sm:px-5 sm:py-4"
+        gmailLabels={gmailLabels}
         headerActions={
           expanded ? (
             <MessageHeaderActions
@@ -635,6 +645,7 @@ const SingleMessageCard = ({
   currentUserEmail,
   isLoading,
   linkedDraftMessage,
+  gmailLabels,
   mailboxId,
   message,
   onComposeDraftRequested,
@@ -645,6 +656,7 @@ const SingleMessageCard = ({
   isLoading?: boolean;
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
+  gmailLabels: GmailLabelListItem[];
   mailboxId: string;
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
@@ -679,6 +691,7 @@ const SingleMessageCard = ({
     <section>
       <MessageHeaderContent
         className="p-4 sm:p-5"
+        gmailLabels={gmailLabels}
         headerActions={
           <MessageHeaderActions
             onContinueDraft={linkedDraftMessage ? openLinkedDraft : undefined}
@@ -715,6 +728,7 @@ const ThreadMessageList = ({
   allThreadMessages,
   currentUserEmail,
   isLoading,
+  gmailLabels,
   mailboxId,
   messages,
   onComposeDraftRequested,
@@ -724,6 +738,7 @@ const ThreadMessageList = ({
   allThreadMessages: MessageListItem[];
   currentUserEmail?: string | null;
   isLoading?: boolean;
+  gmailLabels: GmailLabelListItem[];
   isActionPending?: boolean;
   mailboxId: string;
   messages: MessageListItem[];
@@ -744,6 +759,7 @@ const ThreadMessageList = ({
           <ThreadMessageCard
             currentUserEmail={currentUserEmail}
             expanded={isExpanded}
+            gmailLabels={gmailLabels}
             isLoading={isLoading}
             isActionPending={isActionPending}
             key={threadMessage.id}
@@ -776,6 +792,9 @@ export const MessageView = ({
   onComposeDraftRequested,
   pendingActions,
 }: MessageViewProps) => {
+  const { data: gmailLabels = [] } = useQuery(
+    labelsQueryOptions(mailboxId, mailboxProvider === "gmail"),
+  );
   const threadQuery = useQuery({
     // react-doctor-disable-next-line react-doctor/no-event-handler
     ...getThreadWithDetailsOptions(mailboxId, message.threadId),
@@ -916,6 +935,7 @@ export const MessageView = ({
         <ThreadMessageList
           allThreadMessages={threadMessages}
           currentUserEmail={currentUserEmail}
+          gmailLabels={gmailLabels}
           isLoading={isBodyRefreshPending}
           isActionPending={isActionPending}
           key={message.threadId}
@@ -930,6 +950,7 @@ export const MessageView = ({
         visibleMessages.map((threadMessage) => (
           <SingleMessageCard
             currentUserEmail={currentUserEmail}
+            gmailLabels={gmailLabels}
             isLoading={isBodyRefreshPending}
             isActionPending={isActionPending}
             key={threadMessage.id}

@@ -125,7 +125,7 @@ const UsefulDetailCard = ({
         : "Copy reference";
 
   return (
-    <article className="flex min-w-0 items-center gap-2 rounded-xl border border-border/70 bg-muted/35 p-2.5">
+    <article className="flex min-w-0 items-center gap-2 py-2">
       <button
         className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
         onClick={onOpen}
@@ -133,7 +133,7 @@ const UsefulDetailCard = ({
       >
         <span
           className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground shadow-xs",
+            "flex size-7 shrink-0 items-center justify-center rounded-md bg-muted/60 text-muted-foreground",
             {
               "text-destructive": detail.kind === "security_alert",
               "text-foreground":
@@ -204,7 +204,7 @@ export const GmailUsefulDetails = ({
 }) => {
   const queryClient = useQueryClient();
   const queryKey = getGmailUsefulDetailsQueryKey(mailboxId);
-  const { data: detailsData } = useQuery(gmailUsefulDetailsQueryOptions(mailboxId));
+  const { data: detailsData, isFetching } = useQuery(gmailUsefulDetailsQueryOptions(mailboxId));
   const [now, setNow] = useState(() => Date.now());
   const dismissMutation = useMutation({
     ...orpc.mail.dismissGmailUsefulDetail.mutationOptions(),
@@ -279,15 +279,39 @@ export const GmailUsefulDetails = ({
   }, [detailsData?.nextRelevantAt, mailboxId, queryClient]);
 
   const visibleItems = items.filter((item) => new Date(item.expiresAt).getTime() > now);
-  if (!detailsData?.enabled || visibleItems.length === 0) {
+  if (!detailsData?.enabled) {
     return null;
   }
 
+  if (visibleItems.length === 0) {
+    return (
+      <section
+        aria-label="Useful details"
+        className="flex min-h-9 items-center gap-2 border-b border-border/60 px-3 py-2 text-[11px] text-muted-foreground"
+      >
+        <span className="font-medium text-foreground/80">Useful details</span>
+        <span className="min-w-0 flex-1 truncate">
+          {isFetching
+            ? "Checking new mail…"
+            : "Nothing timely found. New codes, deliveries, and deadlines appear here."}
+        </span>
+        <button
+          className="shrink-0 rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
+          disabled={stopMutation.isPending}
+          onClick={() => stopMutation.mutate({ enabled: false, mailboxId })}
+          type="button"
+        >
+          Stop
+        </button>
+      </section>
+    );
+  }
+
   return (
-    <section aria-label="Ready for you" className="border-b border-border/60 px-3 py-2">
-      <div className="mb-1.5 flex items-center justify-between gap-3 px-0.5">
+    <section aria-label="Useful details" className="border-b border-border/60 px-3 py-1">
+      <div className="flex items-center justify-between gap-3 py-1">
         <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-          Ready for you
+          Useful details
         </p>
         <button
           className="flex items-center gap-1 text-[10px] text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
@@ -299,7 +323,7 @@ export const GmailUsefulDetails = ({
           Stop showing
         </button>
       </div>
-      <div className="grid gap-1.5">
+      <div className="divide-y divide-border/50">
         {visibleItems.map((detail) => (
           <UsefulDetailCard
             detail={detail}
