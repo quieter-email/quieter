@@ -258,6 +258,12 @@ const SidebarContent = ({
   const [hoveredChatId, setHoveredChatId] = useState<string | null>(null);
   const highlightedChatId = hoveredChatId ?? activeChatId;
 
+  useEffect(() => {
+    if (hoveredChatId && !chats.some((chat) => chat.id === hoveredChatId)) {
+      setHoveredChatId(null);
+    }
+  }, [chats, hoveredChatId]);
+
   const handleComposeNewMail = () => {
     onComposeNewMail();
     onRequestClose?.();
