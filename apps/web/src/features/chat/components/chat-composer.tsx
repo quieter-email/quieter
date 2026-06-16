@@ -57,12 +57,13 @@ export const ChatComposer = ({
       />
       <div className="flex items-center justify-between gap-1 px-2 pb-2">
         <Select
+          items={chatModels.map(({ label, value }) => ({ label, value }))}
           onValueChange={(value) => {
             if (value) onModelChange(value);
           }}
           value={model}
         >
-          <SelectTrigger aria-label="Response style" disabled={disabled || busy} variant="ghost">
+          <SelectTrigger aria-label="Model" disabled={disabled || busy} variant="ghost">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
