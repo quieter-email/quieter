@@ -23,7 +23,7 @@ import {
   Input,
   LinkButton,
 } from "@quieter/ui";
-import { AnimatePresence, domAnimation, LayoutGroup, LazyMotion, m } from "motion/react";
+import { AnimatePresence, domMax, LazyMotion, m } from "motion/react";
 import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -114,7 +114,6 @@ type SidebarChatRowProps = {
   animateEntrance: boolean;
   chat: SidebarChat;
   editingTitle: string;
-  highlightedChatId: string | null;
   index: number;
   isActive: boolean;
   isEditing: boolean;
@@ -124,7 +123,6 @@ type SidebarChatRowProps = {
   onRenameKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
   onRenameSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onSelect: (chatId: string) => void;
-  onHoverChange: (chatId: string | null) => void;
   onStartRename: (chat: SidebarChat) => void;
 };
 
@@ -132,7 +130,6 @@ const SidebarChatRow = ({
   animateEntrance,
   chat,
   editingTitle,
-  highlightedChatId,
   index,
   isActive,
   isEditing,
@@ -142,7 +139,6 @@ const SidebarChatRow = ({
   onRenameKeyDown,
   onRenameSubmit,
   onSelect,
-  onHoverChange,
   onStartRename,
 }: SidebarChatRowProps) => {
   const title = chat.title?.trim() || "New chat";
@@ -150,13 +146,9 @@ const SidebarChatRow = ({
   return (
     <m.div
       key={chat.id}
-      className="relative w-full rounded-md will-change-[transform,opacity,filter]"
+      className="w-full will-change-[transform,opacity,filter]"
       initial={getSidebarEntranceInitial(animateEntrance)}
       animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-      onBlur={() => onHoverChange(null)}
-      onFocus={() => onHoverChange(chat.id)}
-      onMouseEnter={() => onHoverChange(chat.id)}
-      onMouseLeave={() => onHoverChange(null)}
       transition={{
         delay: getSidebarEntranceDelay(index + 3),
         duration: 0.5,
@@ -178,14 +170,9 @@ const SidebarChatRow = ({
         </form>
       ) : (
         <div className="group flex w-full items-center rounded-md">
-          <AnimatedHoverSurface
-            layoutId="chat-sidebar-hover"
-            visible={highlightedChatId === chat.id}
-          />
           <Button
             aria-current={isActive ? "page" : undefined}
-            className="min-w-0 flex-1 justify-start gap-3 bg-transparent px-3 text-left text-foreground"
-            hoverLayer={false}
+            className="min-w-0 flex-1 justify-start gap-3 px-3 text-left text-foreground"
             onClick={() => onSelect(chat.id)}
             size="sm"
             type="button"
@@ -255,14 +242,7 @@ const SidebarContent = ({
 }: SidebarContentProps) => {
   const isInboxView = selectedView === "inbox";
   const [editingChat, setEditingChat] = useState<{ id: string; title: string } | null>(null);
-  const [hoveredChatId, setHoveredChatId] = useState<string | null>(null);
-  const highlightedChatId = hoveredChatId ?? activeChatId;
-
-  useEffect(() => {
-    if (hoveredChatId && !chats.some((chat) => chat.id === hoveredChatId)) {
-      setHoveredChatId(null);
-    }
-  }, [chats, hoveredChatId]);
+  const [isSettingsHovered, setIsSettingsHovered] = useState(false);
 
   const handleComposeNewMail = () => {
     onComposeNewMail();
@@ -421,7 +401,6 @@ const SidebarContent = ({
       {isInboxView && (
         <div className="mt-2 min-h-0 flex-1 p-1">
           <SidebarMailboxNav
-            animateEntrance={animateEntrance}
             mailboxProvider={selectedMailboxProvider}
             onSelectMailbox={handleSelectMailbox}
             selectedMailbox={selectedMailbox}
@@ -461,37 +440,33 @@ const SidebarContent = ({
             </Button>
           </m.div>
 
-          <LayoutGroup id="chat-sidebar-hover">
-            <nav
-              aria-label="Chats"
-              className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1"
-            >
-              {chats.map((chat, index) => {
-                const isActive = chat.id === activeChatId;
+          <nav
+            aria-label="Chats"
+            className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1"
+          >
+            {chats.map((chat, index) => {
+              const isActive = chat.id === activeChatId;
 
-                return (
-                  <SidebarChatRow
-                    key={chat.id}
-                    animateEntrance={animateEntrance}
-                    chat={chat}
-                    editingTitle={editingChat?.id === chat.id ? editingChat.title : ""}
-                    highlightedChatId={highlightedChatId}
-                    index={index}
-                    isActive={isActive}
-                    isEditing={editingChat?.id === chat.id}
-                    onCancelRename={() => setEditingChat(null)}
-                    onDelete={onDeleteChat}
-                    onEditingTitleChange={(title) => setEditingChat({ id: chat.id, title })}
-                    onHoverChange={setHoveredChatId}
-                    onRenameKeyDown={handleRenameKeyDown}
-                    onRenameSubmit={submitRenameChat}
-                    onSelect={handleSelectChat}
-                    onStartRename={startRenameChat}
-                  />
-                );
-              })}
-            </nav>
-          </LayoutGroup>
+              return (
+                <SidebarChatRow
+                  key={chat.id}
+                  animateEntrance={animateEntrance}
+                  chat={chat}
+                  editingTitle={editingChat?.id === chat.id ? editingChat.title : ""}
+                  index={index}
+                  isActive={isActive}
+                  isEditing={editingChat?.id === chat.id}
+                  onCancelRename={() => setEditingChat(null)}
+                  onDelete={onDeleteChat}
+                  onEditingTitleChange={(title) => setEditingChat({ id: chat.id, title })}
+                  onRenameKeyDown={handleRenameKeyDown}
+                  onRenameSubmit={submitRenameChat}
+                  onSelect={handleSelectChat}
+                  onStartRename={startRenameChat}
+                />
+              );
+            })}
+          </nav>
         </>
       )}
 
@@ -501,24 +476,31 @@ const SidebarContent = ({
         animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
         transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
       >
-        <LinkButton
-          aria-label="Settings"
-          className="group w-full justify-start"
-          onClick={onRequestClose}
-          search={{
-            from: "/",
-            tab: "general",
-          }}
-          variant="ghost"
-          to="/settings"
+        <div
+          className="relative rounded-md"
+          onMouseEnter={() => setIsSettingsHovered(true)}
+          onMouseLeave={() => setIsSettingsHovered(false)}
         >
-          <HugeiconsIcon
-            className="size-4 shrink-0 rotate-0 transition-transform duration-1000 ease-in-out group-hover:rotate-360"
-            icon={Settings01Icon}
-            strokeWidth={1.5}
-          />
-          Settings
-        </LinkButton>
+          <AnimatedHoverSurface layoutId="sidebar-settings-hover" visible={isSettingsHovered} />
+          <LinkButton
+            aria-label="Settings"
+            className="group relative z-10 w-full justify-start bg-transparent hover:bg-transparent active:scale-100"
+            onClick={onRequestClose}
+            search={{
+              from: "/",
+              tab: "general",
+            }}
+            variant="ghost"
+            to="/settings"
+          >
+            <HugeiconsIcon
+              className="size-4 shrink-0 rotate-0 transition-transform duration-1000 ease-in-out group-hover:rotate-360"
+              icon={Settings01Icon}
+              strokeWidth={1.5}
+            />
+            Settings
+          </LinkButton>
+        </div>
       </m.div>
     </div>
   );
@@ -562,7 +544,7 @@ export const MailSidebar = ({
   }, [isMobileOpen]);
 
   return (
-    <LazyMotion features={domAnimation}>
+    <LazyMotion features={domMax}>
       <>
         <aside
           className="relative hidden h-full shrink-0 bg-transparent text-foreground lg:flex lg:flex-col"

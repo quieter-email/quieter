@@ -33,15 +33,15 @@ import {
 } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LayoutGroup, m } from "motion/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { GmailLabelListItem } from "~/lib/gmail/gmail";
-import { AnimatedHoverSurface } from "~/components/animated-hover-surface";
 import { serializeStructuredSearchState } from "~/features/message-search/components/message-list-search/message-list-search-utils";
 import {
   getUserLabels,
   normalizeLabelSelectionKey,
   parseStructuredSearchQuery,
 } from "~/features/message-search/state/message-list-search-state";
+import { SidebarNavItem } from "~/features/navigation/components/sidebar-nav-item";
 import { getLabelsQueryKey, labelsQueryOptions } from "~/lib/gmail/labels-query";
 import { orpc } from "~/lib/orpc";
 
@@ -73,7 +73,7 @@ const SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY = "quieter:sidebar-label-visibility";
 
 const getSidebarEntranceDelay = (step: number) => step * 0.1;
 const getSidebarEntranceInitial = (animateEntrance: boolean) =>
-  animateEntrance ? { opacity: 0, x: -20, filter: "blur(20px)" } : false;
+  animateEntrance ? { opacity: 0, filter: "blur(20px)" } : false;
 
 const updateLabelFilter = (searchQuery: string, labelName: string, enabled: boolean) => {
   const state = parseStructuredSearchQuery(searchQuery);
@@ -123,7 +123,30 @@ export const SidebarLabelNav = ({
   const [editingLabel, setEditingLabel] = useState<EditingLabel>(null);
   const [editingLabelDetails, setEditingLabelDetails] = useState<EditingLabelDetails | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const labelNavRef = useRef<HTMLElement>(null);
   const [hoveredLabelId, setHoveredLabelId] = useState<string | null>(null);
+  const [exitingLabelId, setExitingLabelId] = useState<string | null>(null);
+  const hoverEnterRef = useRef(false);
+
+  const setLabelHover = (labelId: string) => {
+    hoverEnterRef.current = hoveredLabelId === null && exitingLabelId === null;
+    setExitingLabelId(null);
+    setHoveredLabelId(labelId);
+  };
+
+  const clearLabelHover = () => {
+    if (hoveredLabelId !== null) {
+      setExitingLabelId(hoveredLabelId);
+    }
+    hoverEnterRef.current = false;
+    setHoveredLabelId(null);
+  };
+
+  const clearLabelHoverIfLeavingNav = (nextTarget: EventTarget | null) => {
+    if (!nextTarget || !labelNavRef.current?.contains(nextTarget as Node)) {
+      clearLabelHover();
+    }
+  };
   const [hiddenLabelState, setHiddenLabelState] = useState<HiddenLabelState>(() => ({
     mailboxId,
     value: readHiddenLabelIds(mailboxId),
@@ -299,8 +322,13 @@ export const SidebarLabelNav = ({
         </IconButtonTooltip>
       </m.div>
 
-      <LayoutGroup id="label-sidebar-hover">
-        <nav aria-label="Labels" className="flex flex-col gap-0.5">
+      <LayoutGroup id="label-sidebar">
+        <nav
+          ref={labelNavRef}
+          aria-label="Labels"
+          className="flex flex-col"
+          onMouseLeave={clearLabelHover}
+        >
           {areLabelsPending ? (
             <m.p
               className="px-2 py-1 text-xs text-muted-foreground will-change-[transform,opacity,filter]"
@@ -329,55 +357,48 @@ export const SidebarLabelNav = ({
               No labels shown.
             </m.p>
           ) : (
-            visibleUserLabels.map((label, index) => {
+            visibleUserLabels.map((label) => {
               const isActive = selectedLabelKeys.has(normalizeLabelSelectionKey(label.name));
+              const isHovered = hoveredLabelId === label.id;
+              const isHoverExiting = exitingLabelId === label.id;
+
               return (
-                <m.div
+                <SidebarNavItem
                   key={label.id}
-                  className="relative w-full rounded-md will-change-[transform,opacity,filter]"
-                  initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
-                  animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-                  onBlur={() => setHoveredLabelId(null)}
-                  onFocus={() => setHoveredLabelId(label.id)}
-                  onMouseEnter={() => setHoveredLabelId(label.id)}
-                  onMouseLeave={() => setHoveredLabelId(null)}
-                  transition={{
-                    delay: getSidebarEntranceDelay(index + 9),
-                    duration: 0.5,
-                    ease: "easeOut",
-                  }}
+                  active={isActive}
+                  aria-pressed={isActive}
+                  className={cn(
+                    "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light",
+                    {
+                      "text-foreground": isActive || isHovered,
+                      "text-muted-foreground": !isActive && !isHovered,
+                    },
+                  )}
+                  hover={isHovered}
+                  hoverEnter={isHovered && hoverEnterRef.current}
+                  hoverExiting={isHoverExiting}
+                  hoverLayoutId="label-sidebar-hover"
+                  onBlur={(event) => clearLabelHoverIfLeavingNav(event.relatedTarget)}
+                  onClick={() => onSearch(updateLabelFilter(searchQuery, label.name, !isActive))}
+                  onFocus={() => setLabelHover(label.id)}
+                  onHoverExitComplete={() => setExitingLabelId(null)}
+                  onMouseEnter={() => setLabelHover(label.id)}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
                 >
-                  <AnimatedHoverSurface
-                    layoutId="label-sidebar-hover"
-                    visible={hoveredLabelId === label.id}
+                  <HugeiconsIcon
+                    aria-hidden
+                    className={cn("shrink-0", {
+                      "text-primary": isActive,
+                      "text-foreground": !isActive && isHovered,
+                      "text-muted-foreground": !isActive && !isHovered,
+                    })}
+                    icon={Tag01Icon}
+                    strokeWidth={1.5}
                   />
-                  <Button
-                    aria-pressed={isActive}
-                    className={cn(
-                      "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light text-foreground",
-                      {
-                        "bg-muted": isActive,
-                        "bg-transparent": !isActive,
-                      },
-                    )}
-                    hoverLayer={false}
-                    onClick={() => onSearch(updateLabelFilter(searchQuery, label.name, !isActive))}
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                  >
-                    <HugeiconsIcon
-                      aria-hidden
-                      className={cn("shrink-0", {
-                        "text-primary": isActive,
-                        "text-muted-foreground": !isActive,
-                      })}
-                      icon={Tag01Icon}
-                      strokeWidth={1.5}
-                    />
-                    <span className="min-w-0 truncate">{label.name}</span>
-                  </Button>
-                </m.div>
+                  <span className="min-w-0 truncate">{label.name}</span>
+                </SidebarNavItem>
               );
             })
           )}

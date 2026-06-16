@@ -151,6 +151,7 @@ const toMailboxListItem = (
     emailAddress: string;
     grantRole: MailboxGrantRole | null;
     gmailAutoLabelEnabled?: boolean | null;
+    gmailCredentialMailboxId?: string | null;
     gmailUsefulDetailsEnabled?: boolean | null;
     id: string;
     organizationId: string | null;
@@ -160,7 +161,10 @@ const toMailboxListItem = (
   },
   group: MailboxGroupMetadata,
 ): MailboxListItem => ({
-  connectionStatus: record.status,
+  connectionStatus:
+    record.provider === MAILBOX_PROVIDER_GMAIL && !record.gmailCredentialMailboxId
+      ? "needs_reconnect"
+      : record.status,
   displayName: record.displayName,
   emailAddress: record.emailAddress,
   grantRole: record.grantRole,
@@ -188,6 +192,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         displayName: mailbox.displayName,
         emailAddress: mailbox.emailAddress,
         gmailAutoLabelEnabled: gmailAutoLabelSettings.enabled,
+        gmailCredentialMailboxId: gmailCredential.mailboxId,
         gmailUsefulDetailsEnabled: gmailUsefulDetailSettings.enabled,
         id: mailbox.id,
         organizationId: mailbox.organizationId,
@@ -196,6 +201,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         status: mailbox.status,
       })
       .from(mailbox)
+      .leftJoin(gmailCredential, eq(gmailCredential.mailboxId, mailbox.id))
       .leftJoin(gmailAutoLabelSettings, eq(gmailAutoLabelSettings.mailboxId, mailbox.id))
       .leftJoin(gmailUsefulDetailSettings, eq(gmailUsefulDetailSettings.mailboxId, mailbox.id))
       .where(
@@ -585,32 +591,30 @@ export const completeGmailOAuth = async (input: {
         updatedAt: now,
       });
   const encryptedAccessToken = encryptSecret(tokenResponse.access_token);
-  await db.batch([
-    mailboxWrite,
-    db
-      .insert(gmailCredential)
-      .values({
+  await mailboxWrite;
+  await db
+    .insert(gmailCredential)
+    .values({
+      accessTokenExpiresAt: new Date(now.getTime() + tokenResponse.expires_in * 1000),
+      createdAt: now,
+      encryptedAccessToken,
+      encryptedRefreshToken,
+      googleSubject: tokenInfo.sub,
+      mailboxId,
+      scopes: tokenResponse.scope,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      set: {
         accessTokenExpiresAt: new Date(now.getTime() + tokenResponse.expires_in * 1000),
-        createdAt: now,
         encryptedAccessToken,
         encryptedRefreshToken,
         googleSubject: tokenInfo.sub,
-        mailboxId,
         scopes: tokenResponse.scope,
         updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        set: {
-          accessTokenExpiresAt: new Date(now.getTime() + tokenResponse.expires_in * 1000),
-          encryptedAccessToken,
-          encryptedRefreshToken,
-          googleSubject: tokenInfo.sub,
-          scopes: tokenResponse.scope,
-          updatedAt: now,
-        },
-        target: gmailCredential.mailboxId,
-      }),
-  ]);
+      },
+      target: gmailCredential.mailboxId,
+    });
 
   return {
     mailboxId,

@@ -1,7 +1,20 @@
 import { neon } from "@neondatabase/serverless";
 import { serverEnv } from "@quieter/env/server";
 import { drizzle } from "drizzle-orm/neon-http";
+import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import { authRelations } from "./schema";
+
+type BatchQuery = PromiseLike<unknown>;
+type BatchResult<TBatch extends readonly BatchQuery[]> = {
+  [Key in keyof TBatch]: Awaited<TBatch[Key]>;
+};
+
+export type DatabaseClient = ReturnType<typeof drizzlePostgres> & {
+  batch: <TBatch extends readonly [BatchQuery, ...BatchQuery[]]>(
+    batch: TBatch,
+  ) => Promise<BatchResult<TBatch>>;
+};
 
 const getDatabaseUrl = () => {
   const databaseUrl = serverEnv.DATABASE_URL;
@@ -11,19 +24,37 @@ const getDatabaseUrl = () => {
   return databaseUrl;
 };
 
+const isLocalDatabaseUrl = (databaseUrl: string) => {
+  const { hostname } = new URL(databaseUrl);
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+};
+
 export const assertDatabaseConfigured = () => {
   getDatabaseUrl();
 };
 
-const createDatabaseClient = () => {
-  const sql = neon(getDatabaseUrl());
+const createDatabaseClient = (): DatabaseClient => {
+  const databaseUrl = getDatabaseUrl();
+
+  if (isLocalDatabaseUrl(databaseUrl)) {
+    const sql = postgres(databaseUrl);
+    const client = drizzlePostgres({
+      client: sql,
+      relations: authRelations,
+    });
+
+    return Object.assign(client, {
+      batch: <TBatch extends readonly [BatchQuery, ...BatchQuery[]]>(batch: TBatch) =>
+        Promise.all(batch) as Promise<BatchResult<TBatch>>,
+    });
+  }
+
+  const sql = neon(databaseUrl);
   return drizzle({
     client: sql,
     relations: authRelations,
-  });
+  }) as unknown as DatabaseClient;
 };
-
-export type DatabaseClient = ReturnType<typeof createDatabaseClient>;
 
 let databaseClient: DatabaseClient | undefined;
 
