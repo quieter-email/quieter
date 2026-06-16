@@ -1,10 +1,10 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { MouseEventHandler, ReactNode } from "react";
 import { Button, cn, type ButtonProps } from "@quieter/ui";
 import { m } from "motion/react";
 
-type SidebarNavItemProps = ButtonProps & {
+type SidebarNavItemProps = Omit<ButtonProps, "onMouseEnter" | "onMouseLeave"> & {
   active?: boolean;
   activeLayoutId?: string;
   activeSurfaceClassName?: string;
@@ -15,6 +15,8 @@ type SidebarNavItemProps = ButtonProps & {
   hoverLayoutId?: string;
   hoverSurfaceClassName?: string;
   onHoverExitComplete?: () => void;
+  onMouseEnter?: MouseEventHandler<HTMLDivElement>;
+  onMouseLeave?: MouseEventHandler<HTMLDivElement>;
 };
 
 export const SidebarNavItem = ({
