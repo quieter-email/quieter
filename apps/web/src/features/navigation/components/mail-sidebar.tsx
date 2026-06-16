@@ -401,6 +401,7 @@ const SidebarContent = ({
       {isInboxView && (
         <div className="mt-2 min-h-0 flex-1 p-1">
           <SidebarMailboxNav
+            animateEntrance={animateEntrance}
             mailboxProvider={selectedMailboxProvider}
             onSelectMailbox={handleSelectMailbox}
             selectedMailbox={selectedMailbox}

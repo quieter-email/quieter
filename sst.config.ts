@@ -160,38 +160,37 @@ export default $config({
       url: true,
     });
 
-    let gmailPubSubIngressUrl: $util.Output<string> | null = null;
-    let gmailLiveSyncUrl: $util.Output<string> | null = null;
-    if (gmailPubSubEnabled) {
-      const gmailLiveSyncConnections = new sst.aws.Dynamo("GmailLiveSyncConnections", {
-        fields: {
-          connectionId: "string",
-          mailboxId: "string",
-        },
-        globalIndexes: {
-          mailboxId: { hashKey: "mailboxId", projection: "keys-only" },
-        },
-        primaryIndex: { hashKey: "connectionId" },
-        ttl: "expiresAt",
-      });
-      const gmailLiveSyncApi = new sst.aws.ApiGatewayWebSocket("GmailLiveSyncApi");
-      const gmailLiveSyncHandler = new sst.aws.Function("GmailLiveSyncWebSocketHandler", {
-        environment: {
-          DATABASE_URL: databaseUrl,
-          POLAR_ACCESS_TOKEN: polarAccessToken,
-          POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
-          POLAR_SANDBOX: polarSandbox,
-          QUIETER_UNLIMITED_BILLING_EMAILS: env.QUIETER_UNLIMITED_BILLING_EMAILS ?? "",
-        },
-        handler: "packages/aws/src/gmail-live-sync-websocket.handler",
-        link: [gmailLiveSyncConnections, gmailLiveSyncTokenSecret],
-        timeout: "30 seconds",
-      });
-      gmailLiveSyncApi.route("$connect", gmailLiveSyncHandler.arn);
-      gmailLiveSyncApi.route("$disconnect", gmailLiveSyncHandler.arn);
-      gmailLiveSyncApi.route("ping", gmailLiveSyncHandler.arn);
-      gmailLiveSyncUrl = gmailLiveSyncApi.url;
+    const gmailLiveSyncConnections = new sst.aws.Dynamo("GmailLiveSyncConnections", {
+      fields: {
+        connectionId: "string",
+        mailboxId: "string",
+      },
+      globalIndexes: {
+        mailboxId: { hashKey: "mailboxId", projection: "keys-only" },
+      },
+      primaryIndex: { hashKey: "connectionId" },
+      ttl: "expiresAt",
+    });
+    const gmailLiveSyncApi = new sst.aws.ApiGatewayWebSocket("GmailLiveSyncApi");
+    const gmailLiveSyncHandler = new sst.aws.Function("GmailLiveSyncWebSocketHandler", {
+      environment: {
+        DATABASE_URL: databaseUrl,
+        POLAR_ACCESS_TOKEN: polarAccessToken,
+        POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
+        POLAR_SANDBOX: polarSandbox,
+        QUIETER_UNLIMITED_BILLING_EMAILS: env.QUIETER_UNLIMITED_BILLING_EMAILS ?? "",
+      },
+      handler: "packages/aws/src/gmail-live-sync-websocket.handler",
+      link: [gmailLiveSyncConnections, gmailLiveSyncTokenSecret],
+      timeout: "30 seconds",
+    });
+    gmailLiveSyncApi.route("$connect", gmailLiveSyncHandler.arn);
+    gmailLiveSyncApi.route("$disconnect", gmailLiveSyncHandler.arn);
+    gmailLiveSyncApi.route("ping", gmailLiveSyncHandler.arn);
+    const gmailLiveSyncUrl = gmailLiveSyncApi.url;
 
+    let gmailPubSubIngressUrl: $util.Output<string> | null = null;
+    if (gmailPubSubEnabled) {
       const gmailPubSubDeadLetterQueue = new sst.aws.Queue("GmailPubSubDeadLetterQueue", {
         fifo: true,
         transform: {

@@ -44,8 +44,13 @@ const createDatabaseClient = (): DatabaseClient => {
     });
 
     return Object.assign(client, {
-      batch: <TBatch extends readonly [BatchQuery, ...BatchQuery[]]>(batch: TBatch) =>
-        Promise.all(batch) as Promise<BatchResult<TBatch>>,
+      batch: async <TBatch extends readonly [BatchQuery, ...BatchQuery[]]>(batch: TBatch) => {
+        const results: unknown[] = [];
+        for (const query of batch) {
+          results.push(await query);
+        }
+        return results as BatchResult<TBatch>;
+      },
     });
   }
 

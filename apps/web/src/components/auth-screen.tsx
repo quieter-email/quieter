@@ -17,9 +17,14 @@ import { setTermsAcceptanceCookie } from "~/lib/terms-acceptance";
 const authRouteApi = getRouteApi("/auth");
 const AUTHENTICATION_ERROR_MESSAGE =
   "Unable to authenticate. Please check your credentials or try again.";
-const AUTH_ERROR_MESSAGES: Record<string, string> = {
+
+type AuthErrorKey = "signup_disabled";
+
+const AUTH_ERROR_MESSAGES: Record<AuthErrorKey, string> = {
   signup_disabled: "No account exists for that Google account. Sign up first to create one.",
 };
+
+const isAuthErrorKey = (key: string): key is AuthErrorKey => key in AUTH_ERROR_MESSAGES;
 
 type AuthNavigate = ReturnType<(typeof authRouteApi)["useNavigate"]>;
 
@@ -392,7 +397,11 @@ const AuthCredentials = ({
 export const AuthScreen = () => {
   const { error, mode } = authRouteApi.useSearch();
   const navigate = authRouteApi.useNavigate();
-  const authError = error ? (AUTH_ERROR_MESSAGES[error] ?? AUTHENTICATION_ERROR_MESSAGE) : null;
+  const authError = error
+    ? isAuthErrorKey(error)
+      ? AUTH_ERROR_MESSAGES[error]
+      : AUTHENTICATION_ERROR_MESSAGE
+    : null;
 
   return (
     <div className="grid h-dvh max-h-dvh w-full overflow-hidden bg-background md:grid-cols-2">

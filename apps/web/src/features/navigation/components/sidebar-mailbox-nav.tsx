@@ -10,7 +10,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { cn } from "@quieter/ui";
-import { LayoutGroup } from "motion/react";
+import { LayoutGroup, m } from "motion/react";
 import { useRef, useState } from "react";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 import { SidebarNavItem } from "~/features/navigation/components/sidebar-nav-item";
@@ -31,17 +31,24 @@ const MANAGED_MAILBOX_ITEMS = SIDEBAR_MAILBOX_ITEMS.filter(
   (item) => item.id === "inbox" || item.id === "sent",
 );
 
+const getSidebarEntranceDelay = (step: number) => step * 0.1;
+const getSidebarEntranceInitial = (animateEntrance: boolean) =>
+  animateEntrance ? { opacity: 0, x: -20, filter: "blur(8px)" } : false;
+
 type SidebarMailboxNavProps = {
+  animateEntrance: boolean;
   mailboxProvider: "gmail" | "managed" | null;
   selectedMailbox: MailboxCategory;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
 };
 
 export const SidebarMailboxNav = ({
+  animateEntrance,
   mailboxProvider,
   onSelectMailbox,
   selectedMailbox,
 }: SidebarMailboxNavProps) => {
+  const [shouldAnimateEntrance] = useState(animateEntrance);
   const navRef = useRef<HTMLElement>(null);
   const [hoveredMailbox, setHoveredMailbox] = useState<MailboxCategory | null>(null);
   const [exitingMailbox, setExitingMailbox] = useState<MailboxCategory | null>(null);
@@ -71,41 +78,52 @@ export const SidebarMailboxNav = ({
     <LayoutGroup id="mailbox-sidebar">
       <nav ref={navRef} aria-label="Mailboxes" className="flex flex-col" onMouseLeave={clearHover}>
         {(mailboxProvider === "managed" ? MANAGED_MAILBOX_ITEMS : SIDEBAR_MAILBOX_ITEMS).map(
-          (item) => {
+          (item, index) => {
             const isActive = selectedMailbox === item.id;
             const isHovered = hoveredMailbox === item.id;
             const isHoverExiting = exitingMailbox === item.id;
 
             return (
-              <SidebarNavItem
+              <m.div
                 key={item.id}
-                active={isActive}
-                activeLayoutId="mailbox-sidebar-active"
-                aria-current={isActive ? "page" : undefined}
-                className={cn("w-full justify-start gap-3 px-3 text-left", {
-                  "text-foreground": isActive || isHovered,
-                  "text-muted-foreground": !isActive && !isHovered,
-                })}
-                hover={isHovered}
-                hoverEnter={isHovered && hoverEnterRef.current}
-                hoverExiting={isHoverExiting}
-                hoverLayoutId="mailbox-sidebar-hover"
-                onBlur={(event) => clearHoverIfLeavingNav(event.relatedTarget)}
-                onClick={() => onSelectMailbox(item.id)}
-                onFocus={() => setHover(item.id)}
-                onHoverExitComplete={() => setExitingMailbox(null)}
-                onMouseEnter={() => setHover(item.id)}
-                size="sm"
-                type="button"
-                variant="ghost"
+                className="w-full will-change-[transform,opacity,filter]"
+                initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
+                animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                transition={{
+                  delay: getSidebarEntranceDelay(index + 3),
+                  duration: 0.5,
+                  ease: "easeOut",
+                }}
               >
-                <HugeiconsIcon
-                  strokeWidth={1.5}
-                  className="shrink-0 text-foreground"
-                  icon={item.icon}
-                />
-                {item.label}
-              </SidebarNavItem>
+                <SidebarNavItem
+                  active={isActive}
+                  activeLayoutId="mailbox-sidebar-active"
+                  aria-current={isActive ? "page" : undefined}
+                  className={cn("w-full justify-start gap-3 px-3 text-left", {
+                    "text-foreground": isActive || isHovered,
+                    "text-muted-foreground": !isActive && !isHovered,
+                  })}
+                  hover={isHovered}
+                  hoverEnter={isHovered && hoverEnterRef.current}
+                  hoverExiting={isHoverExiting}
+                  hoverLayoutId="mailbox-sidebar-hover"
+                  onBlur={(event) => clearHoverIfLeavingNav(event.relatedTarget)}
+                  onClick={() => onSelectMailbox(item.id)}
+                  onFocus={() => setHover(item.id)}
+                  onHoverExitComplete={() => setExitingMailbox(null)}
+                  onMouseEnter={() => setHover(item.id)}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <HugeiconsIcon
+                    strokeWidth={1.5}
+                    className="shrink-0 text-foreground"
+                    icon={item.icon}
+                  />
+                  {item.label}
+                </SidebarNavItem>
+              </m.div>
             );
           },
         )}

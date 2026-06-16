@@ -73,7 +73,7 @@ const SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY = "quieter:sidebar-label-visibility";
 
 const getSidebarEntranceDelay = (step: number) => step * 0.1;
 const getSidebarEntranceInitial = (animateEntrance: boolean) =>
-  animateEntrance ? { opacity: 0, filter: "blur(20px)" } : false;
+  animateEntrance ? { opacity: 0, x: -20, filter: "blur(8px)" } : false;
 
 const updateLabelFilter = (searchQuery: string, labelName: string, enabled: boolean) => {
   const state = parseStructuredSearchQuery(searchQuery);
@@ -357,48 +357,59 @@ export const SidebarLabelNav = ({
               No labels shown.
             </m.p>
           ) : (
-            visibleUserLabels.map((label) => {
+            visibleUserLabels.map((label, index) => {
               const isActive = selectedLabelKeys.has(normalizeLabelSelectionKey(label.name));
               const isHovered = hoveredLabelId === label.id;
               const isHoverExiting = exitingLabelId === label.id;
 
               return (
-                <SidebarNavItem
+                <m.div
                   key={label.id}
-                  active={isActive}
-                  aria-pressed={isActive}
-                  className={cn(
-                    "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light",
-                    {
-                      "text-foreground": isActive || isHovered,
-                      "text-muted-foreground": !isActive && !isHovered,
-                    },
-                  )}
-                  hover={isHovered}
-                  hoverEnter={isHovered && hoverEnterRef.current}
-                  hoverExiting={isHoverExiting}
-                  hoverLayoutId="label-sidebar-hover"
-                  onBlur={(event) => clearLabelHoverIfLeavingNav(event.relatedTarget)}
-                  onClick={() => onSearch(updateLabelFilter(searchQuery, label.name, !isActive))}
-                  onFocus={() => setLabelHover(label.id)}
-                  onHoverExitComplete={() => setExitingLabelId(null)}
-                  onMouseEnter={() => setLabelHover(label.id)}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
+                  className="w-full will-change-[transform,opacity,filter]"
+                  initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
+                  animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                  transition={{
+                    delay: getSidebarEntranceDelay(index + 9),
+                    duration: 0.5,
+                    ease: "easeOut",
+                  }}
                 >
-                  <HugeiconsIcon
-                    aria-hidden
-                    className={cn("shrink-0", {
-                      "text-primary": isActive,
-                      "text-foreground": !isActive && isHovered,
-                      "text-muted-foreground": !isActive && !isHovered,
-                    })}
-                    icon={Tag01Icon}
-                    strokeWidth={1.5}
-                  />
-                  <span className="min-w-0 truncate">{label.name}</span>
-                </SidebarNavItem>
+                  <SidebarNavItem
+                    active={isActive}
+                    aria-pressed={isActive}
+                    className={cn(
+                      "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light",
+                      {
+                        "text-foreground": isActive || isHovered,
+                        "text-muted-foreground": !isActive && !isHovered,
+                      },
+                    )}
+                    hover={isHovered}
+                    hoverEnter={isHovered && hoverEnterRef.current}
+                    hoverExiting={isHoverExiting}
+                    hoverLayoutId="label-sidebar-hover"
+                    onBlur={(event) => clearLabelHoverIfLeavingNav(event.relatedTarget)}
+                    onClick={() => onSearch(updateLabelFilter(searchQuery, label.name, !isActive))}
+                    onFocus={() => setLabelHover(label.id)}
+                    onHoverExitComplete={() => setExitingLabelId(null)}
+                    onMouseEnter={() => setLabelHover(label.id)}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <HugeiconsIcon
+                      aria-hidden
+                      className={cn("shrink-0", {
+                        "text-primary": isActive,
+                        "text-foreground": !isActive && isHovered,
+                        "text-muted-foreground": !isActive && !isHovered,
+                      })}
+                      icon={Tag01Icon}
+                      strokeWidth={1.5}
+                    />
+                    <span className="min-w-0 truncate">{label.name}</span>
+                  </SidebarNavItem>
+                </m.div>
               );
             })
           )}
