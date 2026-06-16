@@ -390,9 +390,17 @@ export const SidebarLabelNav = ({
                     hoverLayoutId="label-sidebar-hover"
                     onBlur={(event) => clearLabelHoverIfLeavingNav(event.relatedTarget)}
                     onClick={() => onSearch(updateLabelFilter(searchQuery, label.name, !isActive))}
-                    onFocus={() => setLabelHover(label.id)}
+                    onFocus={() => {
+                      if (!isActive) setLabelHover(label.id);
+                    }}
                     onHoverExitComplete={() => setExitingLabelId(null)}
-                    onMouseEnter={() => setLabelHover(label.id)}
+                    onMouseEnter={() => {
+                      if (isActive) {
+                        clearLabelHover();
+                        return;
+                      }
+                      setLabelHover(label.id);
+                    }}
                     size="sm"
                     type="button"
                     variant="ghost"
