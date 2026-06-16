@@ -3,10 +3,10 @@
 import type { MouseEventHandler, ReactNode } from "react";
 import { Button, cn, type ButtonProps } from "@quieter/ui";
 import { m } from "motion/react";
+import { useState } from "react";
 
 type SidebarNavItemProps = Omit<ButtonProps, "onMouseEnter" | "onMouseLeave"> & {
   active?: boolean;
-  activeLayoutId?: string;
   activeSurfaceClassName?: string;
   children: ReactNode;
   hover?: boolean;
@@ -21,7 +21,6 @@ type SidebarNavItemProps = Omit<ButtonProps, "onMouseEnter" | "onMouseLeave"> & 
 
 export const SidebarNavItem = ({
   active,
-  activeLayoutId,
   activeSurfaceClassName,
   children,
   className,
@@ -38,40 +37,35 @@ export const SidebarNavItem = ({
   variant = "ghost",
   ...buttonProps
 }: SidebarNavItemProps) => {
-  const showHoverSurface = (hover || hoverExiting) && hoverLayoutId;
+  const [pressed, setPressed] = useState(false);
 
   return (
     <div
       className="relative w-full rounded-md py-px"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      onPointerCancel={() => setPressed(false)}
+      onPointerDown={(event) => {
+        if (event.button === 0) {
+          setPressed(true);
+        }
+      }}
+      onPointerLeave={() => setPressed(false)}
+      onPointerUp={() => setPressed(false)}
     >
       {active ? (
-        activeLayoutId ? (
-          <m.span
-            aria-hidden
-            className={cn(
-              "pointer-events-none absolute inset-0 z-0 rounded-md bg-muted",
-              activeSurfaceClassName,
-            )}
-            initial={false}
-            layout="position"
-            layoutId={activeLayoutId}
-            transition={{
-              layout: { type: "spring", stiffness: 1200, damping: 52, mass: 0.3 },
-            }}
-          />
-        ) : (
-          <span
-            aria-hidden
-            className={cn(
-              "pointer-events-none absolute inset-0 z-0 rounded-md bg-muted",
-              activeSurfaceClassName,
-            )}
-          />
-        )
+        <m.span
+          aria-hidden
+          animate={{ scale: pressed ? 0.95 : 1 }}
+          className={cn(
+            "pointer-events-none absolute inset-0 z-0 rounded-md bg-muted",
+            activeSurfaceClassName,
+          )}
+          initial={false}
+          transition={{ scale: { duration: 0.1, ease: "easeOut" } }}
+        />
       ) : null}
-      {showHoverSurface ? (
+      {!active && (hover || hoverExiting) && hoverLayoutId ? (
         <m.span
           className="pointer-events-none absolute inset-0 z-1"
           initial={false}
@@ -83,7 +77,9 @@ export const SidebarNavItem = ({
         >
           <m.span
             aria-hidden
-            animate={hoverExiting ? { opacity: 0, scale: 0.9 } : { opacity: 1, scale: 1 }}
+            animate={
+              hoverExiting ? { opacity: 0, scale: 0.9 } : { opacity: 1, scale: pressed ? 0.95 : 1 }
+            }
             className={cn("block size-full rounded-md bg-muted/60", hoverSurfaceClassName)}
             initial={hoverEnter ? { opacity: 0, scale: 0.9 } : false}
             onAnimationComplete={() => {
@@ -93,14 +89,16 @@ export const SidebarNavItem = ({
             }}
             transition={{
               opacity: { duration: 0.08, ease: "easeOut" },
-              scale: { duration: 0.08, ease: "easeOut" },
+              scale: hoverExiting
+                ? { duration: 0.08, ease: "easeOut" }
+                : { duration: 0.1, ease: "easeOut" },
             }}
           />
         </m.span>
       ) : null}
       <Button
         className={cn(
-          "relative z-10 w-full bg-transparent hover:bg-transparent active:scale-100 active:bg-transparent",
+          "relative z-10 w-full bg-transparent hover:bg-transparent active:scale-100 active:bg-transparent motion-reduce:active:scale-100",
           className,
         )}
         onBlur={onBlur}

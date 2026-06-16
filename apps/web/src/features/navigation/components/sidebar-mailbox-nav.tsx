@@ -97,7 +97,6 @@ export const SidebarMailboxNav = ({
               >
                 <SidebarNavItem
                   active={isActive}
-                  activeLayoutId="mailbox-sidebar-active"
                   aria-current={isActive ? "page" : undefined}
                   className={cn("w-full justify-start gap-3 px-3 text-left", {
                     "text-foreground": isActive || isHovered,
@@ -109,9 +108,17 @@ export const SidebarMailboxNav = ({
                   hoverLayoutId="mailbox-sidebar-hover"
                   onBlur={(event) => clearHoverIfLeavingNav(event.relatedTarget)}
                   onClick={() => onSelectMailbox(item.id)}
-                  onFocus={() => setHover(item.id)}
+                  onFocus={() => {
+                    if (!isActive) setHover(item.id);
+                  }}
                   onHoverExitComplete={() => setExitingMailbox(null)}
-                  onMouseEnter={() => setHover(item.id)}
+                  onMouseEnter={() => {
+                    if (isActive) {
+                      clearHover();
+                      return;
+                    }
+                    setHover(item.id);
+                  }}
                   size="sm"
                   type="button"
                   variant="ghost"
