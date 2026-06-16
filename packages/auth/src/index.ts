@@ -165,6 +165,7 @@ export const auth = betterAuth({
     google: {
       clientId: serverEnv.GOOGLE_AUTH_CLIENT_ID ?? "",
       clientSecret: serverEnv.GOOGLE_AUTH_CLIENT_SECRET ?? "",
+      disableImplicitSignUp: true,
       scope: [...GOOGLE_AUTH_SCOPES],
     },
   },

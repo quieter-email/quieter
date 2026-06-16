@@ -23,6 +23,7 @@ import {
 } from "@quieter/ui";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
 import { type ReactNode, useRef, useState } from "react";
+import { AnimatedHoverSurface } from "~/components/animated-hover-surface";
 import { VerticalSlot } from "~/components/vertical-slot";
 
 type MailboxSwitcherMailbox = {
@@ -331,6 +332,7 @@ export const MailboxSwitcherDropdown = ({
   const secondaryLabel = selectedMailbox?.groupName ?? "No organization";
   const canReorderGroups = groups.length > 1;
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [isTriggerHovered, setIsTriggerHovered] = useState(false);
   const toggleGroup = (groupId: string) => {
     setCollapsedGroupIds((current) => {
       const next = new Set(current);
@@ -363,19 +365,26 @@ export const MailboxSwitcherDropdown = ({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label="Switch mailbox"
-        className="squircle w-full min-w-0 flex-1 rounded-md px-4 py-3 text-left outline-none hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-100"
+      <div
+        className="relative min-w-0 flex-1 rounded-md"
+        onMouseEnter={() => setIsTriggerHovered(true)}
+        onMouseLeave={() => setIsTriggerHovered(false)}
       >
-        <VerticalSlot className="min-w-0">
-          <div>
-            <p className="truncate text-[13px]/5 font-medium tracking-tight text-foreground">
-              {primaryLabel}
-            </p>
-            <p className="mt-1 truncate text-xs text-muted-foreground">{secondaryLabel}</p>
-          </div>
-        </VerticalSlot>
-      </DropdownMenuTrigger>
+        <AnimatedHoverSurface layoutId="mailbox-switcher-hover" visible={isTriggerHovered} />
+        <DropdownMenuTrigger
+          aria-label="Switch mailbox"
+          className="squircle relative z-10 w-full min-w-0 rounded-md px-4 py-3 text-left outline-none hover:bg-transparent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-100"
+        >
+          <VerticalSlot className="min-w-0">
+            <div>
+              <p className="truncate text-[13px]/5 font-medium tracking-tight text-foreground">
+                {primaryLabel}
+              </p>
+              <p className="mt-1 truncate text-xs text-muted-foreground">{secondaryLabel}</p>
+            </div>
+          </VerticalSlot>
+        </DropdownMenuTrigger>
+      </div>
 
       <DropdownMenuContent
         align="start"

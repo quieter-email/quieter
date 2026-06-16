@@ -337,11 +337,11 @@ export const MailboxesSettingsPanel = () => {
                       <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5">
                         <span className="min-w-0 flex-1">
                           <span className="block text-xs font-medium text-foreground">
-                            Timely mail
+                            Useful details
                             {!hasGmailAutomationAccess && " · Pro"}
                           </span>
                           <span className="mt-0.5 block text-[11px]/4 text-muted-foreground">
-                            Codes, deliveries, deadlines, and other timely mail.
+                            Show codes, deliveries, and deadlines above the inbox.
                           </span>
                         </span>
                         <Switch
@@ -362,7 +362,10 @@ export const MailboxesSettingsPanel = () => {
                               {
                                 onError: (error) => {
                                   toast.error(
-                                    getMutationErrorMessage(error, "Could not update timely mail."),
+                                    getMutationErrorMessage(
+                                      error,
+                                      "Could not update useful details.",
+                                    ),
                                   );
                                 },
                               },
@@ -380,8 +383,7 @@ export const MailboxesSettingsPanel = () => {
                             {!hasGmailAutomationAccess && " · Pro"}
                           </span>
                           <span className="mt-0.5 block text-[11px]/4 text-muted-foreground">
-                            Apply labels to new Inbox mail when they match the emails-to-include
-                            rules you set on each label.
+                            Label new Inbox mail using each label's include rules.
                           </span>
                         </span>
                         <Switch
@@ -416,14 +418,6 @@ export const MailboxesSettingsPanel = () => {
                         </Switch>
                       </label>
                     </div>
-
-                    {mailbox.gmailUsefulDetailsEnabled && (
-                      <p className="border-t border-border/60 px-3 py-2 text-[11px]/4 text-muted-foreground">
-                        Updates appear above your inbox. To test, send a new verification email from
-                        a different account; mail sent from this mailbox is ignored. New updates
-                        should appear within seconds.
-                      </p>
-                    )}
                   </div>
                 );
               })}

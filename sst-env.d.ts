@@ -37,6 +37,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "GmailLiveSyncWebSocketHandler": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
     "MailBucket": {
       "name": string
       "type": "sst.aws.Bucket"

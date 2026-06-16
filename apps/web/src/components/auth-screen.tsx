@@ -18,6 +18,14 @@ const authRouteApi = getRouteApi("/auth");
 const AUTHENTICATION_ERROR_MESSAGE =
   "Unable to authenticate. Please check your credentials or try again.";
 
+type AuthErrorKey = "signup_disabled";
+
+const AUTH_ERROR_MESSAGES: Record<AuthErrorKey, string> = {
+  signup_disabled: "No account exists for that Google account. Sign up first to create one.",
+};
+
+const isAuthErrorKey = (key: string): key is AuthErrorKey => key in AUTH_ERROR_MESSAGES;
+
 type AuthNavigate = ReturnType<(typeof authRouteApi)["useNavigate"]>;
 
 type AuthFormValues = {
@@ -101,6 +109,8 @@ const AuthCredentials = ({
       const response = await authClient.signIn.social({
         provider: "google",
         callbackURL: "/",
+        errorCallbackURL: errorCallbackHref,
+        requestSignUp: isSignup,
       });
       if (response.error) {
         throw new Error(response.error.message ?? "Could not start Google sign-in.");
@@ -385,8 +395,13 @@ const AuthCredentials = ({
 };
 
 export const AuthScreen = () => {
-  const { mode } = authRouteApi.useSearch();
+  const { error, mode } = authRouteApi.useSearch();
   const navigate = authRouteApi.useNavigate();
+  const authError = error
+    ? isAuthErrorKey(error)
+      ? AUTH_ERROR_MESSAGES[error]
+      : AUTHENTICATION_ERROR_MESSAGE
+    : null;
 
   return (
     <div className="grid h-dvh max-h-dvh w-full overflow-hidden bg-background md:grid-cols-2">
@@ -400,6 +415,12 @@ export const AuthScreen = () => {
           </h1>
 
           <AuthCredentials key={mode} mode={mode} navigate={navigate} />
+
+          {authError ? (
+            <p aria-live="assertive" className="mt-4 text-sm text-destructive" role="status">
+              {authError}
+            </p>
+          ) : null}
 
           <p className="mt-6 text-sm text-muted-foreground">
             <Link

@@ -9,7 +9,7 @@ import {
   UserIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button } from "@quieter/ui";
+import { Button, cn } from "@quieter/ui";
 import type { SettingsTab } from "~/features/settings/domain/settings-tab";
 
 type SettingsSidebarProps = {
@@ -43,18 +43,24 @@ export const SettingsSidebar = ({ activeTab, onBack, onSelectTab }: SettingsSide
     </Button>
 
     <div className="flex flex-wrap gap-2 pt-6 md:flex-col md:pt-12">
-      {SETTINGS_SIDEBAR_NAV.map(({ tab, label, icon }) => (
-        <Button
-          className="flex w-full items-center justify-start gap-2"
-          key={tab}
-          onClick={() => onSelectTab(tab)}
-          size="sm"
-          variant={activeTab === tab ? "default" : "ghost"}
-        >
-          <HugeiconsIcon className="size-4" icon={icon} />
-          {label}
-        </Button>
-      ))}
+      {SETTINGS_SIDEBAR_NAV.map(({ tab, label, icon }) => {
+        const isActive = activeTab === tab;
+        return (
+          <Button
+            aria-current={isActive ? "page" : undefined}
+            className={cn("flex w-full items-center justify-start gap-2", {
+              "bg-primary text-primary-foreground shadow-sm": isActive,
+            })}
+            key={tab}
+            onClick={() => onSelectTab(tab)}
+            size="sm"
+            variant="ghost"
+          >
+            <HugeiconsIcon className="size-4" icon={icon} />
+            {label}
+          </Button>
+        );
+      })}
     </div>
   </aside>
 );

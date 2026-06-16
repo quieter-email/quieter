@@ -3,6 +3,7 @@ import type { MailboxScopeRepairRequiredErrorData } from "@quieter/orpc/errors";
 type OrpcErrorLike = {
   code?: unknown;
   data?: unknown;
+  status?: unknown;
 };
 
 export const isMailboxScopeRepairRequiredError = (
@@ -26,5 +27,13 @@ export const isMailboxScopeRepairRequiredError = (
   );
 };
 
-export const shouldRetryOrpcError = (failureCount: number, error: unknown) =>
-  !isMailboxScopeRepairRequiredError(error) && failureCount < 3;
+export const shouldRetryOrpcError = (failureCount: number, error: unknown) => {
+  if (isMailboxScopeRepairRequiredError(error)) return false;
+  if (!error || typeof error !== "object") return failureCount < 3;
+
+  const candidate = error as OrpcErrorLike;
+  if (candidate.code === "NOT_FOUND") return false;
+  if (typeof candidate.status === "number" && candidate.status < 500) return false;
+
+  return failureCount < 3;
+};

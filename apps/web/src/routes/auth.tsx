@@ -8,6 +8,7 @@ import { getSessionUser } from "~/lib/auth.functions";
 export const Route = createFileRoute("/auth")({
   validateSearch: zodValidator(
     z.object({
+      error: z.string().optional(),
       mode: z.enum(["login", "signup"]).catch("login").default("login"),
     }),
   ),

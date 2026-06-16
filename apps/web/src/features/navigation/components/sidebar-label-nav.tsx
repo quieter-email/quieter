@@ -32,8 +32,8 @@ import {
   toast,
 } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { m } from "motion/react";
-import { useState } from "react";
+import { LayoutGroup, m } from "motion/react";
+import { useRef, useState } from "react";
 import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 import { serializeStructuredSearchState } from "~/features/message-search/components/message-list-search/message-list-search-utils";
 import {
@@ -41,6 +41,7 @@ import {
   normalizeLabelSelectionKey,
   parseStructuredSearchQuery,
 } from "~/features/message-search/state/message-list-search-state";
+import { SidebarNavItem } from "~/features/navigation/components/sidebar-nav-item";
 import { getLabelsQueryKey, labelsQueryOptions } from "~/lib/gmail/labels-query";
 import { orpc } from "~/lib/orpc";
 
@@ -72,7 +73,7 @@ const SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY = "quieter:sidebar-label-visibility";
 
 const getSidebarEntranceDelay = (step: number) => step * 0.1;
 const getSidebarEntranceInitial = (animateEntrance: boolean) =>
-  animateEntrance ? { opacity: 0, x: -20, filter: "blur(20px)" } : false;
+  animateEntrance ? { opacity: 0, x: -20, filter: "blur(8px)" } : false;
 
 const updateLabelFilter = (searchQuery: string, labelName: string, enabled: boolean) => {
   const state = parseStructuredSearchQuery(searchQuery);
@@ -122,6 +123,30 @@ export const SidebarLabelNav = ({
   const [editingLabel, setEditingLabel] = useState<EditingLabel>(null);
   const [editingLabelDetails, setEditingLabelDetails] = useState<EditingLabelDetails | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const labelNavRef = useRef<HTMLElement>(null);
+  const [hoveredLabelId, setHoveredLabelId] = useState<string | null>(null);
+  const [exitingLabelId, setExitingLabelId] = useState<string | null>(null);
+  const hoverEnterRef = useRef(false);
+
+  const setLabelHover = (labelId: string) => {
+    hoverEnterRef.current = hoveredLabelId === null && exitingLabelId === null;
+    setExitingLabelId(null);
+    setHoveredLabelId(labelId);
+  };
+
+  const clearLabelHover = () => {
+    if (hoveredLabelId !== null) {
+      setExitingLabelId(hoveredLabelId);
+    }
+    hoverEnterRef.current = false;
+    setHoveredLabelId(null);
+  };
+
+  const clearLabelHoverIfLeavingNav = (nextTarget: EventTarget | null) => {
+    if (!nextTarget || !labelNavRef.current?.contains(nextTarget as Node)) {
+      clearLabelHover();
+    }
+  };
   const [hiddenLabelState, setHiddenLabelState] = useState<HiddenLabelState>(() => ({
     mailboxId,
     value: readHiddenLabelIds(mailboxId),
@@ -297,78 +322,99 @@ export const SidebarLabelNav = ({
         </IconButtonTooltip>
       </m.div>
 
-      <nav aria-label="Labels" className="flex flex-col gap-0.5">
-        {areLabelsPending ? (
-          <m.p
-            className="px-2 py-1 text-xs text-muted-foreground will-change-[transform,opacity,filter]"
-            initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
-            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-            transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
-          >
-            Loading labels…
-          </m.p>
-        ) : areLabelsError ? (
-          <m.p
-            className="px-2 py-1 text-xs text-destructive will-change-[transform,opacity,filter]"
-            initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
-            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-            transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
-          >
-            Could not load labels.
-          </m.p>
-        ) : visibleUserLabels.length === 0 ? (
-          <m.p
-            className="px-2 py-1 text-xs text-muted-foreground will-change-[transform,opacity,filter]"
-            initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
-            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-            transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
-          >
-            No labels shown.
-          </m.p>
-        ) : (
-          visibleUserLabels.map((label, index) => {
-            const isActive = selectedLabelKeys.has(normalizeLabelSelectionKey(label.name));
-            return (
-              <m.div
-                key={label.id}
-                className="w-full will-change-[transform,opacity,filter]"
-                initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
-                animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-                transition={{
-                  delay: getSidebarEntranceDelay(index + 9),
-                  duration: 0.5,
-                  ease: "easeOut",
-                }}
-              >
-                <Button
-                  aria-pressed={isActive}
-                  className={cn(
-                    "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light text-foreground",
-                    {
-                      "bg-muted hover:bg-muted": isActive,
-                    },
-                  )}
-                  onClick={() => onSearch(updateLabelFilter(searchQuery, label.name, !isActive))}
-                  type="button"
-                  variant="ghost"
-                  size="sm"
+      <LayoutGroup id="label-sidebar">
+        <nav
+          ref={labelNavRef}
+          aria-label="Labels"
+          className="flex flex-col"
+          onMouseLeave={clearLabelHover}
+        >
+          {areLabelsPending ? (
+            <m.p
+              className="px-2 py-1 text-xs text-muted-foreground will-change-[transform,opacity,filter]"
+              initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
+              animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+              transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
+            >
+              Loading labels…
+            </m.p>
+          ) : areLabelsError ? (
+            <m.p
+              className="px-2 py-1 text-xs text-destructive will-change-[transform,opacity,filter]"
+              initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
+              animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+              transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
+            >
+              Could not load labels.
+            </m.p>
+          ) : visibleUserLabels.length === 0 ? (
+            <m.p
+              className="px-2 py-1 text-xs text-muted-foreground will-change-[transform,opacity,filter]"
+              initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
+              animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+              transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
+            >
+              No labels shown.
+            </m.p>
+          ) : (
+            visibleUserLabels.map((label, index) => {
+              const isActive = selectedLabelKeys.has(normalizeLabelSelectionKey(label.name));
+              const isHovered = hoveredLabelId === label.id;
+              const isHoverExiting = exitingLabelId === label.id;
+
+              return (
+                <m.div
+                  key={label.id}
+                  className="w-full will-change-[transform,opacity,filter]"
+                  initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
+                  animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                  transition={{
+                    delay: getSidebarEntranceDelay(index + 9),
+                    duration: 0.5,
+                    ease: "easeOut",
+                  }}
                 >
-                  <HugeiconsIcon
-                    aria-hidden
-                    className={cn("shrink-0", {
-                      "text-primary": isActive,
-                      "text-muted-foreground": !isActive,
-                    })}
-                    icon={Tag01Icon}
-                    strokeWidth={1.5}
-                  />
-                  <span className="min-w-0 truncate">{label.name}</span>
-                </Button>
-              </m.div>
-            );
-          })
-        )}
-      </nav>
+                  <SidebarNavItem
+                    active={isActive}
+                    aria-pressed={isActive}
+                    className={cn(
+                      "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light",
+                      {
+                        "text-foreground": isActive || isHovered,
+                        "text-muted-foreground": !isActive && !isHovered,
+                      },
+                    )}
+                    hover={isHovered}
+                    hoverEnter={isHovered && hoverEnterRef.current}
+                    hoverExiting={isHoverExiting}
+                    hoverLayoutId="label-sidebar-hover"
+                    onBlur={(event) => clearLabelHoverIfLeavingNav(event.relatedTarget)}
+                    onClick={() => onSearch(updateLabelFilter(searchQuery, label.name, !isActive))}
+                    onFocus={() => setLabelHover(label.id)}
+                    onHoverExitComplete={() => setExitingLabelId(null)}
+                    onMouseEnter={() => setLabelHover(label.id)}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <HugeiconsIcon
+                      aria-hidden
+                      className={cn("shrink-0", {
+                        "text-primary": isActive,
+                        "text-foreground": !isActive && isHovered,
+                        "text-muted-foreground": !isActive && !isHovered,
+                      })}
+                      icon={Tag01Icon}
+                      strokeWidth={1.5}
+                    />
+                    <span className="min-w-0 truncate">{label.name}</span>
+                  </SidebarNavItem>
+                </m.div>
+              );
+            })
+          )}
+        </nav>
+      </LayoutGroup>
 
       <FullPageDialog
         onOpenChange={(open) => {

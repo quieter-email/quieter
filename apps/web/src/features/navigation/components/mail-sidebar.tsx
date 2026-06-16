@@ -23,7 +23,7 @@ import {
   Input,
   LinkButton,
 } from "@quieter/ui";
-import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
+import { AnimatePresence, domMax, LazyMotion, m } from "motion/react";
 import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -33,6 +33,7 @@ import {
 } from "react";
 import type { MailboxWorkspaceView } from "~/features/mailbox/domain/mailbox-workspace-view";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
+import { AnimatedHoverSurface } from "~/components/animated-hover-surface";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
 import {
   type MailboxSwitcherOrder,
@@ -168,15 +169,10 @@ const SidebarChatRow = ({
           />
         </form>
       ) : (
-        <div
-          className={cn("group flex w-full items-center rounded-md", {
-            "bg-muted hover:bg-muted": isActive,
-            "hover:bg-muted/60": !isActive,
-          })}
-        >
+        <div className="group flex w-full items-center rounded-md">
           <Button
             aria-current={isActive ? "page" : undefined}
-            className="min-w-0 flex-1 justify-start gap-3 bg-transparent px-3 text-left text-foreground hover:bg-transparent active:bg-transparent"
+            className="min-w-0 flex-1 justify-start gap-3 px-3 text-left text-foreground"
             onClick={() => onSelect(chat.id)}
             size="sm"
             type="button"
@@ -246,6 +242,7 @@ const SidebarContent = ({
 }: SidebarContentProps) => {
   const isInboxView = selectedView === "inbox";
   const [editingChat, setEditingChat] = useState<{ id: string; title: string } | null>(null);
+  const [isSettingsHovered, setIsSettingsHovered] = useState(false);
 
   const handleComposeNewMail = () => {
     onComposeNewMail();
@@ -480,24 +477,31 @@ const SidebarContent = ({
         animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
         transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
       >
-        <LinkButton
-          aria-label="Settings"
-          className="group w-full justify-start"
-          onClick={onRequestClose}
-          search={{
-            from: "/",
-            tab: "general",
-          }}
-          variant="ghost"
-          to="/settings"
+        <div
+          className="relative rounded-md"
+          onMouseEnter={() => setIsSettingsHovered(true)}
+          onMouseLeave={() => setIsSettingsHovered(false)}
         >
-          <HugeiconsIcon
-            className="size-4 shrink-0 rotate-0 transition-transform duration-1000 ease-in-out group-hover:rotate-360"
-            icon={Settings01Icon}
-            strokeWidth={1.5}
-          />
-          Settings
-        </LinkButton>
+          <AnimatedHoverSurface layoutId="sidebar-settings-hover" visible={isSettingsHovered} />
+          <LinkButton
+            aria-label="Settings"
+            className="group relative z-10 w-full justify-start bg-transparent hover:bg-transparent active:scale-100"
+            onClick={onRequestClose}
+            search={{
+              from: "/",
+              tab: "general",
+            }}
+            variant="ghost"
+            to="/settings"
+          >
+            <HugeiconsIcon
+              className="size-4 shrink-0 rotate-0 transition-transform duration-1000 ease-in-out group-hover:rotate-360"
+              icon={Settings01Icon}
+              strokeWidth={1.5}
+            />
+            Settings
+          </LinkButton>
+        </div>
       </m.div>
     </div>
   );
@@ -541,7 +545,7 @@ export const MailSidebar = ({
   }, [isMobileOpen]);
 
   return (
-    <LazyMotion features={domAnimation}>
+    <LazyMotion features={domMax}>
       <>
         <aside
           className="relative hidden h-full shrink-0 bg-transparent text-foreground lg:flex lg:flex-col"
