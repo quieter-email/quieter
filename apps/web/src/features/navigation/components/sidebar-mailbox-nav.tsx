@@ -10,8 +10,10 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { Button, cn } from "@quieter/ui";
-import { m } from "motion/react";
+import { LayoutGroup, m } from "motion/react";
+import { useState } from "react";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
+import { AnimatedHoverSurface } from "~/components/animated-hover-surface";
 
 const SIDEBAR_MAILBOX_ITEMS: ReadonlyArray<{
   id: MailboxCategory;
@@ -45,44 +47,61 @@ export const SidebarMailboxNav = ({
   mailboxProvider,
   onSelectMailbox,
   selectedMailbox,
-}: SidebarMailboxNavProps) => (
-  <nav aria-label="Mailboxes" className="flex flex-col gap-0.5">
-    {(mailboxProvider === "managed" ? MANAGED_MAILBOX_ITEMS : SIDEBAR_MAILBOX_ITEMS).map(
-      (item, index) => {
-        const isActive = selectedMailbox === item.id;
+}: SidebarMailboxNavProps) => {
+  const [hoveredMailbox, setHoveredMailbox] = useState<MailboxCategory | null>(null);
+  const highlightedMailbox = hoveredMailbox ?? selectedMailbox;
 
-        return (
-          <m.div
-            key={item.id}
-            className="w-full will-change-[transform,opacity,filter]"
-            initial={getSidebarEntranceInitial(animateEntrance)}
-            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-            transition={{
-              delay: getSidebarEntranceDelay(index + 2),
-              duration: 0.5,
-              ease: "easeOut",
-            }}
-          >
-            <Button
-              aria-current={isActive ? "page" : undefined}
-              className={cn("w-full justify-start gap-3 px-3 text-left text-foreground", {
-                "bg-muted hover:bg-muted": isActive,
-              })}
-              onClick={() => onSelectMailbox(item.id)}
-              type="button"
-              size="sm"
-              variant="ghost"
-            >
-              <HugeiconsIcon
-                strokeWidth={1.5}
-                className="shrink-0 text-foreground"
-                icon={item.icon}
-              />
-              {item.label}
-            </Button>
-          </m.div>
-        );
-      },
-    )}
-  </nav>
-);
+  return (
+    <LayoutGroup id="mailbox-sidebar-hover">
+      <nav aria-label="Mailboxes" className="flex flex-col gap-0.5">
+        {(mailboxProvider === "managed" ? MANAGED_MAILBOX_ITEMS : SIDEBAR_MAILBOX_ITEMS).map(
+          (item, index) => {
+            const isActive = selectedMailbox === item.id;
+
+            return (
+              <m.div
+                key={item.id}
+                className="relative w-full rounded-md will-change-[transform,opacity,filter]"
+                initial={getSidebarEntranceInitial(animateEntrance)}
+                animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                onBlur={() => setHoveredMailbox(null)}
+                onFocus={() => setHoveredMailbox(item.id)}
+                onMouseEnter={() => setHoveredMailbox(item.id)}
+                onMouseLeave={() => setHoveredMailbox(null)}
+                transition={{
+                  delay: getSidebarEntranceDelay(index + 2),
+                  duration: 0.5,
+                  ease: "easeOut",
+                }}
+              >
+                <AnimatedHoverSurface
+                  layoutId="mailbox-sidebar-hover"
+                  visible={highlightedMailbox === item.id}
+                />
+                <Button
+                  aria-current={isActive ? "page" : undefined}
+                  className={cn("w-full justify-start gap-3 bg-transparent px-3 text-left", {
+                    "text-foreground": isActive,
+                    "text-muted-foreground hover:text-foreground": !isActive,
+                  })}
+                  hoverLayer={false}
+                  onClick={() => onSelectMailbox(item.id)}
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                >
+                  <HugeiconsIcon
+                    strokeWidth={1.5}
+                    className="shrink-0 text-foreground"
+                    icon={item.icon}
+                  />
+                  {item.label}
+                </Button>
+              </m.div>
+            );
+          },
+        )}
+      </nav>
+    </LayoutGroup>
+  );
+};

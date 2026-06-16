@@ -23,7 +23,7 @@ import {
   Input,
   LinkButton,
 } from "@quieter/ui";
-import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
+import { AnimatePresence, domAnimation, LayoutGroup, LazyMotion, m } from "motion/react";
 import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -33,6 +33,7 @@ import {
 } from "react";
 import type { MailboxWorkspaceView } from "~/features/mailbox/domain/mailbox-workspace-view";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
+import { AnimatedHoverSurface } from "~/components/animated-hover-surface";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
 import {
   type MailboxSwitcherOrder,
@@ -113,6 +114,7 @@ type SidebarChatRowProps = {
   animateEntrance: boolean;
   chat: SidebarChat;
   editingTitle: string;
+  highlightedChatId: string | null;
   index: number;
   isActive: boolean;
   isEditing: boolean;
@@ -122,6 +124,7 @@ type SidebarChatRowProps = {
   onRenameKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
   onRenameSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onSelect: (chatId: string) => void;
+  onHoverChange: (chatId: string | null) => void;
   onStartRename: (chat: SidebarChat) => void;
 };
 
@@ -129,6 +132,7 @@ const SidebarChatRow = ({
   animateEntrance,
   chat,
   editingTitle,
+  highlightedChatId,
   index,
   isActive,
   isEditing,
@@ -138,6 +142,7 @@ const SidebarChatRow = ({
   onRenameKeyDown,
   onRenameSubmit,
   onSelect,
+  onHoverChange,
   onStartRename,
 }: SidebarChatRowProps) => {
   const title = chat.title?.trim() || "New chat";
@@ -145,9 +150,13 @@ const SidebarChatRow = ({
   return (
     <m.div
       key={chat.id}
-      className="w-full will-change-[transform,opacity,filter]"
+      className="relative w-full rounded-md will-change-[transform,opacity,filter]"
       initial={getSidebarEntranceInitial(animateEntrance)}
       animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+      onBlur={() => onHoverChange(null)}
+      onFocus={() => onHoverChange(chat.id)}
+      onMouseEnter={() => onHoverChange(chat.id)}
+      onMouseLeave={() => onHoverChange(null)}
       transition={{
         delay: getSidebarEntranceDelay(index + 3),
         duration: 0.5,
@@ -168,15 +177,15 @@ const SidebarChatRow = ({
           />
         </form>
       ) : (
-        <div
-          className={cn("group flex w-full items-center rounded-md", {
-            "bg-muted hover:bg-muted": isActive,
-            "hover:bg-muted/60": !isActive,
-          })}
-        >
+        <div className="group flex w-full items-center rounded-md">
+          <AnimatedHoverSurface
+            layoutId="chat-sidebar-hover"
+            visible={highlightedChatId === chat.id}
+          />
           <Button
             aria-current={isActive ? "page" : undefined}
-            className="min-w-0 flex-1 justify-start gap-3 bg-transparent px-3 text-left text-foreground hover:bg-transparent active:bg-transparent"
+            className="min-w-0 flex-1 justify-start gap-3 bg-transparent px-3 text-left text-foreground"
+            hoverLayer={false}
             onClick={() => onSelect(chat.id)}
             size="sm"
             type="button"
@@ -246,6 +255,8 @@ const SidebarContent = ({
 }: SidebarContentProps) => {
   const isInboxView = selectedView === "inbox";
   const [editingChat, setEditingChat] = useState<{ id: string; title: string } | null>(null);
+  const [hoveredChatId, setHoveredChatId] = useState<string | null>(null);
+  const highlightedChatId = hoveredChatId ?? activeChatId;
 
   const handleComposeNewMail = () => {
     onComposeNewMail();
@@ -444,33 +455,37 @@ const SidebarContent = ({
             </Button>
           </m.div>
 
-          <nav
-            aria-label="Chats"
-            className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1"
-          >
-            {chats.map((chat, index) => {
-              const isActive = chat.id === activeChatId;
+          <LayoutGroup id="chat-sidebar-hover">
+            <nav
+              aria-label="Chats"
+              className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1"
+            >
+              {chats.map((chat, index) => {
+                const isActive = chat.id === activeChatId;
 
-              return (
-                <SidebarChatRow
-                  key={chat.id}
-                  animateEntrance={animateEntrance}
-                  chat={chat}
-                  editingTitle={editingChat?.id === chat.id ? editingChat.title : ""}
-                  index={index}
-                  isActive={isActive}
-                  isEditing={editingChat?.id === chat.id}
-                  onCancelRename={() => setEditingChat(null)}
-                  onDelete={onDeleteChat}
-                  onEditingTitleChange={(title) => setEditingChat({ id: chat.id, title })}
-                  onRenameKeyDown={handleRenameKeyDown}
-                  onRenameSubmit={submitRenameChat}
-                  onSelect={handleSelectChat}
-                  onStartRename={startRenameChat}
-                />
-              );
-            })}
-          </nav>
+                return (
+                  <SidebarChatRow
+                    key={chat.id}
+                    animateEntrance={animateEntrance}
+                    chat={chat}
+                    editingTitle={editingChat?.id === chat.id ? editingChat.title : ""}
+                    highlightedChatId={highlightedChatId}
+                    index={index}
+                    isActive={isActive}
+                    isEditing={editingChat?.id === chat.id}
+                    onCancelRename={() => setEditingChat(null)}
+                    onDelete={onDeleteChat}
+                    onEditingTitleChange={(title) => setEditingChat({ id: chat.id, title })}
+                    onHoverChange={setHoveredChatId}
+                    onRenameKeyDown={handleRenameKeyDown}
+                    onRenameSubmit={submitRenameChat}
+                    onSelect={handleSelectChat}
+                    onStartRename={startRenameChat}
+                  />
+                );
+              })}
+            </nav>
+          </LayoutGroup>
         </>
       )}
 
