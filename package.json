@@ -1,5 +1,5 @@
 {
-  "name": "quieter",
+  "name": "@quieter/workspace",
   "private": true,
   "license": "MIT",
   "workspaces": {

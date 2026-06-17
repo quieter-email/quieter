@@ -1,0 +1,39 @@
+{
+  "name": "quieter",
+  "version": "0.0.0",
+  "description": "Quieter SDK placeholder.",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && bun build ./src/index.ts --outdir ./dist --target browser --format esm && tsgo --project ./tsconfig.build.json",
+    "fmt": "oxfmt --config ../../oxfmt.json .",
+    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
+    "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/sdk",
+    "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/sdk",
+    "prepublishOnly": "bun run build && bun run fmt:check && bun run lint && bun run typecheck",
+    "typecheck": "tsgo --noEmit"
+  },
+  "devDependencies": {
+    "@quieter/config": "workspace:*",
+    "@typescript/native-preview": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:"
+  }
+}
