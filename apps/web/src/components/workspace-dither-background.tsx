@@ -21,6 +21,8 @@ uniform float uStep;
 uniform float uDpr;
 uniform vec3 uColor;
 uniform float uAlphaScale;
+uniform float uFalloff;
+uniform float uPattern;
 
 float hashAt(vec2 cell) {
   return fract(sin(cell.x * 127.1 + cell.y * 311.7) * 43758.5453123);
@@ -39,10 +41,12 @@ void main() {
   float horizontal = column / columns;
   float vertical = row / rows;
   float bottomLeftToTopRight = clamp((1.0 - horizontal + vertical) * 0.5, 0.0, 1.0);
+  float topRightToBottomLeft = clamp((horizontal + 1.0 - vertical) * 0.5, 0.0, 1.0);
+  float baseDensity = mix(bottomLeftToTopRight, max(bottomLeftToTopRight, topRightToBottomLeft), uPattern);
   float contour =
     sin(horizontal * 13.5 + vertical * 6.5) * 0.09 +
     sin(horizontal * 5.5 - vertical * 15.0) * 0.055;
-  float density = clamp(pow(bottomLeftToTopRight, 1.28) + contour, 0.0, 1.0);
+  float density = clamp(pow(baseDensity, uFalloff) + contour, 0.0, 1.0);
   float threshold = density * 1.03 - 0.06;
 
   if (hashAt(vec2(column, row)) > threshold) {
@@ -61,6 +65,14 @@ void main() {
 }
 `;
 
+type WorkspaceDitherBackgroundProps = {
+  dotRgb?: string;
+  falloff?: number;
+  opacity?: number;
+  pattern?: "default" | "opposing-corners";
+  strength?: number;
+};
+
 const compileShader = (gl: WebGLRenderingContext, type: number, source: string) => {
   const shader = gl.createShader(type);
   if (!shader) return null;
@@ -76,7 +88,13 @@ const compileShader = (gl: WebGLRenderingContext, type: number, source: string) 
   return shader;
 };
 
-export const WorkspaceDitherBackground = () => {
+export const WorkspaceDitherBackground = ({
+  dotRgb,
+  falloff = 1.28,
+  opacity,
+  pattern = "default",
+  strength,
+}: WorkspaceDitherBackgroundProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -127,23 +145,30 @@ export const WorkspaceDitherBackground = () => {
     const dprLocation = gl.getUniformLocation(program, "uDpr");
     const colorLocation = gl.getUniformLocation(program, "uColor");
     const alphaScaleLocation = gl.getUniformLocation(program, "uAlphaScale");
+    const falloffLocation = gl.getUniformLocation(program, "uFalloff");
+    const patternLocation = gl.getUniformLocation(program, "uPattern");
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.uniform1f(stepLocation, DITHER_STEP);
+    gl.uniform1f(falloffLocation, falloff);
+    gl.uniform1f(patternLocation, pattern === "opposing-corners" ? 1 : 0);
 
     const applyTheme = () => {
       const style = getComputedStyle(canvas);
-      const raw = style.getPropertyValue("--workspace-dither-dot-rgb").trim();
+      const raw = dotRgb ?? style.getPropertyValue("--workspace-dither-dot-rgb").trim();
       const [red, green, blue] = (raw || "0, 0, 0")
         .split(",")
         .map((channel) => Number.parseFloat(channel) / 255);
       gl.uniform3f(colorLocation, red || 0, green || 0, blue || 0);
 
-      const strength = Number.parseFloat(
+      const cssStrength = Number.parseFloat(
         style.getPropertyValue("--workspace-dither-strength").trim(),
       );
-      gl.uniform1f(alphaScaleLocation, Number.isFinite(strength) ? strength : 1);
+      gl.uniform1f(
+        alphaScaleLocation,
+        strength ?? (Number.isFinite(cssStrength) ? cssStrength : 1),
+      );
     };
 
     const draw = () => {
@@ -189,13 +214,13 @@ export const WorkspaceDitherBackground = () => {
       gl.deleteShader(fragmentShader);
       gl.deleteBuffer(positionBuffer);
     };
-  }, []);
+  }, [dotRgb, falloff, pattern, strength]);
 
   return (
     <canvas
       className="pointer-events-none absolute inset-0 z-0 size-full overflow-hidden"
       ref={canvasRef}
-      style={{ opacity: "var(--workspace-dither-opacity, 0.25)" }}
+      style={{ opacity: opacity ?? "var(--workspace-dither-opacity, 0.25)" }}
     />
   );
 };

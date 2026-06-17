@@ -1,6 +1,6 @@
 import { LinkButton } from "@quieter/ui";
 import { domAnimation, LazyMotion, m } from "motion/react";
-import { ContourLines } from "~/components/contour-lines";
+import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
 import { WaitlistForm } from "./waitlist-form";
 
 export const HomePage = () => (
@@ -9,7 +9,7 @@ export const HomePage = () => (
       initial={{ opacity: 0, filter: "blur(8px)" }}
       animate={{ opacity: 1, filter: "blur(0px)" }}
       transition={{ duration: 1.2, ease: "easeOut" }}
-      className="relative isolate min-h-dvh w-full bg-neutral-950 will-change-[opacity,filter]"
+      className="quieter-workspace-background relative isolate min-h-dvh w-full bg-neutral-950 text-white will-change-[opacity,filter] [--background:#0a0a0a]"
     >
       <LinkButton
         className="fixed top-4 right-4 z-20 h-8 border-white/15 bg-white/5 px-3 text-xs text-white/50 shadow-none backdrop-blur-sm hover:bg-white/10 hover:text-white/80"
@@ -20,9 +20,8 @@ export const HomePage = () => (
         Access
       </LinkButton>
       <div className="relative z-10 grid min-h-dvh w-full place-items-center px-6 py-16">
-        <div className="absolute inset-0 bg-[radial-gradient(48%_42%_at_50%_50%,rgba(0,0,0,0.92)_0%,rgba(0,0,0,0.68)_48%,rgba(0,0,0,0.18)_72%,transparent_100%)]" />
         <div className="relative flex w-full max-w-5xl flex-col items-center justify-center gap-y-10 min-[2560px]:max-w-6xl min-[2560px]:gap-y-11">
-          <h1 className="max-w-3xl text-center text-6xl leading-[0.95] font-semibold text-balance text-white min-[1920px]:max-w-4xl min-[1920px]:text-[3.875rem] min-[2560px]:text-[4.25rem]">
+          <h1 className="max-w-3xl text-center text-[3.25rem] leading-[0.95] font-semibold text-balance text-white min-[1920px]:max-w-4xl min-[1920px]:text-[3.875rem] min-[2560px]:text-[4.25rem] sm:text-6xl">
             <m.span
               initial={{ opacity: 0, y: 20, filter: "blur(8px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
@@ -78,9 +77,13 @@ export const HomePage = () => (
           </m.div>
         </div>
       </div>
-      <div className="fixed top-0 left-0 h-dvh w-dvw">
-        <ContourLines />
-      </div>
+      <WorkspaceDitherBackground
+        dotRgb="21, 21, 21"
+        falloff={2.35}
+        opacity={1}
+        pattern="opposing-corners"
+        strength={14}
+      />
     </m.div>
   </LazyMotion>
 );

@@ -1,6 +1,6 @@
 {
   "$schema": "https://v2-9-17.turborepo.dev/schema.json",
-  "ui": "stream",
+  "ui": "tui",
   "envMode": "strict",
   "globalDependencies": [".env*"],
   "tasks": {
