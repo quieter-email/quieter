@@ -3,7 +3,7 @@ import { chat, type ChatMiddleware } from "@tanstack/ai";
 import { z } from "zod";
 import { createOpenRouterAdapter } from "./openrouter";
 
-export const GMAIL_USEFUL_DETAIL_MODEL = "openai/gpt-5-nano" as const;
+export const GMAIL_USEFUL_DETAIL_MODEL = "deepseek/deepseek-v4-flash" as const;
 
 const deliveryStatusSchema = z.enum([
   "delayed",
@@ -95,11 +95,6 @@ export const extractGmailUsefulDetail = async ({
       },
     ],
     middleware,
-    modelOptions: {
-      reasoning: {
-        effort: "minimal",
-      },
-    },
     outputSchema: gmailUsefulDetailSchema,
     systemPrompts: [
       `Extract at most one useful, time-sensitive detail from the email JSON.

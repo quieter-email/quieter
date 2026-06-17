@@ -170,12 +170,12 @@ export const materializeGmailUsefulDetail = ({
     !expiresAt ||
     expiresAt <= now ||
     relevantFrom >= expiresAt ||
-    relevantFrom < receivedAt ||
     expiresAt.getTime() - receivedAt.getTime() > MAX_RELEVANCE_HORIZON_MS[candidate.kind] ||
     !candidate.relevanceSource
   ) {
     return null;
   }
+  const visibleFrom = relevantFrom < receivedAt ? receivedAt : relevantFrom;
 
   const code = candidate.kind === "verification_code" ? normalizeCode(candidate.code) : null;
   if (candidate.kind === "verification_code" && !code) {
@@ -229,7 +229,7 @@ export const materializeGmailUsefulDetail = ({
     receivedAt,
     reference,
     relevanceSource: candidate.relevanceSource,
-    relevantFrom,
+    relevantFrom: visibleFrom,
     status,
     summary,
     title: trimText(candidate.service, 80) ?? merchant ?? carrier ?? defaultTitles[candidate.kind],

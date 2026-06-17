@@ -36,6 +36,7 @@ const billingProductIdCache = new Map<PaidBillingPlan, string>();
 let aiUsageMeterId: string | null = null;
 const aiUsageRates = {
   "anthropic/claude-haiku-4.5": { completion: 500, prompt: 100 },
+  "deepseek/deepseek-v4-flash": { completion: 18, prompt: 9 },
   "google/gemini-3.1-flash-lite": { completion: 150, prompt: 25 },
   "google/gemini-3.5-flash": { completion: 900, prompt: 150 },
   "openai/gpt-5-nano": { completion: 40, prompt: 5 },

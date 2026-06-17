@@ -3,7 +3,7 @@ import { chat, type ChatMiddleware } from "@tanstack/ai";
 import { z } from "zod";
 import { createOpenRouterAdapter } from "./openrouter";
 
-export const GMAIL_AUTO_LABEL_MODEL = "openai/gpt-5-nano" as const;
+export const GMAIL_AUTO_LABEL_MODEL = "deepseek/deepseek-v4-flash" as const;
 
 export type GmailAutoLabelCandidate = {
   description: string | null;
@@ -80,7 +80,12 @@ export const classifyGmailMessage = async ({
     messages: [
       {
         content: JSON.stringify({
-          availableLabels: eligibleLabels,
+          availableLabels: eligibleLabels.map((label) => ({
+            description: label.description,
+            inclusionCriteria: label.inclusionCriteria,
+            labelId: label.id,
+            name: label.name,
+          })),
           email: {
             attachments: message.attachments?.map(({ fileName, mimeType }) => ({
               fileName,
@@ -97,11 +102,6 @@ export const classifyGmailMessage = async ({
       },
     ],
     middleware,
-    modelOptions: {
-      reasoning: {
-        effort: "minimal",
-      },
-    },
     outputSchema: gmailAutoLabelSchema,
     systemPrompts: [
       `Decide which existing Gmail user labels apply to the email JSON.
@@ -113,10 +113,13 @@ Return one decision per label in availableLabels with its exact labelId and appl
 
 Strict rules:
 - Start with applies false for every label.
-- applies true only when the email directly satisfies that label's inclusionCriteria with clear evidence
-  in the sender, subject, or body. Speculation, weak association, and "could be related" are forbidden.
+- Set applies true when the email directly satisfies that label's inclusionCriteria with clear evidence
+  in the sender, subject, or body.
+- Use the label's exact labelId value. Do not use the label name.
+- Apply every clearly satisfied label, including multiple labels, when their criteria are independently met.
+- Speculation, weak association, and "could be related" are forbidden.
 - If you are unsure, keep applies false.
-- Most emails should receive zero labels.
+- Many routine emails should receive zero labels.
 - Marketing, newsletters, promotions, ads, receipts for unrelated purchases, and routine notifications
   must stay unlabeled unless inclusionCriteria explicitly and unambiguously covers them.
 - Never set applies true for every label.

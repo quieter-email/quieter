@@ -652,6 +652,7 @@ const processMailboxHistory = async ({
           .where(eq(gmailWatchState.mailboxId, mailboxId))
           .limit(1);
         if (!state?.historyId) {
+          await beginHistoryRecovery(accessToken, mailboxId, state?.lastProcessedAt ?? null);
           break;
         }
 
@@ -903,7 +904,7 @@ export const processGmailPubSubNotification = async (
     return { ignored: true, reason: "mailbox_not_connected" as const };
   }
 
-  await ensureWatchState(gmailMailbox.id, input.historyId);
+  await ensureWatchState(gmailMailbox.id);
   await db
     .update(gmailWatchState)
     .set({
