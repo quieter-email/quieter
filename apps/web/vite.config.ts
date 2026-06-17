@@ -8,8 +8,6 @@ import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
 
-const motionPackages = ["motion", "framer-motion", "motion-dom", "motion-utils"] as const;
-
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
   const isSentryEnabled = !isDev && !!serverEnv.SENTRY_AUTH_TOKEN;
@@ -47,10 +45,10 @@ export default defineConfig(({ command }) => {
       ...sentryPlugins,
     ],
     optimizeDeps: {
-      include: [...motionPackages, "motion/react"],
+      include: ["motion", "motion/react"],
     },
     resolve: {
-      dedupe: ["@tanstack/react-router", "react", "react-dom", ...motionPackages],
+      dedupe: ["@tanstack/react-router", "react", "react-dom", "motion"],
       tsconfigPaths: true,
     },
     server: {

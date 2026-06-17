@@ -1,0 +1,84 @@
+name: Publish SDK
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      version:
+        description: SDK version to publish from packages/sdk/package.json
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: sdk-publish-${{ github.event.release.tag_name || inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish quieter
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Use latest npm
+        run: npm install --global npm@latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Validate release version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          WORKFLOW_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          package_version="$(node -p "require('./packages/sdk/package.json').version")"
+          expected_version="${WORKFLOW_VERSION:-}"
+
+          if [ -n "${RELEASE_TAG:-}" ]; then
+            case "$RELEASE_TAG" in
+              sdk-v*) expected_version="${RELEASE_TAG#sdk-v}" ;;
+              *) echo "SDK release tags must use sdk-v<version>; got $RELEASE_TAG." >&2; exit 1 ;;
+            esac
+          fi
+
+          if [ "$package_version" != "$expected_version" ]; then
+            echo "packages/sdk/package.json version $package_version does not match $expected_version." >&2
+            exit 1
+          fi
+
+          if npm view "quieter@$package_version" version >/dev/null 2>&1; then
+            echo "quieter@$package_version is already published." >&2
+            exit 1
+          fi
+
+      - name: Format check
+        run: bun run fmt:check
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
+
+      - name: Publish
+        working-directory: packages/sdk
+        run: npm publish --access public
