@@ -14,3 +14,16 @@ export const gmailUsefulDetailsQueryOptions = (mailboxId: string, enabled = true
     refetchOnWindowFocus: "always",
     refetchOnReconnect: "always",
   });
+
+export const gmailThreadUsefulDetailsQueryOptions = (
+  mailboxId: string,
+  gmailThreadId: string,
+  enabled = true,
+) =>
+  queryOptions({
+    queryKey: ["gmail-useful-details", mailboxId, "thread", gmailThreadId],
+    queryFn: ({ signal }) =>
+      rpc.mail.listGmailThreadUsefulDetails({ gmailThreadId, mailboxId }, { signal }),
+    enabled,
+    staleTime: 1000 * 30,
+  });

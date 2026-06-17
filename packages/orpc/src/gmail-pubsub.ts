@@ -32,7 +32,6 @@ import { randomUUID } from "node:crypto";
 import { syncGmailLabels } from "./gmail-labels";
 import { runAuthorizedGmailMailbox } from "./gmail-mailbox-access";
 import {
-  cleanupExpiredGmailUsefulDetails,
   listPendingGmailUsefulDetailMessageIds,
   processGmailUsefulDetailMessage,
   reportPendingGmailUsefulDetailUsage,
@@ -712,7 +711,6 @@ const processMailboxHistory = async ({
       await Promise.all([
         reportPendingAutoLabelUsage(mailboxId, userId),
         reportPendingGmailUsefulDetailUsage(mailboxId, userId),
-        cleanupExpiredGmailUsefulDetails(mailboxId),
       ]);
       const now = new Date();
       await db
@@ -843,7 +841,6 @@ export const maintainGmailPubSubMailbox = async (input: {
   }
 
   try {
-    await cleanupExpiredGmailUsefulDetails(gmailMailbox.id);
     if (gmailMailbox.status !== "connected") {
       return { status: "skipped" as const };
     }
