@@ -177,6 +177,23 @@ describe("Gmail useful-detail materialization", () => {
     });
   });
 
+  test("clamps relevance start to the message receive time", () => {
+    const detail = materializeGmailUsefulDetail({
+      candidate: candidate({
+        eventAt: "2026-06-20T09:00:00.000Z",
+        kind: "appointment",
+        relevanceSource: "inferred",
+        relevantFrom: "2026-06-14T11:00:00.000Z",
+        relevantUntil: "2026-06-20T10:00:00.000Z",
+        summary: "Arrive 10 minutes early.",
+      }),
+      message: message(),
+      now: NOW,
+    });
+
+    expect(detail?.relevantFrom.toISOString()).toBe("2026-06-14T11:58:00.000Z");
+  });
+
   test("drops medium-confidence classifications", () => {
     const detail = materializeGmailUsefulDetail({
       candidate: candidate({
