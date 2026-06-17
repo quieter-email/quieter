@@ -1,23 +1,5 @@
-import {
-  getAutoLabelEligibleLabels,
-  resolveAutoLabelDecisions,
-  sanitizeAutoLabelSelection,
-} from "@quieter/ai";
+import { resolveAutoLabelDecisions, sanitizeAutoLabelSelection } from "@quieter/ai";
 import { describe, expect, test } from "bun:test";
-
-describe("Gmail auto-label eligibility", () => {
-  test("only labels with inclusion criteria are eligible", () => {
-    const eligible = getAutoLabelEligibleLabels([
-      { description: "Work mail", id: "a", inclusionCriteria: "Client projects", name: "Business" },
-      { description: null, id: "b", inclusionCriteria: null, name: "Personal" },
-      { description: null, id: "c", inclusionCriteria: "   ", name: "University" },
-    ]);
-
-    expect(eligible).toEqual([
-      { description: "Work mail", id: "a", inclusionCriteria: "Client projects", name: "Business" },
-    ]);
-  });
-});
 
 describe("Gmail auto-label selection", () => {
   test("drops the result when every available label was selected", () => {
@@ -57,8 +39,8 @@ describe("Gmail auto-label selection", () => {
     ]);
   });
 
-  test("resolves model decisions against eligible labels only", () => {
-    const eligibleLabelIds = new Set(["business", "personal"]);
+  test("resolves model decisions against available labels only", () => {
+    const availableLabelIds = new Set(["business", "personal"]);
 
     expect(
       resolveAutoLabelDecisions(
@@ -67,7 +49,7 @@ describe("Gmail auto-label selection", () => {
           { applies: true, labelId: "personal" },
           { applies: true, labelId: "ignored" },
         ],
-        eligibleLabelIds,
+        availableLabelIds,
       ),
     ).toEqual([]);
   });
