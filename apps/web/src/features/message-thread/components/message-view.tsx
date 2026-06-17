@@ -40,6 +40,10 @@ import {
   findLinkedDraftForMessage,
   hasDistinctReplyAllRecipients,
 } from "~/features/compose";
+import {
+  GmailUsefulDetailCard,
+  type GmailUsefulDetail,
+} from "~/features/gmail-useful-details/components/gmail-useful-detail-card";
 import { MessageLabels } from "~/features/message-labels/components/message-labels";
 import {
   hasRenderableMessageBody,
@@ -53,6 +57,7 @@ import { labelsQueryOptions } from "~/lib/gmail/labels-query";
 import { getMessageInspectorOptions } from "~/lib/gmail/message-inspector-query";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
+import { gmailThreadUsefulDetailsQueryOptions } from "~/lib/gmail/useful-details-query";
 import { createMailboxThreadMessageActionHandlers } from "./message-action-handlers";
 import { MessageActionsDropdown } from "./message-actions";
 import { MessageAttachments } from "./message-attachments";
@@ -551,6 +556,7 @@ const ThreadMessageCard = ({
   onUnsubscribe,
   onToggleExpanded,
   isActionPending,
+  usefulDetails,
 }: {
   currentUserEmail?: string | null;
   expanded: boolean;
@@ -563,6 +569,7 @@ const ThreadMessageCard = ({
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
   onToggleExpanded: () => void;
+  usefulDetails: GmailUsefulDetail[];
 }) => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
@@ -627,6 +634,14 @@ const ThreadMessageCard = ({
         }
       />
 
+      {usefulDetails.length > 0 && (
+        <div className="space-y-1.5 px-4 pb-3 sm:px-5">
+          {usefulDetails.map((detail) => (
+            <GmailUsefulDetailCard detail={detail} key={detail.id} />
+          ))}
+        </div>
+      )}
+
       <div id={`message-body-${message.id}`}>
         <ThreadMessageBody expanded={expanded} isLoading={isLoading} message={message} />
       </div>
@@ -651,6 +666,7 @@ const SingleMessageCard = ({
   onComposeDraftRequested,
   onUnsubscribe,
   isActionPending,
+  usefulDetails,
 }: {
   currentUserEmail?: string | null;
   isLoading?: boolean;
@@ -661,6 +677,7 @@ const SingleMessageCard = ({
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
+  usefulDetails: GmailUsefulDetail[];
 }) => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
@@ -710,6 +727,14 @@ const SingleMessageCard = ({
         senderNameClassName="text-base"
       />
 
+      {usefulDetails.length > 0 && (
+        <div className="space-y-1.5 px-4 pb-3 sm:px-5">
+          {usefulDetails.map((detail) => (
+            <GmailUsefulDetailCard detail={detail} key={detail.id} />
+          ))}
+        </div>
+      )}
+
       <div className="px-4 pb-4 sm:px-5 sm:pb-5">
         <MessageBody html={message.bodyHtml} isLoading={isLoading} text={message.bodyText} />
       </div>
@@ -734,6 +759,7 @@ const ThreadMessageList = ({
   onComposeDraftRequested,
   onUnsubscribe,
   isActionPending,
+  usefulDetails,
 }: {
   allThreadMessages: MessageListItem[];
   currentUserEmail?: string | null;
@@ -744,6 +770,7 @@ const ThreadMessageList = ({
   messages: MessageListItem[];
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
+  usefulDetails: GmailUsefulDetail[];
 }) => {
   const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>(
     messages.length ? [messages[0].id] : [],
@@ -775,6 +802,9 @@ const ThreadMessageList = ({
                   : [...current, threadMessage.id],
               );
             }}
+            usefulDetails={usefulDetails.filter(
+              (detail) => detail.gmailMessageId === threadMessage.id,
+            )}
           />
         );
       })}
@@ -805,6 +835,9 @@ export const MessageView = ({
       messages: [message],
     },
   });
+  const { data: usefulDetails = [] } = useQuery(
+    gmailThreadUsefulDetailsQueryOptions(mailboxId, message.threadId, mailboxProvider === "gmail"),
+  );
   const {
     isError: isThreadError,
     isFetching: isThreadFetching,
@@ -945,6 +978,7 @@ export const MessageView = ({
           onUnsubscribe={
             mailboxProvider === "gmail" ? mailboxActions.unsubscribeFromMessage : undefined
           }
+          usefulDetails={usefulDetails}
         />
       ) : (
         visibleMessages.map((threadMessage) => (
@@ -961,6 +995,9 @@ export const MessageView = ({
             onUnsubscribe={
               mailboxProvider === "gmail" ? mailboxActions.unsubscribeFromMessage : undefined
             }
+            usefulDetails={usefulDetails.filter(
+              (detail) => detail.gmailMessageId === threadMessage.id,
+            )}
           />
         ))
       )}

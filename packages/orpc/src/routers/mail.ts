@@ -52,6 +52,7 @@ import { setGmailAutoLabeling } from "../gmail-pubsub";
 import {
   dismissGmailUsefulDetail,
   listGmailUsefulDetails,
+  listGmailThreadUsefulDetails,
   setGmailUsefulDetails,
 } from "../gmail-useful-details";
 import {
@@ -198,6 +199,22 @@ export const mailRouter = {
     .input(z.object({ mailboxId: mailboxIdSchema }))
     .handler(async ({ context, input }) => {
       return await listGmailUsefulDetails({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+    }),
+
+  listGmailThreadUsefulDetails: protectedProcedure
+    .route({ method: "GET" })
+    .input(
+      z.object({
+        gmailThreadId: z.string().trim().min(1),
+        mailboxId: mailboxIdSchema,
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      return await listGmailThreadUsefulDetails({
+        gmailThreadId: input.gmailThreadId,
         mailboxId: input.mailboxId,
         userId: context.userId,
       });

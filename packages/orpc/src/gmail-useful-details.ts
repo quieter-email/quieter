@@ -49,6 +49,47 @@ const excludedLabels = new Set<string>([
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message.slice(0, 2_000) : "Unknown useful-details error.";
 
+const serializeUsefulDetails = async (
+  items: (typeof gmailUsefulDetail.$inferSelect)[],
+): Promise<GmailUsefulDetailListItem[]> => {
+  const details: GmailUsefulDetailListItem[] = [];
+
+  for (const item of items) {
+    let code: string | null = null;
+    if (item.encryptedCode) {
+      try {
+        code = decryptSecret(item.encryptedCode);
+      } catch (error) {
+        console.error(`Could not decrypt useful detail ${item.id}.`, getErrorMessage(error));
+        continue;
+      }
+    }
+
+    details.push({
+      carrier: item.carrier,
+      code,
+      eventAt: item.eventAt,
+      expectedAt: item.expectedAt,
+      expiresAt: item.expiresAt,
+      gmailMessageId: item.gmailMessageId,
+      gmailThreadId: item.gmailThreadId,
+      id: item.id,
+      kind: item.kind,
+      location: item.location,
+      receivedAt: item.receivedAt,
+      reference: item.reference,
+      relevanceSource: item.relevanceSource,
+      relevantFrom: item.relevantFrom,
+      status: item.deliveryStatus,
+      summary: item.summary,
+      title: item.title,
+      trackingNumber: item.trackingNumber,
+    });
+  }
+
+  return details;
+};
+
 const trimText = (value: string | null, maxLength: number) => {
   const normalized = value?.trim();
   return normalized ? normalized.slice(0, maxLength) : null;
@@ -552,14 +593,6 @@ export const reportPendingGmailUsefulDetailUsage = async (mailboxId: string, use
   }
 };
 
-export const cleanupExpiredGmailUsefulDetails = async (mailboxId: string) => {
-  await db
-    .delete(gmailUsefulDetail)
-    .where(
-      and(eq(gmailUsefulDetail.mailboxId, mailboxId), lte(gmailUsefulDetail.expiresAt, new Date())),
-    );
-};
-
 export const setGmailUsefulDetails = async (input: {
   enabled: boolean;
   mailboxId: string;
@@ -620,7 +653,6 @@ export const listGmailUsefulDetails = async (input: { mailboxId: string; userId:
     };
   }
 
-  await cleanupExpiredGmailUsefulDetails(input.mailboxId);
   const now = new Date();
   const [items, [nextItem]] = await Promise.all([
     db
@@ -651,46 +683,31 @@ export const listGmailUsefulDetails = async (input: { mailboxId: string; userId:
       .limit(1),
   ]);
 
-  const visibleItems: GmailUsefulDetailListItem[] = [];
-
-  for (const item of items) {
-    let code: string | null = null;
-    if (item.encryptedCode) {
-      try {
-        code = decryptSecret(item.encryptedCode);
-      } catch (error) {
-        console.error(`Could not decrypt useful detail ${item.id}.`, getErrorMessage(error));
-        continue;
-      }
-    }
-
-    visibleItems.push({
-      carrier: item.carrier,
-      code,
-      eventAt: item.eventAt,
-      expectedAt: item.expectedAt,
-      expiresAt: item.expiresAt,
-      gmailMessageId: item.gmailMessageId,
-      gmailThreadId: item.gmailThreadId,
-      id: item.id,
-      kind: item.kind,
-      location: item.location,
-      receivedAt: item.receivedAt,
-      reference: item.reference,
-      relevanceSource: item.relevanceSource,
-      relevantFrom: item.relevantFrom,
-      status: item.deliveryStatus,
-      summary: item.summary,
-      title: item.title,
-      trackingNumber: item.trackingNumber,
-    });
-  }
-
   return {
     enabled,
-    items: visibleItems,
+    items: await serializeUsefulDetails(items),
     nextRelevantAt: nextItem?.relevantFrom ?? null,
   };
+};
+
+export const listGmailThreadUsefulDetails = async (input: {
+  gmailThreadId: string;
+  mailboxId: string;
+  userId: string;
+}) => {
+  await assertOwnedGmailMailbox(input.mailboxId, input.userId);
+  const items = await db
+    .select()
+    .from(gmailUsefulDetail)
+    .where(
+      and(
+        eq(gmailUsefulDetail.mailboxId, input.mailboxId),
+        eq(gmailUsefulDetail.gmailThreadId, input.gmailThreadId),
+      ),
+    )
+    .orderBy(asc(gmailUsefulDetail.receivedAt));
+
+  return await serializeUsefulDetails(items);
 };
 
 export const dismissGmailUsefulDetail = async (input: {
