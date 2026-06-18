@@ -12,6 +12,8 @@ import {
 import { and, eq, exists, ilike, not, or, sql, type SQL } from "drizzle-orm";
 import { normalizeManagedSearchValue, parseAbsoluteDate, parseRelativeDate } from "./normalization";
 
+const createContainsPattern = (value: string) => `%${value.replace(/[%_\\]/g, "\\$&")}%`;
+
 const createFilterCondition = (
   mailboxId: string,
   filter: MailSearchFilter,
@@ -23,28 +25,29 @@ const createFilterCondition = (
 
   switch (filter.type) {
     case "from":
-      condition = ilike(managedMailMessage.fromNormalized, `%${normalizedValue}%`);
+      condition = ilike(managedMailMessage.fromNormalized, createContainsPattern(normalizedValue));
       break;
     case "to":
-      condition = ilike(managedMailMessage.toNormalized, `%${normalizedValue}%`);
+      condition = ilike(managedMailMessage.toNormalized, createContainsPattern(normalizedValue));
       break;
     case "cc":
-      condition = ilike(managedMailMessage.ccNormalized, `%${normalizedValue}%`);
+      condition = ilike(managedMailMessage.ccNormalized, createContainsPattern(normalizedValue));
       break;
     case "bcc":
-      condition = ilike(managedMailMessage.bccNormalized, `%${normalizedValue}%`);
+      condition = ilike(managedMailMessage.bccNormalized, createContainsPattern(normalizedValue));
       break;
     case "subject":
-      condition = ilike(managedMailMessage.subject, `%${value}%`);
+      condition = ilike(managedMailMessage.subject, createContainsPattern(value));
       break;
     case "content":
-      condition = ilike(managedMailMessage.bodyText, `%${value}%`);
+      condition = ilike(managedMailMessage.bodyText, createContainsPattern(value));
       break;
     case "filename":
       condition = exists(
         sql`select 1 from ${managedMailAttachment}
             where ${managedMailAttachment.messageId} = ${managedMailMessage.id}
-              and ${managedMailAttachment.normalizedFileName} like ${`%${normalizedValue}%`}`,
+              and ${managedMailAttachment.normalizedFileName}
+                like ${createContainsPattern(normalizedValue)}`,
       );
       break;
     case "has":
@@ -104,12 +107,12 @@ const createTextCondition = (text: string) =>
   or(
     sql`to_tsvector('simple', ${managedMailMessage.searchText})
         @@ websearch_to_tsquery('simple', ${text})`,
-    ilike(managedMailMessage.searchText, `%${text}%`),
+    ilike(managedMailMessage.searchText, createContainsPattern(text)),
     exists(
       sql`select 1 from ${managedMailAttachment}
           where ${managedMailAttachment.messageId} = ${managedMailMessage.id}
             and ${managedMailAttachment.normalizedFileName}
-              like ${`%${normalizeManagedSearchValue(text)}%`}`,
+              like ${createContainsPattern(normalizeManagedSearchValue(text))}`,
     ),
   )!;
 

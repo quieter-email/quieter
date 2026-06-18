@@ -136,11 +136,12 @@ export const reorderManagedLabels = async (input: {
     userId: input.userId,
   });
   await assertManagedLabelsBelongToMailbox(input.mailboxId, input.labelIds);
+  const now = new Date();
   await Promise.all(
     input.labelIds.map((labelId, position) =>
       db
         .update(managedMailLabel)
-        .set({ position, updatedAt: new Date(), updatedByUserId: input.userId })
+        .set({ position, updatedAt: now, updatedByUserId: input.userId })
         .where(
           and(eq(managedMailLabel.id, labelId), eq(managedMailLabel.mailboxId, input.mailboxId)),
         ),

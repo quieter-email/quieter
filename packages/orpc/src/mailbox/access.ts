@@ -6,6 +6,24 @@ import { and, eq, or } from "drizzle-orm";
 export const MAILBOX_PROVIDER_GMAIL = "gmail" as const;
 export const MAILBOX_PROVIDER_MANAGED = "managed" as const;
 
+export const assertOwnedGmailMailbox = async (input: { mailboxId: string; userId: string }) => {
+  const [gmailMailbox] = await db
+    .select({ id: mailbox.id })
+    .from(mailbox)
+    .where(
+      and(
+        eq(mailbox.id, input.mailboxId),
+        eq(mailbox.ownerUserId, input.userId),
+        eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL),
+      ),
+    )
+    .limit(1);
+  if (!gmailMailbox) {
+    throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
+  }
+  return gmailMailbox;
+};
+
 export const getAuthorizedManagedMailbox = async (input: {
   mailboxId: string;
   requiredRoles?: MailboxGrantRole[];

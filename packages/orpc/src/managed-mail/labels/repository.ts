@@ -93,7 +93,6 @@ export const updateManagedMessageLabelAssignments = async (input: {
 
   return input.messageIds.map((messageId) => ({
     id: messageId,
-    isUnread: false,
     labelIds: labelIdsByMessageId.get(messageId) ?? [],
   }));
 };

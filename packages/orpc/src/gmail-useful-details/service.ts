@@ -12,7 +12,6 @@ import {
   gmailUsefulDetail,
   gmailUsefulDetailEvent,
   gmailUsefulDetailSettings,
-  mailbox,
   type GmailDeliveryStatus,
   type GmailUsefulDetailKind,
   type GmailUsefulDetailRelevanceSource,
@@ -21,6 +20,7 @@ import { MAILBOX_LABELS, type MessageListItem } from "@quieter/gmail";
 import { and, asc, eq, gt, isNull, lte, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { decryptSecret, encryptSecret } from "../gmail-mailbox-access";
+import { assertOwnedGmailMailbox } from "../mailbox/access";
 
 const RETRY_BASE_MS = 1000 * 60 * 5;
 const RETRY_MAX_MS = 1000 * 60 * 60 * 24;
@@ -283,24 +283,6 @@ export const isGmailUsefulDetailCandidate = (
 ): message is MessageListItem =>
   !!message?.labelIds?.includes(MAILBOX_LABELS.inbox) &&
   !message.labelIds.some((labelId) => excludedLabels.has(labelId));
-
-const assertOwnedGmailMailbox = async (mailboxId: string, userId: string) => {
-  const [gmailMailbox] = await db
-    .select({ id: mailbox.id })
-    .from(mailbox)
-    .where(
-      and(
-        eq(mailbox.id, mailboxId),
-        eq(mailbox.ownerUserId, userId),
-        eq(mailbox.provider, "gmail"),
-      ),
-    )
-    .limit(1);
-
-  if (!gmailMailbox) {
-    throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
-  }
-};
 
 const getOrCreateEvent = async (mailboxId: string, gmailMessageId: string) => {
   const now = new Date();
@@ -594,7 +576,7 @@ export const reportPendingGmailUsefulDetailUsage = async (mailboxId: string, use
 };
 
 export const listGmailUsefulDetails = async (input: { mailboxId: string; userId: string }) => {
-  await assertOwnedGmailMailbox(input.mailboxId, input.userId);
+  await assertOwnedGmailMailbox(input);
   const [[settings], entitlement] = await Promise.all([
     db
       .select({ enabled: gmailUsefulDetailSettings.enabled })
@@ -654,7 +636,7 @@ export const listGmailThreadUsefulDetails = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
-  await assertOwnedGmailMailbox(input.mailboxId, input.userId);
+  await assertOwnedGmailMailbox(input);
   const items = await db
     .select()
     .from(gmailUsefulDetail)
@@ -674,7 +656,7 @@ export const dismissGmailUsefulDetail = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
-  await assertOwnedGmailMailbox(input.mailboxId, input.userId);
+  await assertOwnedGmailMailbox(input);
   const [dismissed] = await db
     .update(gmailUsefulDetail)
     .set({ dismissedAt: new Date(), updatedAt: new Date() })

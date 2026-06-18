@@ -1,27 +1,13 @@
-import { ORPCError } from "@orpc/server";
 import { assertUserBillingFeature } from "@quieter/billing/entitlements";
-import { db, gmailAutoLabelSettings, mailbox } from "@quieter/database";
-import { and, eq } from "drizzle-orm";
+import { db, gmailAutoLabelSettings } from "@quieter/database";
+import { assertOwnedGmailMailbox } from "../mailbox/access";
 
 export const setGmailAutoLabeling = async (input: {
   enabled: boolean;
   mailboxId: string;
   userId: string;
 }) => {
-  const [gmailMailbox] = await db
-    .select({ id: mailbox.id })
-    .from(mailbox)
-    .where(
-      and(
-        eq(mailbox.id, input.mailboxId),
-        eq(mailbox.ownerUserId, input.userId),
-        eq(mailbox.provider, "gmail"),
-      ),
-    )
-    .limit(1);
-  if (!gmailMailbox) {
-    throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
-  }
+  await assertOwnedGmailMailbox(input);
   if (input.enabled) {
     await assertUserBillingFeature({
       feature: "gmailAutomation",

@@ -83,12 +83,14 @@ export const matchesManagedMailRule = (input: {
   attachments: readonly ManagedAttachmentRecord[];
   matchMode: "all" | "any";
   message: ManagedMessageRecord;
+  now?: Date;
   search: StructuredMailSearch;
 }) => {
   const search = normalizeStructuredMailSearch(input.search);
+  const now = input.now ?? new Date();
   const results = search.filters
     .filter((filter) => filter.type !== "label")
-    .map((filter) => matchesFilter(input.message, input.attachments, filter, new Date()));
+    .map((filter) => matchesFilter(input.message, input.attachments, filter, now));
 
   if (search.text) results.push(includesNormalized(input.message.searchText, search.text));
   if (results.length === 0) return false;
