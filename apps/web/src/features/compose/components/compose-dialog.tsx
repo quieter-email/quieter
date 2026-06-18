@@ -70,9 +70,9 @@ type ComposeRecipientFieldProps = {
   disabled?: boolean;
   endAdornment?: ReactNode;
   invalid?: boolean;
+  label: string;
   onBlur: () => void;
   onChange: (value: string) => void;
-  placeholder: string;
   value: string;
 };
 
@@ -230,9 +230,9 @@ const ComposeRecipientField = ({
   disabled,
   endAdornment,
   invalid,
+  label,
   onBlur,
   onChange,
-  placeholder,
   value,
 }: ComposeRecipientFieldProps) => {
   const [recipientState, setRecipientState] = useState<RecipientInputState>({
@@ -318,8 +318,8 @@ const ComposeRecipientField = ({
           "cursor-text": !disabled,
         })}
       >
-        <span className="mt-1.5 shrink-0 text-xs font-medium text-muted-foreground">
-          {placeholder}
+        <span className="flex size-8 shrink-0 items-center text-sm font-medium text-muted-foreground">
+          {label}
         </span>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
           {tokens.map((token, index) => (
@@ -344,13 +344,12 @@ const ComposeRecipientField = ({
             onChange={(event) => updateInputValue(event.currentTarget.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={tokens.length > 0 ? "" : placeholder}
             spellCheck={false}
             type="text"
             value={inputValue}
           />
         </div>
-        {endAdornment && <div className="mt-1.5 shrink-0">{endAdornment}</div>}
+        {endAdornment && <div className="shrink-0">{endAdornment}</div>}
       </div>
     </div>
   );
@@ -505,14 +504,17 @@ export const ComposeDialog = ({
                 ariaLabel="Recipients"
                 clearActiveDraftError={clearActiveDraftError}
                 endAdornment={
-                  <div className="flex shrink-0 items-center gap-3">
+                  <div className="flex shrink-0 items-center gap-0.5">
                     <button
                       aria-controls="compose-cc-field"
                       aria-expanded={state.showCc}
-                      className={cn("text-xs transition-colors", {
-                        "text-foreground": state.showCc,
-                        "text-muted-foreground hover:text-foreground": !state.showCc,
-                      })}
+                      className={cn(
+                        "inline-flex h-8 items-center rounded-md px-2 text-sm font-medium transition-[background-color,color,transform] duration-100 ease-out outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+                        {
+                          "bg-muted text-foreground": state.showCc,
+                          "text-muted-foreground hover:text-foreground": !state.showCc,
+                        },
+                      )}
                       onClick={() => toggleRecipientVisibility("cc")}
                       type="button"
                     >
@@ -521,10 +523,13 @@ export const ComposeDialog = ({
                     <button
                       aria-controls="compose-bcc-field"
                       aria-expanded={state.showBcc}
-                      className={cn("text-xs transition-colors", {
-                        "text-foreground": state.showBcc,
-                        "text-muted-foreground hover:text-foreground": !state.showBcc,
-                      })}
+                      className={cn(
+                        "inline-flex h-8 items-center rounded-md px-2 text-sm font-medium transition-[background-color,color,transform] duration-100 ease-out outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+                        {
+                          "bg-muted text-foreground": state.showBcc,
+                          "text-muted-foreground hover:text-foreground": !state.showBcc,
+                        },
+                      )}
                       onClick={() => toggleRecipientVisibility("bcc")}
                       type="button"
                     >
@@ -533,8 +538,8 @@ export const ComposeDialog = ({
                   </div>
                 }
                 form={form}
+                label="To"
                 name="to"
-                placeholder="To"
               />
 
               <LazyMotion features={domAnimation}>
@@ -543,8 +548,8 @@ export const ComposeDialog = ({
                     ariaLabel="Cc recipients"
                     clearActiveDraftError={clearActiveDraftError}
                     form={form}
+                    label="Cc"
                     name="cc"
-                    placeholder="Cc"
                   />
                 </AnimatedRecipientField>
 
@@ -553,8 +558,8 @@ export const ComposeDialog = ({
                     ariaLabel="Bcc recipients"
                     clearActiveDraftError={clearActiveDraftError}
                     form={form}
+                    label="Bcc"
                     name="bcc"
-                    placeholder="Bcc"
                   />
                 </AnimatedRecipientField>
               </LazyMotion>
