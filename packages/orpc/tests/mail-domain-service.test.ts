@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   aggregateMailDomainStatus,
-  checkMailDomainDnsRecords,
   createMailDomainDnsRecords,
   normalizeMailDomain,
-} from "../src/mail-domain";
+} from "../src/mail-domain/records";
+import { checkMailDomainDnsRecords } from "../src/mail-domain/service";
 
 describe("normalizeMailDomain", () => {
   test("normalizes domains from plain domains and URLs", () => {

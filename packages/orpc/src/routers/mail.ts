@@ -1,5 +1,4 @@
 import { ORPCError } from "@orpc/server";
-import { db, user } from "@quieter/database";
 import {
   createDraft,
   createLabel,
@@ -38,12 +37,7 @@ import {
   composeSendDraftInputSchema,
   splitMailAddressList,
 } from "@quieter/mail/compose";
-import {
-  mailboxLabelColorSchema,
-  mailboxSavedViewDefinitionSchema,
-  managedMailboxRuleDefinitionSchema,
-} from "@quieter/mail/mailbox-organization";
-import { eq } from "drizzle-orm";
+import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import { z } from "zod";
 import { saveGmailDraft, sendGmailMessage } from "../gmail-compose";
 import {
@@ -52,32 +46,17 @@ import {
   syncGmailLabels,
   upsertSyncedGmailLabel,
 } from "../gmail-labels";
-import { createGmailLiveSyncConnection } from "../gmail-live-sync";
-import { setGmailAutoLabeling } from "../gmail-pubsub";
+import { assertAccessibleMailbox } from "../mailbox/service";
 import {
-  dismissGmailUsefulDetail,
-  listGmailUsefulDetails,
-  listGmailThreadUsefulDetails,
-  setGmailUsefulDetails,
-} from "../gmail-useful-details";
+  createManagedLabel,
+  deleteManagedLabel,
+  listManagedLabels,
+  updateManagedLabel,
+  updateManagedThreadLabels,
+  updateSingleManagedMessageLabels,
+} from "../managed-mail/labels/service";
+import { deleteManagedMessage, deleteManagedThread } from "../managed-mail/messages/deletion";
 import {
-  applyMailboxSwitcherOrder,
-  canonicalizeMailboxSwitcherOrder,
-  createManagedMailbox,
-  disconnectGmailMailbox,
-  getUserMailboxPreferences,
-  listAccessibleMailboxState,
-  moveGmailMailbox,
-  removeManagedMailboxGrant,
-  resolveDefaultMailboxId,
-  setManagedMailboxGrant,
-  startGmailOAuth,
-  assertAccessibleMailbox,
-  type MailboxListItem,
-} from "../mailbox";
-import {
-  deleteManagedMessage,
-  deleteManagedThread,
   getManagedMessageInspector,
   getManagedThread,
   listManagedMessages,
@@ -85,40 +64,17 @@ import {
   sendManagedMailboxMessage,
   setManagedMessageReadState,
   setManagedThreadReadState,
-} from "../managed-mail";
-import {
-  cancelManagedRuleBackfill,
-  createManagedLabel,
-  createManagedRule,
-  createManagedSavedView,
-  deleteManagedLabel,
-  deleteManagedRule,
-  deleteManagedSavedView,
-  getManagedRuleBackfill,
-  listManagedLabelCounts,
-  listManagedLabels,
-  listManagedRules,
-  listManagedSavedViews,
-  previewManagedRule,
-  reorderManagedLabels,
-  reorderManagedRules,
-  reorderManagedSavedViews,
-  startManagedRuleBackfill,
-  updateManagedLabel,
-  updateManagedRule,
-  updateManagedSavedView,
-  updateManagedThreadLabels,
-  updateSingleManagedMessageLabels,
-} from "../managed-mail-organization";
+} from "../managed-mail/messages/service";
 import {
   callGmail,
   historySyncMailboxCategorySchema,
   gmailUserLabelNameSchema,
   mailboxCategorySchema,
   mailboxIdSchema,
-  mailboxSwitcherOrderSchema,
   protectedProcedure,
 } from "./base";
+import { mailboxProcedures } from "./mail/mailboxes";
+import { managedOrganizationMailRouter } from "./mail/managed-organization";
 
 const parseListUnsubscribeMailto = (value: string) => {
   let url: URL;
@@ -158,238 +114,8 @@ const parseListUnsubscribeMailto = (value: string) => {
 };
 
 export const mailRouter = {
-  listMailboxes: protectedProcedure.route({ method: "GET" }).handler(async ({ context }) => {
-    const [mailboxPreferences, mailboxState] = await Promise.all([
-      getUserMailboxPreferences(context.userId),
-      listAccessibleMailboxState({ userId: context.userId }),
-    ]);
-    const { groups } = mailboxState;
-    const orderedGroups = applyMailboxSwitcherOrder(
-      groups,
-      mailboxPreferences.mailboxSwitcherOrder,
-    );
-    const allMailboxes: MailboxListItem[] = orderedGroups.flatMap((group) => group.mailboxes);
-
-    return {
-      defaultMailboxId: resolveDefaultMailboxId(allMailboxes, mailboxPreferences.defaultMailboxId),
-      groups: orderedGroups,
-    };
-  }),
-
-  startGmailConnection: protectedProcedure
-    .input(
-      z.object({
-        mailboxId: mailboxIdSchema.optional(),
-        organizationId: z.string().trim().min(1).nullable().optional(),
-        returnTo: z.string().trim().optional(),
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      return await startGmailOAuth({
-        mailboxId: input.mailboxId,
-        organizationId: input.organizationId,
-        returnTo: input.returnTo,
-        userId: context.userId,
-      });
-    }),
-
-  setGmailAutoLabeling: protectedProcedure
-    .input(
-      z.object({
-        enabled: z.boolean(),
-        mailboxId: mailboxIdSchema,
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      return await setGmailAutoLabeling({
-        enabled: input.enabled,
-        mailboxId: input.mailboxId,
-        userId: context.userId,
-      });
-    }),
-
-  setGmailUsefulDetails: protectedProcedure
-    .input(
-      z.object({
-        enabled: z.boolean(),
-        mailboxId: mailboxIdSchema,
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      return await setGmailUsefulDetails({
-        enabled: input.enabled,
-        mailboxId: input.mailboxId,
-        userId: context.userId,
-      });
-    }),
-
-  listGmailUsefulDetails: protectedProcedure
-    .route({ method: "GET" })
-    .input(z.object({ mailboxId: mailboxIdSchema }))
-    .handler(async ({ context, input }) => {
-      return await listGmailUsefulDetails({
-        mailboxId: input.mailboxId,
-        userId: context.userId,
-      });
-    }),
-
-  listGmailThreadUsefulDetails: protectedProcedure
-    .route({ method: "GET" })
-    .input(
-      z.object({
-        gmailThreadId: z.string().trim().min(1),
-        mailboxId: mailboxIdSchema,
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      return await listGmailThreadUsefulDetails({
-        gmailThreadId: input.gmailThreadId,
-        mailboxId: input.mailboxId,
-        userId: context.userId,
-      });
-    }),
-
-  dismissGmailUsefulDetail: protectedProcedure
-    .input(
-      z.object({
-        id: z.string().trim().min(1),
-        mailboxId: mailboxIdSchema,
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      return await dismissGmailUsefulDetail({
-        id: input.id,
-        mailboxId: input.mailboxId,
-        userId: context.userId,
-      });
-    }),
-
-  createGmailLiveSyncConnection: protectedProcedure
-    .input(z.object({ mailboxId: mailboxIdSchema }))
-    .handler(async ({ context, input }) => {
-      return await createGmailLiveSyncConnection({
-        mailboxId: input.mailboxId,
-        userId: context.userId,
-      });
-    }),
-
-  disconnectMailbox: protectedProcedure
-    .input(
-      z.object({
-        mailboxId: mailboxIdSchema,
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      return await disconnectGmailMailbox({
-        mailboxId: input.mailboxId,
-        userId: context.userId,
-      });
-    }),
-
-  moveGmailMailbox: protectedProcedure
-    .input(
-      z.object({
-        mailboxId: mailboxIdSchema,
-        organizationId: z.string().trim().min(1).nullable(),
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      return await moveGmailMailbox({
-        mailboxId: input.mailboxId,
-        organizationId: input.organizationId,
-        userId: context.userId,
-      });
-    }),
-
-  createManagedMailbox: protectedProcedure
-    .input(
-      z.object({
-        displayName: z.string().trim().max(120).nullable().optional(),
-        emailAddress: z.string().trim().email(),
-        organizationId: z.string().trim().min(1),
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      return await createManagedMailbox({
-        ...input,
-        userId: context.userId,
-      });
-    }),
-
-  setManagedMailboxGrant: protectedProcedure
-    .input(
-      z.object({
-        mailboxId: mailboxIdSchema,
-        role: z.enum(["reader", "responder", "manager"]),
-        userId: z.string().trim().min(1),
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      return await setManagedMailboxGrant({
-        mailboxId: input.mailboxId,
-        role: input.role,
-        targetUserId: input.userId,
-        userId: context.userId,
-      });
-    }),
-
-  removeManagedMailboxGrant: protectedProcedure
-    .input(
-      z.object({
-        mailboxId: mailboxIdSchema,
-        userId: z.string().trim().min(1),
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      return await removeManagedMailboxGrant({
-        mailboxId: input.mailboxId,
-        targetUserId: input.userId,
-        userId: context.userId,
-      });
-    }),
-
-  setDefaultMailbox: protectedProcedure
-    .input(
-      z.object({
-        mailboxId: mailboxIdSchema.nullable(),
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      if (input.mailboxId) {
-        const mailboxState = await listAccessibleMailboxState({ userId: context.userId });
-        if (
-          !mailboxState.groups.some((group) =>
-            group.mailboxes.some((record) => record.id === input.mailboxId),
-          )
-        ) {
-          throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
-        }
-      }
-
-      await db
-        .update(user)
-        .set({ defaultMailboxId: input.mailboxId, updatedAt: new Date() })
-        .where(eq(user.id, context.userId));
-
-      return { defaultMailboxId: input.mailboxId };
-    }),
-
-  updateMailboxSwitcherOrder: protectedProcedure
-    .input(mailboxSwitcherOrderSchema)
-    .handler(async ({ context, input }) => {
-      const mailboxState = await listAccessibleMailboxState({
-        userId: context.userId,
-      });
-      const canonicalOrder = canonicalizeMailboxSwitcherOrder(mailboxState.groups, input);
-
-      await db
-        .update(user)
-        .set({ mailboxSwitcherOrder: canonicalOrder, updatedAt: new Date() })
-        .where(eq(user.id, context.userId));
-
-      return { mailboxSwitcherOrder: canonicalOrder };
-    }),
-
+  ...mailboxProcedures,
+  ...managedOrganizationMailRouter,
   listMessages: protectedProcedure
     .route({ method: "GET" })
     .input(
@@ -1062,166 +788,6 @@ export const mailRouter = {
         return { sent: true };
       });
     }),
-
-  listManagedLabelCounts: protectedProcedure
-    .route({ method: "GET" })
-    .input(z.object({ mailboxId: mailboxIdSchema }))
-    .handler(async ({ context, input }) =>
-      listManagedLabelCounts({ ...input, userId: context.userId }),
-    ),
-
-  reorderManagedLabels: protectedProcedure
-    .input(
-      z.object({
-        labelIds: z.array(z.string().trim().min(1)),
-        mailboxId: mailboxIdSchema,
-      }),
-    )
-    .handler(async ({ context, input }) =>
-      reorderManagedLabels({ ...input, userId: context.userId }),
-    ),
-
-  listManagedSavedViews: protectedProcedure
-    .route({ method: "GET" })
-    .input(z.object({ mailboxId: mailboxIdSchema }))
-    .handler(async ({ context, input }) =>
-      listManagedSavedViews({ ...input, userId: context.userId }),
-    ),
-
-  createManagedSavedView: protectedProcedure
-    .input(
-      z.object({
-        definition: mailboxSavedViewDefinitionSchema,
-        mailboxId: mailboxIdSchema,
-        shared: z.boolean(),
-      }),
-    )
-    .handler(async ({ context, input }) =>
-      createManagedSavedView({ ...input, userId: context.userId }),
-    ),
-
-  updateManagedSavedView: protectedProcedure
-    .input(
-      z.object({
-        definition: mailboxSavedViewDefinitionSchema,
-        mailboxId: mailboxIdSchema,
-        viewId: z.string().trim().min(1),
-      }),
-    )
-    .handler(async ({ context, input }) =>
-      updateManagedSavedView({ ...input, userId: context.userId }),
-    ),
-
-  deleteManagedSavedView: protectedProcedure
-    .input(
-      z.object({
-        mailboxId: mailboxIdSchema,
-        viewId: z.string().trim().min(1),
-      }),
-    )
-    .handler(async ({ context, input }) =>
-      deleteManagedSavedView({ ...input, userId: context.userId }),
-    ),
-
-  reorderManagedSavedViews: protectedProcedure
-    .input(
-      z.object({
-        mailboxId: mailboxIdSchema,
-        viewIds: z.array(z.string().trim().min(1)),
-      }),
-    )
-    .handler(async ({ context, input }) =>
-      reorderManagedSavedViews({ ...input, userId: context.userId }),
-    ),
-
-  listManagedRules: protectedProcedure
-    .route({ method: "GET" })
-    .input(z.object({ mailboxId: mailboxIdSchema }))
-    .handler(async ({ context, input }) => listManagedRules({ ...input, userId: context.userId })),
-
-  createManagedRule: protectedProcedure
-    .input(
-      z.object({
-        definition: managedMailboxRuleDefinitionSchema,
-        mailboxId: mailboxIdSchema,
-      }),
-    )
-    .handler(async ({ context, input }) => createManagedRule({ ...input, userId: context.userId })),
-
-  updateManagedRule: protectedProcedure
-    .input(
-      z.object({
-        definition: managedMailboxRuleDefinitionSchema,
-        mailboxId: mailboxIdSchema,
-        ruleId: z.string().trim().min(1),
-      }),
-    )
-    .handler(async ({ context, input }) => updateManagedRule({ ...input, userId: context.userId })),
-
-  deleteManagedRule: protectedProcedure
-    .input(
-      z.object({
-        mailboxId: mailboxIdSchema,
-        ruleId: z.string().trim().min(1),
-      }),
-    )
-    .handler(async ({ context, input }) => deleteManagedRule({ ...input, userId: context.userId })),
-
-  reorderManagedRules: protectedProcedure
-    .input(
-      z.object({
-        mailboxId: mailboxIdSchema,
-        ruleIds: z.array(z.string().trim().min(1)),
-      }),
-    )
-    .handler(async ({ context, input }) =>
-      reorderManagedRules({ ...input, userId: context.userId }),
-    ),
-
-  previewManagedRule: protectedProcedure
-    .input(
-      z.object({
-        definition: managedMailboxRuleDefinitionSchema,
-        mailboxId: mailboxIdSchema,
-      }),
-    )
-    .handler(async ({ context, input }) =>
-      previewManagedRule({ ...input, userId: context.userId }),
-    ),
-
-  startManagedRuleBackfill: protectedProcedure
-    .input(
-      z.object({
-        mailboxId: mailboxIdSchema,
-        ruleId: z.string().trim().min(1),
-      }),
-    )
-    .handler(async ({ context, input }) =>
-      startManagedRuleBackfill({ ...input, userId: context.userId }),
-    ),
-
-  getManagedRuleBackfill: protectedProcedure
-    .route({ method: "GET" })
-    .input(
-      z.object({
-        backfillId: z.string().trim().min(1),
-        mailboxId: mailboxIdSchema,
-      }),
-    )
-    .handler(async ({ context, input }) =>
-      getManagedRuleBackfill({ ...input, userId: context.userId }),
-    ),
-
-  cancelManagedRuleBackfill: protectedProcedure
-    .input(
-      z.object({
-        backfillId: z.string().trim().min(1),
-        mailboxId: mailboxIdSchema,
-      }),
-    )
-    .handler(async ({ context, input }) =>
-      cancelManagedRuleBackfill({ ...input, userId: context.userId }),
-    ),
 
   getAttachment: protectedProcedure
     .route({ method: "GET" })

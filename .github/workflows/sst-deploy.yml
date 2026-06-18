@@ -85,6 +85,12 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Check backend import boundaries
+        run: bun run check:boundaries
+
+      - name: Bundle AWS handlers
+        run: bun run check:bundles
+
       - name: Test
         run: bun run test
 

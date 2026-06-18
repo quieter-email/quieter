@@ -29,7 +29,7 @@ import {
 } from "../chat-run-store";
 import { ACTIVE_CHAT_RUN_STATUSES } from "../chat-run-stream";
 import { saveGmailDraft, sendGmailMessage } from "../gmail-compose";
-import { assertAccessibleMailbox } from "../mailbox";
+import { assertAccessibleMailbox } from "../mailbox/service";
 import { callGmail, mailboxCategorySchema, mailboxIdSchema, protectedProcedure } from "./base";
 
 const chatIdSchema = z.string().trim().min(1);

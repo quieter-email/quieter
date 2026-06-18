@@ -1,7 +1,7 @@
 import { GetObjectCommand, HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { recordInboundOrganizationMailUsage } from "@quieter/billing/organization-mail-usage";
 import { serverEnv } from "@quieter/env/server";
-import { recordInboundManagedMessage } from "@quieter/orpc/managed-mail-storage";
+import { recordInboundManagedMessage } from "@quieter/orpc/managed-mail/ingestion";
 import { Resource } from "sst";
 import { deleteMailObjectUnlessTracked } from "./mail-object-retention";
 

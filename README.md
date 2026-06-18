@@ -25,6 +25,7 @@ Read [SECURITY.md](SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md) before co
 - Gmail OAuth, synchronization, drafts, labels, live updates, and mailbox automation
 - Managed inbound and outbound email through the SST-owned mail stack, with shared labels,
   structured search, saved views, and automatic organization rules
+- Deployment-safe backend module boundaries with CI checks for worker imports and handler bundles
 - Mailbox-scoped chat with streamed server-side generation and Gmail tools
 - Polar billing through PayKit
 - Browser-only c15t consent preferences and consent-gated analytics

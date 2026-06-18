@@ -16,6 +16,8 @@
     "./receipt": "./src/receipt.ts"
   },
   "scripts": {
+    "check:boundaries": "bun scripts/check-import-boundaries.ts",
+    "check:bundles": "bun scripts/check-handler-bundles.ts",
     "dev": "bun ../../scripts/sst.ts dev",
     "fmt": "oxfmt --config ../../oxfmt.json .",
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",

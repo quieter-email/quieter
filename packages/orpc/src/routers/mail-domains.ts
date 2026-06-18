@@ -7,11 +7,16 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   aggregateMailDomainStatus,
+  createMailDomainDnsRecords,
+  createMailDomainOwnershipToken,
+  getMailDomainOwnershipToken,
+  MAIL_DOMAIN_STATUS_VERIFIED,
+  normalizeMailDomain,
+} from "../mail-domain/records";
+import {
   assertUserCanManageMailDomains,
   assertUserOrganizationMember,
   checkMailDomainDnsRecords,
-  createMailDomainDnsRecords,
-  createMailDomainOwnershipToken,
   createOrLoadEmailIdentity,
   createSesIdentityCheck,
   createSesMailFromCheck,
@@ -22,10 +27,7 @@ import {
   getAwsRegion,
   getDkimTokens,
   getEmailIdentity,
-  MAIL_DOMAIN_STATUS_VERIFIED,
-  getMailDomainOwnershipToken,
-  normalizeMailDomain,
-} from "../mail-domain";
+} from "../mail-domain/service";
 import { protectedProcedure } from "./base";
 
 export const mailDomainsRouter = {
