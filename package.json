@@ -64,6 +64,8 @@
   },
   "scripts": {
     "build": "turbo run build",
+    "check:boundaries": "turbo run check:boundaries --filter=@quieter/aws",
+    "check:bundles": "turbo run check:bundles --filter=@quieter/aws",
     "db:check": "turbo run db:check --filter=@quieter/database",
     "db:deploy": "turbo run db:deploy --filter=@quieter/database",
     "db:generate": "turbo run db:generate --filter=@quieter/database",

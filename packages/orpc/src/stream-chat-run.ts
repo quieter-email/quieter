@@ -1,6 +1,5 @@
 import { chatMessage, db } from "@quieter/database";
 import { eq } from "drizzle-orm";
-import { ensureChatRunGeneration, handoffChatRunToBackground } from "./chat-generation";
 import { getAuthorizedChatRun } from "./chat-run-store";
 import {
   formatChatRunSse,
@@ -8,6 +7,7 @@ import {
   subscribeChatRunEvents,
   type ChatRunStreamEvent,
 } from "./chat-run-stream";
+import { ensureChatRunGeneration, handoffChatRunToBackground } from "./chat/generation/lifecycle";
 
 const getAssistantMessage = async (assistantMessageId: string) => {
   const [message] = await db

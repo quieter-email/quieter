@@ -15,6 +15,10 @@
 - `apps/*` consume reusable UI through `@quieter/ui`.
 - Do not import Base UI, Vaul, or Sonner directly in app code unless extending `packages/ui` in the same change.
 - `packages/orpc` is the boundary between app and DB logic.
+- AWS handlers import only deployment-safe `@quieter/orpc` entrypoints. Keep authenticated
+  application services, routers, and framework adapters out of ingestion and worker dependency
+  graphs. `bun run check:boundaries` validates imports and `bun run check:bundles` bundles every
+  SST handler to catch unsupported transitive dependencies.
 - `packages/mail` owns pure mail parsing, compose schemas, MIME building, message content extraction, and sender avatar derivation.
 - `packages/gmail` owns Gmail REST service logic and Gmail-specific draft parsing; encrypted credentials and token refresh are owned by `packages/orpc`.
 - `packages/billing` owns PayKit/Polar billing plans, checkout, subscription sync, and webhook handling.

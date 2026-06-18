@@ -1,7 +1,7 @@
 import type { GmailUsefulDetailCandidate } from "@quieter/ai";
 import type { MessageListItem } from "@quieter/gmail";
 import { describe, expect, test } from "bun:test";
-import { materializeGmailUsefulDetail } from "../src/gmail-useful-details";
+import { materializeGmailUsefulDetail } from "../src/gmail-useful-details/service";
 
 const NOW = new Date("2026-06-14T12:00:00.000Z");
 

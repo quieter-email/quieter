@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import type { MailboxGroup, MailboxListItem } from "../src/mailbox/types";
 import {
   applyMailboxSwitcherOrder,
   canonicalizeMailboxSwitcherOrder,
   resolveDefaultMailboxId,
-  type MailboxGroup,
-  type MailboxListItem,
-} from "../src/mailbox";
+} from "../src/mailbox/preferences";
 
 const gmailMailbox = (id: string, emailAddress: string): MailboxListItem => ({
   connectionStatus: "connected",

@@ -8,7 +8,7 @@ import {
 } from "@quieter/billing/organization-mail-usage";
 import { serverEnv } from "@quieter/env/server";
 import { z } from "zod";
-import { recordOutboundManagedMessageForSender } from "./managed-mail";
+import { recordOutboundManagedMessageForSender } from "./managed-mail/messages/service";
 import {
   assertOrganizationOwnsVerifiedSenderDomain,
   OrganizationMailSendError,

@@ -22,10 +22,9 @@ import {
   type ChatMessagePart,
   type ChatMessageStatus,
 } from "@quieter/database";
-import { serverEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
-import { isCancelRequested, updateAssistantMessage, updateRunStatus } from "./chat-run-store";
-import { isActiveChatRunStatus, publishChatRunEvent } from "./chat-run-stream";
+import { isCancelRequested, updateAssistantMessage, updateRunStatus } from "../../chat-run-store";
+import { isActiveChatRunStatus, publishChatRunEvent } from "../../chat-run-stream";
 import {
   getMailboxOverviewForUser,
   listGmailLabelsForUser,
@@ -33,14 +32,12 @@ import {
   readGmailMessageForUser,
   readGmailThreadForUser,
   searchGmailForUser,
-} from "./gmail-chat-search";
+} from "../../gmail-chat-search";
+import { terminalizeFailedChatRun } from "./failure";
 
 const DRAFT_PERSIST_INTERVAL_MS = 750;
 const CANCEL_POLL_INTERVAL_MS = 1_000;
 const HEARTBEAT_TOUCH_INTERVAL_MS = 5_000;
-const ENQUEUE_CHAT_RUN_TIMEOUT_MS = 10_000;
-
-const inFlightGenerations = new Map<string, Promise<void>>();
 
 /** StreamProcessor may append multiple assistant messages across tool continuations. */
 const getStreamingAssistantParts = (
@@ -70,137 +67,6 @@ const toUiMessages = (
     parts: message.parts as UIMessage["parts"],
     role: message.role,
   }));
-
-const terminalizeFailedChatRun = async (
-  runId: string,
-  error: string,
-  assistant?: { id: string; parts: ChatMessagePart[] },
-) => {
-  let terminalAssistant = assistant;
-
-  if (!terminalAssistant) {
-    const [run] = await db
-      .select({ assistantMessageId: chatRun.assistantMessageId })
-      .from(chatRun)
-      .where(eq(chatRun.id, runId))
-      .limit(1);
-
-    if (!run) {
-      return;
-    }
-
-    const [message] = await db
-      .select({ parts: chatMessage.parts })
-      .from(chatMessage)
-      .where(eq(chatMessage.id, run.assistantMessageId))
-      .limit(1);
-
-    terminalAssistant = {
-      id: run.assistantMessageId,
-      parts: message?.parts ?? [{ content: "", type: "text" }],
-    };
-  }
-
-  await Promise.all([
-    updateAssistantMessage({
-      assistantMessageId: terminalAssistant.id,
-      error,
-      parts: terminalAssistant.parts,
-      status: "failed",
-    }),
-    updateRunStatus(runId, "failed", { error }),
-  ]);
-  publishChatRunEvent(runId, {
-    assistantMessageId: terminalAssistant.id,
-    error,
-    parts: terminalAssistant.parts,
-    status: "failed",
-    type: "done",
-  });
-};
-
-export const ensureChatRunGeneration = (runId: string) => {
-  const existing = inFlightGenerations.get(runId);
-
-  if (existing) {
-    return existing;
-  }
-
-  const generation = runChatGeneration(runId)
-    .catch(async (error) => {
-      console.error("Chat generation failed.", error);
-      await terminalizeFailedChatRun(
-        runId,
-        error instanceof Error ? error.message : "Chat generation failed.",
-      ).catch((updateError) => {
-        console.error("Could not terminalize the failed chat generation.", updateError);
-      });
-    })
-    .finally(() => {
-      inFlightGenerations.delete(runId);
-    });
-
-  inFlightGenerations.set(runId, generation);
-  return generation;
-};
-
-export const handoffChatRunToBackground = (runId: string) => {
-  if (inFlightGenerations.has(runId)) {
-    return;
-  }
-
-  void enqueueChatRun(runId).catch((error) => {
-    console.error("Could not hand off chat generation to the background worker.", error);
-    return ensureChatRunGeneration(runId);
-  });
-};
-
-export const enqueueChatRun = async (runId: string) => {
-  const startUrl = serverEnv.CHAT_GENERATION_START_URL;
-
-  if (!startUrl) {
-    void ensureChatRunGeneration(runId);
-    return;
-  }
-
-  const token = serverEnv.CHAT_GENERATION_START_TOKEN;
-
-  if (!token) {
-    throw new Error(
-      "CHAT_GENERATION_START_TOKEN is required when CHAT_GENERATION_START_URL is set.",
-    );
-  }
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), ENQUEUE_CHAT_RUN_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(startUrl, {
-      body: JSON.stringify({ runId }),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      method: "POST",
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Failed to enqueue chat generation (${response.status}): ${body}`);
-    }
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error(
-        `Timed out enqueueing chat generation after ${ENQUEUE_CHAT_RUN_TIMEOUT_MS}ms.`,
-      );
-    }
-
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-};
 
 export const runChatGeneration = async (runId: string) => {
   const [run] = await db.select().from(chatRun).where(eq(chatRun.id, runId)).limit(1);

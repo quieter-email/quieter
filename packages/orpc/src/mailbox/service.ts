@@ -1,4 +1,4 @@
-import type { MailboxGrantRole, MailboxSwitcherOrder } from "@quieter/database";
+import type { MailboxGrantRole } from "@quieter/database";
 import { ORPCError } from "@orpc/server";
 import { auth } from "@quieter/auth";
 import {
@@ -14,10 +14,11 @@ import {
   user,
 } from "@quieter/database";
 import { getGmailProfile, isGmailServiceError } from "@quieter/gmail";
-import { and, asc, eq, inArray, lt, or } from "drizzle-orm";
+import { and, asc, eq, inArray, lt } from "drizzle-orm";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
-import { encryptSecret, getGmailOAuthConfig, GMAIL_SCOPES } from "./gmail-mailbox-access";
+import type { MailboxGroup, MailboxGroupMetadata, MailboxListItem } from "./types";
+import { encryptSecret, getGmailOAuthConfig, GMAIL_SCOPES } from "../gmail-mailbox-access";
 
 export {
   GMAIL_SCOPES,
@@ -25,10 +26,14 @@ export {
   markGmailMailboxNeedsReconnect,
   refreshAuthorizedGmailAccessToken,
   runAuthorizedGmailMailbox,
-} from "./gmail-mailbox-access";
+} from "../gmail-mailbox-access";
 
-export const MAILBOX_PROVIDER_GMAIL = "gmail" as const;
-export const MAILBOX_PROVIDER_MANAGED = "managed" as const;
+export {
+  getAuthorizedManagedMailbox,
+  MAILBOX_PROVIDER_GMAIL,
+  MAILBOX_PROVIDER_MANAGED,
+} from "./access";
+import { MAILBOX_PROVIDER_GMAIL, MAILBOX_PROVIDER_MANAGED } from "./access";
 
 const PERSONAL_GROUP_ID = "personal";
 const PERSONAL_GROUP_NAME = "Personal";
@@ -37,32 +42,7 @@ const GOOGLE_AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_TOKEN_INFO_URL = "https://oauth2.googleapis.com/tokeninfo";
 
-type MailboxGroupMetadata = {
-  groupId: string;
-  groupKind: "personal" | "organization";
-  groupName: string;
-};
-
-export type MailboxListItem = MailboxGroupMetadata & {
-  connectionStatus: "connected" | "needs_reconnect";
-  displayName: string | null;
-  emailAddress: string;
-  grantRole: MailboxGrantRole | null;
-  gmailAutoLabelEnabled: boolean;
-  gmailUsefulDetailsEnabled: boolean;
-  id: string;
-  organizationId: string | null;
-  ownerUserId: string | null;
-  provider: "gmail" | "managed";
-};
-
-export type MailboxGroup = {
-  id: string;
-  kind: "personal" | "organization";
-  mailboxes: MailboxListItem[];
-  name: string;
-  slug: string | null;
-};
+export type { MailboxGroup, MailboxListItem } from "./types";
 
 const googleTokenResponseSchema = z.object({
   access_token: z.string().min(1),
@@ -669,258 +649,6 @@ export const moveGmailMailbox = async (input: {
     throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
   }
   return updatedMailbox;
-};
-
-export const createManagedMailbox = async (input: {
-  displayName?: string | null;
-  emailAddress: string;
-  organizationId: string;
-  userId: string;
-}) => {
-  const [membership] = await db
-    .select({ role: member.role })
-    .from(member)
-    .where(and(eq(member.userId, input.userId), eq(member.organizationId, input.organizationId)))
-    .limit(1);
-  if (!membership || !["admin", "owner"].includes(membership.role)) {
-    throw new ORPCError("FORBIDDEN", {
-      message: "Only organization owners and admins can create managed mailboxes.",
-    });
-  }
-
-  const mailboxId = randomUUID();
-  const grantId = randomUUID();
-  const now = new Date();
-  await db.batch([
-    db.insert(mailbox).values({
-      createdAt: now,
-      displayName: input.displayName?.trim() || null,
-      emailAddress: normalizeEmailAddress(input.emailAddress),
-      id: mailboxId,
-      organizationId: input.organizationId,
-      ownerUserId: null,
-      provider: MAILBOX_PROVIDER_MANAGED,
-      status: "connected",
-      updatedAt: now,
-    }),
-    db.insert(mailboxGrant).values({
-      createdAt: now,
-      id: grantId,
-      mailboxId,
-      role: "manager",
-      updatedAt: now,
-      userId: input.userId,
-    }),
-  ]);
-  return { mailboxId };
-};
-
-const assertManagedMailboxManager = async (mailboxId: string, userId: string) => {
-  const [grant] = await db
-    .select({ id: mailboxGrant.id })
-    .from(mailboxGrant)
-    .innerJoin(mailbox, eq(mailbox.id, mailboxGrant.mailboxId))
-    .innerJoin(
-      member,
-      and(eq(member.userId, userId), eq(member.organizationId, mailbox.organizationId)),
-    )
-    .where(
-      and(
-        eq(mailboxGrant.mailboxId, mailboxId),
-        eq(mailboxGrant.userId, userId),
-        eq(mailboxGrant.role, "manager"),
-        eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED),
-      ),
-    )
-    .limit(1);
-  if (!grant) {
-    throw new ORPCError("FORBIDDEN", { message: "Mailbox manager access is required." });
-  }
-};
-
-export const setManagedMailboxGrant = async (input: {
-  mailboxId: string;
-  role: MailboxGrantRole;
-  targetUserId: string;
-  userId: string;
-}) => {
-  await assertManagedMailboxManager(input.mailboxId, input.userId);
-  const [target] = await db
-    .select({ organizationId: mailbox.organizationId })
-    .from(mailbox)
-    .innerJoin(
-      member,
-      and(eq(member.organizationId, mailbox.organizationId), eq(member.userId, input.targetUserId)),
-    )
-    .where(eq(mailbox.id, input.mailboxId))
-    .limit(1);
-  if (!target) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "Mailbox grants can only be assigned to organization members.",
-    });
-  }
-
-  const now = new Date();
-  await db
-    .insert(mailboxGrant)
-    .values({
-      createdAt: now,
-      id: randomUUID(),
-      mailboxId: input.mailboxId,
-      role: input.role,
-      updatedAt: now,
-      userId: input.targetUserId,
-    })
-    .onConflictDoUpdate({
-      set: { role: input.role, updatedAt: now },
-      target: [mailboxGrant.mailboxId, mailboxGrant.userId],
-    });
-  return { mailboxId: input.mailboxId, role: input.role, userId: input.targetUserId };
-};
-
-export const removeManagedMailboxGrant = async (input: {
-  mailboxId: string;
-  targetUserId: string;
-  userId: string;
-}) => {
-  await assertManagedMailboxManager(input.mailboxId, input.userId);
-  const managerGrants = await db
-    .select({ userId: mailboxGrant.userId })
-    .from(mailboxGrant)
-    .where(and(eq(mailboxGrant.mailboxId, input.mailboxId), eq(mailboxGrant.role, "manager")));
-  if (
-    input.targetUserId === input.userId &&
-    managerGrants.length === 1 &&
-    managerGrants[0]?.userId === input.userId
-  ) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "Assign another mailbox manager before removing the last manager.",
-    });
-  }
-
-  await db
-    .delete(mailboxGrant)
-    .where(
-      and(eq(mailboxGrant.mailboxId, input.mailboxId), eq(mailboxGrant.userId, input.targetUserId)),
-    );
-  return { removed: true };
-};
-
-export const getAuthorizedManagedMailbox = async (input: {
-  mailboxId: string;
-  requiredRoles?: MailboxGrantRole[];
-  userId: string;
-}) => {
-  const roleConditions = input.requiredRoles?.map((role) => eq(mailboxGrant.role, role));
-  const [selectedMailbox] = await db
-    .select({
-      displayName: mailbox.displayName,
-      emailAddress: mailbox.emailAddress,
-      id: mailbox.id,
-      organizationId: mailbox.organizationId,
-      provider: mailbox.provider,
-      role: mailboxGrant.role,
-    })
-    .from(mailboxGrant)
-    .innerJoin(mailbox, eq(mailbox.id, mailboxGrant.mailboxId))
-    .innerJoin(
-      member,
-      and(eq(member.userId, input.userId), eq(member.organizationId, mailbox.organizationId)),
-    )
-    .where(
-      and(
-        eq(mailbox.id, input.mailboxId),
-        eq(mailboxGrant.userId, input.userId),
-        eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED),
-        roleConditions?.length ? or(...roleConditions) : undefined,
-      ),
-    )
-    .limit(1);
-  if (!selectedMailbox) {
-    throw new ORPCError("NOT_FOUND", { message: "Managed mailbox not found." });
-  }
-  return selectedMailbox;
-};
-
-export const getUserMailboxPreferences = async (userId: string) => {
-  const [row] = await db
-    .select({
-      defaultMailboxId: user.defaultMailboxId,
-      mailboxSwitcherOrder: user.mailboxSwitcherOrder,
-    })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1);
-  return {
-    defaultMailboxId: row?.defaultMailboxId ?? null,
-    mailboxSwitcherOrder: row?.mailboxSwitcherOrder ?? null,
-  };
-};
-
-export const resolveDefaultMailboxId = (
-  mailboxes: Array<{ id: string }>,
-  defaultMailboxId: string | null,
-) =>
-  mailboxes.some((mailboxRecord) => mailboxRecord.id === defaultMailboxId)
-    ? defaultMailboxId
-    : null;
-
-export const canonicalizeMailboxSwitcherOrder = (
-  groups: MailboxGroup[],
-  order: MailboxSwitcherOrder | null,
-): MailboxSwitcherOrder => {
-  const groupIds = groups.map((group) => group.id);
-  const groupIdSet = new Set(groupIds);
-  const seenGroupIds = new Set<string>();
-  const orderedGroupIds = [
-    ...(order?.groupIds.filter((groupId) => groupIdSet.has(groupId)) ?? []),
-    ...groupIds,
-  ].filter((groupId) => {
-    if (seenGroupIds.has(groupId) || !groupIdSet.has(groupId)) return false;
-    seenGroupIds.add(groupId);
-    return true;
-  });
-  const mailboxIdsByGroupId: Record<string, string[]> = {};
-
-  for (const group of groups) {
-    const mailboxIds = group.mailboxes.map((record) => record.id);
-    const mailboxIdSet = new Set(mailboxIds);
-    const seenMailboxIds = new Set<string>();
-    mailboxIdsByGroupId[group.id] = [
-      ...(order?.mailboxIdsByGroupId[group.id] ?? []),
-      ...mailboxIds,
-    ].filter((mailboxId) => {
-      if (seenMailboxIds.has(mailboxId) || !mailboxIdSet.has(mailboxId)) return false;
-      seenMailboxIds.add(mailboxId);
-      return true;
-    });
-  }
-
-  return { groupIds: orderedGroupIds, mailboxIdsByGroupId };
-};
-
-export const applyMailboxSwitcherOrder = (
-  groups: MailboxGroup[],
-  order: MailboxSwitcherOrder | null,
-): MailboxGroup[] => {
-  if (!order) return groups;
-
-  const canonicalOrder = canonicalizeMailboxSwitcherOrder(groups, order);
-  const groupsById = new Map(groups.map((group) => [group.id, group]));
-  return canonicalOrder.groupIds.flatMap((groupId) => {
-    const group = groupsById.get(groupId);
-    if (!group) return [];
-    const mailboxesById = new Map(group.mailboxes.map((record) => [record.id, record]));
-    return [
-      {
-        ...group,
-        mailboxes: canonicalOrder.mailboxIdsByGroupId[group.id].flatMap((mailboxId) => {
-          const record = mailboxesById.get(mailboxId);
-          return record ? [record] : [];
-        }),
-      },
-    ];
-  });
 };
 
 export const isGmailAccessRepairError = (error: unknown) =>

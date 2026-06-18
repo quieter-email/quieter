@@ -2,11 +2,12 @@ import { db, mailbox, managedMailAttachment, managedMailMessage } from "@quieter
 import { parseRawMailMessage, type ParsedRawMailMessage } from "@quieter/mail/raw-message";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
+import { inheritManagedThreadLabels } from "../labels/repository";
+import { applyManagedRulesToMessage } from "../rules/evaluator";
 import {
-  applyManagedRulesToMessage,
-  inheritManagedThreadLabels,
-} from "./managed-mail-organization";
-import { createManagedMessageSearchText, normalizeManagedSearchValue } from "./managed-mail-search";
+  createManagedMessageSearchText,
+  normalizeManagedSearchValue,
+} from "../search/normalization";
 
 const normalizeEmailAddress = (value: string) => value.trim().toLowerCase();
 

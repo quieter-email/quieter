@@ -1,5 +1,5 @@
 import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { hasManagedMailObjectReference } from "@quieter/orpc/managed-mail-storage";
+import { hasManagedMailObjectReference } from "@quieter/orpc/managed-mail/ingestion";
 
 export const deleteMailObjectUnlessTracked = async (input: {
   bucket: string;

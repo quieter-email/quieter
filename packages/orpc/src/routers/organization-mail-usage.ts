@@ -6,7 +6,7 @@ import { z } from "zod";
 import {
   assertUserCanManageOrganizationSettings,
   assertUserOrganizationMember,
-} from "../mail-domain";
+} from "../mail-domain/service";
 import { protectedProcedure } from "./base";
 
 const microCentsPerCent = 1_000_000;

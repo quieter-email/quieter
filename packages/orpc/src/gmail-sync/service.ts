@@ -1,4 +1,3 @@
-import { ORPCError } from "@orpc/server";
 import {
   classifyGmailMessage,
   GMAIL_AUTO_LABEL_MODEL,
@@ -6,7 +5,7 @@ import {
   type GmailAutoLabelCandidate,
 } from "@quieter/ai";
 import { reportAiUsage } from "@quieter/billing";
-import { assertUserBillingFeature, hasUserBillingFeature } from "@quieter/billing/entitlements";
+import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import {
   db,
   gmailAutoLabelEvent,
@@ -29,13 +28,13 @@ import {
 } from "@quieter/gmail";
 import { and, eq, isNull, lt, lte, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { syncGmailLabels } from "./gmail-labels";
-import { runAuthorizedGmailMailbox } from "./gmail-mailbox-access";
+import { syncGmailLabels } from "../gmail-labels";
+import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import {
   listPendingGmailUsefulDetailMessageIds,
   processGmailUsefulDetailMessage,
   reportPendingGmailUsefulDetailUsage,
-} from "./gmail-useful-details";
+} from "../gmail-useful-details/service";
 
 const WATCH_RENEWAL_INTERVAL_MS = 1000 * 60 * 60 * 20;
 const WATCH_EXPIRATION_BUFFER_MS = 1000 * 60 * 60 * 48;
@@ -934,61 +933,5 @@ export const processGmailPubSubNotification = async (
     ignored: false,
     mailboxId: gmailMailbox.id,
     pubSubMessageId: input.pubSubMessageId,
-  };
-};
-
-const assertOwnedGmailMailbox = async (mailboxId: string, userId: string) => {
-  const [gmailMailbox] = await db
-    .select({ id: mailbox.id })
-    .from(mailbox)
-    .where(
-      and(
-        eq(mailbox.id, mailboxId),
-        eq(mailbox.ownerUserId, userId),
-        eq(mailbox.provider, "gmail"),
-      ),
-    )
-    .limit(1);
-  if (!gmailMailbox) {
-    throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
-  }
-
-  return gmailMailbox;
-};
-
-export const setGmailAutoLabeling = async (input: {
-  enabled: boolean;
-  mailboxId: string;
-  userId: string;
-}) => {
-  await assertOwnedGmailMailbox(input.mailboxId, input.userId);
-
-  if (input.enabled) {
-    await assertUserBillingFeature({
-      feature: "gmailAutomation",
-      userId: input.userId,
-    });
-  }
-
-  const now = new Date();
-  await db
-    .insert(gmailAutoLabelSettings)
-    .values({
-      createdAt: now,
-      enabled: input.enabled,
-      mailboxId: input.mailboxId,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      set: {
-        enabled: input.enabled,
-        updatedAt: now,
-      },
-      target: gmailAutoLabelSettings.mailboxId,
-    });
-
-  return {
-    enabled: input.enabled,
-    mailboxId: input.mailboxId,
   };
 };

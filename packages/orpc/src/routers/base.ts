@@ -4,7 +4,7 @@ import { isGmailRateLimitedError, type MailboxCategory } from "@quieter/gmail";
 import { z } from "zod";
 import { getRequestHeaders, type OrpcContext } from "../context";
 import { orpcErrorMap } from "../errors";
-import { runAuthorizedGmailMailbox } from "../mailbox";
+import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 
 export const base = os.errors(orpcErrorMap).$context<OrpcContext>();
 export const publicProcedure = base;

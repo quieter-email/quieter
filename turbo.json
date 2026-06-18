@@ -61,6 +61,16 @@
       "inputs": ["$TURBO_DEFAULT$"],
       "outputs": ["dist/**", ".output/**", "!.output/cache/**", ".vercel/output/**"]
     },
+    "check:boundaries": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "outputs": []
+    },
+    "check:bundles": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "outputs": []
+    },
     "lint": {
       "dependsOn": ["^lint"],
       "outputs": [],

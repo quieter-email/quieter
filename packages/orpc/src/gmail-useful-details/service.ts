@@ -6,7 +6,7 @@ import {
   type GmailUsefulDetailCandidate,
 } from "@quieter/ai";
 import { reportAiUsage } from "@quieter/billing";
-import { assertUserBillingFeature, hasUserBillingFeature } from "@quieter/billing/entitlements";
+import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import {
   db,
   gmailUsefulDetail,
@@ -20,7 +20,7 @@ import {
 import { MAILBOX_LABELS, type MessageListItem } from "@quieter/gmail";
 import { and, asc, eq, gt, isNull, lte, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { decryptSecret, encryptSecret } from "./gmail-mailbox-access";
+import { decryptSecret, encryptSecret } from "../gmail-mailbox-access";
 
 const RETRY_BASE_MS = 1000 * 60 * 5;
 const RETRY_MAX_MS = 1000 * 60 * 60 * 24;
@@ -591,47 +591,6 @@ export const reportPendingGmailUsefulDetailUsage = async (mailboxId: string, use
   for (const event of events) {
     await reportUsage({ ...event, userId });
   }
-};
-
-export const setGmailUsefulDetails = async (input: {
-  enabled: boolean;
-  mailboxId: string;
-  userId: string;
-}) => {
-  await assertOwnedGmailMailbox(input.mailboxId, input.userId);
-
-  if (input.enabled) {
-    await assertUserBillingFeature({
-      feature: "gmailAutomation",
-      userId: input.userId,
-    });
-  }
-
-  const now = new Date();
-  await db
-    .insert(gmailUsefulDetailSettings)
-    .values({
-      createdAt: now,
-      enabled: input.enabled,
-      mailboxId: input.mailboxId,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      set: {
-        enabled: input.enabled,
-        updatedAt: now,
-      },
-      target: gmailUsefulDetailSettings.mailboxId,
-    });
-
-  if (!input.enabled) {
-    await db.delete(gmailUsefulDetail).where(eq(gmailUsefulDetail.mailboxId, input.mailboxId));
-  }
-
-  return {
-    enabled: input.enabled,
-    mailboxId: input.mailboxId,
-  };
 };
 
 export const listGmailUsefulDetails = async (input: { mailboxId: string; userId: string }) => {
