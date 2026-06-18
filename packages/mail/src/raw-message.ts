@@ -1,6 +1,13 @@
 import PostalMime, { type Address, type Email } from "postal-mime";
 
 export type ParsedRawMailMessage = {
+  attachments: Array<{
+    contentId?: string;
+    fileName: string;
+    inline: boolean;
+    mimeType: string;
+    size: number;
+  }>;
   bcc?: string;
   bodyHtml?: string;
   bodyText?: string;
@@ -62,6 +69,16 @@ export const parseRawMailMessage = async (
   const parsedDate = email.date ? new Date(email.date) : undefined;
 
   return {
+    attachments: email.attachments.map((attachment, index) => ({
+      contentId: attachment.contentId?.trim() || undefined,
+      fileName: attachment.filename?.trim() || `attachment-${index + 1}`,
+      inline: attachment.disposition === "inline",
+      mimeType: attachment.mimeType || "application/octet-stream",
+      size:
+        typeof attachment.content === "string"
+          ? new TextEncoder().encode(attachment.content).byteLength
+          : attachment.content.byteLength,
+    })),
     bcc: formatAddresses(email.bcc),
     bodyHtml: normalizeBody(email.html),
     bodyText: normalizeBody(email.text),

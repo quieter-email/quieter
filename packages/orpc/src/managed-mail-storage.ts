@@ -1,7 +1,12 @@
-import { db, mailbox, managedMailMessage } from "@quieter/database";
+import { db, mailbox, managedMailAttachment, managedMailMessage } from "@quieter/database";
 import { parseRawMailMessage, type ParsedRawMailMessage } from "@quieter/mail/raw-message";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
+import {
+  applyManagedRulesToMessage,
+  inheritManagedThreadLabels,
+} from "./managed-mail-organization";
+import { createManagedMessageSearchText, normalizeManagedSearchValue } from "./managed-mail-search";
 
 const normalizeEmailAddress = (value: string) => value.trim().toLowerCase();
 
@@ -76,12 +81,15 @@ export const recordInboundManagedMessage = async (input: {
       .insert(managedMailMessage)
       .values({
         bcc: parsed.bcc ?? null,
+        bccNormalized: normalizeManagedSearchValue(parsed.bcc),
         bodyHtml: parsed.bodyHtml ?? null,
         bodyText: parsed.bodyText ?? null,
         cc: parsed.cc ?? null,
+        ccNormalized: normalizeManagedSearchValue(parsed.cc),
         createdAt: new Date(),
         direction: "inbound",
         from: parsed.from,
+        fromNormalized: normalizeManagedSearchValue(parsed.from),
         headers: parsed.headers,
         id,
         inReplyTo: parsed.inReplyTo ?? null,
@@ -94,19 +102,77 @@ export const recordInboundManagedMessage = async (input: {
         replyTo: parsed.replyTo ?? null,
         s3Bucket: input.s3Bucket,
         s3Key: input.s3Key,
+        searchText: createManagedMessageSearchText(parsed),
         sentAt,
         snippet: parsed.snippet ?? null,
         subject: parsed.subject ?? null,
         threadId,
         to: parsed.to ?? recipients.join(", "),
+        toNormalized: normalizeManagedSearchValue(parsed.to ?? recipients.join(", ")),
         updatedAt: new Date(),
       })
       .onConflictDoNothing({
         target: [managedMailMessage.mailboxId, managedMailMessage.providerMessageId],
       })
-      .returning({ mailboxId: managedMailMessage.mailboxId });
+      .returning({
+        id: managedMailMessage.id,
+        mailboxId: managedMailMessage.mailboxId,
+        threadId: managedMailMessage.threadId,
+      });
 
-    if (inserted) insertedMailboxIds.push(inserted.mailboxId);
+    if (inserted) {
+      if (parsed.attachments.length > 0) {
+        await db.insert(managedMailAttachment).values(
+          parsed.attachments.map((attachment) => ({
+            contentId: attachment.contentId ?? null,
+            createdAt: new Date(),
+            fileName: attachment.fileName,
+            id: randomUUID(),
+            inline: attachment.inline,
+            mailboxId: inserted.mailboxId,
+            messageId: inserted.id,
+            mimeType: attachment.mimeType,
+            normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
+            size: attachment.size,
+          })),
+        );
+      }
+      try {
+        await inheritManagedThreadLabels({
+          mailboxId: inserted.mailboxId,
+          messageId: inserted.id,
+          threadId: inserted.threadId,
+        });
+        await applyManagedRulesToMessage({
+          mailboxId: inserted.mailboxId,
+          messageId: inserted.id,
+        });
+      } catch (error) {
+        console.error("Managed message organization failed after ingestion.", {
+          error,
+          mailboxId: inserted.mailboxId,
+          messageId: inserted.id,
+        });
+      }
+      insertedMailboxIds.push(inserted.mailboxId);
+    } else {
+      const [existing] = await db
+        .select({ id: managedMailMessage.id })
+        .from(managedMailMessage)
+        .where(
+          and(
+            eq(managedMailMessage.mailboxId, targetMailbox.id),
+            eq(managedMailMessage.providerMessageId, input.providerMessageId),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        await applyManagedRulesToMessage({
+          mailboxId: targetMailbox.id,
+          messageId: existing.id,
+        });
+      }
+    }
   }
 
   return insertedMailboxIds;

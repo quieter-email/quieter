@@ -1,12 +1,12 @@
 "use client";
 
+import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { ArrowRight01Icon, Tag01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { cn } from "@quieter/ui";
 import { LazyMotion, domAnimation, AnimatePresence, m } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 import {
   normalizeLabelSelectionKey,
   type SearchFilterChip,
@@ -14,66 +14,30 @@ import {
 } from "~/features/message-search/state/message-list-search-state";
 import { searchFilterOptions } from "./message-list-search-filter-options";
 
-const searchFilterSections: ReadonlyArray<{
-  label: string;
-  options: typeof searchFilterOptions;
-}> = [
+const createSearchFilterSections = (
+  options: typeof searchFilterOptions,
+): ReadonlyArray<{ label: string; options: typeof searchFilterOptions }> => [
   {
     label: "Status",
-    options: searchFilterOptions.filter((option) => option.filter.type === "is"),
+    options: options.filter((option) => option.filter.type === "is"),
   },
   {
     label: "Date",
-    options: searchFilterOptions.filter((option) =>
+    options: options.filter((option) =>
       ["after", "before", "newer_than", "older_than"].includes(option.filter.type),
     ),
   },
   {
     label: "People",
-    options: searchFilterOptions.filter((option) =>
-      ["bcc", "cc", "from", "to"].includes(option.filter.type),
-    ),
+    options: options.filter((option) => ["bcc", "cc", "from", "to"].includes(option.filter.type)),
   },
   {
     label: "Content",
-    options: searchFilterOptions.filter((option) =>
-      ["filename", "has"].includes(option.filter.type),
+    options: options.filter((option) =>
+      ["content", "filename", "has", "subject"].includes(option.filter.type),
     ),
   },
 ];
-
-if (import.meta.env.MODE !== "production") {
-  const sectionOptionCounts = new Map<string, number>();
-  for (const section of searchFilterSections) {
-    for (const option of section.options) {
-      const key = `${option.filter.type}:${option.filter.value}`;
-      sectionOptionCounts.set(key, (sectionOptionCounts.get(key) ?? 0) + 1);
-    }
-  }
-
-  const missingOptions: string[] = [];
-  for (const option of searchFilterOptions) {
-    const key = `${option.filter.type}:${option.filter.value}`;
-    if (!sectionOptionCounts.has(key)) {
-      missingOptions.push(key);
-    }
-  }
-
-  const duplicatedOptions: string[] = [];
-  for (const [key, count] of sectionOptionCounts) {
-    if (count > 1) {
-      duplicatedOptions.push(key);
-    }
-  }
-
-  if (missingOptions.length > 0 || duplicatedOptions.length > 0) {
-    throw new Error(
-      `searchFilterSections must include each searchFilterOptions entry exactly once. Missing: ${
-        missingOptions.join(", ") || "none"
-      }. Duplicated: ${duplicatedOptions.join(", ") || "none"}.`,
-    );
-  }
-}
 
 const isSearchFilterOptionActive = (
   filters: readonly SearchFilterChip[],
@@ -141,6 +105,7 @@ const initialLabelsSubmenuLayout: LabelsSubmenuLayout = {
 
 export const MessageListSearchDropdown = ({
   draftSearchState,
+  filterOptions,
   highlightedItemKey,
   isOpen,
   isLoadingLabels,
@@ -150,14 +115,16 @@ export const MessageListSearchDropdown = ({
   userLabels,
 }: {
   draftSearchState: StructuredSearchState;
+  filterOptions: typeof searchFilterOptions;
   highlightedItemKey: string | null;
   isOpen: boolean;
   isLoadingLabels: boolean;
   labelsErrorMessage: string | null;
   onSelectFilter: (filter: SearchFilterChip) => void;
   onToggleLabel: (labelName: string) => void;
-  userLabels: readonly GmailLabelListItem[];
+  userLabels: readonly MailboxLabel[];
 }) => {
+  const searchFilterSections = createSearchFilterSections(filterOptions);
   const [isLabelsSubmenuOpen, setIsLabelsSubmenuOpen] = useState(false);
   const [labelsLayout, setLabelsLayout] = useState<LabelsSubmenuLayout>(initialLabelsSubmenuLayout);
   const closeLabelsSubmenuTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);

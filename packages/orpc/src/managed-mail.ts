@@ -7,7 +7,13 @@ import {
   estimateOutboundOrganizationMailUsage,
   recordOrganizationMailUsage,
 } from "@quieter/billing/organization-mail-usage";
-import { db, mailbox, managedMailMessage } from "@quieter/database";
+import {
+  db,
+  mailbox,
+  managedMailAttachment,
+  managedMailMessage,
+  managedMailMessageLabel,
+} from "@quieter/database";
 import { serverEnv } from "@quieter/env/server";
 import {
   MAILBOX_LABELS,
@@ -24,9 +30,16 @@ import {
   splitMailAddressList,
 } from "@quieter/mail/compose";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
-import { and, asc, desc, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { getAuthorizedManagedMailbox } from "./mailbox";
+import { inheritManagedThreadLabels } from "./managed-mail-organization";
+import {
+  createManagedMessageSearchText,
+  createManagedSearchCondition,
+  normalizeManagedSearchValue,
+  parseManagedSearchQuery,
+} from "./managed-mail-search";
 import {
   assertOrganizationOwnsVerifiedSenderDomain,
   OrganizationMailSendError,
@@ -65,6 +78,11 @@ const getS3Client = async (): Promise<S3Client> => {
 
 const toMessageListItem = async (
   record: typeof managedMailMessage.$inferSelect,
+  options: {
+    attachmentCount?: number;
+    labelIds?: string[];
+    threadMessageCount?: number;
+  } = {},
 ): Promise<MessageListItem> => ({
   bcc: record.bcc ?? undefined,
   bodyHtml: record.bodyHtml ?? undefined,
@@ -79,6 +97,7 @@ const toMessageListItem = async (
   labelIds: [
     record.direction === "inbound" ? MAILBOX_LABELS.inbox : MAILBOX_LABELS.sent,
     ...(!record.isRead ? [MAILBOX_LABELS.unread] : []),
+    ...(options.labelIds ?? []),
   ],
   messageHeaderId: record.messageHeaderId ?? undefined,
   references: record.references ?? undefined,
@@ -86,7 +105,9 @@ const toMessageListItem = async (
   senderAvatarUrls: await getSenderAvatarUrls(record.from),
   snippet: record.snippet ?? undefined,
   subject: record.subject ?? undefined,
+  threadAttachmentCount: options.attachmentCount,
   threadId: record.threadId,
+  threadMessageCount: options.threadMessageCount,
   to: record.to ?? undefined,
 });
 
@@ -99,10 +120,25 @@ const getCategoryCondition = (category: MailboxCategory) => {
   return null;
 };
 
-const parsePageOffset = (pageToken: string | undefined) => {
-  const offset = Number.parseInt(pageToken ?? "0", 10);
-  return Number.isSafeInteger(offset) && offset >= 0 ? offset : 0;
+const parseManagedPageCursor = (pageToken: string | undefined) => {
+  if (!pageToken) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(pageToken, "base64url").toString("utf8")) as {
+      id?: unknown;
+      sentAt?: unknown;
+    };
+    if (typeof parsed.id !== "string" || typeof parsed.sentAt !== "string") return null;
+    const sentAt = new Date(parsed.sentAt);
+    return Number.isNaN(sentAt.getTime()) ? null : { id: parsed.id, sentAt };
+  } catch {
+    return null;
+  }
 };
+
+const encodeManagedPageCursor = (record: { id: string; sentAt: Date }) =>
+  Buffer.from(JSON.stringify({ id: record.id, sentAt: record.sentAt.toISOString() })).toString(
+    "base64url",
+  );
 
 export const listManagedMessages = async (input: {
   category: MailboxCategory;
@@ -122,42 +158,121 @@ export const listManagedMessages = async (input: {
     return { messages: [], resultSizeEstimate: 0 };
   }
 
-  const query = input.query?.trim();
-  const searchCondition = query
-    ? or(
-        ilike(managedMailMessage.subject, `%${query}%`),
-        ilike(managedMailMessage.from, `%${query}%`),
-        ilike(managedMailMessage.to, `%${query}%`),
-        ilike(managedMailMessage.snippet, `%${query}%`),
-        ilike(managedMailMessage.bodyText, `%${query}%`),
-      )
-    : undefined;
+  const search = parseManagedSearchQuery(input.query);
+  const searchCondition = createManagedSearchCondition(input.mailboxId, search);
   const where = and(
     eq(managedMailMessage.mailboxId, input.mailboxId),
     categoryCondition,
     searchCondition,
   );
-  const offset = parsePageOffset(input.pageToken);
   const limit = Math.min(input.maxResults ?? MANAGED_MESSAGE_PAGE_SIZE, 100);
+  const matchedMessages = db
+    .selectDistinctOn([managedMailMessage.threadId])
+    .from(managedMailMessage)
+    .where(where)
+    .orderBy(
+      managedMailMessage.threadId,
+      desc(managedMailMessage.sentAt),
+      desc(managedMailMessage.id),
+    )
+    .as("matched_messages");
+  const cursor = parseManagedPageCursor(input.pageToken);
+  const cursorCondition = cursor
+    ? or(
+        lt(matchedMessages.sentAt, cursor.sentAt),
+        and(eq(matchedMessages.sentAt, cursor.sentAt), lt(matchedMessages.id, cursor.id)),
+      )
+    : undefined;
   const [records, countRows] = await Promise.all([
     db
       .select()
-      .from(managedMailMessage)
-      .where(where)
-      .orderBy(desc(managedMailMessage.sentAt), desc(managedMailMessage.id))
-      .limit(limit + 1)
-      .offset(offset),
+      .from(matchedMessages)
+      .where(cursorCondition)
+      .orderBy(desc(matchedMessages.sentAt), desc(matchedMessages.id))
+      .limit(limit + 1),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select({ count: sql<number>`count(distinct ${managedMailMessage.threadId})` })
       .from(managedMailMessage)
       .where(where),
   ]);
   const hasNextPage = records.length > limit;
   const pageRecords = records.slice(0, limit);
+  const threadIds = pageRecords.map((record) => record.threadId);
+  const [assignments, messageCounts, attachmentCounts] =
+    threadIds.length === 0
+      ? [[], [], []]
+      : await Promise.all([
+          db
+            .selectDistinct({
+              labelId: managedMailMessageLabel.labelId,
+              threadId: managedMailMessage.threadId,
+            })
+            .from(managedMailMessageLabel)
+            .innerJoin(
+              managedMailMessage,
+              eq(managedMailMessage.id, managedMailMessageLabel.messageId),
+            )
+            .where(
+              and(
+                eq(managedMailMessage.mailboxId, input.mailboxId),
+                inArray(managedMailMessage.threadId, threadIds),
+              ),
+            ),
+          db
+            .select({ count: count(), threadId: managedMailMessage.threadId })
+            .from(managedMailMessage)
+            .where(
+              and(
+                eq(managedMailMessage.mailboxId, input.mailboxId),
+                inArray(managedMailMessage.threadId, threadIds),
+              ),
+            )
+            .groupBy(managedMailMessage.threadId),
+          db
+            .select({
+              count: count(),
+              threadId: managedMailMessage.threadId,
+            })
+            .from(managedMailAttachment)
+            .innerJoin(
+              managedMailMessage,
+              eq(managedMailMessage.id, managedMailAttachment.messageId),
+            )
+            .where(
+              and(
+                eq(managedMailAttachment.mailboxId, input.mailboxId),
+                inArray(managedMailMessage.threadId, threadIds),
+              ),
+            )
+            .groupBy(managedMailMessage.threadId),
+        ]);
+  const labelIdsByThreadId = new Map<string, string[]>();
+  for (const assignment of assignments) {
+    const labelIds = labelIdsByThreadId.get(assignment.threadId) ?? [];
+    labelIds.push(assignment.labelId);
+    labelIdsByThreadId.set(assignment.threadId, labelIds);
+  }
+  const messageCountByThreadId = new Map(
+    messageCounts.map((record) => [record.threadId, Number(record.count)]),
+  );
+  const attachmentCountByThreadId = new Map(
+    attachmentCounts.map((record) => [record.threadId, Number(record.count)]),
+  );
 
   return {
-    messages: await Promise.all(pageRecords.map(toMessageListItem)),
-    nextPageToken: hasNextPage ? String(offset + limit) : undefined,
+    messages: await Promise.all(
+      pageRecords.map((record) =>
+        toMessageListItem(record, {
+          attachmentCount: attachmentCountByThreadId.get(record.threadId) ?? 0,
+          labelIds: labelIdsByThreadId.get(record.threadId) ?? [],
+          threadMessageCount: messageCountByThreadId.get(record.threadId) ?? 1,
+        }),
+      ),
+    ),
+    nextPageToken:
+      hasNextPage && pageRecords.length > 0
+        ? encodeManagedPageCursor(pageRecords[pageRecords.length - 1])
+        : undefined,
     resultSizeEstimate: Number(countRows[0]?.count ?? 0),
   };
 };
@@ -186,7 +301,51 @@ export const getManagedThread = async (input: {
     throw new ORPCError("NOT_FOUND", { message: "Message thread not found." });
   }
 
-  const messages = await Promise.all(records.map(toMessageListItem));
+  const [assignments, attachmentCounts] = await Promise.all([
+    db
+      .select({
+        labelId: managedMailMessageLabel.labelId,
+        messageId: managedMailMessageLabel.messageId,
+      })
+      .from(managedMailMessageLabel)
+      .where(
+        and(
+          eq(managedMailMessageLabel.mailboxId, input.mailboxId),
+          inArray(
+            managedMailMessageLabel.messageId,
+            records.map((record) => record.id),
+          ),
+        ),
+      ),
+    db
+      .select({ count: count(), messageId: managedMailAttachment.messageId })
+      .from(managedMailAttachment)
+      .where(
+        inArray(
+          managedMailAttachment.messageId,
+          records.map((record) => record.id),
+        ),
+      )
+      .groupBy(managedMailAttachment.messageId),
+  ]);
+  const labelIdsByMessageId = new Map<string, string[]>();
+  for (const assignment of assignments) {
+    const labelIds = labelIdsByMessageId.get(assignment.messageId) ?? [];
+    labelIds.push(assignment.labelId);
+    labelIdsByMessageId.set(assignment.messageId, labelIds);
+  }
+  const attachmentCountByMessageId = new Map(
+    attachmentCounts.map((record) => [record.messageId, Number(record.count)]),
+  );
+  const messages = await Promise.all(
+    records.map((record) =>
+      toMessageListItem(record, {
+        attachmentCount: attachmentCountByMessageId.get(record.id) ?? 0,
+        labelIds: labelIdsByMessageId.get(record.id) ?? [],
+        threadMessageCount: records.length,
+      }),
+    ),
+  );
   return {
     messages,
     snippet: messages.at(-1)?.snippet,
@@ -255,10 +414,35 @@ export const refreshManagedMessages = async (input: {
       ),
     );
   const recordsById = new Map(records.map((record) => [record.id, record]));
+  const assignments =
+    records.length > 0
+      ? await db
+          .select({
+            labelId: managedMailMessageLabel.labelId,
+            messageId: managedMailMessageLabel.messageId,
+          })
+          .from(managedMailMessageLabel)
+          .where(
+            inArray(
+              managedMailMessageLabel.messageId,
+              records.map((record) => record.id),
+            ),
+          )
+      : [];
+  const labelIdsByMessageId = new Map<string, string[]>();
+  for (const assignment of assignments) {
+    const labelIds = labelIdsByMessageId.get(assignment.messageId) ?? [];
+    labelIds.push(assignment.labelId);
+    labelIdsByMessageId.set(assignment.messageId, labelIds);
+  }
 
   return {
     removedMessageIds: input.messageIds.filter((messageId) => !recordsById.has(messageId)),
-    updatedMessages: await Promise.all(records.map(toMessageListItem)),
+    updatedMessages: await Promise.all(
+      records.map((record) =>
+        toMessageListItem(record, { labelIds: labelIdsByMessageId.get(record.id) ?? [] }),
+      ),
+    ),
   };
 };
 
@@ -300,11 +484,18 @@ export const setManagedMessageReadState = async (input: {
         eq(managedMailMessage.id, input.messageId),
       ),
     );
+  const customLabels = await db
+    .select({ labelId: managedMailMessageLabel.labelId })
+    .from(managedMailMessageLabel)
+    .where(eq(managedMailMessageLabel.messageId, input.messageId));
 
   return {
     id: input.messageId,
     isUnread: !input.read,
-    labelIds: getManagedMessageLabelIds(record.direction, input.read),
+    labelIds: [
+      ...getManagedMessageLabelIds(record.direction, input.read),
+      ...customLabels.map((assignment) => assignment.labelId),
+    ],
   };
 };
 
@@ -343,12 +534,33 @@ export const setManagedThreadReadState = async (input: {
         eq(managedMailMessage.threadId, input.threadId),
       ),
     );
+  const customLabels = await db
+    .select({
+      labelId: managedMailMessageLabel.labelId,
+      messageId: managedMailMessageLabel.messageId,
+    })
+    .from(managedMailMessageLabel)
+    .where(
+      inArray(
+        managedMailMessageLabel.messageId,
+        records.map((record) => record.id),
+      ),
+    );
+  const labelIdsByMessageId = new Map<string, string[]>();
+  for (const assignment of customLabels) {
+    const labelIds = labelIdsByMessageId.get(assignment.messageId) ?? [];
+    labelIds.push(assignment.labelId);
+    labelIdsByMessageId.set(assignment.messageId, labelIds);
+  }
 
   return {
     messages: records.map((record) => ({
       id: record.id,
       isUnread: !input.read,
-      labelIds: getManagedMessageLabelIds(record.direction, input.read),
+      labelIds: [
+        ...getManagedMessageLabelIds(record.direction, input.read),
+        ...(labelIdsByMessageId.get(record.id) ?? []),
+      ],
     })),
     threadId: input.threadId,
   };
@@ -480,6 +692,13 @@ export const deleteManagedThread = async (input: {
 };
 
 export const recordOutboundManagedMessageForSender = async (input: {
+  attachments?: Array<{
+    contentId?: string | null;
+    fileName: string;
+    inline: boolean;
+    mimeType: string;
+    size: number;
+  }>;
   bcc?: string[];
   bodyHtml?: string;
   bodyText?: string;
@@ -513,12 +732,15 @@ export const recordOutboundManagedMessageForSender = async (input: {
     .insert(managedMailMessage)
     .values({
       bcc: input.bcc?.join(", ") || null,
+      bccNormalized: normalizeManagedSearchValue(input.bcc?.join(", ")),
       bodyHtml: input.bodyHtml ?? null,
       bodyText: input.bodyText ?? null,
       cc: input.cc?.join(", ") || null,
+      ccNormalized: normalizeManagedSearchValue(input.cc?.join(", ")),
       createdAt: sentAt,
       direction: "outbound",
       from: input.sender,
+      fromNormalized: normalizeManagedSearchValue(input.sender),
       headers: [],
       id,
       inReplyTo: null,
@@ -531,6 +753,7 @@ export const recordOutboundManagedMessageForSender = async (input: {
       replyTo: input.replyTo?.join(", ") || null,
       s3Bucket: null,
       s3Key: null,
+      searchText: createManagedMessageSearchText(input),
       sentAt,
       snippet:
         (input.bodyText ?? input.bodyHtml?.replaceAll(/<[^>]+>/g, " "))
@@ -540,6 +763,7 @@ export const recordOutboundManagedMessageForSender = async (input: {
       subject: input.subject || null,
       threadId: input.threadId ?? id,
       to: input.to.join(", "),
+      toNormalized: normalizeManagedSearchValue(input.to.join(", ")),
       updatedAt: sentAt,
     })
     .onConflictDoNothing({
@@ -547,7 +771,30 @@ export const recordOutboundManagedMessageForSender = async (input: {
     })
     .returning({ id: managedMailMessage.id, threadId: managedMailMessage.threadId });
 
-  return inserted ?? null;
+  if (!inserted) return null;
+
+  if (input.attachments?.length) {
+    await db.insert(managedMailAttachment).values(
+      input.attachments.map((attachment) => ({
+        contentId: attachment.contentId ?? null,
+        createdAt: sentAt,
+        fileName: attachment.fileName,
+        id: randomUUID(),
+        inline: attachment.inline,
+        mailboxId: senderMailbox.id,
+        messageId: inserted.id,
+        mimeType: attachment.mimeType,
+        normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
+        size: attachment.size,
+      })),
+    );
+  }
+  await inheritManagedThreadLabels({
+    mailboxId: senderMailbox.id,
+    messageId: inserted.id,
+    threadId: inserted.threadId,
+  });
+  return inserted;
 };
 
 export const sendManagedMailboxMessage = async (input: {
@@ -645,6 +892,22 @@ export const sendManagedMailboxMessage = async (input: {
   const persistSendRecord = async () => {
     try {
       return await recordOutboundManagedMessageForSender({
+        attachments: [
+          ...input.message.attachments.map((attachment) => ({
+            contentId: attachment.contentId,
+            fileName: attachment.fileName ?? attachment.name,
+            inline: false,
+            mimeType: attachment.mimeType,
+            size: attachment.size,
+          })),
+          ...input.message.inlineImages.map((attachment) => ({
+            contentId: attachment.contentId,
+            fileName: attachment.name,
+            inline: true,
+            mimeType: attachment.mimeType,
+            size: attachment.size,
+          })),
+        ],
         bcc,
         bodyHtml: input.message.bodyHtml,
         bodyText: input.message.bodyText,

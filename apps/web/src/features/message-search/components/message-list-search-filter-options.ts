@@ -4,9 +4,11 @@ import {
   Calendar03Icon,
   FileAttachmentIcon,
   FileEditIcon,
+  Mail01Icon,
   MailAtSign01Icon,
   MailAtSign02Icon,
   MailOpen02Icon,
+  MailSend02Icon,
 } from "@hugeicons/core-free-icons";
 import type { SearchFilterChip } from "~/features/message-search/state/message-list-search-state";
 
@@ -28,6 +30,18 @@ export const searchFilterOptions: ReadonlyArray<{
     icon: MailOpen02Icon,
     label: "Read",
   },
+  {
+    filter: { type: "is", value: "inbound" },
+    hint: "is:inbound",
+    icon: Mail01Icon,
+    label: "Inbound",
+  },
+  {
+    filter: { type: "is", value: "outbound" },
+    hint: "is:outbound",
+    icon: MailSend02Icon,
+    label: "Outbound",
+  },
   { filter: { type: "before", value: "" }, hint: "before:", icon: Calendar01Icon, label: "Before" },
   { filter: { type: "after", value: "" }, hint: "after:", icon: Calendar03Icon, label: "After" },
   {
@@ -46,6 +60,18 @@ export const searchFilterOptions: ReadonlyArray<{
   { filter: { type: "to", value: "" }, hint: "to:", icon: MailAtSign02Icon, label: "To" },
   { filter: { type: "cc", value: "" }, hint: "cc:", icon: MailAtSign02Icon, label: "Cc" },
   { filter: { type: "bcc", value: "" }, hint: "bcc:", icon: MailAtSign02Icon, label: "Bcc" },
+  {
+    filter: { type: "subject", value: "" },
+    hint: "subject:",
+    icon: FileEditIcon,
+    label: "Subject",
+  },
+  {
+    filter: { type: "content", value: "" },
+    hint: "content:",
+    icon: FileEditIcon,
+    label: "Content",
+  },
   {
     filter: { type: "filename", value: "" },
     hint: "filename:",

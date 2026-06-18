@@ -517,13 +517,15 @@ const messageMatchesQuery = (message: MessageListItem, query: string | undefined
       continue;
     }
 
-    const filterTargets = {
+    const filterTargets: Partial<Record<string, Array<string | null | undefined>>> = {
       bcc: [message.bcc],
       cc: [message.cc],
+      content: [message.bodyText, message.snippet],
       filename: message.attachments?.map((attachment) => attachment.fileName) ?? [],
       from: [message.from],
+      subject: [message.subject],
       to: [message.to],
-    } satisfies Partial<Record<typeof filter.type, Array<string | null | undefined>>>;
+    };
     const targets = filterTargets[filter.type];
     if (targets && !targets.some((target) => textMatchesQuery(target, filter.value))) {
       return false;

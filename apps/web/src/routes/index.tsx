@@ -17,6 +17,7 @@ export const Route = createFileRoute("/")({
       chatId: z.string().trim().min(1).optional().catch(undefined),
       gmailLink: z.literal("complete").optional().catch(undefined),
       messageId: z.string().trim().min(1).optional().catch(undefined),
+      threadId: z.string().trim().min(1).optional().catch(undefined),
       query: z.string().trim().catch("").default(""),
       view: z.enum(MAILBOX_WORKSPACE_VIEWS).catch("inbox").default("inbox"),
     }),

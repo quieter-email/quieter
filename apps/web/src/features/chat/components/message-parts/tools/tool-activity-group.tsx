@@ -5,7 +5,7 @@ import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@quieter/ui";
 import { AnimatePresence, m } from "motion/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ResolveComposeTool } from "../../../types";
 import { getActiveToolDetail, summarizeToolCalls } from "../../../domain/tool-summaries";
 import { ToolPart } from "../tool-part";
@@ -30,12 +30,11 @@ export const ToolActivityGroup = ({
 }: ToolActivityGroupProps) => {
   const hasPending = items.some((item) => !item.result);
   const [expanded, setExpanded] = useState(hasPending);
-
-  useEffect(() => {
-    if (!hasPending) {
-      setExpanded(false);
-    }
-  }, [hasPending]);
+  const [previousHasPending, setPreviousHasPending] = useState(hasPending);
+  if (previousHasPending !== hasPending) {
+    setPreviousHasPending(hasPending);
+    if (!hasPending) setExpanded(false);
+  }
   const summaryItems = items.map((item) => ({
     call: item.call,
     pending: !item.result,
@@ -89,7 +88,7 @@ export const ToolActivityGroup = ({
         <span className="min-w-0 flex-1 truncate text-sm/relaxed text-muted-foreground">
           <span className="capitalize">{summary}</span>
           {activeDetail ? (
-            <span className="text-muted-foreground/70">{` · ${activeDetail}`}</span>
+            <span className="ml-2 text-muted-foreground/70">{activeDetail}</span>
           ) : null}
         </span>
       </button>

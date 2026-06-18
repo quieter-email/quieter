@@ -22,6 +22,33 @@ import {
   parseDateFilterValue,
 } from "./message-list-search-utils";
 
+const getFilterLabel = (type: string) => {
+  switch (type) {
+    case "bcc":
+      return "Bcc";
+    case "cc":
+      return "Cc";
+    case "filename":
+      return "File";
+    case "from":
+      return "From";
+    case "has":
+      return "Has";
+    case "is":
+      return "Status";
+    case "label":
+      return "Label";
+    case "to":
+      return "To";
+    case "newer_than":
+      return "Newer than";
+    case "older_than":
+      return "Older than";
+    default:
+      return type.charAt(0).toLocaleUpperCase() + type.slice(1);
+  }
+};
+
 export const MessageListSearchView = ({
   controller,
 }: {
@@ -30,6 +57,7 @@ export const MessageListSearchView = ({
   const {
     activeDateFilter,
     activeDateFilterIndex,
+    availableFilterOptions,
     calendarFallbackMonth,
     clearSearch,
     currentState,
@@ -51,12 +79,14 @@ export const MessageListSearchView = ({
     onScrollToTop,
     openDateFilter,
     openSearchDropdown,
-    removeFilterAtIndex,
+    removeFilterFromPointer,
     rowRef,
     runSearch,
     selectDateFilterValue,
+    selectDatePreset,
     setDateTokenRef,
     setSegmentRef,
+    suppressNextBlurCommit,
     textInputRef,
     toggleLabelToken,
     updateFilterValue,
@@ -125,18 +155,30 @@ export const MessageListSearchView = ({
                       <button
                         className={cn(
                           filterChipClassName,
-                          "squircle rounded-xs px-2 outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20",
+                          "squircle gap-1 rounded-xs px-2 outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20",
                         )}
                         key={`label:${normalizeLabelSelectionKey(filter.value)}`}
-                        onClick={() => removeFilterAtIndex(index)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          removeFilterFromPointer(index);
+                        }}
                         onFocus={openSearchDropdown}
                         onKeyDown={(event) =>
                           handleTokenKeyDown(event, index, { removeOnSpace: true })
                         }
                         ref={(node) => setSegmentRef(index, node)}
+                        onPointerDown={(event) => {
+                          if (document.activeElement === event.currentTarget) {
+                            suppressNextBlurCommit();
+                          }
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
                         type="button"
                       >
-                        {filter.value}
+                        {filter.negated ? <span className="text-muted-foreground">Not</span> : null}
+                        <span className="text-muted-foreground">Label</span>
+                        <span>{filter.value}</span>
                       </button>
                     );
                   }
@@ -146,16 +188,28 @@ export const MessageListSearchView = ({
                       <button
                         className={cn(
                           filterChipClassName,
-                          "squircle rounded-xs px-2 outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20",
+                          "squircle gap-1 rounded-xs px-2 outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20",
                         )}
                         key={`${filter.type}:${filter.value}`}
-                        onClick={() => removeFilterAtIndex(index)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          removeFilterFromPointer(index);
+                        }}
                         onFocus={openSearchDropdown}
                         onKeyDown={(event) => handleTokenKeyDown(event, index)}
                         ref={(node) => setSegmentRef(index, node)}
+                        onPointerDown={(event) => {
+                          if (document.activeElement === event.currentTarget) {
+                            suppressNextBlurCommit();
+                          }
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
                         type="button"
                       >
-                        {`${filter.type}:${filter.value}`}
+                        {filter.negated ? <span className="text-muted-foreground">Not</span> : null}
+                        <span className="text-muted-foreground">{getFilterLabel(filter.type)}</span>
+                        <span>{filter.value}</span>
                       </button>
                     );
                   }
@@ -170,10 +224,15 @@ export const MessageListSearchView = ({
                           "border-ring ring-2 ring-ring/20": activeDateFilterIndex === index,
                         },
                       )}
-                      key={filter.type}
+                      key={`${filter.type}:${filter.value}:${index}`}
                       ref={(node) => setDateTokenRef(index, node)}
                     >
-                      <span className="shrink-0 text-muted-foreground">{`${filter.type}:`}</span>
+                      {filter.negated ? (
+                        <span className="shrink-0 text-muted-foreground">Not</span>
+                      ) : null}
+                      <span className="shrink-0 text-muted-foreground">
+                        {getFilterLabel(filter.type)}
+                      </span>
                       <input
                         aria-label={`${filter.type} filter value`}
                         autoCapitalize="off"
@@ -198,6 +257,24 @@ export const MessageListSearchView = ({
                         type="text"
                         value={filter.value}
                       />
+                      <button
+                        aria-label={`Remove ${getFilterLabel(filter.type)} filter`}
+                        className="flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/20"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          removeFilterFromPointer(index);
+                        }}
+                        onPointerDown={(event) => {
+                          if (document.activeElement === event.currentTarget) {
+                            suppressNextBlurCommit();
+                          }
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                        type="button"
+                      >
+                        <HugeiconsIcon aria-hidden className="size-3" icon={Cancel01Icon} />
+                      </button>
                     </div>
                   );
                 })}
@@ -278,6 +355,45 @@ export const MessageListSearchView = ({
                   className="absolute top-full z-40 mt-2 rounded-lg border bg-popover p-2 shadow-lg"
                   style={{ left: datePopoverLeft }}
                 >
+                  <div className="mb-2 grid grid-cols-2 gap-1 border-b pb-2">
+                    <Button
+                      onClick={() => selectDateFilterValue(calendarFallbackMonth)}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      Today
+                    </Button>
+                    <Button
+                      onClick={() => selectDatePreset({ type: "newer_than", value: "7d" })}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      Last 7 days
+                    </Button>
+                    <Button
+                      onClick={() => selectDatePreset({ type: "newer_than", value: "30d" })}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      Last 30 days
+                    </Button>
+                    <Button
+                      onClick={() =>
+                        selectDatePreset({
+                          type: "after",
+                          value: `${calendarFallbackMonth.getFullYear()}/1/1`,
+                        })
+                      }
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      This year
+                    </Button>
+                  </div>
                   <Calendar
                     mode="single"
                     month={parseDateFilterValue(activeDateFilter.value) ?? calendarFallbackMonth}
@@ -293,6 +409,7 @@ export const MessageListSearchView = ({
 
             <MessageListSearchDropdown
               draftSearchState={currentState}
+              filterOptions={availableFilterOptions}
               highlightedItemKey={highlightedDropdownItemKey}
               isLoadingLabels={isLoadingLabels}
               isOpen={isDropdownOpen}

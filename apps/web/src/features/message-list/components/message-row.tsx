@@ -1,11 +1,11 @@
 "use client";
 
+import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { FileAttachmentIcon, MessageMultiple01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { splitMailAddressList } from "@quieter/mail/compose";
 import { cn } from "@quieter/ui";
 import { type KeyboardEvent, type MouseEvent } from "react";
-import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import { SenderAvatar } from "~/components/sender-avatar";
 import { MessageLabels } from "~/features/message-labels/components/message-labels";
@@ -33,7 +33,7 @@ const getSelectionGesture = (event: MessageRowGestureEvent): MessageRowSelection
 
 type MessageRowProps = {
   activeMailbox: MessageListProps["activeMailbox"];
-  gmailLabels: GmailLabelListItem[];
+  gmailLabels: MailboxLabel[];
   isActive?: boolean;
   isSelected?: boolean;
   isSelectionMode?: boolean;
@@ -244,7 +244,8 @@ const MessageRowContent = ({
         actions={createMailboxThreadMessageActionHandlers({
           mailboxActions,
           onOpenDraft,
-          supportsLabelsAndFolders: mailboxProvider === "gmail",
+          supportsFolders: mailboxProvider === "gmail",
+          supportsLabels: true,
           supportsUnsubscribe: mailboxProvider === "gmail",
         })}
         isPending={isActionPending}
@@ -325,15 +326,13 @@ const MessageRowContent = ({
                     subject
                   )}
                 </p>
-                {mailboxProvider === "gmail" && (
-                  <MessageLabels
-                    className="shrink-0 flex-nowrap"
-                    compact
-                    labelIds={threadLabelIds}
-                    labels={gmailLabels}
-                    limit={2}
-                  />
-                )}
+                <MessageLabels
+                  className="shrink-0 flex-nowrap"
+                  compact
+                  labelIds={threadLabelIds}
+                  labels={gmailLabels}
+                  limit={2}
+                />
               </div>
             </div>
           </div>

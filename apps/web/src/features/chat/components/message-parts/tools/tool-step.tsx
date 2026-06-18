@@ -61,7 +61,7 @@ export const ToolStep = ({
           )
         ) : null}
         <span
-          className={cn("min-w-0 flex-1 truncate", {
+          className={cn("flex min-w-0 flex-1 items-baseline gap-x-2 truncate", {
             "text-sm/relaxed": nested,
             "text-sm/5": !nested,
           })}
@@ -74,14 +74,11 @@ export const ToolStep = ({
           >
             {label}
           </span>
-          {detail ? (
-            <span className="text-muted-foreground/80">
-              {" "}
-              <span className="text-foreground/75">{detail}</span>
-            </span>
+          {detail ? <span className="text-foreground/75">{detail}</span> : null}
+          {meta ? <span className="text-muted-foreground/65">{meta}</span> : null}
+          {hasError ? (
+            <span className="border-l border-destructive/30 pl-2 text-destructive/90">{error}</span>
           ) : null}
-          {meta ? <span className="text-muted-foreground/65"> · {meta}</span> : null}
-          {hasError ? <span className="text-destructive/90"> · {error}</span> : null}
         </span>
         {!nested && canExpand ? (
           <HugeiconsIcon

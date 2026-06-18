@@ -1,5 +1,6 @@
 "use client";
 
+import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import {
   ArrowDown01Icon,
   ArrowRightDoubleIcon,
@@ -47,7 +48,6 @@ import {
 import { MessageLabels } from "~/features/message-labels/components/message-labels";
 import {
   hasRenderableMessageBody,
-  type GmailLabelListItem,
   isMessageUnread,
   type MailboxCategory,
   MAILBOX_LABELS,
@@ -80,7 +80,7 @@ type MessageViewProps = {
 };
 
 type MessageHeaderContentProps = {
-  gmailLabels: GmailLabelListItem[];
+  gmailLabels: MailboxLabel[];
   message: MessageListItem;
   className?: string;
   headerActions?: ReactNode;
@@ -380,8 +380,12 @@ const MessageInspectorPanel = ({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => {
-  const inspectorQuery = useQuery(getMessageInspectorOptions(mailboxId, message.id, open));
-  const inspector = inspectorQuery.data;
+  const {
+    data: inspector,
+    error: inspectorError,
+    isError: isInspectorError,
+    isPending: isInspectorPending,
+  } = useQuery(getMessageInspectorOptions(mailboxId, message.id, open));
   const payloadText = inspector?.payload ? JSON.stringify(inspector.payload, null, 2) : "";
 
   return (
@@ -395,14 +399,14 @@ const MessageInspectorPanel = ({
         </DialogHeader>
 
         <DialogBody className="max-h-[70vh] space-y-5 overflow-y-auto">
-          {inspectorQuery.isPending ? (
+          {isInspectorPending ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <HugeiconsIcon aria-hidden className="animate-spin" icon={Loading03Icon} />
               <span>Loading message details…</span>
             </div>
-          ) : inspectorQuery.isError ? (
+          ) : isInspectorError ? (
             <p className="text-sm text-destructive">
-              {inspectorQuery.error.message || "Could not load message details."}
+              {inspectorError.message || "Could not load message details."}
             </p>
           ) : (
             inspector && (
@@ -563,7 +567,7 @@ const ThreadMessageCard = ({
   isLoading?: boolean;
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
-  gmailLabels: GmailLabelListItem[];
+  gmailLabels: MailboxLabel[];
   mailboxId: string;
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
@@ -672,7 +676,7 @@ const SingleMessageCard = ({
   isLoading?: boolean;
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
-  gmailLabels: GmailLabelListItem[];
+  gmailLabels: MailboxLabel[];
   mailboxId: string;
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
@@ -764,7 +768,7 @@ const ThreadMessageList = ({
   allThreadMessages: MessageListItem[];
   currentUserEmail?: string | null;
   isLoading?: boolean;
-  gmailLabels: GmailLabelListItem[];
+  gmailLabels: MailboxLabel[];
   isActionPending?: boolean;
   mailboxId: string;
   messages: MessageListItem[];
@@ -822,10 +826,14 @@ export const MessageView = ({
   onComposeDraftRequested,
   pendingActions,
 }: MessageViewProps) => {
-  const { data: gmailLabels = [] } = useQuery(
-    labelsQueryOptions(mailboxId, mailboxProvider === "gmail"),
-  );
-  const threadQuery = useQuery({
+  const { data: gmailLabels = [] } = useQuery(labelsQueryOptions(mailboxId));
+  const {
+    data: threadData,
+    isError: isThreadError,
+    isFetching: isThreadFetching,
+    isPending: isThreadPending,
+    refetch: refetchThread,
+  } = useQuery({
     // react-doctor-disable-next-line react-doctor/no-event-handler
     ...getThreadWithDetailsOptions(mailboxId, message.threadId),
     placeholderData: {
@@ -838,15 +846,8 @@ export const MessageView = ({
   const { data: usefulDetails = [] } = useQuery(
     gmailThreadUsefulDetailsQueryOptions(mailboxId, message.threadId, mailboxProvider === "gmail"),
   );
-  const {
-    isError: isThreadError,
-    isFetching: isThreadFetching,
-    isPending: isThreadPending,
-    refetch: refetchThread,
-  } = threadQuery;
-
-  const threadMessages = threadQuery.data?.messages?.length
-    ? [...threadQuery.data.messages].reverse()
+  const threadMessages = threadData?.messages?.length
+    ? [...threadData.messages].reverse()
     : [message];
   const messages = threadMessages.filter((threadMessage) => !isDraftMessage(threadMessage));
   const visibleMessages = messages.length > 0 ? messages : [message];
@@ -864,7 +865,7 @@ export const MessageView = ({
 
       return threadMessage.subject;
     }, undefined) ||
-    threadQuery.data?.subject ||
+    threadData?.subject ||
     message.subject ||
     "(No subject)";
   const threadIsUnread = visibleMessages.some((entry) => isMessageUnread(entry));
@@ -939,7 +940,8 @@ export const MessageView = ({
             <MessageActionsDropdown
               actions={createMailboxThreadMessageActionHandlers({
                 mailboxActions,
-                supportsLabelsAndFolders: mailboxProvider === "gmail",
+                supportsFolders: mailboxProvider === "gmail",
+                supportsLabels: true,
                 supportsUnsubscribe: mailboxProvider === "gmail",
               })}
               isPending={isActionPending}

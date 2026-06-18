@@ -2,11 +2,7 @@
 
 import { type QueryClient, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  type ListMessagesPageResult,
-  type MailboxCategory,
-  type MessageListItem,
-} from "~/lib/gmail/gmail";
+import { type ListMessagesPageResult, type MailboxCategory } from "~/lib/gmail/gmail";
 import {
   getLiveSyncQueryKey,
   getMessagesQueryKey,
@@ -15,6 +11,7 @@ import {
   refreshLoadedMessagesPages,
   syncMessages,
 } from "~/lib/gmail/inbox-query";
+import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
 import { useGmailLiveSync } from "~/lib/gmail/use-gmail-live-sync";
 import { useVisibleMessageRefresh } from "./use-visible-message-refresh";
 
@@ -23,6 +20,7 @@ type UseMailboxMessagesOptions = {
   isDemoMode: boolean;
   mailboxProvider: "gmail" | "managed";
   messageId?: string;
+  threadId?: string;
   queryClient: QueryClient;
   searchQuery: string;
   selectedMailboxId: string | null;
@@ -61,6 +59,7 @@ export const useMailboxMessages = ({
   isDemoMode,
   mailboxProvider,
   messageId,
+  threadId,
   queryClient,
   searchQuery,
   selectedMailboxId,
@@ -113,6 +112,19 @@ export const useMailboxMessages = ({
     searchQuery: normalizedQuery,
   });
   const flattenedMessages = useMemo(() => messages.flatMap((page) => page.messages), [messages]);
+  const cachedSelectedMessage =
+    activeMailbox !== "drafts" && messageId
+      ? flattenedMessages.find((message) => message.id === messageId)
+      : undefined;
+  const shouldLoadSelectedThread =
+    activeMailbox !== "drafts" &&
+    !!selectedMailboxId &&
+    !!messageId &&
+    !!threadId &&
+    !cachedSelectedMessage;
+  const selectedThreadQuery = useQuery(
+    getThreadWithDetailsOptions(selectedMailboxId ?? "", threadId ?? "", shouldLoadSelectedThread),
+  );
 
   const refreshMessages = useCallback(async () => {
     if (!selectedMailboxId) {
@@ -151,15 +163,10 @@ export const useMailboxMessages = ({
     selectedMailboxId,
   });
 
-  let selectedMessage: MessageListItem | null = null;
-  if (activeMailbox !== "drafts" && messageId) {
-    for (const message of flattenedMessages) {
-      if (message.id === messageId) {
-        selectedMessage = message;
-        break;
-      }
-    }
-  }
+  const selectedMessage =
+    cachedSelectedMessage ??
+    selectedThreadQuery.data?.messages.find((message) => message.id === messageId) ??
+    null;
 
   const isRefreshing =
     isManualRefreshing || syncQuery.isFetching || (isRefetching && !isFetchingNextPage);
@@ -195,7 +202,7 @@ export const useMailboxMessages = ({
     isRefreshing,
     listState,
     loadMoreMessages,
-    messagesPending: isPending,
+    messagesPending: isPending || (shouldLoadSelectedThread && selectedThreadQuery.isPending),
     refreshMessages,
     refreshSearchResultsIfNeeded,
     selectedMessage,

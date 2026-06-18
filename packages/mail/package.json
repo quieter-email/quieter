@@ -6,7 +6,9 @@
     ".": "./src/index.ts",
     "./compose": "./src/compose/index.ts",
     "./message-content": "./src/message-content.ts",
+    "./mailbox-organization": "./src/mailbox-organization.ts",
     "./raw-message": "./src/raw-message.ts",
+    "./search": "./src/search.ts",
     "./sender-avatar": "./src/sender-avatar.ts"
   },
   "scripts": {

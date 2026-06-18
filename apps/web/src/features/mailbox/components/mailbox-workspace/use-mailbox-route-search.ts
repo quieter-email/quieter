@@ -12,6 +12,7 @@ type MailboxSearchPatch = {
   mailbox?: MailboxCategory;
   mailboxId?: string | null;
   messageId?: string | null;
+  threadId?: string | null;
   query?: string | null;
   view?: MailboxWorkspaceView;
 };
@@ -24,6 +25,7 @@ type InboxRouteState = {
   mailbox: MailboxCategory;
   mailboxId?: string;
   messageId?: string;
+  threadId?: string;
   query: string;
 };
 
@@ -47,6 +49,12 @@ const applyInboxPatch = (state: InboxRouteState, patch: MailboxSearchPatch): Inb
     patch.mailboxId === undefined ? state.mailboxId : normalizeSearchValue(patch.mailboxId),
   messageId:
     patch.messageId === undefined ? state.messageId : normalizeSearchValue(patch.messageId),
+  threadId:
+    patch.threadId === undefined
+      ? patch.messageId === undefined
+        ? state.threadId
+        : undefined
+      : normalizeSearchValue(patch.threadId),
   query: patch.query === undefined ? state.query : (patch.query?.trim() ?? ""),
 });
 
@@ -79,6 +87,7 @@ export const useMailboxSearchActions = () => {
               mailbox: previous.mailbox,
               mailboxId: previous.mailboxId,
               messageId: previous.messageId,
+              threadId: previous.threadId,
               query: previous.query,
             };
           }
@@ -103,6 +112,7 @@ export const useMailboxSearchActions = () => {
             mailbox: nextInboxState.mailbox,
             mailboxId: nextInboxState.mailboxId,
             messageId: nextInboxState.messageId,
+            threadId: nextInboxState.threadId,
             query: nextInboxState.query,
             view: "inbox",
           } as MailboxSearch;
@@ -117,6 +127,11 @@ export const useMailboxSearchActions = () => {
 export const useMailboxMessageId = () =>
   inboxRouteApi.useSearch({
     select: (search) => search.messageId,
+  });
+
+export const useMailboxThreadId = () =>
+  inboxRouteApi.useSearch({
+    select: (search) => search.threadId,
   });
 
 export const useMailboxRouteSearch = () => {
