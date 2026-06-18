@@ -115,16 +115,57 @@ carrier, tracking number, current status, and stated or strongly implied expecte
 available. expectedAt must be an ISO 8601 timestamp or null. Keep summary factual and under 160
 characters.
 
-The other allowed kinds are:
-- "travel": flights, trains, hotels, check-in, delays, cancellations, or gate/platform changes.
-- "appointment": confirmed professional appointments and changes or preparation instructions.
-- "reservation": restaurant, venue, event, or ticket reservations and material changes.
-- "bill": a concrete payment due date, renewal, failed payment, or material price increase.
-- "return": a return deadline, drop-off code, refund, or return-status update.
-- "document_expiry": an important ID, policy, warranty, certificate, or similar expiry.
-- "application": a job, housing, visa, benefits, or support-case status requiring awareness.
-- "security_alert": a credible suspicious login, new device, or account-security alert.
-- "task": an explicit request directed to the recipient with a clear deadline.
+Apply these rules to the other allowed kinds:
+
+- "travel": A booked flight, train, bus, ferry, hotel, or similar trip with a concrete future time,
+  check-in window, cancellation, delay, or gate/platform/terminal change. Include booking references,
+  departure or check-in time, and location when stated. Exclude travel marketing, fare alerts,
+  destination guides, loyalty statements, ride receipts, and unbooked itineraries.
+
+- "appointment": A confirmed professional appointment such as medical care, an interview, repair,
+  consultation, or service visit, including a reschedule, cancellation, preparation requirement, or
+  imminent reminder. A concrete appointment time or actionable preparation deadline must exist.
+  Exclude invitations awaiting confirmation, general availability, recurring newsletters, and
+  vague reminders without an identifiable appointment.
+
+- "reservation": A confirmed restaurant, venue, event, rental, or ticket reservation with a future
+  time or a material change such as cancellation, relocation, or entry instructions. Include the
+  venue, booking reference, and event time when stated. Exclude advertisements, waitlist marketing,
+  purchase receipts without a future event, and invitations that do not confirm a reservation.
+
+- "bill": A specific payment that is due, overdue, failed, unexpectedly changed, or scheduled to
+  renew at a materially different price. A due date, retry date, service interruption deadline, or
+  renewal date must be clear. Exclude ordinary paid receipts, routine statements with no action,
+  unchanged subscription renewals, promotional offers, and generic balance notifications.
+
+- "return": A concrete return, exchange, refund, chargeback, or dispute update that the recipient
+  may need to act on or monitor. Include a return deadline, drop-off code, required method, refund
+  amount/status, or reference when stated. Exclude ordinary purchase receipts, broad return-policy
+  marketing, and completed refunds that require no awareness or action unless unusually material.
+
+- "document_expiry": An important document, credential, policy, warranty, license, certification,
+  payment card, or official authorization that will expire or requires renewal. The item and expiry
+  or renewal deadline must be explicit. Exclude expiring coupons, memberships with no consequence,
+  marketing offers, and vague reminders that do not identify the document or deadline.
+
+- "application": A concrete status or required next step for a job, housing, school, visa,
+  immigration, benefits, insurance claim, financing, or support-case application. Include deadlines,
+  interview times, missing documents, approvals, rejections, and material status changes. Exclude
+  generic recruiting messages, job recommendations, acknowledgements that merely say an application
+  was received, surveys, and support newsletters with no case-specific development.
+
+- "security_alert": A credible unauthorized, suspicious, blocked, or unrecognized login, device,
+  transaction, credential change, recovery attempt, or account-security event that the recipient
+  should investigate. The email must directly indicate risk, uncertainty, or required action.
+  Exclude routine notifications about successful sign-ins, authorized apps, permission changes,
+  password changes, or devices when the message does not indicate they may be unauthorized. For
+  example, an email merely saying that a third-party OAuth application was added or authorized must
+  return "none".
+
+- "task": An explicit request addressed to the recipient that requires a concrete action by a clear
+  deadline. The requested action and deadline must both be recoverable from the email. Exclude vague
+  requests, optional suggestions, meeting discussion points, FYI messages, open-ended follow-ups,
+  automated engagement prompts, and tasks assigned to someone else.
 
 Do not treat marketing, newsletters, generic account activity, ordinary receipts, informational
 status mail, vague requests, or events without a concrete future action/window as useful details.
@@ -137,6 +178,9 @@ determined, return "none". eventAt is the appointment, departure, deadline, due 
 other central time when one exists. reference is an explicit stable booking, case, invoice, return,
 or application identifier. location is a concise gate, platform, venue, address, or meeting place.
 service is a concise human-readable name for the service, organization, event, or requested action.
+For every non-"none" result except "verification_code", summary must be a standalone statement of
+the useful fact or required action. It must explain why the item is worth showing and must not be
+only a sender, merchant, service, category label, or generic phrase such as "account update".
 
 When neither kind clearly applies, return kind "none". Use null for every field that does not apply.
 Never invent codes, identifiers, dates stated by the sender, merchants, carriers, locations, or

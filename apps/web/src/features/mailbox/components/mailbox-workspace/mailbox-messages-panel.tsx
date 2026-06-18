@@ -12,7 +12,11 @@ import { orpc } from "~/lib/orpc";
 import { createMailboxActionHandlers } from "../mailbox-action-handlers";
 import { useMailboxMessages } from "./use-mailbox-messages";
 import { useMailboxPendingActions } from "./use-mailbox-pending-actions";
-import { useMailboxMessageId, useMailboxSearchActions } from "./use-mailbox-route-search";
+import {
+  useMailboxMessageId,
+  useMailboxSearchActions,
+  useMailboxThreadId,
+} from "./use-mailbox-route-search";
 
 type MailboxMessagesPanelProps = {
   activeMailbox: MailboxCategory;
@@ -38,6 +42,7 @@ export const MailboxMessagesPanel = ({
   searchQuery,
 }: MailboxMessagesPanelProps) => {
   const messageId = useMailboxMessageId() ?? null;
+  const threadId = useMailboxThreadId() ?? null;
   const setMailboxSearch = useMailboxSearchActions();
   const queryClient = useQueryClient();
   const normalizedSearchQuery = searchQuery.trim();
@@ -68,6 +73,7 @@ export const MailboxMessagesPanel = ({
     isDemoMode,
     mailboxProvider,
     messageId: messageId ?? undefined,
+    threadId: threadId ?? undefined,
     queryClient,
     searchQuery: normalizedSearchQuery,
     selectedMailboxId: mailboxId,
@@ -84,7 +90,7 @@ export const MailboxMessagesPanel = ({
       return;
     }
 
-    void setMailboxSearch({ messageId: null });
+    void setMailboxSearch({ messageId: null, threadId: null });
   }, [
     activeMailbox,
     hasMessagePages,
@@ -126,7 +132,7 @@ export const MailboxMessagesPanel = ({
     onComposeDraftRequested(buildComposeDraftFromSavedDraftMessage(message));
   };
 
-  const activateMessage = (nextMessageId: string) => {
+  const activateMessage = (nextMessageId: string, nextThreadId?: string | null) => {
     if (activeMailbox === "drafts") {
       const draftMessage = flattenedMessages.find((message) => message.id === nextMessageId);
       if (draftMessage) {
@@ -137,14 +143,17 @@ export const MailboxMessagesPanel = ({
 
     const shouldPushMobileHistory =
       !messageId && window.matchMedia("(max-width: 1023.98px)").matches;
-    void setMailboxSearch({ messageId: nextMessageId }, { replace: !shouldPushMobileHistory });
+    void setMailboxSearch(
+      { messageId: nextMessageId, threadId: nextThreadId ?? null },
+      { replace: !shouldPushMobileHistory },
+    );
   };
 
   const applySearch = (nextQuery: string) => {
     const normalizedQuery = nextQuery.trim();
 
     if (normalizedQuery === normalizedSearchQuery) {
-      void setMailboxSearch({ messageId: null });
+      void setMailboxSearch({ messageId: null, threadId: null });
       void refreshMessages();
       return;
     }
@@ -153,7 +162,7 @@ export const MailboxMessagesPanel = ({
   };
 
   const backToList = () => {
-    void setMailboxSearch({ messageId: null });
+    void setMailboxSearch({ messageId: null, threadId: null });
   };
 
   return (

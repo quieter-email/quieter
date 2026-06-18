@@ -1,9 +1,8 @@
+import { serializeStructuredSearchState } from "@quieter/mail/search";
+import { isRepeatableMailSearchFilter } from "@quieter/mail/search";
 import {
-  normalizeSearchText,
   normalizeLabelSelectionKey,
-  serializeStructuredSearchFilterToken,
   type SearchFilterChip,
-  type StructuredSearchState,
 } from "~/features/message-search/state/message-list-search-state";
 import type { DropdownDirection } from "./message-list-search-types";
 
@@ -42,11 +41,7 @@ export const parseDateFilterValue = (value: string) => {
   return date;
 };
 
-export const serializeStructuredSearchState = (state: StructuredSearchState) =>
-  [...state.filters.map(serializeStructuredSearchFilterToken), normalizeSearchText(state.text)]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
+export { serializeStructuredSearchState };
 
 export const getDropdownDirection = (key: string): DropdownDirection | null =>
   key === "ArrowDown" ? "next" : key === "ArrowUp" ? "previous" : null;
@@ -81,6 +76,16 @@ export const upsertFilter = (
       return { filters: [...filters], index: existingIndex };
     }
 
+    return { filters: [...filters, nextFilter], index: filters.length };
+  }
+
+  if (isRepeatableMailSearchFilter(nextFilter.type)) {
+    const unfinishedIndex = filters.findIndex(
+      (filter) => filter.type === nextFilter.type && filter.value.trim().length === 0,
+    );
+    if (unfinishedIndex !== -1) {
+      return { filters: [...filters], index: unfinishedIndex };
+    }
     return { filters: [...filters, nextFilter], index: filters.length };
   }
 

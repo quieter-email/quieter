@@ -42,6 +42,15 @@ export type GmailUsefulDetailKind =
   | "verification_code";
 export type GmailUsefulDetailRelevanceSource = "explicit" | "inferred";
 export type ManagedMailDirection = "inbound" | "outbound";
+export type ManagedMailLabelAssignmentSource = "backfill" | "inherited" | "manual" | "rule";
+export type ManagedMailRuleBackfillStatus =
+  | "cancelled"
+  | "completed"
+  | "failed"
+  | "pending"
+  | "running";
+export type ManagedMailRuleMatchMode = "all" | "any";
+export type ManagedMailSavedViewSort = "newest" | "oldest" | "relevance";
 export type ManagedMailHeader = {
   name: string;
   value: string;
@@ -550,14 +559,19 @@ export const managedMailMessage = pgTable(
     inReplyTo: text("inReplyTo"),
     references: text("references"),
     from: text("from").notNull(),
+    fromNormalized: text("fromNormalized").notNull().default(""),
     to: text("to"),
+    toNormalized: text("toNormalized").notNull().default(""),
     cc: text("cc"),
+    ccNormalized: text("ccNormalized").notNull().default(""),
     bcc: text("bcc"),
+    bccNormalized: text("bccNormalized").notNull().default(""),
     replyTo: text("replyTo"),
     subject: text("subject"),
     snippet: text("snippet"),
     bodyHtml: text("bodyHtml"),
     bodyText: text("bodyText"),
+    searchText: text("searchText").notNull().default(""),
     headers: jsonb("headers").$type<ManagedMailHeader[]>().notNull().default([]),
     isRead: boolean("isRead").notNull().default(false),
     sentAt: timestamp("sentAt").notNull(),
@@ -578,11 +592,230 @@ export const managedMailMessage = pgTable(
       table.sentAt,
     ),
     index("managed_mail_message_mailbox_thread_id_idx").on(table.mailboxId, table.threadId),
+    index("managed_mail_message_mailbox_from_normalized_idx").on(
+      table.mailboxId,
+      table.fromNormalized,
+    ),
+    index("managed_mail_message_mailbox_sent_at_id_idx").on(
+      table.mailboxId,
+      table.sentAt,
+      table.id,
+    ),
     index("managed_mail_message_s3_bucket_key_idx").on(table.s3Bucket, table.s3Key),
     unique("managed_mail_message_mailbox_provider_message_unique").on(
       table.mailboxId,
       table.providerMessageId,
     ),
+  ],
+);
+
+export const managedMailLabel = pgTable(
+  "managedMailLabel",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    normalizedName: text("normalizedName").notNull(),
+    color: text("color").notNull().default("gray"),
+    description: text("description"),
+    visible: boolean("visible").notNull().default(true),
+    position: integer("position").notNull().default(0),
+    createdByUserId: text("createdByUserId").references(() => user.id, { onDelete: "set null" }),
+    updatedByUserId: text("updatedByUserId").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    index("managed_mail_label_mailbox_position_idx").on(table.mailboxId, table.position),
+    unique("managed_mail_label_mailbox_normalized_name_unique").on(
+      table.mailboxId,
+      table.normalizedName,
+    ),
+  ],
+);
+
+export const managedMailSavedView = pgTable(
+  "managedMailSavedView",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    ownerUserId: text("ownerUserId").references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    normalizedName: text("normalizedName").notNull(),
+    search: jsonb("search").$type<unknown>().notNull(),
+    sort: text("sort").$type<ManagedMailSavedViewSort>().notNull().default("newest"),
+    color: text("color"),
+    icon: text("icon"),
+    position: integer("position").notNull().default(0),
+    disabledReason: text("disabledReason"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "managed_mail_saved_view_sort_check",
+      sql`${table.sort} in ('newest', 'oldest', 'relevance')`,
+    ),
+    index("managed_mail_saved_view_mailbox_owner_position_idx").on(
+      table.mailboxId,
+      table.ownerUserId,
+      table.position,
+    ),
+    uniqueIndex("managed_mail_saved_view_shared_name_unique")
+      .on(table.mailboxId, table.normalizedName)
+      .where(sql`${table.ownerUserId} is null`),
+    uniqueIndex("managed_mail_saved_view_personal_name_unique")
+      .on(table.mailboxId, table.ownerUserId, table.normalizedName)
+      .where(sql`${table.ownerUserId} is not null`),
+  ],
+);
+
+export const managedMailRule = pgTable(
+  "managedMailRule",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    normalizedName: text("normalizedName").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    matchMode: text("matchMode").$type<ManagedMailRuleMatchMode>().notNull().default("all"),
+    search: jsonb("search").$type<unknown>().notNull(),
+    labelIds: jsonb("labelIds").$type<string[]>().notNull(),
+    priority: integer("priority").notNull().default(0),
+    createdByUserId: text("createdByUserId").references(() => user.id, { onDelete: "set null" }),
+    updatedByUserId: text("updatedByUserId").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check("managed_mail_rule_match_mode_check", sql`${table.matchMode} in ('all', 'any')`),
+    index("managed_mail_rule_mailbox_enabled_priority_idx").on(
+      table.mailboxId,
+      table.enabled,
+      table.priority,
+    ),
+    unique("managed_mail_rule_mailbox_normalized_name_unique").on(
+      table.mailboxId,
+      table.normalizedName,
+    ),
+  ],
+);
+
+export const managedMailMessageLabel = pgTable(
+  "managedMailMessageLabel",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    messageId: text("messageId")
+      .notNull()
+      .references(() => managedMailMessage.id, { onDelete: "cascade" }),
+    labelId: text("labelId")
+      .notNull()
+      .references(() => managedMailLabel.id, { onDelete: "cascade" }),
+    source: text("source").$type<ManagedMailLabelAssignmentSource>().notNull(),
+    ruleId: text("ruleId").references(() => managedMailRule.id, { onDelete: "set null" }),
+    assignedByUserId: text("assignedByUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => [
+    check(
+      "managed_mail_message_label_source_check",
+      sql`${table.source} in ('manual', 'rule', 'inherited', 'backfill')`,
+    ),
+    index("managed_mail_message_label_mailbox_label_idx").on(table.mailboxId, table.labelId),
+    index("managed_mail_message_label_message_idx").on(table.messageId),
+    unique("managed_mail_message_label_message_label_unique").on(table.messageId, table.labelId),
+  ],
+);
+
+export const managedMailAttachment = pgTable(
+  "managedMailAttachment",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    messageId: text("messageId")
+      .notNull()
+      .references(() => managedMailMessage.id, { onDelete: "cascade" }),
+    fileName: text("fileName").notNull(),
+    normalizedFileName: text("normalizedFileName").notNull(),
+    mimeType: text("mimeType").notNull(),
+    size: integer("size").notNull(),
+    inline: boolean("inline").notNull().default(false),
+    contentId: text("contentId"),
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => [
+    index("managed_mail_attachment_mailbox_name_idx").on(table.mailboxId, table.normalizedFileName),
+    index("managed_mail_attachment_message_idx").on(table.messageId),
+  ],
+);
+
+export const managedMailRuleApplication = pgTable(
+  "managedMailRuleApplication",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    ruleId: text("ruleId")
+      .notNull()
+      .references(() => managedMailRule.id, { onDelete: "cascade" }),
+    messageId: text("messageId")
+      .notNull()
+      .references(() => managedMailMessage.id, { onDelete: "cascade" }),
+    matched: boolean("matched").notNull(),
+    error: text("error"),
+    appliedAt: timestamp("appliedAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    index("managed_mail_rule_application_mailbox_created_idx").on(table.mailboxId, table.createdAt),
+    unique("managed_mail_rule_application_rule_message_unique").on(table.ruleId, table.messageId),
+  ],
+);
+
+export const managedMailRuleBackfill = pgTable(
+  "managedMailRuleBackfill",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    ruleId: text("ruleId")
+      .notNull()
+      .references(() => managedMailRule.id, { onDelete: "cascade" }),
+    status: text("status").$type<ManagedMailRuleBackfillStatus>().notNull().default("pending"),
+    cursor: text("cursor"),
+    processedCount: integer("processedCount").notNull().default(0),
+    matchedCount: integer("matchedCount").notNull().default(0),
+    updatedCount: integer("updatedCount").notNull().default(0),
+    errorCount: integer("errorCount").notNull().default(0),
+    lastError: text("lastError"),
+    startedAt: timestamp("startedAt"),
+    completedAt: timestamp("completedAt"),
+    cancelledAt: timestamp("cancelledAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "managed_mail_rule_backfill_status_check",
+      sql`${table.status} in ('pending', 'running', 'completed', 'failed', 'cancelled')`,
+    ),
+    index("managed_mail_rule_backfill_rule_status_idx").on(table.ruleId, table.status),
   ],
 );
 
@@ -861,7 +1094,14 @@ export const tables = {
   gmailWatchState,
   mailbox,
   mailboxGrant,
+  managedMailAttachment,
+  managedMailLabel,
   managedMailMessage,
+  managedMailMessageLabel,
+  managedMailRule,
+  managedMailRuleApplication,
+  managedMailRuleBackfill,
+  managedMailSavedView,
   mailDomain,
   organizationMailUsageAlertEvent,
   organizationMailUsageEvent,
@@ -1052,6 +1292,22 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.mailbox.id,
       to: r.managedMailMessage.mailboxId,
     }),
+    managedAttachments: r.many.managedMailAttachment({
+      from: r.mailbox.id,
+      to: r.managedMailAttachment.mailboxId,
+    }),
+    managedLabels: r.many.managedMailLabel({
+      from: r.mailbox.id,
+      to: r.managedMailLabel.mailboxId,
+    }),
+    managedRules: r.many.managedMailRule({
+      from: r.mailbox.id,
+      to: r.managedMailRule.mailboxId,
+    }),
+    managedSavedViews: r.many.managedMailSavedView({
+      from: r.mailbox.id,
+      to: r.managedMailSavedView.mailboxId,
+    }),
     owner: r.one.user({
       from: r.mailbox.ownerUserId,
       to: r.user.id,
@@ -1149,10 +1405,85 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
   },
   managedMailMessage: {
+    attachments: r.many.managedMailAttachment({
+      from: r.managedMailMessage.id,
+      to: r.managedMailAttachment.messageId,
+    }),
+    labels: r.many.managedMailMessageLabel({
+      from: r.managedMailMessage.id,
+      to: r.managedMailMessageLabel.messageId,
+    }),
     mailbox: r.one.mailbox({
       from: r.managedMailMessage.mailboxId,
       to: r.mailbox.id,
       optional: false,
+    }),
+  },
+  managedMailAttachment: {
+    mailbox: r.one.mailbox({
+      from: r.managedMailAttachment.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+    message: r.one.managedMailMessage({
+      from: r.managedMailAttachment.messageId,
+      to: r.managedMailMessage.id,
+      optional: false,
+    }),
+  },
+  managedMailLabel: {
+    assignments: r.many.managedMailMessageLabel({
+      from: r.managedMailLabel.id,
+      to: r.managedMailMessageLabel.labelId,
+    }),
+    mailbox: r.one.mailbox({
+      from: r.managedMailLabel.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+  },
+  managedMailMessageLabel: {
+    label: r.one.managedMailLabel({
+      from: r.managedMailMessageLabel.labelId,
+      to: r.managedMailLabel.id,
+      optional: false,
+    }),
+    message: r.one.managedMailMessage({
+      from: r.managedMailMessageLabel.messageId,
+      to: r.managedMailMessage.id,
+      optional: false,
+    }),
+    rule: r.one.managedMailRule({
+      from: r.managedMailMessageLabel.ruleId,
+      to: r.managedMailRule.id,
+      optional: true,
+    }),
+  },
+  managedMailRule: {
+    applications: r.many.managedMailRuleApplication({
+      from: r.managedMailRule.id,
+      to: r.managedMailRuleApplication.ruleId,
+    }),
+    backfills: r.many.managedMailRuleBackfill({
+      from: r.managedMailRule.id,
+      to: r.managedMailRuleBackfill.ruleId,
+    }),
+    mailbox: r.one.mailbox({
+      from: r.managedMailRule.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+  },
+  managedMailSavedView: {
+    mailbox: r.one.mailbox({
+      from: r.managedMailSavedView.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+    owner: r.one.user({
+      from: r.managedMailSavedView.ownerUserId,
+      to: r.user.id,
+      optional: true,
     }),
   },
   mailDomain: {

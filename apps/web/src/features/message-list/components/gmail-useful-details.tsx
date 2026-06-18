@@ -18,7 +18,7 @@ export const GmailUsefulDetails = ({
   onActivateMessage,
 }: {
   mailboxId: string;
-  onActivateMessage: (messageId: string) => void;
+  onActivateMessage: (messageId: string, threadId?: string | null) => void;
 }) => {
   const queryClient = useQueryClient();
   const queryKey = getGmailUsefulDetailsQueryKey(mailboxId);
@@ -106,7 +106,7 @@ export const GmailUsefulDetails = ({
             <GmailUsefulDetailCard
               detail={detail}
               onDismiss={() => dismissMutation.mutate({ id: detail.id, mailboxId })}
-              onOpen={() => onActivateMessage(detail.gmailMessageId)}
+              onOpen={() => onActivateMessage(detail.gmailMessageId, detail.gmailThreadId)}
             />
           </div>
         ))}

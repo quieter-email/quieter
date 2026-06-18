@@ -35,17 +35,16 @@ const copyText = async (value: string) => {
 
 const getDetailMetadata = (detail: GmailUsefulDetail) => {
   if (detail.kind === "verification_code") {
-    return detail.code;
+    return detail.code ? [detail.code] : [];
   }
 
   return [
+    detail.summary,
     detail.kind === "delivery" && detail.status ? deliveryStatusLabels[detail.status] : null,
     detail.eventAt ? eventDateFormatter.format(new Date(detail.eventAt)) : null,
     detail.location,
     detail.reference,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  ].filter((value): value is string => Boolean(value));
 };
 
 export const GmailUsefulDetailCard = ({
@@ -63,7 +62,15 @@ export const GmailUsefulDetailCard = ({
   const content = (
     <>
       <span className="truncate font-medium text-foreground">{detail.title}</span>
-      {metadata && <span className="truncate text-muted-foreground">{metadata}</span>}
+      {metadata.length > 0 && (
+        <span className="flex min-w-0 items-center gap-2 overflow-hidden text-muted-foreground">
+          {metadata.map((value) => (
+            <span className="truncate" key={value}>
+              {value}
+            </span>
+          ))}
+        </span>
+      )}
     </>
   );
 

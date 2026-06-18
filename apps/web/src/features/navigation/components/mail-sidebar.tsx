@@ -39,6 +39,7 @@ import {
   type MailboxSwitcherOrder,
   MailboxSwitcherDropdown,
 } from "~/features/navigation/components/mailbox-switcher";
+import { ManagedMailboxOrganizer } from "~/features/navigation/components/managed-mailbox-organizer";
 import { SidebarLabelNav } from "~/features/navigation/components/sidebar-label-nav";
 import { SidebarMailboxNav } from "~/features/navigation/components/sidebar-mailbox-nav";
 
@@ -56,6 +57,7 @@ type MailSidebarProps = {
     kind: "personal" | "organization";
     mailboxes: Array<{
       connectionStatus: "connected" | "needs_reconnect";
+      grantRole?: "manager" | "reader" | "responder" | null;
       id: string;
       emailAddress: string;
       displayName: string | null;
@@ -241,6 +243,9 @@ const SidebarContent = ({
   switcherSide = "right",
 }: SidebarContentProps) => {
   const isInboxView = selectedView === "inbox";
+  const selectedMailboxGrantRole = groups
+    .flatMap((group) => group.mailboxes)
+    .find((mailbox) => mailbox.id === selectedMailboxId)?.grantRole;
   const [editingChat, setEditingChat] = useState<{ id: string; title: string } | null>(null);
   const [isSettingsHovered, setIsSettingsHovered] = useState(false);
 
@@ -406,9 +411,9 @@ const SidebarContent = ({
             onSelectMailbox={handleSelectMailbox}
             selectedMailbox={selectedMailbox}
           />
-          {selectedMailboxProvider !== "managed" && (
-            <SidebarLabelNav
-              animateEntrance={animateEntrance}
+          {selectedMailboxProvider === "managed" && selectedMailboxId ? (
+            <ManagedMailboxOrganizer
+              canManage={selectedMailboxGrantRole === "manager"}
               mailboxId={selectedMailboxId}
               onSearch={(query) => {
                 onSearch(query);
@@ -416,7 +421,20 @@ const SidebarContent = ({
               }}
               searchQuery={searchQuery}
             />
-          )}
+          ) : null}
+          <SidebarLabelNav
+            animateEntrance={animateEntrance}
+            canManage={
+              selectedMailboxProvider === "gmail" || selectedMailboxGrantRole === "manager"
+            }
+            mailboxId={selectedMailboxId}
+            mailboxProvider={selectedMailboxProvider ?? "gmail"}
+            onSearch={(query) => {
+              onSearch(query);
+              onRequestClose?.();
+            }}
+            searchQuery={searchQuery}
+          />
         </div>
       )}
 

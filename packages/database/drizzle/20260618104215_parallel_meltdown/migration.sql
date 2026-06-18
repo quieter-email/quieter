@@ -1,0 +1,3 @@
+ALTER TABLE "managedMailSavedView" DROP CONSTRAINT "managed_mail_saved_view_mailbox_owner_name_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "managed_mail_saved_view_shared_name_unique" ON "managedMailSavedView" ("mailboxId","normalizedName") WHERE "ownerUserId" is null;--> statement-breakpoint
+CREATE UNIQUE INDEX "managed_mail_saved_view_personal_name_unique" ON "managedMailSavedView" ("mailboxId","ownerUserId","normalizedName") WHERE "ownerUserId" is not null;

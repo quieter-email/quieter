@@ -212,10 +212,10 @@ const ManagedUsageSettingsForm = ({
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="text-sm font-medium text-foreground">Managed Usage</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {overview.managedUsageRates.markupPercent}% service markup
-            {periodEnd ? ` · Resets ${periodEnd}` : ""}
-          </p>
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            <span>{overview.managedUsageRates.markupPercent}% service markup</span>
+            {periodEnd ? <span>Resets {periodEnd}</span> : null}
+          </div>
         </div>
 
         {canManageOrganizationMailUsage && (
@@ -396,21 +396,22 @@ const ManagedUsageSettingsForm = ({
                     </NumberFieldGroup>
                   </NumberField>
 
-                  <div className="min-w-0 flex-1 text-xs text-muted-foreground">
-                    <span className="font-mono text-foreground">
-                      {includedThresholdCents == null
-                        ? "Enter a threshold"
-                        : formatMoney(includedThresholdCents)}
-                    </span>{" "}
-                    of included usage
+                  <div className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <span>
+                      <span className="font-mono text-foreground">
+                        {includedThresholdCents == null
+                          ? "Enter a threshold"
+                          : formatMoney(includedThresholdCents)}
+                      </span>{" "}
+                      of included usage
+                    </span>
                     {overageThresholdCents != null && (
-                      <>
-                        {" · "}
+                      <span>
                         <span className="font-mono text-foreground">
                           {formatMoney(overageThresholdCents)}
                         </span>{" "}
                         of the overage limit
-                      </>
+                      </span>
                     )}
                   </div>
 
@@ -460,9 +461,12 @@ export const OrganizationMailUsageSettings = ({
   canUseOrganizationMail: boolean;
   organizationId: string;
 }) => {
-  const usageQuery = useQuery(
-    organizationMailUsageQueryOptions(organizationId, canUseOrganizationMail),
-  );
+  const {
+    data: usage,
+    error: usageError,
+    isError: isUsageError,
+    isPending: isUsagePending,
+  } = useQuery(organizationMailUsageQueryOptions(organizationId, canUseOrganizationMail));
 
   if (billingAccessUnknown) {
     return <ManagedUsageUnavailable message="Could not load billing access." />;
@@ -472,19 +476,17 @@ export const OrganizationMailUsageSettings = ({
     return <ManagedUsageUnavailable message="Available on Managed and Pro." />;
   }
 
-  if (usageQuery.isPending) {
+  if (isUsagePending) {
     return <ManagedUsageLoading message="Loading usage…" />;
   }
 
-  if (usageQuery.isError) {
+  if (isUsageError) {
     return (
-      <ManagedUsageUnavailable
-        message={usageQuery.error.message ?? "Could not load Managed Usage."}
-      />
+      <ManagedUsageUnavailable message={usageError.message ?? "Could not load Managed Usage."} />
     );
   }
 
-  if (!usageQuery.data.hasAccess) {
+  if (!usage.hasAccess) {
     return <ManagedUsageUnavailable message="Available on Managed and Pro." />;
   }
 
@@ -492,12 +494,12 @@ export const OrganizationMailUsageSettings = ({
     <ManagedUsageSettingsForm
       canManageOrganizationMailUsage={canManageOrganizationMailUsage}
       key={[
-        usageQuery.data.settings.overageEnabled,
-        usageQuery.data.settings.monthlyOverageLimitCents,
-        usageQuery.data.settings.alertMilestonePercents.join("-"),
+        usage.settings.overageEnabled,
+        usage.settings.monthlyOverageLimitCents,
+        usage.settings.alertMilestonePercents.join("-"),
       ].join(":")}
       organizationId={organizationId}
-      overview={usageQuery.data}
+      overview={usage}
     />
   );
 };

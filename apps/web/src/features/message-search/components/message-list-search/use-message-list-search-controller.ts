@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  getSupportedMailSearchFilterTypes,
+  isMailSearchFilterSupported,
+} from "@quieter/mail/search";
 import { useQuery } from "@tanstack/react-query";
 import {
   type FocusEvent as ReactFocusEvent,
@@ -62,6 +66,7 @@ const resolveStateAction = <T>(action: SetStateAction<T>, current: T) =>
 export const useMessageListSearchController = ({
   isRefreshing,
   mailboxId,
+  mailboxProvider,
   onOpenSidebar,
   onRefresh,
   onScrollToTop,
@@ -74,6 +79,7 @@ export const useMessageListSearchController = ({
   const segmentRefs = useRef<Array<HTMLElement | null>>([]);
   const dateTokenRefs = useRef(new Map<number, HTMLDivElement>());
   const pendingFocusRef = useRef<PendingFocusTarget | null>(null);
+  const suppressNextBlurCommitRef = useRef(false);
   const committedSearchQuery = searchQuery.trim();
   const [draftState, setDraftState] = useState<DraftSearchState | null>(null);
   const calendarFallbackMonth = useSyncExternalStore(
@@ -125,6 +131,16 @@ export const useMessageListSearchController = ({
   const userLabels = getUserLabels(labelsQuery.data ?? []);
   const activeDateFilter =
     activeDateFilterIndex === null ? null : (currentState.filters[activeDateFilterIndex] ?? null);
+  const supportedFilterTypes = getSupportedMailSearchFilterTypes(mailboxProvider);
+  const availableFilterOptions = searchFilterOptions.filter(
+    (option) =>
+      supportedFilterTypes.has(option.filter.type) &&
+      !(
+        mailboxProvider === "gmail" &&
+        option.filter.type === "is" &&
+        ["inbound", "outbound"].includes(option.filter.value)
+      ),
+  );
 
   const openDropdown = (preserveHighlight = false) => {
     if (!preserveHighlight) {
@@ -164,6 +180,10 @@ export const useMessageListSearchController = ({
     }
 
     requestAnimationFrame(() => {
+      if (suppressNextBlurCommitRef.current) {
+        suppressNextBlurCommitRef.current = false;
+        return;
+      }
       if (isSearchSurfaceTarget(document.activeElement)) {
         return;
       }
@@ -310,7 +330,10 @@ export const useMessageListSearchController = ({
     { refreshIfUnchanged = false }: { refreshIfUnchanged?: boolean } = {},
   ) => {
     const normalizedState = {
-      filters: nextState.filters.filter((filter) => filter.value.trim().length > 0),
+      filters: nextState.filters.filter(
+        (filter) =>
+          filter.value.trim().length > 0 && isMailSearchFilterSupported(mailboxProvider, filter),
+      ),
       text: normalizeSearchText(nextState.text),
     };
 
@@ -327,6 +350,22 @@ export const useMessageListSearchController = ({
     if (closeAfterCommit) {
       closeSearchOverlays();
     }
+  };
+
+  const removeFilterFromPointer = (index: number) => {
+    pendingFocusRef.current = null;
+    setActiveDateFilterIndex(null);
+    commitState(
+      {
+        ...currentState,
+        filters: currentState.filters.filter((_, filterIndex) => filterIndex !== index),
+      },
+      true,
+    );
+  };
+
+  const suppressNextBlurCommit = () => {
+    suppressNextBlurCommitRef.current = true;
   };
 
   const handleFilterSelection = (filter: SearchFilterChip) => {
@@ -364,7 +403,7 @@ export const useMessageListSearchController = ({
   };
 
   const dropdownItems = [
-    ...searchFilterOptions.map((option) => ({
+    ...availableFilterOptions.map((option) => ({
       key: `filter:${option.filter.type}:${option.filter.value}`,
       onSelect: () => handleFilterSelection(option.filter),
     })),
@@ -653,6 +692,19 @@ export const useMessageListSearchController = ({
     pendingFocusRef.current = { kind: "text", toEnd: true };
   };
 
+  const selectDatePreset = (filter: SearchFilterChip) => {
+    if (activeDateFilterIndex === null) return;
+    stageState({
+      ...currentState,
+      filters: currentState.filters.map((current, index) =>
+        index === activeDateFilterIndex ? filter : current,
+      ),
+    });
+    setActiveDateFilterIndex(null);
+    openDropdown(true);
+    pendingFocusRef.current = { kind: "text", toEnd: true };
+  };
+
   useEffect(() => {
     if (!isDropdownOpen && activeDateFilterIndex === null) {
       return;
@@ -711,6 +763,7 @@ export const useMessageListSearchController = ({
   return {
     activeDateFilter,
     activeDateFilterIndex,
+    availableFilterOptions,
     calendarFallbackMonth,
     clearSearch,
     currentState,
@@ -733,11 +786,14 @@ export const useMessageListSearchController = ({
     openDateFilter,
     openSearchDropdown,
     removeFilterAtIndex,
+    removeFilterFromPointer,
     rowRef,
     runSearch,
     selectDateFilterValue,
+    selectDatePreset,
     setDateTokenRef,
     setSegmentRef,
+    suppressNextBlurCommit,
     textInputRef,
     toggleLabelToken,
     updateFilterValue,

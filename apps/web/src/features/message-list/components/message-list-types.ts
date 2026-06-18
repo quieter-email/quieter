@@ -23,7 +23,7 @@ export type MessageListProps = {
   isRefreshing: boolean;
   mailboxActions: MailboxActions;
   messages: ListMessagesPageResult[];
-  onActivateMessage: (messageId: string) => void;
+  onActivateMessage: (messageId: string, threadId?: string | null) => void;
   /** Plain row click on the already-open thread closes the reading pane (same as back). */
   onDeactivateActiveMessage: () => void;
   onLoadMore: () => void;

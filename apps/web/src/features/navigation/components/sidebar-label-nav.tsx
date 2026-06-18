@@ -1,7 +1,10 @@
 "use client";
 
+import type { MailboxLabel, MailboxLabelColor } from "@quieter/mail/mailbox-organization";
 import {
   ArrowLeft02Icon,
+  ArrowDown01Icon,
+  ArrowUp01Icon,
   Delete01Icon,
   Edit01Icon,
   MoreVerticalIcon,
@@ -10,6 +13,14 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Button,
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogCloseButton,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -34,7 +45,6 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LayoutGroup, m } from "motion/react";
 import { useRef, useState } from "react";
-import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 import { serializeStructuredSearchState } from "~/features/message-search/components/message-list-search/message-list-search-utils";
 import {
   getUserLabels,
@@ -43,18 +53,24 @@ import {
 } from "~/features/message-search/state/message-list-search-state";
 import { SidebarNavItem } from "~/features/navigation/components/sidebar-nav-item";
 import { getLabelsQueryKey, labelsQueryOptions } from "~/lib/gmail/labels-query";
+import {
+  getManagedLabelCountsQueryKey,
+  managedLabelCountsQueryOptions,
+} from "~/lib/managed-mailbox-organization-query";
 import { orpc } from "~/lib/orpc";
 
 type SidebarLabelNavProps = {
   animateEntrance: boolean;
+  canManage: boolean;
   mailboxId: string | null;
+  mailboxProvider: "gmail" | "managed";
   onSearch: (query: string) => void;
   searchQuery: string;
 };
 
 type EditingLabel =
-  | { mode: "create"; name: string }
-  | { label: GmailLabelListItem; mode: "rename"; name: string }
+  | { color: MailboxLabelColor; mode: "create"; name: string }
+  | { color: MailboxLabelColor; label: MailboxLabel; mode: "rename"; name: string }
   | null;
 
 type HiddenLabelState = {
@@ -70,6 +86,28 @@ type EditingLabelDetails = {
 
 const MAX_VISIBLE_SIDEBAR_LABELS = 10;
 const SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY = "quieter:sidebar-label-visibility";
+const MANAGED_LABEL_COLORS: MailboxLabelColor[] = [
+  "gray",
+  "blue",
+  "cyan",
+  "green",
+  "yellow",
+  "orange",
+  "red",
+  "pink",
+  "purple",
+];
+const managedLabelColorClassNames: Record<MailboxLabelColor, string> = {
+  blue: "bg-blue-500",
+  cyan: "bg-cyan-500",
+  gray: "bg-gray-500",
+  green: "bg-green-500",
+  orange: "bg-orange-500",
+  pink: "bg-pink-500",
+  purple: "bg-purple-500",
+  red: "bg-red-500",
+  yellow: "bg-yellow-500",
+};
 
 const getSidebarEntranceDelay = (step: number) => step * 0.1;
 const getSidebarEntranceInitial = (animateEntrance: boolean) =>
@@ -114,22 +152,25 @@ const writeHiddenLabelIds = (mailboxId: string, hiddenLabelIds: Set<string>) => 
 
 export const SidebarLabelNav = ({
   animateEntrance,
+  canManage,
   mailboxId,
+  mailboxProvider,
   onSearch,
   searchQuery,
 }: SidebarLabelNavProps) => {
-  const [shouldAnimateEntrance] = useState(animateEntrance);
+  const shouldAnimateEntrance = animateEntrance;
   const queryClient = useQueryClient();
   const [editingLabel, setEditingLabel] = useState<EditingLabel>(null);
   const [editingLabelDetails, setEditingLabelDetails] = useState<EditingLabelDetails | null>(null);
+  const [deletingLabel, setDeletingLabel] = useState<MailboxLabel | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const labelNavRef = useRef<HTMLElement>(null);
   const [hoveredLabelId, setHoveredLabelId] = useState<string | null>(null);
   const [exitingLabelId, setExitingLabelId] = useState<string | null>(null);
-  const hoverEnterRef = useRef(false);
+  const [hoverEnter, setHoverEnter] = useState(false);
 
   const setLabelHover = (labelId: string) => {
-    hoverEnterRef.current = hoveredLabelId === null && exitingLabelId === null;
+    setHoverEnter(hoveredLabelId === null && exitingLabelId === null);
     setExitingLabelId(null);
     setHoveredLabelId(labelId);
   };
@@ -138,7 +179,7 @@ export const SidebarLabelNav = ({
     if (hoveredLabelId !== null) {
       setExitingLabelId(hoveredLabelId);
     }
-    hoverEnterRef.current = false;
+    setHoverEnter(false);
     setHoveredLabelId(null);
   };
 
@@ -156,16 +197,27 @@ export const SidebarLabelNav = ({
     isError: areLabelsError,
     isPending: areLabelsPending,
   } = useQuery(labelsQueryOptions(mailboxId ?? "", !!mailboxId));
+  const { data: managedLabelCounts = [] } = useQuery(
+    managedLabelCountsQueryOptions(mailboxId ?? "", mailboxProvider === "managed" && !!mailboxId),
+  );
+  const managedLabelCountById = new Map(
+    managedLabelCounts.map((record) => [record.labelId, Number(record.count)]),
+  );
   const userLabels = getUserLabels(labels ?? []);
   const hiddenLabelIds =
     hiddenLabelState.mailboxId === mailboxId
       ? hiddenLabelState.value
       : readHiddenLabelIds(mailboxId);
-  const effectiveHiddenLabelIds = new Set(hiddenLabelIds);
-  for (const label of userLabels
-    .filter((userLabel) => !hiddenLabelIds.has(userLabel.id))
-    .slice(MAX_VISIBLE_SIDEBAR_LABELS)) {
-    effectiveHiddenLabelIds.add(label.id);
+  const effectiveHiddenLabelIds =
+    mailboxProvider === "managed"
+      ? new Set(userLabels.filter((label) => !label.visible).map((label) => label.id))
+      : new Set(hiddenLabelIds);
+  if (mailboxProvider === "gmail") {
+    for (const label of userLabels
+      .filter((userLabel) => !hiddenLabelIds.has(userLabel.id))
+      .slice(MAX_VISIBLE_SIDEBAR_LABELS)) {
+      effectiveHiddenLabelIds.add(label.id);
+    }
   }
   const visibleUserLabels = userLabels.filter((label) => !effectiveHiddenLabelIds.has(label.id));
   const selectedLabelKeys = new Set(
@@ -191,17 +243,27 @@ export const SidebarLabelNav = ({
 
   const invalidateLabels = async () => {
     if (!mailboxId) return;
-    await queryClient.invalidateQueries({ queryKey: getLabelsQueryKey(mailboxId) });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: getLabelsQueryKey(mailboxId) }),
+      ...(mailboxProvider === "managed"
+        ? [
+            queryClient.invalidateQueries({
+              queryKey: getManagedLabelCountsQueryKey(mailboxId),
+            }),
+          ]
+        : []),
+    ]);
   };
 
   const createLabelMutation = useMutation(orpc.mail.createLabel.mutationOptions());
   const updateLabelMutation = useMutation(orpc.mail.updateLabel.mutationOptions());
   const deleteLabelMutation = useMutation(orpc.mail.deleteLabel.mutationOptions());
   const updateLabelDetailsMutation = useMutation(orpc.mail.updateLabelDetails.mutationOptions());
+  const reorderLabelsMutation = useMutation(orpc.mail.reorderManagedLabels.mutationOptions());
   const isSavingLabel =
     createLabelMutation.isPending || updateLabelMutation.isPending || deleteLabelMutation.isPending;
 
-  const resetEditForm = () => setEditingLabel({ mode: "create", name: "" });
+  const resetEditForm = () => setEditingLabel({ color: "gray", mode: "create", name: "" });
 
   const submitLabelEdit = async () => {
     if (!mailboxId || !editingLabel) return;
@@ -210,7 +272,11 @@ export const SidebarLabelNav = ({
 
     try {
       if (editingLabel.mode === "create") {
-        const label = await createLabelMutation.mutateAsync({ mailboxId, name });
+        const label = await createLabelMutation.mutateAsync({
+          color: editingLabel.color,
+          mailboxId,
+          name,
+        });
         if (visibleUserLabels.length >= MAX_VISIBLE_SIDEBAR_LABELS) {
           setMailboxHiddenLabelIds((current) => {
             current.add(label.id);
@@ -227,6 +293,7 @@ export const SidebarLabelNav = ({
         labelId: editingLabel.label.id,
         mailboxId,
         name,
+        color: editingLabel.color,
       });
       resetEditForm();
       await invalidateLabels();
@@ -240,7 +307,7 @@ export const SidebarLabelNav = ({
     }
   };
 
-  const deleteLabel = async (label: GmailLabelListItem) => {
+  const deleteLabel = async (label: MailboxLabel) => {
     if (!mailboxId) return;
 
     try {
@@ -254,6 +321,7 @@ export const SidebarLabelNav = ({
       });
       await invalidateLabels();
       onSearch(updateLabelFilter(searchQuery, label.name, false));
+      setDeletingLabel(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not delete label.");
     }
@@ -278,6 +346,24 @@ export const SidebarLabelNav = ({
   };
 
   const toggleSidebarVisibility = (labelId: string) => {
+    if (!mailboxId) return;
+    if (mailboxProvider === "managed") {
+      const label = userLabels.find((candidate) => candidate.id === labelId);
+      if (!label) return;
+      void updateLabelMutation
+        .mutateAsync({
+          labelId,
+          mailboxId,
+          name: label.name,
+          visible: effectiveHiddenLabelIds.has(labelId),
+        })
+        .then(invalidateLabels)
+        .catch((error) => {
+          toast.error(error instanceof Error ? error.message : "Could not update label.");
+        });
+      return;
+    }
+
     setMailboxHiddenLabelIds((current) => {
       const isShown = !effectiveHiddenLabelIds.has(labelId);
       if (!isShown) {
@@ -305,21 +391,23 @@ export const SidebarLabelNav = ({
         transition={{ delay: getSidebarEntranceDelay(8), duration: 0.5, ease: "easeOut" }}
       >
         <p className="text-xs font-medium text-muted-foreground">Labels</p>
-        <IconButtonTooltip label="Edit labels">
-          <Button
-            aria-label="Edit labels"
-            className="size-6 text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              resetEditForm();
-              setIsEditDialogOpen(true);
-            }}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
-            <HugeiconsIcon aria-hidden className="size-3.5" icon={Edit01Icon} />
-          </Button>
-        </IconButtonTooltip>
+        {canManage && (
+          <IconButtonTooltip label="Edit labels">
+            <Button
+              aria-label="Edit labels"
+              className="size-6 text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                resetEditForm();
+                setIsEditDialogOpen(true);
+              }}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <HugeiconsIcon aria-hidden className="size-3.5" icon={Edit01Icon} />
+            </Button>
+          </IconButtonTooltip>
+        )}
       </m.div>
 
       <LayoutGroup id="label-sidebar">
@@ -385,7 +473,7 @@ export const SidebarLabelNav = ({
                       },
                     )}
                     hover={isHovered}
-                    hoverEnter={isHovered && hoverEnterRef.current}
+                    hoverEnter={isHovered && hoverEnter}
                     hoverExiting={isHoverExiting}
                     hoverLayoutId="label-sidebar-hover"
                     onBlur={(event) => clearLabelHoverIfLeavingNav(event.relatedTarget)}
@@ -416,6 +504,11 @@ export const SidebarLabelNav = ({
                       strokeWidth={1.5}
                     />
                     <span className="min-w-0 truncate">{label.name}</span>
+                    {mailboxProvider === "managed" ? (
+                      <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
+                        {managedLabelCountById.get(label.id) ?? 0}
+                      </span>
+                    ) : null}
                   </SidebarNavItem>
                 </m.div>
               );
@@ -465,13 +558,35 @@ export const SidebarLabelNav = ({
                     if (editingLabel) {
                       setEditingLabel({ ...editingLabel, name: nextName });
                     } else {
-                      setEditingLabel({ mode: "create", name: nextName });
+                      setEditingLabel({ color: "gray", mode: "create", name: nextName });
                     }
                   }}
                   placeholder={editingLabel?.mode === "rename" ? "Rename label" : "New label"}
                   value={editingLabel?.name ?? ""}
                   size="sm"
                 />
+                {mailboxProvider === "managed" && editingLabel ? (
+                  <div
+                    className="flex shrink-0 items-center gap-1"
+                    role="group"
+                    aria-label="Label color"
+                  >
+                    {MANAGED_LABEL_COLORS.map((color) => (
+                      <button
+                        aria-label={color}
+                        aria-pressed={editingLabel.color === color}
+                        className={cn(
+                          "size-5 rounded-full border-2 border-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
+                          managedLabelColorClassNames[color],
+                          { "border-foreground/70": editingLabel.color === color },
+                        )}
+                        key={color}
+                        onClick={() => setEditingLabel({ ...editingLabel, color })}
+                        type="button"
+                      />
+                    ))}
+                  </div>
+                ) : null}
                 <Button
                   disabled={isSavingLabel || !editingLabel?.name.trim()}
                   size="sm"
@@ -491,7 +606,7 @@ export const SidebarLabelNav = ({
                   <p className="py-3 text-sm text-muted-foreground">No labels yet.</p>
                 ) : (
                   <div className="flex flex-col">
-                    {userLabels.map((label) => {
+                    {userLabels.map((label, index) => {
                       const isShown = !effectiveHiddenLabelIds.has(label.id);
                       const labelDetails =
                         editingLabelDetails?.labelId === label.id ? editingLabelDetails : null;
@@ -511,6 +626,55 @@ export const SidebarLabelNav = ({
                                 </p>
                               )}
                             </div>
+                            {mailboxProvider === "managed" ? (
+                              <div className="flex items-center">
+                                <IconButtonTooltip label={`Move ${label.name} up`}>
+                                  <Button
+                                    aria-label={`Move ${label.name} up`}
+                                    disabled={index === 0 || reorderLabelsMutation.isPending}
+                                    onClick={() => {
+                                      const labelIds = userLabels.map((candidate) => candidate.id);
+                                      [labelIds[index - 1], labelIds[index]] = [
+                                        labelIds[index],
+                                        labelIds[index - 1],
+                                      ];
+                                      void reorderLabelsMutation
+                                        .mutateAsync({ labelIds, mailboxId })
+                                        .then(invalidateLabels);
+                                    }}
+                                    size="icon-sm"
+                                    type="button"
+                                    variant="ghost"
+                                  >
+                                    <HugeiconsIcon aria-hidden icon={ArrowUp01Icon} />
+                                  </Button>
+                                </IconButtonTooltip>
+                                <IconButtonTooltip label={`Move ${label.name} down`}>
+                                  <Button
+                                    aria-label={`Move ${label.name} down`}
+                                    disabled={
+                                      index === userLabels.length - 1 ||
+                                      reorderLabelsMutation.isPending
+                                    }
+                                    onClick={() => {
+                                      const labelIds = userLabels.map((candidate) => candidate.id);
+                                      [labelIds[index], labelIds[index + 1]] = [
+                                        labelIds[index + 1],
+                                        labelIds[index],
+                                      ];
+                                      void reorderLabelsMutation
+                                        .mutateAsync({ labelIds, mailboxId })
+                                        .then(invalidateLabels);
+                                    }}
+                                    size="icon-sm"
+                                    type="button"
+                                    variant="ghost"
+                                  >
+                                    <HugeiconsIcon aria-hidden icon={ArrowDown01Icon} />
+                                  </Button>
+                                </IconButtonTooltip>
+                              </div>
+                            ) : null}
                             <IconButtonTooltip
                               label={isShown ? "Hide in sidebar" : "Show in sidebar"}
                             >
@@ -563,7 +727,12 @@ export const SidebarLabelNav = ({
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onSelect={() =>
-                                    setEditingLabel({ label, mode: "rename", name: label.name })
+                                    setEditingLabel({
+                                      color: label.color ?? "gray",
+                                      label,
+                                      mode: "rename",
+                                      name: label.name,
+                                    })
                                   }
                                 >
                                   <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
@@ -571,7 +740,7 @@ export const SidebarLabelNav = ({
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="text-destructive"
-                                  onSelect={() => void deleteLabel(label)}
+                                  onSelect={() => setDeletingLabel(label)}
                                 >
                                   <HugeiconsIcon
                                     aria-hidden
@@ -610,27 +779,29 @@ export const SidebarLabelNav = ({
                                   Describe the topic or workflow this label represents.
                                 </FieldDescription>
                               </Field>
-                              <Field>
-                                <FieldLabel>Emails to include</FieldLabel>
-                                <textarea
-                                  aria-label="Emails to include"
-                                  className="squircle min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50"
-                                  disabled={updateLabelDetailsMutation.isPending}
-                                  maxLength={4000}
-                                  onChange={(event) => {
-                                    const inclusionCriteria = event.currentTarget.value;
-                                    setEditingLabelDetails((current) =>
-                                      current ? { ...current, inclusionCriteria } : current,
-                                    );
-                                  }}
-                                  placeholder="For example: invoices, receipts, and payment confirmations from vendors."
-                                  value={labelDetails.inclusionCriteria}
-                                />
-                                <FieldDescription>
-                                  Explain the senders, subjects, content, or situations that belong
-                                  here.
-                                </FieldDescription>
-                              </Field>
+                              {mailboxProvider === "gmail" ? (
+                                <Field>
+                                  <FieldLabel>Emails to include</FieldLabel>
+                                  <textarea
+                                    aria-label="Emails to include"
+                                    className="squircle min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                    disabled={updateLabelDetailsMutation.isPending}
+                                    maxLength={4000}
+                                    onChange={(event) => {
+                                      const inclusionCriteria = event.currentTarget.value;
+                                      setEditingLabelDetails((current) =>
+                                        current ? { ...current, inclusionCriteria } : current,
+                                      );
+                                    }}
+                                    placeholder="For example: invoices, receipts, and payment confirmations from vendors."
+                                    value={labelDetails.inclusionCriteria}
+                                  />
+                                  <FieldDescription>
+                                    Explain the senders, subjects, content, or situations that
+                                    belong here.
+                                  </FieldDescription>
+                                </Field>
+                              ) : null}
                               <div className="flex justify-end gap-2">
                                 <Button
                                   disabled={updateLabelDetailsMutation.isPending}
@@ -661,6 +832,39 @@ export const SidebarLabelNav = ({
           </FullPageDialogBody>
         </FullPageDialogContent>
       </FullPageDialog>
+      <AlertDialog
+        onOpenChange={(open) => {
+          if (!open) setDeletingLabel(null);
+        }}
+        open={!!deletingLabel}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete label</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the label from conversations, saved views, and automatic rules. Rules or
+              views left without usable settings will be disabled.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogBody>
+            <p className="text-sm text-foreground">
+              Delete {deletingLabel?.name ? `"${deletingLabel.name}"` : "this label"}?
+            </p>
+          </AlertDialogBody>
+          <AlertDialogFooter>
+            <AlertDialogCloseButton>Cancel</AlertDialogCloseButton>
+            <Button
+              disabled={deleteLabelMutation.isPending || !deletingLabel}
+              onClick={() => {
+                if (deletingLabel) void deleteLabel(deletingLabel);
+              }}
+              variant="destructive"
+            >
+              Delete label
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 };

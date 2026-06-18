@@ -31,7 +31,7 @@ export const MessageTool = ({
       : success
         ? [success.from, success.date ? formatMessageDate(success.date) : null]
             .filter(Boolean)
-            .join(" · ")
+            .join(" ")
         : undefined;
 
   return (
@@ -53,10 +53,13 @@ export const MessageTool = ({
           type="button"
         >
           <p className="text-[11px] text-muted-foreground">
-            {success.to ? `To ${success.to}` : null}
-            {success.attachmentCount > 0
-              ? `${success.to ? " · " : ""}${success.attachmentCount} attachment${success.attachmentCount === 1 ? "" : "s"}`
-              : null}
+            {success.to ? <span className="mr-3">To {success.to}</span> : null}
+            {success.attachmentCount > 0 ? (
+              <span>
+                {success.attachmentCount} attachment
+                {success.attachmentCount === 1 ? "" : "s"}
+              </span>
+            ) : null}
           </p>
           <p className="mt-1 text-xs/relaxed whitespace-pre-wrap text-muted-foreground">
             {success.body || success.snippet || "(No content)"}

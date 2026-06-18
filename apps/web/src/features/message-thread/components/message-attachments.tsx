@@ -187,7 +187,7 @@ export const MessageAttachments = ({
                 <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
                   <span className="truncate font-medium">{attachment.fileName}</span>
                   <span className="shrink-0 whitespace-nowrap text-muted-foreground tabular-nums">
-                    · {sizeLabel}
+                    {sizeLabel}
                   </span>
                 </span>
               ) : (

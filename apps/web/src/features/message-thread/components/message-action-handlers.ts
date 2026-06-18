@@ -22,18 +22,20 @@ export type ThreadActionHandlers = {
 export const createMailboxThreadMessageActionHandlers = ({
   mailboxActions,
   onOpenDraft,
-  supportsLabelsAndFolders = true,
+  supportsFolders = true,
+  supportsLabels = true,
   supportsUnsubscribe = true,
 }: {
   mailboxActions: MailboxActions;
   onOpenDraft?: (message: MessageListItem) => void | Promise<void>;
-  supportsLabelsAndFolders?: boolean;
+  supportsFolders?: boolean;
+  supportsLabels?: boolean;
   supportsUnsubscribe?: boolean;
 }): ThreadActionHandlers => ({
   onMarkAsRead: (threadId) => mailboxActions.markThreadAsRead(threadId),
   onMarkAsUnread: (threadId) => mailboxActions.markThreadAsUnread(threadId),
   ...(supportsUnsubscribe ? { onUnsubscribe: mailboxActions.unsubscribeFromMessage } : {}),
-  ...(supportsLabelsAndFolders
+  ...(supportsFolders
     ? {
         onDeleteDraft: mailboxActions.deleteDraft,
         onMarkAsSpam: (threadId: string) => mailboxActions.markThreadAsSpam(threadId),
@@ -41,6 +43,10 @@ export const createMailboxThreadMessageActionHandlers = ({
         onOpenDraft,
         onUnmarkAsSpam: (threadId: string) => mailboxActions.unmarkThreadAsSpam(threadId),
         onUntrash: (threadId: string) => mailboxActions.untrashThread(threadId),
+      }
+    : {}),
+  ...(supportsLabels
+    ? {
         onUpdateLabels: (threadId: string, changes: LabelChanges) =>
           mailboxActions.updateThreadLabels(threadId, changes),
       }

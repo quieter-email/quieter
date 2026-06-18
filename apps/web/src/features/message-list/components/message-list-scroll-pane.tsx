@@ -1,10 +1,10 @@
 "use client";
 
+import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useLayoutEffect, useRef } from "react";
-import type { GmailLabelListItem } from "~/lib/gmail/gmail";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import type { MessageListProps } from "./message-list-types";
 import type { useMessageListSelection } from "./use-message-list-selection";
@@ -25,7 +25,7 @@ const MESSAGE_LIST_SKELETON_ROW_IDS = [
 ] as const;
 
 type MessageListScrollPaneProps = {
-  gmailLabels: GmailLabelListItem[];
+  gmailLabels: MailboxLabel[];
   list: MessageListProps;
   selection: ReturnType<typeof useMessageListSelection>;
   threadedMessages: ThreadListEntry[];

@@ -1,9 +1,29 @@
 "use client";
 
-import { Delete01Icon, Delete02Icon, Mail01Icon, MailOpen02Icon } from "@hugeicons/core-free-icons";
-import { toast } from "@quieter/ui";
+import {
+  Delete01Icon,
+  Delete02Icon,
+  Mail01Icon,
+  MailOpen02Icon,
+  Tag01Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  Button,
+  Checkbox,
+  CheckboxIndicator,
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  toast,
+} from "@quieter/ui";
 import { useQuery } from "@tanstack/react-query";
 import { m } from "motion/react";
+import { useState } from "react";
 import type { MessageListItem } from "~/lib/gmail/gmail";
 import { MessageListSearch } from "~/features/message-search/components/message-list-search";
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
@@ -35,9 +55,9 @@ const buildDraftListEntry = (message: MessageListItem): ThreadListEntry => ({
 });
 
 export const MessageList = (props: MessageListProps) => {
-  const { data: gmailLabels = [] } = useQuery(
-    labelsQueryOptions(props.mailboxId, props.mailboxProvider === "gmail"),
-  );
+  const [isBulkLabelsOpen, setIsBulkLabelsOpen] = useState(false);
+  const [bulkLabelIds, setBulkLabelIds] = useState<string[]>([]);
+  const { data: gmailLabels = [] } = useQuery(labelsQueryOptions(props.mailboxId));
   const flattenedMessages = props.messages.flatMap((page) => page.messages);
   const threadedMessages =
     props.activeMailbox === "drafts"
@@ -97,6 +117,16 @@ export const MessageList = (props: MessageListProps) => {
               await runBulkAction(props.mailboxActions.markThreadsAsRead);
             },
           },
+          ...(gmailLabels.length > 0
+            ? [
+                {
+                  icon: Tag01Icon,
+                  id: "modify-thread-labels",
+                  label: "Modify labels",
+                  onSelect: () => setIsBulkLabelsOpen(true),
+                } satisfies MessageListBulkAction,
+              ]
+            : []),
           {
             icon: Mail01Icon,
             id: "mark-threads-unread",
@@ -195,6 +225,82 @@ export const MessageList = (props: MessageListProps) => {
           threadedMessages={threadedMessages}
         />
       </m.div>
+
+      <Dialog
+        onOpenChange={(open) => {
+          setIsBulkLabelsOpen(open);
+          if (!open) setBulkLabelIds([]);
+        }}
+        open={isBulkLabelsOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Modify labels</DialogTitle>
+          </DialogHeader>
+          <DialogBody className="max-h-[50vh] space-y-2 overflow-y-auto">
+            {gmailLabels
+              .filter((label) => label.type === "user")
+              .map((label) => (
+                <label className="flex items-center gap-2 text-sm" key={label.id}>
+                  <Checkbox
+                    checked={bulkLabelIds.includes(label.id)}
+                    onCheckedChange={(checked) =>
+                      setBulkLabelIds((current) =>
+                        checked
+                          ? [...current, label.id]
+                          : current.filter((labelId) => labelId !== label.id),
+                      )
+                    }
+                  >
+                    <CheckboxIndicator />
+                  </Checkbox>
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-3.5 text-muted-foreground"
+                    icon={Tag01Icon}
+                  />
+                  {label.name}
+                </label>
+              ))}
+          </DialogBody>
+          <DialogFooter>
+            <DialogCloseButton>Cancel</DialogCloseButton>
+            <Button
+              disabled={bulkLabelIds.length === 0 || isBulkActionPending}
+              onClick={() => {
+                void runBulkAction(async (threads) => {
+                  await Promise.all(
+                    threads.map((thread) =>
+                      props.mailboxActions.updateThreadLabels(thread.threadId, {
+                        removeLabelIds: bulkLabelIds,
+                      }),
+                    ),
+                  );
+                }).then(() => setIsBulkLabelsOpen(false));
+              }}
+              variant="outline"
+            >
+              Remove
+            </Button>
+            <Button
+              disabled={bulkLabelIds.length === 0 || isBulkActionPending}
+              onClick={() => {
+                void runBulkAction(async (threads) => {
+                  await Promise.all(
+                    threads.map((thread) =>
+                      props.mailboxActions.updateThreadLabels(thread.threadId, {
+                        addLabelIds: bulkLabelIds,
+                      }),
+                    ),
+                  );
+                }).then(() => setIsBulkLabelsOpen(false));
+              }}
+            >
+              Apply
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

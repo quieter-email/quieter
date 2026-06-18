@@ -56,7 +56,7 @@ const ComposeReceipt = ({ result }: { result: ComposeEmailResult }) => {
     return null;
   }
 
-  const detail = [result.to, result.subject].filter(Boolean).join(" · ");
+  const detail = [result.to ? `To ${result.to}` : "", result.subject].filter(Boolean).join(" ");
 
   return (
     <ToolStep
@@ -75,7 +75,7 @@ const ComposeDeclinedView = ({
 }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const bodyHtml = getRenderableComposeBodyHtml("", initial.bodyText);
-  const detail = [initial.to, initial.subject].filter(Boolean).join(" · ");
+  const detail = [initial.to ? `To ${initial.to}` : "", initial.subject].filter(Boolean).join(" ");
 
   return (
     <ToolStep

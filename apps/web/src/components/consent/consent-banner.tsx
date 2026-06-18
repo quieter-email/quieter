@@ -21,11 +21,10 @@ export const ConsentBanner = () => {
         <div className="min-w-0 space-y-1">
           <p className="text-sm font-medium text-foreground">{translations.cookieBanner.title}</p>
           <p className="text-sm/6 text-muted-foreground">{translations.cookieBanner.description}</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <Link className="underline hover:text-foreground" to="/privacy">
               Privacy Policy
             </Link>
-            {" · "}
             <Link className="underline hover:text-foreground" to="/cookies">
               Cookie Policy
             </Link>

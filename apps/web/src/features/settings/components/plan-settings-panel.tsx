@@ -21,7 +21,13 @@ export const PlanSettingsPanel = () => {
   const navigate = useNavigate({ from: "/settings" });
   const { billing: billingResult } = settingsRouteApi.useSearch();
   const queryClient = useQueryClient();
-  const billingQuery = useQuery(userBillingQueryOptions());
+  const {
+    data: billingData,
+    error: billingError,
+    isError: isBillingError,
+    isPending: isBillingPending,
+    refetch: refetchBilling,
+  } = useQuery(userBillingQueryOptions());
   const checkoutMutation = useMutation({
     ...orpc.billing.createCheckout.mutationOptions(),
     onError: (error) => {
@@ -38,7 +44,7 @@ export const PlanSettingsPanel = () => {
 
     if (billingResult === "success") {
       toast.success("Plan updated. It may take a moment to sync.");
-      void billingQuery.refetch();
+      void refetchBilling();
     } else {
       toast.message("Checkout canceled.");
     }
@@ -51,11 +57,11 @@ export const PlanSettingsPanel = () => {
       }),
       to: ".",
     });
-  }, [billingQuery.refetch, billingResult, navigate]);
+  }, [billingResult, navigate, refetchBilling]);
 
-  const currentPlan = normalizeBillingPlan(billingQuery.data?.plan);
-  const currentSubscription = billingQuery.data?.subscription ?? null;
-  const isReady = !billingQuery.isPending && !billingQuery.isError;
+  const currentPlan = normalizeBillingPlan(billingData?.plan);
+  const currentSubscription = billingData?.subscription ?? null;
+  const isReady = !isBillingPending && !isBillingError;
 
   return (
     <div>
@@ -72,8 +78,8 @@ export const PlanSettingsPanel = () => {
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
               {formatBillingPlan(currentPlan)}
               {currentSubscription && (
-                <span className="text-muted-foreground">
-                  · {formatBillingStatus(currentSubscription.status)}
+                <span className="rounded-full bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  {formatBillingStatus(currentSubscription.status)}
                 </span>
               )}
             </span>
@@ -81,14 +87,14 @@ export const PlanSettingsPanel = () => {
         )}
       </div>
 
-      {billingQuery.isPending ? (
+      {isBillingPending ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
           Loading your plan…
         </div>
-      ) : billingQuery.isError ? (
+      ) : isBillingError ? (
         <p className="text-sm text-destructive">
-          {billingQuery.error.message ?? "Could not load your plan."}
+          {billingError.message ?? "Could not load your plan."}
         </p>
       ) : (
         <div className="flex flex-col gap-3">

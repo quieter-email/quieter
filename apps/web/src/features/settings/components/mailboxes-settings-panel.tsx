@@ -338,7 +338,11 @@ export const MailboxesSettingsPanel = () => {
                         <span className="min-w-0 flex-1">
                           <span className="block text-xs font-medium text-foreground">
                             Useful details
-                            {!hasGmailAutomationAccess && " · Pro"}
+                            {!hasGmailAutomationAccess && (
+                              <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                Pro
+                              </span>
+                            )}
                           </span>
                           <span className="mt-0.5 block text-[11px]/4 text-muted-foreground">
                             Show codes, deliveries, and deadlines above the inbox.
@@ -380,7 +384,11 @@ export const MailboxesSettingsPanel = () => {
                         <span className="min-w-0 flex-1">
                           <span className="block text-xs font-medium text-foreground">
                             Auto-label
-                            {!hasGmailAutomationAccess && " · Pro"}
+                            {!hasGmailAutomationAccess && (
+                              <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                Pro
+                              </span>
+                            )}
                           </span>
                           <span className="mt-0.5 block text-[11px]/4 text-muted-foreground">
                             Label new Inbox mail using each label's include rules.
