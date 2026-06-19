@@ -449,7 +449,7 @@ export const MailboxesSettingsPanel = () => {
                 setManagedOrganizationId(value ?? "");
                 setManagedDomain(undefined);
               }}
-              value={managedOrganizationId}
+              value={managedOrganizationId || null}
             >
               <SelectTrigger aria-label="Managed mailbox organization" className="w-48">
                 <SelectValue placeholder="Select organization" />
