@@ -4,6 +4,9 @@ import { rpc } from "~/lib/orpc";
 export const getGmailUsefulDetailsQueryKey = (mailboxId: string) =>
   ["gmail-useful-details", mailboxId] as const;
 
+export const getGmailThreadUsefulDetailsQueryKey = (mailboxId: string, gmailThreadId: string) =>
+  ["gmail-useful-details", mailboxId, "thread", gmailThreadId] as const;
+
 export const gmailUsefulDetailsQueryOptions = (mailboxId: string, enabled = true) =>
   queryOptions({
     queryKey: getGmailUsefulDetailsQueryKey(mailboxId),
@@ -21,7 +24,7 @@ export const gmailThreadUsefulDetailsQueryOptions = (
   enabled = true,
 ) =>
   queryOptions({
-    queryKey: ["gmail-useful-details", mailboxId, "thread", gmailThreadId],
+    queryKey: getGmailThreadUsefulDetailsQueryKey(mailboxId, gmailThreadId),
     queryFn: ({ signal }) =>
       rpc.mail.listGmailThreadUsefulDetails({ gmailThreadId, mailboxId }, { signal }),
     enabled,

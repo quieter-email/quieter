@@ -1,7 +1,10 @@
 import type { GmailUsefulDetailCandidate } from "@quieter/ai";
 import type { MessageListItem } from "@quieter/gmail";
 import { describe, expect, test } from "bun:test";
-import { materializeGmailUsefulDetail } from "../src/gmail-useful-details/service";
+import {
+  buildGmailUsefulDetailPreferenceProfile,
+  materializeGmailUsefulDetail,
+} from "../src/gmail-useful-details/service";
 
 const NOW = new Date("2026-06-14T12:00:00.000Z");
 
@@ -210,6 +213,24 @@ describe("Gmail useful-detail materialization", () => {
     expect(detail).toBeNull();
   });
 
+  test("drops a category the mailbox preference profile avoids", () => {
+    const detail = materializeGmailUsefulDetail({
+      candidate: candidate({
+        eventAt: "2026-06-20T09:00:00.000Z",
+        kind: "appointment",
+        relevanceSource: "explicit",
+        relevantFrom: "2026-06-19T09:00:00.000Z",
+        relevantUntil: "2026-06-20T10:00:00.000Z",
+        summary: "The appointment starts at 09:00.",
+      }),
+      message: message(),
+      now: NOW,
+      preferences: { avoidKinds: ["appointment"], preferKinds: [] },
+    });
+
+    expect(detail).toBeNull();
+  });
+
   test("supports every conservative reminder category", () => {
     const kinds = [
       "application",
@@ -254,5 +275,40 @@ describe("Gmail useful-detail materialization", () => {
     });
 
     expect(detail).toBeNull();
+  });
+});
+
+describe("Gmail useful-detail preference profile", () => {
+  test("applies one sender-specific rejection immediately", () => {
+    const profile = buildGmailUsefulDetailPreferenceProfile({
+      global: [],
+      source: [{ count: 1, kind: "task", signal: "not_useful" }],
+    });
+
+    expect(profile).toEqual({ avoidKinds: ["task"], preferKinds: [] });
+  });
+
+  test("requires repeated global feedback before suppressing a category", () => {
+    expect(
+      buildGmailUsefulDetailPreferenceProfile({
+        global: [{ count: 2, kind: "appointment", signal: "not_useful" }],
+        source: [],
+      }),
+    ).toEqual({ avoidKinds: [], preferKinds: [] });
+    expect(
+      buildGmailUsefulDetailPreferenceProfile({
+        global: [{ count: 3, kind: "appointment", signal: "not_useful" }],
+        source: [],
+      }),
+    ).toEqual({ avoidKinds: ["appointment"], preferKinds: [] });
+  });
+
+  test("lets sender-specific positive feedback override a global rejection", () => {
+    const profile = buildGmailUsefulDetailPreferenceProfile({
+      global: [{ count: 4, kind: "delivery", signal: "not_useful" }],
+      source: [{ count: 2, kind: "delivery", signal: "useful" }],
+    });
+
+    expect(profile).toEqual({ avoidKinds: [], preferKinds: ["delivery"] });
   });
 });

@@ -9,6 +9,7 @@ import {
   dismissGmailUsefulDetail,
   listGmailThreadUsefulDetails,
   listGmailUsefulDetails,
+  setGmailUsefulDetailFeedback,
 } from "../../gmail-useful-details/service";
 import { setGmailUsefulDetails } from "../../gmail-useful-details/settings";
 import {
@@ -86,6 +87,17 @@ export const mailboxProcedures = {
     .input(z.object({ id: z.string().trim().min(1), mailboxId: mailboxIdSchema }))
     .handler(async ({ context, input }) =>
       dismissGmailUsefulDetail({ ...input, userId: context.userId }),
+    ),
+  setGmailUsefulDetailFeedback: protectedProcedure
+    .input(
+      z.object({
+        feedback: z.enum(["not_useful", "useful"]),
+        id: z.string().trim().min(1),
+        mailboxId: mailboxIdSchema,
+      }),
+    )
+    .handler(async ({ context, input }) =>
+      setGmailUsefulDetailFeedback({ ...input, userId: context.userId }),
     ),
   createGmailLiveSyncConnection: protectedProcedure
     .input(z.object({ mailboxId: mailboxIdSchema }))

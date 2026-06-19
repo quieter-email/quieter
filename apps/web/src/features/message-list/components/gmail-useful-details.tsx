@@ -105,6 +105,7 @@ export const GmailUsefulDetails = ({
           >
             <GmailUsefulDetailCard
               detail={detail}
+              mailboxId={mailboxId}
               onDismiss={() => dismissMutation.mutate({ id: detail.id, mailboxId })}
               onOpen={() => onActivateMessage(detail.gmailMessageId, detail.gmailThreadId)}
             />
