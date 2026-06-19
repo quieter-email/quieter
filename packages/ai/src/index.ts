@@ -45,6 +45,7 @@ export {
   extractGmailUsefulDetail,
   GMAIL_USEFUL_DETAIL_MODEL,
   type GmailUsefulDetailCandidate,
+  type GmailUsefulDetailPreferenceProfile,
 } from "./extract-gmail-useful-detail";
 export { createOpenRouterAdapter } from "./openrouter";
 export { generateChatTitle } from "./generate-chat-title";

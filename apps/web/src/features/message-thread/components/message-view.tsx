@@ -641,7 +641,7 @@ const ThreadMessageCard = ({
       {usefulDetails.length > 0 && (
         <div className="space-y-1.5 px-4 pb-3 sm:px-5">
           {usefulDetails.map((detail) => (
-            <GmailUsefulDetailCard detail={detail} key={detail.id} />
+            <GmailUsefulDetailCard detail={detail} key={detail.id} mailboxId={mailboxId} />
           ))}
         </div>
       )}
@@ -734,7 +734,7 @@ const SingleMessageCard = ({
       {usefulDetails.length > 0 && (
         <div className="space-y-1.5 px-4 pb-3 sm:px-5">
           {usefulDetails.map((detail) => (
-            <GmailUsefulDetailCard detail={detail} key={detail.id} />
+            <GmailUsefulDetailCard detail={detail} key={detail.id} mailboxId={mailboxId} />
           ))}
         </div>
       )}

@@ -4,6 +4,7 @@ import {
   GMAIL_USEFUL_DETAIL_MODEL,
   type ChatMiddleware,
   type GmailUsefulDetailCandidate,
+  type GmailUsefulDetailPreferenceProfile,
 } from "@quieter/ai";
 import { reportAiUsage } from "@quieter/billing";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
@@ -11,13 +12,15 @@ import {
   db,
   gmailUsefulDetail,
   gmailUsefulDetailEvent,
+  gmailUsefulDetailFeedback,
   gmailUsefulDetailSettings,
   type GmailDeliveryStatus,
+  type GmailUsefulDetailFeedbackSignal,
   type GmailUsefulDetailKind,
   type GmailUsefulDetailRelevanceSource,
 } from "@quieter/database";
 import { MAILBOX_LABELS, type MessageListItem } from "@quieter/gmail";
-import { and, asc, eq, gt, isNull, lte, or } from "drizzle-orm";
+import { and, asc, count, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { decryptSecret, encryptSecret } from "../gmail-mailbox-access";
 import { assertOwnedGmailMailbox } from "../mailbox/access";
@@ -25,6 +28,19 @@ import { assertOwnedGmailMailbox } from "../mailbox/access";
 const RETRY_BASE_MS = 1000 * 60 * 5;
 const RETRY_MAX_MS = 1000 * 60 * 60 * 24;
 const DAY_MS = 1000 * 60 * 60 * 24;
+const USEFUL_DETAIL_KINDS: GmailUsefulDetailKind[] = [
+  "application",
+  "appointment",
+  "bill",
+  "delivery",
+  "document_expiry",
+  "reservation",
+  "return",
+  "security_alert",
+  "task",
+  "travel",
+  "verification_code",
+];
 const MAX_RELEVANCE_HORIZON_MS = {
   application: DAY_MS * 180,
   appointment: DAY_MS * 365,
@@ -49,12 +65,20 @@ const excludedLabels = new Set<string>([
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message.slice(0, 2_000) : "Unknown useful-details error.";
 
+const getSenderSource = (from?: string) => {
+  const domain = from?.match(/[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})/i)?.[1];
+  return domain?.toLowerCase().slice(0, 253) ?? null;
+};
+
 const serializeUsefulDetails = async (
-  items: (typeof gmailUsefulDetail.$inferSelect)[],
+  items: {
+    detail: typeof gmailUsefulDetail.$inferSelect;
+    feedback: GmailUsefulDetailFeedbackSignal | null;
+  }[],
 ): Promise<GmailUsefulDetailListItem[]> => {
   const details: GmailUsefulDetailListItem[] = [];
 
-  for (const item of items) {
+  for (const { detail: item, feedback } of items) {
     let code: string | null = null;
     if (item.encryptedCode) {
       try {
@@ -71,6 +95,7 @@ const serializeUsefulDetails = async (
       eventAt: item.eventAt,
       expectedAt: item.expectedAt,
       expiresAt: item.expiresAt,
+      feedback,
       gmailMessageId: item.gmailMessageId,
       gmailThreadId: item.gmailThreadId,
       id: item.id,
@@ -175,6 +200,7 @@ export type GmailUsefulDetailListItem = {
   eventAt: Date | null;
   expectedAt: Date | null;
   expiresAt: Date;
+  feedback: GmailUsefulDetailFeedbackSignal | null;
   gmailMessageId: string;
   gmailThreadId: string | null;
   id: string;
@@ -194,13 +220,18 @@ export const materializeGmailUsefulDetail = ({
   candidate,
   message,
   now = new Date(),
+  preferences,
 }: {
   candidate: GmailUsefulDetailCandidate;
   message: MessageListItem;
   now?: Date;
+  preferences?: GmailUsefulDetailPreferenceProfile;
 }): MaterializedGmailUsefulDetail => {
   const receivedAt = getMessageReceivedAt(message, now);
   if (candidate.kind === "none" || candidate.confidence !== "high") {
+    return null;
+  }
+  if (preferences?.avoidKinds.includes(candidate.kind)) {
     return null;
   }
 
@@ -373,6 +404,85 @@ const markEventProcessedWithoutUsage = async (eventId: string) => {
     .where(eq(gmailUsefulDetailEvent.id, eventId));
 };
 
+type GmailUsefulDetailFeedbackCount = {
+  count: number;
+  kind: GmailUsefulDetailKind;
+  signal: GmailUsefulDetailFeedbackSignal;
+};
+
+const getFeedbackTotals = (rows: GmailUsefulDetailFeedbackCount[], kind: GmailUsefulDetailKind) => {
+  let notUseful = 0;
+  let useful = 0;
+
+  for (const row of rows) {
+    if (row.kind !== kind) continue;
+    if (row.signal === "useful") useful += row.count;
+    else notUseful += row.count;
+  }
+
+  return { notUseful, total: useful + notUseful, useful };
+};
+
+export const buildGmailUsefulDetailPreferenceProfile = ({
+  global,
+  source,
+}: {
+  global: GmailUsefulDetailFeedbackCount[];
+  source: GmailUsefulDetailFeedbackCount[];
+}): GmailUsefulDetailPreferenceProfile => {
+  const avoidKinds: GmailUsefulDetailKind[] = [];
+  const preferKinds: GmailUsefulDetailKind[] = [];
+
+  for (const kind of USEFUL_DETAIL_KINDS) {
+    const sourceTotals = getFeedbackTotals(source, kind);
+    const globalTotals = getFeedbackTotals(global, kind);
+    const sourceAvoids =
+      sourceTotals.notUseful > sourceTotals.useful &&
+      sourceTotals.notUseful / sourceTotals.total >= 0.67;
+    const sourcePrefers =
+      sourceTotals.useful >= 2 &&
+      sourceTotals.useful > sourceTotals.notUseful &&
+      sourceTotals.useful / sourceTotals.total >= 0.67;
+    const globalAvoids =
+      globalTotals.notUseful >= 3 && globalTotals.notUseful / globalTotals.total >= 0.75;
+    const globalPrefers =
+      globalTotals.useful >= 3 && globalTotals.useful / globalTotals.total >= 0.75;
+
+    if (sourceAvoids || (!sourcePrefers && globalAvoids)) {
+      avoidKinds.push(kind);
+    } else if (sourcePrefers || globalPrefers) {
+      preferKinds.push(kind);
+    }
+  }
+
+  return { avoidKinds, preferKinds };
+};
+
+const getGmailUsefulDetailPreferenceProfile = async (
+  mailboxId: string,
+  source: string | null,
+): Promise<GmailUsefulDetailPreferenceProfile> => {
+  const rows = await db
+    .select({
+      count: count(),
+      kind: gmailUsefulDetailFeedback.kind,
+      signal: gmailUsefulDetailFeedback.signal,
+      sourceCount: source
+        ? sql<number>`count(*) filter (where ${gmailUsefulDetailFeedback.source} = ${source})`
+        : sql<number>`0`,
+    })
+    .from(gmailUsefulDetailFeedback)
+    .where(eq(gmailUsefulDetailFeedback.mailboxId, mailboxId))
+    .groupBy(gmailUsefulDetailFeedback.kind, gmailUsefulDetailFeedback.signal);
+  const global = rows.map((row) => ({ ...row, count: Number(row.count) }));
+  const sourceSpecific = rows.flatMap((row) => {
+    const sourceCount = Number(row.sourceCount);
+    return sourceCount > 0 ? [{ ...row, count: sourceCount }] : [];
+  });
+
+  return buildGmailUsefulDetailPreferenceProfile({ global, source: sourceSpecific });
+};
+
 export const processGmailUsefulDetailMessage = async ({
   gmailMessageId,
   loadMessage,
@@ -406,18 +516,29 @@ export const processGmailUsefulDetailMessage = async ({
         completionTokens += usage.completionTokens;
       },
     };
+    const source = getSenderSource(message.from);
+    const [[currentSettings], preferences] = await Promise.all([
+      db
+        .select({ enabled: gmailUsefulDetailSettings.enabled })
+        .from(gmailUsefulDetailSettings)
+        .where(eq(gmailUsefulDetailSettings.mailboxId, mailboxId))
+        .limit(1),
+      getGmailUsefulDetailPreferenceProfile(mailboxId, source),
+    ]);
+    if (!currentSettings?.enabled) {
+      await markEventProcessedWithoutUsage(event.id);
+      return;
+    }
+    if (preferences.avoidKinds.length === USEFUL_DETAIL_KINDS.length) {
+      await markEventProcessedWithoutUsage(event.id);
+      return;
+    }
     const candidate = await extractGmailUsefulDetail({
       message,
       middleware: [usageMiddleware],
+      preferences,
     });
-    const [currentSettings] = await db
-      .select({ enabled: gmailUsefulDetailSettings.enabled })
-      .from(gmailUsefulDetailSettings)
-      .where(eq(gmailUsefulDetailSettings.mailboxId, mailboxId))
-      .limit(1);
-    const detail = currentSettings?.enabled
-      ? materializeGmailUsefulDetail({ candidate, message })
-      : null;
+    const detail = materializeGmailUsefulDetail({ candidate, message, preferences });
     const now = new Date();
     const eventUpdate = db
       .update(gmailUsefulDetailEvent)
@@ -459,6 +580,7 @@ export const processGmailUsefulDetailMessage = async ({
             reference: detail.reference,
             relevanceSource: detail.relevanceSource,
             relevantFrom: detail.relevantFrom,
+            source,
             summary: detail.summary,
             title: detail.title,
             trackingNumber: detail.trackingNumber,
@@ -479,6 +601,7 @@ export const processGmailUsefulDetailMessage = async ({
               reference: detail.reference,
               relevanceSource: detail.relevanceSource,
               relevantFrom: detail.relevantFrom,
+              source,
               summary: detail.summary,
               title: detail.title,
               trackingNumber: detail.trackingNumber,
@@ -597,8 +720,18 @@ export const listGmailUsefulDetails = async (input: { mailboxId: string; userId:
   const now = new Date();
   const [items, [nextItem]] = await Promise.all([
     db
-      .select()
+      .select({
+        detail: gmailUsefulDetail,
+        feedback: gmailUsefulDetailFeedback.signal,
+      })
       .from(gmailUsefulDetail)
+      .leftJoin(
+        gmailUsefulDetailFeedback,
+        and(
+          eq(gmailUsefulDetailFeedback.mailboxId, gmailUsefulDetail.mailboxId),
+          eq(gmailUsefulDetailFeedback.detailId, gmailUsefulDetail.id),
+        ),
+      )
       .where(
         and(
           eq(gmailUsefulDetail.mailboxId, input.mailboxId),
@@ -638,12 +771,23 @@ export const listGmailThreadUsefulDetails = async (input: {
 }) => {
   await assertOwnedGmailMailbox(input);
   const items = await db
-    .select()
+    .select({
+      detail: gmailUsefulDetail,
+      feedback: gmailUsefulDetailFeedback.signal,
+    })
     .from(gmailUsefulDetail)
+    .leftJoin(
+      gmailUsefulDetailFeedback,
+      and(
+        eq(gmailUsefulDetailFeedback.mailboxId, gmailUsefulDetail.mailboxId),
+        eq(gmailUsefulDetailFeedback.detailId, gmailUsefulDetail.id),
+      ),
+    )
     .where(
       and(
         eq(gmailUsefulDetail.mailboxId, input.mailboxId),
         eq(gmailUsefulDetail.gmailThreadId, input.gmailThreadId),
+        isNull(gmailUsefulDetail.dismissedAt),
       ),
     )
     .orderBy(asc(gmailUsefulDetail.receivedAt));
@@ -670,4 +814,60 @@ export const dismissGmailUsefulDetail = async (input: {
   }
 
   return { dismissed: true, id: dismissed.id };
+};
+
+export const setGmailUsefulDetailFeedback = async (input: {
+  feedback: GmailUsefulDetailFeedbackSignal;
+  id: string;
+  mailboxId: string;
+  userId: string;
+}) => {
+  await assertOwnedGmailMailbox(input);
+  const [detail] = await db
+    .select({
+      id: gmailUsefulDetail.id,
+      kind: gmailUsefulDetail.kind,
+      source: gmailUsefulDetail.source,
+    })
+    .from(gmailUsefulDetail)
+    .where(
+      and(eq(gmailUsefulDetail.id, input.id), eq(gmailUsefulDetail.mailboxId, input.mailboxId)),
+    )
+    .limit(1);
+
+  if (!detail) {
+    throw new ORPCError("NOT_FOUND", { message: "Useful detail not found." });
+  }
+
+  const now = new Date();
+  await db
+    .insert(gmailUsefulDetailFeedback)
+    .values({
+      createdAt: now,
+      detailId: detail.id,
+      id: randomUUID(),
+      kind: detail.kind,
+      mailboxId: input.mailboxId,
+      signal: input.feedback,
+      source: detail.source,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      set: {
+        kind: detail.kind,
+        signal: input.feedback,
+        source: detail.source,
+        updatedAt: now,
+      },
+      target: [gmailUsefulDetailFeedback.mailboxId, gmailUsefulDetailFeedback.detailId],
+    });
+
+  if (input.feedback === "not_useful") {
+    await db
+      .update(gmailUsefulDetail)
+      .set({ dismissedAt: now, updatedAt: now })
+      .where(eq(gmailUsefulDetail.id, detail.id));
+  }
+
+  return { feedback: input.feedback, id: detail.id };
 };

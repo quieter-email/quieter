@@ -21,6 +21,7 @@ export default defineConfig({
     "gmailOAuthState",
     "gmailUsefulDetail",
     "gmailUsefulDetailEvent",
+    "gmailUsefulDetailFeedback",
     "gmailUsefulDetailSettings",
     "gmailWatchState",
     "invitation",

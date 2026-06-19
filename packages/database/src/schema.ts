@@ -41,6 +41,7 @@ export type GmailUsefulDetailKind =
   | "travel"
   | "verification_code";
 export type GmailUsefulDetailRelevanceSource = "explicit" | "inferred";
+export type GmailUsefulDetailFeedbackSignal = "not_useful" | "useful";
 export type ManagedMailDirection = "inbound" | "outbound";
 export type ManagedMailLabelAssignmentSource = "backfill" | "inherited" | "manual" | "rule";
 export type ManagedMailRuleBackfillStatus =
@@ -459,6 +460,7 @@ export const gmailUsefulDetail = pgTable(
     relevanceSource: text("relevanceSource").$type<GmailUsefulDetailRelevanceSource>().notNull(),
     reference: text("reference"),
     location: text("location"),
+    source: text("source"),
     receivedAt: timestamp("receivedAt").notNull(),
     expiresAt: timestamp("expiresAt").notNull(),
     dismissedAt: timestamp("dismissedAt"),
@@ -497,6 +499,38 @@ export const gmailUsefulDetail = pgTable(
       table.mailboxId,
       table.kind,
       table.dedupeKey,
+    ),
+  ],
+);
+
+export const gmailUsefulDetailFeedback = pgTable(
+  "gmailUsefulDetailFeedback",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    detailId: text("detailId").notNull(),
+    kind: text("kind").$type<GmailUsefulDetailKind>().notNull(),
+    signal: text("signal").$type<GmailUsefulDetailFeedbackSignal>().notNull(),
+    source: text("source"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "gmail_useful_detail_feedback_signal_check",
+      sql`${table.signal} in ('not_useful', 'useful')`,
+    ),
+    index("gmail_useful_detail_feedback_profile_idx").on(
+      table.mailboxId,
+      table.source,
+      table.kind,
+      table.signal,
+    ),
+    unique("gmail_useful_detail_feedback_mailbox_detail_unique").on(
+      table.mailboxId,
+      table.detailId,
     ),
   ],
 );
@@ -1088,6 +1122,7 @@ export const tables = {
   gmailAutoLabelSettings,
   gmailUsefulDetail,
   gmailUsefulDetailEvent,
+  gmailUsefulDetailFeedback,
   gmailUsefulDetailSettings,
   gmailLabel,
   gmailOAuthState,
@@ -1267,6 +1302,10 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.mailbox.id,
       to: r.gmailUsefulDetailEvent.mailboxId,
     }),
+    gmailUsefulDetailFeedback: r.many.gmailUsefulDetailFeedback({
+      from: r.mailbox.id,
+      to: r.gmailUsefulDetailFeedback.mailboxId,
+    }),
     gmailUsefulDetailSettings: r.one.gmailUsefulDetailSettings({
       from: r.mailbox.id,
       to: r.gmailUsefulDetailSettings.mailboxId,
@@ -1343,6 +1382,13 @@ export const authRelations = defineRelations(tables, (r) => ({
   gmailUsefulDetail: {
     mailbox: r.one.mailbox({
       from: r.gmailUsefulDetail.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+  },
+  gmailUsefulDetailFeedback: {
+    mailbox: r.one.mailbox({
+      from: r.gmailUsefulDetailFeedback.mailboxId,
       to: r.mailbox.id,
       optional: false,
     }),
