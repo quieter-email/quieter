@@ -454,7 +454,11 @@ export const MailboxesSettingsPanel = () => {
               <SelectTrigger aria-label="Managed mailbox organization" className="w-48">
                 <SelectValue placeholder="Select organization" />
               </SelectTrigger>
-              <SelectContent align="start">
+              <SelectContent
+                align="start"
+                alignItemWithTrigger={managedOrganizationId.length > 0}
+                className="min-w-(--anchor-width)"
+              >
                 {organizations.map((organization) => (
                   <SelectItem key={organization.id} value={organization.id}>
                     {organization.name}
