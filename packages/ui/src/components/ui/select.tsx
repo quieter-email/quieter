@@ -76,12 +76,13 @@ export const SelectTrigger = ({
 
 export const SelectContent = ({
   align = "center",
+  alignItemWithTrigger = true,
   alignOffset = 0,
   children,
   className,
   positionerClassName,
-  side = "bottom",
-  sideOffset = 6,
+  side,
+  sideOffset = 4,
   ...props
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.Popup> &
   Pick<
@@ -94,14 +95,14 @@ export const SelectContent = ({
     <SelectPrimitive.Positioner
       align={align}
       alignOffset={alignOffset}
-      alignItemWithTrigger={false}
-      className={cn("z-50", positionerClassName)}
+      alignItemWithTrigger={alignItemWithTrigger}
+      className={cn("z-50 min-h-20", positionerClassName)}
       side={side}
       sideOffset={sideOffset}
     >
       <SelectPrimitive.Popup
         className={cn(
-          "z-50 min-w-52 origin-(--transform-origin) overflow-hidden rounded-lg border bg-popover p-1 text-popover-foreground shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] outline-none data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
+          "z-50 min-w-52 origin-(--transform-origin) overflow-hidden rounded-lg border bg-popover p-1 text-popover-foreground shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] outline-none data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0 data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
           className,
         )}
         {...props}
@@ -146,7 +147,13 @@ export const SelectList = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.List>) => (
-  <SelectPrimitive.List className={cn("max-h-72 overflow-y-auto", className)} {...props} />
+  <SelectPrimitive.List
+    className={cn(
+      "max-h-[min(18rem,var(--available-height))] scroll-py-7 overflow-y-auto overscroll-contain",
+      className,
+    )}
+    {...props}
+  />
 );
 
 export const SelectItem = ({
@@ -156,7 +163,7 @@ export const SelectItem = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.Item>) => (
   <SelectPrimitive.Item
     className={cn(
-      "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm text-foreground transition-transform duration-100 ease-out outline-none select-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted/60 motion-reduce:transition-none motion-reduce:active:scale-100",
+      "squircle relative flex min-h-9 cursor-default scroll-my-1 items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm text-foreground transition-transform duration-100 ease-out outline-none select-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted/60 motion-reduce:transition-none motion-reduce:active:scale-100",
       className,
     )}
     {...props}
