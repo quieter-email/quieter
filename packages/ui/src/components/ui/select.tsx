@@ -96,7 +96,7 @@ export const SelectContent = ({
       align={align}
       alignOffset={alignOffset}
       alignItemWithTrigger={alignItemWithTrigger}
-      className={cn("z-50 min-h-20", positionerClassName)}
+      className={cn("z-50", { "min-h-20": alignItemWithTrigger }, positionerClassName)}
       side={side}
       sideOffset={sideOffset}
     >
