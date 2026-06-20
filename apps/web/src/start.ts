@@ -28,11 +28,15 @@ const csrfMiddleware = createCsrfMiddleware({
 });
 
 const getRateLimitPolicy = (pathname: string) => {
-  if (pathname.startsWith("/api/auth")) return { limit: 20, windowMs: 60_000 };
-  if (pathname === "/api/waitlist") return { limit: 5, windowMs: 60 * 60_000 };
-  if (pathname === "/api/messages") return { limit: 60, windowMs: 60_000 };
-  if (pathname.includes("/chat")) return { limit: 30, windowMs: 60_000 };
-  return { limit: 120, windowMs: 60_000 };
+  if (pathname.startsWith("/api/auth")) return { group: "auth", limit: 20, windowMs: 60_000 };
+  if (pathname === "/api/waitlist") {
+    return { group: "waitlist", limit: 5, windowMs: 60 * 60_000 };
+  }
+  if (pathname === "/api/messages") {
+    return { group: "messages", limit: 60, windowMs: 60_000 };
+  }
+  if (pathname.includes("/chat")) return { group: "chat", limit: 30, windowMs: 60_000 };
+  return { group: "default", limit: 120, windowMs: 60_000 };
 };
 
 const abuseProtectionMiddleware = createMiddleware().server(async ({ next, request }) => {
@@ -47,8 +51,9 @@ const abuseProtectionMiddleware = createMiddleware().server(async ({ next, reque
     "unknown";
   const policy = getRateLimitPolicy(requestUrl.pathname);
   const result = await consumeRateLimit({
-    key: `${requestUrl.pathname}:${clientAddress}`,
-    ...policy,
+    key: `${policy.group}:${clientAddress}`,
+    limit: policy.limit,
+    windowMs: policy.windowMs,
   });
 
   if (!result.allowed) {

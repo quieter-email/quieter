@@ -102,14 +102,12 @@
     },
     "db:generate": {
       "dependsOn": ["^build"],
-      "env": ["DATABASE_URL"],
       "cache": false,
       "outputs": ["drizzle/**"],
       "interactive": true
     },
     "db:check": {
       "dependsOn": ["^build"],
-      "env": ["DATABASE_URL"],
       "cache": false,
       "outputs": []
     },

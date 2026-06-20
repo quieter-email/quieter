@@ -2,19 +2,16 @@
 
 Priority reflects user impact, security and privacy exposure, data integrity, billing correctness, production reliability, and the likelihood that later work depends on the fix.
 
-- **P0 — Immediate:** active risk of security incidents, duplicate side effects, lost data, incorrect billing, or production outages. Issues **1–20**.
+- **P0 — Resolved:** issues **1–20** were addressed by the June 20, 2026 P0 reliability and security remediation.
 - **P1 — High:** serious correctness, isolation, durability, privacy, or operational risks that should be addressed before scaling the affected feature. Issues **21–27, 38–39, 43–52, 59–61, 63–69, 73–81, 83–90, 94–96, 100–102, 108, 111–114, 118–124, 127–130, 137–150, 152–161, 164–167, 171–175, 188, 202, 208, 214–217, 220–231, 246, 249–253, 266–275, 278–284, 294–295**.
 - **P2 — Medium:** important resilience, scalability, maintainability, contract, and test-coverage work. All issues not listed under P0, P1, or P3.
 - **P3 — Low:** localized cleanup, optimization, or future-proofing with limited near-term user impact. Issues **28–30, 33–35, 40, 53–54, 71–72, 82, 92–93, 97–99, 103–107, 109–110, 115–117, 131–136, 162–163, 168–170, 176, 179–186, 193–200, 203–207, 209–213, 218–219, 232–245, 247–248, 254–265, 276–277, 285–293**.
 
 Within each domain below, issues remain in their original order so references and related findings stay together.
 
-## P0 — Immediate changes
+## Resolved P0 issues
 
-These are the decisions most likely to cause security incidents, duplicate side effects, lost data, incorrect billing, or production outages.
-
-> Resolution status (June 20, 2026): Issues 1–20 are addressed by the P0 reliability and security
-> remediation change set, including its database migration and billing regression tests.
+Resolved on June 20, 2026 by the P0 reliability and security remediation change set, including its database migration and billing regression tests.
 
 1. **Global mutation retries can duplicate side effects.** The shared Query client retries mutations on network and 5xx failures. That is unsafe for sending mail, checkout creation, mailbox creation, and other non-idempotent operations. TanStack mutations should default to no retries; enable them only for explicitly idempotent mutations. See [providers.tsx](/E:/Coding/quieter/apps/web/src/components/providers.tsx:19) and [orpc-errors.ts](/E:/Coding/quieter/apps/web/src/lib/orpc-errors.ts:30).
 
