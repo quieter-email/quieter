@@ -5,6 +5,7 @@ import {
   assertCanConsumeOrganizationMailUsage,
   estimateOutboundOrganizationMailUsage,
   recordOrganizationMailUsage,
+  withOrganizationMailUsageLock,
 } from "@quieter/billing/organization-mail-usage";
 import { serverEnv } from "@quieter/env/server";
 import { z } from "zod";
@@ -64,102 +65,93 @@ export const sendOrganizationMailMessage = async (input: {
 }) => {
   const usageEstimate = estimateOutboundOrganizationMailUsage(input.message);
 
-  try {
-    await assertCanConsumeOrganizationMailUsage({
-      estimate: usageEstimate,
-      organizationId: input.organizationId,
-    });
-  } catch (error) {
-    if (error instanceof ORPCError) {
-      throw new OrganizationMailSendError(error.message, error.status ?? 403);
+  return await withOrganizationMailUsageLock(input.organizationId, async () => {
+    try {
+      await assertCanConsumeOrganizationMailUsage({
+        estimate: usageEstimate,
+        organizationId: input.organizationId,
+      });
+    } catch (error) {
+      if (error instanceof ORPCError) {
+        throw new OrganizationMailSendError(error.message, error.status ?? 403);
+      }
+
+      throw error;
     }
 
-    throw error;
-  }
+    await assertOrganizationOwnsVerifiedSenderDomain({
+      organizationId: input.organizationId,
+      sender: input.message.sender,
+    });
 
-  await assertOrganizationOwnsVerifiedSenderDomain({
-    organizationId: input.organizationId,
-    sender: input.message.sender,
-  });
-
-  const { SendEmailCommand } = await import("@aws-sdk/client-sesv2");
-  const client = await getSesv2Client();
-  const response = await client.send(
-    new SendEmailCommand({
-      Content: {
-        Simple: {
-          Body: {
-            ...(input.message.html
-              ? {
-                  Html: {
-                    Charset: "UTF-8",
-                    Data: input.message.html,
-                  },
-                }
-              : {}),
-            ...(input.message.text
-              ? {
-                  Text: {
-                    Charset: "UTF-8",
-                    Data: input.message.text,
-                  },
-                }
-              : {}),
-          },
-          Subject: {
-            Charset: "UTF-8",
-            Data: input.message.subject,
+    const { SendEmailCommand } = await import("@aws-sdk/client-sesv2");
+    const client = await getSesv2Client();
+    const response = await client.send(
+      new SendEmailCommand({
+        Content: {
+          Simple: {
+            Body: {
+              ...(input.message.html
+                ? {
+                    Html: {
+                      Charset: "UTF-8",
+                      Data: input.message.html,
+                    },
+                  }
+                : {}),
+              ...(input.message.text
+                ? {
+                    Text: {
+                      Charset: "UTF-8",
+                      Data: input.message.text,
+                    },
+                  }
+                : {}),
+            },
+            Subject: {
+              Charset: "UTF-8",
+              Data: input.message.subject,
+            },
           },
         },
-      },
-      Destination: {
-        BccAddresses: normalizeAddresses(input.message.bcc),
-        CcAddresses: normalizeAddresses(input.message.cc),
-        ToAddresses: normalizeAddresses(input.message.to),
-      },
-      FromEmailAddress: input.message.sender.trim().toLowerCase(),
-      ReplyToAddresses: normalizeAddresses(input.message.replyTo),
-    }),
-  );
+        Destination: {
+          BccAddresses: normalizeAddresses(input.message.bcc),
+          CcAddresses: normalizeAddresses(input.message.cc),
+          ToAddresses: normalizeAddresses(input.message.to),
+        },
+        FromEmailAddress: input.message.sender.trim().toLowerCase(),
+        ReplyToAddresses: normalizeAddresses(input.message.replyTo),
+      }),
+    );
 
-  if (response.MessageId) {
-    recordOutboundManagedMessageForSender({
-      bcc: normalizeAddresses(input.message.bcc),
-      bodyHtml: input.message.html,
-      bodyText: input.message.text,
-      cc: normalizeAddresses(input.message.cc),
-      organizationId: input.organizationId,
-      providerMessageId: response.MessageId,
-      replyTo: normalizeAddresses(input.message.replyTo),
-      sender: input.message.sender.trim().toLowerCase(),
-      subject: input.message.subject,
-      to: normalizeAddresses(input.message.to),
-    }).catch((error) => {
-      console.error("Failed to persist outbound managed message for sender.", {
-        error,
-        messageId: response.MessageId,
-        organizationId: input.organizationId,
-      });
-    });
+    if (response.MessageId) {
+      await Promise.all([
+        recordOutboundManagedMessageForSender({
+          bcc: normalizeAddresses(input.message.bcc),
+          bodyHtml: input.message.html,
+          bodyText: input.message.text,
+          cc: normalizeAddresses(input.message.cc),
+          organizationId: input.organizationId,
+          providerMessageId: response.MessageId,
+          replyTo: normalizeAddresses(input.message.replyTo),
+          sender: input.message.sender.trim().toLowerCase(),
+          subject: input.message.subject,
+          to: normalizeAddresses(input.message.to),
+        }),
+        recordOrganizationMailUsage({
+          ...usageEstimate,
+          metadata: {
+            sender: input.message.sender.trim().toLowerCase(),
+          },
+          organizationId: input.organizationId,
+          providerMessageId: response.MessageId,
+        }),
+      ]);
+    }
 
-    recordOrganizationMailUsage({
-      ...usageEstimate,
-      metadata: {
-        sender: input.message.sender.trim().toLowerCase(),
-      },
-      organizationId: input.organizationId,
-      providerMessageId: response.MessageId,
-    }).catch((error) => {
-      console.error("Failed to record Managed Usage after sending.", {
-        error,
-        messageId: response.MessageId,
-        organizationId: input.organizationId,
-      });
-    });
-  }
-
-  return {
-    messageId: response.MessageId ?? null,
-    sent: true,
-  };
+    return {
+      messageId: response.MessageId ?? null,
+      sent: true,
+    };
+  });
 };

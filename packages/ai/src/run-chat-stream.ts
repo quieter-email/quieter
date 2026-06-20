@@ -10,7 +10,8 @@ import {
 import type { ChatModel } from "./chat-models";
 import { createOpenRouterAdapter } from "./openrouter";
 
-const CHAT_AGENT_MAX_ITERATIONS = 15;
+export const CHAT_AGENT_MAX_ITERATIONS = 6;
+export const CHAT_AGENT_MAX_TOKENS = 4_096;
 
 export const runChatStream = async ({
   abortController,
@@ -45,13 +46,13 @@ export const runChatStream = async ({
     abortController,
     adapter: createOpenRouterAdapter(model),
     agentLoopStrategy: maxIterations(CHAT_AGENT_MAX_ITERATIONS),
-    maxTokens: 16_384,
+    maxTokens: CHAT_AGENT_MAX_TOKENS,
     messages: processor.getMessages(),
     middleware,
     modelOptions: {
       parallelToolCalls: true,
       reasoning: {
-        effort: "high",
+        effort: "medium",
       },
     },
     systemPrompts,

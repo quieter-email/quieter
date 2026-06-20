@@ -3,51 +3,15 @@ import { defineConfig } from "drizzle-kit";
 
 const databaseUrl = serverEnv.DATABASE_URL;
 
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL is not set");
+}
+
 export default defineConfig({
   schema: "./src/schema.ts",
   out: "./drizzle",
   dialect: "postgresql",
-  tablesFilter: [
-    "account",
-    "apikey",
-    "billingSubscription",
-    "chat",
-    "chatMessage",
-    "chatRun",
-    "gmailCredential",
-    "gmailAutoLabelEvent",
-    "gmailAutoLabelSettings",
-    "gmailLabel",
-    "gmailOAuthState",
-    "gmailUsefulDetail",
-    "gmailUsefulDetailEvent",
-    "gmailUsefulDetailFeedback",
-    "gmailUsefulDetailSettings",
-    "gmailWatchState",
-    "invitation",
-    "mailDomain",
-    "mailbox",
-    "mailboxGrant",
-    "managedMailMessage",
-    "managedMailAttachment",
-    "managedMailLabel",
-    "managedMailMessageLabel",
-    "managedMailRule",
-    "managedMailRuleApplication",
-    "managedMailRuleBackfill",
-    "managedMailSavedView",
-    "member",
-    "organization",
-    "organizationMailUsageAlertEvent",
-    "organizationMailUsageEvent",
-    "organizationMailUsageSettings",
-    "passkey",
-    "session",
-    "user",
-    "verification",
-    "waitlistSignup",
-  ],
-  ...(databaseUrl ? { dbCredentials: { url: databaseUrl } } : {}),
+  dbCredentials: { url: databaseUrl },
   strict: true,
   verbose: true,
 });

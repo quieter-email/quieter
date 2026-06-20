@@ -1,23 +1,7 @@
-import {
-  experimental_createQueryPersister,
-  type AsyncStorage,
-} from "@tanstack/query-persist-client-core";
-
-const createBrowserQueryStorage = (): AsyncStorage<string> | undefined => {
-  if (typeof window === "undefined") return undefined;
-
-  return {
-    getItem: async (key) => window.localStorage.getItem(key),
-    setItem: async (key, value) => window.localStorage.setItem(key, value),
-    removeItem: async (key) => window.localStorage.removeItem(key),
-    entries: async () => Object.entries(window.localStorage),
-  };
-};
+import { experimental_createQueryPersister } from "@tanstack/query-persist-client-core";
 
 export const queryPersister = experimental_createQueryPersister({
-  buster: "v3",
-  storage: createBrowserQueryStorage(),
-  refetchOnRestore: false,
-  maxAge: 1000 * 60 * 60 * 24 * 7,
+  buster: "v4",
+  storage: undefined,
   prefix: "quieter-cache",
 });

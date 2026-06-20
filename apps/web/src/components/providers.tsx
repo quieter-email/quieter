@@ -21,9 +21,7 @@ export const Providers = ({ children }: PropsWithChildren) => {
             gcTime: 1000 * 60 * 30,
             retry: shouldRetryOrpcError,
           },
-          mutations: {
-            retry: shouldRetryOrpcError,
-          },
+          mutations: { retry: false },
         },
       }),
   );

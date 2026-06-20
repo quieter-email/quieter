@@ -1,3 +1,4 @@
+import { consumeRateLimit } from "@quieter/orpc/abuse-protection";
 import {
   sentryGlobalFunctionMiddleware,
   sentryGlobalRequestMiddleware,
@@ -24,6 +25,68 @@ const isSentryEnabled = process.env.NODE_ENV !== "development" && !!process.env.
 
 const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === "serverFn",
+});
+
+const getRateLimitPolicy = (pathname: string) => {
+  if (pathname.startsWith("/api/auth")) return { limit: 20, windowMs: 60_000 };
+  if (pathname === "/api/waitlist") return { limit: 5, windowMs: 60 * 60_000 };
+  if (pathname === "/api/messages") return { limit: 60, windowMs: 60_000 };
+  if (pathname.includes("/chat")) return { limit: 30, windowMs: 60_000 };
+  return { limit: 120, windowMs: 60_000 };
+};
+
+const abuseProtectionMiddleware = createMiddleware().server(async ({ next, request }) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(request.method.toUpperCase())) {
+    return next();
+  }
+
+  const requestUrl = new URL(request.url);
+  const clientAddress =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip")?.trim() ||
+    "unknown";
+  const policy = getRateLimitPolicy(requestUrl.pathname);
+  const result = await consumeRateLimit({
+    key: `${requestUrl.pathname}:${clientAddress}`,
+    ...policy,
+  });
+
+  if (!result.allowed) {
+    return new Response("Too many requests", {
+      headers: {
+        "Retry-After": String(
+          Math.max(1, Math.ceil((result.resetAt.getTime() - Date.now()) / 1000)),
+        ),
+      },
+      status: 429,
+    });
+  }
+
+  return next();
+});
+
+const securityHeadersMiddleware = createMiddleware().server(async ({ next }) => {
+  const result = await next();
+  result.response.headers.set(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "connect-src 'self' https: wss:",
+      "font-src 'self' data: https:",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+      "img-src 'self' data: blob: https:",
+      "object-src 'none'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https:",
+    ].join("; "),
+  );
+  result.response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  result.response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  result.response.headers.set("X-Content-Type-Options", "nosniff");
+  result.response.headers.set("X-Frame-Options", "DENY");
+  return result;
 });
 
 const sitePasswordMiddleware = createMiddleware().server(async ({ next, request }) => {
@@ -58,6 +121,8 @@ export const startInstance = createStart(() => ({
   functionMiddleware: isSentryEnabled ? [sentryGlobalFunctionMiddleware] : [],
   requestMiddleware: [
     ...(isSentryEnabled ? [sentryGlobalRequestMiddleware] : []),
+    securityHeadersMiddleware,
+    abuseProtectionMiddleware,
     csrfMiddleware,
     sitePasswordMiddleware,
   ],

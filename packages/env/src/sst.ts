@@ -29,7 +29,6 @@ export const createSstEnv = (
       POLAR_ACCESS_TOKEN: runtimeEnv.POLAR_ACCESS_TOKEN,
       POLAR_ORGANIZATION_ID: runtimeEnv.POLAR_ORGANIZATION_ID,
       POLAR_SANDBOX: runtimeEnv.POLAR_SANDBOX,
-      QUIETER_UNLIMITED_BILLING_EMAILS: runtimeEnv.QUIETER_UNLIMITED_BILLING_EMAILS,
     },
     server: {
       DATABASE_URL: z.string().trim().url(),
@@ -45,7 +44,6 @@ export const createSstEnv = (
       POLAR_ACCESS_TOKEN: z.string().trim().min(1),
       POLAR_ORGANIZATION_ID: optionalString,
       POLAR_SANDBOX: optionalBooleanString,
-      QUIETER_UNLIMITED_BILLING_EMAILS: optionalString,
     },
   });
   const missingGmailPubSubVariables = gmailPubSubVariableNames.filter((name) => !env[name]);

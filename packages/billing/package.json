@@ -14,6 +14,7 @@
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
     "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/billing",
     "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/billing",
+    "test": "bun test",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {

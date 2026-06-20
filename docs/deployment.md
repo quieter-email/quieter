@@ -49,7 +49,6 @@ wrapper so the correct config, stage, and local AWS environment are applied:
 
 ```bash
 bun run sst secret set MailIngestToken <value>
-bun run sst secret set MailSendToken <value>
 bun run sst secret set ChatGenerationStartToken <value>
 bun run sst secret set GmailLiveSyncTokenSecret <value>
 ```

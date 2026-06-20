@@ -23,7 +23,6 @@
         "POLAR_ORGANIZATION_ID",
         "POLAR_SANDBOX",
         "POLAR_WEBHOOK_SECRET",
-        "QUIETER_UNLIMITED_BILLING_EMAILS",
         "BETTER_AUTH_URL",
         "VITE_PUBLIC_POSTHOG_PROJECT_TOKEN",
         "VITE_PUBLIC_POSTHOG_HOST",
@@ -103,12 +102,14 @@
     },
     "db:generate": {
       "dependsOn": ["^build"],
+      "env": ["DATABASE_URL"],
       "cache": false,
       "outputs": ["drizzle/**"],
       "interactive": true
     },
     "db:check": {
       "dependsOn": ["^build"],
+      "env": ["DATABASE_URL"],
       "cache": false,
       "outputs": []
     },
@@ -151,8 +152,8 @@
       "dependsOn": ["^build"],
       "env": ["DATABASE_URL"],
       "cache": false,
-      "outputs": [],
-      "interactive": true
+      "interactive": true,
+      "outputs": []
     },
     "dev": {
       "dependsOn": ["^build"],
@@ -185,7 +186,6 @@
         "POLAR_ORGANIZATION_ID",
         "POLAR_SANDBOX",
         "POLAR_WEBHOOK_SECRET",
-        "QUIETER_UNLIMITED_BILLING_EMAILS",
         "BETTER_AUTH_URL",
         "VITE_PUBLIC_POSTHOG_PROJECT_TOKEN",
         "VITE_PUBLIC_POSTHOG_HOST",

@@ -11,7 +11,7 @@ import {
 import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { PaidBillingPlan } from "./plans";
 import { getOrganizationBillingEntitlement } from "./entitlements";
-import { getPolarApiOrganizationId, getPolarClient } from "./polar";
+import { getPolarApiOrganizationId, getPolarClient, ingestPolarEvents } from "./polar";
 import {
   getManagedUsageMarkupBasisPoints,
   getManagedUsageRates,
@@ -68,6 +68,24 @@ const getBillingPeriod = (start: Date | null, end: Date | null) => {
 
 const applyOverageMarkup = (sesCostMicroCents: number, plan: PaidBillingPlan | null) =>
   Math.ceil(sesCostMicroCents * (1 + getManagedUsageMarkupBasisPoints(plan) / 10_000));
+
+export const withOrganizationMailUsageLock = async <T>(
+  organizationId: string,
+  callback: () => Promise<T>,
+) => {
+  const connection = await db.$client.reserve();
+  let locked = false;
+  try {
+    await connection`select pg_advisory_lock(hashtextextended(${organizationId}, 0))`;
+    locked = true;
+    return await callback();
+  } finally {
+    if (locked) {
+      await connection`select pg_advisory_unlock(hashtextextended(${organizationId}, 0))`;
+    }
+    connection.release();
+  }
+};
 
 export const normalizeOrganizationMailAlertMilestones = (milestones: number[]) =>
   Array.from(
@@ -562,25 +580,22 @@ export const recordOrganizationMailUsage = async (input: OrganizationMailUsageIn
   }
 
   await getOrganizationMailUsageMeterId();
-  await (
-    await getPolarClient()
-  ).events.ingest({
-    events: [
-      {
-        externalCustomerId: `user:${entitlement.billingUserId}`,
-        metadata: {
-          billableCostCents: billableCostMicroCents / 1_000_000,
-          direction: input.direction,
-          organizationId: input.organizationId,
-          providerMessageId: input.providerMessageId,
-          sesCostCents: input.sesCostMicroCents / 1_000_000,
-          usageEventId: usageEvent.id,
-        },
-        name: ORGANIZATION_MAIL_POLAR_EVENT_NAME,
-        organizationId: getPolarApiOrganizationId(),
+  await ingestPolarEvents([
+    {
+      externalCustomerId: `user:${entitlement.billingUserId}`,
+      externalId: `organization-mail-usage:${usageEvent.id}`,
+      metadata: {
+        billableCostCents: billableCostMicroCents / 1_000_000,
+        direction: input.direction,
+        organizationId: input.organizationId,
+        providerMessageId: input.providerMessageId,
+        sesCostCents: input.sesCostMicroCents / 1_000_000,
+        usageEventId: usageEvent.id,
       },
-    ],
-  });
+      name: ORGANIZATION_MAIL_POLAR_EVENT_NAME,
+      organizationId: getPolarApiOrganizationId(),
+    },
+  ]);
 
   await db
     .update(organizationMailUsageEvent)
