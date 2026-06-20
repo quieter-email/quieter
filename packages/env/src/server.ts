@@ -7,6 +7,7 @@ import {
   optionalString,
   optionalUrl,
   type RuntimeEnvironment,
+  webSocketUrl,
 } from "./schema";
 
 export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
@@ -72,7 +73,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       DATABASE_URL: optionalUrl,
       GMAIL_CREDENTIAL_ROTATION_TOKEN: optionalString,
       GMAIL_LIVE_SYNC_TOKEN_SECRET: optionalString,
-      GMAIL_LIVE_SYNC_URL: optionalHttpUrl,
+      GMAIL_LIVE_SYNC_URL: webSocketUrl.optional(),
       GMAIL_PUBSUB_PUSH_AUDIENCE: optionalHttpUrl,
       GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: z.string().trim().email().optional(),
       GMAIL_PUBSUB_QUEUE_URL: optionalUrl,

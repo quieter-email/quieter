@@ -15,6 +15,13 @@ export const httpsUrl = httpUrl.refine((value) => new URL(value).protocol === "h
   message: "URL must use HTTPS.",
 });
 export const optionalHttpUrl = httpUrl.optional();
+export const webSocketUrl = z
+  .string()
+  .trim()
+  .url()
+  .refine((value) => ["ws:", "wss:"].includes(new URL(value).protocol), {
+    message: "URL must use WS or WSS.",
+  });
 
 export const optionalBooleanString = z
   .string()
