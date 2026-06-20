@@ -35,6 +35,15 @@ describe("server environment", () => {
       }),
     ).toThrow();
   });
+
+  test("accepts WebSocket live-sync URLs", () => {
+    const env = createServerEnv({
+      GMAIL_LIVE_SYNC_URL: "wss://example.com/live",
+      NODE_ENV: "test",
+    });
+
+    expect(env.GMAIL_LIVE_SYNC_URL).toBe("wss://example.com/live");
+  });
 });
 
 describe("web client environment", () => {

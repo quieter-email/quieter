@@ -4,6 +4,7 @@ import {
   sentryGlobalRequestMiddleware,
 } from "@sentry/tanstackstart-react";
 import { createCsrfMiddleware, createMiddleware, createStart } from "@tanstack/react-start";
+import { withSecurityHeaders } from "~/lib/security-headers.server";
 import {
   hasSitePasswordConfigured,
   isSitePasswordGateEnabled,
@@ -72,26 +73,11 @@ const abuseProtectionMiddleware = createMiddleware().server(async ({ next, reque
 
 const securityHeadersMiddleware = createMiddleware().server(async ({ next }) => {
   const result = await next();
-  result.response.headers.set(
-    "Content-Security-Policy",
-    [
-      "default-src 'self'",
-      "base-uri 'self'",
-      "connect-src 'self' https: wss:",
-      "font-src 'self' data: https:",
-      "form-action 'self'",
-      "frame-ancestors 'none'",
-      "img-src 'self' data: blob: https:",
-      "object-src 'none'",
-      "script-src 'self' 'unsafe-inline'",
-      "style-src 'self' 'unsafe-inline' https:",
-    ].join("; "),
-  );
-  result.response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  result.response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  result.response.headers.set("X-Content-Type-Options", "nosniff");
-  result.response.headers.set("X-Frame-Options", "DENY");
-  return result;
+
+  return {
+    ...result,
+    response: withSecurityHeaders(result.response),
+  };
 });
 
 const sitePasswordMiddleware = createMiddleware().server(async ({ next, request }) => {

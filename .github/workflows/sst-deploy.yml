@@ -284,12 +284,9 @@ jobs:
         run: |
           bun run - <<'EOF'
           const token = process.env.GMAIL_CREDENTIAL_ROTATION_TOKEN;
-          const productionUrl = process.env.QUIETER_PRODUCTION_URL;
+          const productionUrl = process.env.QUIETER_PRODUCTION_URL || "https://quieter.email";
           if (!token) {
             throw new Error("GMAIL_CREDENTIAL_ROTATION_TOKEN is required.");
-          }
-          if (!productionUrl) {
-            throw new Error("QUIETER_PRODUCTION_URL is required.");
           }
 
           const url = new URL("/api/internal/gmail-credentials/rotate", productionUrl);

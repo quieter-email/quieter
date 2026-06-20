@@ -4,6 +4,8 @@ import { sql } from "drizzle-orm";
 export const consumeRateLimit = async (input: { key: string; limit: number; windowMs: number }) => {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + input.windowMs);
+  const nowValue = now.toISOString();
+  const expiresAtValue = expiresAt.toISOString();
   const [bucket] = await db
     .insert(rateLimitBucket)
     .values({
@@ -14,9 +16,9 @@ export const consumeRateLimit = async (input: { key: string; limit: number; wind
     })
     .onConflictDoUpdate({
       set: {
-        count: sql`case when ${rateLimitBucket.expiresAt} <= ${now} then 1 else ${rateLimitBucket.count} + 1 end`,
-        expiresAt: sql`case when ${rateLimitBucket.expiresAt} <= ${now} then ${expiresAt} else ${rateLimitBucket.expiresAt} end`,
-        windowStart: sql`case when ${rateLimitBucket.expiresAt} <= ${now} then ${now} else ${rateLimitBucket.windowStart} end`,
+        count: sql`case when ${rateLimitBucket.expiresAt} <= ${nowValue} then 1 else ${rateLimitBucket.count} + 1 end`,
+        expiresAt: sql`case when ${rateLimitBucket.expiresAt} <= ${nowValue} then ${expiresAtValue} else ${rateLimitBucket.expiresAt} end`,
+        windowStart: sql`case when ${rateLimitBucket.expiresAt} <= ${nowValue} then ${nowValue} else ${rateLimitBucket.windowStart} end`,
       },
       target: rateLimitBucket.key,
     })
