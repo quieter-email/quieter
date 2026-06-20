@@ -4,10 +4,12 @@ import { getAuthorizedChatRun } from "./chat-run-store";
 import {
   formatChatRunSse,
   isActiveChatRunStatus,
-  subscribeChatRunEvents,
   type ChatRunStreamEvent,
 } from "./chat-run-stream";
-import { ensureChatRunGeneration, handoffChatRunToBackground } from "./chat/generation/lifecycle";
+import { enqueueChatRun, handoffChatRunToBackground } from "./chat/generation/lifecycle";
+
+const CHAT_RUN_POLL_INTERVAL_MS = 1_000;
+const CHAT_RUN_STALE_HEARTBEAT_MS = 30_000;
 
 const getAssistantMessage = async (assistantMessageId: string) => {
   const [message] = await db
@@ -36,9 +38,9 @@ export const createChatRunStreamResponse = async (input: {
   const stream = new ReadableStream<Uint8Array>({
     start: async (controller) => {
       const encoder = new TextEncoder();
-      const pendingEvents: ChatRunStreamEvent[] = [];
-      let initialized = false;
       let finished = false;
+      let polling = false;
+      let previousParts = "";
       let resolveFinished = () => {};
       const finishedPromise = new Promise<void>((resolve) => {
         resolveFinished = resolve;
@@ -53,15 +55,9 @@ export const createChatRunStreamResponse = async (input: {
         }
       };
 
-      const unsubscribe = subscribeChatRunEvents(input.runId, (event) => {
-        if (initialized) {
-          send(event);
-        } else {
-          pendingEvents.push(event);
-        }
-      });
       const onAbort = () => resolveFinished();
       input.requestSignal.addEventListener("abort", onAbort, { once: true });
+      let pollInterval: ReturnType<typeof setInterval> | undefined;
 
       try {
         if (input.requestSignal.aborted) {
@@ -101,16 +97,57 @@ export const createChatRunStreamResponse = async (input: {
           parts: assistantParts,
           type: "draft",
         });
-        initialized = true;
+        previousParts = JSON.stringify(assistantParts);
 
-        for (const event of pendingEvents) {
-          if (!finished) {
-            send(event);
+        const poll = async () => {
+          if (polling || finished || input.requestSignal.aborted) return;
+          polling = true;
+
+          try {
+            const currentRun = await getAuthorizedChatRun(input.runId, input.userId);
+            if (!currentRun) {
+              resolveFinished();
+              return;
+            }
+
+            const currentAssistant = await getAssistantMessage(currentRun.assistantMessageId);
+            const currentParts = currentAssistant?.parts ?? [{ content: "", type: "text" }];
+            const serializedParts = JSON.stringify(currentParts);
+
+            if (!isActiveChatRunStatus(currentRun.status)) {
+              send({
+                assistantMessageId: currentRun.assistantMessageId,
+                error: currentRun.error ?? currentAssistant?.error,
+                parts: currentParts,
+                status: currentRun.status,
+                type: "done",
+              });
+            } else {
+              const lastActivity = currentRun.lastHeartbeatAt ?? currentRun.updatedAt;
+              if (Date.now() - lastActivity.getTime() > CHAT_RUN_STALE_HEARTBEAT_MS) {
+                await enqueueChatRun(input.runId);
+              }
+
+              if (serializedParts !== previousParts) {
+                previousParts = serializedParts;
+                send({
+                  assistantMessageId: currentRun.assistantMessageId,
+                  parts: currentParts,
+                  type: "draft",
+                });
+              }
+            }
+          } catch (error) {
+            console.error("Could not refresh the chat generation stream.", error);
+          } finally {
+            polling = false;
           }
-        }
+        };
 
         if (!finished) {
-          void ensureChatRunGeneration(input.runId);
+          await enqueueChatRun(input.runId);
+          pollInterval = setInterval(() => void poll(), CHAT_RUN_POLL_INTERVAL_MS);
+          void poll();
           await finishedPromise;
         }
 
@@ -118,7 +155,7 @@ export const createChatRunStreamResponse = async (input: {
           handoffChatRunToBackground(input.runId);
         }
       } finally {
-        unsubscribe();
+        if (pollInterval) clearInterval(pollInterval);
         input.requestSignal.removeEventListener("abort", onAbort);
         controller.close();
       }

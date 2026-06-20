@@ -55,7 +55,7 @@ export const updateRunStatus = async (
   extra?: { error?: string | null; lastHeartbeatAt?: Date },
 ) => {
   const now = new Date();
-  await db
+  const [updated] = await db
     .update(chatRun)
     .set({
       error: extra?.error,
@@ -63,7 +63,9 @@ export const updateRunStatus = async (
       status,
       updatedAt: now,
     })
-    .where(eq(chatRun.id, runId));
+    .where(and(eq(chatRun.id, runId), inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])))
+    .returning({ id: chatRun.id });
+  return !!updated;
 };
 
 export const updateAssistantMessage = async (input: {
@@ -179,48 +181,6 @@ export const getActiveChatRunSummary = async (chatId: string) => {
 
 export const hasActiveChatRun = async (chatId: string) => !!(await getActiveChatRunSummary(chatId));
 
-const createAssistantMessage = (input: {
-  chatId: string;
-  createdAt: Date;
-  id: string;
-  position: number;
-  userId: string;
-}) =>
-  db.insert(chatMessage).values({
-    chatId: input.chatId,
-    createdAt: input.createdAt,
-    id: input.id,
-    parts: EMPTY_ASSISTANT_PARTS,
-    position: input.position,
-    role: "assistant",
-    status: "draft",
-    userId: input.userId,
-  });
-
-const createRun = (input: {
-  assistantMessageId: string;
-  chatId: string;
-  createdAt: Date;
-  mailboxCategory: string;
-  mailboxId: string;
-  model: ChatModel;
-  runId: string;
-  userId: string;
-}) =>
-  db.insert(chatRun).values({
-    assistantMessageId: input.assistantMessageId,
-    chatId: input.chatId,
-    createdAt: input.createdAt,
-    id: input.runId,
-    lastHeartbeatAt: input.createdAt,
-    mailboxCategory: input.mailboxCategory,
-    mailboxId: input.mailboxId,
-    model: input.model,
-    status: "queued",
-    updatedAt: input.createdAt,
-    userId: input.userId,
-  });
-
 export const createChatRunRecords = async (input: {
   assistantMessageId: string;
   chatId: string;
@@ -238,8 +198,8 @@ export const createChatRunRecords = async (input: {
   const now = new Date();
 
   try {
-    await db.batch([
-      db.insert(chatMessage).values({
+    await db.transaction(async (tx) => {
+      await tx.insert(chatMessage).values({
         chatId: input.chatId,
         createdAt: now,
         id: input.userMessage.id,
@@ -248,20 +208,32 @@ export const createChatRunRecords = async (input: {
         role: "user",
         status: "complete",
         userId: input.userId,
-      }),
-      createAssistantMessage({
+      });
+      await tx.insert(chatMessage).values({
         chatId: input.chatId,
         createdAt: now,
         id: input.assistantMessageId,
+        parts: EMPTY_ASSISTANT_PARTS,
         position: input.userMessage.position + 1,
+        role: "assistant",
+        status: "draft",
         userId: input.userId,
-      }),
-      createRun({
-        ...input,
+      });
+      await tx.insert(chatRun).values({
+        assistantMessageId: input.assistantMessageId,
+        chatId: input.chatId,
         createdAt: now,
-      }),
-      db.update(chat).set({ updatedAt: now }).where(eq(chat.id, input.chatId)),
-    ]);
+        id: input.runId,
+        lastHeartbeatAt: now,
+        mailboxCategory: input.mailboxCategory,
+        mailboxId: input.mailboxId,
+        model: input.model,
+        status: "queued",
+        updatedAt: now,
+        userId: input.userId,
+      });
+      await tx.update(chat).set({ updatedAt: now }).where(eq(chat.id, input.chatId));
+    });
   } catch (error) {
     rethrowChatRunConflict(error);
   }
@@ -284,48 +256,52 @@ export const startAssistantRun = async (input: {
   const now = new Date();
 
   try {
-    await db.batch([
-      db
+    await db.transaction(async (tx) => {
+      await tx
         .delete(chatMessage)
         .where(
           and(
             eq(chatMessage.chatId, input.chatId),
             gt(chatMessage.position, input.userMessagePosition),
           ),
-        ),
-      ...(input.userMessage
-        ? [
-            db
-              .update(chatMessage)
-              .set({ parts: input.userMessage.parts })
-              .where(
-                and(
-                  eq(chatMessage.id, input.userMessage.id),
-                  eq(chatMessage.chatId, input.chatId),
-                  eq(chatMessage.role, "user"),
-                ),
-              ),
-          ]
-        : []),
-      createAssistantMessage({
+        );
+      if (input.userMessage) {
+        await tx
+          .update(chatMessage)
+          .set({ parts: input.userMessage.parts })
+          .where(
+            and(
+              eq(chatMessage.id, input.userMessage.id),
+              eq(chatMessage.chatId, input.chatId),
+              eq(chatMessage.role, "user"),
+            ),
+          );
+      }
+      await tx.insert(chatMessage).values({
         chatId: input.chatId,
         createdAt: now,
         id: assistantMessageId,
+        parts: EMPTY_ASSISTANT_PARTS,
         position: input.userMessagePosition + 1,
+        role: "assistant",
+        status: "draft",
         userId: input.userId,
-      }),
-      createRun({
+      });
+      await tx.insert(chatRun).values({
         assistantMessageId,
         chatId: input.chatId,
         createdAt: now,
+        id: runId,
+        lastHeartbeatAt: now,
         mailboxCategory: input.mailboxCategory,
         mailboxId: input.mailboxId,
         model: input.model,
-        runId,
+        status: "queued",
+        updatedAt: now,
         userId: input.userId,
-      }),
-      db.update(chat).set({ updatedAt: now }).where(eq(chat.id, input.chatId)),
-    ]);
+      });
+      await tx.update(chat).set({ updatedAt: now }).where(eq(chat.id, input.chatId));
+    });
   } catch (error) {
     rethrowChatRunConflict(error);
   }
@@ -350,8 +326,8 @@ export const continueAssistantRun = async (input: {
   const now = new Date();
 
   try {
-    await db.batch([
-      db
+    await db.transaction(async (tx) => {
+      await tx
         .update(chatMessage)
         .set({
           error: null,
@@ -365,26 +341,32 @@ export const continueAssistantRun = async (input: {
             eq(chatMessage.userId, input.userId),
             eq(chatMessage.role, "assistant"),
           ),
-        ),
-      createAssistantMessage({
+        );
+      await tx.insert(chatMessage).values({
         chatId: input.chatId,
         createdAt: now,
         id: assistantMessageId,
+        parts: EMPTY_ASSISTANT_PARTS,
         position: input.previousAssistant.position + 1,
+        role: "assistant",
+        status: "draft",
         userId: input.userId,
-      }),
-      createRun({
+      });
+      await tx.insert(chatRun).values({
         assistantMessageId,
         chatId: input.chatId,
         createdAt: now,
+        id: runId,
+        lastHeartbeatAt: now,
         mailboxCategory: input.mailboxCategory,
         mailboxId: input.mailboxId,
         model: input.model,
-        runId,
+        status: "queued",
+        updatedAt: now,
         userId: input.userId,
-      }),
-      db.update(chat).set({ updatedAt: now }).where(eq(chat.id, input.chatId)),
-    ]);
+      });
+      await tx.update(chat).set({ updatedAt: now }).where(eq(chat.id, input.chatId));
+    });
   } catch (error) {
     rethrowChatRunConflict(error);
   }

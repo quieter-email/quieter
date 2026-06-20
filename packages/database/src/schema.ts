@@ -134,6 +134,9 @@ export const organization = pgTable(
   "organization",
   {
     id: text("id").primaryKey(),
+    billingOwnerUserId: text("billingOwnerUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     logo: text("logo"),
@@ -152,10 +155,12 @@ export const session = pgTable("session", {
   updatedAt: timestamp("updatedAt").notNull(),
   ipAddress: text("ipAddress"),
   userAgent: text("userAgent"),
-  activeOrganizationId: text("activeOrganizationId").references(() => organization.id),
+  activeOrganizationId: text("activeOrganizationId").references(() => organization.id, {
+    onDelete: "set null",
+  }),
   userId: text("userId")
     .notNull()
-    .references(() => user.id),
+    .references(() => user.id, { onDelete: "cascade" }),
 });
 
 export const account = pgTable(
@@ -166,7 +171,7 @@ export const account = pgTable(
     providerId: text("providerId").notNull(),
     userId: text("userId")
       .notNull()
-      .references(() => user.id),
+      .references(() => user.id, { onDelete: "cascade" }),
     accessToken: text("accessToken"),
     refreshToken: text("refreshToken"),
     idToken: text("idToken"),
@@ -197,7 +202,7 @@ export const passkey = pgTable(
     publicKey: text("publicKey").notNull(),
     userId: text("userId")
       .notNull()
-      .references(() => user.id),
+      .references(() => user.id, { onDelete: "cascade" }),
     credentialID: text("credentialID").notNull(),
     counter: bigint("counter", { mode: "number" }).notNull(),
     deviceType: text("deviceType").notNull(),
@@ -219,10 +224,10 @@ export const member = pgTable(
     id: text("id").primaryKey(),
     organizationId: text("organizationId")
       .notNull()
-      .references(() => organization.id),
+      .references(() => organization.id, { onDelete: "cascade" }),
     userId: text("userId")
       .notNull()
-      .references(() => user.id),
+      .references(() => user.id, { onDelete: "cascade" }),
     role: text("role").notNull(),
     createdAt: timestamp("createdAt").notNull(),
   },
@@ -239,14 +244,14 @@ export const invitation = pgTable(
     id: text("id").primaryKey(),
     organizationId: text("organizationId")
       .notNull()
-      .references(() => organization.id),
+      .references(() => organization.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
     role: text("role").notNull(),
     status: text("status").notNull(),
     expiresAt: timestamp("expiresAt").notNull(),
     inviterId: text("inviterId")
       .notNull()
-      .references(() => user.id),
+      .references(() => user.id, { onDelete: "cascade" }),
     createdAt: timestamp("createdAt").notNull(),
   },
   (table) => [
@@ -265,7 +270,9 @@ export const mailbox = pgTable(
     ownerUserId: text("ownerUserId").references(() => user.id, {
       onDelete: "cascade",
     }),
-    organizationId: text("organizationId").references(() => organization.id),
+    organizationId: text("organizationId").references(() => organization.id, {
+      onDelete: "cascade",
+    }),
     status: text("status").$type<MailboxConnectionStatus>().notNull().default("connected"),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
@@ -859,7 +866,7 @@ export const mailDomain = pgTable(
     id: text("id").primaryKey(),
     organizationId: text("organizationId")
       .notNull()
-      .references(() => organization.id),
+      .references(() => organization.id, { onDelete: "cascade" }),
     domain: text("domain").notNull(),
     mailFromDomain: text("mailFromDomain").notNull(),
     status: text("status").$type<MailDomainStatus>().notNull(),
@@ -881,7 +888,7 @@ export const billingSubscription = pgTable(
     id: text("id").primaryKey(),
     userId: text("userId")
       .notNull()
-      .references(() => user.id),
+      .references(() => user.id, { onDelete: "cascade" }),
     provider: text("provider").$type<BillingProvider>().notNull(),
     providerSubscriptionId: text("providerSubscriptionId").notNull(),
     providerCustomerId: text("providerCustomerId"),
@@ -904,13 +911,40 @@ export const billingSubscription = pgTable(
   ],
 );
 
+export const billingEntitlementOverride = pgTable(
+  "billingEntitlementOverride",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    plan: text("plan").$type<BillingPlan>().notNull(),
+    reason: text("reason").notNull(),
+    createdByUserId: text("createdByUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    expiresAt: timestamp("expiresAt"),
+    revokedAt: timestamp("revokedAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    index("billing_entitlement_override_user_id_idx").on(table.userId),
+    index("billing_entitlement_override_active_idx").on(
+      table.userId,
+      table.revokedAt,
+      table.expiresAt,
+    ),
+  ],
+);
+
 export const organizationMailUsageEvent = pgTable(
   "organizationMailUsageEvent",
   {
     id: text("id").primaryKey(),
     organizationId: text("organizationId")
       .notNull()
-      .references(() => organization.id),
+      .references(() => organization.id, { onDelete: "cascade" }),
     direction: text("direction").$type<OrganizationMailUsageDirection>().notNull(),
     provider: text("provider").notNull(),
     providerMessageId: text("providerMessageId").notNull(),
@@ -936,10 +970,21 @@ export const organizationMailUsageEvent = pgTable(
   ],
 );
 
+export const rateLimitBucket = pgTable(
+  "rateLimitBucket",
+  {
+    key: text("key").primaryKey(),
+    count: integer("count").notNull(),
+    windowStart: timestamp("windowStart").notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+  },
+  (table) => [index("rate_limit_bucket_expires_at_idx").on(table.expiresAt)],
+);
+
 export const organizationMailUsageSettings = pgTable("organizationMailUsageSettings", {
   organizationId: text("organizationId")
     .primaryKey()
-    .references(() => organization.id),
+    .references(() => organization.id, { onDelete: "cascade" }),
   overageEnabled: boolean("overageEnabled").notNull().default(true),
   monthlyOverageLimitMicroCents: bigint("monthlyOverageLimitMicroCents", {
     mode: "number",
@@ -958,7 +1003,7 @@ export const organizationMailUsageAlertEvent = pgTable(
     id: text("id").primaryKey(),
     organizationId: text("organizationId")
       .notNull()
-      .references(() => organization.id),
+      .references(() => organization.id, { onDelete: "cascade" }),
     periodStart: timestamp("periodStart").notNull(),
     periodEnd: timestamp("periodEnd").notNull(),
     target: text("target").$type<OrganizationMailUsageAlertTarget>().notNull(),
@@ -990,7 +1035,7 @@ export const chat = pgTable(
       .references(() => mailbox.id, { onDelete: "cascade" }),
     userId: text("userId")
       .notNull()
-      .references(() => user.id),
+      .references(() => user.id, { onDelete: "cascade" }),
     title: text("title"),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
@@ -1105,6 +1150,7 @@ export const apikey = pgTable(
 
 export const tables = {
   apikey,
+  billingEntitlementOverride,
   billingSubscription,
   chat,
   chatMessage,
@@ -1115,6 +1161,7 @@ export const tables = {
   account,
   verification,
   passkey,
+  rateLimitBucket,
   member,
   invitation,
   gmailCredential,

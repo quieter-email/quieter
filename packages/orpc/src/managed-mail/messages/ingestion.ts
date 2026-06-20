@@ -78,66 +78,71 @@ export const recordInboundManagedMessage = async (input: {
       parsed,
       deriveThreadId(targetMailbox.id, canonicalRef),
     );
-    const [inserted] = await db
-      .insert(managedMailMessage)
-      .values({
-        bcc: parsed.bcc ?? null,
-        bccNormalized: normalizeManagedSearchValue(parsed.bcc),
-        bodyHtml: parsed.bodyHtml ?? null,
-        bodyText: parsed.bodyText ?? null,
-        cc: parsed.cc ?? null,
-        ccNormalized: normalizeManagedSearchValue(parsed.cc),
-        createdAt: new Date(),
-        direction: "inbound",
-        from: parsed.from,
-        fromNormalized: normalizeManagedSearchValue(parsed.from),
-        headers: parsed.headers,
-        id,
-        inReplyTo: parsed.inReplyTo ?? null,
-        isRead: false,
-        mailboxId: targetMailbox.id,
-        messageHeaderId: parsed.messageHeaderId ?? null,
-        providerMessageId: input.providerMessageId,
-        rawSizeBytes: input.rawSizeBytes,
-        references: parsed.references ?? null,
-        replyTo: parsed.replyTo ?? null,
-        s3Bucket: input.s3Bucket,
-        s3Key: input.s3Key,
-        searchText: createManagedMessageSearchText(parsed),
-        sentAt,
-        snippet: parsed.snippet ?? null,
-        subject: parsed.subject ?? null,
-        threadId,
-        to: parsed.to ?? recipients.join(", "),
-        toNormalized: normalizeManagedSearchValue(parsed.to ?? recipients.join(", ")),
-        updatedAt: new Date(),
-      })
-      .onConflictDoNothing({
-        target: [managedMailMessage.mailboxId, managedMailMessage.providerMessageId],
-      })
-      .returning({
-        id: managedMailMessage.id,
-        mailboxId: managedMailMessage.mailboxId,
-        threadId: managedMailMessage.threadId,
-      });
+    const inserted = await db.transaction(async (tx) => {
+      const [message] = await tx
+        .insert(managedMailMessage)
+        .values({
+          bcc: parsed.bcc ?? null,
+          bccNormalized: normalizeManagedSearchValue(parsed.bcc),
+          bodyHtml: parsed.bodyHtml ?? null,
+          bodyText: parsed.bodyText ?? null,
+          cc: parsed.cc ?? null,
+          ccNormalized: normalizeManagedSearchValue(parsed.cc),
+          createdAt: new Date(),
+          direction: "inbound",
+          from: parsed.from,
+          fromNormalized: normalizeManagedSearchValue(parsed.from),
+          headers: parsed.headers,
+          id,
+          inReplyTo: parsed.inReplyTo ?? null,
+          isRead: false,
+          mailboxId: targetMailbox.id,
+          messageHeaderId: parsed.messageHeaderId ?? null,
+          providerMessageId: input.providerMessageId,
+          rawSizeBytes: input.rawSizeBytes,
+          references: parsed.references ?? null,
+          replyTo: parsed.replyTo ?? null,
+          s3Bucket: input.s3Bucket,
+          s3Key: input.s3Key,
+          searchText: createManagedMessageSearchText(parsed),
+          sentAt,
+          snippet: parsed.snippet ?? null,
+          subject: parsed.subject ?? null,
+          threadId,
+          to: parsed.to ?? recipients.join(", "),
+          toNormalized: normalizeManagedSearchValue(parsed.to ?? recipients.join(", ")),
+          updatedAt: new Date(),
+        })
+        .onConflictDoNothing({
+          target: [managedMailMessage.mailboxId, managedMailMessage.providerMessageId],
+        })
+        .returning({
+          id: managedMailMessage.id,
+          mailboxId: managedMailMessage.mailboxId,
+          threadId: managedMailMessage.threadId,
+        });
 
-    if (inserted) {
-      if (parsed.attachments.length > 0) {
-        await db.insert(managedMailAttachment).values(
+      if (message && parsed.attachments.length > 0) {
+        await tx.insert(managedMailAttachment).values(
           parsed.attachments.map((attachment) => ({
             contentId: attachment.contentId ?? null,
             createdAt: new Date(),
             fileName: attachment.fileName,
             id: randomUUID(),
             inline: attachment.inline,
-            mailboxId: inserted.mailboxId,
-            messageId: inserted.id,
+            mailboxId: message.mailboxId,
+            messageId: message.id,
             mimeType: attachment.mimeType,
             normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
             size: attachment.size,
           })),
         );
       }
+
+      return message;
+    });
+
+    if (inserted) {
       try {
         await inheritManagedThreadLabels({
           mailboxId: inserted.mailboxId,
@@ -158,7 +163,7 @@ export const recordInboundManagedMessage = async (input: {
       insertedMailboxIds.push(inserted.mailboxId);
     } else {
       const [existing] = await db
-        .select({ id: managedMailMessage.id })
+        .select({ id: managedMailMessage.id, threadId: managedMailMessage.threadId })
         .from(managedMailMessage)
         .where(
           and(
@@ -168,6 +173,11 @@ export const recordInboundManagedMessage = async (input: {
         )
         .limit(1);
       if (existing) {
+        await inheritManagedThreadLabels({
+          mailboxId: targetMailbox.id,
+          messageId: existing.id,
+          threadId: existing.threadId,
+        });
         await applyManagedRulesToMessage({
           mailboxId: targetMailbox.id,
           messageId: existing.id,

@@ -22,7 +22,7 @@ import {
   type ChatMessagePart,
   type ChatMessageStatus,
 } from "@quieter/database";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { isCancelRequested, updateAssistantMessage, updateRunStatus } from "../../chat-run-store";
 import { isActiveChatRunStatus, publishChatRunEvent } from "../../chat-run-stream";
 import {
@@ -38,6 +38,7 @@ import { terminalizeFailedChatRun } from "./failure";
 const DRAFT_PERSIST_INTERVAL_MS = 750;
 const CANCEL_POLL_INTERVAL_MS = 1_000;
 const HEARTBEAT_TOUCH_INTERVAL_MS = 5_000;
+const STALE_RUN_CLAIM_MS = 30_000;
 
 /** StreamProcessor may append multiple assistant messages across tool continuations. */
 const getStreamingAssistantParts = (
@@ -81,6 +82,7 @@ export const runChatGeneration = async (runId: string) => {
 
   const model = chatModelSchema.parse(run.model);
   const now = new Date();
+  const staleBefore = new Date(now.getTime() - STALE_RUN_CLAIM_MS);
   const [claimed] = await db
     .update(chatRun)
     .set({
@@ -88,7 +90,19 @@ export const runChatGeneration = async (runId: string) => {
       status: "running",
       updatedAt: now,
     })
-    .where(and(eq(chatRun.id, runId), eq(chatRun.status, "queued")))
+    .where(
+      and(
+        eq(chatRun.id, runId),
+        isNull(chatRun.cancelRequestedAt),
+        or(
+          eq(chatRun.status, "queued"),
+          and(
+            inArray(chatRun.status, ["running", "waiting_on_tool"]),
+            or(isNull(chatRun.lastHeartbeatAt), lt(chatRun.lastHeartbeatAt, staleBefore)),
+          ),
+        ),
+      ),
+    )
     .returning({ id: chatRun.id });
 
   if (!claimed) {
@@ -123,16 +137,21 @@ export const runChatGeneration = async (runId: string) => {
   let cancelled = false;
   let hasPersistedStreamingDraft = false;
   let lastHeartbeatTouchAt = 0;
+  const usageReports: Promise<void>[] = [];
 
   const cancelPoll = setInterval(() => {
-    void isCancelRequested(runId).then((shouldCancel) => {
-      if (!shouldCancel || cancelled) {
-        return;
-      }
+    void isCancelRequested(runId)
+      .then((shouldCancel) => {
+        if (!shouldCancel || cancelled) {
+          return;
+        }
 
-      cancelled = true;
-      abortController.abort();
-    });
+        cancelled = true;
+        abortController.abort();
+      })
+      .catch((error) => {
+        console.error("Could not check chat generation cancellation.", error);
+      });
   }, CANCEL_POLL_INTERVAL_MS);
 
   const drainAssistantDraftPersist = async () => {
@@ -229,19 +248,26 @@ export const runChatGeneration = async (runId: string) => {
   const usageMiddleware: ChatMiddleware = {
     name: "polar-ai-usage",
     onUsage: (_context, usage) => {
-      void reportAiUsage({
-        chatId: run.chatId,
-        completionTokens: usage.completionTokens,
-        model,
-        promptTokens: usage.promptTokens,
-        userId: run.userId,
-      }).catch((error) => {
-        console.error(
-          "Could not report AI usage to Polar.",
-          error instanceof Error ? error.message : "Unknown error.",
-        );
-      });
+      usageReports.push(
+        reportAiUsage({
+          chatId: run.chatId,
+          completionTokens: usage.completionTokens,
+          externalId: `${run.id}:${usageReports.length}`,
+          model,
+          promptTokens: usage.promptTokens,
+          userId: run.userId,
+        }),
+      );
     },
+  };
+
+  const settleUsageReports = async () => {
+    const results = await Promise.allSettled(usageReports);
+    for (const result of results) {
+      if (result.status === "rejected") {
+        console.error("Could not report AI usage.", result.reason);
+      }
+    }
   };
 
   try {
@@ -347,6 +373,7 @@ export const runChatGeneration = async (runId: string) => {
     const terminalStatus = cancelled ? "cancelled" : "complete";
 
     pendingParts = finalParts;
+    await settleUsageReports();
     await flushAssistantDraft(
       cancelled ? "failed" : "complete",
       cancelled ? "Generation cancelled." : null,
@@ -360,6 +387,7 @@ export const runChatGeneration = async (runId: string) => {
       type: "done",
     });
   } catch (error) {
+    await settleUsageReports();
     const message = error instanceof Error ? error.message : "Chat generation failed.";
 
     if (cancelled || abortController.signal.aborted) {

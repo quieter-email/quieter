@@ -48,7 +48,6 @@ export default $config({
     });
     const mailReceiptTopic = new sst.aws.SnsTopic("MailReceiptTopic");
     const mailIngestToken = new sst.Secret("MailIngestToken");
-    const mailSendToken = new sst.Secret("MailSendToken");
 
     const mailReceiptRole = new aws.iam.Role("MailReceiptRole", {
       assumeRolePolicy: $jsonStringify({
@@ -178,7 +177,6 @@ export default $config({
         POLAR_ACCESS_TOKEN: polarAccessToken,
         POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
         POLAR_SANDBOX: polarSandbox,
-        QUIETER_UNLIMITED_BILLING_EMAILS: env.QUIETER_UNLIMITED_BILLING_EMAILS ?? "",
       },
       handler: "packages/aws/src/gmail-live-sync-websocket.handler",
       link: [gmailLiveSyncConnections, gmailLiveSyncTokenSecret],
@@ -225,7 +223,6 @@ export default $config({
             POLAR_ACCESS_TOKEN: polarAccessToken,
             POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
             POLAR_SANDBOX: polarSandbox,
-            QUIETER_UNLIMITED_BILLING_EMAILS: env.QUIETER_UNLIMITED_BILLING_EMAILS ?? "",
           },
           handler: "packages/aws/src/gmail-pubsub-consumer.handler",
           link: [gmailLiveSyncApi, gmailLiveSyncConnections],
@@ -283,19 +280,6 @@ export default $config({
       url: true,
     });
 
-    const mailOutbound = new sst.aws.Function("MailOutbound", {
-      handler: "packages/aws/src/outbound.handler",
-      link: [mailSendToken],
-      permissions: [
-        {
-          actions: ["ses:SendEmail", "ses:SendRawEmail"],
-          resources: ["*"],
-        },
-      ],
-      timeout: "30 seconds",
-      url: true,
-    });
-
     return {
       chatGenerationEnqueueUrl: chatGenerationEnqueue.url,
       chatGenerationStartTokenSecretName: chatGenerationStartToken.name,
@@ -305,12 +289,10 @@ export default $config({
       gmailPubSubPushAudience: gmailPubSubEnvironment.GMAIL_PUBSUB_PUSH_AUDIENCE || null,
       mailBucket: mailBucket.name,
       mailIngressUrl: mailIngress.url,
-      mailOutboundUrl: mailOutbound.url,
       mailIngestTokenSecretName: mailIngestToken.name,
       mailReceiptRoleArn: mailReceiptRole.arn,
       mailReceiptRuleSetName,
       mailReceiptTopicArn: mailReceiptTopic.arn,
-      mailSendTokenSecretName: mailSendToken.name,
       stage: $app.stage,
     };
   },

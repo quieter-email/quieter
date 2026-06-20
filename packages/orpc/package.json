@@ -5,6 +5,7 @@
   "exports": {
     ".": "./src/client.ts",
     "./context": "./src/context.ts",
+    "./abuse-protection": "./src/abuse-protection.ts",
     "./errors": "./src/errors.ts",
     "./mailbox": "./src/mailbox/service.ts",
     "./mail-domain": "./src/mail-domain/service.ts",

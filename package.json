@@ -83,9 +83,6 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"
   },
-  "dependencies": {
-    "@neondatabase/serverless": "^1.1.0"
-  },
   "devDependencies": {
     "@quieter/env": "workspace:*",
     "eslint-plugin-better-tailwindcss": "4.5.0",

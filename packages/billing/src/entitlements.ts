@@ -1,51 +1,124 @@
 import { ORPCError } from "@orpc/server";
 import {
+  billingEntitlementOverride,
   billingSubscription,
   db,
   member,
-  user,
+  organization,
   type BillingSubscriptionStatus,
 } from "@quieter/database";
-import { serverEnv } from "@quieter/env/server";
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
 import {
   BILLING_FEATURES,
-  BILLING_PLAN_ORDER,
   hasBillingPlanAccess,
   type BillingFeature,
   type BillingPlan,
   type PaidBillingPlan,
 } from "./plans";
 
-const ACTIVE_BILLING_STATUSES = new Set<BillingSubscriptionStatus>([
-  "active",
-  "past_due",
-  "pending",
-  "trialing",
-]);
-const BUILT_IN_UNLIMITED_EMAILS = ["riefel.leander@gmail.com"];
-
-const unlimitedBillingEmails = () =>
-  new Set(
-    [...BUILT_IN_UNLIMITED_EMAILS, ...(serverEnv.QUIETER_UNLIMITED_BILLING_EMAILS ?? "").split(",")]
-      .map((email) => email.trim().toLowerCase())
-      .filter(Boolean),
-  );
+const ACTIVE_BILLING_STATUSES = new Set<BillingSubscriptionStatus>(["active", "trialing"]);
 
 export const isActiveBillingStatus = (status: BillingSubscriptionStatus) =>
   ACTIVE_BILLING_STATUSES.has(status);
 
-export const hasUnlimitedBillingAccess = async (userId: string) => {
-  const [matchedUser] = await db
-    .select({ email: user.email })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1);
-
-  return matchedUser ? unlimitedBillingEmails().has(matchedUser.email.toLowerCase()) : false;
+type OrganizationBillingOwnerRepository = {
+  assignBillingOwnerId: (input: {
+    organizationId: string;
+    userId: string;
+  }) => Promise<string | null>;
+  getBillingOwnerId: (organizationId: string) => Promise<string | null>;
+  getFirstOwnerId: (organizationId: string) => Promise<string | null>;
 };
 
+type OrganizationSubscription = {
+  currentPeriodEnd: Date;
+  currentPeriodStart: Date;
+  plan: PaidBillingPlan;
+  status: BillingSubscriptionStatus;
+  updatedAt: Date;
+};
+
+export const resolveOrganizationBillingOwnerId = async (
+  organizationId: string,
+  repository: OrganizationBillingOwnerRepository,
+) => {
+  const currentBillingOwnerId = await repository.getBillingOwnerId(organizationId);
+  if (currentBillingOwnerId) return currentBillingOwnerId;
+
+  const firstOwnerId = await repository.getFirstOwnerId(organizationId);
+  if (!firstOwnerId) return null;
+
+  const assignedBillingOwnerId = await repository.assignBillingOwnerId({
+    organizationId,
+    userId: firstOwnerId,
+  });
+  if (assignedBillingOwnerId) return assignedBillingOwnerId;
+
+  return await repository.getBillingOwnerId(organizationId);
+};
+
+export const resolveOrganizationBillingEntitlement = (input: {
+  billingOwnerId: string;
+  overridePlan: PaidBillingPlan | null;
+  requiredPlan: PaidBillingPlan;
+  subscriptions: OrganizationSubscription[];
+}) => {
+  if (input.overridePlan) {
+    return {
+      billingUserId: input.billingOwnerId,
+      currentPeriodEnd: null,
+      currentPeriodStart: null,
+      hasAccess: hasBillingPlanAccess(input.overridePlan, input.requiredPlan),
+      hasUnlimitedAccess: true,
+      plan: input.overridePlan,
+      requiredPlan: input.requiredPlan,
+    };
+  }
+
+  const subscription =
+    input.subscriptions.find(
+      (row) =>
+        isActiveBillingStatus(row.status) && hasBillingPlanAccess(row.plan, input.requiredPlan),
+    ) ?? null;
+
+  return {
+    billingUserId: subscription ? input.billingOwnerId : null,
+    currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
+    currentPeriodStart: subscription?.currentPeriodStart ?? null,
+    hasAccess: !!subscription,
+    hasUnlimitedAccess: false,
+    plan: subscription?.plan ?? null,
+    requiredPlan: input.requiredPlan,
+  };
+};
+
+const getActiveOverride = async (userId: string) => {
+  const [override] = await db
+    .select({ plan: billingEntitlementOverride.plan })
+    .from(billingEntitlementOverride)
+    .where(
+      and(
+        eq(billingEntitlementOverride.userId, userId),
+        isNull(billingEntitlementOverride.revokedAt),
+        or(
+          isNull(billingEntitlementOverride.expiresAt),
+          gt(billingEntitlementOverride.expiresAt, new Date()),
+        ),
+      ),
+    )
+    .orderBy(desc(billingEntitlementOverride.updatedAt))
+    .limit(1);
+
+  return override ?? null;
+};
+
+export const hasUnlimitedBillingAccess = async (userId: string) =>
+  !!(await getActiveOverride(userId));
+
 export const getUserBillingPlan = async (userId: string): Promise<BillingPlan> => {
+  const override = await getActiveOverride(userId);
+  if (override) return override.plan;
+
   const rows = await db
     .select({
       plan: billingSubscription.plan,
@@ -55,9 +128,9 @@ export const getUserBillingPlan = async (userId: string): Promise<BillingPlan> =
     .from(billingSubscription)
     .where(eq(billingSubscription.userId, userId))
     .orderBy(desc(billingSubscription.updatedAt));
-  const subscription = rows.find((row) => isActiveBillingStatus(row.status)) ?? rows[0] ?? null;
+  const subscription = rows.find((row) => isActiveBillingStatus(row.status)) ?? null;
 
-  return subscription && isActiveBillingStatus(subscription.status) ? subscription.plan : "free";
+  return subscription?.plan ?? "free";
 };
 
 export const hasUserBillingFeature = async (input: { feature: BillingFeature; userId: string }) => {
@@ -93,23 +166,39 @@ export const assertUserBillingFeature = async (input: {
   return result;
 };
 
-const getOrganizationBillingOwnerIds = async (organizationId: string) => {
-  const memberships = await db
-    .select({
-      role: member.role,
-      userId: member.userId,
-    })
-    .from(member)
-    .where(eq(member.organizationId, organizationId));
+const getOrganizationBillingOwnerId = async (organizationId: string) => {
+  return await resolveOrganizationBillingOwnerId(organizationId, {
+    assignBillingOwnerId: async (input) => {
+      const [assigned] = await db
+        .update(organization)
+        .set({ billingOwnerUserId: input.userId, updatedAt: new Date() })
+        .where(
+          and(eq(organization.id, input.organizationId), isNull(organization.billingOwnerUserId)),
+        )
+        .returning({ billingOwnerUserId: organization.billingOwnerUserId });
 
-  return memberships
-    .filter((membership) =>
-      membership.role
-        .split(",")
-        .map((part) => part.trim().toLowerCase())
-        .some((part) => part === "admin" || part === "owner"),
-    )
-    .map((membership) => membership.userId);
+      return assigned?.billingOwnerUserId ?? null;
+    },
+    getBillingOwnerId: async (id) => {
+      const [record] = await db
+        .select({ billingOwnerUserId: organization.billingOwnerUserId })
+        .from(organization)
+        .where(eq(organization.id, id))
+        .limit(1);
+
+      return record?.billingOwnerUserId ?? null;
+    },
+    getFirstOwnerId: async (id) => {
+      const [owner] = await db
+        .select({ userId: member.userId })
+        .from(member)
+        .where(and(eq(member.organizationId, id), eq(member.role, "owner")))
+        .orderBy(member.createdAt)
+        .limit(1);
+
+      return owner?.userId ?? null;
+    },
+  });
 };
 
 export const getOrganizationBillingEntitlement = async (input: {
@@ -117,9 +206,9 @@ export const getOrganizationBillingEntitlement = async (input: {
   organizationId: string;
 }) => {
   const requiredPlan = BILLING_FEATURES[input.feature].requiredPlan;
-  const billingOwnerIds = await getOrganizationBillingOwnerIds(input.organizationId);
+  const billingOwnerId = await getOrganizationBillingOwnerId(input.organizationId);
 
-  if (billingOwnerIds.length === 0) {
+  if (!billingOwnerId) {
     return {
       billingUserId: null,
       currentPeriodEnd: null,
@@ -131,20 +220,14 @@ export const getOrganizationBillingEntitlement = async (input: {
     };
   }
 
-  const unlimitedAccessChecks = await Promise.all(
-    billingOwnerIds.map((userId) => hasUnlimitedBillingAccess(userId)),
-  );
-
-  if (unlimitedAccessChecks.some(Boolean)) {
-    return {
-      billingUserId: billingOwnerIds[unlimitedAccessChecks.findIndex(Boolean)] ?? null,
-      currentPeriodEnd: null,
-      currentPeriodStart: null,
-      hasAccess: true,
-      hasUnlimitedAccess: true,
-      plan: null,
+  const override = await getActiveOverride(billingOwnerId);
+  if (override) {
+    return resolveOrganizationBillingEntitlement({
+      billingOwnerId,
+      overridePlan: override.plan,
       requiredPlan,
-    };
+      subscriptions: [],
+    });
   }
 
   const rows = await db
@@ -154,34 +237,17 @@ export const getOrganizationBillingEntitlement = async (input: {
       plan: billingSubscription.plan,
       status: billingSubscription.status,
       updatedAt: billingSubscription.updatedAt,
-      userId: billingSubscription.userId,
     })
     .from(billingSubscription)
-    .where(inArray(billingSubscription.userId, billingOwnerIds))
+    .where(eq(billingSubscription.userId, billingOwnerId))
     .orderBy(desc(billingSubscription.updatedAt));
-  const activeRows = rows.filter((row) => isActiveBillingStatus(row.status));
-  const eligibleRows = activeRows
-    .filter((row) => hasBillingPlanAccess(row.plan, requiredPlan))
-    .sort((left, right) => {
-      const planDelta =
-        BILLING_PLAN_ORDER[right.plan as PaidBillingPlan] -
-        BILLING_PLAN_ORDER[left.plan as PaidBillingPlan];
 
-      if (planDelta !== 0) return planDelta;
-
-      return right.updatedAt.getTime() - left.updatedAt.getTime();
-    });
-  const subscription = eligibleRows[0] ?? null;
-
-  return {
-    billingUserId: subscription?.userId ?? null,
-    currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
-    currentPeriodStart: subscription?.currentPeriodStart ?? null,
-    hasAccess: !!subscription,
-    hasUnlimitedAccess: false,
-    plan: subscription?.plan ?? null,
+  return resolveOrganizationBillingEntitlement({
+    billingOwnerId,
+    overridePlan: null,
     requiredPlan,
-  };
+    subscriptions: rows,
+  });
 };
 
 export const organizationHasBillingFeature = async (input: {

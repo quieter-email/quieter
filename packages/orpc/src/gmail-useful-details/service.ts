@@ -558,8 +558,8 @@ export const processGmailUsefulDetailMessage = async ({
       event = processed ?? event;
     } else {
       const encryptedCode = detail.code ? encryptSecret(detail.code) : null;
-      await db.batch([
-        db
+      await db.transaction(async (tx) => {
+        await tx
           .insert(gmailUsefulDetail)
           .values({
             carrier: detail.carrier,
@@ -612,9 +612,20 @@ export const processGmailUsefulDetailMessage = async ({
               gmailUsefulDetail.kind,
               gmailUsefulDetail.dedupeKey,
             ],
-          }),
-        eventUpdate,
-      ]);
+          });
+        await tx
+          .update(gmailUsefulDetailEvent)
+          .set({
+            completionTokens,
+            lastError: null,
+            model: GMAIL_USEFUL_DETAIL_MODEL,
+            nextAttemptAt: null,
+            processedAt: now,
+            promptTokens,
+            updatedAt: now,
+          })
+          .where(eq(gmailUsefulDetailEvent.id, event.id));
+      });
       event = {
         ...event,
         completionTokens,

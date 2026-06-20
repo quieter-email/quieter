@@ -26,8 +26,8 @@ export const createManagedMailbox = async (input: {
 
   const mailboxId = randomUUID();
   const now = new Date();
-  await db.batch([
-    db.insert(mailbox).values({
+  await db.transaction(async (tx) => {
+    await tx.insert(mailbox).values({
       createdAt: now,
       displayName: input.displayName?.trim() || null,
       emailAddress: normalizeEmailAddress(input.emailAddress),
@@ -37,16 +37,16 @@ export const createManagedMailbox = async (input: {
       provider: MAILBOX_PROVIDER_MANAGED,
       status: "connected",
       updatedAt: now,
-    }),
-    db.insert(mailboxGrant).values({
+    });
+    await tx.insert(mailboxGrant).values({
       createdAt: now,
       id: randomUUID(),
       mailboxId,
       role: "manager",
       updatedAt: now,
       userId: input.userId,
-    }),
-  ]);
+    });
+  });
   return { mailboxId };
 };
 

@@ -28,8 +28,6 @@ export const ensureChatRunGeneration = (runId: string) => {
 };
 
 export const handoffChatRunToBackground = (runId: string) => {
-  if (inFlightGenerations.has(runId)) return;
-
   void enqueueChatRun(runId).catch((error) => {
     console.error("Could not hand off chat generation to the background worker.", error);
     return ensureChatRunGeneration(runId);
@@ -39,7 +37,7 @@ export const handoffChatRunToBackground = (runId: string) => {
 export const enqueueChatRun = async (runId: string) => {
   const startUrl = serverEnv.CHAT_GENERATION_START_URL;
   if (!startUrl) {
-    void ensureChatRunGeneration(runId);
+    await ensureChatRunGeneration(runId);
     return;
   }
 

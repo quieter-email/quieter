@@ -4,9 +4,6 @@
   "workspaces": {
     "": {
       "name": "quieter",
-      "dependencies": {
-        "@neondatabase/serverless": "^1.1.0",
-      },
       "devDependencies": {
         "@quieter/env": "workspace:*",
         "eslint-plugin-better-tailwindcss": "4.5.0",
@@ -202,7 +199,6 @@
     "packages/database": {
       "name": "@quieter/database",
       "dependencies": {
-        "@neondatabase/serverless": "^1.1.0",
         "@quieter/env": "workspace:*",
         "drizzle-orm": "catalog:",
         "postgres": "^3.4.7",
