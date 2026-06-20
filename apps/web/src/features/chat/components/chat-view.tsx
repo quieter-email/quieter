@@ -379,7 +379,7 @@ export const ChatView = ({
   };
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden border-l">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <header className="flex min-h-14 items-center px-3 lg:hidden">
         <Button onClick={onOpenSidebar} size="sm" type="button" variant="ghost">
           Sidebar

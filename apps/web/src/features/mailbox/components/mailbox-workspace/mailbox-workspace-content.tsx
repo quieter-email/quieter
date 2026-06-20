@@ -165,7 +165,7 @@ export const MailboxWorkspaceContent = ({
   selectedView,
 }: MailboxWorkspaceContentProps) => (
   <LazyMotion features={domAnimation}>
-    <main className="quieter-workspace-background relative isolate flex h-dvh min-h-0 flex-col overflow-hidden text-foreground">
+    <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-background-dark text-foreground">
       <WorkspaceDitherBackground />
       <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
         {selectedMailboxId && (
@@ -207,7 +207,7 @@ export const MailboxWorkspaceContent = ({
           ) : selectedView === "chat" ? (
             <m.div
               key={`chat-${chatId ?? draftChatKey}`}
-              className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden bg-transparent"
+              className="absolute inset-1.5 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border bg-background/60"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.08, ease: "linear" }}
@@ -222,7 +222,7 @@ export const MailboxWorkspaceContent = ({
               />
             </m.div>
           ) : (
-            <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden bg-transparent lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+            <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
               {selectedMailboxNeedsReconnect ? (
                 <section className="flex min-h-0 flex-1 items-center justify-center bg-background px-8">
                   <m.div className="max-w-md space-y-3 text-center" {...workspaceContentMotion}>

@@ -27,4 +27,9 @@ I want to create something like resend, but not just for programmatic sending. W
   - For example, engineers, marketing, sales, etc.
   - Then you can for example have social@quieter.email which only the social media team can access, support@quieter.email for support etc.
   - Then one team can share emails inside a mailbox with other teams, maybe even without forwarding them, just on our platform, need for find out the right ergonomics where these would then show up
-  -
+
+UPDATE BILLING
+Personal and team billing are separate things.
+Everything is credits, ai, mails, etc.
+Personal you can buy $10 worth of credits for $10 and unlock ai.
+Team you can buy $10 worth of credits and unlock managed or $20 worth of credits and unlock ai too.
