@@ -127,23 +127,14 @@ export const handler = async (event: SnsEvent) => {
       });
 
       console.info("Processed SES receipt notification.", {
-        mailFrom: notification.mail?.source?.trim() || null,
-        mailboxIds,
-        messageIdHeader: notification.mail?.commonHeaders?.messageId?.trim() || null,
-        providerMessageId,
+        mailboxCount: mailboxIds.length,
+        messageSizeBytes,
         receivedAt,
-        recipients,
-        s3Bucket: Resource.MailBucket.name,
-        s3Key,
         stored,
-        subject: notification.mail?.commonHeaders?.subject?.trim() || null,
       });
     } catch (error) {
       console.error("Failed to process SES receipt record.", {
-        error,
-        providerMessageId,
-        recipients,
-        s3Key,
+        errorName: error instanceof Error ? error.name : "UnknownError",
       });
       throw error;
     }

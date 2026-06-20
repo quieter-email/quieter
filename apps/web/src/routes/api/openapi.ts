@@ -79,7 +79,7 @@ const openApiDocument = {
       },
       ErrorResponse: {
         type: "object",
-        additionalProperties: true,
+        additionalProperties: false,
         required: ["error"],
         properties: {
           error: {
@@ -158,7 +158,7 @@ export const Route = createFileRoute("/api/openapi")({
       GET: async () =>
         Response.json(openApiDocument, {
           headers: {
-            "cache-control": "public, max-age=300",
+            "cache-control": "no-store",
           },
         }),
     },

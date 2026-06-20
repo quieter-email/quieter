@@ -18,7 +18,7 @@ export function getRouter() {
       enableLogs: false,
       environment: import.meta.env.MODE,
       sendDefaultPii: false,
-      tracesSampleRate: 0,
+      tracesSampleRate: 0.05,
     });
   }
 
