@@ -6,6 +6,17 @@ export const Route = createFileRoute("/api/waitlist")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
+        const acceptsFormData =
+          contentType.startsWith("application/x-www-form-urlencoded") ||
+          contentType.startsWith("multipart/form-data");
+        if (!acceptsFormData) {
+          return Response.json(
+            { message: "Submit the waitlist form using form data." },
+            { status: 415 },
+          );
+        }
+
         const formData = await request.formData();
         const email = z.email().trim().safeParse(formData.get("email"));
         const wantsJson = (request.headers.get("accept") ?? "").includes("application/json");
