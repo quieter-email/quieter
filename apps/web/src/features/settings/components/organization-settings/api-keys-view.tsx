@@ -484,7 +484,7 @@ export const ApiKeysView = ({
   const manageApiKeysReason =
     (billingAccessUnknown && "Could not load billing access.") ||
     (!canUseOrganizationApiKeys &&
-      `Creating API keys requires the ${BILLING_FEATURES.organizationApiKeys.requiredPlan} plan.`) ||
+      `Creating API keys requires ${BILLING_FEATURES.organizationApiKeys.requirementLabel} billing.`) ||
     (!canManageApiKeys && "Only admins and owners can create API keys.") ||
     null;
 

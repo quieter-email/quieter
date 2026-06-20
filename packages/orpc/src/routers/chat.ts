@@ -141,7 +141,7 @@ const assertCanRunChatGeneration = async (input: {
 
   if (!entitlement.hasAccess) {
     throw new ORPCError("FORBIDDEN", {
-      message: `AI chat requires the ${BILLING_FEATURES.aiChat.requiredPlan} plan.`,
+      message: `AI chat requires ${BILLING_FEATURES.aiChat.requirementLabel}.`,
     });
   }
 
@@ -321,7 +321,7 @@ export const chatRouter = {
 
       if (!entitlement.hasAccess) {
         throw new ORPCError("FORBIDDEN", {
-          message: `AI chat requires the ${BILLING_FEATURES.aiChat.requiredPlan} plan.`,
+          message: `AI chat requires ${BILLING_FEATURES.aiChat.requirementLabel}.`,
         });
       }
 
@@ -336,6 +336,7 @@ export const chatRouter = {
             reportAiUsage({
               chatId: authorizedChat.id,
               completionTokens: usage.completionTokens,
+              mailboxId: input.mailboxId,
               model: "openai/gpt-5-nano",
               promptTokens: usage.promptTokens,
               userId: context.userId,

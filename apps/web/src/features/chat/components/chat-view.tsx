@@ -4,17 +4,13 @@ import type { ChatMessagePart } from "@quieter/database";
 import type { RouterOutputs } from "@quieter/orpc";
 import type { UIMessage } from "@tanstack/ai";
 import { defaultChatModel, type ChatModel } from "@quieter/ai";
-import { BILLING_FEATURES, hasBillingPlanAccess } from "@quieter/billing/plans";
+import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { Button, toast } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { LayoutGroup } from "motion/react";
 import { type FormEvent, type KeyboardEvent, useRef, useState } from "react";
-import {
-  formatBillingPlan,
-  normalizeBillingPlan,
-  userBillingQueryOptions,
-} from "~/features/settings/domain/billing";
+import { hasPersonalAiAccess, userBillingQueryOptions } from "~/features/settings/domain/billing";
 import { chatQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-query";
 import { orpc } from "~/lib/orpc";
 import { queryPersister } from "~/lib/query-persister";
@@ -231,10 +227,8 @@ export const ChatView = ({
     editUserMessageMutation.isPending ||
     regenerateResponseMutation.isPending ||
     resolveComposeToolMutation.isPending;
-  const currentPlan = normalizeBillingPlan(billing?.plan);
   const aiRequirement = BILLING_FEATURES.aiChat;
-  const canUseAiChat =
-    !!billing?.hasUnlimitedAccess || hasBillingPlanAccess(currentPlan, aiRequirement.requiredPlan);
+  const canUseAiChat = hasPersonalAiAccess(billing);
   const composerDisabled = isBillingPending || !canUseAiChat;
   const errorMessage = activeRun?.error ?? chatData?.messages.at(-1)?.error ?? undefined;
 
@@ -405,10 +399,7 @@ export const ChatView = ({
               <div className="w-full px-4 pb-5">
                 <div className="mx-auto w-full max-w-2xl">
                   {!canUseAiChat && !isBillingPending && (
-                    <PlanRequiredBlock
-                      currentPlan={currentPlan}
-                      requiredPlan={aiRequirement.requiredPlan}
-                    />
+                    <PlanRequiredBlock requirementLabel={aiRequirement.requirementLabel} />
                   )}
                   <ChatComposer
                     busy={isComposerLoading}
@@ -429,10 +420,7 @@ export const ChatView = ({
             <div className="flex min-h-0 flex-1 items-center justify-center px-4">
               <div className="w-full max-w-xl">
                 {!canUseAiChat && !isBillingPending && (
-                  <PlanRequiredBlock
-                    currentPlan={currentPlan}
-                    requiredPlan={aiRequirement.requiredPlan}
-                  />
+                  <PlanRequiredBlock requirementLabel={aiRequirement.requirementLabel} />
                 )}
                 <ChatComposer
                   busy={isComposerLoading}
@@ -455,21 +443,14 @@ export const ChatView = ({
   );
 };
 
-const PlanRequiredBlock = ({
-  currentPlan,
-  requiredPlan,
-}: {
-  currentPlan: Parameters<typeof formatBillingPlan>[0];
-  requiredPlan: "managed" | "pro";
-}) => {
+const PlanRequiredBlock = ({ requirementLabel }: { requirementLabel: string }) => {
   const navigate = useNavigate();
 
   return (
     <div className="mb-3 rounded-lg border border-border/70 bg-secondary/35 p-3 text-sm">
       <p className="font-medium text-foreground">Upgrade required</p>
       <p className="mt-1 text-muted-foreground">
-        AI chat requires {formatBillingPlan(requiredPlan)}. Your current plan is{" "}
-        {formatBillingPlan(currentPlan)}.
+        AI chat requires {requirementLabel} billing with available credits.
       </p>
       <Button
         className="mt-3"

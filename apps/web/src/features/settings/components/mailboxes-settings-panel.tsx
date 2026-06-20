@@ -8,7 +8,6 @@ import {
   PinOffIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { BILLING_FEATURES, hasBillingPlanAccess } from "@quieter/billing/plans";
 import {
   Button,
   Select,
@@ -26,7 +25,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { MailboxSettingsRow } from "~/features/navigation/components/mailbox-switcher";
 import { organizationMailDomainsQueryOptions } from "~/features/settings/components/organization-settings/mail-domains";
-import { normalizeBillingPlan, userBillingQueryOptions } from "~/features/settings/domain/billing";
+import { hasPersonalAiAccess, userBillingQueryOptions } from "~/features/settings/domain/billing";
 import { authClient } from "~/lib/auth";
 import { openGoogleAccountLink } from "~/lib/google-account-link";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
@@ -51,11 +50,7 @@ export const MailboxesSettingsPanel = () => {
     isError: isMailboxesError,
   } = useQuery(mailboxesQueryOptions());
   const { data: billing, isSuccess: isBillingSuccess } = useQuery(userBillingQueryOptions());
-  const currentPlan = normalizeBillingPlan(billing?.plan);
-  const hasGmailAutomationAccess =
-    isBillingSuccess &&
-    (!!billing?.hasUnlimitedAccess ||
-      hasBillingPlanAccess(currentPlan, BILLING_FEATURES.gmailAutomation.requiredPlan));
+  const hasGmailAutomationAccess = isBillingSuccess && hasPersonalAiAccess(billing);
   const groups = mailboxesData?.groups ?? [];
   const gmailGroups = groups.map((group) => ({
     ...group,

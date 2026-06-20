@@ -349,6 +349,7 @@ const getOrCreateEvent = async (mailboxId: string, gmailMessageId: string) => {
 const reportUsage = async (event: {
   completionTokens: number | null;
   id: string;
+  mailboxId: string;
   model: string | null;
   promptTokens: number | null;
   usageReportedAt: Date | null;
@@ -367,6 +368,7 @@ const reportUsage = async (event: {
     await reportAiUsage({
       completionTokens: event.completionTokens,
       externalId: event.id,
+      mailboxId: event.mailboxId,
       model: GMAIL_USEFUL_DETAIL_MODEL,
       promptTokens: event.promptTokens,
       userId: event.userId,
@@ -705,7 +707,7 @@ export const reportPendingGmailUsefulDetailUsage = async (mailboxId: string, use
     .limit(100);
 
   for (const event of events) {
-    await reportUsage({ ...event, userId });
+    await reportUsage({ ...event, mailboxId, userId });
   }
 };
 

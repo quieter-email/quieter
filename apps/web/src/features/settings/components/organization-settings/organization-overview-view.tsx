@@ -86,7 +86,7 @@ export const OrganizationOverviewView = ({
   const domainsSummary = billingAccessUnknown
     ? "Could not load billing access."
     : !canUseOrganizationDomains
-      ? `Requires ${BILLING_FEATURES.organizationDomains.requiredPlan}`
+      ? `Requires ${BILLING_FEATURES.organizationDomains.requirementLabel}`
       : domainsQuery.isPending
         ? "Loading domains…"
         : domainsQuery.isError
@@ -95,7 +95,7 @@ export const OrganizationOverviewView = ({
   const apiKeysSummary = billingAccessUnknown
     ? "Could not load billing access."
     : !canUseOrganizationApiKeys
-      ? `Requires ${BILLING_FEATURES.organizationApiKeys.requiredPlan}`
+      ? `Requires ${BILLING_FEATURES.organizationApiKeys.requirementLabel}`
       : apiKeysQuery.isPending
         ? "Loading API keys…"
         : apiKeysQuery.isError

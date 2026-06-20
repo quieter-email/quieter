@@ -77,7 +77,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
                 </Button>
               </IconButtonTooltip>
               <span className="text-sm font-semibold text-foreground capitalize">
-                {tab === "plan" ? "Billing Plan" : `${tab} Settings`}
+                {tab === "plan" ? "Billing" : `${tab} Settings`}
               </span>
             </div>
 

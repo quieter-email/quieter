@@ -139,6 +139,7 @@ const releaseMailboxProcessingLease = async (mailboxId: string, leaseId: string)
 const reportAutoLabelUsage = async (event: {
   completionTokens: number | null;
   id: string;
+  mailboxId: string;
   model: string | null;
   promptTokens: number | null;
   usageReportedAt: Date | null;
@@ -157,6 +158,7 @@ const reportAutoLabelUsage = async (event: {
     await reportAiUsage({
       completionTokens: event.completionTokens,
       externalId: event.id,
+      mailboxId: event.mailboxId,
       model: GMAIL_AUTO_LABEL_MODEL,
       promptTokens: event.promptTokens,
       userId: event.userId,
@@ -200,7 +202,7 @@ const reportPendingAutoLabelUsage = async (mailboxId: string, userId: string) =>
     .limit(100);
 
   for (const event of events) {
-    await reportAutoLabelUsage({ ...event, userId });
+    await reportAutoLabelUsage({ ...event, mailboxId, userId });
   }
 };
 

@@ -209,7 +209,7 @@ export const DomainsView = ({
   const manageDomainsReason =
     (billingAccessUnknown && "Could not load billing access.") ||
     (!canUseOrganizationDomains &&
-      `Registering domains requires the ${BILLING_FEATURES.organizationDomains.requiredPlan} plan.`) ||
+      `Registering domains requires ${BILLING_FEATURES.organizationDomains.requirementLabel} billing.`) ||
     (!canManageDomains && "Only admins and owners can register organization domains.") ||
     null;
 

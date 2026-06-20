@@ -1,7 +1,9 @@
+import { ORPCError } from "@orpc/server";
 import { createBillingCheckout, getBillingOverview } from "@quieter/billing";
-import { paidBillingPlanSchema } from "@quieter/billing/plans";
+import { BILLING_PRODUCTS, billingProductIdSchema } from "@quieter/billing/plans";
 import { z } from "zod";
 import { getRequestHeaders } from "../context";
+import { assertUserCanManageOrganizationSettings } from "../mail-domain/service";
 import { protectedProcedure } from "./base";
 
 export const billingRouter = {
@@ -15,17 +17,31 @@ export const billingRouter = {
   createCheckout: protectedProcedure
     .input(
       z.object({
-        plan: paidBillingPlanSchema,
+        organizationId: z.string().trim().min(1).optional(),
+        product: billingProductIdSchema,
       }),
     )
-    .handler(
-      async ({ context, input }) =>
-        await createBillingCheckout({
-          customerEmail: context.user.email,
-          customerName: context.user.name,
-          headers: getRequestHeaders(context),
-          plan: input.plan,
+    .handler(async ({ context, input }) => {
+      if (BILLING_PRODUCTS[input.product].scope === "team") {
+        if (!input.organizationId) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "Choose an organization for team billing.",
+          });
+        }
+
+        await assertUserCanManageOrganizationSettings({
+          organizationId: input.organizationId,
           userId: context.userId,
-        }),
-    ),
+        });
+      }
+
+      return await createBillingCheckout({
+        customerEmail: context.user.email,
+        customerName: context.user.name,
+        headers: getRequestHeaders(context),
+        organizationId: input.organizationId,
+        product: input.product,
+        userId: context.userId,
+      });
+    }),
 };

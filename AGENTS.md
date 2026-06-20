@@ -91,12 +91,12 @@
 ## Billing
 
 - Pricing and checkout use PayKit with Polar.
-- Subscriptions are user-scoped in `billingSubscription`; checkout metadata must include the Quieter user id and plan so Polar webhooks can reconcile the subscription.
-- Paid plans are `managed` and `pro`. Gmail and BYOK remain available without checkout.
+- Personal and team billing are separate. `billingSubscription.scope` is `personal` or `team`; team subscriptions point directly at an organization while `userId` records the purchaser.
+- Paid products are `personal`, `team`, and `team_ai`. Personal costs $10/month and provides $10 personal credits plus AI access. Team costs $10/month and provides $10 organization credits plus managed mail. Team + AI costs $20/month and provides $20 organization credits plus managed mail and AI for members. Gmail and BYOK remain available without checkout.
 - Organizations persist one stable billing owner. Administrative/test entitlements use audited
   `billingEntitlementOverride` rows rather than source-controlled email bypasses.
-- Managed and Pro Polar products are defined in code and synced through PayKit/Polar at checkout. The Polar webhook posts to `/api/billing/polar-webhook` and uses `POLAR_WEBHOOK_SECRET`.
-- Organization mail SES usage is metered in `organizationMailUsageEvent`. Managed and Pro include $10 raw SES usage per billing period; overage events are sent to Polar at SES + 5% for Managed and SES + 2% for Pro.
+- Polar products are defined in code and synced through PayKit/Polar at checkout. Checkout metadata must include the Quieter user id, billing scope, product, and organization id for team billing. The Polar webhook posts to `/api/billing/polar-webhook` and uses `POLAR_WEBHOOK_SECRET`.
+- AI and managed-mail costs consume the same scoped balance through `billingCreditUsageEvent`. Personal usage can consume only personal credits; organization usage can consume only that organization’s credits. Overage events are sent to Polar only after the scoped monthly credits are exhausted. Managed-mail costs use the existing 5% Team or 2% Team + AI service markup.
 
 ## Schema + Generated Files
 

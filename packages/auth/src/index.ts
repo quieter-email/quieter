@@ -1,7 +1,7 @@
 import { apiKey } from "@better-auth/api-key";
 import { passkey } from "@better-auth/passkey";
-import { hasUserBillingFeature } from "@quieter/billing/entitlements";
-import { BILLING_FEATURES, type PaidBillingPlan } from "@quieter/billing/plans";
+import { getOrganizationBillingEntitlement } from "@quieter/billing/entitlements";
+import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { db, tables } from "@quieter/database";
 import { serverEnv } from "@quieter/env/server";
 import { betterAuth } from "better-auth";
@@ -86,13 +86,22 @@ export const auth = betterAuth({
 
       if (ctx.path === "/api-key/create") {
         const requirement = BILLING_FEATURES.organizationApiKeys;
-        const entitlement = await hasUserBillingFeature({
-          feature: "organizationApiKeys",
-          userId: currentSession.user.id,
-        });
+        const organizationId =
+          ctx.body &&
+          typeof ctx.body === "object" &&
+          "organizationId" in ctx.body &&
+          typeof ctx.body.organizationId === "string"
+            ? ctx.body.organizationId
+            : null;
+        const entitlement = organizationId
+          ? await getOrganizationBillingEntitlement({
+              feature: "organizationApiKeys",
+              organizationId,
+            })
+          : null;
 
-        if (!entitlement.hasAccess) {
-          throwPlanRequiredError(requirement.requiredPlan, requirement.description);
+        if (!entitlement?.hasAccess) {
+          throwPlanRequiredError(requirement.requirementLabel, requirement.description);
         }
       }
 
@@ -210,8 +219,8 @@ export const auth = betterAuth({
 
 export { GOOGLE_AUTH_SCOPES };
 
-const throwPlanRequiredError = (plan: PaidBillingPlan, description: string) => {
+const throwPlanRequiredError = (plan: string, description: string) => {
   throw new APIError("FORBIDDEN", {
-    message: `${description} requires the ${plan} plan.`,
+    message: `${description} requires ${plan} billing.`,
   });
 };
