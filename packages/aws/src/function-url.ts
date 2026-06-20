@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "node:crypto";
+
 export type LambdaFunctionUrlEvent = {
   body?: string | null;
   headers?: Record<string, string | undefined> | null;
@@ -36,6 +38,19 @@ export const getBearerToken = (headers: Record<string, string | undefined> | nul
   }
 
   return authorization.slice("Bearer ".length).trim() || null;
+};
+
+export const bearerTokenMatches = (actual: string | null, expected: string) => {
+  if (!actual) {
+    return false;
+  }
+
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+
+  return (
+    actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer)
+  );
 };
 
 export const parseEventJson = (event: LambdaFunctionUrlEvent) => {

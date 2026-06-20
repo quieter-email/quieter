@@ -119,11 +119,18 @@ const parseManagedPageCursor = (pageToken: string | undefined) => {
       id?: unknown;
       sentAt?: unknown;
     };
-    if (typeof parsed.id !== "string" || typeof parsed.sentAt !== "string") return null;
+    if (typeof parsed.id !== "string" || typeof parsed.sentAt !== "string") {
+      throw new Error("Invalid cursor shape.");
+    }
     const sentAt = new Date(parsed.sentAt);
-    return Number.isNaN(sentAt.getTime()) ? null : { id: parsed.id, sentAt };
+    if (Number.isNaN(sentAt.getTime())) {
+      throw new Error("Invalid cursor date.");
+    }
+    return { id: parsed.id, sentAt };
   } catch {
-    return null;
+    throw new ORPCError("BAD_REQUEST", {
+      message: "The message page token is invalid.",
+    });
   }
 };
 

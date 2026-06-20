@@ -34,8 +34,8 @@ jobs:
         with:
           bun-version-file: package.json
 
-      - name: Use latest npm
-        run: npm install --global npm@latest
+      - name: Use pinned npm
+        run: npm install --global npm@11.4.2
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

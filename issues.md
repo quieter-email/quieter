@@ -2,10 +2,10 @@
 
 Priority reflects user impact, security and privacy exposure, data integrity, billing correctness, production reliability, and the likelihood that later work depends on the fix.
 
-- **P0 — Resolved:** issues **1–20** were addressed by the June 20, 2026 P0 reliability and security remediation.
-- **P1 — High:** serious correctness, isolation, durability, privacy, or operational risks that should be addressed before scaling the affected feature. Issues **21–27, 38–39, 43–52, 59–61, 63–69, 73–81, 83–90, 94–96, 100–102, 108, 111–114, 118–124, 127–130, 137–150, 152–161, 164–167, 171–175, 188, 202, 208, 214–217, 220–231, 246, 249–253, 266–275, 278–284, 294–295**.
-- **P2 — Medium:** important resilience, scalability, maintainability, contract, and test-coverage work. All issues not listed under P0, P1, or P3.
-- **P3 — Low:** localized cleanup, optimization, or future-proofing with limited near-term user impact. Issues **28–30, 33–35, 40, 53–54, 71–72, 82, 92–93, 97–99, 103–107, 109–110, 115–117, 131–136, 162–163, 168–170, 176, 179–186, 193–200, 203–207, 209–213, 218–219, 232–245, 247–248, 254–265, 276–277, 285–293**.
+- **Resolved:** issues **1–20, 209, 222, 226, 231, 247, 250, 254, 276, 286, and 288** have been addressed.
+- **P1 — High:** serious correctness, isolation, durability, privacy, or operational risks that should be addressed before scaling the affected feature. Issues **21–27, 38–39, 43–52, 59–61, 63–69, 73–81, 83–90, 94–96, 100–102, 108, 111–114, 118–124, 127–130, 137–150, 152–161, 164–167, 171–175, 188, 202, 208, 214–217, 220–221, 223–225, 227–230, 246, 249, 251–253, 266–275, 278–284, 294–295**.
+- **P2 — Medium:** important resilience, scalability, maintainability, contract, and test-coverage work. All unresolved issues not listed under P1 or P3.
+- **P3 — Low:** localized cleanup, optimization, or future-proofing with limited near-term user impact. Issues **28–30, 33–35, 40, 53–54, 71–72, 82, 92–93, 97–99, 103–107, 109–110, 115–117, 131–136, 162–163, 168–170, 176, 179–186, 193–200, 203–207, 210–213, 218–219, 232–245, 248, 255–265, 277, 285, 287, 289–293**.
 
 Within each domain below, issues remain in their original order so references and related findings stay together.
 
@@ -447,7 +447,7 @@ Resolved on June 20, 2026 by the P0 reliability and security remediation change 
 
 208. **The public API has no explicit idempotency-key mechanism for mail sends.**
 
-209. **The API error schema allows arbitrary additional properties.** Client behavior cannot rely on a stable structured error contract.
+209. **Resolved:** The API error schema rejects additional properties, giving clients a stable structured error contract.
 
 210. **Provider-specific concepts are spread through product, service, infrastructure, and UI packages.** This makes provider replacement disproportionately expensive.
 
@@ -475,7 +475,7 @@ Resolved on June 20, 2026 by the P0 reliability and security remediation change 
 
 221. **Bearer-protected function URLs are used for internal integration.** Exposure depends entirely on secret confidentiality.
 
-222. **Static bearer comparison is not timing-safe.** This is minor for high-entropy tokens but easy to avoid.
+222. **Resolved:** Internal function bearer tokens use constant-time comparison.
 
 223. **The raw inbound utility is another production-exposed bypass surface.** If it only supports development or migration, it should not exist in production.
 
@@ -483,7 +483,7 @@ Resolved on June 20, 2026 by the P0 reliability and security remediation change 
 
 225. **Raw email content is loaded fully into memory.** Large messages can pressure function memory and timeout budgets.
 
-226. **Receipt processing logs sender, recipients, subject, message IDs, and object keys.** This is substantial personal data in infrastructure logs. See [receipt.ts](/E:/Coding/quieter/packages/aws/src/receipt.ts:129).
+226. **Resolved:** Receipt processing logs only non-identifying operational metadata.
 
 227. **PII logging and log retention are not coordinated through an explicit policy.**
 
@@ -493,7 +493,7 @@ Resolved on June 20, 2026 by the P0 reliability and security remediation change 
 
 230. **Several external requests lack explicit timeout and abort behavior.** A hung provider can consume the full function duration.
 
-231. **Function errors sometimes return raw exception messages.** Internal details can leak through internal/public integration endpoints.
+231. **Resolved:** Function responses use stable generic errors instead of raw exception messages.
 
 232. **There is no structured logging or correlation-ID standard across web, workers, queues, and provider calls.**
 
@@ -527,13 +527,13 @@ Resolved on June 20, 2026 by the P0 reliability and security remediation change 
 
 246. **Critical production variables are optional in the web server schema.** A deployment can start successfully and fail only when a feature is used.
 
-247. **URL environment variables generally accept any URL scheme.** Configuration mistakes can pass validation and fail later.
+247. **Resolved:** Service URL environment variables reject non-HTTP schemes, and deploy hooks require HTTPS.
 
 248. **SST schemas require broad provider configuration even for unrelated local tasks.** This increases local coupling and setup fragility.
 
 249. **GitHub actions are pinned to release tags rather than immutable SHAs.**
 
-250. **The SDK publish workflow installs `npm@latest`.** That makes publication behavior change without a repository change.
+250. **Resolved:** The SDK publish workflow installs a pinned npm version.
 
 251. **The production workflow combines migrations, AWS deployment, Vercel environment mutation, Vercel deployment, and credential rotation.** Partial failure can leave a mixed production state.
 
@@ -541,7 +541,7 @@ Resolved on June 20, 2026 by the P0 reliability and security remediation change 
 
 253. **The deployment workflow relies heavily on every migration remaining expand-compatible.** The convention is good, but app-version compatibility is not automatically tested.
 
-254. **Credential rotation invokes a hardcoded production URL.** Domain changes or staging promotion require workflow edits.
+254. **Resolved:** Credential rotation uses the configured canonical production URL.
 
 255. **Commit-triggered Vercel deployment is disabled.** This intentionally centralizes deployment, but makes the custom workflow a single release-path dependency.
 
@@ -587,7 +587,7 @@ Resolved on June 20, 2026 by the P0 reliability and security remediation change 
 
 275. **There are no restore or disaster-recovery tests represented in the repository.**
 
-276. **Client Sentry tracing is configured with a zero trace sample rate.** Error reporting exists, but performance and distributed latency diagnosis are limited. See [router.tsx](/E:/Coding/quieter/apps/web/src/router.tsx:16).
+276. **Resolved:** Production client tracing uses a bounded nonzero sample rate.
 
 277. **Most backend failures use `console` rather than structured events.**
 
@@ -609,11 +609,11 @@ Resolved on June 20, 2026 by the P0 reliability and security remediation change 
 
 285. **The route tree is generated and correctly treated as generated, but routing remains dependent on generation being current during all build paths.**
 
-286. **The OpenAPI endpoint caches a manually defined document for five minutes.** Documentation fixes may remain stale briefly.
+286. **Resolved:** The OpenAPI endpoint is served without caching.
 
 287. **Error messages sometimes encode implementation assumptions that can become inaccurate as providers change.**
 
-288. **Cursor decoding silently accepting invalid state favors apparent resilience over debuggability.**
+288. **Resolved:** Invalid managed-mail cursors return an explicit bad-request error.
 
 289. **Multiple places create fresh provider clients rather than consistently reusing cached instances.**
 

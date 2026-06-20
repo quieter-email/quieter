@@ -3,6 +3,7 @@ import { serverEnv } from "@quieter/env/server";
 import { Resource } from "sst";
 import { z } from "zod";
 import {
+  bearerTokenMatches,
   getBearerToken,
   parseEventJson,
   toJson,
@@ -37,7 +38,7 @@ export const handler = async (
     const token = getBearerToken(event.headers);
     const expectedToken = Resource.ChatGenerationStartToken.value;
 
-    if (!token || token !== expectedToken) {
+    if (!bearerTokenMatches(token, expectedToken)) {
       return toJson({ error: "Unauthorized" }, 401);
     }
 
@@ -52,12 +53,7 @@ export const handler = async (
     );
 
     return toJson({ enqueued: true, runId: payload.runId });
-  } catch (error) {
-    return toJson(
-      {
-        error: error instanceof Error ? error.message : "Could not enqueue chat generation.",
-      },
-      400,
-    );
+  } catch {
+    return toJson({ error: "Could not enqueue chat generation." }, 400);
   }
 };

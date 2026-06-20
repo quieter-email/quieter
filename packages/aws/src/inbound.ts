@@ -4,6 +4,7 @@ import { recordInboundManagedMessage } from "@quieter/orpc/managed-mail/ingestio
 import { Resource } from "sst";
 import { z } from "zod";
 import {
+  bearerTokenMatches,
   getBearerToken,
   parseEventJson,
   toJson,
@@ -63,7 +64,7 @@ export const handler = async (
 
     const bearerToken = getBearerToken(event.headers);
 
-    if (!bearerToken || bearerToken !== Resource.MailIngestToken.value) {
+    if (!bearerTokenMatches(bearerToken, Resource.MailIngestToken.value)) {
       return toJson(
         {
           error: "Unauthorized",

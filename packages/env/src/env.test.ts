@@ -26,6 +26,15 @@ describe("server environment", () => {
     expect(env.POLAR_SANDBOX).toBe(true);
     expect(env.QUIETER_AUTH_MAIL_SENDER).toBe("auth@quieter.email");
   });
+
+  test("rejects non-HTTP service URLs", () => {
+    expect(() =>
+      createServerEnv({
+        CHAT_GENERATION_START_URL: "file:///tmp/chat",
+        NODE_ENV: "test",
+      }),
+    ).toThrow();
+  });
 });
 
 describe("web client environment", () => {
@@ -33,6 +42,10 @@ describe("web client environment", () => {
     const env = createWebClientEnv({});
 
     expect(env.VITE_PUBLIC_POSTHOG_HOST).toBe("https://eu.i.posthog.com");
+  });
+
+  test("rejects non-HTTP public service URLs", () => {
+    expect(() => createWebClientEnv({ VITE_PUBLIC_POSTHOG_HOST: "ftp://example.com" })).toThrow();
   });
 });
 
@@ -88,5 +101,16 @@ describe("deployment environment", () => {
     } finally {
       consoleError.mockRestore();
     }
+  });
+
+  test("requires an HTTPS deploy hook", () => {
+    expect(() =>
+      createDeploymentEnv({
+        VERCEL_DEPLOY_HOOK_URL: "http://example.com/deploy",
+        VERCEL_PROJECT_ID: "project",
+        VERCEL_TEAM_ID: "team",
+        VERCEL_TOKEN: "token",
+      }),
+    ).toThrow();
   });
 });
