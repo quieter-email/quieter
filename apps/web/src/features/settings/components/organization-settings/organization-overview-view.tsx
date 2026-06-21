@@ -14,6 +14,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { Button } from "@quieter/ui";
 import { useQuery } from "@tanstack/react-query";
+import type { UserBillingOverview } from "~/features/settings/domain/billing";
 import { organizationApiKeysQueryOptions } from "./api-keys";
 import {
   type FullOrganization,
@@ -25,13 +26,16 @@ import {
 } from "./domain";
 import { organizationMailDomainsQueryOptions } from "./mail-domains";
 import { DeleteOrganizationDialog, LeaveOrganizationDialog } from "./organization-action-dialogs";
+import { OrganizationBillingSettings } from "./organization-billing-settings";
 import { OrganizationFormDialog } from "./organization-form-dialog";
 import { OrganizationMailUsageSettings } from "./organization-mail-usage-settings";
 import { MutedActionButton, SettingsRow } from "./settings-row";
 
 export const OrganizationOverviewView = ({
   activeRole,
+  billing,
   billingAccessUnknown,
+  billingPending,
   canDeleteOrganization,
   canUpdateOrganization,
   canUseOrganizationApiKeys,
@@ -46,7 +50,9 @@ export const OrganizationOverviewView = ({
   fullOrganization,
 }: {
   activeRole: OrganizationRoleOption | null;
+  billing: UserBillingOverview["teams"][number] | null;
   billingAccessUnknown: boolean;
+  billingPending: boolean;
   canDeleteOrganization: boolean;
   canUpdateOrganization: boolean;
   canUseOrganizationApiKeys: boolean;
@@ -60,11 +66,19 @@ export const OrganizationOverviewView = ({
   pendingInvitationsCount: number;
   fullOrganization: FullOrganization;
 }) => {
-  const apiKeysQuery = useQuery({
+  const {
+    data: apiKeys,
+    isError: isApiKeysError,
+    isPending: isApiKeysPending,
+  } = useQuery({
     ...organizationApiKeysQueryOptions(organization.id),
     enabled: canUseOrganizationApiKeys && !!organization.id,
   });
-  const domainsQuery = useQuery({
+  const {
+    data: domains,
+    isError: isDomainsError,
+    isPending: isDomainsPending,
+  } = useQuery({
     ...organizationMailDomainsQueryOptions(organization.id),
     enabled: canUseOrganizationDomains && !!organization.id,
   });
@@ -83,24 +97,28 @@ export const OrganizationOverviewView = ({
   ]
     .filter(Boolean)
     .join(", ");
-  const domainsSummary = billingAccessUnknown
-    ? "Could not load billing access."
-    : !canUseOrganizationDomains
-      ? `Requires ${BILLING_FEATURES.organizationDomains.requirementLabel}`
-      : domainsQuery.isPending
-        ? "Loading domains…"
-        : domainsQuery.isError
-          ? "Could not load domains."
-          : formatCount(domainsQuery.data.domains.length, "Domain", "Domains");
-  const apiKeysSummary = billingAccessUnknown
-    ? "Could not load billing access."
-    : !canUseOrganizationApiKeys
-      ? `Requires ${BILLING_FEATURES.organizationApiKeys.requirementLabel}`
-      : apiKeysQuery.isPending
-        ? "Loading API keys…"
-        : apiKeysQuery.isError
-          ? "Could not load API keys."
-          : formatCount(apiKeysQuery.data.apiKeys.length, "API Key", "API Keys");
+  const domainsSummary = billingPending
+    ? "Loading billing access…"
+    : billingAccessUnknown
+      ? "Could not load billing access."
+      : !canUseOrganizationDomains
+        ? `Requires ${BILLING_FEATURES.organizationDomains.requirementLabel}`
+        : isDomainsPending
+          ? "Loading domains…"
+          : isDomainsError
+            ? "Could not load domains."
+            : formatCount(domains.domains.length, "Domain", "Domains");
+  const apiKeysSummary = billingPending
+    ? "Loading billing access…"
+    : billingAccessUnknown
+      ? "Could not load billing access."
+      : !canUseOrganizationApiKeys
+        ? `Requires ${BILLING_FEATURES.organizationApiKeys.requirementLabel}`
+        : isApiKeysPending
+          ? "Loading API keys…"
+          : isApiKeysError
+            ? "Could not load API keys."
+            : formatCount(apiKeys.apiKeys.length, "API Key", "API Keys");
 
   return (
     <section className="space-y-6">
@@ -180,8 +198,16 @@ export const OrganizationOverviewView = ({
           }
         />
 
+        <OrganizationBillingSettings
+          billing={billing}
+          billingAccessUnknown={billingAccessUnknown}
+          billingPending={billingPending}
+          organizationId={organization.id}
+        />
+
         <OrganizationMailUsageSettings
           billingAccessUnknown={billingAccessUnknown}
+          billingPending={billingPending}
           canManageOrganizationMailUsage={canUpdateOrganization}
           canUseOrganizationMail={canUseOrganizationMail}
           organizationId={organization.id}

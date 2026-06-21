@@ -9,6 +9,7 @@ import { WorkspaceDitherBackground } from "~/components/workspace-dither-backgro
 import { type SettingsTab } from "~/features/settings/domain/settings-tab";
 import { settingsRouteApi } from "~/lib/route-apis";
 import { AccountSettingsPanel } from "./account-settings-panel";
+import { BillingCheckoutResult } from "./billing-checkout-result";
 import { GeneralSettingsPanel } from "./general-settings-panel";
 import { MailboxesSettingsPanel } from "./mailboxes-settings-panel";
 import { OrganizationSettingsPanel } from "./organization-settings-panel";
@@ -48,6 +49,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
 
   return (
     <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-background-dark text-foreground">
+      <BillingCheckoutResult />
       <WorkspaceDitherBackground />
       <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
         <SettingsSidebar
@@ -82,7 +84,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
             </div>
 
             {/* Scrollable content container */}
-            <div className="min-h-0 flex-1 overflow-y-auto p-6 md:p-8">
+            <div className="min-h-0 flex-1 overflow-y-auto px-12 py-8 md:px-16 md:py-12">
               {tab === "general" && <GeneralSettingsPanel />}
               {tab === "account" && <AccountSettingsPanel initialUser={initialUser} />}
               {tab === "plan" && <PlanSettingsPanel />}

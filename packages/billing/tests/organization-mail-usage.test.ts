@@ -5,6 +5,7 @@ import {
   normalizeOrganizationMailAlertMilestones,
 } from "../src/organization-mail-usage";
 import {
+  getManagedUsageRates,
   SES_INBOUND_CHUNK_BYTES,
   SES_INBOUND_CHUNK_MICROCENTS,
   SES_INBOUND_MESSAGE_MICROCENTS,
@@ -40,5 +41,19 @@ describe("organization mail usage", () => {
 
   test("normalizes alert milestones", () => {
     expect(normalizeOrganizationMailAlertMilestones([100, 50.2, 50, 0, 101])).toEqual([50, 100]);
+  });
+
+  test("gives Team + AI cleaner, lower managed mail rates", () => {
+    const teamRates = getManagedUsageRates("managed");
+    const teamAiRates = getManagedUsageRates("pro");
+
+    expect(teamRates.messagesPerThousandDollars).toBeCloseTo(0.2);
+    expect(teamAiRates.messagesPerThousandDollars).toBeCloseTo(0.15);
+    expect(teamRates.attachmentDataPerGbDollars).toBeCloseTo(0.24);
+    expect(teamAiRates.attachmentDataPerGbDollars).toBeCloseTo(0.18);
+    expect(teamRates.inboundProcessingPerThousandDollars).toBeCloseTo(0.18);
+    expect(teamAiRates.inboundProcessingPerThousandDollars).toBeCloseTo(0.135);
+    expect(teamRates.markupPercent).toBe(100);
+    expect(teamAiRates.markupPercent).toBe(50);
   });
 });

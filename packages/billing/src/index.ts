@@ -168,10 +168,29 @@ const getBaseUrl = (headers: Headers) => {
   return host ? `${proto}://${host}` : "http://localhost:3000";
 };
 
-const getSettingsUrl = (headers: Headers, billing?: "canceled" | "success") => {
+const getSettingsUrl = (
+  headers: Headers,
+  input:
+    | {
+        billing?: "canceled" | "success";
+        organizationId: string;
+        product: Exclude<BillingProductId, "personal">;
+      }
+    | {
+        billing?: "canceled" | "success";
+        product: "personal";
+      },
+) => {
   const url = new URL("/settings", getBaseUrl(headers));
-  url.searchParams.set("tab", "plan");
-  if (billing) url.searchParams.set("billing", billing);
+  if (input.product !== "personal") {
+    url.searchParams.set("tab", "organization");
+    url.searchParams.set("organizationId", input.organizationId);
+    url.searchParams.set("organizationView", "overview");
+  } else {
+    url.searchParams.set("tab", "plan");
+  }
+
+  if (input.billing) url.searchParams.set("billing", input.billing);
   return url.toString();
 };
 
@@ -190,20 +209,42 @@ export const createBillingCheckout = async (input: {
 }) => {
   const product = BILLING_PRODUCTS[input.product];
 
-  if (product.scope === "team" && !input.organizationId) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "Choose an organization for team billing.",
-    });
-  }
-
   if (product.scope === "personal" && input.organizationId) {
     throw new ORPCError("BAD_REQUEST", {
       message: "Personal billing cannot be assigned to an organization.",
     });
   }
 
-  const successUrl = getSettingsUrl(input.headers, "success");
-  const cancelUrl = getSettingsUrl(input.headers, "canceled");
+  let successUrl: string;
+  let cancelUrl: string;
+
+  if (input.product === "personal") {
+    successUrl = getSettingsUrl(input.headers, {
+      billing: "success",
+      product: input.product,
+    });
+    cancelUrl = getSettingsUrl(input.headers, {
+      billing: "canceled",
+      product: input.product,
+    });
+  } else {
+    if (!input.organizationId) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Choose an organization for team billing.",
+      });
+    }
+
+    successUrl = getSettingsUrl(input.headers, {
+      billing: "success",
+      organizationId: input.organizationId,
+      product: input.product,
+    });
+    cancelUrl = getSettingsUrl(input.headers, {
+      billing: "canceled",
+      organizationId: input.organizationId,
+      product: input.product,
+    });
+  }
   const providerProductId = await getBillingProductId(input.product);
   const rows = await db
     .select({

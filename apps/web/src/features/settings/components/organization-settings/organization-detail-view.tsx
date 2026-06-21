@@ -35,9 +35,18 @@ export const OrganizationDetailView = ({
   userId: string;
   view: OrganizationSettingsView;
 }) => {
-  const fullOrganizationQuery = useQuery(fullOrganizationQueryOptions(organization.id));
-  const billingQuery = useQuery(userBillingQueryOptions());
-  const fullOrganization = fullOrganizationQuery.data;
+  const {
+    data: fullOrganization,
+    error: fullOrganizationError,
+    isError: isFullOrganizationError,
+    isPending: isFullOrganizationPending,
+  } = useQuery(fullOrganizationQueryOptions(organization.id));
+  const {
+    data: billing,
+    isError: isBillingError,
+    isPending: isBillingPending,
+    isSuccess: isBillingSuccess,
+  } = useQuery(userBillingQueryOptions());
   const activeMember = fullOrganization?.members.find((member) => member.userId === userId) ?? null;
   const activeRole = activeMember && normalizeOrganizationRole(activeMember.role);
   const pendingInvitations =
@@ -60,13 +69,10 @@ export const OrganizationDetailView = ({
   const canUpdateOrganization = hasOrganizationPermission(activeRole, {
     organization: ["update"],
   });
-  const teamBilling = getTeamBilling(billingQuery.data, organization.id);
-  const billingAccessUnknown = billingQuery.isError;
-  const canUseOrganizationDomains = billingQuery.isSuccess && teamBilling?.hasAccess === true;
-  const canUseOrganizationApiKeys = billingQuery.isSuccess && teamBilling?.hasAccess === true;
-  const canUseOrganizationMail = billingQuery.isSuccess && teamBilling?.hasAccess === true;
+  const teamBilling = getTeamBilling(billing, organization.id);
+  const canUseTeamFeatures = isBillingSuccess && teamBilling?.hasAccess === true;
 
-  if (fullOrganizationQuery.isPending) {
+  if (isFullOrganizationPending) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
@@ -75,10 +81,10 @@ export const OrganizationDetailView = ({
     );
   }
 
-  if (fullOrganizationQuery.isError) {
+  if (isFullOrganizationError) {
     return (
       <p className="text-sm text-destructive">
-        {fullOrganizationQuery.error.message ?? "Could not load organization."}
+        {fullOrganizationError.message ?? "Could not load organization."}
       </p>
     );
   }
@@ -106,9 +112,10 @@ export const OrganizationDetailView = ({
   if (view === "domains") {
     return (
       <DomainsView
-        billingAccessUnknown={billingAccessUnknown}
+        billingAccessUnknown={isBillingError}
+        billingPending={isBillingPending}
         canManageDomains={canUpdateOrganization}
-        canUseOrganizationDomains={canUseOrganizationDomains}
+        canUseOrganizationDomains={canUseTeamFeatures}
         onBack={onBackToOrganization}
         organization={fullOrganization}
       />
@@ -118,9 +125,10 @@ export const OrganizationDetailView = ({
   if (view === "api-keys") {
     return (
       <ApiKeysView
-        billingAccessUnknown={billingAccessUnknown}
+        billingAccessUnknown={isBillingError}
+        billingPending={isBillingPending}
         canManageApiKeys={canUpdateOrganization}
-        canUseOrganizationApiKeys={canUseOrganizationApiKeys}
+        canUseOrganizationApiKeys={canUseTeamFeatures}
         onBack={onBackToOrganization}
         organization={fullOrganization}
       />
@@ -130,12 +138,14 @@ export const OrganizationDetailView = ({
   return (
     <OrganizationOverviewView
       activeRole={activeRole}
-      billingAccessUnknown={billingAccessUnknown}
+      billing={teamBilling}
+      billingAccessUnknown={isBillingError}
+      billingPending={isBillingPending}
       canDeleteOrganization={canDeleteOrganization}
       canUpdateOrganization={canUpdateOrganization}
-      canUseOrganizationApiKeys={canUseOrganizationApiKeys}
-      canUseOrganizationDomains={canUseOrganizationDomains}
-      canUseOrganizationMail={canUseOrganizationMail}
+      canUseOrganizationApiKeys={canUseTeamFeatures}
+      canUseOrganizationDomains={canUseTeamFeatures}
+      canUseOrganizationMail={canUseTeamFeatures}
       fullOrganization={fullOrganization}
       onBackToList={onBackToList}
       onOpenApiKeys={onOpenApiKeys}

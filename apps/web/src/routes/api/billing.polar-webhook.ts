@@ -1,5 +1,6 @@
 import { handlePolarBillingWebhook } from "@quieter/billing";
 import { createFileRoute } from "@tanstack/react-router";
+import { reportServerError } from "~/lib/server-error-reporting";
 
 export const Route = createFileRoute("/api/billing/polar-webhook")({
   server: {
@@ -14,7 +15,7 @@ export const Route = createFileRoute("/api/billing/polar-webhook")({
 
           return Response.json({ success: true });
         } catch (error) {
-          console.error(error);
+          reportServerError(error, "polar-webhook");
 
           return Response.json({ error: "Could not process the Polar webhook." }, { status: 500 });
         }

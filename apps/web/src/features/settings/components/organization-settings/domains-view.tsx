@@ -193,12 +193,14 @@ const DomainRow = ({
 
 export const DomainsView = ({
   billingAccessUnknown,
+  billingPending,
   canManageDomains,
   canUseOrganizationDomains,
   onBack,
   organization,
 }: {
   billingAccessUnknown: boolean;
+  billingPending: boolean;
   canManageDomains: boolean;
   canUseOrganizationDomains: boolean;
   onBack: () => void;
@@ -207,6 +209,7 @@ export const DomainsView = ({
   const domainsQuery = useQuery(organizationMailDomainsQueryOptions(organization.id));
   const domains = domainsQuery.data?.domains ?? [];
   const manageDomainsReason =
+    (billingPending && "Loading billing access…") ||
     (billingAccessUnknown && "Could not load billing access.") ||
     (!canUseOrganizationDomains &&
       `Registering domains requires ${BILLING_FEATURES.organizationDomains.requirementLabel} billing.`) ||
