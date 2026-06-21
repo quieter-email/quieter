@@ -13,6 +13,7 @@ import {
 } from "~/lib/site-password.server";
 
 const sitePasswordPaths = new Set([
+  "/api/billing/polar-webhook",
   "/api/internal/gmail-credentials/rotate",
   "/api/messages",
   "/api/site-password",
