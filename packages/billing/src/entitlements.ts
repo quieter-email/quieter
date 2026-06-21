@@ -280,22 +280,6 @@ export const hasUserBillingFeature = async (input: {
   organizationId?: string;
   userId: string;
 }) => {
-  if (BILLING_FEATURES[input.feature].type === "team") {
-    if (!input.organizationId) {
-      return {
-        account: null,
-        hasAccess: false,
-        hasUnlimitedAccess: false,
-        product: null,
-      } satisfies BillingEntitlement;
-    }
-
-    return await getOrganizationBillingEntitlement({
-      feature: input.feature,
-      organizationId: input.organizationId,
-    });
-  }
-
   if (input.organizationId) {
     const [membership] = await db
       .select({ id: member.id })
@@ -316,6 +300,15 @@ export const hasUserBillingFeature = async (input: {
       feature: input.feature,
       organizationId: input.organizationId,
     });
+  }
+
+  if (BILLING_FEATURES[input.feature].type === "team") {
+    return {
+      account: null,
+      hasAccess: false,
+      hasUnlimitedAccess: false,
+      product: null,
+    } satisfies BillingEntitlement;
   }
 
   return await getPersonalBillingEntitlement(input.userId);
