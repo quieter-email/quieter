@@ -145,6 +145,12 @@ export const sendOrganizationMailMessage = async (input: {
           },
           organizationId: input.organizationId,
           providerMessageId: response.MessageId,
+        }).catch((error) => {
+          console.error("Failed to record organization mail usage after send.", {
+            error,
+            organizationId: input.organizationId,
+            providerMessageId: response.MessageId,
+          });
         }),
       ]);
     }

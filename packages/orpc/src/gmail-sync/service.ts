@@ -830,6 +830,7 @@ export const maintainGmailPubSubMailbox = async (input: {
   const [gmailMailbox] = await db
     .select({
       id: mailbox.id,
+      organizationId: mailbox.organizationId,
       ownerUserId: mailbox.ownerUserId,
       status: mailbox.status,
     })
@@ -848,6 +849,7 @@ export const maintainGmailPubSubMailbox = async (input: {
 
     const entitlement = await hasUserBillingFeature({
       feature: "gmailAutomation",
+      organizationId: gmailMailbox.organizationId ?? undefined,
       userId: gmailMailbox.ownerUserId,
     });
     if (!entitlement.hasAccess) {
@@ -886,6 +888,7 @@ export const processGmailPubSubNotification = async (
   const [gmailMailbox] = await db
     .select({
       id: mailbox.id,
+      organizationId: mailbox.organizationId,
       ownerUserId: mailbox.ownerUserId,
       status: mailbox.status,
     })
@@ -913,6 +916,7 @@ export const processGmailPubSubNotification = async (
 
   const entitlement = await hasUserBillingFeature({
     feature: "gmailAutomation",
+    organizationId: gmailMailbox.organizationId ?? undefined,
     userId: gmailMailbox.ownerUserId,
   });
   if (!entitlement.hasAccess) {

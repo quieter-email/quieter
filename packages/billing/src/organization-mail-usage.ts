@@ -383,30 +383,16 @@ export const recordOrganizationMailUsage = async (input: OrganizationMailUsageIn
     input.sesCostMicroCents,
     entitlement.product === "team_ai" ? "team_ai" : "team",
   );
-  const creditUsage =
-    entitlement.account &&
-    (await recordBillingCreditUsage({
-      account: entitlement.account,
-      category: "mail",
-      costMicroCents: customerCostMicroCents,
-      dedupeKey: `mail:${dedupeKey}`,
-      metadata: {
-        direction: input.direction,
-        organizationId: input.organizationId,
-        providerMessageId: input.providerMessageId,
-      },
-    }));
-  const billableCostMicroCents = creditUsage?.billableCostMicroCents ?? 0;
-  const [usageEvent] = await db
+  const [insertedUsageEvent] = await db
     .insert(organizationMailUsageEvent)
     .values({
       attachmentSizeBytes: input.attachmentSizeBytes,
-      billableCostMicroCents,
+      billableCostMicroCents: 0,
       createdAt: now,
       dedupeKey,
       direction: input.direction,
       id: crypto.randomUUID(),
-      includedSesCostMicroCents: Math.max(0, customerCostMicroCents - billableCostMicroCents),
+      includedSesCostMicroCents: customerCostMicroCents,
       incomingChunkCount: input.incomingChunkCount,
       messageCount: input.messageCount,
       messageSizeBytes: input.messageSizeBytes,
@@ -421,8 +407,45 @@ export const recordOrganizationMailUsage = async (input: OrganizationMailUsageIn
     .returning({
       id: organizationMailUsageEvent.id,
     });
+  const usageEvent =
+    insertedUsageEvent ??
+    (
+      await db
+        .select({ id: organizationMailUsageEvent.id })
+        .from(organizationMailUsageEvent)
+        .where(eq(organizationMailUsageEvent.dedupeKey, dedupeKey))
+        .limit(1)
+    )[0];
 
-  if (usageEvent && entitlement.account) {
+  if (!usageEvent) {
+    throw new Error("Could not persist organization mail usage.");
+  }
+
+  const creditUsage =
+    entitlement.account &&
+    (await recordBillingCreditUsage({
+      account: entitlement.account,
+      category: "mail",
+      costMicroCents: customerCostMicroCents,
+      dedupeKey: `mail:${dedupeKey}`,
+      metadata: {
+        direction: input.direction,
+        organizationId: input.organizationId,
+        providerMessageId: input.providerMessageId,
+      },
+    }));
+  const billableCostMicroCents = creditUsage?.billableCostMicroCents ?? 0;
+
+  await db
+    .update(organizationMailUsageEvent)
+    .set({
+      billableCostMicroCents,
+      includedSesCostMicroCents: Math.max(0, customerCostMicroCents - billableCostMicroCents),
+      polarEventReportedAt: billableCostMicroCents > 0 ? new Date() : null,
+    })
+    .where(eq(organizationMailUsageEvent.id, usageEvent.id));
+
+  if (entitlement.account) {
     const creditUsageOverview = await getBillingCreditUsage(entitlement.account);
     await recordOrganizationMailUsageAlerts({
       creditAmountMicroCents: creditUsageOverview.creditAmountMicroCents,
@@ -436,7 +459,7 @@ export const recordOrganizationMailUsage = async (input: OrganizationMailUsageIn
     });
   }
 
-  return usageEvent ?? null;
+  return usageEvent;
 };
 
 export const getOrganizationMailUsageOverview = async (organizationId: string) => {

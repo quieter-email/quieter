@@ -443,7 +443,7 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
 export const reportAiUsage = async (input: {
   chatId?: string | null;
   completionTokens: number;
-  externalId?: string;
+  externalId: string;
   mailboxId?: string;
   model: keyof typeof aiUsageRates;
   promptTokens: number;
@@ -476,7 +476,7 @@ export const reportAiUsage = async (input: {
     account: entitlement.account,
     category: "ai",
     costMicroCents,
-    dedupeKey: `ai:${input.externalId ?? crypto.randomUUID()}`,
+    dedupeKey: `ai:${input.externalId}`,
     metadata: {
       chatId: input.chatId ?? "",
       completionTokens: input.completionTokens,

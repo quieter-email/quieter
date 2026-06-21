@@ -121,14 +121,15 @@ const assertCanRunChatGeneration = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
-  const [authorizedChat, accessibleMailbox, entitlement] = await Promise.all([
+  const accessibleMailbox = await assertAccessibleMailbox({
+    mailboxId: input.mailboxId,
+    userId: input.userId,
+  });
+  const [authorizedChat, entitlement] = await Promise.all([
     findAuthorizedChat(input.chatId, input.mailboxId, input.userId),
-    assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: input.userId,
-    }),
     hasUserBillingFeature({
       feature: "aiChat",
+      organizationId: accessibleMailbox.organizationId ?? undefined,
       userId: input.userId,
     }),
   ]);
@@ -311,13 +312,18 @@ export const chatRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
-      const [authorizedChat, entitlement] = await Promise.all([
+      const [authorizedChat, accessibleMailbox] = await Promise.all([
         getAuthorizedChat(input.chatId, input.mailboxId, context.userId),
-        hasUserBillingFeature({
-          feature: "aiChat",
+        assertAccessibleMailbox({
+          mailboxId: input.mailboxId,
           userId: context.userId,
         }),
       ]);
+      const entitlement = await hasUserBillingFeature({
+        feature: "aiChat",
+        organizationId: accessibleMailbox.organizationId ?? undefined,
+        userId: context.userId,
+      });
 
       if (!entitlement.hasAccess) {
         throw new ORPCError("FORBIDDEN", {
@@ -336,6 +342,7 @@ export const chatRouter = {
             reportAiUsage({
               chatId: authorizedChat.id,
               completionTokens: usage.completionTokens,
+              externalId: `chat-title:${authorizedChat.id}`,
               mailboxId: input.mailboxId,
               model: "openai/gpt-5-nano",
               promptTokens: usage.promptTokens,

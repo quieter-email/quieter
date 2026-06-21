@@ -12,7 +12,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, cn, IconButtonTooltip } from "@quieter/ui";
 import { AnimatePresence, domMax, LayoutGroup, LazyMotion, m } from "motion/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SettingsTab } from "~/features/settings/domain/settings-tab";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
 import { SidebarNavItem } from "~/features/navigation/components/sidebar-nav-item";
@@ -163,47 +163,64 @@ export const SettingsSidebar = ({
   onSelectTab,
   isMobileOpen,
   onMobileOpenChange,
-}: SettingsSidebarProps) => (
-  <LazyMotion features={domMax}>
-    <>
-      <aside
-        className="relative hidden h-full shrink-0 bg-transparent text-foreground md:flex md:flex-col"
-        style={{ width: "272px" }}
-      >
-        <SidebarContent activeTab={activeTab} onBack={onBack} onSelectTab={onSelectTab} />
-      </aside>
+}: SettingsSidebarProps) => {
+  useEffect(() => {
+    if (!isMobileOpen) return;
 
-      <AnimatePresence initial={false}>
-        {isMobileOpen && (
-          <>
-            <m.button
-              aria-label="Close sidebar"
-              className="fixed inset-0 z-40 bg-background-dark/50 backdrop-blur-[2px] md:hidden"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => onMobileOpenChange?.(false)}
-              type="button"
-            />
-            <m.aside
-              aria-label="Settings sidebar"
-              className="fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-hidden bg-background-dark pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-foreground shadow-2xl md:hidden"
-              initial={{ x: "-100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
-              transition={{ type: "spring", bounce: 0, duration: 0.24 }}
-            >
-              <WorkspaceDitherBackground />
-              <SidebarContent
-                activeTab={activeTab}
-                onBack={onBack}
-                onSelectTab={onSelectTab}
-                onRequestClose={() => onMobileOpenChange?.(false)}
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onMobileOpenChange?.(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isMobileOpen, onMobileOpenChange]);
+
+  return (
+    <LazyMotion features={domMax}>
+      <>
+        <aside
+          className="relative hidden h-full shrink-0 bg-transparent text-foreground md:flex md:flex-col"
+          style={{ width: "272px" }}
+        >
+          <SidebarContent activeTab={activeTab} onBack={onBack} onSelectTab={onSelectTab} />
+        </aside>
+
+        <AnimatePresence initial={false}>
+          {isMobileOpen && (
+            <>
+              <m.button
+                aria-label="Close sidebar"
+                className="fixed inset-0 z-40 bg-background-dark/50 backdrop-blur-[2px] md:hidden"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => onMobileOpenChange?.(false)}
+                type="button"
               />
-            </m.aside>
-          </>
-        )}
-      </AnimatePresence>
-    </>
-  </LazyMotion>
-);
+              <m.aside
+                aria-label="Settings sidebar"
+                aria-modal="true"
+                className="fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-hidden bg-background-dark pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-foreground shadow-2xl md:hidden"
+                initial={{ x: "-100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "-100%" }}
+                role="dialog"
+                transition={{ type: "spring", bounce: 0, duration: 0.24 }}
+              >
+                <WorkspaceDitherBackground />
+                <SidebarContent
+                  activeTab={activeTab}
+                  onBack={onBack}
+                  onSelectTab={onSelectTab}
+                  onRequestClose={() => onMobileOpenChange?.(false)}
+                />
+              </m.aside>
+            </>
+          )}
+        </AnimatePresence>
+      </>
+    </LazyMotion>
+  );
+};

@@ -54,6 +54,7 @@ export const ChatView = ({
   chatId,
   draftChatKey,
   mailboxId,
+  mailboxOrganizationId,
   onChatIdChange,
   onOpenSidebar,
 }: ChatViewProps) => {
@@ -228,7 +229,7 @@ export const ChatView = ({
     regenerateResponseMutation.isPending ||
     resolveComposeToolMutation.isPending;
   const aiRequirement = BILLING_FEATURES.aiChat;
-  const canUseAiChat = hasPersonalAiAccess(billing);
+  const canUseAiChat = hasPersonalAiAccess(billing, mailboxOrganizationId);
   const composerDisabled = isBillingPending || !canUseAiChat;
   const errorMessage = activeRun?.error ?? chatData?.messages.at(-1)?.error ?? undefined;
 

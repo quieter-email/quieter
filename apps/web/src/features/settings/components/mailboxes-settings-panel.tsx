@@ -50,7 +50,6 @@ export const MailboxesSettingsPanel = () => {
     isError: isMailboxesError,
   } = useQuery(mailboxesQueryOptions());
   const { data: billing, isSuccess: isBillingSuccess } = useQuery(userBillingQueryOptions());
-  const hasGmailAutomationAccess = isBillingSuccess && hasPersonalAiAccess(billing);
   const groups = mailboxesData?.groups ?? [];
   const gmailGroups = groups.map((group) => ({
     ...group,
@@ -143,8 +142,9 @@ export const MailboxesSettingsPanel = () => {
           <h2 className="text-sm font-medium text-foreground">Connected Gmail</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Connect an existing personal or Google Workspace inbox. Organization placement does not
-            share the mailbox with other members. Pro keeps your inbox current as mail arrives and
-            can apply your existing Gmail labels or surface timely updates from new mail.
+            share the mailbox with other members. Personal or Team + AI billing keeps your inbox
+            current as mail arrives and can apply your existing Gmail labels or surface timely
+            updates from new mail.
           </p>
         </div>
 
@@ -195,6 +195,8 @@ export const MailboxesSettingsPanel = () => {
             <div className="space-y-2">
               {group.mailboxes.map((mailbox) => {
                 const isDefault = mailbox.id === defaultMailboxId;
+                const hasGmailAutomationAccess =
+                  isBillingSuccess && hasPersonalAiAccess(billing, mailbox.organizationId);
                 return (
                   <div
                     className="overflow-hidden rounded-lg border border-border/70 bg-muted/15"
@@ -335,7 +337,7 @@ export const MailboxesSettingsPanel = () => {
                             Useful details
                             {!hasGmailAutomationAccess && (
                               <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                Pro
+                                Personal or Team + AI
                               </span>
                             )}
                           </span>
@@ -381,7 +383,7 @@ export const MailboxesSettingsPanel = () => {
                             Auto-label
                             {!hasGmailAutomationAccess && (
                               <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                Pro
+                                Personal or Team + AI
                               </span>
                             )}
                           </span>

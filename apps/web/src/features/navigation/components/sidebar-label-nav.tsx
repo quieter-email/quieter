@@ -199,21 +199,25 @@ export const SidebarLabelNav = ({
   } = useQuery(labelsQueryOptions(mailboxId ?? "", !!mailboxId));
 
   const mountTimeRef = useRef(Date.now());
-  const [prevMailboxId, setPrevMailboxId] = useState(mailboxId);
-  const [prevAreLabelsPending, setPrevAreLabelsPending] = useState(areLabelsPending);
+  const prevMailboxIdRef = useRef(mailboxId);
+  const prevAreLabelsPendingRef = useRef(areLabelsPending);
   const [animateLabelsEntrance, setAnimateLabelsEntrance] = useState(false);
   const [hasAnimatedLabels, setHasAnimatedLabels] = useState(false);
   const [labelsDelayOffset, setLabelsDelayOffset] = useState(0);
 
-  if (mailboxId !== prevMailboxId) {
-    setPrevMailboxId(mailboxId);
+  useEffect(() => {
+    if (mailboxId === prevMailboxIdRef.current) return;
+
+    prevMailboxIdRef.current = mailboxId;
     setHasAnimatedLabels(false);
     setAnimateLabelsEntrance(false);
     setLabelsDelayOffset(0);
-  }
+  }, [mailboxId]);
 
-  if (areLabelsPending !== prevAreLabelsPending) {
-    setPrevAreLabelsPending(areLabelsPending);
+  useEffect(() => {
+    if (areLabelsPending === prevAreLabelsPendingRef.current) return;
+
+    prevAreLabelsPendingRef.current = areLabelsPending;
     if (!areLabelsPending && !hasAnimatedLabels) {
       setAnimateLabelsEntrance(true);
       setHasAnimatedLabels(true);
@@ -226,7 +230,7 @@ export const SidebarLabelNav = ({
         setLabelsDelayOffset(0);
       }
     }
-  }
+  }, [areLabelsPending, hasAnimatedLabels]);
 
   useEffect(() => {
     if (animateLabelsEntrance) {

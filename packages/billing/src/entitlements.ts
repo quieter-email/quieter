@@ -275,29 +275,6 @@ export const getOrganizationBillingEntitlement = async (input: {
   };
 };
 
-const getTeamAiEntitlementForUser = async (input: { organizationId?: string; userId: string }) => {
-  const memberships = await db
-    .select({ organizationId: member.organizationId })
-    .from(member)
-    .where(
-      input.organizationId
-        ? and(eq(member.userId, input.userId), eq(member.organizationId, input.organizationId))
-        : eq(member.userId, input.userId),
-    )
-    .orderBy(asc(member.createdAt));
-
-  for (const membership of memberships) {
-    const entitlement = await getOrganizationBillingEntitlement({
-      feature: "aiChat",
-      organizationId: membership.organizationId,
-    });
-
-    if (entitlement.hasAccess) return entitlement;
-  }
-
-  return null;
-};
-
 export const hasUserBillingFeature = async (input: {
   feature: BillingFeature;
   organizationId?: string;
@@ -320,21 +297,28 @@ export const hasUserBillingFeature = async (input: {
   }
 
   if (input.organizationId) {
-    const organizationEntitlement = await getTeamAiEntitlementForUser(input);
-    if (organizationEntitlement?.hasAccess) return organizationEntitlement;
+    const [membership] = await db
+      .select({ id: member.id })
+      .from(member)
+      .where(and(eq(member.userId, input.userId), eq(member.organizationId, input.organizationId)))
+      .limit(1);
+
+    if (!membership) {
+      return {
+        account: null,
+        hasAccess: false,
+        hasUnlimitedAccess: false,
+        product: null,
+      } satisfies BillingEntitlement;
+    }
+
+    return await getOrganizationBillingEntitlement({
+      feature: input.feature,
+      organizationId: input.organizationId,
+    });
   }
 
-  const personal = await getPersonalBillingEntitlement(input.userId);
-  if (personal.hasAccess) return personal;
-
-  return (
-    (await getTeamAiEntitlementForUser({ userId: input.userId })) ?? {
-      account: null,
-      hasAccess: false,
-      hasUnlimitedAccess: false,
-      product: null,
-    }
-  );
+  return await getPersonalBillingEntitlement(input.userId);
 };
 
 export const assertUserBillingFeature = async (input: {

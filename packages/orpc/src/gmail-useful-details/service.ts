@@ -712,14 +712,18 @@ export const reportPendingGmailUsefulDetailUsage = async (mailboxId: string, use
 };
 
 export const listGmailUsefulDetails = async (input: { mailboxId: string; userId: string }) => {
-  await assertOwnedGmailMailbox(input);
+  const gmailMailbox = await assertOwnedGmailMailbox(input);
   const [[settings], entitlement] = await Promise.all([
     db
       .select({ enabled: gmailUsefulDetailSettings.enabled })
       .from(gmailUsefulDetailSettings)
       .where(eq(gmailUsefulDetailSettings.mailboxId, input.mailboxId))
       .limit(1),
-    hasUserBillingFeature({ feature: "gmailAutomation", userId: input.userId }),
+    hasUserBillingFeature({
+      feature: "gmailAutomation",
+      organizationId: gmailMailbox.organizationId ?? undefined,
+      userId: input.userId,
+    }),
   ]);
   const enabled = !!settings?.enabled && entitlement.hasAccess;
   if (!enabled) {
