@@ -43,7 +43,7 @@ export default defineConfig(({ command }) => {
       tailwindcss(),
       nitro({
         preset: "vercel",
-        traceDeps: ["@paykit-sdk/polar", "@polar-sh/sdk", "react", "zod"],
+        traceDeps: ["@paykit-sdk/polar", "@polar-sh/sdk", "react"],
       }),
       ...sentryPlugins,
     ],
