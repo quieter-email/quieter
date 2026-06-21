@@ -2,10 +2,12 @@ import { z } from "zod";
 import { formatManagedUsagePriceFeature } from "./ses-pricing";
 
 export const BILLING_PRODUCT_IDS = ["personal", "team", "team_ai"] as const;
+export const BILLING_PRICE_CURRENCIES = ["eur", "usd"] as const;
 export const billingProductIdSchema = z.enum(BILLING_PRODUCT_IDS);
 export const billingPlanSchema = z.enum(["free", ...BILLING_PRODUCT_IDS]);
 
 export type BillingProductId = (typeof BILLING_PRODUCT_IDS)[number];
+export type BillingPriceCurrency = (typeof BILLING_PRICE_CURRENCIES)[number];
 export type PaidBillingPlan = BillingProductId;
 export type BillingPlan = "free" | BillingProductId;
 
@@ -112,5 +114,12 @@ export const productHasAi = (product: BillingProductId) =>
 
 export const productHasManagedMail = (product: BillingProductId) =>
   product === "team" || product === "team_ai";
+
+export const getBillingFixedPrices = (product: BillingProductId) =>
+  BILLING_PRICE_CURRENCIES.map((priceCurrency) => ({
+    amountType: "fixed" as const,
+    priceAmount: BILLING_PRODUCTS[product].monthlyPriceCents,
+    priceCurrency,
+  }));
 
 export const getBillingFeatureRequirement = (feature: BillingFeature) => BILLING_FEATURES[feature];
