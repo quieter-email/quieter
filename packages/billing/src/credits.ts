@@ -6,33 +6,35 @@ import {
 } from "@quieter/database";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import type { BillingAccount } from "./entitlements";
-import { BILLING_PRICE_CURRENCIES } from "./plans";
+import { BILLING_PRICE_CURRENCIES, type BillingPriceCurrency } from "./plans";
 import { getPolarApiOrganizationId, getPolarClient, ingestPolarEvents } from "./polar";
 
 const BILLING_CREDIT_USAGE_EVENT_NAME = "quieter.credit_usage";
 const BILLING_CREDIT_USAGE_METER_KEY = "quieter_credit_usage";
 const MICROCENTS_PER_CENT = 1_000_000;
 
-let creditUsageMeterId: string | null = null;
+const creditUsageMeterIds = new Map<BillingPriceCurrency, string>();
 
-const getCreditUsageMeterId = async () => {
-  if (creditUsageMeterId) return creditUsageMeterId;
+const getCreditUsageMeterId = async (currency: BillingPriceCurrency) => {
+  const cachedMeterId = creditUsageMeterIds.get(currency);
+  if (cachedMeterId) return cachedMeterId;
 
   const polar = await getPolarClient();
   const organizationId = getPolarApiOrganizationId();
+  const metadataKey = `${BILLING_CREDIT_USAGE_METER_KEY}:${currency}`;
   const meters = await polar.meters.list({
     limit: 100,
     metadata: {
-      quieterMeter: BILLING_CREDIT_USAGE_METER_KEY,
+      quieterMeter: metadataKey,
     },
     organizationId,
   });
   const existingMeter = meters.result.items.find(
-    (meter) => meter.metadata.quieterMeter === BILLING_CREDIT_USAGE_METER_KEY,
+    (meter) => meter.metadata.quieterMeter === metadataKey,
   );
 
   if (existingMeter) {
-    creditUsageMeterId = existingMeter.id;
+    creditUsageMeterIds.set(currency, existingMeter.id);
     return existingMeter.id;
   }
 
@@ -52,26 +54,25 @@ const getCreditUsageMeterId = async () => {
       conjunction: "and",
     },
     metadata: {
-      quieterMeter: BILLING_CREDIT_USAGE_METER_KEY,
+      quieterMeter: metadataKey,
     },
-    name: "Quieter credit overage",
+    name: `Quieter credit overage (${currency.toUpperCase()})`,
     organizationId,
   });
 
-  creditUsageMeterId = createdMeter.id;
+  creditUsageMeterIds.set(currency, createdMeter.id);
   return createdMeter.id;
 };
 
-export const getCreditUsageMeteredPrices = async () => {
-  const meterId = await getCreditUsageMeterId();
-
-  return BILLING_PRICE_CURRENCIES.map((priceCurrency) => ({
-    amountType: "metered_unit" as const,
-    meterId,
-    priceCurrency,
-    unitAmount: "1",
-  }));
-};
+export const getCreditUsageMeteredPrices = async () =>
+  await Promise.all(
+    BILLING_PRICE_CURRENCIES.map(async (priceCurrency) => ({
+      amountType: "metered_unit" as const,
+      meterId: await getCreditUsageMeterId(priceCurrency),
+      priceCurrency,
+      unitAmount: "1",
+    })),
+  );
 
 const getTargetCondition = (input: {
   organizationId: string | null;
@@ -179,7 +180,7 @@ export const recordBillingCreditUsage = async (input: {
   });
 
   if (result.eventId && result.billableCostMicroCents > 0 && !result.polarEventReportedAt) {
-    await getCreditUsageMeterId();
+    await Promise.all(BILLING_PRICE_CURRENCIES.map(getCreditUsageMeterId));
     await ingestPolarEvents([
       {
         externalCustomerId: input.account.externalCustomerId,
