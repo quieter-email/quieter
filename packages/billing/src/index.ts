@@ -96,11 +96,13 @@ const getBillingProductId = async (productId: BillingProductId) => {
   ];
 
   if (existingProduct) {
+    const matchedPriceIds = new Set<string>();
     const missingPrices = expectedPrices.filter(
       (expectedPrice) =>
         !existingProduct.prices.some((price) => {
           if (
             price.isArchived ||
+            matchedPriceIds.has(price.id) ||
             price.amountType !== expectedPrice.amountType ||
             price.priceCurrency !== expectedPrice.priceCurrency
           ) {
@@ -108,27 +110,30 @@ const getBillingProductId = async (productId: BillingProductId) => {
           }
 
           if (expectedPrice.amountType === "fixed") {
-            return "priceAmount" in price && price.priceAmount === expectedPrice.priceAmount;
+            if (!("priceAmount" in price) || price.priceAmount !== expectedPrice.priceAmount) {
+              return false;
+            }
+          } else if (
+            !("meterId" in price) ||
+            price.meterId !== expectedPrice.meterId ||
+            Number(price.unitAmount) !== Number(expectedPrice.unitAmount)
+          ) {
+            return false;
           }
 
-          return (
-            "meterId" in price &&
-            price.meterId === expectedPrice.meterId &&
-            String(price.unitAmount) === expectedPrice.unitAmount
-          );
+          matchedPriceIds.add(price.id);
+          return true;
         }),
     );
+    const hasUnexpectedPrices = existingProduct.prices.some(
+      (price) => !price.isArchived && !matchedPriceIds.has(price.id),
+    );
 
-    if (missingPrices.length > 0) {
+    if (missingPrices.length > 0 || hasUnexpectedPrices) {
       await polar.products.update({
         id: existingProduct.id,
         productUpdate: {
-          prices: [
-            ...existingProduct.prices
-              .filter((price) => !price.isArchived)
-              .map((price) => ({ id: price.id })),
-            ...missingPrices,
-          ],
+          prices: [...[...matchedPriceIds].map((id) => ({ id })), ...missingPrices],
         },
       });
     }
