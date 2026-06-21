@@ -41,7 +41,10 @@ export default defineConfig(({ command }) => {
         presets: [reactCompilerPreset()],
       }),
       tailwindcss(),
-      nitro({ preset: "vercel", traceDeps: ["react"] }),
+      nitro({
+        preset: "vercel",
+        traceDeps: ["@paykit-sdk/polar", "@polar-sh/sdk", "react", "zod"],
+      }),
       ...sentryPlugins,
     ],
     optimizeDeps: {
