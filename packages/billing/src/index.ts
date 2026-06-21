@@ -168,10 +168,26 @@ const getBaseUrl = (headers: Headers) => {
   return host ? `${proto}://${host}` : "http://localhost:3000";
 };
 
-const getSettingsUrl = (headers: Headers, billing?: "canceled" | "success") => {
+const getSettingsUrl = (
+  headers: Headers,
+  input: {
+    billing?: "canceled" | "success";
+    organizationId?: string;
+    product: BillingProductId;
+  },
+) => {
   const url = new URL("/settings", getBaseUrl(headers));
-  url.searchParams.set("tab", "plan");
-  if (billing) url.searchParams.set("billing", billing);
+  const product = BILLING_PRODUCTS[input.product];
+
+  if (product.scope === "team") {
+    url.searchParams.set("tab", "organization");
+    url.searchParams.set("organizationId", input.organizationId!);
+    url.searchParams.set("organizationView", "overview");
+  } else {
+    url.searchParams.set("tab", "plan");
+  }
+
+  if (input.billing) url.searchParams.set("billing", input.billing);
   return url.toString();
 };
 
@@ -202,8 +218,16 @@ export const createBillingCheckout = async (input: {
     });
   }
 
-  const successUrl = getSettingsUrl(input.headers, "success");
-  const cancelUrl = getSettingsUrl(input.headers, "canceled");
+  const successUrl = getSettingsUrl(input.headers, {
+    billing: "success",
+    organizationId: input.organizationId,
+    product: input.product,
+  });
+  const cancelUrl = getSettingsUrl(input.headers, {
+    billing: "canceled",
+    organizationId: input.organizationId,
+    product: input.product,
+  });
   const providerProductId = await getBillingProductId(input.product);
   const rows = await db
     .select({

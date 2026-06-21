@@ -16,7 +16,6 @@ import { getThreadQueryKey } from "../thread-query";
 import {
   applySyncDeltaToQueryData,
   mergeRefreshedMailboxPagesIntoQueryData,
-  removeMessagesFromThreadData,
   updateFirstPageHistoryId,
   upsertMessageInThreadData,
   type MessagesQueryData,
@@ -174,7 +173,7 @@ export const refreshVisibleMailboxMessages = async (
   await applyVisibleMailboxMessagesRefreshToCache(queryClient, args, result);
 };
 
-const applyMailboxSyncDelta = async (
+export const applyMailboxSyncDelta = async (
   queryClient: QueryClient,
   mailboxId: string,
   messagesQueryKey: ReturnType<typeof getMessagesQueryKey>,
@@ -183,23 +182,6 @@ const applyMailboxSyncDelta = async (
   removedMessageIds: readonly string[],
   nextHistoryId?: string,
 ) => {
-  const currentMessages = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
-  const removedMessageThreadIds = new Map<string, string>();
-  const currentMessagesById = new Map<string, MessageListItem>();
-
-  for (const page of currentMessages?.pages ?? []) {
-    for (const message of page.messages) {
-      currentMessagesById.set(message.id, message);
-    }
-  }
-
-  for (const removedMessageId of removedMessageIds) {
-    const removedMessage = currentMessagesById.get(removedMessageId);
-    if (removedMessage) {
-      removedMessageThreadIds.set(removedMessageId, removedMessage.threadId);
-    }
-  }
-
   if (updatedMessages.length > 0 || removedMessageIds.length > 0) {
     queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
       applySyncDeltaToQueryData(data, updatedMessages, removedMessageIds),
@@ -221,17 +203,6 @@ const applyMailboxSyncDelta = async (
     touchedThreadQueryKeys.set(threadQueryKey.join("::"), threadQueryKey);
     queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
       upsertMessageInThreadData(currentData, updatedMessage),
-    );
-  }
-
-  for (const removedMessageId of removedMessageIds) {
-    const removedThreadId = removedMessageThreadIds.get(removedMessageId);
-    if (!removedThreadId) continue;
-
-    const threadQueryKey = getThreadQueryKey(mailboxId, removedThreadId);
-    touchedThreadQueryKeys.set(threadQueryKey.join("::"), threadQueryKey);
-    queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
-      removeMessagesFromThreadData(currentData, (message) => message.id === removedMessageId),
     );
   }
 

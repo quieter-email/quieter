@@ -213,7 +213,7 @@ const ManagedUsageSettingsForm = ({
         <div>
           <h2 className="text-sm font-medium text-foreground">Team credits</h2>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            <span>{overview.managedUsageRates.markupPercent}% service markup</span>
+            <span>Managed mail rates</span>
             {periodEnd ? <span>Resets {periodEnd}</span> : null}
           </div>
         </div>

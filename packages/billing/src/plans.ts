@@ -84,9 +84,8 @@ export const BILLING_PRODUCTS = {
     features: [
       "$20 in monthly team credits",
       "Everything in Team",
+      "AI features",
       formatManagedUsagePriceFeature("pro"),
-      "AI chat for team members",
-      "AI organization and useful details",
     ],
     highlight: true,
     monthlyPriceCents: 2_000,

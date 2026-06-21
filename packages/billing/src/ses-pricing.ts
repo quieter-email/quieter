@@ -1,7 +1,7 @@
 export const ORGANIZATION_MAIL_INCLUDED_SES_USAGE_MICROCENTS = 1_000_000_000;
 export const ORGANIZATION_MAIL_OVERAGE_MARKUP_BASIS_POINTS = {
-  managed: 500,
-  pro: 200,
+  managed: 10_000,
+  pro: 5_000,
 } as const;
 
 export const SES_OUTBOUND_MESSAGE_MICROCENTS = 10_000;
@@ -43,9 +43,9 @@ const formatRate = (value: number) =>
 export const formatManagedUsagePriceFeature = (plan: ManagedUsagePlan) => {
   const rates = getManagedUsageRates(plan);
 
-  return `Managed mail uses credits at ${formatRate(
+  return `Managed mail costs ${formatRate(
     rates.messagesPerThousandDollars,
-  )}/1K messages, ${formatRate(rates.attachmentDataPerGbDollars)}/GB attachments, ${formatRate(
+  )}/1K outbound mails, ${formatRate(rates.attachmentDataPerGbDollars)}/GB attachments, ${formatRate(
     rates.inboundProcessingPerThousandDollars,
-  )}/1K incoming mail units`;
+  )}/1K inbound mails`;
 };
