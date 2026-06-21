@@ -96,6 +96,7 @@
 - Organizations persist one stable billing owner. Administrative/test entitlements use audited
   `billingEntitlementOverride` rows rather than source-controlled email bypasses.
 - Polar products are defined in code and synced through PayKit/Polar at checkout. Checkout metadata must include the Quieter user id, billing scope, product, and organization id for team billing. The Polar webhook posts to `/api/billing/polar-webhook` and uses `POLAR_WEBHOOK_SECRET`.
+- Polar products carry equal nominal EUR and USD fixed and metered prices. Checkout creation forwards the customer IP so Polar can select a configured local currency; other currencies fall back to the Polar organization's default payment currency.
 - AI and managed-mail costs consume the same scoped balance through `billingCreditUsageEvent`. Personal usage can consume only personal credits; organization usage can consume only that organization’s credits. Overage events are sent to Polar only after the scoped monthly credits are exhausted. Managed-mail costs use a 100% Team or 50% Team + AI service markup.
 
 ## Schema + Generated Files

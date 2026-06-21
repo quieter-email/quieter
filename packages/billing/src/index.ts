@@ -8,7 +8,7 @@ import { serverEnv } from "@quieter/env/server";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import {
   getBillingCreditUsage,
-  getCreditUsageMeteredPrice,
+  getCreditUsageMeteredPrices,
   recordBillingCreditUsage,
 } from "./credits";
 import {
@@ -17,7 +17,12 @@ import {
   hasUserBillingFeature,
   isActiveBillingStatus,
 } from "./entitlements";
-import { BILLING_PRODUCTS, billingProductIdSchema, type BillingProductId } from "./plans";
+import {
+  BILLING_PRODUCTS,
+  billingProductIdSchema,
+  getBillingFixedPrices,
+  type BillingProductId,
+} from "./plans";
 import { getPolarApiOrganizationId, getPolarClient, getPolarSandboxMode } from "./polar";
 
 const BILLING_PROVIDER = "polar" as const;
@@ -85,17 +90,36 @@ const getBillingProductId = async (productId: BillingProductId) => {
   const existingProduct = products.result.items.find(
     (candidate) => candidate.metadata[BILLING_METADATA_PRODUCT] === product.polarMetadataKey,
   );
-  const creditUsageMeteredPrice = await getCreditUsageMeteredPrice();
+  const expectedPrices = [
+    ...getBillingFixedPrices(productId),
+    ...(await getCreditUsageMeteredPrices()),
+  ];
 
   if (existingProduct) {
-    const hasCreditUsageMeteredPrice = existingProduct.prices.some(
-      (price) =>
-        price.amountType === "metered_unit" &&
-        "meterId" in price &&
-        price.meterId === creditUsageMeteredPrice.meterId,
+    const missingPrices = expectedPrices.filter(
+      (expectedPrice) =>
+        !existingProduct.prices.some((price) => {
+          if (
+            price.isArchived ||
+            price.amountType !== expectedPrice.amountType ||
+            price.priceCurrency !== expectedPrice.priceCurrency
+          ) {
+            return false;
+          }
+
+          if (expectedPrice.amountType === "fixed") {
+            return "priceAmount" in price && price.priceAmount === expectedPrice.priceAmount;
+          }
+
+          return (
+            "meterId" in price &&
+            price.meterId === expectedPrice.meterId &&
+            String(price.unitAmount) === expectedPrice.unitAmount
+          );
+        }),
     );
 
-    if (!hasCreditUsageMeteredPrice) {
+    if (missingPrices.length > 0) {
       await polar.products.update({
         id: existingProduct.id,
         productUpdate: {
@@ -103,7 +127,7 @@ const getBillingProductId = async (productId: BillingProductId) => {
             ...existingProduct.prices
               .filter((price) => !price.isArchived)
               .map((price) => ({ id: price.id })),
-            creditUsageMeteredPrice,
+            ...missingPrices,
           ],
         },
       });
@@ -120,14 +144,7 @@ const getBillingProductId = async (productId: BillingProductId) => {
     },
     name: `Quieter ${product.name}`,
     organizationId,
-    prices: [
-      {
-        amountType: "fixed",
-        priceAmount: product.monthlyPriceCents,
-        priceCurrency: "usd",
-      },
-      creditUsageMeteredPrice,
-    ],
+    prices: expectedPrices,
     recurringInterval: "month",
   });
 
@@ -167,6 +184,11 @@ const getBaseUrl = (headers: Headers) => {
 
   return host ? `${proto}://${host}` : "http://localhost:3000";
 };
+
+const getCustomerIpAddress = (headers: Headers) =>
+  headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+  headers.get("x-real-ip")?.trim() ||
+  undefined;
 
 const getSettingsUrl = (
   headers: Headers,
@@ -308,6 +330,7 @@ export const createBillingCheckout = async (input: {
         [BILLING_METADATA_USER_ID]: input.userId,
       },
       customerName: input.customerName,
+      customerIpAddress: getCustomerIpAddress(input.headers),
       externalCustomerId,
       returnUrl: cancelUrl,
     },

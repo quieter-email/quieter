@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { isActiveBillingStatus } from "../src/entitlements";
-import { BILLING_PRODUCTS, productHasAi, productHasManagedMail } from "../src/plans";
+import {
+  BILLING_PRICE_CURRENCIES,
+  BILLING_PRODUCTS,
+  getBillingFixedPrices,
+  productHasAi,
+  productHasManagedMail,
+} from "../src/plans";
 
 describe("billing entitlement statuses", () => {
   test("grants access only after payment is active or trialing", () => {
@@ -33,5 +39,17 @@ describe("billing products", () => {
     for (const product of Object.values(BILLING_PRODUCTS)) {
       expect(product.creditAmountCents).toBe(product.monthlyPriceCents);
     }
+  });
+
+  test("offers equal nominal prices in EUR and USD", () => {
+    expect(BILLING_PRICE_CURRENCIES).toEqual(["eur", "usd"]);
+    expect(getBillingFixedPrices("personal")).toEqual([
+      { amountType: "fixed", priceAmount: 1_000, priceCurrency: "eur" },
+      { amountType: "fixed", priceAmount: 1_000, priceCurrency: "usd" },
+    ]);
+    expect(getBillingFixedPrices("team_ai")).toEqual([
+      { amountType: "fixed", priceAmount: 2_000, priceCurrency: "eur" },
+      { amountType: "fixed", priceAmount: 2_000, priceCurrency: "usd" },
+    ]);
   });
 });

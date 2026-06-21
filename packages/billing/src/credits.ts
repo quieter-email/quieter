@@ -6,6 +6,7 @@ import {
 } from "@quieter/database";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import type { BillingAccount } from "./entitlements";
+import { BILLING_PRICE_CURRENCIES } from "./plans";
 import { getPolarApiOrganizationId, getPolarClient, ingestPolarEvents } from "./polar";
 
 const BILLING_CREDIT_USAGE_EVENT_NAME = "quieter.credit_usage";
@@ -61,12 +62,16 @@ const getCreditUsageMeterId = async () => {
   return createdMeter.id;
 };
 
-export const getCreditUsageMeteredPrice = async () => ({
-  amountType: "metered_unit" as const,
-  meterId: await getCreditUsageMeterId(),
-  priceCurrency: "usd",
-  unitAmount: "1",
-});
+export const getCreditUsageMeteredPrices = async () => {
+  const meterId = await getCreditUsageMeterId();
+
+  return BILLING_PRICE_CURRENCIES.map((priceCurrency) => ({
+    amountType: "metered_unit" as const,
+    meterId,
+    priceCurrency,
+    unitAmount: "1",
+  }));
+};
 
 const getTargetCondition = (input: {
   organizationId: string | null;
