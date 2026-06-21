@@ -35,6 +35,7 @@ export const OrganizationOverviewView = ({
   activeRole,
   billing,
   billingAccessUnknown,
+  billingPending,
   canDeleteOrganization,
   canUpdateOrganization,
   canUseOrganizationApiKeys,
@@ -51,6 +52,7 @@ export const OrganizationOverviewView = ({
   activeRole: OrganizationRoleOption | null;
   billing: UserBillingOverview["teams"][number] | null;
   billingAccessUnknown: boolean;
+  billingPending: boolean;
   canDeleteOrganization: boolean;
   canUpdateOrganization: boolean;
   canUseOrganizationApiKeys: boolean;
@@ -95,24 +97,28 @@ export const OrganizationOverviewView = ({
   ]
     .filter(Boolean)
     .join(", ");
-  const domainsSummary = billingAccessUnknown
-    ? "Could not load billing access."
-    : !canUseOrganizationDomains
-      ? `Requires ${BILLING_FEATURES.organizationDomains.requirementLabel}`
-      : isDomainsPending
-        ? "Loading domains…"
-        : isDomainsError
-          ? "Could not load domains."
-          : formatCount(domains.domains.length, "Domain", "Domains");
-  const apiKeysSummary = billingAccessUnknown
-    ? "Could not load billing access."
-    : !canUseOrganizationApiKeys
-      ? `Requires ${BILLING_FEATURES.organizationApiKeys.requirementLabel}`
-      : isApiKeysPending
-        ? "Loading API keys…"
-        : isApiKeysError
-          ? "Could not load API keys."
-          : formatCount(apiKeys.apiKeys.length, "API Key", "API Keys");
+  const domainsSummary = billingPending
+    ? "Loading billing access…"
+    : billingAccessUnknown
+      ? "Could not load billing access."
+      : !canUseOrganizationDomains
+        ? `Requires ${BILLING_FEATURES.organizationDomains.requirementLabel}`
+        : isDomainsPending
+          ? "Loading domains…"
+          : isDomainsError
+            ? "Could not load domains."
+            : formatCount(domains.domains.length, "Domain", "Domains");
+  const apiKeysSummary = billingPending
+    ? "Loading billing access…"
+    : billingAccessUnknown
+      ? "Could not load billing access."
+      : !canUseOrganizationApiKeys
+        ? `Requires ${BILLING_FEATURES.organizationApiKeys.requirementLabel}`
+        : isApiKeysPending
+          ? "Loading API keys…"
+          : isApiKeysError
+            ? "Could not load API keys."
+            : formatCount(apiKeys.apiKeys.length, "API Key", "API Keys");
 
   return (
     <section className="space-y-6">
@@ -195,11 +201,13 @@ export const OrganizationOverviewView = ({
         <OrganizationBillingSettings
           billing={billing}
           billingAccessUnknown={billingAccessUnknown}
+          billingPending={billingPending}
           organizationId={organization.id}
         />
 
         <OrganizationMailUsageSettings
           billingAccessUnknown={billingAccessUnknown}
+          billingPending={billingPending}
           canManageOrganizationMailUsage={canUpdateOrganization}
           canUseOrganizationMail={canUseOrganizationMail}
           organizationId={organization.id}

@@ -44,6 +44,7 @@ export const OrganizationDetailView = ({
   const {
     data: billing,
     isError: isBillingError,
+    isPending: isBillingPending,
     isSuccess: isBillingSuccess,
   } = useQuery(userBillingQueryOptions());
   const activeMember = fullOrganization?.members.find((member) => member.userId === userId) ?? null;
@@ -112,6 +113,7 @@ export const OrganizationDetailView = ({
     return (
       <DomainsView
         billingAccessUnknown={isBillingError}
+        billingPending={isBillingPending}
         canManageDomains={canUpdateOrganization}
         canUseOrganizationDomains={canUseTeamFeatures}
         onBack={onBackToOrganization}
@@ -124,6 +126,7 @@ export const OrganizationDetailView = ({
     return (
       <ApiKeysView
         billingAccessUnknown={isBillingError}
+        billingPending={isBillingPending}
         canManageApiKeys={canUpdateOrganization}
         canUseOrganizationApiKeys={canUseTeamFeatures}
         onBack={onBackToOrganization}
@@ -137,6 +140,7 @@ export const OrganizationDetailView = ({
       activeRole={activeRole}
       billing={teamBilling}
       billingAccessUnknown={isBillingError}
+      billingPending={isBillingPending}
       canDeleteOrganization={canDeleteOrganization}
       canUpdateOrganization={canUpdateOrganization}
       canUseOrganizationApiKeys={canUseTeamFeatures}

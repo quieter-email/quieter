@@ -468,12 +468,14 @@ const ApiKeyRow = ({
 
 export const ApiKeysView = ({
   billingAccessUnknown,
+  billingPending,
   canManageApiKeys,
   canUseOrganizationApiKeys,
   onBack,
   organization,
 }: {
   billingAccessUnknown: boolean;
+  billingPending: boolean;
   canManageApiKeys: boolean;
   canUseOrganizationApiKeys: boolean;
   onBack: () => void;
@@ -482,6 +484,7 @@ export const ApiKeysView = ({
   const apiKeysQuery = useQuery(organizationApiKeysQueryOptions(organization.id));
   const apiKeys = (apiKeysQuery.data?.apiKeys ?? []) as OrganizationApiKey[];
   const manageApiKeysReason =
+    (billingPending && "Loading billing access…") ||
     (billingAccessUnknown && "Could not load billing access.") ||
     (!canUseOrganizationApiKeys &&
       `Creating API keys requires ${BILLING_FEATURES.organizationApiKeys.requirementLabel} billing.`) ||

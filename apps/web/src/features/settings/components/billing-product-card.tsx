@@ -16,12 +16,14 @@ const moneyFormatter = new Intl.NumberFormat("en-US", {
 export const BillingProductCard = ({
   canChoose = true,
   currentProduct,
+  isAnyCheckoutPending,
   isStartingCheckout,
   onCheckout,
   productId,
 }: {
   canChoose?: boolean;
   currentProduct: BillingProductId | null;
+  isAnyCheckoutPending: boolean;
   isStartingCheckout: boolean;
   onCheckout: () => void;
   productId: BillingProductId;
@@ -67,7 +69,7 @@ export const BillingProductCard = ({
           </p>
           <Button
             className="w-full sm:w-auto"
-            disabled={!canChoose || isCurrent || isStartingCheckout}
+            disabled={!canChoose || isCurrent || isAnyCheckoutPending}
             onClick={onCheckout}
             size="sm"
             variant={product.highlight ? "default" : "outline"}

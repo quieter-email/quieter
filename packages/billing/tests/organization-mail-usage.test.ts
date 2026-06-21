@@ -47,12 +47,12 @@ describe("organization mail usage", () => {
     const teamRates = getManagedUsageRates("managed");
     const teamAiRates = getManagedUsageRates("pro");
 
-    expect(teamRates.messagesPerThousandDollars).toBe(0.2);
-    expect(teamAiRates.messagesPerThousandDollars).toBe(0.15);
-    expect(teamRates.attachmentDataPerGbDollars).toBe(0.24);
-    expect(teamAiRates.attachmentDataPerGbDollars).toBe(0.18);
-    expect(teamRates.inboundProcessingPerThousandDollars).toBe(0.18);
-    expect(teamAiRates.inboundProcessingPerThousandDollars).toBe(0.135);
+    expect(teamRates.messagesPerThousandDollars).toBeCloseTo(0.2);
+    expect(teamAiRates.messagesPerThousandDollars).toBeCloseTo(0.15);
+    expect(teamRates.attachmentDataPerGbDollars).toBeCloseTo(0.24);
+    expect(teamAiRates.attachmentDataPerGbDollars).toBeCloseTo(0.18);
+    expect(teamRates.inboundProcessingPerThousandDollars).toBeCloseTo(0.18);
+    expect(teamAiRates.inboundProcessingPerThousandDollars).toBeCloseTo(0.135);
     expect(teamRates.markupPercent).toBe(100);
     expect(teamAiRates.markupPercent).toBe(50);
   });

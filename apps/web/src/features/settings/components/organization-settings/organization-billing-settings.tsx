@@ -18,10 +18,12 @@ import { orpc } from "~/lib/orpc";
 export const OrganizationBillingSettings = ({
   billing,
   billingAccessUnknown,
+  billingPending,
   organizationId,
 }: {
   billing: UserBillingOverview["teams"][number] | null;
   billingAccessUnknown: boolean;
+  billingPending: boolean;
   organizationId: string;
 }) => {
   const queryClient = useQueryClient();
@@ -35,6 +37,15 @@ export const OrganizationBillingSettings = ({
       window.location.assign(result.checkoutUrl);
     },
   });
+
+  if (billingPending) {
+    return (
+      <section className="flex items-center gap-2 border-b border-border/70 py-6 text-sm text-muted-foreground">
+        <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+        Loading billing…
+      </section>
+    );
+  }
 
   if (!billing && !billingAccessUnknown) {
     return (
@@ -79,6 +90,7 @@ export const OrganizationBillingSettings = ({
           <BillingProductCard
             canChoose={billing.canManageBilling}
             currentProduct={currentProduct}
+            isAnyCheckoutPending={checkoutMutation.isPending}
             isStartingCheckout={
               checkoutMutation.isPending && checkoutMutation.variables?.product === product
             }

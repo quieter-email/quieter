@@ -73,6 +73,7 @@ export const PlanSettingsPanel = () => {
         </div>
         <BillingProductCard
           currentProduct={personalProduct}
+          isAnyCheckoutPending={checkoutMutation.isPending}
           isStartingCheckout={
             checkoutMutation.isPending && checkoutMutation.variables?.product === "personal"
           }
