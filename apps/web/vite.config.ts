@@ -6,16 +6,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
-import { cp } from "node:fs/promises";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
 import { defineConfig } from "vite";
-
-const billingRequire = createRequire(
-  new URL("../../packages/billing/package.json", import.meta.url),
-);
-const paykitRequire = createRequire(billingRequire.resolve("@paykit-sdk/core"));
-const paykitZodDirectory = dirname(paykitRequire.resolve("zod/package.json"));
 
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
@@ -51,13 +42,6 @@ export default defineConfig(({ command }) => {
       }),
       tailwindcss(),
       nitro({
-        hooks: {
-          compiled: async (nitro) => {
-            await cp(paykitZodDirectory, join(nitro.options.output.serverDir, "node_modules/zod"), {
-              recursive: true,
-            });
-          },
-        },
         preset: "vercel",
         traceDeps: ["@paykit-sdk/polar", "@polar-sh/sdk", "react"],
       }),

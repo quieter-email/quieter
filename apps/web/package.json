@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun --env-file=../../.env.local vite build",
+    "build": "bun --env-file=../../.env.local vite build && bun scripts/include-paykit-zod.ts",
     "dev": "bun --env-file=../../.env.local vite dev --port 3000",
     "fmt": "oxfmt --config ../../oxfmt.json .",
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
