@@ -2,10 +2,9 @@
 
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { BILLING_FEATURES, hasBillingPlanAccess } from "@quieter/billing/plans";
 import { useQuery } from "@tanstack/react-query";
 import type { OrganizationSettingsView } from "~/features/settings/domain/organization-settings-view";
-import { normalizeBillingPlan, userBillingQueryOptions } from "~/features/settings/domain/billing";
+import { getTeamBilling, userBillingQueryOptions } from "~/features/settings/domain/billing";
 import { ApiKeysView } from "./api-keys-view";
 import {
   type OrganizationSummary,
@@ -61,20 +60,11 @@ export const OrganizationDetailView = ({
   const canUpdateOrganization = hasOrganizationPermission(activeRole, {
     organization: ["update"],
   });
-  const currentPlan = normalizeBillingPlan(billingQuery.data?.plan);
+  const teamBilling = getTeamBilling(billingQuery.data, organization.id);
   const billingAccessUnknown = billingQuery.isError;
-  const canUseOrganizationDomains =
-    billingQuery.isSuccess &&
-    (!!billingQuery.data?.hasUnlimitedAccess ||
-      hasBillingPlanAccess(currentPlan, BILLING_FEATURES.organizationDomains.requiredPlan));
-  const canUseOrganizationApiKeys =
-    billingQuery.isSuccess &&
-    (!!billingQuery.data?.hasUnlimitedAccess ||
-      hasBillingPlanAccess(currentPlan, BILLING_FEATURES.organizationApiKeys.requiredPlan));
-  const canUseOrganizationMail =
-    billingQuery.isSuccess &&
-    (!!billingQuery.data?.hasUnlimitedAccess ||
-      hasBillingPlanAccess(currentPlan, BILLING_FEATURES.organizationMail.requiredPlan));
+  const canUseOrganizationDomains = billingQuery.isSuccess && teamBilling?.hasAccess === true;
+  const canUseOrganizationApiKeys = billingQuery.isSuccess && teamBilling?.hasAccess === true;
+  const canUseOrganizationMail = billingQuery.isSuccess && teamBilling?.hasAccess === true;
 
   if (fullOrganizationQuery.isPending) {
     return (

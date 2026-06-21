@@ -8,10 +8,11 @@ export const setGmailUsefulDetails = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
-  await assertOwnedGmailMailbox(input);
+  const gmailMailbox = await assertOwnedGmailMailbox(input);
   if (input.enabled) {
     await assertUserBillingFeature({
       feature: "gmailAutomation",
+      organizationId: gmailMailbox.organizationId ?? undefined,
       userId: input.userId,
     });
   }

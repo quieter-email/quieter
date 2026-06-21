@@ -68,7 +68,7 @@
 :root[data-kb-theme="dark"] {
   --background: oklch(0.218 0 0);
   --background-light: oklch(0.248 0 0);
-  --background-dark: oklch(0.202 0 0);
+  --background-dark: oklch(0.2 0 0);
   --foreground: oklch(1 0 0);
   --card: oklch(0.252 0 0);
   --card-foreground: oklch(0.985 0 0);

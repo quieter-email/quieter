@@ -1,13 +1,13 @@
 import { z } from "zod";
 import { formatManagedUsagePriceFeature } from "./ses-pricing";
 
-export const PAID_BILLING_PLANS = ["managed", "pro"] as const;
-export const paidBillingPlanSchema = z.enum(PAID_BILLING_PLANS);
-export const BILLING_PLAN_IDS = ["free", ...PAID_BILLING_PLANS] as const;
-export const billingPlanSchema = z.enum(BILLING_PLAN_IDS);
+export const BILLING_PRODUCT_IDS = ["personal", "team", "team_ai"] as const;
+export const billingProductIdSchema = z.enum(BILLING_PRODUCT_IDS);
+export const billingPlanSchema = z.enum(["free", ...BILLING_PRODUCT_IDS]);
 
-export type PaidBillingPlan = (typeof PAID_BILLING_PLANS)[number];
-export type BillingPlan = "free" | PaidBillingPlan;
+export type BillingProductId = (typeof BILLING_PRODUCT_IDS)[number];
+export type PaidBillingPlan = BillingProductId;
+export type BillingPlan = "free" | BillingProductId;
 
 export type BillingFeature =
   | "aiChat"
@@ -16,45 +16,57 @@ export type BillingFeature =
   | "organizationDomains"
   | "organizationMail";
 
-export const BILLING_PLAN_ORDER = {
-  free: 0,
-  managed: 1,
-  pro: 2,
-} as const satisfies Record<BillingPlan, number>;
-
 export const BILLING_FEATURES = {
   aiChat: {
     description: "AI chat",
-    requiredPlan: "pro",
+    requirementLabel: "Personal or Team + AI",
+    type: "ai",
   },
   gmailAutomation: {
     description: "Live Gmail updates and AI assistance",
-    requiredPlan: "pro",
+    requirementLabel: "Personal or Team + AI",
+    type: "ai",
   },
   organizationApiKeys: {
     description: "organization API keys",
-    requiredPlan: "managed",
+    requirementLabel: "Team",
+    type: "team",
   },
   organizationDomains: {
     description: "custom organization domains",
-    requiredPlan: "managed",
+    requirementLabel: "Team",
+    type: "team",
   },
   organizationMail: {
-    description: "organization mail API sending",
-    requiredPlan: "managed",
+    description: "organization mail",
+    requirementLabel: "Team",
+    type: "team",
   },
 } as const satisfies Record<
   BillingFeature,
   {
     description: string;
-    requiredPlan: PaidBillingPlan;
+    requirementLabel: string;
+    type: "ai" | "team";
   }
 >;
 
 export const BILLING_PRODUCTS = {
-  managed: {
-    description: "Hosted organization mailboxes, custom domains, and API-key sending.",
+  personal: {
+    creditAmountCents: 1_000,
+    description: "A personal credit balance for Quieter AI across your mailboxes.",
+    features: ["$10 in monthly credits", "AI chat", "AI organization and useful details"],
+    highlight: false,
+    monthlyPriceCents: 1_000,
+    name: "Personal",
+    polarMetadataKey: "quieter_personal_credits",
+    scope: "personal",
+  },
+  team: {
+    creditAmountCents: 1_000,
+    description: "A shared organization credit balance for managed mail.",
     features: [
+      "$10 in monthly team credits",
       "Managed sending and receiving",
       "Custom organization domains",
       "Organization API keys",
@@ -62,38 +74,44 @@ export const BILLING_PRODUCTS = {
     ],
     highlight: false,
     monthlyPriceCents: 1_000,
-    name: "Managed",
-    polarMetadataKey: "quieter_managed",
+    name: "Team",
+    polarMetadataKey: "quieter_team_credits",
+    scope: "team",
   },
-  pro: {
-    description: "Managed mail plus AI chat, live Gmail updates, and automatic organization.",
+  team_ai: {
+    creditAmountCents: 2_000,
+    description: "A larger shared balance with managed mail and AI for team members.",
     features: [
-      "Everything in Managed",
+      "$20 in monthly team credits",
+      "Everything in Team",
       formatManagedUsagePriceFeature("pro"),
-      "AI chat",
-      "$10 AI credits included",
-      "Instant Gmail updates",
-      "AI auto-labeling",
-      "Time-sensitive details from new mail",
+      "AI chat for team members",
+      "AI organization and useful details",
     ],
     highlight: true,
     monthlyPriceCents: 2_000,
-    name: "Pro",
-    polarMetadataKey: "quieter_pro",
+    name: "Team + AI",
+    polarMetadataKey: "quieter_team_ai_credits",
+    scope: "team",
   },
 } as const satisfies Record<
-  PaidBillingPlan,
+  BillingProductId,
   {
+    creditAmountCents: number;
     description: string;
     features: string[];
     highlight: boolean;
     monthlyPriceCents: number;
     name: string;
     polarMetadataKey: string;
+    scope: "personal" | "team";
   }
 >;
 
-export const hasBillingPlanAccess = (plan: BillingPlan, requiredPlan: PaidBillingPlan) =>
-  BILLING_PLAN_ORDER[plan] >= BILLING_PLAN_ORDER[requiredPlan];
+export const productHasAi = (product: BillingProductId) =>
+  product === "personal" || product === "team_ai";
+
+export const productHasManagedMail = (product: BillingProductId) =>
+  product === "team" || product === "team_ai";
 
 export const getBillingFeatureRequirement = (feature: BillingFeature) => BILLING_FEATURES[feature];

@@ -31,7 +31,7 @@ const getLiveSyncConfiguration = () => {
 
 export const getGmailLiveSyncAccess = async (input: { mailboxId: string; userId: string }) => {
   const [selectedMailbox] = await db
-    .select({ id: mailbox.id })
+    .select({ id: mailbox.id, organizationId: mailbox.organizationId })
     .from(mailbox)
     .where(
       and(
@@ -48,6 +48,7 @@ export const getGmailLiveSyncAccess = async (input: { mailboxId: string; userId:
 
   return await hasUserBillingFeature({
     feature: "gmailAutomation",
+    organizationId: selectedMailbox.organizationId ?? undefined,
     userId: input.userId,
   });
 };

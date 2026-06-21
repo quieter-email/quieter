@@ -8,7 +8,6 @@ import {
   PinOffIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { BILLING_FEATURES, hasBillingPlanAccess } from "@quieter/billing/plans";
 import {
   Button,
   Select,
@@ -26,7 +25,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { MailboxSettingsRow } from "~/features/navigation/components/mailbox-switcher";
 import { organizationMailDomainsQueryOptions } from "~/features/settings/components/organization-settings/mail-domains";
-import { normalizeBillingPlan, userBillingQueryOptions } from "~/features/settings/domain/billing";
+import { hasPersonalAiAccess, userBillingQueryOptions } from "~/features/settings/domain/billing";
 import { authClient } from "~/lib/auth";
 import { openGoogleAccountLink } from "~/lib/google-account-link";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
@@ -51,11 +50,6 @@ export const MailboxesSettingsPanel = () => {
     isError: isMailboxesError,
   } = useQuery(mailboxesQueryOptions());
   const { data: billing, isSuccess: isBillingSuccess } = useQuery(userBillingQueryOptions());
-  const currentPlan = normalizeBillingPlan(billing?.plan);
-  const hasGmailAutomationAccess =
-    isBillingSuccess &&
-    (!!billing?.hasUnlimitedAccess ||
-      hasBillingPlanAccess(currentPlan, BILLING_FEATURES.gmailAutomation.requiredPlan));
   const groups = mailboxesData?.groups ?? [];
   const gmailGroups = groups.map((group) => ({
     ...group,
@@ -148,8 +142,9 @@ export const MailboxesSettingsPanel = () => {
           <h2 className="text-sm font-medium text-foreground">Connected Gmail</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Connect an existing personal or Google Workspace inbox. Organization placement does not
-            share the mailbox with other members. Pro keeps your inbox current as mail arrives and
-            can apply your existing Gmail labels or surface timely updates from new mail.
+            share the mailbox with other members. Personal or Team + AI billing keeps your inbox
+            current as mail arrives and can apply your existing Gmail labels or surface timely
+            updates from new mail.
           </p>
         </div>
 
@@ -200,6 +195,8 @@ export const MailboxesSettingsPanel = () => {
             <div className="space-y-2">
               {group.mailboxes.map((mailbox) => {
                 const isDefault = mailbox.id === defaultMailboxId;
+                const hasGmailAutomationAccess =
+                  isBillingSuccess && hasPersonalAiAccess(billing, mailbox.organizationId);
                 return (
                   <div
                     className="overflow-hidden rounded-lg border border-border/70 bg-muted/15"
@@ -340,7 +337,7 @@ export const MailboxesSettingsPanel = () => {
                             Useful details
                             {!hasGmailAutomationAccess && (
                               <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                Pro
+                                Personal or Team + AI
                               </span>
                             )}
                           </span>
@@ -386,7 +383,7 @@ export const MailboxesSettingsPanel = () => {
                             Auto-label
                             {!hasGmailAutomationAccess && (
                               <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                Pro
+                                Personal or Team + AI
                               </span>
                             )}
                           </span>

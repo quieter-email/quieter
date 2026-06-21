@@ -1,5 +1,6 @@
 "use client";
 
+import { cn, useColorModeValue } from "@quieter/ui";
 import { useEffect, useRef } from "react";
 
 const DITHER_STEP = 3;
@@ -66,9 +67,9 @@ void main() {
 `;
 
 type WorkspaceDitherBackgroundProps = {
+  className?: string;
   dotRgb?: string;
   falloff?: number;
-  opacity?: number;
   pattern?: "default" | "opposing-corners";
   strength?: number;
 };
@@ -89,13 +90,15 @@ const compileShader = (gl: WebGLRenderingContext, type: number, source: string) 
 };
 
 export const WorkspaceDitherBackground = ({
-  dotRgb,
+  className,
+  dotRgb = "0, 0, 0",
   falloff = 1.28,
-  opacity,
   pattern = "default",
   strength,
 }: WorkspaceDitherBackgroundProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const themeStrength = useColorModeValue(2, 5);
+  const activeStrength = strength ?? themeStrength;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -154,22 +157,11 @@ export const WorkspaceDitherBackground = ({
     gl.uniform1f(falloffLocation, falloff);
     gl.uniform1f(patternLocation, pattern === "opposing-corners" ? 1 : 0);
 
-    const applyTheme = () => {
-      const style = getComputedStyle(canvas);
-      const raw = dotRgb ?? style.getPropertyValue("--workspace-dither-dot-rgb").trim();
-      const [red, green, blue] = (raw || "0, 0, 0")
-        .split(",")
-        .map((channel) => Number.parseFloat(channel) / 255);
-      gl.uniform3f(colorLocation, red || 0, green || 0, blue || 0);
-
-      const cssStrength = Number.parseFloat(
-        style.getPropertyValue("--workspace-dither-strength").trim(),
-      );
-      gl.uniform1f(
-        alphaScaleLocation,
-        strength ?? (Number.isFinite(cssStrength) ? cssStrength : 1),
-      );
-    };
+    const [red, green, blue] = dotRgb
+      .split(",")
+      .map((channel) => Number.parseFloat(channel.trim()) / 255);
+    gl.uniform3f(colorLocation, red || 0, green || 0, blue || 0);
+    gl.uniform1f(alphaScaleLocation, activeStrength);
 
     const draw = () => {
       const { height, width } = canvas.getBoundingClientRect();
@@ -188,7 +180,6 @@ export const WorkspaceDitherBackground = ({
       gl.uniform2f(resolutionLocation, deviceWidth, deviceHeight);
       gl.uniform2f(cssSizeLocation, width, height);
       gl.uniform1f(dprLocation, pixelRatio);
-      applyTheme();
 
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -200,27 +191,22 @@ export const WorkspaceDitherBackground = ({
     const resizeObserver = new ResizeObserver(draw);
     resizeObserver.observe(canvas);
 
-    const themeObserver = new MutationObserver(draw);
-    themeObserver.observe(document.documentElement, {
-      attributeFilter: ["class", "style"],
-      attributes: true,
-    });
-
     return () => {
       resizeObserver.disconnect();
-      themeObserver.disconnect();
       gl.deleteProgram(program);
       gl.deleteShader(vertexShader);
       gl.deleteShader(fragmentShader);
       gl.deleteBuffer(positionBuffer);
     };
-  }, [dotRgb, falloff, pattern, strength]);
+  }, [activeStrength, dotRgb, falloff, pattern]);
 
   return (
     <canvas
-      className="pointer-events-none absolute inset-0 z-0 size-full overflow-hidden"
+      className={cn(
+        "pointer-events-none absolute inset-0 z-0 size-full overflow-hidden opacity-25 dark:opacity-100",
+        className,
+      )}
       ref={canvasRef}
-      style={{ opacity: opacity ?? "var(--workspace-dither-opacity, 0.25)" }}
     />
   );
 };

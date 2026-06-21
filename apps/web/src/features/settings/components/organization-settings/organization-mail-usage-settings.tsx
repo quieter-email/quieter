@@ -76,7 +76,7 @@ const createInitialMilestones = (percents: number[]): Milestone[] =>
 
 const ManagedUsageLoading = ({ message }: { message: string }) => (
   <section className="border-b border-border/70 py-6">
-    <h2 className="text-sm font-medium text-foreground">Managed Usage</h2>
+    <h2 className="text-sm font-medium text-foreground">Team credits</h2>
     <p className="mt-2 inline-flex items-center gap-2 text-sm text-muted-foreground">
       <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
       {message}
@@ -86,7 +86,7 @@ const ManagedUsageLoading = ({ message }: { message: string }) => (
 
 const ManagedUsageUnavailable = ({ message }: { message: string }) => (
   <section className="border-b border-border/70 py-6">
-    <h2 className="text-sm font-medium text-foreground">Managed Usage</h2>
+    <h2 className="text-sm font-medium text-foreground">Team credits</h2>
     <p className="mt-1 text-sm text-muted-foreground">{message}</p>
   </section>
 );
@@ -194,7 +194,7 @@ const ManagedUsageSettingsForm = ({
       <section className="border-b border-border/70 py-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-sm font-medium text-foreground">Managed Usage</h2>
+            <h2 className="text-sm font-medium text-foreground">Team credits</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {formatMoney(managedUsageCostCents)} tracked this period
             </p>
@@ -211,7 +211,7 @@ const ManagedUsageSettingsForm = ({
     <section className="border-b border-border/70 py-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h2 className="text-sm font-medium text-foreground">Managed Usage</h2>
+          <h2 className="text-sm font-medium text-foreground">Team credits</h2>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
             <span>{overview.managedUsageRates.markupPercent}% service markup</span>
             {periodEnd ? <span>Resets {periodEnd}</span> : null}
@@ -239,10 +239,10 @@ const ManagedUsageSettingsForm = ({
             <p className="font-mono text-xl font-semibold text-foreground">
               {formatMoney(managedUsageCostCents)}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">used this billing period</p>
+            <p className="mt-1 text-xs text-muted-foreground">used across team features</p>
           </div>
           <p className="text-right text-xs text-muted-foreground">
-            {formatMoney(includedUsageCents)} included
+            {formatMoney(includedUsageCents)} monthly credits
             <br />
             {formatMoney(overview.usage.billableCostCents)} overage
           </p>
@@ -280,7 +280,7 @@ const ManagedUsageSettingsForm = ({
               Allow overage
             </label>
             <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-              When disabled, new sends fail after the included amount is used.
+              When disabled, new paid usage stops after the team credits are used.
             </p>
           </div>
           <Switch
@@ -298,7 +298,7 @@ const ManagedUsageSettingsForm = ({
           <div>
             <p className="text-sm font-medium text-foreground">Monthly overage limit</p>
             <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-              Maximum Managed Usage billed above the included amount.
+              Maximum usage billed above the monthly team credits.
             </p>
           </div>
 
@@ -403,7 +403,7 @@ const ManagedUsageSettingsForm = ({
                           ? "Enter a threshold"
                           : formatMoney(includedThresholdCents)}
                       </span>{" "}
-                      of included usage
+                      of monthly credits
                     </span>
                     {overageThresholdCents != null && (
                       <span>
@@ -443,7 +443,7 @@ const ManagedUsageSettingsForm = ({
 
       {!canManageOrganizationMailUsage && (
         <p className="mt-4 text-xs text-muted-foreground">
-          Only admins and owners can change Managed Usage settings.
+          Only admins and owners can change team credit settings.
         </p>
       )}
     </section>
@@ -473,7 +473,7 @@ export const OrganizationMailUsageSettings = ({
   }
 
   if (!canUseOrganizationMail) {
-    return <ManagedUsageUnavailable message="Available on Managed and Pro." />;
+    return <ManagedUsageUnavailable message="Available with Team billing." />;
   }
 
   if (isUsagePending) {
@@ -487,7 +487,7 @@ export const OrganizationMailUsageSettings = ({
   }
 
   if (!usage.hasAccess) {
-    return <ManagedUsageUnavailable message="Available on Managed and Pro." />;
+    return <ManagedUsageUnavailable message="Available with Team billing." />;
   }
 
   return (

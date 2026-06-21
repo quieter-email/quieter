@@ -40,20 +40,10 @@ const formatRate = (value: number) =>
     minimumFractionDigits: 3,
     style: "currency",
   }).format(value);
-const formatUsd = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    currency: "USD",
-    maximumFractionDigits: 2,
-    style: "currency",
-  }).format(value);
-
 export const formatManagedUsagePriceFeature = (plan: ManagedUsagePlan) => {
   const rates = getManagedUsageRates(plan);
-  const includedUsageDollars = formatUsd(
-    microCentsToDollars(ORGANIZATION_MAIL_INCLUDED_SES_USAGE_MICROCENTS),
-  );
 
-  return `${includedUsageDollars} Managed Usage included; then ${formatRate(
+  return `Managed mail uses credits at ${formatRate(
     rates.messagesPerThousandDollars,
   )}/1K messages, ${formatRate(rates.attachmentDataPerGbDollars)}/GB attachments, ${formatRate(
     rates.inboundProcessingPerThousandDollars,

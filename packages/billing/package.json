@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./credits": "./src/credits.ts",
     "./entitlements": "./src/entitlements.ts",
     "./plans": "./src/plans.ts",
     "./ses-pricing": "./src/ses-pricing.ts",

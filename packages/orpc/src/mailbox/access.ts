@@ -8,7 +8,7 @@ export const MAILBOX_PROVIDER_MANAGED = "managed" as const;
 
 export const assertOwnedGmailMailbox = async (input: { mailboxId: string; userId: string }) => {
   const [gmailMailbox] = await db
-    .select({ id: mailbox.id })
+    .select({ id: mailbox.id, organizationId: mailbox.organizationId })
     .from(mailbox)
     .where(
       and(

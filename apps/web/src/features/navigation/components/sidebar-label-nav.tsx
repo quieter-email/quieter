@@ -44,7 +44,7 @@ import {
 } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LayoutGroup, m } from "motion/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { serializeStructuredSearchState } from "~/features/message-search/components/message-list-search/message-list-search-utils";
 import {
   getUserLabels,
@@ -197,6 +197,48 @@ export const SidebarLabelNav = ({
     isError: areLabelsError,
     isPending: areLabelsPending,
   } = useQuery(labelsQueryOptions(mailboxId ?? "", !!mailboxId));
+
+  const mountTimeRef = useRef(Date.now());
+  const prevMailboxIdRef = useRef(mailboxId);
+  const prevAreLabelsPendingRef = useRef(areLabelsPending);
+  const [animateLabelsEntrance, setAnimateLabelsEntrance] = useState(false);
+  const [hasAnimatedLabels, setHasAnimatedLabels] = useState(false);
+  const [labelsDelayOffset, setLabelsDelayOffset] = useState(0);
+
+  useEffect(() => {
+    if (mailboxId === prevMailboxIdRef.current) return;
+
+    prevMailboxIdRef.current = mailboxId;
+    setHasAnimatedLabels(false);
+    setAnimateLabelsEntrance(false);
+    setLabelsDelayOffset(0);
+  }, [mailboxId]);
+
+  useEffect(() => {
+    if (areLabelsPending === prevAreLabelsPendingRef.current) return;
+
+    prevAreLabelsPendingRef.current = areLabelsPending;
+    if (!areLabelsPending && !hasAnimatedLabels) {
+      setAnimateLabelsEntrance(true);
+      setHasAnimatedLabels(true);
+
+      const elapsed = Date.now() - mountTimeRef.current;
+      const targetTime = 900; // 900ms
+      if (elapsed < targetTime) {
+        setLabelsDelayOffset((targetTime - elapsed) / 1000);
+      } else {
+        setLabelsDelayOffset(0);
+      }
+    }
+  }, [areLabelsPending, hasAnimatedLabels]);
+
+  useEffect(() => {
+    if (animateLabelsEntrance) {
+      const frame = requestAnimationFrame(() => setAnimateLabelsEntrance(false));
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [animateLabelsEntrance]);
+
   const { data: managedLabelCounts = [] } = useQuery(
     managedLabelCountsQueryOptions(mailboxId ?? "", mailboxProvider === "managed" && !!mailboxId),
   );
@@ -454,10 +496,14 @@ export const SidebarLabelNav = ({
                 <m.div
                   key={label.id}
                   className="w-full will-change-[transform,opacity,filter]"
-                  initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
+                  initial={getSidebarEntranceInitial(
+                    shouldAnimateEntrance || animateLabelsEntrance,
+                  )}
                   animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
                   transition={{
-                    delay: getSidebarEntranceDelay(index + 9),
+                    delay: shouldAnimateEntrance
+                      ? getSidebarEntranceDelay(index + 9)
+                      : labelsDelayOffset + getSidebarEntranceDelay(index),
                     duration: 0.5,
                     ease: "easeOut",
                   }}

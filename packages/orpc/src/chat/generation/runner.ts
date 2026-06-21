@@ -253,6 +253,7 @@ export const runChatGeneration = async (runId: string) => {
           chatId: run.chatId,
           completionTokens: usage.completionTokens,
           externalId: `${run.id}:${usageReports.length}`,
+          mailboxId: run.mailboxId,
           model,
           promptTokens: usage.promptTokens,
           userId: run.userId,

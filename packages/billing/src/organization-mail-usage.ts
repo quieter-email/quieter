@@ -9,9 +9,8 @@ import {
   type OrganizationMailUsageDirection,
 } from "@quieter/database";
 import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
-import type { PaidBillingPlan } from "./plans";
+import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits";
 import { getOrganizationBillingEntitlement } from "./entitlements";
-import { getPolarApiOrganizationId, getPolarClient, ingestPolarEvents } from "./polar";
 import {
   getManagedUsageMarkupBasisPoints,
   getManagedUsageRates,
@@ -20,11 +19,7 @@ import {
   SES_INBOUND_MESSAGE_MICROCENTS,
   SES_OUTBOUND_ATTACHMENT_DATA_MICROCENTS_PER_GB,
   SES_OUTBOUND_MESSAGE_MICROCENTS,
-  ORGANIZATION_MAIL_INCLUDED_SES_USAGE_MICROCENTS,
 } from "./ses-pricing";
-
-export const ORGANIZATION_MAIL_POLAR_EVENT_NAME = "quieter.organization_mail.ses_overage";
-export const ORGANIZATION_MAIL_USAGE_METER_KEY = "quieter_organization_mail_ses_overage";
 
 type OrganizationMailUsageEstimate = {
   attachmentSizeBytes: number;
@@ -48,8 +43,6 @@ export type OrganizationMailUsageSettings = {
   overageEnabled: boolean;
 };
 
-let organizationMailUsageMeterId: string | null = null;
-
 export const DEFAULT_ORGANIZATION_MAIL_USAGE_SETTINGS = {
   alertMilestonePercents: [50, 80, 100],
   monthlyOverageLimitMicroCents: null,
@@ -66,8 +59,11 @@ const getBillingPeriod = (start: Date | null, end: Date | null) => {
   return { end: calendarEnd, start: calendarStart };
 };
 
-const applyOverageMarkup = (sesCostMicroCents: number, plan: PaidBillingPlan | null) =>
-  Math.ceil(sesCostMicroCents * (1 + getManagedUsageMarkupBasisPoints(plan) / 10_000));
+const applyUsageMarkup = (sesCostMicroCents: number, product: "team" | "team_ai" | null) =>
+  Math.ceil(
+    sesCostMicroCents *
+      (1 + getManagedUsageMarkupBasisPoints(product === "team_ai" ? "pro" : "managed") / 10_000),
+  );
 
 export const withOrganizationMailUsageLock = async <T>(
   organizationId: string,
@@ -246,101 +242,8 @@ const getPeriodUsageMicroCents = async (input: {
   };
 };
 
-const getEventOverage = (input: {
-  estimate: OrganizationMailUsageEstimate;
-  plan: PaidBillingPlan | null;
-  usedSesCostMicroCents: number;
-}) => {
-  const remainingIncludedSesCostMicroCents = Math.max(
-    0,
-    ORGANIZATION_MAIL_INCLUDED_SES_USAGE_MICROCENTS - input.usedSesCostMicroCents,
-  );
-  const overageSesCostMicroCents = Math.max(
-    0,
-    input.estimate.sesCostMicroCents - remainingIncludedSesCostMicroCents,
-  );
-
-  return {
-    billableCostMicroCents: applyOverageMarkup(overageSesCostMicroCents, input.plan),
-    overageSesCostMicroCents,
-    remainingIncludedSesCostMicroCents,
-  };
-};
-
-const applyOrganizationMailUsageSettings = (input: {
-  billableCostMicroCents: number;
-  currentBillableCostMicroCents: number;
-  settings: OrganizationMailUsageSettings;
-}) => {
-  if (!input.settings.overageEnabled) return 0;
-
-  if (input.settings.monthlyOverageLimitMicroCents == null) {
-    return input.billableCostMicroCents;
-  }
-
-  const remainingBillableCostMicroCents = Math.max(
-    0,
-    input.settings.monthlyOverageLimitMicroCents - input.currentBillableCostMicroCents,
-  );
-
-  return Math.min(input.billableCostMicroCents, remainingBillableCostMicroCents);
-};
-
-const getOrganizationMailUsageMeterId = async () => {
-  if (organizationMailUsageMeterId) return organizationMailUsageMeterId;
-
-  const polar = await getPolarClient();
-  const organizationId = getPolarApiOrganizationId();
-  const meters = await polar.meters.list({
-    limit: 100,
-    metadata: {
-      quieterMeter: ORGANIZATION_MAIL_USAGE_METER_KEY,
-    },
-    organizationId,
-  });
-  const existingMeter = meters.result.items.find(
-    (meter) => meter.metadata.quieterMeter === ORGANIZATION_MAIL_USAGE_METER_KEY,
-  );
-
-  if (existingMeter) {
-    organizationMailUsageMeterId = existingMeter.id;
-    return existingMeter.id;
-  }
-
-  const createdMeter = await polar.meters.create({
-    aggregation: {
-      func: "sum",
-      property: "billableCostCents",
-    },
-    filter: {
-      clauses: [
-        {
-          operator: "eq",
-          property: "name",
-          value: ORGANIZATION_MAIL_POLAR_EVENT_NAME,
-        },
-      ],
-      conjunction: "and",
-    },
-    metadata: {
-      quieterMeter: ORGANIZATION_MAIL_USAGE_METER_KEY,
-    },
-    name: "Quieter Managed Usage overage",
-    organizationId,
-  });
-
-  organizationMailUsageMeterId = createdMeter.id;
-  return createdMeter.id;
-};
-
-export const getOrganizationMailMeteredPrice = async () => ({
-  amountType: "metered_unit" as const,
-  meterId: await getOrganizationMailUsageMeterId(),
-  priceCurrency: "usd",
-  unitAmount: "1",
-});
-
 const recordOrganizationMailUsageAlerts = async (input: {
+  creditAmountMicroCents: number;
   organizationId: string;
   period: { end: Date; start: Date };
   settings: OrganizationMailUsageSettings;
@@ -356,7 +259,7 @@ const recordOrganizationMailUsageAlerts = async (input: {
 
   const alerts = input.settings.alertMilestonePercents.flatMap((milestonePercent) => {
     const includedUsageThreshold = Math.ceil(
-      ORGANIZATION_MAIL_INCLUDED_SES_USAGE_MICROCENTS * (milestonePercent / 100),
+      input.creditAmountMicroCents * (milestonePercent / 100),
     );
     const includedUsageAlert: AlertCandidate[] =
       input.usage.sesCostMicroCents >= includedUsageThreshold
@@ -423,31 +326,31 @@ export const assertCanConsumeOrganizationMailUsage = async (input: {
 
   if (!entitlement.hasAccess) {
     throw new ORPCError("FORBIDDEN", {
-      message: "Organization mail API sending requires the managed plan.",
+      message: "Organization mail requires Team billing.",
       status: 403,
     });
   }
 
-  const period = getBillingPeriod(entitlement.currentPeriodStart, entitlement.currentPeriodEnd);
-  const usage = await getPeriodUsageMicroCents({
-    end: period.end,
-    organizationId: input.organizationId,
-    start: period.start,
-  });
-  const eventOverage = getEventOverage({
-    estimate: input.estimate,
-    plan: entitlement.plan,
-    usedSesCostMicroCents: usage.sesCostMicroCents,
-  });
+  const period = getBillingPeriod(
+    entitlement.account?.currentPeriodStart ?? null,
+    entitlement.account?.currentPeriodEnd ?? null,
+  );
 
-  if (eventOverage.overageSesCostMicroCents > 0 && !entitlement.hasUnlimitedAccess) {
+  if (entitlement.account) {
+    const usage = await getBillingCreditUsage(entitlement.account);
+    const costMicroCents = applyUsageMarkup(
+      input.estimate.sesCostMicroCents,
+      entitlement.product === "team_ai" ? "team_ai" : "team",
+    );
+    const projectedBillableCostMicroCents = Math.max(
+      0,
+      usage.costMicroCents + costMicroCents - usage.creditAmountMicroCents,
+    );
     const settings = await getOrganizationMailUsageSettings(input.organizationId);
-    const projectedBillableCostMicroCents =
-      usage.billableCostMicroCents + eventOverage.billableCostMicroCents;
 
-    if (!settings.overageEnabled) {
+    if (projectedBillableCostMicroCents > 0 && !settings.overageEnabled) {
       throw new ORPCError("FORBIDDEN", {
-        message: "Managed Usage overage is disabled for this organization.",
+        message: "Team credit overage is disabled for this organization.",
         status: 403,
       });
     }
@@ -457,97 +360,39 @@ export const assertCanConsumeOrganizationMailUsage = async (input: {
       projectedBillableCostMicroCents > settings.monthlyOverageLimitMicroCents
     ) {
       throw new ORPCError("FORBIDDEN", {
-        message: "Managed Usage overage limit reached for this billing period.",
+        message: "Team credit overage limit reached for this billing period.",
         status: 403,
       });
     }
-  }
-
-  if (
-    eventOverage.overageSesCostMicroCents > 0 &&
-    !entitlement.hasUnlimitedAccess &&
-    !entitlement.billingUserId
-  ) {
-    throw new ORPCError("FORBIDDEN", {
-      message: "Managed Usage overage billing is not available for this organization.",
-      status: 403,
-    });
-  }
-
-  if (eventOverage.overageSesCostMicroCents > 0 && !entitlement.hasUnlimitedAccess) {
-    await getOrganizationMailUsageMeterId();
   }
 
   return { entitlement, period };
 };
 
 export const recordOrganizationMailUsage = async (input: OrganizationMailUsageInput) => {
-  const entitlement = await getOrganizationBillingEntitlement({
-    feature: "organizationMail",
-    organizationId: input.organizationId,
-  });
-
-  if (!entitlement.hasAccess) return null;
-
-  const period = getBillingPeriod(entitlement.currentPeriodStart, entitlement.currentPeriodEnd);
-  const usage = await getPeriodUsageMicroCents({
-    end: period.end,
-    organizationId: input.organizationId,
-    start: period.start,
-  });
-  const eventOverage = getEventOverage({
+  const { entitlement, period } = await assertCanConsumeOrganizationMailUsage({
     estimate: input,
-    plan: entitlement.plan,
-    usedSesCostMicroCents: usage.sesCostMicroCents,
+    organizationId: input.organizationId,
   });
-  const includedSesCostMicroCents = entitlement.hasUnlimitedAccess
-    ? input.sesCostMicroCents
-    : Math.min(input.sesCostMicroCents, eventOverage.remainingIncludedSesCostMicroCents);
   const settings = entitlement.hasUnlimitedAccess
     ? DEFAULT_ORGANIZATION_MAIL_USAGE_SETTINGS
     : await getOrganizationMailUsageSettings(input.organizationId);
-  const rawBillableCostMicroCents = entitlement.hasUnlimitedAccess
-    ? 0
-    : eventOverage.billableCostMicroCents;
-
-  if (rawBillableCostMicroCents > 0 && !settings.overageEnabled) {
-    throw new ORPCError("FORBIDDEN", {
-      message: "Managed Usage overage is disabled for this organization.",
-      status: 403,
-    });
-  }
-
-  if (
-    rawBillableCostMicroCents > 0 &&
-    settings.monthlyOverageLimitMicroCents != null &&
-    usage.billableCostMicroCents + rawBillableCostMicroCents >
-      settings.monthlyOverageLimitMicroCents
-  ) {
-    throw new ORPCError("FORBIDDEN", {
-      message: "Managed Usage overage limit reached for this billing period.",
-      status: 403,
-    });
-  }
-
-  const billableCostMicroCents = entitlement.hasUnlimitedAccess
-    ? 0
-    : applyOrganizationMailUsageSettings({
-        billableCostMicroCents: rawBillableCostMicroCents,
-        currentBillableCostMicroCents: usage.billableCostMicroCents,
-        settings,
-      });
   const now = new Date();
   const dedupeKey = `${input.direction}:${input.organizationId}:${input.providerMessageId}`;
-  const [usageEvent] = await db
+  const customerCostMicroCents = applyUsageMarkup(
+    input.sesCostMicroCents,
+    entitlement.product === "team_ai" ? "team_ai" : "team",
+  );
+  const [insertedUsageEvent] = await db
     .insert(organizationMailUsageEvent)
     .values({
       attachmentSizeBytes: input.attachmentSizeBytes,
-      billableCostMicroCents,
+      billableCostMicroCents: 0,
       createdAt: now,
       dedupeKey,
       direction: input.direction,
       id: crypto.randomUUID(),
-      includedSesCostMicroCents,
+      includedSesCostMicroCents: customerCostMicroCents,
       incomingChunkCount: input.incomingChunkCount,
       messageCount: input.messageCount,
       messageSizeBytes: input.messageSizeBytes,
@@ -562,45 +407,57 @@ export const recordOrganizationMailUsage = async (input: OrganizationMailUsageIn
     .returning({
       id: organizationMailUsageEvent.id,
     });
+  const usageEvent =
+    insertedUsageEvent ??
+    (
+      await db
+        .select({ id: organizationMailUsageEvent.id })
+        .from(organizationMailUsageEvent)
+        .where(eq(organizationMailUsageEvent.dedupeKey, dedupeKey))
+        .limit(1)
+    )[0];
 
-  if (usageEvent && !entitlement.hasUnlimitedAccess) {
+  if (!usageEvent) {
+    throw new Error("Could not persist organization mail usage.");
+  }
+
+  const creditUsage =
+    entitlement.account &&
+    (await recordBillingCreditUsage({
+      account: entitlement.account,
+      category: "mail",
+      costMicroCents: customerCostMicroCents,
+      dedupeKey: `mail:${dedupeKey}`,
+      metadata: {
+        direction: input.direction,
+        organizationId: input.organizationId,
+        providerMessageId: input.providerMessageId,
+      },
+    }));
+  const billableCostMicroCents = creditUsage?.billableCostMicroCents ?? 0;
+
+  await db
+    .update(organizationMailUsageEvent)
+    .set({
+      billableCostMicroCents,
+      includedSesCostMicroCents: Math.max(0, customerCostMicroCents - billableCostMicroCents),
+      polarEventReportedAt: billableCostMicroCents > 0 ? new Date() : null,
+    })
+    .where(eq(organizationMailUsageEvent.id, usageEvent.id));
+
+  if (entitlement.account) {
+    const creditUsageOverview = await getBillingCreditUsage(entitlement.account);
     await recordOrganizationMailUsageAlerts({
+      creditAmountMicroCents: creditUsageOverview.creditAmountMicroCents,
       organizationId: input.organizationId,
       period,
       settings,
       usage: {
-        billableCostMicroCents: usage.billableCostMicroCents + billableCostMicroCents,
-        sesCostMicroCents: usage.sesCostMicroCents + input.sesCostMicroCents,
+        billableCostMicroCents: creditUsageOverview.billableCostMicroCents,
+        sesCostMicroCents: creditUsageOverview.costMicroCents,
       },
     });
   }
-
-  if (!usageEvent || billableCostMicroCents <= 0 || !entitlement.billingUserId) {
-    return usageEvent ?? null;
-  }
-
-  await getOrganizationMailUsageMeterId();
-  await ingestPolarEvents([
-    {
-      externalCustomerId: `user:${entitlement.billingUserId}`,
-      externalId: `organization-mail-usage:${usageEvent.id}`,
-      metadata: {
-        billableCostCents: billableCostMicroCents / 1_000_000,
-        direction: input.direction,
-        organizationId: input.organizationId,
-        providerMessageId: input.providerMessageId,
-        sesCostCents: input.sesCostMicroCents / 1_000_000,
-        usageEventId: usageEvent.id,
-      },
-      name: ORGANIZATION_MAIL_POLAR_EVENT_NAME,
-      organizationId: getPolarApiOrganizationId(),
-    },
-  ]);
-
-  await db
-    .update(organizationMailUsageEvent)
-    .set({ polarEventReportedAt: new Date() })
-    .where(eq(organizationMailUsageEvent.id, usageEvent.id));
 
   return usageEvent;
 };
@@ -610,27 +467,36 @@ export const getOrganizationMailUsageOverview = async (organizationId: string) =
     feature: "organizationMail",
     organizationId,
   });
-  const period = getBillingPeriod(entitlement.currentPeriodStart, entitlement.currentPeriodEnd);
-  const [settings, usage] = await Promise.all([
+  const period = getBillingPeriod(
+    entitlement.account?.currentPeriodStart ?? null,
+    entitlement.account?.currentPeriodEnd ?? null,
+  );
+  const [settings, mailUsage, creditUsage] = await Promise.all([
     getOrganizationMailUsageSettings(organizationId),
     getPeriodUsageMicroCents({
       end: period.end,
       organizationId,
       start: period.start,
     }),
+    entitlement.account ? getBillingCreditUsage(entitlement.account) : null,
   ]);
+  const creditAmountMicroCents = creditUsage?.creditAmountMicroCents ?? 0;
+  const usedCreditMicroCents = creditUsage?.costMicroCents ?? mailUsage.sesCostMicroCents;
 
   return {
     hasAccess: entitlement.hasAccess,
     hasUnlimitedAccess: entitlement.hasUnlimitedAccess,
-    includedSesUsageMicroCents: ORGANIZATION_MAIL_INCLUDED_SES_USAGE_MICROCENTS,
-    managedUsageRates: getManagedUsageRates(entitlement.plan === "pro" ? "pro" : "managed"),
+    includedSesUsageMicroCents: creditAmountMicroCents,
+    managedUsageRates: getManagedUsageRates(entitlement.product === "team_ai" ? "pro" : "managed"),
     period,
     remainingIncludedSesUsageMicroCents: entitlement.hasUnlimitedAccess
       ? null
-      : Math.max(0, ORGANIZATION_MAIL_INCLUDED_SES_USAGE_MICROCENTS - usage.sesCostMicroCents),
+      : Math.max(0, creditAmountMicroCents - usedCreditMicroCents),
     settings,
-    usage,
+    usage: {
+      billableCostMicroCents: creditUsage?.billableCostMicroCents ?? 0,
+      sesCostMicroCents: usedCreditMicroCents,
+    },
   };
 };
 

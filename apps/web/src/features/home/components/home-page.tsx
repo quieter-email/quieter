@@ -9,7 +9,7 @@ export const HomePage = () => (
       initial={{ opacity: 0, filter: "blur(8px)" }}
       animate={{ opacity: 1, filter: "blur(0px)" }}
       transition={{ duration: 1.2, ease: "easeOut" }}
-      className="quieter-workspace-background relative isolate min-h-dvh w-full bg-neutral-950 text-white will-change-[opacity,filter] [--background:#0a0a0a]"
+      className="relative isolate min-h-dvh w-full bg-neutral-950 text-white will-change-[opacity,filter]"
     >
       <LinkButton
         className="fixed top-4 right-4 z-20 h-8 border-white/15 bg-white/5 px-3 text-xs text-white/50 shadow-none backdrop-blur-sm hover:bg-white/10 hover:text-white/80"
@@ -78,9 +78,9 @@ export const HomePage = () => (
         </div>
       </div>
       <WorkspaceDitherBackground
+        className="opacity-100"
         dotRgb="21, 21, 21"
         falloff={2.35}
-        opacity={1}
         pattern="opposing-corners"
         strength={14}
       />

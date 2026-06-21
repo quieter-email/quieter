@@ -299,7 +299,7 @@ const SidebarContent = ({
   };
 
   return (
-    <div className="relative z-10 flex min-h-0 flex-1 flex-col p-3">
+    <div className="relative z-10 flex min-h-0 flex-1 flex-col p-6">
       <m.div
         className="flex min-w-0 items-start gap-2 rounded-md will-change-[transform,opacity,filter]"
         initial={getSidebarEntranceInitial(animateEntrance)}
@@ -567,7 +567,7 @@ export const MailSidebar = ({
       <>
         <aside
           className="relative hidden h-full shrink-0 bg-transparent text-foreground lg:flex lg:flex-col"
-          style={{ width: "248px" }}
+          style={{ width: "272px" }}
         >
           <SidebarContent {...sidebarProps} animateEntrance={animateEntrance} />
         </aside>
@@ -586,7 +586,7 @@ export const MailSidebar = ({
               />
               <m.aside
                 aria-label="Mail sidebar"
-                className="quieter-workspace-background fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-foreground shadow-2xl lg:hidden"
+                className="fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-hidden bg-background-dark pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-foreground shadow-2xl lg:hidden"
                 initial={{ x: "-100%" }}
                 animate={{ x: 0 }}
                 exit={{ x: "-100%" }}

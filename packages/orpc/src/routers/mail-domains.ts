@@ -1,7 +1,7 @@
 import type { GetEmailIdentityCommandOutput } from "@aws-sdk/client-sesv2";
 import type { MailDomainCheckResult } from "@quieter/database";
 import { ORPCError } from "@orpc/server";
-import { assertUserBillingFeature } from "@quieter/billing/entitlements";
+import { getOrganizationBillingEntitlement } from "@quieter/billing/entitlements";
 import { db, mailDomain } from "@quieter/database";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -75,10 +75,15 @@ export const mailDomainsRouter = {
         organizationId: input.organizationId,
         userId: context.userId,
       });
-      await assertUserBillingFeature({
+      const entitlement = await getOrganizationBillingEntitlement({
         feature: "organizationDomains",
-        userId: context.userId,
+        organizationId: input.organizationId,
       });
+      if (!entitlement.hasAccess) {
+        throw new ORPCError("FORBIDDEN", {
+          message: "Custom organization domains require Team billing.",
+        });
+      }
 
       const domain = normalizeMailDomain(input.domain);
       const [existingDomain] = await db
@@ -185,10 +190,15 @@ export const mailDomainsRouter = {
         organizationId: input.organizationId,
         userId: context.userId,
       });
-      await assertUserBillingFeature({
+      const entitlement = await getOrganizationBillingEntitlement({
         feature: "organizationDomains",
-        userId: context.userId,
+        organizationId: input.organizationId,
       });
+      if (!entitlement.hasAccess) {
+        throw new ORPCError("FORBIDDEN", {
+          message: "Custom organization domains require Team billing.",
+        });
+      }
 
       const domain = normalizeMailDomain(input.domain);
       const [storedDomain] = await db

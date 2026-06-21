@@ -56,8 +56,9 @@ export type ManagedMailHeader = {
   name: string;
   value: string;
 };
-export type BillingPlan = "managed" | "pro";
+export type BillingPlan = "managed" | "personal" | "pro" | "team" | "team_ai";
 export type BillingProvider = "polar";
+export type BillingScope = "personal" | "team";
 export type BillingSubscriptionStatus =
   | "active"
   | "canceled"
@@ -65,6 +66,7 @@ export type BillingSubscriptionStatus =
   | "past_due"
   | "pending"
   | "trialing";
+export type BillingUsageCategory = "ai" | "mail";
 export type OrganizationMailUsageAlertTarget = "included_usage" | "overage_limit";
 export type OrganizationMailUsageDirection = "inbound" | "outbound";
 
@@ -889,6 +891,10 @@ export const billingSubscription = pgTable(
     userId: text("userId")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    organizationId: text("organizationId").references(() => organization.id, {
+      onDelete: "cascade",
+    }),
+    scope: text("scope").$type<BillingScope>().notNull().default("personal"),
     provider: text("provider").$type<BillingProvider>().notNull(),
     providerSubscriptionId: text("providerSubscriptionId").notNull(),
     providerCustomerId: text("providerCustomerId"),
@@ -903,11 +909,54 @@ export const billingSubscription = pgTable(
   },
   (table) => [
     index("billing_subscription_user_id_idx").on(table.userId),
+    index("billing_subscription_organization_id_idx").on(table.organizationId),
+    index("billing_subscription_scope_target_idx").on(
+      table.scope,
+      table.userId,
+      table.organizationId,
+    ),
     index("billing_subscription_provider_subscription_id_idx").on(table.providerSubscriptionId),
     unique("billing_subscription_provider_subscription_unique").on(
       table.provider,
       table.providerSubscriptionId,
     ),
+  ],
+);
+
+export const billingCreditUsageEvent = pgTable(
+  "billingCreditUsageEvent",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
+    organizationId: text("organizationId").references(() => organization.id, {
+      onDelete: "cascade",
+    }),
+    scope: text("scope").$type<BillingScope>().notNull(),
+    category: text("category").$type<BillingUsageCategory>().notNull(),
+    costMicroCents: bigint("costMicroCents", { mode: "number" }).notNull(),
+    billableCostMicroCents: bigint("billableCostMicroCents", { mode: "number" }).notNull(),
+    dedupeKey: text("dedupeKey").notNull(),
+    polarEventReportedAt: timestamp("polarEventReportedAt"),
+    metadata: jsonb("metadata").$type<Record<string, string | number | boolean>>(),
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => [
+    check(
+      "billing_credit_usage_event_target_check",
+      sql`(
+        (${table.scope} = 'personal' and ${table.userId} is not null and ${table.organizationId} is null)
+        or
+        (${table.scope} = 'team' and ${table.userId} is null and ${table.organizationId} is not null)
+      )`,
+    ),
+    check("billing_credit_usage_event_cost_check", sql`${table.costMicroCents} >= 0`),
+    check(
+      "billing_credit_usage_event_billable_cost_check",
+      sql`${table.billableCostMicroCents} >= 0`,
+    ),
+    index("billing_credit_usage_event_personal_period_idx").on(table.userId, table.createdAt),
+    index("billing_credit_usage_event_team_period_idx").on(table.organizationId, table.createdAt),
+    unique("billing_credit_usage_event_dedupe_key_unique").on(table.dedupeKey),
   ],
 );
 
@@ -1150,6 +1199,7 @@ export const apikey = pgTable(
 
 export const tables = {
   apikey,
+  billingCreditUsageEvent,
   billingEntitlementOverride,
   billingSubscription,
   chat,
@@ -1197,6 +1247,10 @@ export const authRelations = defineRelations(tables, (r) => ({
     billingSubscriptions: r.many.billingSubscription({
       from: r.user.id,
       to: r.billingSubscription.userId,
+    }),
+    billingCreditUsageEvents: r.many.billingCreditUsageEvent({
+      from: r.user.id,
+      to: r.billingCreditUsageEvent.userId,
     }),
     chats: r.many.chat({ from: r.user.id, to: r.chat.userId }),
     invitations: r.many.invitation({ from: r.user.id, to: r.invitation.inviterId }),
@@ -1259,6 +1313,14 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
   },
   organization: {
+    billingCreditUsageEvents: r.many.billingCreditUsageEvent({
+      from: r.organization.id,
+      to: r.billingCreditUsageEvent.organizationId,
+    }),
+    billingSubscriptions: r.many.billingSubscription({
+      from: r.organization.id,
+      to: r.billingSubscription.organizationId,
+    }),
     gmailOAuthStates: r.many.gmailOAuthState({
       from: r.organization.id,
       to: r.gmailOAuthState.organizationId,
@@ -1587,10 +1649,27 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
   },
   billingSubscription: {
+    organization: r.one.organization({
+      from: r.billingSubscription.organizationId,
+      to: r.organization.id,
+      optional: true,
+    }),
     user: r.one.user({
       from: r.billingSubscription.userId,
       to: r.user.id,
       optional: false,
+    }),
+  },
+  billingCreditUsageEvent: {
+    organization: r.one.organization({
+      from: r.billingCreditUsageEvent.organizationId,
+      to: r.organization.id,
+      optional: true,
+    }),
+    user: r.one.user({
+      from: r.billingCreditUsageEvent.userId,
+      to: r.user.id,
+      optional: true,
     }),
   },
   organizationMailUsageEvent: {

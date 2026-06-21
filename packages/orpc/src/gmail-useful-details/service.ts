@@ -349,6 +349,7 @@ const getOrCreateEvent = async (mailboxId: string, gmailMessageId: string) => {
 const reportUsage = async (event: {
   completionTokens: number | null;
   id: string;
+  mailboxId: string;
   model: string | null;
   promptTokens: number | null;
   usageReportedAt: Date | null;
@@ -367,6 +368,7 @@ const reportUsage = async (event: {
     await reportAiUsage({
       completionTokens: event.completionTokens,
       externalId: event.id,
+      mailboxId: event.mailboxId,
       model: GMAIL_USEFUL_DETAIL_MODEL,
       promptTokens: event.promptTokens,
       userId: event.userId,
@@ -705,19 +707,23 @@ export const reportPendingGmailUsefulDetailUsage = async (mailboxId: string, use
     .limit(100);
 
   for (const event of events) {
-    await reportUsage({ ...event, userId });
+    await reportUsage({ ...event, mailboxId, userId });
   }
 };
 
 export const listGmailUsefulDetails = async (input: { mailboxId: string; userId: string }) => {
-  await assertOwnedGmailMailbox(input);
+  const gmailMailbox = await assertOwnedGmailMailbox(input);
   const [[settings], entitlement] = await Promise.all([
     db
       .select({ enabled: gmailUsefulDetailSettings.enabled })
       .from(gmailUsefulDetailSettings)
       .where(eq(gmailUsefulDetailSettings.mailboxId, input.mailboxId))
       .limit(1),
-    hasUserBillingFeature({ feature: "gmailAutomation", userId: input.userId }),
+    hasUserBillingFeature({
+      feature: "gmailAutomation",
+      organizationId: gmailMailbox.organizationId ?? undefined,
+      userId: input.userId,
+    }),
   ]);
   const enabled = !!settings?.enabled && entitlement.hasAccess;
   if (!enabled) {

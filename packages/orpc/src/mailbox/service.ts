@@ -270,7 +270,11 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
 
 export const assertAccessibleMailbox = async (input: { mailboxId: string; userId: string }) => {
   const [ownedGmailMailbox] = await db
-    .select({ id: mailbox.id, provider: mailbox.provider })
+    .select({
+      id: mailbox.id,
+      organizationId: mailbox.organizationId,
+      provider: mailbox.provider,
+    })
     .from(mailbox)
     .where(
       and(
@@ -286,7 +290,11 @@ export const assertAccessibleMailbox = async (input: { mailboxId: string; userId
   }
 
   const [grantedManagedMailbox] = await db
-    .select({ id: mailbox.id, provider: mailbox.provider })
+    .select({
+      id: mailbox.id,
+      organizationId: mailbox.organizationId,
+      provider: mailbox.provider,
+    })
     .from(mailboxGrant)
     .innerJoin(mailbox, eq(mailbox.id, mailboxGrant.mailboxId))
     .innerJoin(
