@@ -1,11 +1,10 @@
 "use client";
 
 import type { RouterOutputs } from "@quieter/orpc";
-import { Cancel01Icon } from "@hugeicons/core-free-icons";
+import { Cancel01Icon, ThumbsDownIcon, ThumbsUpIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, IconButtonTooltip, cn, toast } from "@quieter/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import { getGmailUsefulDetailsQueryKey } from "~/lib/gmail/useful-details-query";
 import { orpc } from "~/lib/orpc";
 
@@ -61,7 +60,6 @@ export const GmailUsefulDetailCard = ({
   onDismiss?: () => void;
   onOpen?: () => void;
 }) => {
-  const [mobileExpanded, setMobileExpanded] = useState(false);
   const queryClient = useQueryClient();
   const feedbackMutation = useMutation({
     ...orpc.mail.setGmailUsefulDetailFeedback.mutationOptions(),
@@ -80,39 +78,16 @@ export const GmailUsefulDetailCard = ({
     : (feedbackMutation.variables?.feedback ?? detail.feedback);
   const content = (
     <span className="block min-w-0">
-      <span
-        className={cn(
-          "block truncate font-medium text-foreground transition-[white-space] sm:group-focus-within/detail:text-clip sm:group-focus-within/detail:whitespace-normal sm:group-hover/detail:text-clip sm:group-hover/detail:whitespace-normal",
-          {
-            "text-clip whitespace-normal": mobileExpanded,
-          },
-        )}
-      >
+      <span className="block text-sm/5 font-semibold wrap-break-word text-foreground">
         {detail.title}
       </span>
       {detail.summary && (
-        <span
-          className={cn(
-            "mt-0.5 block max-h-5 overflow-hidden text-sm/5 wrap-break-word text-foreground/90 transition-[max-height] duration-200 ease-out sm:group-focus-within/detail:max-h-40 sm:group-hover/detail:max-h-40",
-            {
-              "max-h-40": mobileExpanded,
-            },
-          )}
-        >
+        <span className="mt-1 block text-sm/5 wrap-break-word text-foreground/80">
           {detail.summary}
         </span>
       )}
       {metadata.length > 0 && (
-        <span
-          className={cn(
-            "mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 overflow-hidden text-muted-foreground transition-[max-height] duration-200 ease-out sm:group-focus-within/detail:max-h-24 sm:group-hover/detail:max-h-24",
-            {
-              "max-h-24": mobileExpanded,
-              "max-h-4": detail.kind === "verification_code" && !mobileExpanded,
-              "max-h-0": detail.kind !== "verification_code" && !mobileExpanded,
-            },
-          )}
-        >
+        <span className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs/4 text-muted-foreground">
           {metadata.map((value) => (
             <span className="wrap-break-word" key={value}>
               {value}
@@ -124,20 +99,19 @@ export const GmailUsefulDetailCard = ({
   );
 
   return (
-    <div className="group/detail relative min-h-16">
+    <div className="relative">
       <article
         className={cn(
-          "absolute inset-x-0 top-0 z-10 flex min-w-0 items-start gap-2 rounded-lg border px-3 py-2.5 text-xs shadow-sm transition-[box-shadow,background-color] duration-200 sm:group-focus-within/detail:z-30 sm:group-focus-within/detail:shadow-lg sm:group-hover/detail:z-30 sm:group-hover/detail:shadow-lg",
+          "relative z-10 grid min-w-0 grid-cols-1 items-start gap-x-3 gap-y-2 rounded-xl border px-4 py-3.5 shadow-xs sm:grid-cols-[minmax(0,1fr)_auto]",
           {
-            "border-border/70 bg-muted": detail.kind !== "security_alert",
-            "border-destructive/25 bg-destructive/15": detail.kind === "security_alert",
-            "z-30 shadow-lg": mobileExpanded,
+            "border-border/70 bg-card": detail.kind !== "security_alert",
+            "border-destructive/30 bg-card": detail.kind === "security_alert",
           },
         )}
       >
         {onOpen ? (
           <button
-            className="min-w-0 flex-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+            className="min-w-0 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
             onClick={onOpen}
             type="button"
           >
@@ -147,81 +121,71 @@ export const GmailUsefulDetailCard = ({
           <div className="min-w-0 flex-1">{content}</div>
         )}
 
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-0.5 justify-self-end">
+          {copyValue && (
             <Button
-              aria-expanded={mobileExpanded}
-              className="h-7 px-2 text-xs sm:hidden"
-              onClick={() => setMobileExpanded((expanded) => !expanded)}
+              className="mr-1 h-8 px-2.5 text-xs"
+              onClick={() => void copyText(copyValue)}
               size="sm"
               type="button"
-              variant="ghost"
+              variant="outline"
             >
-              {mobileExpanded ? "Less" : "More"}
+              Copy
             </Button>
+          )}
 
-            {copyValue && (
-              <Button
-                className="h-7 px-2 text-xs"
-                onClick={() => void copyText(copyValue)}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                Copy
-              </Button>
-            )}
-
-            {onDismiss && (
-              <IconButtonTooltip label="Dismiss">
-                <button
-                  aria-label="Dismiss useful detail"
-                  className="shrink-0 rounded-md p-1.5 text-muted-foreground outline-none hover:bg-background/80 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
-                  onClick={onDismiss}
-                  type="button"
-                >
-                  <HugeiconsIcon aria-hidden className="size-3.5" icon={Cancel01Icon} />
-                </button>
-              </IconButtonTooltip>
-            )}
-          </div>
-
-          <div
-            aria-label="Was this useful?"
-            className={cn(
-              "hidden items-center gap-0.5 sm:group-focus-within/detail:flex sm:group-hover/detail:flex",
-              {
-                flex: mobileExpanded,
-              },
-            )}
-          >
-            <Button
-              className="h-7 px-2 text-xs"
+          <IconButtonTooltip label="Useful">
+            <button
+              aria-label="Mark as useful"
               aria-pressed={feedback === "useful"}
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50",
+                {
+                  "bg-muted text-foreground": feedback === "useful",
+                },
+              )}
               disabled={feedbackMutation.isPending}
               onClick={() =>
                 feedbackMutation.mutate({ feedback: "useful", id: detail.id, mailboxId })
               }
-              size="sm"
               type="button"
-              variant={feedback === "useful" ? "outline" : "ghost"}
             >
-              Useful
-            </Button>
-            <Button
+              <HugeiconsIcon aria-hidden className="size-4" icon={ThumbsUpIcon} />
+            </button>
+          </IconButtonTooltip>
+
+          <IconButtonTooltip label="Not useful">
+            <button
+              aria-label="Mark as not useful"
               aria-pressed={feedback === "not_useful"}
-              className="h-7 px-2 text-xs"
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50",
+                {
+                  "bg-muted text-foreground": feedback === "not_useful",
+                },
+              )}
               disabled={feedbackMutation.isPending}
               onClick={() =>
                 feedbackMutation.mutate({ feedback: "not_useful", id: detail.id, mailboxId })
               }
-              size="sm"
               type="button"
-              variant={feedback === "not_useful" ? "outline" : "ghost"}
             >
-              Not useful
-            </Button>
-          </div>
+              <HugeiconsIcon aria-hidden className="size-4" icon={ThumbsDownIcon} />
+            </button>
+          </IconButtonTooltip>
+
+          {onDismiss && (
+            <IconButtonTooltip label="Dismiss">
+              <button
+                aria-label="Dismiss useful detail"
+                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
+                onClick={onDismiss}
+                type="button"
+              >
+                <HugeiconsIcon aria-hidden className="size-4" icon={Cancel01Icon} />
+              </button>
+            </IconButtonTooltip>
+          )}
         </div>
       </article>
     </div>

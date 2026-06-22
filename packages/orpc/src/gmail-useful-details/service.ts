@@ -62,6 +62,9 @@ const excludedLabels = new Set<string>([
   MAILBOX_LABELS.trash,
 ]);
 
+const automatedEngineeringSenderPattern =
+  /(?:^|[.@<\s-])(github|gitlab|bitbucket|jira|linear|sentry|coderabbit|vercel|datadog|buildkite|circleci)(?:[.@>\s-]|$)/i;
+
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message.slice(0, 2_000) : "Unknown useful-details error.";
 
@@ -79,6 +82,13 @@ const serializeUsefulDetails = async (
   const details: GmailUsefulDetailListItem[] = [];
 
   for (const { detail: item, feedback } of items) {
+    if (
+      (item.kind === "application" || item.kind === "security_alert" || item.kind === "task") &&
+      automatedEngineeringSenderPattern.test(item.source ?? "")
+    ) {
+      continue;
+    }
+
     let code: string | null = null;
     if (item.encryptedCode) {
       try {
@@ -234,6 +244,14 @@ export const materializeGmailUsefulDetail = ({
   if (preferences?.avoidKinds.includes(candidate.kind)) {
     return null;
   }
+  if (
+    (candidate.kind === "application" ||
+      candidate.kind === "security_alert" ||
+      candidate.kind === "task") &&
+    automatedEngineeringSenderPattern.test(message.from ?? "")
+  ) {
+    return null;
+  }
 
   const relevantFrom = parseTimestamp(candidate.relevantFrom);
   const expiresAt = parseTimestamp(candidate.relevantUntil);
@@ -265,6 +283,17 @@ export const materializeGmailUsefulDetail = ({
   const location = trimText(candidate.location, 160);
   const eventAt = parseTimestamp(candidate.eventAt) ?? expectedAt;
   const status = candidate.kind === "delivery" ? (candidate.status ?? "unknown") : null;
+  if (
+    (candidate.kind === "appointment" ||
+      candidate.kind === "bill" ||
+      candidate.kind === "document_expiry" ||
+      candidate.kind === "reservation" ||
+      candidate.kind === "task" ||
+      candidate.kind === "travel") &&
+    !eventAt
+  ) {
+    return null;
+  }
   if (candidate.kind === "delivery" && !carrier && !merchant && !trackingNumber && !summary) {
     return null;
   }
