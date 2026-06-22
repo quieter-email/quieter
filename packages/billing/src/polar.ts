@@ -16,20 +16,31 @@ const getPolarAccessToken = () => {
   return accessToken;
 };
 
-export const getPolarSandboxMode = () => {
-  if (serverEnv.POLAR_SANDBOX !== undefined) {
-    return serverEnv.POLAR_SANDBOX;
-  }
-
-  return serverEnv.NODE_ENV !== "production";
+export const resolvePolarServer = (input: {
+  nodeEnvironment: "development" | "production" | "test";
+  polarSandbox?: boolean;
+  vercelEnvironment?: string;
+}) => {
+  if (input.vercelEnvironment === "production") return "production";
+  if (input.polarSandbox !== undefined) return input.polarSandbox ? "sandbox" : "production";
+  return input.nodeEnvironment === "production" ? "production" : "sandbox";
 };
+
+export const getPolarServer = () =>
+  resolvePolarServer({
+    nodeEnvironment: serverEnv.NODE_ENV,
+    polarSandbox: serverEnv.POLAR_SANDBOX,
+    vercelEnvironment: serverEnv.VERCEL_ENV,
+  });
+
+export const getPolarSandboxMode = () => getPolarServer() === "sandbox";
 
 export const getPolarClient = () => {
   if (polarClient) return polarClient;
 
   polarClient = new Polar({
     accessToken: getPolarAccessToken(),
-    server: getPolarSandboxMode() ? "sandbox" : "production",
+    server: getPolarServer(),
   });
 
   return polarClient;
