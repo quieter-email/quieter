@@ -91,6 +91,24 @@ export const MessageListScrollPane = ({
   const isLoadingEmptyMessages =
     threadedMessages.length === 0 && (list.isPending || list.isRefreshing);
 
+  // Track when we first see each thread ID to identify new messages
+  const seenTimestampsRef = useRef<Map<string, number>>(new Map());
+  const now = Date.now();
+  const isFirstLoad = seenTimestampsRef.current.size === 0;
+
+  for (const thread of threadedMessages) {
+    if (thread.threadId) {
+      if (!seenTimestampsRef.current.has(thread.threadId)) {
+        seenTimestampsRef.current.set(thread.threadId, isFirstLoad ? 0 : now);
+      }
+    }
+  }
+
+  // Identify threads that are new (seen in the last 2 seconds)
+  const newThreads = threadedMessages.filter(
+    (t) => (seenTimestampsRef.current.get(t.threadId) ?? 0) > now - 2000,
+  );
+
   // react-doctor-disable-next-line react-hooks-js/incompatible-library
   const messageVirtualizer = useVirtualizer({
     count: threadedMessages.length,
@@ -168,6 +186,13 @@ export const MessageListScrollPane = ({
         >
           {virtualItems.map((virtualItem) => {
             const thread = threadedMessages[virtualItem.index];
+            const isNew = thread?.threadId
+              ? (seenTimestampsRef.current.get(thread.threadId) ?? 0) > now - 2000
+              : false;
+            const staggerIndex =
+              isNew && thread?.threadId
+                ? newThreads.findIndex((t) => t.threadId === thread.threadId)
+                : 0;
 
             return (
               thread && (
@@ -177,6 +202,7 @@ export const MessageListScrollPane = ({
                   dataIndex={virtualItem.index}
                   gmailLabels={gmailLabels}
                   isActive={activeThreadId === thread.threadId}
+                  isNew={isNew}
                   isSelected={selection.selectedThreadIds.has(thread.threadId)}
                   isSelectionMode={selection.selectedThreadIds.size > 0}
                   key={thread.threadId}
@@ -188,6 +214,7 @@ export const MessageListScrollPane = ({
                   onThreadPress={selection.handleThreadPress}
                   onThreadSelectionPress={selection.handleThreadSelectionPress}
                   pendingActions={list.pendingActions}
+                  staggerIndex={staggerIndex}
                   thread={thread}
                 />
               )

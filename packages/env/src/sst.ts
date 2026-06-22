@@ -27,7 +27,11 @@ export const createSstEnv = (
       GOOGLE_GMAIL_CLIENT_SECRET: runtimeEnv.GOOGLE_GMAIL_CLIENT_SECRET,
       OPENROUTER_API_KEY: runtimeEnv.OPENROUTER_API_KEY,
       POLAR_ACCESS_TOKEN: runtimeEnv.POLAR_ACCESS_TOKEN,
+      POLAR_METER_CREDIT_USAGE_ID: runtimeEnv.POLAR_METER_CREDIT_USAGE_ID,
       POLAR_ORGANIZATION_ID: runtimeEnv.POLAR_ORGANIZATION_ID,
+      POLAR_PRODUCT_PERSONAL_ID: runtimeEnv.POLAR_PRODUCT_PERSONAL_ID,
+      POLAR_PRODUCT_TEAM_AI_ID: runtimeEnv.POLAR_PRODUCT_TEAM_AI_ID,
+      POLAR_PRODUCT_TEAM_ID: runtimeEnv.POLAR_PRODUCT_TEAM_ID,
       POLAR_SANDBOX: runtimeEnv.POLAR_SANDBOX,
     },
     server: {
@@ -42,7 +46,11 @@ export const createSstEnv = (
       GOOGLE_GMAIL_CLIENT_SECRET: z.string().trim().min(1),
       OPENROUTER_API_KEY: z.string().trim().min(1),
       POLAR_ACCESS_TOKEN: z.string().trim().min(1),
+      POLAR_METER_CREDIT_USAGE_ID: optionalString,
       POLAR_ORGANIZATION_ID: optionalString,
+      POLAR_PRODUCT_PERSONAL_ID: optionalString,
+      POLAR_PRODUCT_TEAM_AI_ID: optionalString,
+      POLAR_PRODUCT_TEAM_ID: optionalString,
       POLAR_SANDBOX: optionalBooleanString,
     },
   });
