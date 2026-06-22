@@ -114,9 +114,22 @@ mailboxPreferences contains compact category preferences learned from explicit u
 Return "none" for a kind listed in avoidKinds. Treat preferKinds only as a tie-breaker; it must never
 weaken the taxonomy, confidence, time-window, or factual-evidence requirements below.
 
-Prefer returning kind "none". Return another kind only when the email clearly contains a detail
-the recipient is likely to need without opening the email again. Set confidence to "high" only
-when the category and core facts are unambiguous. Quieter displays only high-confidence results.
+The acceptance bar is intentionally extreme. Prefer returning kind "none". Return another kind
+only for a concrete personal event, deadline, transaction, access code, shipment, or account risk
+that an everyday person would genuinely regret missing. The result should replace a real need to
+reopen the email later, not merely summarize something recent, actionable, interesting, urgent-
+sounding, or work-related. If a reasonable person can leave the email in their inbox and move on,
+return "none". Set confidence to "high" only when both the category and every core fact are explicit
+and unambiguous. Quieter displays only high-confidence results.
+
+This is not a notification summarizer, productivity feed, or work inbox triage system. Return
+"none" for routine workplace and automated-tool mail: assignments, approvals, mentions, comments,
+document activity, project updates, support notifications, pull requests, code reviews, issues,
+tickets, CI/build/deployment results, monitoring alerts, application errors, incident noise, bot
+reports, repository activity, and requests to investigate or review them. Sender labels and words
+such as "actionable", "requested", "failed", "security", "important", "urgent", or "deadline" do
+not make an item useful. Marketing, social notifications, news alerts, product announcements,
+surveys, community activity, and generic reminders must also return "none".
 
 Return kind "verification_code" only for a short-lived code explicitly intended to verify a login,
 account, transaction, or identity. Do not return passwords, recovery links, order numbers, reference
@@ -163,26 +176,33 @@ Apply these rules to the other allowed kinds:
 
 - "application": A concrete status or required next step for a job, housing, school, visa,
   immigration, benefits, insurance claim, financing, or support-case application. Include deadlines,
-  interview times, missing documents, approvals, rejections, and material status changes. Exclude
-  generic recruiting messages, job recommendations, acknowledgements that merely say an application
-  was received, surveys, and support newsletters with no case-specific development.
+  interview times, missing documents, final approvals, and final rejections. Exclude progress
+  updates, generic recruiting messages, job recommendations, acknowledgements that merely say an
+  application was received, surveys, and support newsletters with no case-specific development.
 
 - "security_alert": A credible unauthorized, suspicious, blocked, or unrecognized login, device,
   transaction, credential change, recovery attempt, or account-security event that the recipient
   should investigate. The email must directly indicate risk, uncertainty, or required action.
+  This category is only for the recipient's account, identity, credentials, or financial activity.
+  Software errors, API authentication failures, service incidents, monitoring alerts, vulnerability
+  reports, and developer-tool notifications are not security alerts.
   Exclude routine notifications about successful sign-ins, authorized apps, permission changes,
   password changes, or devices when the message does not indicate they may be unauthorized. For
   example, an email merely saying that a third-party OAuth application was added or authorized must
   return "none".
 
 - "task": An explicit request addressed to the recipient that requires a concrete action by a clear
-  deadline. The requested action and deadline must both be recoverable from the email. Exclude vague
-  requests, optional suggestions, meeting discussion points, FYI messages, open-ended follow-ups,
-  automated engagement prompts, and tasks assigned to someone else.
+  date and time. The requested action and deadline must both be explicit in the email, and the
+  request must be written directly by a person rather than inferred from an automated status
+  notification. Put the deadline in eventAt. This category should be exceptionally rare. Exclude
+  same-day work chatter, code-review requests, issue assignments, approval requests, bot findings,
+  vague requests, optional suggestions, meeting discussion points, FYI messages, open-ended
+  follow-ups, automated engagement prompts, and tasks assigned to someone else.
 
 Do not treat marketing, newsletters, generic account activity, ordinary receipts, informational
 status mail, vague requests, events without a concrete future action/window, or class/tutorial/
 lecture schedule announcements that require no action from the recipient as useful details.
+When uncertain, return "none". False positives are substantially worse than missed details.
 
 For every non-"none" result, set relevantFrom and relevantUntil to ISO 8601 timestamps describing
 exactly when showing the item is useful. Use the shortest reasonable window. Prefer dates explicitly

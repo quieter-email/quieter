@@ -231,6 +231,43 @@ describe("Gmail useful-detail materialization", () => {
     expect(detail).toBeNull();
   });
 
+  test.each([
+    ["GitHub <notifications@github.com>", "task"],
+    ["Sentry <alerts@sentry.io>", "security_alert"],
+    ["CodeRabbit <notifications@coderabbit.ai>", "application"],
+  ] as const)("drops automated engineering notifications from %s", (from, kind) => {
+    const detail = materializeGmailUsefulDetail({
+      candidate: candidate({
+        eventAt: "2026-06-15T09:00:00.000Z",
+        kind,
+        relevanceSource: "inferred",
+        relevantFrom: "2026-06-14T12:00:00.000Z",
+        relevantUntil: "2026-06-15T12:00:00.000Z",
+        summary: "Review or investigate this automated notification.",
+      }),
+      message: message({ from }),
+      now: NOW,
+    });
+
+    expect(detail).toBeNull();
+  });
+
+  test("drops tasks without an explicit deadline", () => {
+    const detail = materializeGmailUsefulDetail({
+      candidate: candidate({
+        kind: "task",
+        relevanceSource: "inferred",
+        relevantFrom: "2026-06-14T12:00:00.000Z",
+        relevantUntil: "2026-06-15T12:00:00.000Z",
+        summary: "Review the document.",
+      }),
+      message: message({ from: "Person <person@example.com>" }),
+      now: NOW,
+    });
+
+    expect(detail).toBeNull();
+  });
+
   test("supports every conservative reminder category", () => {
     const kinds = [
       "application",
@@ -247,6 +284,7 @@ describe("Gmail useful-detail materialization", () => {
     for (const kind of kinds) {
       const detail = materializeGmailUsefulDetail({
         candidate: candidate({
+          eventAt: "2026-06-15T09:00:00.000Z",
           kind,
           relevanceSource: "inferred",
           relevantFrom: "2026-06-14T12:00:00.000Z",

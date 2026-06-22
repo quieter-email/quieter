@@ -1,7 +1,7 @@
 "use client";
 
 import type { RouterOutputs } from "@quieter/orpc";
-import { cn, toast } from "@quieter/ui";
+import { toast } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { GmailUsefulDetailCard } from "~/features/gmail-useful-details/components/gmail-useful-detail-card";
@@ -79,30 +79,11 @@ export const GmailUsefulDetails = ({
     return null;
   }
 
-  const hasStack = visibleItems.length > 1;
-
   return (
-    <section aria-label="Timely mail updates" className="px-3 pt-1.5 pb-2">
-      <div className="relative flex flex-col gap-1.5">
-        {hasStack && (
-          <>
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-x-2 top-2 bottom-0 -z-20 rounded-lg border border-border/35 bg-muted/20 shadow-sm"
-            />
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-x-1 top-1 bottom-0 -z-10 rounded-lg border border-border/45 bg-muted/30 shadow-sm"
-            />
-          </>
-        )}
-        {visibleItems.map((detail, index) => (
-          <div
-            className={cn("relative", {
-              "z-10": hasStack && index === 0,
-            })}
-            key={detail.id}
-          >
+    <section aria-label="Timely mail updates" className="px-3 pt-2 pb-3">
+      <div className="flex flex-col gap-2">
+        {visibleItems.map((detail) => (
+          <div className="relative" key={detail.id}>
             <GmailUsefulDetailCard
               detail={detail}
               mailboxId={mailboxId}
