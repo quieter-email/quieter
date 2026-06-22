@@ -39,10 +39,7 @@ export const assertOrganizationOwnsVerifiedSenderDomain = async (input: {
     .limit(1);
 
   if (!ownedDomain) {
-    throw new OrganizationMailSendError(
-      "Sender domain is not verified for this organization.",
-      403,
-    );
+    throw new OrganizationMailSendError("Sender domain is not verified for this team.", 403);
   }
 
   return domain;

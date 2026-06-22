@@ -94,7 +94,7 @@ const assertOrganizationMembership = async (userId: string, organizationId: stri
 
   if (!membership) {
     throw new ORPCError("FORBIDDEN", {
-      message: "You are not a member of that organization.",
+      message: "You are not a member of that team.",
     });
   }
 };

@@ -326,7 +326,7 @@ export const assertCanConsumeOrganizationMailUsage = async (input: {
 
   if (!entitlement.hasAccess) {
     throw new ORPCError("FORBIDDEN", {
-      message: "Organization mail requires Team billing.",
+      message: "Team mail requires Team billing.",
       status: 403,
     });
   }
@@ -350,7 +350,7 @@ export const assertCanConsumeOrganizationMailUsage = async (input: {
 
     if (projectedBillableCostMicroCents > 0 && !settings.overageEnabled) {
       throw new ORPCError("FORBIDDEN", {
-        message: "Team credit overage is disabled for this organization.",
+        message: "Team credit overage is disabled for this team.",
         status: 403,
       });
     }
@@ -418,7 +418,7 @@ export const recordOrganizationMailUsage = async (input: OrganizationMailUsageIn
     )[0];
 
   if (!usageEvent) {
-    throw new Error("Could not persist organization mail usage.");
+    throw new Error("Could not persist team mail usage.");
   }
 
   const creditUsage =

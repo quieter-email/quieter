@@ -169,7 +169,7 @@ const loadFullOrganization = async (organizationId: string): Promise<FullOrganiz
     },
   });
   if (result.error) {
-    throw new Error(result.error.message ?? "Could not load organization.");
+    throw new Error(result.error.message ?? "Could not load team.");
   }
 
   return result.data ? fullOrganizationSchema.parse(result.data) : null;

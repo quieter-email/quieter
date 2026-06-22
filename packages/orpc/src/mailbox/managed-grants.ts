@@ -20,7 +20,7 @@ export const createManagedMailbox = async (input: {
     .limit(1);
   if (!membership || !["admin", "owner"].includes(membership.role)) {
     throw new ORPCError("FORBIDDEN", {
-      message: "Only organization owners and admins can create managed mailboxes.",
+      message: "Only team owners and admins can create managed mailboxes.",
     });
   }
 
@@ -91,7 +91,7 @@ export const setManagedMailboxGrant = async (input: {
     .limit(1);
   if (!target) {
     throw new ORPCError("BAD_REQUEST", {
-      message: "Mailbox grants can only be assigned to organization members.",
+      message: "Mailbox grants can only be assigned to team members.",
     });
   }
 

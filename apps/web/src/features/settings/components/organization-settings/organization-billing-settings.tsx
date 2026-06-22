@@ -61,7 +61,7 @@ export const OrganizationBillingSettings = ({
       <section className="border-b border-border/70 py-6">
         <h2 className="text-sm font-medium text-foreground">Billing</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Billing details are unavailable for this organization.
+          Billing details are unavailable for this team.
         </p>
       </section>
     );

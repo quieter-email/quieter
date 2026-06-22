@@ -38,7 +38,7 @@ export const LeaveOrganizationDialog = ({
         organizationId: organization.id,
       });
       if (response.error) {
-        throw new Error(response.error.message ?? "Could not leave organization.");
+        throw new Error(response.error.message ?? "Could not leave team.");
       }
       return response;
     },
@@ -64,7 +64,7 @@ export const LeaveOrganizationDialog = ({
         resetDialog();
       } catch (mutationError) {
         setSubmitError(
-          mutationError instanceof Error ? mutationError.message : "Could not leave organization.",
+          mutationError instanceof Error ? mutationError.message : "Could not leave team.",
         );
       }
     },
@@ -75,7 +75,7 @@ export const LeaveOrganizationDialog = ({
           .string()
           .trim()
           .toLowerCase()
-          .regex(/^leave organization$/, 'Type "leave organization".'),
+          .regex(/^leave team$/, 'Type "leave team".'),
       }),
     },
   });
@@ -107,7 +107,7 @@ export const LeaveOrganizationDialog = ({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Leave organization</DialogTitle>
+            <DialogTitle>Leave team</DialogTitle>
           </DialogHeader>
 
           <form
@@ -117,7 +117,7 @@ export const LeaveOrganizationDialog = ({
           >
             <DialogBody className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Type <span className="font-medium text-foreground">leave organization</span>
+                Type <span className="font-medium text-foreground">leave team</span>
               </p>
 
               <form.Field name="confirmation">
@@ -131,7 +131,7 @@ export const LeaveOrganizationDialog = ({
                         setSubmitError(null);
                         field.handleChange(event.target.value);
                       }}
-                      placeholder="leave organization"
+                      placeholder="leave team"
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
@@ -188,7 +188,7 @@ export const DeleteOrganizationDialog = ({
         organizationId: organization.id,
       });
       if (response.error) {
-        throw new Error(response.error.message ?? "Could not delete organization.");
+        throw new Error(response.error.message ?? "Could not delete team.");
       }
       return response;
     },
@@ -214,7 +214,7 @@ export const DeleteOrganizationDialog = ({
         resetDialog();
       } catch (mutationError) {
         setSubmitError(
-          mutationError instanceof Error ? mutationError.message : "Could not delete organization.",
+          mutationError instanceof Error ? mutationError.message : "Could not delete team.",
         );
       }
     },
@@ -225,7 +225,7 @@ export const DeleteOrganizationDialog = ({
           .string()
           .trim()
           .toLowerCase()
-          .regex(/^delete organization$/, 'Type "delete organization".'),
+          .regex(/^delete team$/, 'Type "delete team".'),
       }),
     },
   });
@@ -257,7 +257,7 @@ export const DeleteOrganizationDialog = ({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete organization</DialogTitle>
+            <DialogTitle>Delete team</DialogTitle>
           </DialogHeader>
 
           <form
@@ -267,7 +267,7 @@ export const DeleteOrganizationDialog = ({
           >
             <DialogBody className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Type <span className="font-medium text-foreground">delete organization</span>
+                Type <span className="font-medium text-foreground">delete team</span>
               </p>
 
               <form.Field name="confirmation">
@@ -281,7 +281,7 @@ export const DeleteOrganizationDialog = ({
                         setSubmitError(null);
                         field.handleChange(event.target.value);
                       }}
-                      placeholder="delete organization"
+                      placeholder="delete team"
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (

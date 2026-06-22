@@ -86,11 +86,11 @@ export const OrganizationOverviewView = ({
     hasOrganizationRole(member.role, "owner"),
   ).length;
   const updateOrganizationReason =
-    (!canUpdateOrganization && "Only admins and owners can edit organization details.") || null;
+    (!canUpdateOrganization && "Only admins and owners can edit team details.") || null;
   const leaveOrganizationReason =
     (activeRole === "owner" && ownerCount <= 1 && "Assign another owner before leaving.") || null;
   const deleteOrganizationReason =
-    (!canDeleteOrganization && "Only owners can delete organizations.") || null;
+    (!canDeleteOrganization && "Only owners can delete teams.") || null;
   const peopleSummary = [
     formatCount(fullOrganization.members.length, "Member", "Members"),
     pendingInvitationsCount > 0 && formatCount(pendingInvitationsCount, "pending invitation"),
@@ -129,7 +129,7 @@ export const OrganizationOverviewView = ({
         variant="ghost"
       >
         <HugeiconsIcon aria-hidden className="size-4" icon={ArrowLeft01Icon} />
-        Organizations
+        Teams
       </Button>
 
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -226,7 +226,7 @@ export const OrganizationOverviewView = ({
             )
           }
           label="Membership"
-          value={activeRole ? formatRoleLabel(activeRole) : "Organization member"}
+          value={activeRole ? formatRoleLabel(activeRole) : "Team member"}
         />
 
         <SettingsRow
@@ -242,7 +242,7 @@ export const OrganizationOverviewView = ({
               <DeleteOrganizationDialog onDeleted={onBackToList} organization={fullOrganization} />
             )
           }
-          label="Delete organization"
+          label="Delete team"
           value="Permanent"
         />
       </div>
