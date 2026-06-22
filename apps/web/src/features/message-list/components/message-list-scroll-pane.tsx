@@ -188,9 +188,7 @@ export const MessageListScrollPane = ({
         >
           {virtualItems.map((virtualItem) => {
             const thread = threadedMessages[virtualItem.index];
-            const compositeKey = thread?.threadId
-              ? `${list.mailboxId}-${thread.threadId}`
-              : "";
+            const compositeKey = thread?.threadId ? `${list.mailboxId}-${thread.threadId}` : "";
             const isNew = thread?.threadId
               ? (seenTimestampsRef.current.get(compositeKey) ?? 0) > now - 2000
               : false;
