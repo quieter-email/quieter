@@ -111,8 +111,8 @@ const RemoveDomainDialog = ({
 
           <DialogBody className="space-y-3 text-sm text-muted-foreground">
             <p>
-              This removes the domain from this organization and releases it for future registration
-              in Quieter.
+              This removes the domain from this team and releases it for future registration in
+              Quieter.
             </p>
             <p>
               Remove the DNS records as soon as possible. Leaving old records in place can keep mail
@@ -213,7 +213,7 @@ export const DomainsView = ({
     (billingAccessUnknown && "Could not load billing access.") ||
     (!canUseOrganizationDomains &&
       `Registering domains requires ${BILLING_FEATURES.organizationDomains.requirementLabel} billing.`) ||
-    (!canManageDomains && "Only admins and owners can register organization domains.") ||
+    (!canManageDomains && "Only admins and owners can register team domains.") ||
     null;
 
   return (

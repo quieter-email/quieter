@@ -1,6 +1,7 @@
 "use client";
 
 import type { MailboxLabel, MailboxLabelColor } from "@quieter/mail/mailbox-organization";
+import type { ReactNode } from "react";
 import {
   ArrowLeft02Icon,
   ArrowDown01Icon,
@@ -44,7 +45,7 @@ import {
 } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LayoutGroup, m } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { serializeStructuredSearchState } from "~/features/message-search/components/message-list-search/message-list-search-utils";
 import {
   getUserLabels,
@@ -113,6 +114,34 @@ const getSidebarEntranceDelay = (step: number) => step * 0.1;
 const getSidebarEntranceInitial = (animateEntrance: boolean) =>
   animateEntrance ? { opacity: 0, x: -20, filter: "blur(8px)" } : false;
 
+const SidebarLabelEntrance = ({
+  animateEntrance,
+  children,
+  delayOffset,
+  index,
+}: {
+  animateEntrance: boolean;
+  children: ReactNode;
+  delayOffset: number;
+  index: number;
+}) => {
+  const [entrance] = useState(() => ({
+    animate: animateEntrance,
+    delay: delayOffset + getSidebarEntranceDelay(index),
+  }));
+
+  return (
+    <m.div
+      className="w-full will-change-[transform,opacity,filter]"
+      initial={getSidebarEntranceInitial(entrance.animate)}
+      animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+      transition={{ delay: entrance.delay, duration: 0.5, ease: "easeOut" }}
+    >
+      {children}
+    </m.div>
+  );
+};
+
 const updateLabelFilter = (searchQuery: string, labelName: string, enabled: boolean) => {
   const state = parseStructuredSearchQuery(searchQuery);
   const labelKey = normalizeLabelSelectionKey(labelName);
@@ -168,9 +197,13 @@ export const SidebarLabelNav = ({
   const [hoveredLabelId, setHoveredLabelId] = useState<string | null>(null);
   const [exitingLabelId, setExitingLabelId] = useState<string | null>(null);
   const [hoverEnter, setHoverEnter] = useState(false);
+  const [hoverSession, setHoverSession] = useState(0);
 
   const setLabelHover = (labelId: string) => {
-    setHoverEnter(hoveredLabelId === null && exitingLabelId === null);
+    setHoverEnter(hoveredLabelId === null);
+    if (hoveredLabelId === null) {
+      setHoverSession((current) => current + 1);
+    }
     setExitingLabelId(null);
     setHoveredLabelId(labelId);
   };
@@ -198,46 +231,14 @@ export const SidebarLabelNav = ({
     isPending: areLabelsPending,
   } = useQuery(labelsQueryOptions(mailboxId ?? "", !!mailboxId));
 
-  const mountTimeRef = useRef(Date.now());
-  const prevMailboxIdRef = useRef(mailboxId);
-  const prevAreLabelsPendingRef = useRef(areLabelsPending);
-  const [animateLabelsEntrance, setAnimateLabelsEntrance] = useState(false);
-  const [hasAnimatedLabels, setHasAnimatedLabels] = useState(false);
-  const [labelsDelayOffset, setLabelsDelayOffset] = useState(0);
+  const [isLabelEntranceSlotOpen, openLabelEntranceSlot] = useReducer(() => true, !animateEntrance);
 
   useEffect(() => {
-    if (mailboxId === prevMailboxIdRef.current) return;
+    if (isLabelEntranceSlotOpen) return;
 
-    prevMailboxIdRef.current = mailboxId;
-    setHasAnimatedLabels(false);
-    setAnimateLabelsEntrance(false);
-    setLabelsDelayOffset(0);
-  }, [mailboxId]);
-
-  useEffect(() => {
-    if (areLabelsPending === prevAreLabelsPendingRef.current) return;
-
-    prevAreLabelsPendingRef.current = areLabelsPending;
-    if (!areLabelsPending && !hasAnimatedLabels) {
-      setAnimateLabelsEntrance(true);
-      setHasAnimatedLabels(true);
-
-      const elapsed = Date.now() - mountTimeRef.current;
-      const targetTime = 900; // 900ms
-      if (elapsed < targetTime) {
-        setLabelsDelayOffset((targetTime - elapsed) / 1000);
-      } else {
-        setLabelsDelayOffset(0);
-      }
-    }
-  }, [areLabelsPending, hasAnimatedLabels]);
-
-  useEffect(() => {
-    if (animateLabelsEntrance) {
-      const frame = requestAnimationFrame(() => setAnimateLabelsEntrance(false));
-      return () => cancelAnimationFrame(frame);
-    }
-  }, [animateLabelsEntrance]);
+    const timeout = window.setTimeout(openLabelEntranceSlot, getSidebarEntranceDelay(9) * 1000);
+    return () => window.clearTimeout(timeout);
+  }, [isLabelEntranceSlotOpen]);
 
   const { data: managedLabelCounts = [] } = useQuery(
     managedLabelCountsQueryOptions(mailboxId ?? "", mailboxProvider === "managed" && !!mailboxId),
@@ -468,7 +469,7 @@ export const SidebarLabelNav = ({
             >
               Loading labels…
             </m.p>
-          ) : areLabelsError ? (
+          ) : !isLabelEntranceSlotOpen ? null : areLabelsError ? (
             <m.p
               className="px-2 py-1 text-xs text-destructive will-change-[transform,opacity,filter]"
               initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
@@ -493,21 +494,7 @@ export const SidebarLabelNav = ({
               const isHoverExiting = exitingLabelId === label.id;
 
               return (
-                <m.div
-                  key={label.id}
-                  className="w-full will-change-[transform,opacity,filter]"
-                  initial={getSidebarEntranceInitial(
-                    shouldAnimateEntrance || animateLabelsEntrance,
-                  )}
-                  animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-                  transition={{
-                    delay: shouldAnimateEntrance
-                      ? getSidebarEntranceDelay(index + 9)
-                      : labelsDelayOffset + getSidebarEntranceDelay(index),
-                    duration: 0.5,
-                    ease: "easeOut",
-                  }}
-                >
+                <SidebarLabelEntrance key={label.id} animateEntrance delayOffset={0} index={index}>
                   <SidebarNavItem
                     active={isActive}
                     aria-pressed={isActive}
@@ -521,7 +508,7 @@ export const SidebarLabelNav = ({
                     hover={isHovered}
                     hoverEnter={isHovered && hoverEnter}
                     hoverExiting={isHoverExiting}
-                    hoverLayoutId="label-sidebar-hover"
+                    hoverLayoutId={`label-sidebar-hover-${hoverSession}`}
                     onBlur={(event) => clearLabelHoverIfLeavingNav(event.relatedTarget)}
                     onClick={() => onSearch(updateLabelFilter(searchQuery, label.name, !isActive))}
                     onFocus={() => {
@@ -556,7 +543,7 @@ export const SidebarLabelNav = ({
                       </span>
                     ) : null}
                   </SidebarNavItem>
-                </m.div>
+                </SidebarLabelEntrance>
               );
             })
           )}

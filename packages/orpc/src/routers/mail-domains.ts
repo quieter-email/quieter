@@ -81,7 +81,7 @@ export const mailDomainsRouter = {
       });
       if (!entitlement.hasAccess) {
         throw new ORPCError("FORBIDDEN", {
-          message: "Custom organization domains require Team billing.",
+          message: "Custom team domains require Team billing.",
         });
       }
 
@@ -100,7 +100,7 @@ export const mailDomainsRouter = {
 
       if (existingDomain && existingDomain.organizationId !== input.organizationId) {
         throw new ORPCError("BAD_REQUEST", {
-          message: "This domain is already registered to another organization.",
+          message: "This domain is already registered to another team.",
         });
       }
 
@@ -196,7 +196,7 @@ export const mailDomainsRouter = {
       });
       if (!entitlement.hasAccess) {
         throw new ORPCError("FORBIDDEN", {
-          message: "Custom organization domains require Team billing.",
+          message: "Custom team domains require Team billing.",
         });
       }
 
@@ -215,7 +215,7 @@ export const mailDomainsRouter = {
 
       if (!storedDomain) {
         throw new ORPCError("NOT_FOUND", {
-          message: "Mail domain setup was not found in the active organization.",
+          message: "Mail domain setup was not found in the active team.",
         });
       }
 
@@ -331,7 +331,7 @@ export const mailDomainsRouter = {
 
       if (!storedDomain) {
         throw new ORPCError("NOT_FOUND", {
-          message: "Mail domain was not found in the active organization.",
+          message: "Mail domain was not found in the active team.",
         });
       }
 

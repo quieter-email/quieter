@@ -30,7 +30,7 @@ export const billingRouter = {
       if (BILLING_PRODUCTS[input.product].scope === "team") {
         if (!input.organizationId) {
           throw new ORPCError("BAD_REQUEST", {
-            message: "Choose an organization for team billing.",
+            message: "Choose a team for team billing.",
           });
         }
 

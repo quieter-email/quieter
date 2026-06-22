@@ -76,7 +76,7 @@ export const OrganizationDetailView = ({
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-        Loading organization…
+        Loading team…
       </div>
     );
   }
@@ -84,13 +84,13 @@ export const OrganizationDetailView = ({
   if (isFullOrganizationError) {
     return (
       <p className="text-sm text-destructive">
-        {fullOrganizationError.message ?? "Could not load organization."}
+        {fullOrganizationError.message ?? "Could not load team."}
       </p>
     );
   }
 
   if (!fullOrganization) {
-    return <p className="text-sm text-muted-foreground">Organization not found.</p>;
+    return <p className="text-sm text-muted-foreground">Team not found.</p>;
   }
 
   if (view === "members") {

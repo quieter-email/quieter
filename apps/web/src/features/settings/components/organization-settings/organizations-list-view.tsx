@@ -161,7 +161,7 @@ export const OrganizationsListView = ({
 }) => (
   <>
     <div className="flex items-center justify-between gap-4">
-      <h1 className="ml-4 text-base font-semibold text-foreground">Organizations</h1>
+      <h1 className="ml-4 text-base font-semibold text-foreground">Teams</h1>
       <OrganizationFormDialog />
     </div>
 
@@ -191,7 +191,7 @@ export const OrganizationsListView = ({
           ))}
       </div>
     ) : (
-      <p className="text-sm text-muted-foreground">No organizations yet.</p>
+      <p className="text-sm text-muted-foreground">No teams yet.</p>
     )}
   </>
 );

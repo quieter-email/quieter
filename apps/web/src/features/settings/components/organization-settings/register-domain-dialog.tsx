@@ -345,9 +345,7 @@ export const RegisterDomainDialog = ({
         <DialogContent className="flex max-h-[88vh] w-[min(94vw,60rem)] flex-col">
           <DialogHeader>
             <DialogTitle>Register domain</DialogTitle>
-            <DialogDescription>
-              Add an organization domain for inbound and outbound mail.
-            </DialogDescription>
+            <DialogDescription>Add a team domain for inbound and outbound mail.</DialogDescription>
           </DialogHeader>
 
           <DialogBody className="min-h-0 space-y-5 overflow-hidden">
@@ -509,7 +507,7 @@ export const RegisterDomainDialog = ({
                     {setup.domain} is verified
                   </h2>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    The domain was added to this organization.
+                    The domain was added to this team.
                   </p>
                 </div>
 

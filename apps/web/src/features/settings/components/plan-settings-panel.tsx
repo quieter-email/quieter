@@ -69,7 +69,7 @@ export const PlanSettingsPanel = () => {
           <h1 className="text-2xl font-medium tracking-tight text-foreground">Personal plan</h1>
           <p className="mt-2 max-w-2xl text-sm/6 text-muted-foreground">
             Your personal plan and credits apply across your personal mailboxes. Team billing is
-            managed from each organization’s settings.
+            managed from each team’s settings.
           </p>
         </div>
         {personalProduct && (

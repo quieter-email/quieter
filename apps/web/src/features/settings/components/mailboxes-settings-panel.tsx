@@ -141,10 +141,10 @@ export const MailboxesSettingsPanel = () => {
         <div>
           <h2 className="text-sm font-medium text-foreground">Connected Gmail</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Connect an existing personal or Google Workspace inbox. Organization placement does not
-            share the mailbox with other members. Personal or Team + AI billing keeps your inbox
-            current as mail arrives and can apply your existing Gmail labels or surface timely
-            updates from new mail.
+            Connect an existing personal or Google Workspace inbox. Team placement does not share
+            the mailbox with other members. Personal or Team + AI billing keeps your inbox current
+            as mail arrives and can apply your existing Gmail labels or surface timely updates from
+            new mail.
           </p>
         </div>
 
@@ -435,7 +435,7 @@ export const MailboxesSettingsPanel = () => {
         <div>
           <h2 className="text-sm font-medium text-foreground">Shared inbox</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Create a mailbox your organization can access.
+            Create a mailbox your team can access.
           </p>
         </div>
         {organizations.length > 0 ? (
@@ -448,8 +448,8 @@ export const MailboxesSettingsPanel = () => {
               }}
               value={managedOrganizationId || null}
             >
-              <SelectTrigger aria-label="Managed mailbox organization" className="w-48">
-                <SelectValue placeholder="Select organization" />
+              <SelectTrigger aria-label="Managed mailbox team" className="w-48">
+                <SelectValue placeholder="Select team" />
               </SelectTrigger>
               <SelectContent
                 align="start"
@@ -544,7 +544,7 @@ export const MailboxesSettingsPanel = () => {
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
-            Create an organization before creating a Managed mailbox.
+            Create a team before creating a Managed mailbox.
           </p>
         )}
         {organizations.length > 0 &&
@@ -552,8 +552,8 @@ export const MailboxesSettingsPanel = () => {
           !areManagedDomainsLoading &&
           verifiedDomains.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              This organization has no verified domain yet. Add and verify one in the organization
-              settings to create a shared inbox.
+              This team has no verified domain yet. Add and verify one in team settings to create a
+              shared inbox.
             </p>
           )}
         {createManagedMailboxMutation.isError && (

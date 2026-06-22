@@ -11,6 +11,7 @@ import {
   Mail01Icon,
   PinIcon,
   PinOffIcon,
+  Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -19,6 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   IconButtonTooltip,
+  LinkButton,
   cn,
 } from "@quieter/ui";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
@@ -211,24 +213,43 @@ const SortableGroup = ({
         })}
         ref={sectionRef}
       >
-        <button
-          aria-expanded={!collapsed}
-          className={cn(
-            "squircle flex min-h-7 w-full items-center gap-2 rounded-xs px-2 py-1 text-left transition-colors hover:bg-muted/40",
+        <div className="group/header flex min-h-7 items-center rounded-xs transition-colors focus-within:bg-muted/40 hover:bg-muted/40">
+          <button
+            aria-expanded={!collapsed}
+            className="squircle flex min-w-0 flex-1 items-center gap-2 rounded-xs px-2 py-1 text-left outline-none"
+            onClick={() => onToggle(group.id)}
+            ref={headerRef}
+            type="button"
+          >
+            <HugeiconsIcon
+              aria-hidden
+              className="size-3 shrink-0 text-muted-foreground/70"
+              icon={collapsed ? ArrowRight01Icon : ArrowDown01Icon}
+            />
+            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+              {group.name}
+            </span>
+          </button>
+          {group.kind === "organization" && (
+            <IconButtonTooltip label={`Open ${group.name} settings`}>
+              <LinkButton
+                aria-label={`Open ${group.name} settings`}
+                className="pointer-events-none mr-0.5 size-7 opacity-0 transition-opacity group-focus-within/header:pointer-events-auto group-focus-within/header:opacity-100 group-hover/header:pointer-events-auto group-hover/header:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100"
+                search={{
+                  from: "/",
+                  organizationId: group.id,
+                  organizationView: "overview",
+                  tab: "organization",
+                }}
+                size="icon-sm"
+                to="/settings"
+                variant="ghost"
+              >
+                <HugeiconsIcon aria-hidden icon={Settings01Icon} />
+              </LinkButton>
+            </IconButtonTooltip>
           )}
-          onClick={() => onToggle(group.id)}
-          ref={headerRef}
-          type="button"
-        >
-          <HugeiconsIcon
-            aria-hidden
-            className="size-3 shrink-0 text-muted-foreground/70"
-            icon={collapsed ? ArrowRight01Icon : ArrowDown01Icon}
-          />
-          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-            {group.name}
-          </span>
-        </button>
+        </div>
 
         <AnimatePresence initial={false}>
           {!collapsed && (
@@ -329,7 +350,7 @@ export const MailboxSwitcherDropdown = ({
   const selectedMailbox =
     mailboxes.find((mailbox) => mailbox.id === selectedMailboxId) ?? mailboxes[0] ?? null;
   const primaryLabel = selectedMailbox?.emailAddress ?? "no mailbox";
-  const secondaryLabel = selectedMailbox?.groupName ?? "No organization";
+  const secondaryLabel = selectedMailbox?.groupName ?? "No team";
   const canReorderGroups = groups.length > 1;
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<ReadonlySet<string>>(() => new Set());
   const [isTriggerHovered, setIsTriggerHovered] = useState(false);

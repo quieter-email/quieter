@@ -166,7 +166,7 @@ export const createBillingCheckout = async (input: {
 
   if (product.scope === "personal" && input.organizationId) {
     throw new ORPCError("BAD_REQUEST", {
-      message: "Personal billing cannot be assigned to an organization.",
+      message: "Personal billing cannot be assigned to a team.",
     });
   }
 
@@ -185,7 +185,7 @@ export const createBillingCheckout = async (input: {
   } else {
     if (!input.organizationId) {
       throw new ORPCError("BAD_REQUEST", {
-        message: "Choose an organization for team billing.",
+        message: "Choose a team for team billing.",
       });
     }
 
@@ -211,7 +211,7 @@ export const createBillingCheckout = async (input: {
 
     if (!organizationRecord) {
       throw new ORPCError("NOT_FOUND", {
-        message: "Organization not found.",
+        message: "Team not found.",
       });
     }
 
@@ -427,7 +427,7 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
       : null;
 
   if (scope === "team" && !organizationId) {
-    console.warn("Skipping team subscription without an organization.", {
+    console.warn("Skipping team subscription without a team.", {
       subscriptionId: subscription.id,
     });
     return { synced: false };

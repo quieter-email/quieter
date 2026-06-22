@@ -88,11 +88,9 @@ export const OrganizationSettingsPanel = () => {
     <TooltipGroup>
       <div className="space-y-6">
         {organizationsState.isPending || sessionState.isPending ? (
-          <p className="text-sm text-muted-foreground">Loading organizations…</p>
+          <p className="text-sm text-muted-foreground">Loading teams…</p>
         ) : loadError ? (
-          <p className="text-sm text-destructive">
-            {loadError.message ?? "Could not load organizations."}
-          </p>
+          <p className="text-sm text-destructive">{loadError.message ?? "Could not load teams."}</p>
         ) : selectedOrganization ? (
           <OrganizationDetailView
             key={selectedOrganization.id}

@@ -103,7 +103,7 @@ export const assertUserOrganizationMember = async (input: {
 
   if (!membership) {
     throw new ORPCError("NOT_FOUND", {
-      message: "Organization not found.",
+      message: "Team not found.",
     });
   }
 
@@ -124,7 +124,7 @@ export const assertUserCanManageMailDomains = async (input: {
 
   if (!hasOrganizationManagerRole(membership.role)) {
     throw new ORPCError("FORBIDDEN", {
-      message: "Only admins and owners can manage organization domains.",
+      message: "Only admins and owners can manage team domains.",
     });
   }
 };
@@ -137,7 +137,7 @@ export const assertUserCanManageOrganizationSettings = async (input: {
 
   if (!hasOrganizationManagerRole(membership.role)) {
     throw new ORPCError("FORBIDDEN", {
-      message: "Only admins and owners can manage organization settings.",
+      message: "Only admins and owners can manage team settings.",
     });
   }
 };

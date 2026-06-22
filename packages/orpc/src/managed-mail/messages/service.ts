@@ -683,7 +683,7 @@ export const sendManagedMailboxMessage = async (input: {
   });
   if (!selectedMailbox.organizationId) {
     throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      message: "Managed mailbox organization is missing.",
+      message: "Managed mailbox team is missing.",
     });
   }
   const organizationId = selectedMailbox.organizationId;
@@ -818,7 +818,7 @@ export const sendManagedMailboxMessage = async (input: {
         providerMessageId,
       });
     } catch (error) {
-      console.error("Failed to record organization mail usage after send.", {
+      console.error("Failed to record team mail usage after send.", {
         error,
         mailboxId: selectedMailbox.id,
         providerMessageId,

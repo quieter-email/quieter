@@ -52,10 +52,14 @@ export const SidebarMailboxNav = ({
   const navRef = useRef<HTMLElement>(null);
   const [hoveredMailbox, setHoveredMailbox] = useState<MailboxCategory | null>(null);
   const [exitingMailbox, setExitingMailbox] = useState<MailboxCategory | null>(null);
-  const hoverEnterRef = useRef(false);
+  const [hoverEnter, setHoverEnter] = useState(false);
+  const [hoverSession, setHoverSession] = useState(0);
 
   const setHover = (mailbox: MailboxCategory) => {
-    hoverEnterRef.current = hoveredMailbox === null && exitingMailbox === null;
+    setHoverEnter(hoveredMailbox === null);
+    if (hoveredMailbox === null) {
+      setHoverSession((current) => current + 1);
+    }
     setExitingMailbox(null);
     setHoveredMailbox(mailbox);
   };
@@ -64,7 +68,7 @@ export const SidebarMailboxNav = ({
     if (hoveredMailbox !== null) {
       setExitingMailbox(hoveredMailbox);
     }
-    hoverEnterRef.current = false;
+    setHoverEnter(false);
     setHoveredMailbox(null);
   };
 
@@ -103,9 +107,9 @@ export const SidebarMailboxNav = ({
                     "text-muted-foreground": !isActive && !isHovered,
                   })}
                   hover={isHovered}
-                  hoverEnter={isHovered && hoverEnterRef.current}
+                  hoverEnter={isHovered && hoverEnter}
                   hoverExiting={isHoverExiting}
-                  hoverLayoutId="mailbox-sidebar-hover"
+                  hoverLayoutId={`mailbox-sidebar-hover-${hoverSession}`}
                   onBlur={(event) => clearHoverIfLeavingNav(event.relatedTarget)}
                   onClick={() => onSelectMailbox(item.id)}
                   onFocus={() => {

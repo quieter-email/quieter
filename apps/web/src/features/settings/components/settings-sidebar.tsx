@@ -30,7 +30,7 @@ const SETTINGS_SIDEBAR_NAV = [
   { tab: "account", label: "Account", icon: UserIcon },
   { tab: "plan", label: "Plan", icon: CreditCardIcon },
   { tab: "mailboxes", label: "Mailboxes", icon: Mail01Icon },
-  { tab: "organization", label: "Organizations", icon: UserGroupIcon },
+  { tab: "organization", label: "Teams", icon: UserGroupIcon },
 ] as const satisfies ReadonlyArray<{
   tab: SettingsTab;
   label: string;
@@ -52,11 +52,15 @@ const SidebarContent = ({
 }: SidebarContentProps) => {
   const [hoveredTab, setHoveredTab] = useState<SettingsTab | null>(null);
   const [exitingTab, setExitingTab] = useState<SettingsTab | null>(null);
-  const hoverEnterRef = useRef(false);
+  const [hoverEnter, setHoverEnter] = useState(false);
+  const [hoverSession, setHoverSession] = useState(0);
   const navRef = useRef<HTMLDivElement>(null);
 
   const setHover = (tab: SettingsTab) => {
-    hoverEnterRef.current = hoveredTab === null && exitingTab === null;
+    setHoverEnter(hoveredTab === null);
+    if (hoveredTab === null) {
+      setHoverSession((current) => current + 1);
+    }
     setExitingTab(null);
     setHoveredTab(tab);
   };
@@ -65,7 +69,7 @@ const SidebarContent = ({
     if (hoveredTab !== null) {
       setExitingTab(hoveredTab);
     }
-    hoverEnterRef.current = false;
+    setHoverEnter(false);
     setHoveredTab(null);
   };
 
@@ -125,9 +129,9 @@ const SidebarContent = ({
                   "text-muted-foreground": !isActive && !isHovered,
                 })}
                 hover={isHovered}
-                hoverEnter={hoverEnterRef.current && isHovered}
+                hoverEnter={hoverEnter && isHovered}
                 hoverExiting={isHoverExiting}
-                hoverLayoutId="settings-sidebar-hover"
+                hoverLayoutId={`settings-sidebar-hover-${hoverSession}`}
                 key={tab}
                 onBlur={(event) => clearHoverIfLeavingNav(event.relatedTarget)}
                 onClick={() => handleSelectTab(tab)}
