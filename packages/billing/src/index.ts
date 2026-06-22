@@ -5,6 +5,7 @@ import type {
   BillingSubscriptionStatus,
 } from "@quieter/database";
 import { ORPCError } from "@orpc/server";
+import { ResourceNotFound } from "@polar-sh/sdk/models/errors/resourcenotfound.js";
 import { billingSubscription, db, mailbox, member, organization } from "@quieter/database";
 import { serverEnv } from "@quieter/env/server";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
@@ -21,7 +22,7 @@ import {
   billingProductIdSchema,
   type BillingProductId,
 } from "./plans";
-import { getPolarClient } from "./polar";
+import { getPolarApiOrganizationId, getPolarClient } from "./polar";
 
 const BILLING_PROVIDER = "polar" as const;
 const BILLING_METADATA_PRODUCT = "quieterProduct";
@@ -260,22 +261,50 @@ export const createBillingCheckout = async (input: {
     return { checkoutUrl: successUrl };
   }
 
-  const externalCustomerId =
-    product.scope === "team" ? `organization:${input.organizationId}` : input.userId;
   const checkoutMetadata = createBillingCheckoutMetadata({
     organizationId: input.organizationId,
     product: input.product,
     scope: product.scope,
     userId: input.userId,
   });
-  const checkout = await (
-    await getPolarClient()
-  ).checkouts.create({
+  const polar = await getPolarClient();
+  const externalCustomerId =
+    product.scope === "team" ? `organization:${input.organizationId}` : input.userId;
+  let teamCustomerId: string | undefined;
+
+  if (product.scope === "team") {
+    try {
+      teamCustomerId = (await polar.customers.getExternal({ externalId: externalCustomerId })).id;
+    } catch (error) {
+      if (!(error instanceof ResourceNotFound)) throw error;
+
+      teamCustomerId = (
+        await polar.customers.create({
+          externalId: externalCustomerId,
+          metadata: checkoutMetadata.customerMetadata,
+          name: customerName,
+          organizationId: getPolarApiOrganizationId(),
+          owner: {
+            email: input.customerEmail,
+            externalId: input.userId,
+            name: input.customerName,
+          },
+          type: "team",
+        })
+      ).id;
+    }
+  }
+
+  const checkout = await polar.checkouts.create({
     allowDiscountCodes: true,
-    customerEmail: input.customerEmail,
-    customerMetadata: checkoutMetadata.customerMetadata,
-    customerName,
-    externalCustomerId,
+    ...(teamCustomerId
+      ? { customerId: teamCustomerId }
+      : {
+          customerEmail: input.customerEmail,
+          customerMetadata: checkoutMetadata.customerMetadata,
+          customerName,
+          externalCustomerId,
+        }),
     metadata: checkoutMetadata.metadata,
     products: [providerProductId],
     returnUrl: cancelUrl,
