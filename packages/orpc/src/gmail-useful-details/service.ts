@@ -64,6 +64,11 @@ const excludedLabels = new Set<string>([
 
 const automatedEngineeringSenderPattern =
   /(?:^|[.@<\s-])(github|gitlab|bitbucket|jira|linear|sentry|coderabbit|vercel|datadog|buildkite|circleci)(?:[.@>\s-]|$)/i;
+const SUPPRESSED_AUTOMATION_KINDS = new Set<GmailUsefulDetailKind>([
+  "application",
+  "security_alert",
+  "task",
+]);
 
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message.slice(0, 2_000) : "Unknown useful-details error.";
@@ -83,7 +88,7 @@ const serializeUsefulDetails = async (
 
   for (const { detail: item, feedback } of items) {
     if (
-      (item.kind === "application" || item.kind === "security_alert" || item.kind === "task") &&
+      SUPPRESSED_AUTOMATION_KINDS.has(item.kind) &&
       automatedEngineeringSenderPattern.test(item.source ?? "")
     ) {
       continue;
@@ -245,9 +250,7 @@ export const materializeGmailUsefulDetail = ({
     return null;
   }
   if (
-    (candidate.kind === "application" ||
-      candidate.kind === "security_alert" ||
-      candidate.kind === "task") &&
+    SUPPRESSED_AUTOMATION_KINDS.has(candidate.kind) &&
     automatedEngineeringSenderPattern.test(message.from ?? "")
   ) {
     return null;

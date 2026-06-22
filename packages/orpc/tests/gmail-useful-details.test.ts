@@ -238,6 +238,7 @@ describe("Gmail useful-detail materialization", () => {
   ] as const)("drops automated engineering notifications from %s", (from, kind) => {
     const detail = materializeGmailUsefulDetail({
       candidate: candidate({
+        eventAt: "2026-06-15T09:00:00.000Z",
         kind,
         relevanceSource: "inferred",
         relevantFrom: "2026-06-14T12:00:00.000Z",
