@@ -15,10 +15,10 @@ export const BillingCheckoutResult = () => {
   const { mutate: syncCheckout } = useMutation({
     ...orpc.billing.syncCheckout.mutationOptions(),
     onError: () => {
-      toast.message("Billing completed. Subscription sync is still pending.");
+      toast.error("We could not activate your plan. Please contact support.");
     },
     onSuccess: () => {
-      toast.success("Billing updated.");
+      toast.success("Your plan is active.");
       void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
     },
   });
@@ -30,7 +30,7 @@ export const BillingCheckoutResult = () => {
       if (checkoutId) {
         syncCheckout({ checkoutId });
       } else {
-        toast.success("Billing updated. It may take a moment to sync.");
+        toast.success("Your purchase was completed.");
         void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
       }
     } else {
