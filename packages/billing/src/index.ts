@@ -5,7 +5,7 @@ import type {
   BillingSubscriptionStatus,
 } from "@quieter/database";
 import { ORPCError } from "@orpc/server";
-import { billingSubscription, db, mailbox, member, organization } from "@quieter/database";
+import { billingSubscription, db, mailbox, member, organization, user } from "@quieter/database";
 import { serverEnv } from "@quieter/env/server";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits";
@@ -95,6 +95,14 @@ const getProductForProviderProductId = (providerProductId: string): BillingProdu
   if (serverEnv.POLAR_PRODUCT_PERSONAL_ID === providerProductId) return "personal";
   if (serverEnv.POLAR_PRODUCT_TEAM_ID === providerProductId) return "team";
   if (serverEnv.POLAR_PRODUCT_TEAM_AI_ID === providerProductId) return "team_ai";
+  return null;
+};
+
+const getProductForProviderProductName = (name: string): BillingProductId | null => {
+  const normalized = name.toLowerCase().trim();
+  if (normalized === "personal pro" || normalized === "quieter personal") return "personal";
+  if (normalized === "team pro") return "team";
+  if (normalized === "team pro + ai") return "team_ai";
   return null;
 };
 
@@ -397,15 +405,36 @@ const getSyncedBillingProduct = (subscription: Subscription) => {
   );
   if (metadataProduct.success) return metadataProduct.data;
 
+  if (subscription.product?.name) {
+    const nameMatch = getProductForProviderProductName(subscription.product.name);
+    if (nameMatch) return nameMatch;
+  }
+
   const legacyPlan = subscription.metadata?.[BILLING_METADATA_LEGACY_PLAN];
   if (legacyPlan === "managed" || legacyPlan === "pro") return legacyPlan;
 
   return null;
 };
 
-export const syncBillingSubscription = async (subscription: Subscription) => {
+export const syncBillingSubscription = async (
+  subscription: Subscription,
+  userIdOverride?: string,
+) => {
   const metadataUserId = subscription.metadata[BILLING_METADATA_USER_ID];
-  const userId = typeof metadataUserId === "string" ? metadataUserId.trim() : "";
+  let userId =
+    (typeof metadataUserId === "string" ? metadataUserId.trim() : "") || userIdOverride || "";
+
+  if (!userId && subscription.customer?.email) {
+    const [userRow] = await db
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.email, subscription.customer.email))
+      .limit(1);
+    if (userRow) {
+      userId = userRow.id;
+    }
+  }
+
   const product = getSyncedBillingProduct(subscription);
 
   if (!userId || !product) {
@@ -498,7 +527,7 @@ export const syncBillingCheckout = async (input: { checkoutId: string; userId: s
   const subscription = await polar.subscriptions.get({
     id: checkout.subscriptionId,
   });
-  return await syncBillingSubscription(subscription);
+  return await syncBillingSubscription(subscription, checkoutUserId);
 };
 
 export const reportAiUsage = async (input: {
