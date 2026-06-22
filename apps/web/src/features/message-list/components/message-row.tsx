@@ -5,6 +5,7 @@ import { FileAttachmentIcon, MessageMultiple01Icon } from "@hugeicons/core-free-
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { splitMailAddressList } from "@quieter/mail/compose";
 import { cn } from "@quieter/ui";
+import { m, useReducedMotion } from "motion/react";
 import { type KeyboardEvent, type MouseEvent } from "react";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import { SenderAvatar } from "~/components/sender-avatar";
@@ -49,6 +50,8 @@ type MessageRowProps = {
   rowRef?: (element: HTMLLIElement | null) => void;
   dataIndex?: number;
   thread: ThreadListEntry;
+  isNew?: boolean;
+  staggerIndex?: number;
 };
 
 type MessageRowContentProps = Omit<
@@ -360,31 +363,57 @@ export const MessageRow = ({
   pendingActions,
   rowRef,
   thread,
+  isNew,
+  staggerIndex = 0,
 }: MessageRowProps) => {
+  const shouldReduceMotion = useReducedMotion();
+
+  const element = (
+    <MessageRowContent
+      activeMailbox={activeMailbox}
+      gmailLabels={gmailLabels}
+      isActive={isActive}
+      isSelected={isSelected}
+      isSelectionMode={isSelectionMode}
+      mailboxActions={mailboxActions}
+      mailboxId={mailboxId}
+      mailboxProvider={mailboxProvider}
+      onOpenDraft={onOpenDraft}
+      onThreadPress={onThreadPress}
+      onThreadSelectionPress={onThreadSelectionPress}
+      pendingActions={pendingActions}
+      thread={thread}
+    />
+  );
+
   return (
     <li
-      className={cn("group relative", className)}
+      className={cn("group relative", className, {
+        "overflow-hidden": isNew,
+      })}
       data-index={dataIndex}
       ref={rowRef}
       style={{
         transform: `translateY(${offsetY}px)`,
       }}
     >
-      <MessageRowContent
-        activeMailbox={activeMailbox}
-        gmailLabels={gmailLabels}
-        isActive={isActive}
-        isSelected={isSelected}
-        isSelectionMode={isSelectionMode}
-        mailboxActions={mailboxActions}
-        mailboxId={mailboxId}
-        mailboxProvider={mailboxProvider}
-        onOpenDraft={onOpenDraft}
-        onThreadPress={onThreadPress}
-        onThreadSelectionPress={onThreadSelectionPress}
-        pendingActions={pendingActions}
-        thread={thread}
-      />
+      {isNew ? (
+        <m.div
+          initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -24, scale: 0.985 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{
+            type: "spring",
+            stiffness: 260,
+            damping: 24,
+            mass: 0.8,
+            delay: staggerIndex * 0.05,
+          }}
+        >
+          {element}
+        </m.div>
+      ) : (
+        element
+      )}
     </li>
   );
 };

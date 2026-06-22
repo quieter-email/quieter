@@ -6,67 +6,10 @@ import {
 } from "@quieter/database";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import type { BillingAccount } from "./entitlements";
-import { getPolarApiOrganizationId, getPolarClient, ingestPolarEvents } from "./polar";
+import { getPolarApiOrganizationId, ingestPolarEvents } from "./polar";
 
 const BILLING_CREDIT_USAGE_EVENT_NAME = "quieter.credit_usage";
-const BILLING_CREDIT_USAGE_METER_KEY = "quieter_credit_usage";
 const MICROCENTS_PER_CENT = 1_000_000;
-
-let creditUsageMeterId: string | null = null;
-
-const getCreditUsageMeterId = async () => {
-  if (creditUsageMeterId) return creditUsageMeterId;
-
-  const polar = await getPolarClient();
-  const organizationId = getPolarApiOrganizationId();
-  const meters = await polar.meters.list({
-    limit: 100,
-    metadata: {
-      quieterMeter: BILLING_CREDIT_USAGE_METER_KEY,
-    },
-    organizationId,
-  });
-  const existingMeter = meters.result.items.find(
-    (meter) => meter.metadata.quieterMeter === BILLING_CREDIT_USAGE_METER_KEY,
-  );
-
-  if (existingMeter) {
-    creditUsageMeterId = existingMeter.id;
-    return existingMeter.id;
-  }
-
-  const createdMeter = await polar.meters.create({
-    aggregation: {
-      func: "sum",
-      property: "billableCostCents",
-    },
-    filter: {
-      clauses: [
-        {
-          operator: "eq",
-          property: "name",
-          value: BILLING_CREDIT_USAGE_EVENT_NAME,
-        },
-      ],
-      conjunction: "and",
-    },
-    metadata: {
-      quieterMeter: BILLING_CREDIT_USAGE_METER_KEY,
-    },
-    name: "Quieter credit overage",
-    organizationId,
-  });
-
-  creditUsageMeterId = createdMeter.id;
-  return createdMeter.id;
-};
-
-export const getCreditUsageMeteredPrice = async () => ({
-  amountType: "metered_unit" as const,
-  meterId: await getCreditUsageMeterId(),
-  priceCurrency: "eur" as const,
-  unitAmount: "1",
-});
 
 const getTargetCondition = (input: {
   organizationId: string | null;
@@ -174,7 +117,6 @@ export const recordBillingCreditUsage = async (input: {
   });
 
   if (result.eventId && result.billableCostMicroCents > 0 && !result.polarEventReportedAt) {
-    await getCreditUsageMeterId();
     await ingestPolarEvents([
       {
         externalCustomerId: input.account.externalCustomerId,

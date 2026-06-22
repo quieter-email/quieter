@@ -99,6 +99,21 @@ describe("SST environment", () => {
       ),
     ).toThrow("GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT is required in production");
   });
+
+  test("requires Polar product configuration in production", () => {
+    expect(() =>
+      createSstEnv(
+        { production: true },
+        {
+          ...requiredSstEnvironment,
+          GMAIL_PUBSUB_PUSH_AUDIENCE: "https://example.com/gmail",
+          GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: "gmail@example.iam.gserviceaccount.com",
+          GMAIL_PUBSUB_SUBSCRIPTION: "projects/example/subscriptions/gmail",
+          GMAIL_PUBSUB_TOPIC: "projects/example/topics/gmail",
+        },
+      ),
+    ).toThrow("Polar product configuration is required in production");
+  });
 });
 
 describe("deployment environment", () => {

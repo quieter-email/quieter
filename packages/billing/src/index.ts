@@ -8,19 +8,20 @@ import { ORPCError } from "@orpc/server";
 import { billingSubscription, db, mailbox, member, organization } from "@quieter/database";
 import { serverEnv } from "@quieter/env/server";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
-import {
-  getBillingCreditUsage,
-  getCreditUsageMeteredPrice,
-  recordBillingCreditUsage,
-} from "./credits";
+import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits";
 import {
   getOrganizationBillingEntitlement,
   getPersonalBillingEntitlement,
   hasUserBillingFeature,
   isActiveBillingStatus,
 } from "./entitlements";
-import { BILLING_PRODUCTS, billingProductIdSchema, type BillingProductId } from "./plans";
-import { getPolarApiOrganizationId, getPolarClient } from "./polar";
+import {
+  BILLING_PRODUCTS,
+  BILLING_PRODUCT_IDS,
+  billingProductIdSchema,
+  type BillingProductId,
+} from "./plans";
+import { getPolarClient } from "./polar";
 
 const BILLING_PROVIDER = "polar" as const;
 const BILLING_METADATA_PRODUCT = "quieterProduct";
@@ -53,7 +54,6 @@ export const createBillingCheckoutMetadata = (input: {
   };
 };
 
-const billingProductIdCache = new Map<BillingProductId, string>();
 const aiUsageRates = {
   "anthropic/claude-haiku-4.5": { completion: 500, prompt: 100 },
   "deepseek/deepseek-v4-flash": { completion: 18, prompt: 9 },
@@ -65,101 +65,36 @@ const aiUsageRates = {
   "openai/gpt-5.5": { completion: 3_000, prompt: 500 },
 } as const;
 
-const getBillingProductId = async (productId: BillingProductId) => {
-  const cachedProductId = billingProductIdCache.get(productId);
-  if (cachedProductId) return cachedProductId;
+const getBillingProductId = (productId: BillingProductId): string => {
+  const polarProductId = {
+    personal: serverEnv.POLAR_PRODUCT_PERSONAL_ID,
+    team: serverEnv.POLAR_PRODUCT_TEAM_ID,
+    team_ai: serverEnv.POLAR_PRODUCT_TEAM_AI_ID,
+  }[productId];
 
-  const product = BILLING_PRODUCTS[productId];
-  const polar = await getPolarClient();
-  const organizationId = getPolarApiOrganizationId();
-  const products = await polar.products.list({
-    isArchived: false,
-    isRecurring: true,
-    limit: 100,
-    organizationId,
-  });
-  const existingProduct = products.result.items.find(
-    (candidate) =>
-      candidate.metadata[BILLING_METADATA_PRODUCT] === product.polarMetadataKey ||
-      candidate.name === product.name,
-  );
-  const creditUsageMeteredPrice = await getCreditUsageMeteredPrice();
-
-  if (existingProduct) {
-    const hasCreditUsageMeteredPrice = existingProduct.prices.some(
-      (price) =>
-        price.amountType === "metered_unit" &&
-        "meterId" in price &&
-        price.meterId === creditUsageMeteredPrice.meterId,
-    );
-
-    const hasCurrentMetadata =
-      existingProduct.metadata[BILLING_METADATA_PRODUCT] === product.polarMetadataKey &&
-      existingProduct.metadata[BILLING_METADATA_SCOPE] === product.scope;
-
-    if (!hasCreditUsageMeteredPrice || !hasCurrentMetadata) {
-      await polar.products.update({
-        id: existingProduct.id,
-        productUpdate: {
-          metadata: {
-            ...existingProduct.metadata,
-            [BILLING_METADATA_PRODUCT]: product.polarMetadataKey,
-            [BILLING_METADATA_SCOPE]: product.scope,
-          },
-          prices: hasCreditUsageMeteredPrice
-            ? undefined
-            : [
-                ...existingProduct.prices
-                  .filter((price) => !price.isArchived)
-                  .map((price) => ({ id: price.id })),
-                creditUsageMeteredPrice,
-              ],
-        },
-      });
-    }
-
-    billingProductIdCache.set(productId, existingProduct.id);
-    return existingProduct.id;
+  if (!polarProductId) {
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: `Polar product is not configured for ${productId}.`,
+    });
   }
 
-  const createdProduct = await polar.products.create({
-    description: product.description,
-    metadata: {
-      [BILLING_METADATA_PRODUCT]: product.polarMetadataKey,
-      [BILLING_METADATA_SCOPE]: product.scope,
-    },
-    name: product.name,
-    organizationId,
-    prices: [
-      {
-        amountType: "fixed",
-        priceAmount: product.monthlyPriceCents,
-        priceCurrency: product.currency,
-      },
-      creditUsageMeteredPrice,
-    ],
-    recurringInterval: "month",
-  });
-
-  billingProductIdCache.set(productId, createdProduct.id);
-  return createdProduct.id;
+  return polarProductId;
 };
 
-export const syncPolarCatalog = async () => {
+export const syncPolarCatalog = () => {
   const products = {} as Record<BillingProductId, string>;
 
-  for (const product of Object.keys(BILLING_PRODUCTS) as BillingProductId[]) {
-    products[product] = await getBillingProductId(product);
+  for (const product of BILLING_PRODUCT_IDS) {
+    products[product] = getBillingProductId(product);
   }
 
   return products;
 };
 
-const getProductForProviderProductId = (providerProductId: string) => {
-  for (const [product, cachedProductId] of billingProductIdCache.entries()) {
-    if (cachedProductId === providerProductId) return product;
-  }
-
+const getProductForProviderProductId = (providerProductId: string): BillingProductId | null => {
+  if (serverEnv.POLAR_PRODUCT_PERSONAL_ID === providerProductId) return "personal";
+  if (serverEnv.POLAR_PRODUCT_TEAM_ID === providerProductId) return "team";
+  if (serverEnv.POLAR_PRODUCT_TEAM_AI_ID === providerProductId) return "team_ai";
   return null;
 };
 
@@ -282,7 +217,7 @@ export const createBillingCheckout = async (input: {
 
     customerName = organizationRecord.name;
   }
-  const providerProductId = await getBillingProductId(input.product);
+  const providerProductId = getBillingProductId(input.product);
   const rows = await db
     .select({
       plan: billingSubscription.plan,
@@ -447,7 +382,7 @@ export const getBillingOverview = async (input: { userId: string }) => {
   return { personal, teams };
 };
 
-const getSyncedBillingProduct = async (subscription: Subscription) => {
+const getSyncedBillingProduct = (subscription: Subscription) => {
   const cachedProduct = getProductForProviderProductId(subscription.productId);
   if (cachedProduct) return cachedProduct;
 
@@ -455,10 +390,7 @@ const getSyncedBillingProduct = async (subscription: Subscription) => {
   const providerProductMatch = getProductForPolarMetadataKey(
     typeof providerProductMetadata === "string" ? providerProductMetadata : undefined,
   );
-  if (providerProductMatch) {
-    billingProductIdCache.set(providerProductMatch, subscription.productId);
-    return providerProductMatch;
-  }
+  if (providerProductMatch) return providerProductMatch;
 
   const metadataProduct = billingProductIdSchema.safeParse(
     subscription.metadata?.[BILLING_METADATA_PRODUCT],
@@ -474,7 +406,7 @@ const getSyncedBillingProduct = async (subscription: Subscription) => {
 export const syncBillingSubscription = async (subscription: Subscription) => {
   const metadataUserId = subscription.metadata[BILLING_METADATA_USER_ID];
   const userId = typeof metadataUserId === "string" ? metadataUserId.trim() : "";
-  const product = await getSyncedBillingProduct(subscription);
+  const product = getSyncedBillingProduct(subscription);
 
   if (!userId || !product) {
     console.warn("Skipping billing subscription without Quieter metadata.", {

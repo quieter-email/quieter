@@ -1,7 +1,7 @@
 import { syncPolarCatalog } from "../src";
 import { getPolarSandboxMode } from "../src/polar";
 
-const products = await syncPolarCatalog();
+const products = syncPolarCatalog();
 
 console.log(
   JSON.stringify(
