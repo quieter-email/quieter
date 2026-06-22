@@ -489,15 +489,36 @@ export const syncBillingCheckout = async (input: { checkoutId: string; userId: s
     });
   }
 
-  if (!checkout.subscriptionId) {
+  let subscription: Subscription | undefined;
+  if (checkout.subscriptionId) {
+    subscription = await polar.subscriptions.get({
+      id: checkout.subscriptionId,
+    });
+  } else if (checkout.customerId && checkout.productId) {
+    const subscriptions = await polar.subscriptions.list({
+      active: true,
+      customerId: checkout.customerId,
+      limit: 10,
+      productId: checkout.productId,
+      sorting: ["-started_at"],
+    });
+    subscription = subscriptions.result.items.find(
+      (candidate) => candidate.metadata[BILLING_METADATA_USER_ID] === input.userId,
+    );
+  }
+
+  if (!subscription) {
+    console.error("Could not resolve the subscription created by a completed checkout.", {
+      checkoutId: checkout.id,
+      customerId: checkout.customerId,
+      productId: checkout.productId,
+      userId: input.userId,
+    });
     throw new ORPCError("BAD_REQUEST", {
-      message: "The checkout has no subscription to synchronize.",
+      message: "We could not activate your plan. Please contact support.",
     });
   }
 
-  const subscription = await polar.subscriptions.get({
-    id: checkout.subscriptionId,
-  });
   return await syncBillingSubscription(subscription);
 };
 
