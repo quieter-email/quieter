@@ -27,7 +27,7 @@ Read [SECURITY.md](SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md) before co
   structured search, saved views, and automatic organization rules
 - Deployment-safe backend module boundaries with CI checks for worker imports and handler bundles
 - Mailbox-scoped chat with streamed server-side generation and Gmail tools
-- Polar billing through PayKit
+- Polar SDK billing integrated with Better Auth
 - Browser-only c15t consent preferences and consent-gated analytics
 
 ## Technology

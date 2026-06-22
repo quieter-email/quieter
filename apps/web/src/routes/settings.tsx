@@ -19,6 +19,7 @@ export const Route = createFileRoute("/settings")({
         .catch("/")
         .default("/"),
       billing: z.enum(["canceled", "success"]).optional().catch(undefined),
+      checkoutId: z.uuid().optional().catch(undefined),
       gmail: z.enum(["connected", "error"]).optional().catch(undefined),
       tab: z.string().trim().pipe(z.enum(SETTINGS_TABS)).catch("general").default("general"),
       organizationId: z.string().trim().catch("").default(""),

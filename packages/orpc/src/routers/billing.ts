@@ -1,5 +1,10 @@
 import { ORPCError } from "@orpc/server";
-import { createBillingCheckout, getBillingOverview } from "@quieter/billing";
+import {
+  createBillingCheckout,
+  createBillingPortal,
+  getBillingOverview,
+  syncBillingCheckout,
+} from "@quieter/billing";
 import { BILLING_PRODUCTS, billingProductIdSchema } from "@quieter/billing/plans";
 import { z } from "zod";
 import { getRequestHeaders } from "../context";
@@ -44,4 +49,39 @@ export const billingRouter = {
         userId: context.userId,
       });
     }),
+
+  createPortal: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string().trim().min(1).optional(),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      if (input.organizationId) {
+        await assertUserCanManageOrganizationSettings({
+          organizationId: input.organizationId,
+          userId: context.userId,
+        });
+      }
+
+      return await createBillingPortal({
+        headers: getRequestHeaders(context),
+        organizationId: input.organizationId,
+        userId: context.userId,
+      });
+    }),
+
+  syncCheckout: protectedProcedure
+    .input(
+      z.object({
+        checkoutId: z.uuid(),
+      }),
+    )
+    .handler(
+      async ({ context, input }) =>
+        await syncBillingCheckout({
+          checkoutId: input.checkoutId,
+          userId: context.userId,
+        }),
+    ),
 };

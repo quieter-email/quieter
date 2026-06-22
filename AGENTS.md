@@ -21,7 +21,7 @@
   SST handler to catch unsupported transitive dependencies.
 - `packages/mail` owns pure mail parsing, compose schemas, MIME building, message content extraction, and sender avatar derivation.
 - `packages/gmail` owns Gmail REST service logic and Gmail-specific draft parsing; encrypted credentials and token refresh are owned by `packages/orpc`.
-- `packages/billing` owns PayKit/Polar billing plans, checkout, subscription sync, and webhook handling.
+- `packages/billing` owns Polar billing plans, direct SDK checkout and portal sessions, subscription sync, metering, and credit usage.
 - `packages/database` owns schema and migrations.
 - `packages/auth` owns Better Auth config.
 - `packages/env` owns T3 Env schemas and runtime normalization. Use its client/public/server/SST/deployment subpaths instead of reading custom variables directly; bootstrap files that must execute before workspace TypeScript can load are the exception.
@@ -90,12 +90,12 @@
 
 ## Billing
 
-- Pricing and checkout use PayKit with Polar.
+- Pricing and checkout use the Polar SDK directly. Better Auth owns the verified Polar webhook endpoint.
 - Personal and team billing are separate. `billingSubscription.scope` is `personal` or `team`; team subscriptions point directly at an organization while `userId` records the purchaser.
-- Paid products are `personal`, `team`, and `team_ai`. Personal costs $10/month and provides $10 personal credits plus AI access. Team costs $10/month and provides $10 organization credits plus managed mail. Team + AI costs $20/month and provides $20 organization credits plus managed mail and AI for members. Gmail and BYOK remain available without checkout.
+- Paid products are `personal`, `team`, and `team_ai`. The production Polar dashboard is the catalog source of truth unless it is clearly misconfigured. The current products are Personal Pro at €10/month with €10 personal credits and AI access, Team Pro at €10/month with €10 organization credits and managed mail, and Team Pro + AI at €20/month with €20 organization credits, managed mail, and AI for members. Gmail and BYOK remain available without checkout.
 - Organizations persist one stable billing owner. Administrative/test entitlements use audited
   `billingEntitlementOverride` rows rather than source-controlled email bypasses.
-- Polar products are defined in code and synced through PayKit/Polar at checkout. Checkout metadata must include the Quieter user id, billing scope, product, and organization id for team billing. The Polar webhook posts to `/api/billing/polar-webhook` and uses `POLAR_WEBHOOK_SECRET`.
+- Polar products are mirrored in code and reconciled by `bun run billing:sync-polar`; production dashboard values win over local variants unless the dashboard is clearly wrong. Checkout metadata includes the Quieter user id, billing scope, product, and organization id for team billing. Better Auth receives Polar webhooks at `/api/auth/polar/webhooks` using `POLAR_WEBHOOK_SECRET`. Successful checkout redirects also carry the Polar checkout id so local sandbox development can synchronize without a publicly reachable webhook.
 - AI and managed-mail costs consume the same scoped balance through `billingCreditUsageEvent`. Personal usage can consume only personal credits; organization usage can consume only that organization’s credits. Overage events are sent to Polar only after the scoped monthly credits are exhausted. Managed-mail costs use a 100% Team or 50% Team + AI service markup.
 
 ## Schema + Generated Files

@@ -23,7 +23,6 @@ import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
 import { Route as ApiMessagesRouteImport } from './routes/api/messages'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
 import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callback'
-import { Route as ApiBillingPolarWebhookRouteImport } from './routes/api/billing.polar-webhook'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 import { Route as ApiInternalGmailCredentialsRotateRouteImport } from './routes/api.internal.gmail-credentials.rotate'
 import { Route as ApiChatRunsRunIdStreamRouteImport } from './routes/api/chat.runs.$runId.stream'
@@ -98,11 +97,6 @@ const ApiGmailCallbackRoute = ApiGmailCallbackRouteImport.update({
   path: '/api/gmail/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiBillingPolarWebhookRoute = ApiBillingPolarWebhookRouteImport.update({
-  id: '/api/billing/polar-webhook',
-  path: '/api/billing/polar-webhook',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -134,7 +128,6 @@ export interface FileRoutesByFullPath {
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
-  '/api/billing/polar-webhook': typeof ApiBillingPolarWebhookRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
@@ -154,7 +147,6 @@ export interface FileRoutesByTo {
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
-  '/api/billing/polar-webhook': typeof ApiBillingPolarWebhookRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
@@ -175,7 +167,6 @@ export interface FileRoutesById {
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
-  '/api/billing/polar-webhook': typeof ApiBillingPolarWebhookRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
@@ -197,7 +188,6 @@ export interface FileRouteTypes {
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
-    | '/api/billing/polar-webhook'
     | '/api/gmail/callback'
     | '/api/orpc/$'
     | '/api/internal/gmail-credentials/rotate'
@@ -217,7 +207,6 @@ export interface FileRouteTypes {
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
-    | '/api/billing/polar-webhook'
     | '/api/gmail/callback'
     | '/api/orpc/$'
     | '/api/internal/gmail-credentials/rotate'
@@ -237,7 +226,6 @@ export interface FileRouteTypes {
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
-    | '/api/billing/polar-webhook'
     | '/api/gmail/callback'
     | '/api/orpc/$'
     | '/api/internal/gmail-credentials/rotate'
@@ -258,7 +246,6 @@ export interface RootRouteChildren {
   ApiSitePasswordRoute: typeof ApiSitePasswordRoute
   ApiWaitlistRoute: typeof ApiWaitlistRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
-  ApiBillingPolarWebhookRoute: typeof ApiBillingPolarWebhookRoute
   ApiGmailCallbackRoute: typeof ApiGmailCallbackRoute
   ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
   ApiInternalGmailCredentialsRotateRoute: typeof ApiInternalGmailCredentialsRotateRoute
@@ -365,13 +352,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGmailCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/billing/polar-webhook': {
-      id: '/api/billing/polar-webhook'
-      path: '/api/billing/polar-webhook'
-      fullPath: '/api/billing/polar-webhook'
-      preLoaderRoute: typeof ApiBillingPolarWebhookRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -410,7 +390,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSitePasswordRoute: ApiSitePasswordRoute,
   ApiWaitlistRoute: ApiWaitlistRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
-  ApiBillingPolarWebhookRoute: ApiBillingPolarWebhookRoute,
   ApiGmailCallbackRoute: ApiGmailCallbackRoute,
   ApiOrpcSplatRoute: ApiOrpcSplatRoute,
   ApiInternalGmailCredentialsRotateRoute:

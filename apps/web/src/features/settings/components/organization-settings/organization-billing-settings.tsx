@@ -2,7 +2,7 @@
 
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { toast } from "@quieter/ui";
+import { Button, toast } from "@quieter/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BillingCreditSummary,
@@ -35,6 +35,15 @@ export const OrganizationBillingSettings = ({
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
       window.location.assign(result.checkoutUrl);
+    },
+  });
+  const portalMutation = useMutation({
+    ...orpc.billing.createPortal.mutationOptions(),
+    onError: (error) => {
+      toast.error(error.message || "Could not open billing.");
+    },
+    onSuccess: (result) => {
+      window.location.assign(result.portalUrl);
     },
   });
 
@@ -71,18 +80,33 @@ export const OrganizationBillingSettings = ({
 
   return (
     <section className="border-b border-border/70 py-6">
-      <div>
-        <h2 className="text-sm font-medium text-foreground">Billing</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Choose the shared monthly credits and features for this team.
-        </p>
-        <div className="mt-2">
-          <BillingCreditSummary
-            creditAmountCents={billing.creditAmountCents}
-            product={currentProduct}
-            usage={billing.usage}
-          />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-medium text-foreground">Billing</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Choose the shared monthly credits and features for this team.
+          </p>
+          <div className="mt-2">
+            <BillingCreditSummary
+              creditAmountCents={billing.creditAmountCents}
+              product={currentProduct}
+              usage={billing.usage}
+            />
+          </div>
         </div>
+        {currentProduct && billing.canManageBilling && (
+          <Button
+            disabled={portalMutation.isPending}
+            onClick={() => portalMutation.mutate({ organizationId })}
+            size="sm"
+            variant="outline"
+          >
+            {portalMutation.isPending && (
+              <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+            )}
+            Manage billing
+          </Button>
+        )}
       </div>
 
       <div className="mt-4 grid gap-3 xl:grid-cols-2">

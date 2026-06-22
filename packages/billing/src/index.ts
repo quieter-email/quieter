@@ -1,8 +1,10 @@
-import type { Subscription } from "@paykit-sdk/core";
-import type { createPolar as createPolarFactory } from "@paykit-sdk/polar";
-import type { BillingPlan as StoredBillingPlan, BillingScope } from "@quieter/database";
+import type { Subscription } from "@polar-sh/sdk/models/components/subscription.js";
+import type {
+  BillingPlan as StoredBillingPlan,
+  BillingScope,
+  BillingSubscriptionStatus,
+} from "@quieter/database";
 import { ORPCError } from "@orpc/server";
-import { PayKit } from "@paykit-sdk/core";
 import { billingSubscription, db, mailbox, member, organization } from "@quieter/database";
 import { serverEnv } from "@quieter/env/server";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
@@ -18,7 +20,7 @@ import {
   isActiveBillingStatus,
 } from "./entitlements";
 import { BILLING_PRODUCTS, billingProductIdSchema, type BillingProductId } from "./plans";
-import { getPolarApiOrganizationId, getPolarClient, getPolarSandboxMode } from "./polar";
+import { getPolarApiOrganizationId, getPolarClient } from "./polar";
 
 const BILLING_PROVIDER = "polar" as const;
 const BILLING_METADATA_PRODUCT = "quieterProduct";
@@ -27,10 +29,6 @@ const BILLING_METADATA_USER_ID = "quieterUserId";
 const BILLING_METADATA_ORGANIZATION_ID = "quieterOrganizationId";
 const BILLING_METADATA_LEGACY_PLAN = "quieterPlan";
 
-type PolarProvider = ReturnType<typeof createPolarFactory>;
-type Paykit = PayKit<PolarProvider>;
-
-let paykit: Paykit | null = null;
 const billingProductIdCache = new Map<BillingProductId, string>();
 const aiUsageRates = {
   "anthropic/claude-haiku-4.5": { completion: 500, prompt: 100 },
@@ -43,29 +41,6 @@ const aiUsageRates = {
   "openai/gpt-5.5": { completion: 3_000, prompt: 500 },
 } as const;
 
-const getPaykit = async () => {
-  if (paykit) return paykit;
-
-  const accessToken = serverEnv.POLAR_ACCESS_TOKEN;
-
-  if (!accessToken) {
-    throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      message: "Billing is not configured.",
-    });
-  }
-
-  const { createPolar } = await import("@paykit-sdk/polar");
-
-  paykit = new PayKit(
-    createPolar({
-      accessToken,
-      isSandbox: getPolarSandboxMode(),
-    }),
-  );
-
-  return paykit;
-};
-
 const getBillingProductId = async (productId: BillingProductId) => {
   const cachedProductId = billingProductIdCache.get(productId);
   if (cachedProductId) return cachedProductId;
@@ -77,13 +52,12 @@ const getBillingProductId = async (productId: BillingProductId) => {
     isArchived: false,
     isRecurring: true,
     limit: 100,
-    metadata: {
-      [BILLING_METADATA_PRODUCT]: product.polarMetadataKey,
-    },
     organizationId,
   });
   const existingProduct = products.result.items.find(
-    (candidate) => candidate.metadata[BILLING_METADATA_PRODUCT] === product.polarMetadataKey,
+    (candidate) =>
+      candidate.metadata[BILLING_METADATA_PRODUCT] === product.polarMetadataKey ||
+      candidate.name === product.name,
   );
   const creditUsageMeteredPrice = await getCreditUsageMeteredPrice();
 
@@ -95,16 +69,27 @@ const getBillingProductId = async (productId: BillingProductId) => {
         price.meterId === creditUsageMeteredPrice.meterId,
     );
 
-    if (!hasCreditUsageMeteredPrice) {
+    const hasCurrentMetadata =
+      existingProduct.metadata[BILLING_METADATA_PRODUCT] === product.polarMetadataKey &&
+      existingProduct.metadata[BILLING_METADATA_SCOPE] === product.scope;
+
+    if (!hasCreditUsageMeteredPrice || !hasCurrentMetadata) {
       await polar.products.update({
         id: existingProduct.id,
         productUpdate: {
-          prices: [
-            ...existingProduct.prices
-              .filter((price) => !price.isArchived)
-              .map((price) => ({ id: price.id })),
-            creditUsageMeteredPrice,
-          ],
+          metadata: {
+            ...existingProduct.metadata,
+            [BILLING_METADATA_PRODUCT]: product.polarMetadataKey,
+            [BILLING_METADATA_SCOPE]: product.scope,
+          },
+          prices: hasCreditUsageMeteredPrice
+            ? undefined
+            : [
+                ...existingProduct.prices
+                  .filter((price) => !price.isArchived)
+                  .map((price) => ({ id: price.id })),
+                creditUsageMeteredPrice,
+              ],
         },
       });
     }
@@ -117,14 +102,15 @@ const getBillingProductId = async (productId: BillingProductId) => {
     description: product.description,
     metadata: {
       [BILLING_METADATA_PRODUCT]: product.polarMetadataKey,
+      [BILLING_METADATA_SCOPE]: product.scope,
     },
-    name: `Quieter ${product.name}`,
+    name: product.name,
     organizationId,
     prices: [
       {
         amountType: "fixed",
         priceAmount: product.monthlyPriceCents,
-        priceCurrency: "usd",
+        priceCurrency: product.currency,
       },
       creditUsageMeteredPrice,
     ],
@@ -133,6 +119,16 @@ const getBillingProductId = async (productId: BillingProductId) => {
 
   billingProductIdCache.set(productId, createdProduct.id);
   return createdProduct.id;
+};
+
+export const syncPolarCatalog = async () => {
+  const products = {} as Record<BillingProductId, string>;
+
+  for (const product of Object.keys(BILLING_PRODUCTS) as BillingProductId[]) {
+    products[product] = await getBillingProductId(product);
+  }
+
+  return products;
 };
 
 const getProductForProviderProductId = (providerProductId: string) => {
@@ -194,9 +190,9 @@ const getSettingsUrl = (
   return url.toString();
 };
 
-const getCustomerId = (subscription: Subscription) => {
-  if (!subscription.customer || !("id" in subscription.customer)) return null;
-  return String(subscription.customer.id);
+const withCheckoutIdPlaceholder = (url: string) => {
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}checkoutId={CHECKOUT_ID}`;
 };
 
 export const createBillingCheckout = async (input: {
@@ -245,6 +241,23 @@ export const createBillingCheckout = async (input: {
       product: input.product,
     });
   }
+  successUrl = withCheckoutIdPlaceholder(successUrl);
+  let customerName = input.customerName;
+  if (product.scope === "team") {
+    const [organizationRecord] = await db
+      .select({ name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, input.organizationId!))
+      .limit(1);
+
+    if (!organizationRecord) {
+      throw new ORPCError("NOT_FOUND", {
+        message: "Organization not found.",
+      });
+    }
+
+    customerName = organizationRecord.name;
+  }
   const providerProductId = await getBillingProductId(input.product);
   const rows = await db
     .select({
@@ -273,7 +286,7 @@ export const createBillingCheckout = async (input: {
 
   if (activeSubscription) {
     if (activeSubscription.plan !== input.product) {
-      await (
+      const updatedSubscription = await (
         await getPolarClient()
       ).subscriptions.update({
         id: activeSubscription.providerSubscriptionId,
@@ -282,41 +295,79 @@ export const createBillingCheckout = async (input: {
           prorationBehavior: "invoice",
         },
       });
+      await syncBillingSubscription(updatedSubscription);
     }
 
     return { checkoutUrl: successUrl };
   }
 
   const externalCustomerId =
-    product.scope === "team" ? `organization:${input.organizationId}` : `user:${input.userId}`;
+    product.scope === "team" ? `organization:${input.organizationId}` : input.userId;
   const checkout = await (
-    await getPaykit()
+    await getPolarClient()
   ).checkouts.create({
-    cancel_url: cancelUrl,
-    customer: { email: input.customerEmail },
-    item_id: providerProductId,
+    allowDiscountCodes: true,
+    customerEmail: input.customerEmail,
+    customerMetadata: {
+      [BILLING_METADATA_ORGANIZATION_ID]: input.organizationId ?? "",
+      [BILLING_METADATA_USER_ID]: input.userId,
+    },
+    customerName,
+    externalCustomerId,
     metadata: {
       [BILLING_METADATA_ORGANIZATION_ID]: input.organizationId ?? "",
       [BILLING_METADATA_PRODUCT]: input.product,
       [BILLING_METADATA_SCOPE]: product.scope,
       [BILLING_METADATA_USER_ID]: input.userId,
     },
-    provider_metadata: {
-      allowDiscountCodes: true,
-      customerMetadata: {
-        [BILLING_METADATA_ORGANIZATION_ID]: input.organizationId ?? "",
-        [BILLING_METADATA_USER_ID]: input.userId,
-      },
-      customerName: input.customerName,
-      externalCustomerId,
-      returnUrl: cancelUrl,
-    },
-    quantity: 1,
-    session_type: "one_time",
-    success_url: successUrl,
+    products: [providerProductId],
+    returnUrl: cancelUrl,
+    successUrl,
   });
 
-  return { checkoutUrl: checkout.payment_url };
+  return { checkoutUrl: checkout.url };
+};
+
+export const createBillingPortal = async (input: {
+  headers: Headers;
+  organizationId?: string;
+  userId: string;
+}) => {
+  const returnUrl = input.organizationId
+    ? getSettingsUrl(input.headers, {
+        organizationId: input.organizationId,
+        product: "team",
+      })
+    : getSettingsUrl(input.headers, { product: "personal" });
+  const session = await (
+    await getPolarClient()
+  ).customerSessions.create({
+    externalCustomerId: input.organizationId
+      ? `organization:${input.organizationId}`
+      : input.userId,
+    returnUrl,
+  });
+
+  return { portalUrl: session.customerPortalUrl };
+};
+
+const normalizeSubscriptionStatus = (status: Subscription["status"]): BillingSubscriptionStatus => {
+  switch (status) {
+    case "active":
+      return "active";
+    case "canceled":
+      return "canceled";
+    case "past_due":
+      return "past_due";
+    case "trialing":
+      return "trialing";
+    case "incomplete":
+      return "pending";
+    case "incomplete_expired":
+      return "expired";
+    default:
+      return "past_due";
+  }
 };
 
 const serializeEntitlement = async (
@@ -375,28 +426,16 @@ export const getBillingOverview = async (input: { userId: string }) => {
 };
 
 const getSyncedBillingProduct = async (subscription: Subscription) => {
-  const cachedProduct = getProductForProviderProductId(subscription.item_id);
+  const cachedProduct = getProductForProviderProductId(subscription.productId);
   if (cachedProduct) return cachedProduct;
 
-  try {
-    const providerProduct = await (
-      await getPolarClient()
-    ).products.get({
-      id: subscription.item_id,
-    });
-    const providerProductMetadata = providerProduct.metadata[BILLING_METADATA_PRODUCT];
-    const providerProductMatch = getProductForPolarMetadataKey(
-      typeof providerProductMetadata === "string" ? providerProductMetadata : undefined,
-    );
-    if (providerProductMatch) {
-      billingProductIdCache.set(providerProductMatch, subscription.item_id);
-      return providerProductMatch;
-    }
-  } catch (error) {
-    console.warn("Could not resolve the billing product from the provider.", {
-      error,
-      productId: subscription.item_id,
-    });
+  const providerProductMetadata = subscription.product.metadata[BILLING_METADATA_PRODUCT];
+  const providerProductMatch = getProductForPolarMetadataKey(
+    typeof providerProductMetadata === "string" ? providerProductMetadata : undefined,
+  );
+  if (providerProductMatch) {
+    billingProductIdCache.set(providerProductMatch, subscription.productId);
+    return providerProductMatch;
   }
 
   const metadataProduct = billingProductIdSchema.safeParse(
@@ -411,12 +450,13 @@ const getSyncedBillingProduct = async (subscription: Subscription) => {
 };
 
 export const syncBillingSubscription = async (subscription: Subscription) => {
-  const userId = subscription.metadata?.[BILLING_METADATA_USER_ID]?.trim();
+  const metadataUserId = subscription.metadata[BILLING_METADATA_USER_ID];
+  const userId = typeof metadataUserId === "string" ? metadataUserId.trim() : "";
   const product = await getSyncedBillingProduct(subscription);
 
   if (!userId || !product) {
     console.warn("Skipping billing subscription without Quieter metadata.", {
-      itemId: subscription.item_id,
+      productId: subscription.productId,
       subscriptionId: subscription.id,
     });
     return { synced: false };
@@ -426,9 +466,10 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
   const scope: BillingScope = parsedProduct.success
     ? BILLING_PRODUCTS[parsedProduct.data].scope
     : "personal";
+  const metadataOrganizationId = subscription.metadata[BILLING_METADATA_ORGANIZATION_ID];
   const organizationId =
-    scope === "team"
-      ? subscription.metadata?.[BILLING_METADATA_ORGANIZATION_ID]?.trim() || null
+    scope === "team" && typeof metadataOrganizationId === "string"
+      ? metadataOrganizationId.trim() || null
       : null;
 
   if (scope === "team" && !organizationId) {
@@ -450,17 +491,19 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
     )
     .limit(1);
   const values = {
-    currentPeriodEnd: subscription.current_period_end,
-    currentPeriodStart: subscription.current_period_start,
-    metadata: subscription.metadata ?? {},
+    currentPeriodEnd: subscription.currentPeriodEnd,
+    currentPeriodStart: subscription.currentPeriodStart,
+    metadata: Object.fromEntries(
+      Object.entries(subscription.metadata).map(([key, value]) => [key, String(value)]),
+    ),
     organizationId,
     plan: product as StoredBillingPlan,
     provider: BILLING_PROVIDER,
-    providerCustomerId: getCustomerId(subscription),
-    providerProductId: subscription.item_id,
+    providerCustomerId: subscription.customerId,
+    providerProductId: subscription.productId,
     providerSubscriptionId: subscription.id,
     scope,
-    status: subscription.status,
+    status: normalizeSubscriptionStatus(subscription.status),
     updatedAt: now,
     userId,
   };
@@ -479,6 +522,29 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
   }
 
   return { synced: true };
+};
+
+export const syncBillingCheckout = async (input: { checkoutId: string; userId: string }) => {
+  const polar = await getPolarClient();
+  const checkout = await polar.checkouts.get({ id: input.checkoutId });
+  const checkoutUserId = checkout.metadata[BILLING_METADATA_USER_ID];
+
+  if (checkout.status !== "succeeded" || checkoutUserId !== input.userId) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "This checkout cannot be applied to your billing account.",
+    });
+  }
+
+  if (!checkout.subscriptionId) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "The checkout has no subscription to synchronize.",
+    });
+  }
+
+  const subscription = await polar.subscriptions.get({
+    id: checkout.subscriptionId,
+  });
+  return await syncBillingSubscription(subscription);
 };
 
 export const reportAiUsage = async (input: {
@@ -524,37 +590,5 @@ export const reportAiUsage = async (input: {
       model: input.model,
       promptTokens: input.promptTokens,
     },
-  });
-};
-
-export const handlePolarBillingWebhook = async (input: {
-  body: string;
-  fullUrl: string;
-  headers: Headers;
-}) => {
-  const webhookSecret = serverEnv.POLAR_WEBHOOK_SECRET;
-
-  if (!webhookSecret) {
-    throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      message: "Billing webhook verification is not configured.",
-    });
-  }
-
-  const webhook = (await getPaykit()).webhooks
-    .setup({ webhookSecret })
-    .on("subscription.created", async (event) => {
-      await syncBillingSubscription(event.data);
-    })
-    .on("subscription.updated", async (event) => {
-      if (event.data) await syncBillingSubscription(event.data);
-    })
-    .on("subscription.canceled", async (event) => {
-      if (event.data) await syncBillingSubscription(event.data);
-    });
-
-  await webhook.handle({
-    body: input.body,
-    fullUrl: input.fullUrl,
-    headersAsObject: Object.fromEntries(input.headers),
   });
 };

@@ -11,6 +11,7 @@
     "./organization-mail-usage": "./src/organization-mail-usage.ts"
   },
   "scripts": {
+    "catalog:sync": "bun --env-file=../../.env.local scripts/sync-polar-catalog.ts",
     "fmt": "oxfmt --config ../../oxfmt.json .",
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
     "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/billing",
@@ -20,9 +21,7 @@
   },
   "dependencies": {
     "@orpc/server": "catalog:",
-    "@paykit-sdk/core": "^1.2.2",
-    "@paykit-sdk/polar": "^1.2.0",
-    "@polar-sh/sdk": "0.37.0",
+    "@polar-sh/sdk": "^0.48.1",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
     "drizzle-orm": "catalog:",
