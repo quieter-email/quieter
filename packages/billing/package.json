@@ -6,6 +6,7 @@
     ".": "./src/index.ts",
     "./credits": "./src/credits.ts",
     "./entitlements": "./src/entitlements.ts",
+    "./polar": "./src/polar.ts",
     "./plans": "./src/plans.ts",
     "./ses-pricing": "./src/ses-pricing.ts",
     "./organization-mail-usage": "./src/organization-mail-usage.ts"

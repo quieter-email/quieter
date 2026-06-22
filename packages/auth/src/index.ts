@@ -5,6 +5,7 @@ import { Polar } from "@polar-sh/sdk";
 import { syncBillingSubscription } from "@quieter/billing";
 import { getOrganizationBillingEntitlement } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
+import { getPolarServer } from "@quieter/billing/polar";
 import { db, tables } from "@quieter/database";
 import { serverEnv } from "@quieter/env/server";
 import { betterAuth } from "better-auth";
@@ -53,8 +54,7 @@ const baseURL =
 const polarClient = serverEnv.POLAR_ACCESS_TOKEN
   ? new Polar({
       accessToken: serverEnv.POLAR_ACCESS_TOKEN,
-      server:
-        (serverEnv.POLAR_SANDBOX ?? serverEnv.NODE_ENV !== "production") ? "sandbox" : "production",
+      server: getPolarServer(),
     })
   : null;
 const polarPlugin =

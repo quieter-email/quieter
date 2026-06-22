@@ -29,6 +29,30 @@ const BILLING_METADATA_USER_ID = "quieterUserId";
 const BILLING_METADATA_ORGANIZATION_ID = "quieterOrganizationId";
 const BILLING_METADATA_LEGACY_PLAN = "quieterPlan";
 
+export const createBillingCheckoutMetadata = (input: {
+  organizationId?: string;
+  product: BillingProductId;
+  scope: BillingScope;
+  userId: string;
+}) => {
+  const organizationMetadata: Record<string, string> = input.organizationId
+    ? { [BILLING_METADATA_ORGANIZATION_ID]: input.organizationId }
+    : {};
+
+  return {
+    customerMetadata: {
+      ...organizationMetadata,
+      [BILLING_METADATA_USER_ID]: input.userId,
+    },
+    metadata: {
+      ...organizationMetadata,
+      [BILLING_METADATA_PRODUCT]: input.product,
+      [BILLING_METADATA_SCOPE]: input.scope,
+      [BILLING_METADATA_USER_ID]: input.userId,
+    },
+  };
+};
+
 const billingProductIdCache = new Map<BillingProductId, string>();
 const aiUsageRates = {
   "anthropic/claude-haiku-4.5": { completion: 500, prompt: 100 },
@@ -303,23 +327,21 @@ export const createBillingCheckout = async (input: {
 
   const externalCustomerId =
     product.scope === "team" ? `organization:${input.organizationId}` : input.userId;
+  const checkoutMetadata = createBillingCheckoutMetadata({
+    organizationId: input.organizationId,
+    product: input.product,
+    scope: product.scope,
+    userId: input.userId,
+  });
   const checkout = await (
     await getPolarClient()
   ).checkouts.create({
     allowDiscountCodes: true,
     customerEmail: input.customerEmail,
-    customerMetadata: {
-      [BILLING_METADATA_ORGANIZATION_ID]: input.organizationId ?? "",
-      [BILLING_METADATA_USER_ID]: input.userId,
-    },
+    customerMetadata: checkoutMetadata.customerMetadata,
     customerName,
     externalCustomerId,
-    metadata: {
-      [BILLING_METADATA_ORGANIZATION_ID]: input.organizationId ?? "",
-      [BILLING_METADATA_PRODUCT]: input.product,
-      [BILLING_METADATA_SCOPE]: product.scope,
-      [BILLING_METADATA_USER_ID]: input.userId,
-    },
+    metadata: checkoutMetadata.metadata,
     products: [providerProductId],
     returnUrl: cancelUrl,
     successUrl,
