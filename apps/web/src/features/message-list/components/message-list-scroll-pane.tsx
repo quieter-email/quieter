@@ -98,16 +98,18 @@ export const MessageListScrollPane = ({
 
   for (const thread of threadedMessages) {
     if (thread.threadId) {
-      if (!seenTimestampsRef.current.has(thread.threadId)) {
-        seenTimestampsRef.current.set(thread.threadId, isFirstLoad ? 0 : now);
+      const compositeKey = `${list.mailboxId}-${thread.threadId}`;
+      if (!seenTimestampsRef.current.has(compositeKey)) {
+        seenTimestampsRef.current.set(compositeKey, isFirstLoad ? 0 : now);
       }
     }
   }
 
   // Identify threads that are new (seen in the last 2 seconds)
-  const newThreads = threadedMessages.filter(
-    (t) => (seenTimestampsRef.current.get(t.threadId) ?? 0) > now - 2000,
-  );
+  const newThreads = threadedMessages.filter((t) => {
+    const compositeKey = `${list.mailboxId}-${t.threadId}`;
+    return (seenTimestampsRef.current.get(compositeKey) ?? 0) > now - 2000;
+  });
 
   // react-doctor-disable-next-line react-hooks-js/incompatible-library
   const messageVirtualizer = useVirtualizer({
@@ -186,8 +188,11 @@ export const MessageListScrollPane = ({
         >
           {virtualItems.map((virtualItem) => {
             const thread = threadedMessages[virtualItem.index];
+            const compositeKey = thread?.threadId
+              ? `${list.mailboxId}-${thread.threadId}`
+              : "";
             const isNew = thread?.threadId
-              ? (seenTimestampsRef.current.get(thread.threadId) ?? 0) > now - 2000
+              ? (seenTimestampsRef.current.get(compositeKey) ?? 0) > now - 2000
               : false;
             const staggerIndex =
               isNew && thread?.threadId

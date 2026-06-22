@@ -9,6 +9,12 @@ const gmailPubSubVariableNames = [
   "GMAIL_PUBSUB_TOPIC",
 ] as const;
 
+const polarProductVariableNames = [
+  "POLAR_PRODUCT_PERSONAL_ID",
+  "POLAR_PRODUCT_TEAM_AI_ID",
+  "POLAR_PRODUCT_TEAM_ID",
+] as const;
+
 export const createSstEnv = (
   options: { production: boolean },
   runtimeEnv: RuntimeEnvironment = process.env,
@@ -71,6 +77,13 @@ export const createSstEnv = (
   }
   if (options.production && !env.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT) {
     throw new Error("GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT is required in production.");
+  }
+
+  const missingPolarProductVariables = polarProductVariableNames.filter((name) => !env[name]);
+  if (options.production && missingPolarProductVariables.length > 0) {
+    throw new Error(
+      `Polar product configuration is required in production: ${missingPolarProductVariables.join(", ")}`,
+    );
   }
 
   return {
