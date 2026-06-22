@@ -98,7 +98,7 @@ const toBillingAccount = (
     currentPeriodStart: row.currentPeriodStart,
     externalCustomerId: target.organizationId
       ? `organization:${target.organizationId}`
-      : `user:${target.userId}`,
+      : target.userId!,
     organizationId: target.organizationId ?? null,
     product,
     scope,

@@ -1,5 +1,8 @@
 import { apiKey } from "@better-auth/api-key";
 import { passkey } from "@better-auth/passkey";
+import { polar, webhooks } from "@polar-sh/better-auth";
+import { Polar } from "@polar-sh/sdk";
+import { syncBillingSubscription } from "@quieter/billing";
 import { getOrganizationBillingEntitlement } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { db, tables } from "@quieter/database";
@@ -47,6 +50,42 @@ const baseURL =
   serverEnv.BETTER_AUTH_URL ||
   (serverEnv.VERCEL_URL && `https://${serverEnv.VERCEL_URL}`) ||
   "http://localhost:3000";
+const polarClient = serverEnv.POLAR_ACCESS_TOKEN
+  ? new Polar({
+      accessToken: serverEnv.POLAR_ACCESS_TOKEN,
+      server:
+        (serverEnv.POLAR_SANDBOX ?? serverEnv.NODE_ENV !== "production") ? "sandbox" : "production",
+    })
+  : null;
+const polarPlugin =
+  polarClient && serverEnv.POLAR_WEBHOOK_SECRET
+    ? polar({
+        client: polarClient,
+        use: [
+          webhooks({
+            onSubscriptionActive: async ({ data }) => {
+              await syncBillingSubscription(data);
+            },
+            onSubscriptionCanceled: async ({ data }) => {
+              await syncBillingSubscription(data);
+            },
+            onSubscriptionCreated: async ({ data }) => {
+              await syncBillingSubscription(data);
+            },
+            onSubscriptionRevoked: async ({ data }) => {
+              await syncBillingSubscription(data);
+            },
+            onSubscriptionUncanceled: async ({ data }) => {
+              await syncBillingSubscription(data);
+            },
+            onSubscriptionUpdated: async ({ data }) => {
+              await syncBillingSubscription(data);
+            },
+            secret: serverEnv.POLAR_WEBHOOK_SECRET,
+          }),
+        ],
+      })
+    : null;
 
 export const getSessionWithOrganization = async (headers: Headers) => {
   return await auth.api.getSession({ headers });
@@ -179,6 +218,7 @@ export const auth = betterAuth({
     },
   },
   plugins: [
+    ...(polarPlugin ? [polarPlugin] : []),
     passkey(),
     organization({
       ac: organizationAccessControl,

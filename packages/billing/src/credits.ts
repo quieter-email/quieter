@@ -64,7 +64,7 @@ const getCreditUsageMeterId = async () => {
 export const getCreditUsageMeteredPrice = async () => ({
   amountType: "metered_unit" as const,
   meterId: await getCreditUsageMeterId(),
-  priceCurrency: "usd",
+  priceCurrency: "eur" as const,
   unitAmount: "1",
 });
 

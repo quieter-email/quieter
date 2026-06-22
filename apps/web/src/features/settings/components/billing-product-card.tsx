@@ -7,7 +7,7 @@ import { Button, cn } from "@quieter/ui";
 import { formatBillingProduct } from "~/features/settings/domain/billing";
 
 const moneyFormatter = new Intl.NumberFormat("en-US", {
-  currency: "USD",
+  currency: "EUR",
   maximumFractionDigits: 2,
   minimumFractionDigits: 2,
   style: "currency",

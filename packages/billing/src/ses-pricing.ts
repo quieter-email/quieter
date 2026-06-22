@@ -18,28 +18,29 @@ export const getManagedUsageMarkupBasisPoints = (plan: ManagedUsagePlan | null) 
 const applyManagedUsageMarkup = (microCents: number, plan: ManagedUsagePlan) =>
   Math.ceil(microCents * (1 + getManagedUsageMarkupBasisPoints(plan) / 10_000));
 
-const microCentsToDollars = (microCents: number) => microCents / 100_000_000;
+const microCentsToCurrency = (microCents: number) => microCents / 100_000_000;
 
 export const getManagedUsageRates = (plan: ManagedUsagePlan) => ({
-  attachmentDataPerGbDollars: microCentsToDollars(
+  attachmentDataPerGbDollars: microCentsToCurrency(
     applyManagedUsageMarkup(SES_OUTBOUND_ATTACHMENT_DATA_MICROCENTS_PER_GB, plan),
   ),
-  inboundProcessingPerThousandDollars: microCentsToDollars(
+  inboundProcessingPerThousandDollars: microCentsToCurrency(
     applyManagedUsageMarkup(SES_INBOUND_CHUNK_MICROCENTS * 1_000, plan),
   ),
   markupPercent: getManagedUsageMarkupBasisPoints(plan) / 100,
-  messagesPerThousandDollars: microCentsToDollars(
+  messagesPerThousandDollars: microCentsToCurrency(
     applyManagedUsageMarkup(SES_OUTBOUND_MESSAGE_MICROCENTS * 1_000, plan),
   ),
 });
 
 const formatRate = (value: number) =>
   new Intl.NumberFormat("en-US", {
-    currency: "USD",
+    currency: "EUR",
     maximumFractionDigits: 4,
     minimumFractionDigits: 3,
     style: "currency",
   }).format(value);
+
 export const formatManagedUsagePriceFeature = (plan: ManagedUsagePlan) => {
   const rates = getManagedUsageRates(plan);
 

@@ -63,6 +63,7 @@
     }
   },
   "scripts": {
+    "billing:sync-polar": "bun run --cwd packages/billing catalog:sync",
     "build": "turbo run build",
     "check:boundaries": "turbo run check:boundaries --filter=@quieter/aws",
     "check:bundles": "turbo run check:bundles --filter=@quieter/aws",

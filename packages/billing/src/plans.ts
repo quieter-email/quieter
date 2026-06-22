@@ -54,19 +54,21 @@ export const BILLING_FEATURES = {
 export const BILLING_PRODUCTS = {
   personal: {
     creditAmountCents: 1_000,
+    currency: "eur",
     description: "A personal credit balance for Quieter AI across your mailboxes.",
-    features: ["$10 in monthly credits", "AI chat", "AI organization and useful details"],
+    features: ["€10 in monthly credits", "AI chat", "AI organization and useful details"],
     highlight: false,
     monthlyPriceCents: 1_000,
-    name: "Personal",
-    polarMetadataKey: "quieter_personal_credits",
+    name: "Personal Pro",
+    polarMetadataKey: "personal",
     scope: "personal",
   },
   team: {
     creditAmountCents: 1_000,
+    currency: "eur",
     description: "A shared organization credit balance for managed mail.",
     features: [
-      "$10 in monthly team credits",
+      "€10 in monthly team credits",
       "Managed sending and receiving",
       "Custom organization domains",
       "Organization API keys",
@@ -74,29 +76,31 @@ export const BILLING_PRODUCTS = {
     ],
     highlight: false,
     monthlyPriceCents: 1_000,
-    name: "Team",
-    polarMetadataKey: "quieter_team_credits",
+    name: "Team Pro",
+    polarMetadataKey: "team",
     scope: "team",
   },
   team_ai: {
     creditAmountCents: 2_000,
+    currency: "eur",
     description: "A larger shared balance with managed mail and AI for team members.",
     features: [
-      "$20 in monthly team credits",
-      "Everything in Team",
+      "€20 in monthly team credits",
+      "Everything in Team Pro",
       "AI features",
       formatManagedUsagePriceFeature("pro"),
     ],
     highlight: true,
     monthlyPriceCents: 2_000,
-    name: "Team + AI",
-    polarMetadataKey: "quieter_team_ai_credits",
+    name: "Team Pro + AI",
+    polarMetadataKey: "team_ai",
     scope: "team",
   },
 } as const satisfies Record<
   BillingProductId,
   {
     creditAmountCents: number;
+    currency: "eur";
     description: string;
     features: string[];
     highlight: boolean;

@@ -2,7 +2,7 @@
 
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { toast } from "@quieter/ui";
+import { Button, toast } from "@quieter/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BillingCreditSummary,
@@ -33,6 +33,15 @@ export const PlanSettingsPanel = () => {
       window.location.assign(result.checkoutUrl);
     },
   });
+  const portalMutation = useMutation({
+    ...orpc.billing.createPortal.mutationOptions(),
+    onError: (error) => {
+      toast.error(error.message || "Could not open billing.");
+    },
+    onSuccess: (result) => {
+      window.location.assign(result.portalUrl);
+    },
+  });
 
   if (isBillingPending) {
     return (
@@ -55,12 +64,27 @@ export const PlanSettingsPanel = () => {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-medium tracking-tight text-foreground">Personal plan</h1>
-        <p className="mt-2 max-w-2xl text-sm/6 text-muted-foreground">
-          Your personal plan and credits apply across your personal mailboxes. Team billing is
-          managed from each organization’s settings.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-medium tracking-tight text-foreground">Personal plan</h1>
+          <p className="mt-2 max-w-2xl text-sm/6 text-muted-foreground">
+            Your personal plan and credits apply across your personal mailboxes. Team billing is
+            managed from each organization’s settings.
+          </p>
+        </div>
+        {personalProduct && (
+          <Button
+            disabled={portalMutation.isPending}
+            onClick={() => portalMutation.mutate({})}
+            size="sm"
+            variant="outline"
+          >
+            {portalMutation.isPending && (
+              <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+            )}
+            Manage billing
+          </Button>
+        )}
       </header>
 
       <section>

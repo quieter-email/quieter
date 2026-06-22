@@ -1,5 +1,5 @@
-import type { Polar } from "@polar-sh/sdk";
 import { ORPCError } from "@orpc/server";
+import { Polar } from "@polar-sh/sdk";
 import { serverEnv } from "@quieter/env/server";
 
 let polarClient: Polar | null = null;
@@ -24,10 +24,8 @@ export const getPolarSandboxMode = () => {
   return serverEnv.NODE_ENV !== "production";
 };
 
-export const getPolarClient = async () => {
+export const getPolarClient = () => {
   if (polarClient) return polarClient;
-
-  const { Polar } = await import("@polar-sh/sdk");
 
   polarClient = new Polar({
     accessToken: getPolarAccessToken(),
@@ -46,32 +44,11 @@ export const ingestPolarEvents = async (
     organizationId?: string;
   }>,
 ) => {
-  const response = await fetch(
-    `${getPolarSandboxMode() ? "https://sandbox-api.polar.sh" : "https://api.polar.sh"}/v1/events/ingest`,
-    {
-      body: JSON.stringify({
-        events: events.map((event) => ({
-          external_customer_id: event.externalCustomerId,
-          external_id: event.externalId,
-          metadata: event.metadata,
-          name: event.name,
-          organization_id: event.organizationId,
-        })),
-      }),
-      headers: {
-        authorization: `Bearer ${getPolarAccessToken()}`,
-        "content-type": "application/json",
-      },
-      method: "POST",
-    },
-  );
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(
-      `Polar event ingestion failed with status ${response.status}${body ? `: ${body.slice(0, 500)}` : "."}`,
-    );
-  }
+  await (
+    await getPolarClient()
+  ).events.ingest({
+    events,
+  });
 };
 
 const POLAR_ORGANIZATION_ACCESS_TOKEN_PREFIX = "polar_oat_";

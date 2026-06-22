@@ -1,33 +1,48 @@
 "use client";
 
 import { toast } from "@quieter/ui";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { USER_BILLING_QUERY_KEY } from "~/features/settings/domain/billing";
+import { orpc } from "~/lib/orpc";
 import { settingsRouteApi } from "~/lib/route-apis";
 
 export const BillingCheckoutResult = () => {
   const navigate = useNavigate({ from: "/settings" });
   const queryClient = useQueryClient();
-  const { billing } = settingsRouteApi.useSearch();
+  const { billing, checkoutId } = settingsRouteApi.useSearch();
+  const { mutate: syncCheckout } = useMutation({
+    ...orpc.billing.syncCheckout.mutationOptions(),
+    onError: () => {
+      toast.message("Billing completed. Subscription sync is still pending.");
+    },
+    onSuccess: () => {
+      toast.success("Billing updated.");
+      void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
+    },
+  });
 
   useEffect(() => {
     if (!billing) return;
 
     if (billing === "success") {
-      toast.success("Billing updated. It may take a moment to sync.");
-      void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
+      if (checkoutId) {
+        syncCheckout({ checkoutId });
+      } else {
+        toast.success("Billing updated. It may take a moment to sync.");
+        void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
+      }
     } else {
       toast.message("Checkout canceled.");
     }
 
     void navigate({
       replace: true,
-      search: (previous) => ({ ...previous, billing: undefined }),
+      search: (previous) => ({ ...previous, billing: undefined, checkoutId: undefined }),
       to: ".",
     });
-  }, [billing, navigate, queryClient]);
+  }, [billing, checkoutId, navigate, queryClient, syncCheckout]);
 
   return null;
 };
