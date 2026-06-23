@@ -4,7 +4,7 @@ import {
   db,
   type BillingUsageCategory,
 } from "@quieter/database";
-import { and, asc, eq, gt, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, count, eq, gt, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { BillingAccount } from "./entitlements";
 import { getPolarApiOrganizationId, ingestPolarEvents } from "./polar";
 
@@ -195,6 +195,29 @@ export const recordBillingCreditUsage = async (input: {
   return result;
 };
 
+const currentActiveSubscriptionUnreportedUsageFilter = and(
+  eq(billingSubscription.organizationId, billingCreditUsageEvent.organizationId),
+  inArray(billingSubscription.plan, ["managed", "pro"]),
+  inArray(billingSubscription.status, ["active", "trialing"]),
+  gte(billingCreditUsageEvent.createdAt, billingSubscription.currentPeriodStart),
+  lt(billingCreditUsageEvent.createdAt, billingSubscription.currentPeriodEnd),
+);
+
+const unreportedPositiveCreditUsageFilter = and(
+  isNull(billingCreditUsageEvent.polarEventReportedAt),
+  gt(billingCreditUsageEvent.costMicroCents, 0),
+);
+
+export const countPendingPolarCreditUsageEvents = async () => {
+  const [result] = await db
+    .select({ count: count() })
+    .from(billingCreditUsageEvent)
+    .innerJoin(billingSubscription, currentActiveSubscriptionUnreportedUsageFilter)
+    .where(unreportedPositiveCreditUsageFilter);
+
+  return result?.count ?? 0;
+};
+
 export const syncUnreportedBillingCreditUsage = async (input: { limit?: number } = {}) => {
   const limit = input.limit ?? 100;
   const rows = await db
@@ -207,22 +230,8 @@ export const syncUnreportedBillingCreditUsage = async (input: { limit?: number }
       organizationId: billingCreditUsageEvent.organizationId,
     })
     .from(billingCreditUsageEvent)
-    .innerJoin(
-      billingSubscription,
-      and(
-        eq(billingSubscription.organizationId, billingCreditUsageEvent.organizationId),
-        inArray(billingSubscription.plan, ["managed", "pro"]),
-        inArray(billingSubscription.status, ["active", "trialing"]),
-        gte(billingCreditUsageEvent.createdAt, billingSubscription.currentPeriodStart),
-        lt(billingCreditUsageEvent.createdAt, billingSubscription.currentPeriodEnd),
-      ),
-    )
-    .where(
-      and(
-        isNull(billingCreditUsageEvent.polarEventReportedAt),
-        gt(billingCreditUsageEvent.costMicroCents, 0),
-      ),
-    )
+    .innerJoin(billingSubscription, currentActiveSubscriptionUnreportedUsageFilter)
+    .where(unreportedPositiveCreditUsageFilter)
     .orderBy(asc(billingCreditUsageEvent.createdAt))
     .limit(limit);
 
