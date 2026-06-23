@@ -440,7 +440,7 @@ export const recordOrganizationMailUsage = async (input: OrganizationMailUsageIn
     .set({
       billableCostMicroCents,
       includedSesCostMicroCents: Math.max(0, customerCostMicroCents - billableCostMicroCents),
-      polarEventReportedAt: billableCostMicroCents > 0 ? new Date() : null,
+      polarEventReportedAt: creditUsage?.polarEventReportedAt ?? null,
     })
     .where(eq(organizationMailUsageEvent.id, usageEvent.id));
 

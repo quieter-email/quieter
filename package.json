@@ -63,6 +63,7 @@
     }
   },
   "scripts": {
+    "billing:sync-credit-usage-polar": "bun run --cwd packages/billing credit-usage:sync",
     "billing:sync-polar": "bun run --cwd packages/billing catalog:sync",
     "build": "turbo run build",
     "check:boundaries": "turbo run check:boundaries --filter=@quieter/aws",

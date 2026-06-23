@@ -68,6 +68,11 @@ const aiUsageRates = {
   "openai/gpt-5.5": { completion: 3_000, prompt: 500 },
 } as const;
 
+export const AI_USAGE_MARKUP_BASIS_POINTS = 5_000;
+
+export const applyAiUsageMarkup = (costMicroCents: number) =>
+  Math.ceil(costMicroCents * (1 + AI_USAGE_MARKUP_BASIS_POINTS / 10_000));
+
 const getBillingProductId = (productId: BillingProductId): string => {
   const polarProductId = {
     managed: serverEnv.POLAR_PRODUCT_MANAGED_ID,
@@ -500,7 +505,9 @@ export const reportAiUsage = async (input: {
   const rates = aiUsageRates[input.model];
   const promptCostCents = (input.promptTokens / 1_000_000) * rates.prompt;
   const completionCostCents = (input.completionTokens / 1_000_000) * rates.completion;
-  const costMicroCents = Math.round((promptCostCents + completionCostCents) * 1_000_000);
+  const costMicroCents = applyAiUsageMarkup(
+    Math.round((promptCostCents + completionCostCents) * 1_000_000),
+  );
   if (costMicroCents <= 0) return;
 
   if (!input.mailboxId) return;

@@ -13,6 +13,7 @@
   },
   "scripts": {
     "catalog:sync": "bun --env-file=../../.env.local scripts/sync-polar-catalog.ts",
+    "credit-usage:sync": "bun --env-file=../../.env.local scripts/sync-polar-credit-usage.ts",
     "fmt": "oxfmt --config ../../oxfmt.json .",
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
     "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/billing",

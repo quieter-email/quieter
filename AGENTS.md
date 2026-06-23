@@ -93,11 +93,11 @@
 
 - Pricing and checkout use the Polar SDK directly. Better Auth owns the verified Polar webhook endpoint.
 - Billing is organization-only. Every `billingSubscription` points directly at an organization while `userId` records the purchaser.
-- Paid products are `managed` and `pro`. The production Polar dashboard is the catalog source of truth unless it is clearly misconfigured. Managed is €10/month with €10 organization credits and managed mail. Pro is €20/month with €20 organization credits, managed mail, and AI for members. Gmail and BYOK remain available without checkout.
+- Paid products are `managed` and `pro`. The production Polar dashboard is the catalog source of truth unless it is clearly misconfigured. Managed is €15/month with €10 organization credits and managed mail. Pro is €25/month with €20 organization credits, managed mail, and AI for members. Gmail and BYOK remain available without checkout.
 - Organizations persist one stable billing owner. Administrative/test entitlements use audited
   `billingEntitlementOverride` rows rather than source-controlled email bypasses.
 - Polar products are mirrored in code and reconciled by `bun run billing:sync-polar`; production dashboard values win over local variants unless the dashboard is clearly wrong. Checkout metadata includes the Quieter user id, product, and organization id. The Polar access token must include customer read/write access so checkout can create and resolve team customers. Better Auth receives Polar webhooks at `/api/auth/polar/webhooks` using `POLAR_WEBHOOK_SECRET`. Successful checkout redirects also carry the Polar checkout id so local sandbox development can synchronize without a publicly reachable webhook.
-- AI and managed-mail costs consume the same organization balance through `billingCreditUsageEvent`. Overage events are sent to Polar only after the organization’s monthly credits are exhausted. Managed-mail costs use a 100% Managed or 50% Pro service markup.
+- AI and managed-mail costs consume the same organization balance through `billingCreditUsageEvent`. Credit usage events are sent to Polar so meter credits are consumed there too; local billing credit usage remains the application source of truth for gating and usage breakdowns. Managed-mail costs use a 125% Managed or 150% Pro service markup. AI costs use a 50% service markup.
 
 ## Schema + Generated Files
 
