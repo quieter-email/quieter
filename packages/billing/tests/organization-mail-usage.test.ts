@@ -43,17 +43,17 @@ describe("organization mail usage", () => {
     expect(normalizeOrganizationMailAlertMilestones([100, 50.2, 50, 0, 101])).toEqual([50, 100]);
   });
 
-  test("gives Pro cleaner, lower managed mail rates", () => {
+  test("applies the configured managed mail margins", () => {
     const teamRates = getManagedUsageRates("managed");
     const teamAiRates = getManagedUsageRates("pro");
 
-    expect(teamRates.messagesPerThousandDollars).toBeCloseTo(0.2);
-    expect(teamAiRates.messagesPerThousandDollars).toBeCloseTo(0.15);
-    expect(teamRates.attachmentDataPerGbDollars).toBeCloseTo(0.24);
-    expect(teamAiRates.attachmentDataPerGbDollars).toBeCloseTo(0.18);
-    expect(teamRates.inboundProcessingPerThousandDollars).toBeCloseTo(0.18);
-    expect(teamAiRates.inboundProcessingPerThousandDollars).toBeCloseTo(0.135);
-    expect(teamRates.markupPercent).toBe(100);
-    expect(teamAiRates.markupPercent).toBe(50);
+    expect(teamRates.messagesPerThousandDollars).toBeCloseTo(0.225);
+    expect(teamAiRates.messagesPerThousandDollars).toBeCloseTo(0.25);
+    expect(teamRates.attachmentDataPerGbDollars).toBeCloseTo(0.27);
+    expect(teamAiRates.attachmentDataPerGbDollars).toBeCloseTo(0.3);
+    expect(teamRates.inboundProcessingPerThousandDollars).toBeCloseTo(0.2025);
+    expect(teamAiRates.inboundProcessingPerThousandDollars).toBeCloseTo(0.225);
+    expect(teamRates.markupPercent).toBe(125);
+    expect(teamAiRates.markupPercent).toBe(150);
   });
 });

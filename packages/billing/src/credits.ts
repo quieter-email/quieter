@@ -1,5 +1,10 @@
-import { billingCreditUsageEvent, db, type BillingUsageCategory } from "@quieter/database";
-import { and, eq, gte, lt, sql } from "drizzle-orm";
+import {
+  billingCreditUsageEvent,
+  billingSubscription,
+  db,
+  type BillingUsageCategory,
+} from "@quieter/database";
+import { and, asc, eq, gt, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { BillingAccount } from "./entitlements";
 import { getPolarApiOrganizationId, ingestPolarEvents } from "./polar";
 
@@ -16,6 +21,28 @@ export const BILLING_USAGE_KINDS = [
 ] as const;
 
 export type BillingUsageKind = (typeof BILLING_USAGE_KINDS)[number];
+
+export const createPolarCreditUsageEvent = (input: {
+  account: Pick<BillingAccount, "externalCustomerId">;
+  billableCostMicroCents: number;
+  category: BillingUsageCategory;
+  costMicroCents: number;
+  eventId: string;
+  metadata: Record<string, string | number | boolean>;
+}) => ({
+  externalCustomerId: input.account.externalCustomerId,
+  externalId: `credit-usage:${input.eventId}`,
+  metadata: {
+    billableCostCents: input.billableCostMicroCents / MICROCENTS_PER_CENT,
+    category: input.category,
+    credits: input.costMicroCents / MICROCENTS_PER_CENT,
+    creditUsageEventId: input.eventId,
+    totalCostCents: input.costMicroCents / MICROCENTS_PER_CENT,
+    ...input.metadata,
+  },
+  name: BILLING_CREDIT_USAGE_EVENT_NAME,
+  organizationId: getPolarApiOrganizationId(),
+});
 
 const getBillingCreditUsageWithClient = async (
   client: Pick<typeof db, "select">,
@@ -84,7 +111,10 @@ export const recordBillingCreditUsage = async (input: {
     const [existingEvent] = await transaction
       .select({
         billableCostMicroCents: billingCreditUsageEvent.billableCostMicroCents,
+        category: billingCreditUsageEvent.category,
+        costMicroCents: billingCreditUsageEvent.costMicroCents,
         id: billingCreditUsageEvent.id,
+        metadata: billingCreditUsageEvent.metadata,
         polarEventReportedAt: billingCreditUsageEvent.polarEventReportedAt,
       })
       .from(billingCreditUsageEvent)
@@ -94,7 +124,10 @@ export const recordBillingCreditUsage = async (input: {
     if (existingEvent) {
       return {
         billableCostMicroCents: existingEvent.billableCostMicroCents,
+        category: existingEvent.category,
+        costMicroCents: existingEvent.costMicroCents,
         eventId: existingEvent.id,
+        metadata: existingEvent.metadata ?? {},
         polarEventReportedAt: existingEvent.polarEventReportedAt,
       };
     }
@@ -125,34 +158,107 @@ export const recordBillingCreditUsage = async (input: {
       });
 
     return {
+      category: input.category,
       billableCostMicroCents: event ? billableCostMicroCents : 0,
+      costMicroCents: input.costMicroCents,
       eventId: event?.id ?? null,
+      metadata: input.metadata ?? {},
       polarEventReportedAt: null,
     };
   });
 
-  if (result.eventId && result.billableCostMicroCents > 0 && !result.polarEventReportedAt) {
+  if (result.eventId && result.costMicroCents > 0 && !result.polarEventReportedAt) {
+    const polarEventReportedAt = new Date();
+
     await ingestPolarEvents([
-      {
-        externalCustomerId: input.account.externalCustomerId,
-        externalId: `credit-usage:${result.eventId}`,
-        metadata: {
-          billableCostCents: result.billableCostMicroCents / MICROCENTS_PER_CENT,
-          category: input.category,
-          credits: result.billableCostMicroCents / MICROCENTS_PER_CENT,
-          creditUsageEventId: result.eventId,
-          ...input.metadata,
-        },
-        name: BILLING_CREDIT_USAGE_EVENT_NAME,
-        organizationId: getPolarApiOrganizationId(),
-      },
+      createPolarCreditUsageEvent({
+        account: input.account,
+        billableCostMicroCents: result.billableCostMicroCents,
+        category: result.category,
+        costMicroCents: result.costMicroCents,
+        eventId: result.eventId,
+        metadata: result.metadata,
+      }),
     ]);
 
     await db
       .update(billingCreditUsageEvent)
-      .set({ polarEventReportedAt: new Date() })
+      .set({ polarEventReportedAt })
       .where(eq(billingCreditUsageEvent.id, result.eventId));
+
+    return {
+      ...result,
+      polarEventReportedAt,
+    };
   }
 
   return result;
+};
+
+export const syncUnreportedBillingCreditUsage = async (input: { limit?: number } = {}) => {
+  const limit = input.limit ?? 100;
+  const rows = await db
+    .select({
+      billableCostMicroCents: billingCreditUsageEvent.billableCostMicroCents,
+      category: billingCreditUsageEvent.category,
+      costMicroCents: billingCreditUsageEvent.costMicroCents,
+      eventId: billingCreditUsageEvent.id,
+      metadata: billingCreditUsageEvent.metadata,
+      organizationId: billingCreditUsageEvent.organizationId,
+    })
+    .from(billingCreditUsageEvent)
+    .innerJoin(
+      billingSubscription,
+      and(
+        eq(billingSubscription.organizationId, billingCreditUsageEvent.organizationId),
+        inArray(billingSubscription.plan, ["managed", "pro"]),
+        inArray(billingSubscription.status, ["active", "trialing"]),
+        gte(billingCreditUsageEvent.createdAt, billingSubscription.currentPeriodStart),
+        lt(billingCreditUsageEvent.createdAt, billingSubscription.currentPeriodEnd),
+      ),
+    )
+    .where(
+      and(
+        isNull(billingCreditUsageEvent.polarEventReportedAt),
+        gt(billingCreditUsageEvent.costMicroCents, 0),
+      ),
+    )
+    .orderBy(asc(billingCreditUsageEvent.createdAt))
+    .limit(limit);
+
+  let synced = 0;
+
+  for (const row of rows) {
+    const polarEventReportedAt = new Date();
+
+    await ingestPolarEvents([
+      createPolarCreditUsageEvent({
+        account: {
+          externalCustomerId: `organization:${row.organizationId}`,
+        },
+        billableCostMicroCents: row.billableCostMicroCents,
+        category: row.category,
+        costMicroCents: row.costMicroCents,
+        eventId: row.eventId,
+        metadata: row.metadata ?? {},
+      }),
+    ]);
+
+    await db
+      .update(billingCreditUsageEvent)
+      .set({ polarEventReportedAt })
+      .where(
+        and(
+          eq(billingCreditUsageEvent.id, row.eventId),
+          isNull(billingCreditUsageEvent.polarEventReportedAt),
+        ),
+      );
+
+    synced += 1;
+  }
+
+  return {
+    remaining: rows.length === limit,
+    synced,
+  };
 };

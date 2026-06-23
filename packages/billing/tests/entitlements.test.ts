@@ -44,9 +44,14 @@ describe("billing products", () => {
     expect(productHasManagedMail("pro")).toBe(true);
   });
 
-  test("turns every monthly payment into equal credits", () => {
-    for (const product of Object.values(BILLING_PRODUCTS)) {
-      expect(product.creditAmountCents).toBe(product.monthlyPriceCents);
-    }
+  test("keeps a platform fee above the included monthly credits", () => {
+    expect(BILLING_PRODUCTS.managed).toMatchObject({
+      creditAmountCents: 1_000,
+      monthlyPriceCents: 1_500,
+    });
+    expect(BILLING_PRODUCTS.pro).toMatchObject({
+      creditAmountCents: 2_000,
+      monthlyPriceCents: 2_500,
+    });
   });
 });

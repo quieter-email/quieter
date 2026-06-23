@@ -1,7 +1,7 @@
 export const ORGANIZATION_MAIL_INCLUDED_SES_USAGE_MICROCENTS = 1_000_000_000;
 export const ORGANIZATION_MAIL_OVERAGE_MARKUP_BASIS_POINTS = {
-  managed: 10_000,
-  pro: 5_000,
+  managed: 12_500,
+  pro: 15_000,
 } as const;
 
 export const SES_OUTBOUND_MESSAGE_MICROCENTS = 10_000;
