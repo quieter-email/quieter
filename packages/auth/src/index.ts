@@ -22,9 +22,11 @@ import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { sendMagicLinkEmail, sendVerificationEmail } from "./email";
 import { GOOGLE_AUTH_SCOPES } from "./google-scopes";
 import {
+  assertCanDeleteOrganization,
   assertCanLeaveOrganization,
   cleanupMailboxesForDeletedOrganization,
   cleanupOrganizationsForDeletedUser,
+  ensureUserOrganizationState,
 } from "./organization";
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "./organization-api-key";
 import { readTermsAcceptedAtFromRequest } from "./terms-acceptance";
@@ -88,7 +90,11 @@ const polarPlugin =
     : null;
 
 export const getSessionWithOrganization = async (headers: Headers) => {
-  return await auth.api.getSession({ headers });
+  const session = await auth.api.getSession({ headers });
+  if (session?.user) {
+    await ensureUserOrganizationState(session.user);
+  }
+  return session;
 };
 
 export const auth = betterAuth({
@@ -115,13 +121,18 @@ export const auth = betterAuth({
       if (!currentSession?.user || !currentSession.session) return;
 
       if (
-        ctx.path === "/organization/leave" &&
+        (ctx.path === "/organization/leave" || ctx.path === "/organization/delete") &&
         ctx.body &&
         typeof ctx.body === "object" &&
         "organizationId" in ctx.body &&
         typeof ctx.body.organizationId === "string"
-      )
-        await assertCanLeaveOrganization(currentSession.user, ctx.body.organizationId);
+      ) {
+        if (ctx.path === "/organization/leave") {
+          await assertCanLeaveOrganization(currentSession.user, ctx.body.organizationId);
+        } else {
+          await assertCanDeleteOrganization(currentSession.user, ctx.body.organizationId);
+        }
+      }
 
       if (ctx.path === "/api-key/create") {
         const requirement = BILLING_FEATURES.organizationApiKeys;
@@ -159,6 +170,9 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
+        after: async (createdUser) => {
+          await ensureUserOrganizationState(createdUser);
+        },
         before: async (createdUser, context) => {
           const hasAcceptedTerms = !!readTermsAcceptedAtFromRequest(context?.request);
 

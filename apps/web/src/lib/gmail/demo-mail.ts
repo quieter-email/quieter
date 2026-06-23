@@ -545,10 +545,10 @@ export const getDemoMailboxes = () => ({
   defaultMailboxId: DEMO_MAILBOX_ID,
   groups: [
     {
-      id: "demo-personal",
-      kind: "personal" as const,
+      id: "demo-team",
+      kind: "organization" as const,
       name: "Demo",
-      slug: null,
+      slug: "demo-team",
       mailboxes: [
         {
           connectionStatus: "connected" as const,
@@ -557,11 +557,11 @@ export const getDemoMailboxes = () => ({
           grantRole: null,
           gmailAutoLabelEnabled: false,
           gmailUsefulDetailsEnabled: false,
-          groupId: "demo-personal",
-          groupKind: "personal" as const,
+          groupId: "demo-team",
+          groupKind: "organization" as const,
           groupName: "Demo",
           id: DEMO_MAILBOX_ID,
-          organizationId: null,
+          organizationId: "demo-team",
           ownerUserId: "demo-user",
           provider: "gmail" as const,
         },

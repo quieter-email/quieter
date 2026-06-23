@@ -51,7 +51,7 @@ export const mailboxProcedures = {
     .input(
       z.object({
         mailboxId: mailboxIdSchema.optional(),
-        organizationId: z.string().trim().min(1).nullable().optional(),
+        organizationId: z.string().trim().min(1).optional(),
         returnTo: z.string().trim().optional(),
       }),
     )
@@ -113,7 +113,7 @@ export const mailboxProcedures = {
     .input(
       z.object({
         mailboxId: mailboxIdSchema,
-        organizationId: z.string().trim().min(1).nullable(),
+        organizationId: z.string().trim().min(1),
       }),
     )
     .handler(async ({ context, input }) => moveGmailMailbox({ ...input, userId: context.userId })),

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { formatManagedUsagePriceFeature } from "./ses-pricing";
 
-export const BILLING_PRODUCT_IDS = ["personal", "team", "team_ai"] as const;
+export const BILLING_PRODUCT_IDS = ["managed", "pro"] as const;
 export const billingProductIdSchema = z.enum(BILLING_PRODUCT_IDS);
 export const billingPlanSchema = z.enum(["free", ...BILLING_PRODUCT_IDS]);
 
@@ -19,27 +19,27 @@ export type BillingFeature =
 export const BILLING_FEATURES = {
   aiChat: {
     description: "AI chat",
-    requirementLabel: "Personal or Team + AI",
+    requirementLabel: "Pro",
     type: "ai",
   },
   gmailAutomation: {
     description: "Live Gmail updates and AI assistance",
-    requirementLabel: "Personal or Team + AI",
+    requirementLabel: "Pro",
     type: "ai",
   },
   organizationApiKeys: {
     description: "team API keys",
-    requirementLabel: "Team",
+    requirementLabel: "Managed",
     type: "team",
   },
   organizationDomains: {
     description: "custom team domains",
-    requirementLabel: "Team",
+    requirementLabel: "Managed",
     type: "team",
   },
   organizationMail: {
     description: "team mail",
-    requirementLabel: "Team",
+    requirementLabel: "Managed",
     type: "team",
   },
 } as const satisfies Record<
@@ -52,18 +52,7 @@ export const BILLING_FEATURES = {
 >;
 
 export const BILLING_PRODUCTS = {
-  personal: {
-    creditAmountCents: 1_000,
-    currency: "eur",
-    description: "A personal credit balance for Quieter AI across your mailboxes.",
-    features: ["€10 in monthly credits", "AI chat", "AI sorting and useful details"],
-    highlight: false,
-    monthlyPriceCents: 1_000,
-    name: "Personal Pro",
-    polarMetadataKey: "personal",
-    scope: "personal",
-  },
-  team: {
+  managed: {
     creditAmountCents: 1_000,
     currency: "eur",
     description: "A shared team credit balance for managed mail.",
@@ -76,25 +65,23 @@ export const BILLING_PRODUCTS = {
     ],
     highlight: false,
     monthlyPriceCents: 1_000,
-    name: "Team Pro",
-    polarMetadataKey: "team",
-    scope: "team",
+    name: "Managed",
+    polarMetadataKey: "managed",
   },
-  team_ai: {
+  pro: {
     creditAmountCents: 2_000,
     currency: "eur",
     description: "A larger shared balance with managed mail and AI for team members.",
     features: [
       "€20 in monthly team credits",
-      "Everything in Team Pro",
+      "Everything in Managed",
       "AI features",
       formatManagedUsagePriceFeature("pro"),
     ],
     highlight: true,
     monthlyPriceCents: 2_000,
-    name: "Team Pro + AI",
-    polarMetadataKey: "team_ai",
-    scope: "team",
+    name: "Pro",
+    polarMetadataKey: "pro",
   },
 } as const satisfies Record<
   BillingProductId,
@@ -107,14 +94,11 @@ export const BILLING_PRODUCTS = {
     monthlyPriceCents: number;
     name: string;
     polarMetadataKey: string;
-    scope: "personal" | "team";
   }
 >;
 
-export const productHasAi = (product: BillingProductId) =>
-  product === "personal" || product === "team_ai";
+export const productHasAi = (product: BillingProductId) => product === "pro";
 
-export const productHasManagedMail = (product: BillingProductId) =>
-  product === "team" || product === "team_ai";
+export const productHasManagedMail = (_product: BillingProductId) => true;
 
 export const getBillingFeatureRequirement = (feature: BillingFeature) => BILLING_FEATURES[feature];

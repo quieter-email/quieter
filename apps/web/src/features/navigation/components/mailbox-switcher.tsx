@@ -39,7 +39,7 @@ type MailboxSwitcherMailbox = {
 
 type MailboxSwitcherGroup = {
   id: string;
-  kind: "personal" | "organization";
+  kind: "organization";
   mailboxes: MailboxSwitcherMailbox[];
   name: string;
 };

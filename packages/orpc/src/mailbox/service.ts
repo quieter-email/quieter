@@ -14,7 +14,7 @@ import {
   user,
 } from "@quieter/database";
 import { getGmailProfile, isGmailServiceError } from "@quieter/gmail";
-import { and, asc, eq, inArray, lt } from "drizzle-orm";
+import { and, asc, eq, lt } from "drizzle-orm";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { MailboxGroup, MailboxGroupMetadata, MailboxListItem } from "./types";
@@ -35,8 +35,6 @@ export {
 } from "./access";
 import { MAILBOX_PROVIDER_GMAIL, MAILBOX_PROVIDER_MANAGED } from "./access";
 
-const PERSONAL_GROUP_ID = "personal";
-const PERSONAL_GROUP_NAME = "Personal";
 const GMAIL_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const GOOGLE_AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -99,32 +97,6 @@ const assertOrganizationMembership = async (userId: string, organizationId: stri
   }
 };
 
-const repairGmailOrganizationPlacement = async (
-  userId: string,
-  organizationIds: readonly string[],
-) => {
-  const ownedGmailMailboxes = await db
-    .select({
-      id: mailbox.id,
-      organizationId: mailbox.organizationId,
-    })
-    .from(mailbox)
-    .where(and(eq(mailbox.ownerUserId, userId), eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)));
-  const accessibleOrganizationIds = new Set(organizationIds);
-  const staleMailboxIds = ownedGmailMailboxes.flatMap((record) =>
-    record.organizationId && !accessibleOrganizationIds.has(record.organizationId)
-      ? [record.id]
-      : [],
-  );
-
-  if (staleMailboxIds.length > 0) {
-    await db
-      .update(mailbox)
-      .set({ organizationId: null, updatedAt: new Date() })
-      .where(inArray(mailbox.id, staleMailboxIds));
-  }
-};
-
 const toMailboxListItem = (
   record: {
     displayName: string | null;
@@ -134,7 +106,7 @@ const toMailboxListItem = (
     gmailCredentialMailboxId?: string | null;
     gmailUsefulDetailsEnabled?: boolean | null;
     id: string;
-    organizationId: string | null;
+    organizationId: string;
     ownerUserId: string | null;
     provider: "gmail" | "managed";
     status: "connected" | "needs_reconnect";
@@ -161,10 +133,6 @@ const toMailboxListItem = (
 
 export const listAccessibleMailboxState = async (input: { userId: string }) => {
   const organizations = await listUserOrganizations(input.userId);
-  await repairGmailOrganizationPlacement(
-    input.userId,
-    organizations.map((record) => record.id),
-  );
 
   const [gmailMailboxes, managedMailboxes] = await Promise.all([
     db
@@ -215,55 +183,35 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
       .orderBy(asc(mailbox.emailAddress)),
   ]);
 
-  const groups: MailboxGroup[] = [
-    {
-      id: PERSONAL_GROUP_ID,
-      kind: "personal",
-      mailboxes: gmailMailboxes
-        .filter((record) => record.organizationId === null)
+  const groups: MailboxGroup[] = organizations.map((organization) => ({
+    id: organization.id,
+    kind: "organization" as const,
+    mailboxes: [
+      ...gmailMailboxes
+        .filter((record) => record.organizationId === organization.id)
         .map((record) =>
           toMailboxListItem(
             { ...record, grantRole: null },
             {
-              groupId: PERSONAL_GROUP_ID,
-              groupKind: "personal",
-              groupName: PERSONAL_GROUP_NAME,
-            },
-          ),
-        ),
-      name: PERSONAL_GROUP_NAME,
-      slug: null,
-    },
-    ...organizations.map((organization) => ({
-      id: organization.id,
-      kind: "organization" as const,
-      mailboxes: [
-        ...gmailMailboxes
-          .filter((record) => record.organizationId === organization.id)
-          .map((record) =>
-            toMailboxListItem(
-              { ...record, grantRole: null },
-              {
-                groupId: organization.id,
-                groupKind: "organization",
-                groupName: organization.name,
-              },
-            ),
-          ),
-        ...managedMailboxes
-          .filter((record) => record.organizationId === organization.id)
-          .map((record) =>
-            toMailboxListItem(record, {
               groupId: organization.id,
               groupKind: "organization",
               groupName: organization.name,
-            }),
+            },
           ),
-      ].sort((left, right) => left.emailAddress.localeCompare(right.emailAddress)),
-      name: organization.name,
-      slug: organization.slug,
-    })),
-  ];
+        ),
+      ...managedMailboxes
+        .filter((record) => record.organizationId === organization.id)
+        .map((record) =>
+          toMailboxListItem(record, {
+            groupId: organization.id,
+            groupKind: "organization",
+            groupName: organization.name,
+          }),
+        ),
+    ].sort((left, right) => left.emailAddress.localeCompare(right.emailAddress)),
+    name: organization.name,
+    slug: organization.slug,
+  }));
 
   return { groups };
 };
@@ -326,7 +274,7 @@ export const startGmailOAuth = async (input: {
   await db.delete(gmailOAuthState).where(lt(gmailOAuthState.expiresAt, new Date()));
 
   let loginHint: string | null = null;
-  let organizationId = input.organizationId ?? null;
+  let organizationId = input.organizationId;
   if (input.mailboxId) {
     const [existingMailbox] = await db
       .select({
@@ -352,9 +300,15 @@ export const startGmailOAuth = async (input: {
     }
   }
 
-  if (organizationId) {
-    await assertOrganizationMembership(input.userId, organizationId);
+  if (!organizationId) {
+    organizationId = (await listUserOrganizations(input.userId))[0]?.id;
   }
+  if (!organizationId) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Create a team before connecting Gmail.",
+    });
+  }
+  await assertOrganizationMembership(input.userId, organizationId);
 
   const state = randomBytes(32).toString("base64url");
   const codeVerifier = createCodeVerifier();
@@ -635,12 +589,10 @@ export const disconnectGmailMailbox = async (input: { mailboxId: string; userId:
 
 export const moveGmailMailbox = async (input: {
   mailboxId: string;
-  organizationId: string | null;
+  organizationId: string;
   userId: string;
 }) => {
-  if (input.organizationId) {
-    await assertOrganizationMembership(input.userId, input.organizationId);
-  }
+  await assertOrganizationMembership(input.userId, input.organizationId);
 
   const [updatedMailbox] = await db
     .update(mailbox)

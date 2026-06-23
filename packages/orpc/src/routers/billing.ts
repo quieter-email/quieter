@@ -1,11 +1,10 @@
-import { ORPCError } from "@orpc/server";
 import {
   createBillingCheckout,
   createBillingPortal,
   getBillingOverview,
   syncBillingCheckout,
 } from "@quieter/billing";
-import { BILLING_PRODUCTS, billingProductIdSchema } from "@quieter/billing/plans";
+import { billingProductIdSchema } from "@quieter/billing/plans";
 import { z } from "zod";
 import { getRequestHeaders } from "../context";
 import { assertUserCanManageOrganizationSettings } from "../mail-domain/service";
@@ -22,23 +21,15 @@ export const billingRouter = {
   createCheckout: protectedProcedure
     .input(
       z.object({
-        organizationId: z.string().trim().min(1).optional(),
+        organizationId: z.string().trim().min(1),
         product: billingProductIdSchema,
       }),
     )
     .handler(async ({ context, input }) => {
-      if (BILLING_PRODUCTS[input.product].scope === "team") {
-        if (!input.organizationId) {
-          throw new ORPCError("BAD_REQUEST", {
-            message: "Choose a team for team billing.",
-          });
-        }
-
-        await assertUserCanManageOrganizationSettings({
-          organizationId: input.organizationId,
-          userId: context.userId,
-        });
-      }
+      await assertUserCanManageOrganizationSettings({
+        organizationId: input.organizationId,
+        userId: context.userId,
+      });
 
       return await createBillingCheckout({
         customerEmail: context.user.email,
@@ -53,16 +44,14 @@ export const billingRouter = {
   createPortal: protectedProcedure
     .input(
       z.object({
-        organizationId: z.string().trim().min(1).optional(),
+        organizationId: z.string().trim().min(1),
       }),
     )
     .handler(async ({ context, input }) => {
-      if (input.organizationId) {
-        await assertUserCanManageOrganizationSettings({
-          organizationId: input.organizationId,
-          userId: context.userId,
-        });
-      }
+      await assertUserCanManageOrganizationSettings({
+        organizationId: input.organizationId,
+        userId: context.userId,
+      });
 
       return await createBillingPortal({
         headers: getRequestHeaders(context),

@@ -2,7 +2,7 @@ import { rpc } from "~/lib/orpc";
 
 export const openGoogleAccountLink = async (input: {
   mailboxId?: string;
-  organizationId?: string | null;
+  organizationId?: string;
   returnTo: string;
 }) => {
   const { authorizationUrl } = await rpc.mail.startGmailConnection({

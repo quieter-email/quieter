@@ -3,7 +3,6 @@
 import {
   ArrowLeft01Icon,
   Cancel01Icon,
-  CreditCardIcon,
   Mail01Icon,
   Settings01Icon,
   UserGroupIcon,
@@ -12,7 +11,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, cn, IconButtonTooltip } from "@quieter/ui";
 import { AnimatePresence, domMax, LayoutGroup, LazyMotion, m } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { SettingsTab } from "~/features/settings/domain/settings-tab";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
 import { SidebarNavItem } from "~/features/navigation/components/sidebar-nav-item";
@@ -28,7 +27,6 @@ type SettingsSidebarProps = {
 const SETTINGS_SIDEBAR_NAV = [
   { tab: "general", label: "General", icon: Settings01Icon },
   { tab: "account", label: "Account", icon: UserIcon },
-  { tab: "plan", label: "Plan", icon: CreditCardIcon },
   { tab: "mailboxes", label: "Mailboxes", icon: Mail01Icon },
   { tab: "organization", label: "Teams", icon: UserGroupIcon },
 ] as const satisfies ReadonlyArray<{
@@ -168,18 +166,22 @@ export const SettingsSidebar = ({
   isMobileOpen,
   onMobileOpenChange,
 }: SettingsSidebarProps) => {
+  const closeMobileSidebar = useEffectEvent(() => {
+    onMobileOpenChange?.(false);
+  });
+
   useEffect(() => {
     if (!isMobileOpen) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onMobileOpenChange?.(false);
+        closeMobileSidebar();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isMobileOpen, onMobileOpenChange]);
+  }, [isMobileOpen]);
 
   return (
     <LazyMotion features={domMax}>

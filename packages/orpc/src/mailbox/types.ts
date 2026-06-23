@@ -2,7 +2,7 @@ import type { MailboxGrantRole } from "@quieter/database";
 
 export type MailboxGroupMetadata = {
   groupId: string;
-  groupKind: "personal" | "organization";
+  groupKind: "organization";
   groupName: string;
 };
 
@@ -14,14 +14,14 @@ export type MailboxListItem = MailboxGroupMetadata & {
   gmailAutoLabelEnabled: boolean;
   gmailUsefulDetailsEnabled: boolean;
   id: string;
-  organizationId: string | null;
+  organizationId: string;
   ownerUserId: string | null;
   provider: "gmail" | "managed";
 };
 
 export type MailboxGroup = {
   id: string;
-  kind: "personal" | "organization";
+  kind: "organization";
   mailboxes: MailboxListItem[];
   name: string;
   slug: string | null;

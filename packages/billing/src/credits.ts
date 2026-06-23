@@ -1,30 +1,10 @@
-import {
-  billingCreditUsageEvent,
-  db,
-  type BillingScope,
-  type BillingUsageCategory,
-} from "@quieter/database";
+import { billingCreditUsageEvent, db, type BillingUsageCategory } from "@quieter/database";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import type { BillingAccount } from "./entitlements";
 import { getPolarApiOrganizationId, ingestPolarEvents } from "./polar";
 
 const BILLING_CREDIT_USAGE_EVENT_NAME = "quieter.credit_usage";
 const MICROCENTS_PER_CENT = 1_000_000;
-
-const getTargetCondition = (input: {
-  organizationId: string | null;
-  scope: BillingScope;
-  userId: string | null;
-}) =>
-  input.scope === "personal"
-    ? and(
-        eq(billingCreditUsageEvent.scope, "personal"),
-        eq(billingCreditUsageEvent.userId, input.userId!),
-      )
-    : and(
-        eq(billingCreditUsageEvent.scope, "team"),
-        eq(billingCreditUsageEvent.organizationId, input.organizationId!),
-      );
 
 const getBillingCreditUsageWithClient = async (
   client: Pick<typeof db, "select">,
@@ -38,7 +18,7 @@ const getBillingCreditUsageWithClient = async (
     .from(billingCreditUsageEvent)
     .where(
       and(
-        getTargetCondition(account),
+        eq(billingCreditUsageEvent.organizationId, account.organizationId),
         gte(billingCreditUsageEvent.createdAt, account.currentPeriodStart),
         lt(billingCreditUsageEvent.createdAt, account.currentPeriodEnd),
       ),
@@ -62,7 +42,7 @@ export const recordBillingCreditUsage = async (input: {
   dedupeKey: string;
   metadata?: Record<string, string | number | boolean>;
 }) => {
-  const lockKey = `${input.account.scope}:${input.account.organizationId ?? input.account.userId}`;
+  const lockKey = `organization:${input.account.organizationId}`;
   const result = await db.transaction(async (transaction) => {
     await transaction.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
     const [existingEvent] = await transaction
@@ -101,8 +81,7 @@ export const recordBillingCreditUsage = async (input: {
         id: crypto.randomUUID(),
         metadata: input.metadata ?? {},
         organizationId: input.account.organizationId,
-        scope: input.account.scope,
-        userId: input.account.userId,
+        scope: "team",
       })
       .onConflictDoNothing({ target: billingCreditUsageEvent.dedupeKey })
       .returning({

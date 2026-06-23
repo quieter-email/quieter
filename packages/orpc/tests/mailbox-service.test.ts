@@ -13,11 +13,11 @@ const gmailMailbox = (id: string, emailAddress: string): MailboxListItem => ({
   grantRole: null,
   gmailAutoLabelEnabled: false,
   gmailUsefulDetailsEnabled: false,
-  groupId: "personal",
-  groupKind: "personal",
-  groupName: "Personal",
+  groupId: "org_default",
+  groupKind: "organization",
+  groupName: "Default Team",
   id,
-  organizationId: null,
+  organizationId: "org_default",
   ownerUserId: "user_1",
   provider: "gmail",
 });
@@ -45,14 +45,14 @@ const managedMailbox = (
 
 const mailboxGroups: MailboxGroup[] = [
   {
-    id: "personal",
-    kind: "personal",
+    id: "org_default",
+    kind: "organization",
     mailboxes: [
       gmailMailbox("gmail-one-id", "one@example.com"),
       gmailMailbox("gmail-two-id", "two@example.com"),
     ],
-    name: "Personal",
-    slug: null,
+    name: "Default Team",
+    slug: "default-team",
   },
   {
     id: "org_a",
@@ -92,11 +92,11 @@ describe("resolveDefaultMailboxId", () => {
 describe("mailbox switcher order", () => {
   test("reorders groups while preserving group mailbox membership", () => {
     const orderedGroups = applyMailboxSwitcherOrder(mailboxGroups, {
-      groupIds: ["org_b", "personal", "org_a"],
+      groupIds: ["org_b", "org_default", "org_a"],
       mailboxIdsByGroupId: {},
     });
 
-    expect(orderedGroups.map((group) => group.id)).toEqual(["org_b", "personal", "org_a"]);
+    expect(orderedGroups.map((group) => group.id)).toEqual(["org_b", "org_default", "org_a"]);
     expect(orderedGroups[0]?.mailboxes.map((mailbox) => mailbox.id)).toEqual(["b1"]);
     expect(orderedGroups[1]?.mailboxes.map((mailbox) => mailbox.id)).toEqual([
       "gmail-one-id",
@@ -106,7 +106,7 @@ describe("mailbox switcher order", () => {
 
   test("reorders mailboxes within one group", () => {
     const orderedGroups = applyMailboxSwitcherOrder(mailboxGroups, {
-      groupIds: ["personal", "org_a", "org_b"],
+      groupIds: ["org_default", "org_a", "org_b"],
       mailboxIdsByGroupId: {
         org_a: ["a2", "a1"],
       },
@@ -119,7 +119,7 @@ describe("mailbox switcher order", () => {
 
   test("drops mailbox ids listed under the wrong group", () => {
     const canonicalOrder = canonicalizeMailboxSwitcherOrder(mailboxGroups, {
-      groupIds: ["org_a", "org_b", "personal"],
+      groupIds: ["org_a", "org_b", "org_default"],
       mailboxIdsByGroupId: {
         org_a: ["b1", "a2"],
         org_b: ["a1", "b1"],
@@ -138,8 +138,11 @@ describe("mailbox switcher order", () => {
       },
     });
 
-    expect(canonicalOrder.groupIds).toEqual(["org_a", "personal", "org_b"]);
+    expect(canonicalOrder.groupIds).toEqual(["org_a", "org_default", "org_b"]);
     expect(canonicalOrder.mailboxIdsByGroupId.org_a).toEqual(["a1", "a2"]);
-    expect(canonicalOrder.mailboxIdsByGroupId.personal).toEqual(["gmail-one-id", "gmail-two-id"]);
+    expect(canonicalOrder.mailboxIdsByGroupId.org_default).toEqual([
+      "gmail-one-id",
+      "gmail-two-id",
+    ]);
   });
 });

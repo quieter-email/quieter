@@ -31,13 +31,10 @@ export const formatBillingProduct = (product: BillingProductId | null) =>
 export const getTeamBilling = (billing: UserBillingOverview | undefined, organizationId: string) =>
   billing?.teams.find((team) => team.organizationId === organizationId) ?? null;
 
-export const hasPersonalAiAccess = (
+export const hasOrganizationAiAccess = (
   billing: UserBillingOverview | undefined,
-  organizationId: string | null,
+  organizationId: string,
 ) =>
-  organizationId
-    ? billing?.teams.some(
-        (team) =>
-          team.organizationId === organizationId && team.product === "team_ai" && team.hasAccess,
-      ) === true
-    : billing?.personal.hasAccess === true;
+  billing?.teams.some(
+    (team) => team.organizationId === organizationId && team.product === "pro" && team.hasAccess,
+  ) === true;

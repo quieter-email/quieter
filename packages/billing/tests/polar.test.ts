@@ -30,30 +30,10 @@ describe("Polar server selection", () => {
 });
 
 describe("Polar checkout metadata", () => {
-  test("omits organization metadata from personal checkout", () => {
-    const metadata = createBillingCheckoutMetadata({
-      product: "personal",
-      scope: "personal",
-      userId: "user-1",
-    });
-
-    expect(metadata).toEqual({
-      customerMetadata: {
-        quieterUserId: "user-1",
-      },
-      metadata: {
-        quieterProduct: "personal",
-        quieterScope: "personal",
-        quieterUserId: "user-1",
-      },
-    });
-  });
-
-  test("includes organization metadata for team checkout", () => {
+  test("includes organization metadata for checkout", () => {
     const metadata = createBillingCheckoutMetadata({
       organizationId: "organization-1",
-      product: "team",
-      scope: "team",
+      product: "managed",
       userId: "user-1",
     });
 

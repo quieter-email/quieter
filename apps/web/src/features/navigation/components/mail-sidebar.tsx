@@ -54,7 +54,7 @@ type MailSidebarProps = {
   defaultMailboxId: string | null;
   groups: Array<{
     id: string;
-    kind: "personal" | "organization";
+    kind: "organization";
     mailboxes: Array<{
       connectionStatus: "connected" | "needs_reconnect";
       grantRole?: "manager" | "reader" | "responder" | null;

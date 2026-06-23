@@ -218,11 +218,9 @@ export const MailboxWorkspaceContent = ({
                 draftChatKey={draftChatKey}
                 mailboxId={selectedMailboxId}
                 mailboxOrganizationId={
-                  mailboxGroups.find(
-                    (group) =>
-                      group.kind === "organization" &&
-                      group.mailboxes.some((mailbox) => mailbox.id === selectedMailboxId),
-                  )?.id ?? null
+                  mailboxGroups.find((group) =>
+                    group.mailboxes.some((mailbox) => mailbox.id === selectedMailboxId),
+                  )?.id ?? ""
                 }
                 onChatIdChange={onChatIdChange}
                 onOpenSidebar={onOpenSidebar}

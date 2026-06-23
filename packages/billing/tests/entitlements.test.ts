@@ -14,19 +14,15 @@ describe("billing entitlement statuses", () => {
 });
 
 describe("billing products", () => {
-  test("keeps personal and team credits separate", () => {
-    expect(BILLING_PRODUCTS.personal.scope).toBe("personal");
-    expect(BILLING_PRODUCTS.team.scope).toBe("team");
-    expect(BILLING_PRODUCTS.team_ai.scope).toBe("team");
+  test("exposes only organization plans", () => {
+    expect(Object.keys(BILLING_PRODUCTS)).toEqual(["managed", "pro"]);
   });
 
   test("matches product access to the purchased capability", () => {
-    expect(productHasAi("personal")).toBe(true);
-    expect(productHasAi("team")).toBe(false);
-    expect(productHasAi("team_ai")).toBe(true);
-    expect(productHasManagedMail("personal")).toBe(false);
-    expect(productHasManagedMail("team")).toBe(true);
-    expect(productHasManagedMail("team_ai")).toBe(true);
+    expect(productHasAi("managed")).toBe(false);
+    expect(productHasAi("pro")).toBe(true);
+    expect(productHasManagedMail("managed")).toBe(true);
+    expect(productHasManagedMail("pro")).toBe(true);
   });
 
   test("turns every monthly payment into equal credits", () => {
