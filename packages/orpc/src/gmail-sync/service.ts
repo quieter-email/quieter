@@ -429,24 +429,26 @@ const processMessageIds = async ({
       }
     };
 
-    if (autoLabelContext) {
-      await processAutoLabelMessage({
-        accessToken,
-        autoLabelContext,
-        gmailMessageId: messageId,
-        loadMessage,
-        mailboxId,
-        userId,
-      });
-    }
-    if (usefulDetailsEnabled) {
-      await processGmailUsefulDetailMessage({
-        gmailMessageId: messageId,
-        loadMessage,
-        mailboxId,
-        userId,
-      });
-    }
+    await Promise.all([
+      autoLabelContext
+        ? processAutoLabelMessage({
+            accessToken,
+            autoLabelContext,
+            gmailMessageId: messageId,
+            loadMessage,
+            mailboxId,
+            userId,
+          })
+        : Promise.resolve(),
+      usefulDetailsEnabled
+        ? processGmailUsefulDetailMessage({
+            gmailMessageId: messageId,
+            loadMessage,
+            mailboxId,
+            userId,
+          })
+        : Promise.resolve(),
+    ]);
   }
 };
 
