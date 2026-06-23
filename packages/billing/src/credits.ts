@@ -3,30 +3,66 @@ import { and, eq, gte, lt, sql } from "drizzle-orm";
 import type { BillingAccount } from "./entitlements";
 import { getPolarApiOrganizationId, ingestPolarEvents } from "./polar";
 
-const BILLING_CREDIT_USAGE_EVENT_NAME = "quieter.credit_usage";
+const BILLING_CREDIT_USAGE_EVENT_NAME = "credit-usage";
 const MICROCENTS_PER_CENT = 1_000_000;
+
+export const BILLING_USAGE_KINDS = [
+  "aiChat",
+  "autoLabel",
+  "usefulDetails",
+  "inboundMail",
+  "outboundMail",
+  "other",
+] as const;
+
+export type BillingUsageKind = (typeof BILLING_USAGE_KINDS)[number];
 
 const getBillingCreditUsageWithClient = async (
   client: Pick<typeof db, "select">,
   account: BillingAccount,
 ) => {
-  const [usage] = await client
-    .select({
-      billableCostMicroCents: sql<number>`coalesce(sum(${billingCreditUsageEvent.billableCostMicroCents}), 0)`,
-      costMicroCents: sql<number>`coalesce(sum(${billingCreditUsageEvent.costMicroCents}), 0)`,
-    })
-    .from(billingCreditUsageEvent)
-    .where(
-      and(
-        eq(billingCreditUsageEvent.organizationId, account.organizationId),
-        gte(billingCreditUsageEvent.createdAt, account.currentPeriodStart),
-        lt(billingCreditUsageEvent.createdAt, account.currentPeriodEnd),
-      ),
-    )
-    .limit(1);
+  const periodFilter = and(
+    eq(billingCreditUsageEvent.organizationId, account.organizationId),
+    gte(billingCreditUsageEvent.createdAt, account.currentPeriodStart),
+    lt(billingCreditUsageEvent.createdAt, account.currentPeriodEnd),
+  );
+  const usageKind = sql<BillingUsageKind>`case
+    when ${billingCreditUsageEvent.category} = 'mail'
+      and ${billingCreditUsageEvent.metadata}->>'direction' = 'inbound' then 'inboundMail'
+    when ${billingCreditUsageEvent.category} = 'mail'
+      and ${billingCreditUsageEvent.metadata}->>'direction' = 'outbound' then 'outboundMail'
+    when ${billingCreditUsageEvent.category} = 'ai'
+      and ${billingCreditUsageEvent.metadata}->>'usageKind' = 'autoLabel' then 'autoLabel'
+    when ${billingCreditUsageEvent.category} = 'ai'
+      and ${billingCreditUsageEvent.metadata}->>'usageKind' = 'usefulDetails' then 'usefulDetails'
+    when ${billingCreditUsageEvent.category} = 'ai' then 'aiChat'
+    else 'other'
+  end`;
+  const [[usage], breakdown] = await Promise.all([
+    client
+      .select({
+        billableCostMicroCents: sql<number>`coalesce(sum(${billingCreditUsageEvent.billableCostMicroCents}), 0)`,
+        costMicroCents: sql<number>`coalesce(sum(${billingCreditUsageEvent.costMicroCents}), 0)`,
+      })
+      .from(billingCreditUsageEvent)
+      .where(periodFilter)
+      .limit(1),
+    client
+      .select({
+        costMicroCents: sql<number>`coalesce(sum(${billingCreditUsageEvent.costMicroCents}), 0)`,
+        kind: usageKind,
+      })
+      .from(billingCreditUsageEvent)
+      .where(periodFilter)
+      .groupBy(usageKind),
+  ]);
 
   return {
     billableCostMicroCents: Number(usage?.billableCostMicroCents ?? 0),
+    breakdown: breakdown.map((item) => ({
+      costMicroCents: Number(item.costMicroCents),
+      kind: item.kind,
+    })),
     costMicroCents: Number(usage?.costMicroCents ?? 0),
     creditAmountMicroCents: account.creditAmountCents * MICROCENTS_PER_CENT,
   };
@@ -103,6 +139,7 @@ export const recordBillingCreditUsage = async (input: {
         metadata: {
           billableCostCents: result.billableCostMicroCents / MICROCENTS_PER_CENT,
           category: input.category,
+          credits: result.billableCostMicroCents / MICROCENTS_PER_CENT,
           creditUsageEventId: result.eventId,
           ...input.metadata,
         },

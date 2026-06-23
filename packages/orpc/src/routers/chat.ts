@@ -346,6 +346,7 @@ export const chatRouter = {
               mailboxId: input.mailboxId,
               model: "openai/gpt-5-nano",
               promptTokens: usage.promptTokens,
+              usageKind: "aiChat",
               userId: context.userId,
             }).catch((error) => {
               console.error(

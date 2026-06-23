@@ -403,6 +403,7 @@ const reportUsage = async (event: {
       mailboxId: event.mailboxId,
       model: GMAIL_USEFUL_DETAIL_MODEL,
       promptTokens: event.promptTokens,
+      usageKind: "usefulDetails",
       userId: event.userId,
     });
     await db
