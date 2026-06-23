@@ -110,7 +110,7 @@ export const OrganizationBillingSettings = ({
       </div>
 
       <div className="mt-4 grid gap-3 xl:grid-cols-2">
-        {(["team", "team_ai"] as const).map((product) => (
+        {(["managed", "pro"] as const).map((product) => (
           <BillingProductCard
             canChoose={billing.canManageBilling}
             currentProduct={currentProduct}

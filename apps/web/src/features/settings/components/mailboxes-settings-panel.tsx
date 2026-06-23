@@ -25,14 +25,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { MailboxSettingsRow } from "~/features/navigation/components/mailbox-switcher";
 import { organizationMailDomainsQueryOptions } from "~/features/settings/components/organization-settings/mail-domains";
-import { hasPersonalAiAccess, userBillingQueryOptions } from "~/features/settings/domain/billing";
+import {
+  hasOrganizationAiAccess,
+  userBillingQueryOptions,
+} from "~/features/settings/domain/billing";
 import { authClient } from "~/lib/auth";
 import { openGoogleAccountLink } from "~/lib/google-account-link";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 
 const getSettingsReturnTo = () => "/settings?tab=mailboxes";
-const personalPlacementValue = "personal";
 const getMutationErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
 
@@ -60,13 +62,10 @@ export const MailboxesSettingsPanel = () => {
     mailboxes: group.mailboxes.filter((mailbox) => mailbox.provider === "managed"),
   }));
   const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
-  const placementItems = [
-    { value: personalPlacementValue, label: "Personal" },
-    ...organizations.map((organization) => ({
-      value: organization.id,
-      label: organization.name,
-    })),
-  ];
+  const placementItems = organizations.map((organization) => ({
+    value: organization.id,
+    label: organization.name,
+  }));
   const organizationItems = organizations.map((organization) => ({
     value: organization.id,
     label: organization.name,
@@ -118,16 +117,15 @@ export const MailboxesSettingsPanel = () => {
     onSuccess: invalidateMailboxes,
   });
 
-  const startGmailConnection = async (input?: {
-    mailboxId?: string;
-    organizationId?: string | null;
-  }) => {
+  const startGmailConnection = async (input?: { mailboxId?: string; organizationId?: string }) => {
     setIsStartingGmail(true);
     try {
       await openGoogleAccountLink({
         mailboxId: input?.mailboxId,
         organizationId:
-          input?.organizationId === undefined ? gmailOrganizationId || null : input.organizationId,
+          input?.organizationId === undefined
+            ? gmailOrganizationId || organizations[0]?.id
+            : input.organizationId,
         returnTo: getSettingsReturnTo(),
       });
     } catch (error) {
@@ -141,26 +139,22 @@ export const MailboxesSettingsPanel = () => {
         <div>
           <h2 className="text-sm font-medium text-foreground">Connected Gmail</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Connect an existing personal or Google Workspace inbox. Team placement does not share
-            the mailbox with other members. Personal or Team + AI billing keeps your inbox current
-            as mail arrives and can apply your existing Gmail labels or surface timely updates from
-            new mail.
+            Connect an existing Gmail or Google Workspace inbox to a team. Team placement does not
+            share the mailbox with other members. Pro keeps your inbox current as mail arrives and
+            can apply your existing Gmail labels or surface timely updates from new mail.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <Select
             items={placementItems}
-            onValueChange={(value) =>
-              setGmailOrganizationId(value === personalPlacementValue ? "" : (value ?? ""))
-            }
-            value={gmailOrganizationId || personalPlacementValue}
+            onValueChange={(value) => setGmailOrganizationId(value ?? "")}
+            value={gmailOrganizationId || organizations[0]?.id}
           >
             <SelectTrigger aria-label="Gmail mailbox placement" className="w-44">
               <SelectValue />
             </SelectTrigger>
             <SelectContent align="start">
-              <SelectItem value={personalPlacementValue}>Personal</SelectItem>
               {organizations.map((organization) => (
                 <SelectItem key={organization.id} value={organization.id}>
                   {organization.name}
@@ -196,7 +190,7 @@ export const MailboxesSettingsPanel = () => {
               {group.mailboxes.map((mailbox) => {
                 const isDefault = mailbox.id === defaultMailboxId;
                 const hasGmailAutomationAccess =
-                  isBillingSuccess && hasPersonalAiAccess(billing, mailbox.organizationId);
+                  isBillingSuccess && hasOrganizationAiAccess(billing, mailbox.organizationId);
                 return (
                   <div
                     className="overflow-hidden rounded-lg border border-border/70 bg-muted/15"
@@ -254,10 +248,11 @@ export const MailboxesSettingsPanel = () => {
                           disabled={moveGmailMailboxMutation.isPending}
                           items={placementItems}
                           onValueChange={(value) => {
+                            if (!value) return;
                             moveGmailMailboxMutation.mutate(
                               {
                                 mailboxId: mailbox.id,
-                                organizationId: value === personalPlacementValue ? null : value,
+                                organizationId: value,
                               },
                               {
                                 onError: (error) => {
@@ -268,7 +263,7 @@ export const MailboxesSettingsPanel = () => {
                               },
                             );
                           }}
-                          value={mailbox.organizationId ?? personalPlacementValue}
+                          value={mailbox.organizationId}
                         >
                           <SelectTrigger
                             aria-label={`Placement for ${mailbox.emailAddress}`}
@@ -279,7 +274,6 @@ export const MailboxesSettingsPanel = () => {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent align="end">
-                            <SelectItem value={personalPlacementValue}>Personal</SelectItem>
                             {organizations.map((organization) => (
                               <SelectItem key={organization.id} value={organization.id}>
                                 {organization.name}
@@ -337,7 +331,7 @@ export const MailboxesSettingsPanel = () => {
                             Useful details
                             {!hasGmailAutomationAccess && (
                               <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                Personal or Team + AI
+                                Pro
                               </span>
                             )}
                           </span>
@@ -383,7 +377,7 @@ export const MailboxesSettingsPanel = () => {
                             Auto-label
                             {!hasGmailAutomationAccess && (
                               <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                Personal or Team + AI
+                                Pro
                               </span>
                             )}
                           </span>

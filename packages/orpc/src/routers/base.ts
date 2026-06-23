@@ -1,5 +1,5 @@
 import { ORPCError, os } from "@orpc/server";
-import { auth } from "@quieter/auth";
+import { getSessionWithOrganization } from "@quieter/auth";
 import { isGmailRateLimitedError, type MailboxCategory } from "@quieter/gmail";
 import { z } from "zod";
 import { getRequestHeaders, type OrpcContext } from "../context";
@@ -20,7 +20,7 @@ export type ProtectedContext = OrpcContext & {
 
 export const protectedProcedure = base.use(async ({ context, errors, next }) => {
   const headers = getRequestHeaders(context);
-  const session = await auth.api.getSession({ headers });
+  const session = await getSessionWithOrganization(headers);
 
   if (!session?.user || !session.session) {
     throw errors.UNAUTHORIZED();

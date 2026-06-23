@@ -43,7 +43,7 @@ describe("organization mail usage", () => {
     expect(normalizeOrganizationMailAlertMilestones([100, 50.2, 50, 0, 101])).toEqual([50, 100]);
   });
 
-  test("gives Team + AI cleaner, lower managed mail rates", () => {
+  test("gives Pro cleaner, lower managed mail rates", () => {
     const teamRates = getManagedUsageRates("managed");
     const teamAiRates = getManagedUsageRates("pro");
 

@@ -13,7 +13,6 @@ import { BillingCheckoutResult } from "./billing-checkout-result";
 import { GeneralSettingsPanel } from "./general-settings-panel";
 import { MailboxesSettingsPanel } from "./mailboxes-settings-panel";
 import { OrganizationSettingsPanel } from "./organization-settings-panel";
-import { PlanSettingsPanel } from "./plan-settings-panel";
 import { SettingsSidebar } from "./settings-sidebar";
 
 type SettingsUser = {
@@ -79,7 +78,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
                 </Button>
               </IconButtonTooltip>
               <span className="text-sm font-semibold text-foreground capitalize">
-                {tab === "plan" ? "Billing" : `${tab} Settings`}
+                {`${tab} Settings`}
               </span>
             </div>
 
@@ -87,7 +86,6 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
             <div className="min-h-0 flex-1 overflow-y-auto px-12 py-8 md:px-16 md:py-12">
               {tab === "general" && <GeneralSettingsPanel />}
               {tab === "account" && <AccountSettingsPanel initialUser={initialUser} />}
-              {tab === "plan" && <PlanSettingsPanel />}
               {tab === "mailboxes" && <MailboxesSettingsPanel />}
               {tab === "organization" && <OrganizationSettingsPanel />}
             </div>

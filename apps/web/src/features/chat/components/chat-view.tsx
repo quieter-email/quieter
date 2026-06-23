@@ -10,7 +10,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { LayoutGroup } from "motion/react";
 import { type FormEvent, type KeyboardEvent, useRef, useState } from "react";
-import { hasPersonalAiAccess, userBillingQueryOptions } from "~/features/settings/domain/billing";
+import {
+  hasOrganizationAiAccess,
+  userBillingQueryOptions,
+} from "~/features/settings/domain/billing";
 import { chatQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-query";
 import { orpc } from "~/lib/orpc";
 import { queryPersister } from "~/lib/query-persister";
@@ -229,7 +232,7 @@ export const ChatView = ({
     regenerateResponseMutation.isPending ||
     resolveComposeToolMutation.isPending;
   const aiRequirement = BILLING_FEATURES.aiChat;
-  const canUseAiChat = hasPersonalAiAccess(billing, mailboxOrganizationId);
+  const canUseAiChat = hasOrganizationAiAccess(billing, mailboxOrganizationId);
   const composerDisabled = isBillingPending || !canUseAiChat;
   const errorMessage = activeRun?.error ?? chatData?.messages.at(-1)?.error ?? undefined;
 
@@ -400,7 +403,10 @@ export const ChatView = ({
               <div className="w-full px-4 pb-5">
                 <div className="mx-auto w-full max-w-2xl">
                   {!canUseAiChat && !isBillingPending && (
-                    <PlanRequiredBlock requirementLabel={aiRequirement.requirementLabel} />
+                    <PlanRequiredBlock
+                      organizationId={mailboxOrganizationId}
+                      requirementLabel={aiRequirement.requirementLabel}
+                    />
                   )}
                   <ChatComposer
                     busy={isComposerLoading}
@@ -421,7 +427,10 @@ export const ChatView = ({
             <div className="flex min-h-0 flex-1 items-center justify-center px-4">
               <div className="w-full max-w-xl">
                 {!canUseAiChat && !isBillingPending && (
-                  <PlanRequiredBlock requirementLabel={aiRequirement.requirementLabel} />
+                  <PlanRequiredBlock
+                    organizationId={mailboxOrganizationId}
+                    requirementLabel={aiRequirement.requirementLabel}
+                  />
                 )}
                 <ChatComposer
                   busy={isComposerLoading}
@@ -444,7 +453,13 @@ export const ChatView = ({
   );
 };
 
-const PlanRequiredBlock = ({ requirementLabel }: { requirementLabel: string }) => {
+const PlanRequiredBlock = ({
+  organizationId,
+  requirementLabel,
+}: {
+  organizationId: string;
+  requirementLabel: string;
+}) => {
   const navigate = useNavigate();
 
   return (
@@ -456,7 +471,14 @@ const PlanRequiredBlock = ({ requirementLabel }: { requirementLabel: string }) =
       <Button
         className="mt-3"
         onClick={() => {
-          void navigate({ to: "/settings", search: { tab: "plan" } });
+          void navigate({
+            to: "/settings",
+            search: {
+              organizationId,
+              organizationView: "overview",
+              tab: "organization",
+            },
+          });
         }}
         size="sm"
         type="button"

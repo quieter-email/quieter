@@ -7,8 +7,7 @@
     "./google-scopes": "./src/google-scopes.ts",
     "./organization-api-key": "./src/organization-api-key.ts",
     "./terms-acceptance": "./src/terms-acceptance.ts",
-    "./user-status": "./src/user-status.ts",
-    "./workspace": "./src/workspace.ts"
+    "./user-status": "./src/user-status.ts"
   },
   "scripts": {
     "fmt": "oxfmt --config ../../oxfmt.json .",

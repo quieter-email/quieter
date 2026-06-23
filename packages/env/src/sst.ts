@@ -9,11 +9,7 @@ const gmailPubSubVariableNames = [
   "GMAIL_PUBSUB_TOPIC",
 ] as const;
 
-const polarProductVariableNames = [
-  "POLAR_PRODUCT_PERSONAL_ID",
-  "POLAR_PRODUCT_TEAM_AI_ID",
-  "POLAR_PRODUCT_TEAM_ID",
-] as const;
+const polarProductVariableNames = ["POLAR_PRODUCT_MANAGED_ID", "POLAR_PRODUCT_PRO_ID"] as const;
 
 export const createSstEnv = (
   options: { production: boolean },
@@ -35,9 +31,8 @@ export const createSstEnv = (
       POLAR_ACCESS_TOKEN: runtimeEnv.POLAR_ACCESS_TOKEN,
       POLAR_METER_CREDIT_USAGE_ID: runtimeEnv.POLAR_METER_CREDIT_USAGE_ID,
       POLAR_ORGANIZATION_ID: runtimeEnv.POLAR_ORGANIZATION_ID,
-      POLAR_PRODUCT_PERSONAL_ID: runtimeEnv.POLAR_PRODUCT_PERSONAL_ID,
-      POLAR_PRODUCT_TEAM_AI_ID: runtimeEnv.POLAR_PRODUCT_TEAM_AI_ID,
-      POLAR_PRODUCT_TEAM_ID: runtimeEnv.POLAR_PRODUCT_TEAM_ID,
+      POLAR_PRODUCT_MANAGED_ID: runtimeEnv.POLAR_PRODUCT_MANAGED_ID,
+      POLAR_PRODUCT_PRO_ID: runtimeEnv.POLAR_PRODUCT_PRO_ID,
       POLAR_SANDBOX: runtimeEnv.POLAR_SANDBOX,
     },
     server: {
@@ -54,9 +49,8 @@ export const createSstEnv = (
       POLAR_ACCESS_TOKEN: z.string().trim().min(1),
       POLAR_METER_CREDIT_USAGE_ID: optionalString,
       POLAR_ORGANIZATION_ID: optionalString,
-      POLAR_PRODUCT_PERSONAL_ID: optionalString,
-      POLAR_PRODUCT_TEAM_AI_ID: optionalString,
-      POLAR_PRODUCT_TEAM_ID: optionalString,
+      POLAR_PRODUCT_MANAGED_ID: optionalString,
+      POLAR_PRODUCT_PRO_ID: optionalString,
       POLAR_SANDBOX: optionalBooleanString,
     },
   });

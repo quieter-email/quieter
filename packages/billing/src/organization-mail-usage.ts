@@ -59,10 +59,9 @@ const getBillingPeriod = (start: Date | null, end: Date | null) => {
   return { end: calendarEnd, start: calendarStart };
 };
 
-const applyUsageMarkup = (sesCostMicroCents: number, product: "team" | "team_ai" | null) =>
+const applyUsageMarkup = (sesCostMicroCents: number, product: "managed" | "pro" | null) =>
   Math.ceil(
-    sesCostMicroCents *
-      (1 + getManagedUsageMarkupBasisPoints(product === "team_ai" ? "pro" : "managed") / 10_000),
+    sesCostMicroCents * (1 + getManagedUsageMarkupBasisPoints(product ?? "managed") / 10_000),
   );
 
 export const withOrganizationMailUsageLock = async <T>(
@@ -326,7 +325,7 @@ export const assertCanConsumeOrganizationMailUsage = async (input: {
 
   if (!entitlement.hasAccess) {
     throw new ORPCError("FORBIDDEN", {
-      message: "Team mail requires Team billing.",
+      message: "Team mail requires Managed billing.",
       status: 403,
     });
   }
@@ -340,7 +339,7 @@ export const assertCanConsumeOrganizationMailUsage = async (input: {
     const usage = await getBillingCreditUsage(entitlement.account);
     const costMicroCents = applyUsageMarkup(
       input.estimate.sesCostMicroCents,
-      entitlement.product === "team_ai" ? "team_ai" : "team",
+      entitlement.product ?? "managed",
     );
     const projectedBillableCostMicroCents = Math.max(
       0,
@@ -381,7 +380,7 @@ export const recordOrganizationMailUsage = async (input: OrganizationMailUsageIn
   const dedupeKey = `${input.direction}:${input.organizationId}:${input.providerMessageId}`;
   const customerCostMicroCents = applyUsageMarkup(
     input.sesCostMicroCents,
-    entitlement.product === "team_ai" ? "team_ai" : "team",
+    entitlement.product ?? "managed",
   );
   const [insertedUsageEvent] = await db
     .insert(organizationMailUsageEvent)
@@ -487,7 +486,7 @@ export const getOrganizationMailUsageOverview = async (organizationId: string) =
     hasAccess: entitlement.hasAccess,
     hasUnlimitedAccess: entitlement.hasUnlimitedAccess,
     includedSesUsageMicroCents: creditAmountMicroCents,
-    managedUsageRates: getManagedUsageRates(entitlement.product === "team_ai" ? "pro" : "managed"),
+    managedUsageRates: getManagedUsageRates(entitlement.product ?? "managed"),
     period,
     remainingIncludedSesUsageMicroCents: entitlement.hasUnlimitedAccess
       ? null

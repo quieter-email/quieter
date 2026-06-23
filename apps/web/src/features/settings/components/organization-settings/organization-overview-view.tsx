@@ -15,6 +15,7 @@ import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { Button } from "@quieter/ui";
 import { useQuery } from "@tanstack/react-query";
 import type { UserBillingOverview } from "~/features/settings/domain/billing";
+import { authClient } from "~/lib/auth";
 import { organizationApiKeysQueryOptions } from "./api-keys";
 import {
   type FullOrganization,
@@ -66,6 +67,7 @@ export const OrganizationOverviewView = ({
   pendingInvitationsCount: number;
   fullOrganization: FullOrganization;
 }) => {
+  const organizationCount = authClient.useListOrganizations().data?.length ?? 0;
   const {
     data: apiKeys,
     isError: isApiKeysError,
@@ -88,9 +90,13 @@ export const OrganizationOverviewView = ({
   const updateOrganizationReason =
     (!canUpdateOrganization && "Only admins and owners can edit team details.") || null;
   const leaveOrganizationReason =
-    (activeRole === "owner" && ownerCount <= 1 && "Assign another owner before leaving.") || null;
+    (organizationCount <= 1 && "Create another team before leaving your only team.") ||
+    (activeRole === "owner" && ownerCount <= 1 && "Assign another owner before leaving.") ||
+    null;
   const deleteOrganizationReason =
-    (!canDeleteOrganization && "Only owners can delete teams.") || null;
+    (organizationCount <= 1 && "Create another team before deleting your only team.") ||
+    (!canDeleteOrganization && "Only owners can delete teams.") ||
+    null;
   const peopleSummary = [
     formatCount(fullOrganization.members.length, "Member", "Members"),
     pendingInvitationsCount > 0 && formatCount(pendingInvitationsCount, "pending invitation"),

@@ -56,9 +56,9 @@ export type ManagedMailHeader = {
   name: string;
   value: string;
 };
-export type BillingPlan = "managed" | "personal" | "pro" | "team" | "team_ai";
+export type BillingPlan = "managed" | "pro";
 export type BillingProvider = "polar";
-export type BillingScope = "personal" | "team";
+export type BillingScope = "team";
 export type BillingSubscriptionStatus =
   | "active"
   | "canceled"
@@ -272,9 +272,11 @@ export const mailbox = pgTable(
     ownerUserId: text("ownerUserId").references(() => user.id, {
       onDelete: "cascade",
     }),
-    organizationId: text("organizationId").references(() => organization.id, {
-      onDelete: "cascade",
-    }),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, {
+        onDelete: "cascade",
+      }),
     status: text("status").$type<MailboxConnectionStatus>().notNull().default("connected"),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
@@ -552,9 +554,11 @@ export const gmailOAuthState = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     mailboxId: text("mailboxId").references(() => mailbox.id, { onDelete: "cascade" }),
-    organizationId: text("organizationId").references(() => organization.id, {
-      onDelete: "cascade",
-    }),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, {
+        onDelete: "cascade",
+      }),
     codeVerifier: text("codeVerifier").notNull(),
     returnTo: text("returnTo").notNull(),
     expiresAt: timestamp("expiresAt").notNull(),
@@ -891,10 +895,12 @@ export const billingSubscription = pgTable(
     userId: text("userId")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    organizationId: text("organizationId").references(() => organization.id, {
-      onDelete: "cascade",
-    }),
-    scope: text("scope").$type<BillingScope>().notNull().default("personal"),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, {
+        onDelete: "cascade",
+      }),
+    scope: text("scope").$type<BillingScope>().notNull().default("team"),
     provider: text("provider").$type<BillingProvider>().notNull(),
     providerSubscriptionId: text("providerSubscriptionId").notNull(),
     providerCustomerId: text("providerCustomerId"),
@@ -928,10 +934,12 @@ export const billingCreditUsageEvent = pgTable(
   {
     id: text("id").primaryKey(),
     userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
-    organizationId: text("organizationId").references(() => organization.id, {
-      onDelete: "cascade",
-    }),
-    scope: text("scope").$type<BillingScope>().notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, {
+        onDelete: "cascade",
+      }),
+    scope: text("scope").$type<BillingScope>().notNull().default("team"),
     category: text("category").$type<BillingUsageCategory>().notNull(),
     costMicroCents: bigint("costMicroCents", { mode: "number" }).notNull(),
     billableCostMicroCents: bigint("billableCostMicroCents", { mode: "number" }).notNull(),
@@ -943,11 +951,7 @@ export const billingCreditUsageEvent = pgTable(
   (table) => [
     check(
       "billing_credit_usage_event_target_check",
-      sql`(
-        (${table.scope} = 'personal' and ${table.userId} is not null and ${table.organizationId} is null)
-        or
-        (${table.scope} = 'team' and ${table.userId} is null and ${table.organizationId} is not null)
-      )`,
+      sql`${table.scope} = 'team' and ${table.userId} is null and ${table.organizationId} is not null`,
     ),
     check("billing_credit_usage_event_cost_check", sql`${table.costMicroCents} >= 0`),
     check(
@@ -1464,7 +1468,7 @@ export const authRelations = defineRelations(tables, (r) => ({
     organization: r.one.organization({
       from: r.mailbox.organizationId,
       to: r.organization.id,
-      optional: true,
+      optional: false,
     }),
   },
   gmailCredential: {
@@ -1532,7 +1536,7 @@ export const authRelations = defineRelations(tables, (r) => ({
     organization: r.one.organization({
       from: r.gmailOAuthState.organizationId,
       to: r.organization.id,
-      optional: true,
+      optional: false,
     }),
     user: r.one.user({
       from: r.gmailOAuthState.userId,
@@ -1664,7 +1668,7 @@ export const authRelations = defineRelations(tables, (r) => ({
     organization: r.one.organization({
       from: r.billingCreditUsageEvent.organizationId,
       to: r.organization.id,
-      optional: true,
+      optional: false,
     }),
     user: r.one.user({
       from: r.billingCreditUsageEvent.userId,

@@ -1,0 +1,1 @@
+ALTER TABLE "billingCreditUsageEvent" DROP CONSTRAINT "billing_credit_usage_event_target_check", ADD CONSTRAINT "billing_credit_usage_event_target_check" CHECK ("scope" = 'team' and "userId" is null and "organizationId" is not null);
