@@ -238,12 +238,17 @@ export const syncUnreportedBillingCreditUsage = async (input: { limit?: number }
     .orderBy(asc(billingCreditUsageEvent.createdAt))
     .limit(limit);
 
-  let synced = 0;
+  if (rows.length === 0) {
+    return {
+      remaining: false,
+      synced: 0,
+    };
+  }
 
-  for (const row of rows) {
-    const polarEventReportedAt = new Date();
+  const polarEventReportedAt = new Date();
 
-    await ingestPolarEvents([
+  await ingestPolarEvents(
+    rows.map((row) =>
       createPolarCreditUsageEvent({
         account: {
           externalCustomerId: `organization:${row.organizationId}`,
@@ -254,23 +259,24 @@ export const syncUnreportedBillingCreditUsage = async (input: { limit?: number }
         eventId: row.eventId,
         metadata: row.metadata ?? {},
       }),
-    ]);
+    ),
+  );
 
-    await db
-      .update(billingCreditUsageEvent)
-      .set({ polarEventReportedAt })
-      .where(
-        and(
-          eq(billingCreditUsageEvent.id, row.eventId),
-          isNull(billingCreditUsageEvent.polarEventReportedAt),
+  await db
+    .update(billingCreditUsageEvent)
+    .set({ polarEventReportedAt })
+    .where(
+      and(
+        inArray(
+          billingCreditUsageEvent.id,
+          rows.map((row) => row.eventId),
         ),
-      );
-
-    synced += 1;
-  }
+        isNull(billingCreditUsageEvent.polarEventReportedAt),
+      ),
+    );
 
   return {
     remaining: rows.length === limit,
-    synced,
+    synced: rows.length,
   };
 };
