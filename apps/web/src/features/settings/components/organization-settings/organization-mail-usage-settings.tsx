@@ -15,6 +15,10 @@ import {
   ProgressTrack,
   Switch,
   SwitchThumb,
+  Tooltip,
+  TooltipArrow,
+  TooltipContent,
+  TooltipTrigger,
   toast,
 } from "@quieter/ui";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -42,14 +46,14 @@ export const organizationMailUsageQueryOptions = (organizationId: string, enable
   });
 
 const moneyFormatter = new Intl.NumberFormat("en-US", {
-  currency: "USD",
+  currency: "EUR",
   maximumFractionDigits: 2,
   minimumFractionDigits: 2,
   style: "currency",
 });
 
 const rateFormatter = new Intl.NumberFormat("en-US", {
-  currency: "USD",
+  currency: "EUR",
   maximumFractionDigits: 4,
   minimumFractionDigits: 3,
   style: "currency",
@@ -100,6 +104,106 @@ const Price = ({ label, suffix, value }: { label: string; suffix: string; value:
     </p>
   </div>
 );
+
+const usageBreakdownConfig = [
+  {
+    className: "bg-sky-500 dark:bg-sky-400",
+    kind: "aiChat",
+    label: "AI chat",
+  },
+  {
+    className: "bg-amber-500 dark:bg-amber-400",
+    kind: "usefulDetails",
+    label: "Useful details",
+  },
+  {
+    className: "bg-violet-500 dark:bg-violet-400",
+    kind: "autoLabel",
+    label: "Auto-label",
+  },
+  {
+    className: "bg-emerald-500 dark:bg-emerald-400",
+    kind: "inboundMail",
+    label: "Inbound mail",
+  },
+  {
+    className: "bg-orange-500 dark:bg-orange-400",
+    kind: "outboundMail",
+    label: "Outbound mail",
+  },
+  {
+    className: "bg-muted-foreground/50",
+    kind: "other",
+    label: "Other",
+  },
+] as const;
+
+const UsageBreakdown = ({
+  breakdown,
+  creditAmountCents,
+}: {
+  breakdown: Array<{
+    costCents: number;
+    kind: (typeof usageBreakdownConfig)[number]["kind"];
+  }>;
+  creditAmountCents: number;
+}) => {
+  const costs = new Map(breakdown.map((item) => [item.kind, item.costCents]));
+  const items = usageBreakdownConfig.map((item) => ({
+    ...item,
+    costCents: costs.get(item.kind) ?? 0,
+  }));
+  const totalCostCents = items.reduce((total, item) => total + item.costCents, 0);
+  const usedPercent =
+    creditAmountCents > 0 ? Math.min(100, (totalCostCents / creditAmountCents) * 100) : 0;
+
+  return (
+    <div className="mt-3">
+      <div className="flex h-3 overflow-hidden rounded-full bg-muted shadow-inner ring-1 ring-border/60">
+        <div className="flex h-full min-w-1 overflow-hidden" style={{ width: `${usedPercent}%` }}>
+          {items.flatMap((item) => {
+            if (item.costCents <= 0) return [];
+
+            const percentage =
+              totalCostCents > 0 ? Math.round((item.costCents / totalCostCents) * 100) : 0;
+
+            return [
+              <Tooltip key={item.kind}>
+                <TooltipTrigger
+                  className={`${item.className} min-w-1 transition-[filter] hover:brightness-110`}
+                  render={<span />}
+                  style={{ flexBasis: 0, flexGrow: item.costCents }}
+                />
+                <TooltipContent className="min-w-40 px-3 py-2">
+                  <div className="flex items-center justify-between gap-5">
+                    <span>{item.label}</span>
+                    <span className="font-mono font-medium">
+                      {moneyFormatter.format(item.costCents / centsPerDollar)}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-muted-foreground">{percentage}% of usage</p>
+                  <TooltipArrow />
+                </TooltipContent>
+              </Tooltip>,
+            ];
+          })}
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-x-5 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
+        {items.map((item) => (
+          <div className="flex min-w-0 items-center gap-2 text-xs" key={item.kind}>
+            <span className={`size-2 shrink-0 rounded-full ${item.className}`} />
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">{item.label}</span>
+            <span className="font-mono text-foreground">
+              {moneyFormatter.format(item.costCents / centsPerDollar)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const ManagedUsageSettingsForm = ({
   canManageOrganizationMailUsage,
@@ -248,9 +352,14 @@ const ManagedUsageSettingsForm = ({
           </p>
         </div>
 
-        <Progress className="mt-3" max={100} value={usagePercent}>
-          <ProgressTrack className="h-1.5 rounded-sm">
-            <ProgressIndicator className="rounded-sm" />
+        <UsageBreakdown
+          breakdown={overview.usage.breakdown}
+          creditAmountCents={includedUsageCents}
+        />
+
+        <Progress className="sr-only" max={100} value={usagePercent}>
+          <ProgressTrack>
+            <ProgressIndicator />
           </ProgressTrack>
         </Progress>
       </div>
@@ -306,7 +415,7 @@ const ManagedUsageSettingsForm = ({
             <NumberField
               disabled={!canManageOrganizationMailUsage || !overageEnabled}
               format={{
-                currency: "USD",
+                currency: "EUR",
                 maximumFractionDigits: 2,
                 minimumFractionDigits: 2,
                 style: "currency",

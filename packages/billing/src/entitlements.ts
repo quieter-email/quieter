@@ -43,10 +43,16 @@ type BillingEntitlement = {
 type SubscriptionRow = {
   currentPeriodEnd: Date;
   currentPeriodStart: Date;
+  metadata: Record<string, string> | null;
   plan: StoredBillingPlan;
   status: BillingSubscriptionStatus;
   updatedAt: Date;
 };
+
+export const subscriptionBelongsToOrganization = (
+  metadata: Record<string, string> | null,
+  organizationId: string,
+) => metadata?.quieterOrganizationId === organizationId;
 
 const getActiveOverride = async (userId: string) => {
   const [override] = await db
@@ -113,6 +119,7 @@ const getOrganizationSubscription = async (organizationId: string) => {
     .select({
       currentPeriodEnd: billingSubscription.currentPeriodEnd,
       currentPeriodStart: billingSubscription.currentPeriodStart,
+      metadata: billingSubscription.metadata,
       plan: billingSubscription.plan,
       status: billingSubscription.status,
       updatedAt: billingSubscription.updatedAt,
@@ -125,7 +132,11 @@ const getOrganizationSubscription = async (organizationId: string) => {
       ),
     )
     .orderBy(desc(billingSubscription.updatedAt));
-  const row = rows.find((candidate) => isActiveBillingStatus(candidate.status));
+  const row = rows.find(
+    (candidate) =>
+      isActiveBillingStatus(candidate.status) &&
+      subscriptionBelongsToOrganization(candidate.metadata, organizationId),
+  );
 
   return row ? toBillingAccount(row, organizationId) : null;
 };

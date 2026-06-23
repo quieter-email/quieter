@@ -161,6 +161,7 @@ const reportAutoLabelUsage = async (event: {
       mailboxId: event.mailboxId,
       model: GMAIL_AUTO_LABEL_MODEL,
       promptTokens: event.promptTokens,
+      usageKind: "autoLabel",
       userId: event.userId,
     });
     await db

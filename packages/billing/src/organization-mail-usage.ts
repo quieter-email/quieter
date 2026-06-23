@@ -494,6 +494,7 @@ export const getOrganizationMailUsageOverview = async (organizationId: string) =
     settings,
     usage: {
       billableCostMicroCents: creditUsage?.billableCostMicroCents ?? 0,
+      breakdown: creditUsage?.breakdown ?? [],
       sesCostMicroCents: usedCreditMicroCents,
     },
   };

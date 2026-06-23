@@ -8,11 +8,12 @@ import { ResourceNotFound } from "@polar-sh/sdk/models/errors/resourcenotfound.j
 import { billingSubscription, db, mailbox, member, organization } from "@quieter/database";
 import { serverEnv } from "@quieter/env/server";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits";
+import { getBillingCreditUsage, recordBillingCreditUsage, type BillingUsageKind } from "./credits";
 import {
   getOrganizationBillingEntitlement,
   hasUserBillingFeature,
   isActiveBillingStatus,
+  subscriptionBelongsToOrganization,
 } from "./entitlements";
 import {
   BILLING_PRODUCTS,
@@ -167,6 +168,7 @@ export const createBillingCheckout = async (input: {
   const rows = await db
     .select({
       plan: billingSubscription.plan,
+      metadata: billingSubscription.metadata,
       providerSubscriptionId: billingSubscription.providerSubscriptionId,
       status: billingSubscription.status,
       updatedAt: billingSubscription.updatedAt,
@@ -179,7 +181,11 @@ export const createBillingCheckout = async (input: {
       ),
     )
     .orderBy(desc(billingSubscription.updatedAt));
-  const activeSubscription = rows.find((row) => isActiveBillingStatus(row.status));
+  const activeSubscription = rows.find(
+    (row) =>
+      isActiveBillingStatus(row.status) &&
+      subscriptionBelongsToOrganization(row.metadata, input.organizationId),
+  );
 
   if (activeSubscription) {
     if (activeSubscription.plan !== input.product) {
@@ -292,6 +298,10 @@ const serializeEntitlement = async (
     usage: usage
       ? {
           billableCostCents: usage.billableCostMicroCents / 1_000_000,
+          breakdown: usage.breakdown.map((item) => ({
+            costCents: item.costMicroCents / 1_000_000,
+            kind: item.kind,
+          })),
           costCents: usage.costMicroCents / 1_000_000,
           remainingCreditCents:
             Math.max(0, usage.creditAmountMicroCents - usage.costMicroCents) / 1_000_000,
@@ -471,6 +481,7 @@ export const reportAiUsage = async (input: {
   mailboxId?: string;
   model: keyof typeof aiUsageRates;
   promptTokens: number;
+  usageKind: Extract<BillingUsageKind, "aiChat" | "autoLabel" | "usefulDetails">;
   userId: string;
 }) => {
   const rates = aiUsageRates[input.model];
@@ -504,6 +515,7 @@ export const reportAiUsage = async (input: {
       completionTokens: input.completionTokens,
       model: input.model,
       promptTokens: input.promptTokens,
+      usageKind: input.usageKind,
     },
   });
 };

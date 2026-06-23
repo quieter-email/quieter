@@ -37,6 +37,10 @@ const serializeOverview = async (organizationId: string) => {
     },
     usage: {
       billableCostCents: toCents(overview.usage.billableCostMicroCents),
+      breakdown: overview.usage.breakdown.map((item) => ({
+        costCents: item.costMicroCents / microCentsPerCent,
+        kind: item.kind,
+      })),
       managedUsageCostCents: toCents(overview.usage.sesCostMicroCents),
     },
   };

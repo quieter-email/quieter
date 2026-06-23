@@ -256,6 +256,7 @@ export const runChatGeneration = async (runId: string) => {
           mailboxId: run.mailboxId,
           model,
           promptTokens: usage.promptTokens,
+          usageKind: "aiChat",
           userId: run.userId,
         }),
       );

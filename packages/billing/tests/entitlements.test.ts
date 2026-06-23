@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isActiveBillingStatus } from "../src/entitlements";
+import { isActiveBillingStatus, subscriptionBelongsToOrganization } from "../src/entitlements";
 import { BILLING_PRODUCTS, productHasAi, productHasManagedMail } from "../src/plans";
 
 describe("billing entitlement statuses", () => {
@@ -10,6 +10,25 @@ describe("billing entitlement statuses", () => {
     expect(isActiveBillingStatus("past_due")).toBe(false);
     expect(isActiveBillingStatus("canceled")).toBe(false);
     expect(isActiveBillingStatus("expired")).toBe(false);
+  });
+});
+
+describe("organization subscription ownership", () => {
+  test("requires subscription metadata for the exact team", () => {
+    expect(
+      subscriptionBelongsToOrganization(
+        { quieterOrganizationId: "organization-a" },
+        "organization-a",
+      ),
+    ).toBe(true);
+    expect(
+      subscriptionBelongsToOrganization(
+        { quieterOrganizationId: "organization-a" },
+        "organization-b",
+      ),
+    ).toBe(false);
+    expect(subscriptionBelongsToOrganization({}, "organization-a")).toBe(false);
+    expect(subscriptionBelongsToOrganization(null, "organization-a")).toBe(false);
   });
 });
 
