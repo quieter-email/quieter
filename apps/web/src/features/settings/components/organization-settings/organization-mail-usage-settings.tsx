@@ -485,6 +485,7 @@ const ManagedUsageSettingsForm = ({
                   key={milestone.id}
                 >
                   <NumberField
+                    className="w-auto shrink-0"
                     disabled={!canManageOrganizationMailUsage}
                     format={{
                       maximumFractionDigits: 0,
