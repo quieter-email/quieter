@@ -22,6 +22,9 @@ export const BILLING_USAGE_KINDS = [
 
 export type BillingUsageKind = (typeof BILLING_USAGE_KINDS)[number];
 
+const sanitizePolarEventMetadata = (metadata: Record<string, string | number | boolean>) =>
+  Object.fromEntries(Object.entries(metadata).filter(([, value]) => value !== ""));
+
 export const createPolarCreditUsageEvent = (input: {
   account: Pick<BillingAccount, "externalCustomerId">;
   billableCostMicroCents: number;
@@ -38,7 +41,7 @@ export const createPolarCreditUsageEvent = (input: {
     credits: input.costMicroCents / MICROCENTS_PER_CENT,
     creditUsageEventId: input.eventId,
     totalCostCents: input.costMicroCents / MICROCENTS_PER_CENT,
-    ...input.metadata,
+    ...sanitizePolarEventMetadata(input.metadata),
   },
   name: BILLING_CREDIT_USAGE_EVENT_NAME,
   organizationId: getPolarApiOrganizationId(),

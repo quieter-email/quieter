@@ -17,6 +17,7 @@ describe("billing credits", () => {
       costMicroCents: 2_500_000,
       eventId: "event-1",
       metadata: {
+        chatId: "",
         direction: "outbound",
       },
     });
@@ -26,5 +27,6 @@ describe("billing credits", () => {
     expect(event.metadata.credits).toBe(2.5);
     expect(event.metadata.totalCostCents).toBe(2.5);
     expect(event.metadata.billableCostCents).toBe(0);
+    expect("chatId" in event.metadata).toBe(false);
   });
 });
