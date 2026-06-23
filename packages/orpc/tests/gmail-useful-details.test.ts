@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildGmailUsefulDetailPreferenceProfile,
   materializeGmailUsefulDetail,
+  materializeGmailVerificationCode,
 } from "../src/gmail-useful-details/service";
 
 const NOW = new Date("2026-06-14T12:00:00.000Z");
@@ -36,6 +37,50 @@ const candidate = (input: Partial<GmailUsefulDetailCandidate>): GmailUsefulDetai
 });
 
 describe("Gmail useful-detail materialization", () => {
+  test("extracts verification codes without model classification", () => {
+    const detail = materializeGmailVerificationCode({
+      message: message({
+        bodyText: "Use code 123 456 to verify your sign-in. This code expires soon.",
+        from: "Example <login@example.com>",
+        subject: "Your verification code",
+      }),
+      now: NOW,
+    });
+
+    expect(detail).toMatchObject({
+      code: "123456",
+      dedupeKey: "message:message-1",
+      kind: "verification_code",
+      title: "Example <login@example.com>",
+    });
+    expect(detail?.expiresAt.toISOString()).toBe("2026-06-14T12:28:00.000Z");
+  });
+
+  test("does not extract stale verification codes", () => {
+    const detail = materializeGmailVerificationCode({
+      message: message({
+        bodyText: "Your one-time code is 123456.",
+        internalDate: String(NOW.getTime() - 1000 * 60 * 31),
+        subject: "Security code",
+      }),
+      now: NOW,
+    });
+
+    expect(detail).toBeNull();
+  });
+
+  test("does not treat unrelated numeric strings as verification codes", () => {
+    const detail = materializeGmailVerificationCode({
+      message: message({
+        bodyText: "Your order number is 123456 and the total is 42.00.",
+        subject: "Order confirmation",
+      }),
+      now: NOW,
+    });
+
+    expect(detail).toBeNull();
+  });
+
   test("uses the model-selected verification-code window", () => {
     const detail = materializeGmailUsefulDetail({
       candidate: candidate({

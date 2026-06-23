@@ -156,6 +156,48 @@ const normalizeCode = (value: string | null) => {
     : null;
 };
 
+const verificationIntentPattern =
+  /\b(2fa|authentication|authorize|confirm|identity|login|one[-\s]?time|otp|passcode|sign[-\s]?in|two[-\s]?factor|verification|verify)\b/i;
+const verificationCodePattern =
+  /\b(?:code|otp|passcode|pin)\b[^A-Za-z0-9]{0,24}([A-Z0-9]{4,16}|[A-Z0-9]+(?:[ -][A-Z0-9]+)+)\b/gi;
+const numericVerificationCodePattern = /\b(\d(?:[ -]?\d){3,7})\b/g;
+
+const buildVerificationCodeSearchText = (message: MessageListItem) =>
+  [message.subject, message.snippet, message.bodyText, message.bodyHtml]
+    .filter(Boolean)
+    .join("\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&(?:nbsp|#160);/gi, " ")
+    .slice(0, 12_000);
+
+const looksLikeVerificationContext = (text: string, index: number, length: number) => {
+  const window = text.slice(Math.max(0, index - 80), Math.min(text.length, index + length + 80));
+  return verificationIntentPattern.test(window);
+};
+
+const extractVerificationCodeFromMessage = (message: MessageListItem) => {
+  const text = buildVerificationCodeSearchText(message);
+  if (!verificationIntentPattern.test(text)) {
+    return null;
+  }
+
+  for (const match of text.matchAll(verificationCodePattern)) {
+    const code = normalizeCode(match[1] ?? null);
+    if (code && looksLikeVerificationContext(text, match.index ?? 0, match[0].length)) {
+      return code;
+    }
+  }
+
+  for (const match of text.matchAll(numericVerificationCodePattern)) {
+    const code = normalizeCode(match[1] ?? null);
+    if (code && looksLikeVerificationContext(text, match.index ?? 0, match[0].length)) {
+      return code;
+    }
+  }
+
+  return null;
+};
+
 const normalizeTrackingKey = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 const parseExpectedAt = (value: string | null) => {
@@ -341,6 +383,44 @@ export const materializeGmailUsefulDetail = ({
   };
 };
 
+export const materializeGmailVerificationCode = ({
+  message,
+  now = new Date(),
+}: {
+  message: MessageListItem;
+  now?: Date;
+}): MaterializedGmailUsefulDetail => {
+  const code = extractVerificationCodeFromMessage(message);
+  if (!code) {
+    return null;
+  }
+
+  const receivedAt = getMessageReceivedAt(message, now);
+  const expiresAt = new Date(receivedAt.getTime() + MAX_RELEVANCE_HORIZON_MS.verification_code);
+  if (expiresAt <= now) {
+    return null;
+  }
+
+  return {
+    carrier: null,
+    code,
+    dedupeKey: `message:${message.id}`,
+    eventAt: null,
+    expectedAt: null,
+    expiresAt,
+    kind: "verification_code",
+    location: null,
+    receivedAt,
+    reference: null,
+    relevanceSource: "inferred",
+    relevantFrom: receivedAt,
+    status: null,
+    summary: null,
+    title: trimText(message.from ?? null, 80) ?? defaultTitles.verification_code,
+    trackingNumber: null,
+  };
+};
+
 export const isGmailUsefulDetailCandidate = (
   message: MessageListItem | null,
 ): message is MessageListItem =>
@@ -423,6 +503,100 @@ const reportUsage = async (event: {
       })
       .where(eq(gmailUsefulDetailEvent.id, event.id));
   }
+};
+
+const upsertGmailUsefulDetail = async ({
+  detail,
+  event,
+  gmailMessageId,
+  message,
+  model,
+  usage,
+  source,
+}: {
+  detail: NonNullable<MaterializedGmailUsefulDetail>;
+  event: typeof gmailUsefulDetailEvent.$inferSelect;
+  gmailMessageId: string;
+  message: MessageListItem;
+  model: string | null;
+  source: string | null;
+  usage: { completionTokens: number | null; promptTokens: number | null };
+}) => {
+  const now = new Date();
+  const encryptedCode = detail.code ? encryptSecret(detail.code) : null;
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(gmailUsefulDetail)
+      .values({
+        carrier: detail.carrier,
+        createdAt: now,
+        dedupeKey: detail.dedupeKey,
+        deliveryStatus: detail.status,
+        encryptedCode,
+        eventAt: detail.eventAt,
+        expectedAt: detail.expectedAt,
+        expiresAt: detail.expiresAt,
+        gmailMessageId,
+        gmailThreadId: message.threadId ?? null,
+        id: randomUUID(),
+        kind: detail.kind,
+        location: detail.location,
+        mailboxId: event.mailboxId,
+        receivedAt: detail.receivedAt,
+        reference: detail.reference,
+        relevanceSource: detail.relevanceSource,
+        relevantFrom: detail.relevantFrom,
+        source,
+        summary: detail.summary,
+        title: detail.title,
+        trackingNumber: detail.trackingNumber,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        set: {
+          carrier: detail.carrier,
+          deliveryStatus: detail.status,
+          encryptedCode,
+          eventAt: detail.eventAt,
+          expectedAt: detail.expectedAt,
+          expiresAt: detail.expiresAt,
+          gmailMessageId,
+          gmailThreadId: message.threadId ?? null,
+          location: detail.location,
+          receivedAt: detail.receivedAt,
+          reference: detail.reference,
+          relevanceSource: detail.relevanceSource,
+          relevantFrom: detail.relevantFrom,
+          source,
+          summary: detail.summary,
+          title: detail.title,
+          trackingNumber: detail.trackingNumber,
+          updatedAt: now,
+        },
+        target: [gmailUsefulDetail.mailboxId, gmailUsefulDetail.kind, gmailUsefulDetail.dedupeKey],
+      });
+    await tx
+      .update(gmailUsefulDetailEvent)
+      .set({
+        completionTokens: usage.completionTokens,
+        lastError: null,
+        model,
+        nextAttemptAt: null,
+        processedAt: now,
+        promptTokens: usage.promptTokens,
+        updatedAt: now,
+        usageReportedAt: model ? null : now,
+      })
+      .where(eq(gmailUsefulDetailEvent.id, event.id));
+  });
+  return {
+    ...event,
+    completionTokens: usage.completionTokens,
+    model,
+    processedAt: now,
+    promptTokens: usage.promptTokens,
+    usageReportedAt: model ? event.usageReportedAt : now,
+  };
 };
 
 const markEventProcessedWithoutUsage = async (eventId: string) => {
@@ -568,6 +742,23 @@ export const processGmailUsefulDetailMessage = async ({
       await markEventProcessedWithoutUsage(event.id);
       return;
     }
+
+    const verificationCode = preferences.avoidKinds.includes("verification_code")
+      ? null
+      : materializeGmailVerificationCode({ message });
+    if (verificationCode) {
+      event = await upsertGmailUsefulDetail({
+        detail: verificationCode,
+        event,
+        gmailMessageId,
+        message,
+        model: null,
+        source,
+        usage: { completionTokens: null, promptTokens: null },
+      });
+      return;
+    }
+
     const candidate = await extractGmailUsefulDetail({
       message,
       middleware: [usageMiddleware],
@@ -592,82 +783,15 @@ export const processGmailUsefulDetailMessage = async ({
       const [processed] = await eventUpdate.returning();
       event = processed ?? event;
     } else {
-      const encryptedCode = detail.code ? encryptSecret(detail.code) : null;
-      await db.transaction(async (tx) => {
-        await tx
-          .insert(gmailUsefulDetail)
-          .values({
-            carrier: detail.carrier,
-            createdAt: now,
-            dedupeKey: detail.dedupeKey,
-            deliveryStatus: detail.status,
-            encryptedCode,
-            eventAt: detail.eventAt,
-            expectedAt: detail.expectedAt,
-            expiresAt: detail.expiresAt,
-            gmailMessageId,
-            gmailThreadId: message.threadId ?? null,
-            id: randomUUID(),
-            kind: detail.kind,
-            location: detail.location,
-            mailboxId,
-            receivedAt: detail.receivedAt,
-            reference: detail.reference,
-            relevanceSource: detail.relevanceSource,
-            relevantFrom: detail.relevantFrom,
-            source,
-            summary: detail.summary,
-            title: detail.title,
-            trackingNumber: detail.trackingNumber,
-            updatedAt: now,
-          })
-          .onConflictDoUpdate({
-            set: {
-              carrier: detail.carrier,
-              deliveryStatus: detail.status,
-              encryptedCode,
-              eventAt: detail.eventAt,
-              expectedAt: detail.expectedAt,
-              expiresAt: detail.expiresAt,
-              gmailMessageId,
-              gmailThreadId: message.threadId ?? null,
-              location: detail.location,
-              receivedAt: detail.receivedAt,
-              reference: detail.reference,
-              relevanceSource: detail.relevanceSource,
-              relevantFrom: detail.relevantFrom,
-              source,
-              summary: detail.summary,
-              title: detail.title,
-              trackingNumber: detail.trackingNumber,
-              updatedAt: now,
-            },
-            target: [
-              gmailUsefulDetail.mailboxId,
-              gmailUsefulDetail.kind,
-              gmailUsefulDetail.dedupeKey,
-            ],
-          });
-        await tx
-          .update(gmailUsefulDetailEvent)
-          .set({
-            completionTokens,
-            lastError: null,
-            model: GMAIL_USEFUL_DETAIL_MODEL,
-            nextAttemptAt: null,
-            processedAt: now,
-            promptTokens,
-            updatedAt: now,
-          })
-          .where(eq(gmailUsefulDetailEvent.id, event.id));
-      });
-      event = {
-        ...event,
-        completionTokens,
+      event = await upsertGmailUsefulDetail({
+        detail,
+        event,
+        gmailMessageId,
+        message,
         model: GMAIL_USEFUL_DETAIL_MODEL,
-        processedAt: now,
-        promptTokens,
-      };
+        source,
+        usage: { completionTokens, promptTokens },
+      });
       const [latestSettings] = await db
         .select({ enabled: gmailUsefulDetailSettings.enabled })
         .from(gmailUsefulDetailSettings)
