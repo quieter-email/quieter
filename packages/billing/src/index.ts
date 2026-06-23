@@ -47,6 +47,16 @@ export const createBillingCheckoutMetadata = (input: {
   };
 };
 
+export const createBillingPortalSession = (input: {
+  organizationId: string;
+  returnUrl: string;
+  userId: string;
+}) => ({
+  externalCustomerId: `organization:${input.organizationId}`,
+  externalMemberId: input.userId,
+  returnUrl: input.returnUrl,
+});
+
 const aiUsageRates = {
   "anthropic/claude-haiku-4.5": { completion: 500, prompt: 100 },
   "deepseek/deepseek-v4-flash": { completion: 18, prompt: 9 },
@@ -256,10 +266,13 @@ export const createBillingPortal = async (input: {
   });
   const session = await (
     await getPolarClient()
-  ).customerSessions.create({
-    externalCustomerId: `organization:${input.organizationId}`,
-    returnUrl,
-  });
+  ).customerSessions.create(
+    createBillingPortalSession({
+      organizationId: input.organizationId,
+      returnUrl,
+      userId: input.userId,
+    }),
+  );
 
   return { portalUrl: session.customerPortalUrl };
 };

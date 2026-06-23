@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createBillingCheckoutMetadata } from "../src";
+import { createBillingCheckoutMetadata, createBillingPortalSession } from "../src";
 import { resolvePolarServer } from "../src/polar";
 
 describe("Polar server selection", () => {
@@ -39,5 +39,21 @@ describe("Polar checkout metadata", () => {
 
     expect(metadata.customerMetadata.quieterOrganizationId).toBe("organization-1");
     expect(metadata.metadata.quieterOrganizationId).toBe("organization-1");
+  });
+});
+
+describe("Polar customer portal", () => {
+  test("opens team customer sessions for the current member", () => {
+    expect(
+      createBillingPortalSession({
+        organizationId: "organization-1",
+        returnUrl: "https://quieter.email/settings",
+        userId: "user-1",
+      }),
+    ).toEqual({
+      externalCustomerId: "organization:organization-1",
+      externalMemberId: "user-1",
+      returnUrl: "https://quieter.email/settings",
+    });
   });
 });
