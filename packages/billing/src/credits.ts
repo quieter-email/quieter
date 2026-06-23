@@ -4,7 +4,7 @@ import {
   db,
   type BillingUsageCategory,
 } from "@quieter/database";
-import { and, asc, count, eq, gt, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { BillingAccount } from "./entitlements";
 import { getPolarApiOrganizationId, ingestPolarEvents } from "./polar";
 
@@ -210,16 +210,6 @@ const unreportedPositiveCreditUsageFilter = and(
   isNull(billingCreditUsageEvent.polarEventReportedAt),
   gt(billingCreditUsageEvent.costMicroCents, 0),
 );
-
-export const countPendingPolarCreditUsageEvents = async () => {
-  const [result] = await db
-    .select({ count: count() })
-    .from(billingCreditUsageEvent)
-    .innerJoin(billingSubscription, currentActiveSubscriptionUnreportedUsageFilter)
-    .where(unreportedPositiveCreditUsageFilter);
-
-  return result?.count ?? 0;
-};
 
 export const syncUnreportedBillingCreditUsage = async (input: { limit?: number } = {}) => {
   const limit = input.limit ?? 100;
