@@ -380,7 +380,9 @@ export default $config({
           },
         },
       );
-      gmailLiveSyncUrl = gmailRealtimeWorker.url.apply((url) => `${url}/gmail/live`);
+      gmailLiveSyncUrl = gmailRealtimeWorker.url.apply(
+        (url) => `${url.replace(/^http/, "ws")}/gmail/live`,
+      );
       gmailPubSubIngressUrl = gmailRealtimeWorker.url.apply((url) => `${url}/gmail/pubsub`);
     }
 
