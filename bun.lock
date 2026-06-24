@@ -154,6 +154,7 @@
         "@aws-sdk/client-sqs": "catalog:",
         "@aws-sdk/lib-dynamodb": "catalog:",
         "@quieter/billing": "workspace:*",
+        "@quieter/database": "workspace:*",
         "@quieter/env": "workspace:*",
         "@quieter/orpc": "workspace:*",
         "jose": "5.10.0",
