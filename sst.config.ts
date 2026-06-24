@@ -3,10 +3,20 @@
 
 export default $config({
   app(input) {
+    const hasCloudflareCredentials =
+      !!process.env.CLOUDFLARE_API_TOKEN ||
+      (!!process.env.CLOUDFLARE_API_KEY && !!process.env.CLOUDFLARE_EMAIL);
+    const providers =
+      input.stage === "production"
+        ? { cloudflare: "6.15.0", vercel: "4.6.0" }
+        : hasCloudflareCredentials
+          ? { cloudflare: "6.15.0" }
+          : undefined;
+
     return {
       home: "aws",
       name: "quieter",
-      providers: input.stage === "production" ? { vercel: "4.6.0" } : undefined,
+      providers,
       protect: input.stage === "production",
       removal: input.stage === "production" ? "retain" : "remove",
     };
@@ -43,6 +53,21 @@ export default $config({
               type: "service",
             },
           ],
+        },
+      ],
+    });
+    new aws.s3.BucketLifecycleConfigurationV2("MailBucketLifecycle", {
+      bucket: mailBucket.name,
+      rules: [
+        {
+          expiration: {
+            days: 1,
+          },
+          filter: {
+            prefix: mailObjectKeyPrefix,
+          },
+          id: "expire-ses-landing-objects",
+          status: "Enabled",
         },
       ],
     });
@@ -93,6 +118,13 @@ export default $config({
 
     const databaseUrl = env.DATABASE_URL;
     const polarAccessToken = env.POLAR_ACCESS_TOKEN;
+    const r2Environment = {
+      R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID ?? "",
+      R2_ACCOUNT_ID: env.R2_ACCOUNT_ID ?? "",
+      R2_BUCKET: env.R2_BUCKET ?? "",
+      R2_ENDPOINT: env.R2_ENDPOINT ?? "",
+      R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY ?? "",
+    };
 
     mailReceiptTopic.subscribe("MailReceiptProcessor", {
       environment: {
@@ -100,6 +132,7 @@ export default $config({
         POLAR_ACCESS_TOKEN: polarAccessToken,
         POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
         POLAR_SANDBOX: polarSandbox,
+        ...r2Environment,
       },
       handler: "packages/aws/src/receipt.handler",
       link: [mailBucket],
@@ -185,10 +218,14 @@ export default $config({
     gmailLiveSyncApi.route("$connect", gmailLiveSyncHandler.arn);
     gmailLiveSyncApi.route("$disconnect", gmailLiveSyncHandler.arn);
     gmailLiveSyncApi.route("ping", gmailLiveSyncHandler.arn);
-    const gmailLiveSyncUrl = gmailLiveSyncApi.url;
+    let gmailLiveSyncUrl: $util.Output<string> = gmailLiveSyncApi.url;
 
     let gmailPubSubIngressUrl: $util.Output<string> | null = null;
+    let gmailPubSubProcessUrl: $util.Output<string> | null = null;
+    let gmailPubSubProcessTokenSecretName: $util.Output<string> | null = null;
     if (gmailPubSubEnabled) {
+      const gmailPubSubProcessToken = new sst.Secret("GmailPubSubProcessToken");
+      gmailPubSubProcessTokenSecretName = gmailPubSubProcessToken.name;
       const gmailPubSubDeadLetterQueue = new sst.aws.Queue("GmailPubSubDeadLetterQueue", {
         fifo: true,
         transform: {
@@ -247,11 +284,12 @@ export default $config({
       });
       gmailPubSubIngress.route("POST /", {
         environment: {
+          DATABASE_URL: databaseUrl,
           ...gmailPubSubEnvironment,
           GMAIL_PUBSUB_QUEUE_URL: gmailPubSubQueue.url,
         },
         handler: "packages/aws/src/gmail-pubsub-ingress.handler",
-        link: [gmailPubSubQueue],
+        link: [gmailPubSubQueue, gmailLiveSyncApi, gmailLiveSyncConnections],
         timeout: "30 seconds",
       });
       gmailPubSubIngressUrl = gmailPubSubIngress.url;
@@ -268,11 +306,90 @@ export default $config({
         },
         schedule: "rate(15 minutes)",
       });
+
+      const gmailPubSubProcess = new sst.aws.Function("GmailPubSubProcess", {
+        environment: {
+          DATABASE_URL: databaseUrl,
+          GMAIL_PUBSUB_PROCESS_TOKEN: gmailPubSubProcessToken.value,
+          GMAIL_TOKEN_ENCRYPTION_KEY: gmailTokenEncryptionKey,
+          GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: gmailTokenEncryptionKeyCurrent,
+          GOOGLE_GMAIL_CLIENT_ID: googleGmailClientId,
+          GOOGLE_GMAIL_CLIENT_SECRET: googleGmailClientSecret,
+          OPENROUTER_API_KEY: openRouterApiKey,
+          POLAR_ACCESS_TOKEN: polarAccessToken,
+          POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
+          POLAR_SANDBOX: polarSandbox,
+        },
+        handler: "packages/aws/src/gmail-pubsub-process.handler",
+        link: [gmailLiveSyncApi, gmailLiveSyncConnections, gmailPubSubProcessToken],
+        timeout: "15 minutes",
+        url: true,
+      });
+      gmailPubSubProcessUrl = gmailPubSubProcess.url;
+
+      const gmailPubSubCloudflareDeadLetterQueue = new sst.cloudflare.Queue(
+        "GmailPubSubCloudflareDeadLetterQueue",
+      );
+      const gmailPubSubCloudflareQueue = new sst.cloudflare.Queue("GmailPubSubCloudflareQueue", {
+        dlq: {
+          queue: gmailPubSubCloudflareDeadLetterQueue.nodes.queue.queueName,
+          retry: 10,
+        },
+        maxConcurrency: 20,
+      });
+      const gmailLiveSyncMailbox = new sst.cloudflare.DurableObject("GmailLiveSyncMailbox", {
+        className: "GmailLiveSyncMailbox",
+      });
+      const gmailRealtimeWorker = new sst.cloudflare.Worker("GmailRealtimeWorker", {
+        compatibility: {
+          date: "2026-06-24",
+          flags: ["nodejs_compat"],
+        },
+        environment: {
+          GMAIL_PUBSUB_PROCESS_URL: gmailPubSubProcess.url,
+          GMAIL_PUBSUB_PUSH_AUDIENCE: gmailPubSubEnvironment.GMAIL_PUBSUB_PUSH_AUDIENCE,
+          GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT:
+            gmailPubSubEnvironment.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT,
+          GMAIL_PUBSUB_SUBSCRIPTION: gmailPubSubEnvironment.GMAIL_PUBSUB_SUBSCRIPTION,
+        },
+        handler: "packages/cloudflare/src/worker.ts",
+        link: [
+          gmailLiveSyncMailbox,
+          gmailLiveSyncTokenSecret,
+          gmailPubSubCloudflareQueue,
+          gmailPubSubProcessToken,
+        ],
+        migrations: [
+          {
+            newSqliteClasses: [gmailLiveSyncMailbox.className],
+            tag: "v1",
+          },
+        ],
+        url: true,
+      });
+      gmailPubSubCloudflareQueue.subscribe(
+        {
+          environment: {
+            GMAIL_PUBSUB_PROCESS_URL: gmailPubSubProcess.url,
+          },
+          handler: "packages/cloudflare/src/worker.ts",
+          link: [gmailPubSubProcessToken],
+        },
+        {
+          batch: {
+            size: 1,
+            window: "0 seconds",
+          },
+        },
+      );
+      gmailLiveSyncUrl = gmailRealtimeWorker.url.apply((url) => `${url}/gmail/live`);
+      gmailPubSubIngressUrl = gmailRealtimeWorker.url.apply((url) => `${url}/gmail/pubsub`);
     }
 
     const mailIngress = new sst.aws.Function("MailIngress", {
       environment: {
         DATABASE_URL: databaseUrl,
+        ...r2Environment,
       },
       handler: "packages/aws/src/inbound.handler",
       link: [mailBucket, mailIngestToken],
@@ -286,6 +403,8 @@ export default $config({
       gmailLiveSyncTokenSecretName: gmailLiveSyncTokenSecret.name,
       gmailLiveSyncUrl,
       gmailPubSubIngressUrl,
+      gmailPubSubProcessTokenSecretName,
+      gmailPubSubProcessUrl,
       gmailPubSubPushAudience: gmailPubSubEnvironment.GMAIL_PUBSUB_PUSH_AUDIENCE || null,
       mailBucket: mailBucket.name,
       mailIngressUrl: mailIngress.url,

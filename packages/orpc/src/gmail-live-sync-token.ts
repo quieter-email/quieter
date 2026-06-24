@@ -4,6 +4,7 @@ import { z } from "zod";
 const TOKEN_LIFETIME_SECONDS = 90;
 
 const tokenPayloadSchema = z.object({
+  emailAddress: z.string().email().optional(),
   expiresAt: z.number().int().positive(),
   issuedAt: z.number().int().positive(),
   mailboxId: z.string().min(1),
@@ -19,6 +20,7 @@ const signTokenPayload = (encodedPayload: string, secret: string) =>
 
 export const createGmailLiveSyncToken = (
   input: {
+    emailAddress?: string;
     mailboxId: string;
     userId: string;
   },
@@ -27,6 +29,7 @@ export const createGmailLiveSyncToken = (
 ) => {
   const issuedAt = Math.floor(now.getTime() / 1000);
   const payload: GmailLiveSyncTokenPayload = {
+    emailAddress: input.emailAddress?.trim().toLowerCase(),
     expiresAt: issuedAt + TOKEN_LIFETIME_SECONDS,
     issuedAt,
     mailboxId: input.mailboxId,

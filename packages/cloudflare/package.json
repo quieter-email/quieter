@@ -1,0 +1,25 @@
+{
+  "name": "@quieter/cloudflare",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fmt": "oxfmt --config ../../oxfmt.json .",
+    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
+    "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/cloudflare",
+    "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/cloudflare",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "jose": "5.10.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20260620.1",
+    "@quieter/config": "workspace:*",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:"
+  }
+}

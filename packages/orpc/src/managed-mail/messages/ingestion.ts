@@ -9,6 +9,8 @@ import {
   normalizeManagedSearchValue,
 } from "../search/normalization";
 
+type RawMailObjectProvider = "r2" | "s3";
+
 const normalizeEmailAddress = (value: string) => value.trim().toLowerCase();
 
 const getReplyReferenceIds = (message: ParsedRawMailMessage) =>
@@ -49,11 +51,14 @@ const resolveManagedThreadId = async (
 export const recordInboundManagedMessage = async (input: {
   providerMessageId: string;
   rawMessage: Buffer | Uint8Array;
+  rawObjectBucket?: string;
+  rawObjectKey?: string;
+  rawObjectProvider?: RawMailObjectProvider;
   rawSizeBytes: number;
   receivedAt: Date;
   recipients: string[];
-  s3Bucket: string;
-  s3Key: string;
+  s3Bucket?: string;
+  s3Key?: string;
 }) => {
   const recipients = Array.from(
     new Set(input.recipients.map(normalizeEmailAddress).filter(Boolean)),
@@ -67,6 +72,12 @@ export const recordInboundManagedMessage = async (input: {
   if (targetMailboxes.length === 0) return [];
 
   const parsed = await parseRawMailMessage(input.rawMessage);
+  const rawObjectProvider = input.rawObjectProvider ?? "s3";
+  const rawObjectBucket = input.rawObjectBucket ?? input.s3Bucket;
+  const rawObjectKey = input.rawObjectKey ?? input.s3Key;
+  if (!rawObjectBucket || !rawObjectKey) {
+    throw new Error("Inbound managed mail requires a canonical raw object reference.");
+  }
   const insertedMailboxIds: string[] = [];
 
   for (const targetMailbox of targetMailboxes) {
@@ -99,11 +110,14 @@ export const recordInboundManagedMessage = async (input: {
           mailboxId: targetMailbox.id,
           messageHeaderId: parsed.messageHeaderId ?? null,
           providerMessageId: input.providerMessageId,
+          rawObjectBucket,
+          rawObjectKey,
+          rawObjectProvider,
           rawSizeBytes: input.rawSizeBytes,
           references: parsed.references ?? null,
           replyTo: parsed.replyTo ?? null,
-          s3Bucket: input.s3Bucket,
-          s3Key: input.s3Key,
+          s3Bucket: rawObjectProvider === "s3" ? rawObjectBucket : (input.s3Bucket ?? null),
+          s3Key: rawObjectProvider === "s3" ? rawObjectKey : (input.s3Key ?? null),
           searchText: createManagedMessageSearchText(parsed),
           sentAt,
           snippet: parsed.snippet ?? null,
@@ -197,6 +211,26 @@ export const hasManagedMailObjectReference = async (input: { s3Bucket: string; s
       and(
         eq(managedMailMessage.s3Bucket, input.s3Bucket),
         eq(managedMailMessage.s3Key, input.s3Key),
+      ),
+    )
+    .limit(1);
+
+  return !!reference;
+};
+
+export const hasManagedRawMailObjectReference = async (input: {
+  bucket: string;
+  key: string;
+  provider: RawMailObjectProvider;
+}) => {
+  const [reference] = await db
+    .select({ id: managedMailMessage.id })
+    .from(managedMailMessage)
+    .where(
+      and(
+        eq(managedMailMessage.rawObjectProvider, input.provider),
+        eq(managedMailMessage.rawObjectBucket, input.bucket),
+        eq(managedMailMessage.rawObjectKey, input.key),
       ),
     )
     .limit(1);

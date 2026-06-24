@@ -31,7 +31,11 @@ const getLiveSyncConfiguration = () => {
 
 export const getGmailLiveSyncAccess = async (input: { mailboxId: string; userId: string }) => {
   const [selectedMailbox] = await db
-    .select({ id: mailbox.id, organizationId: mailbox.organizationId })
+    .select({
+      emailAddress: mailbox.emailAddress,
+      id: mailbox.id,
+      organizationId: mailbox.organizationId,
+    })
     .from(mailbox)
     .where(
       and(
@@ -46,11 +50,15 @@ export const getGmailLiveSyncAccess = async (input: { mailboxId: string; userId:
     throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
   }
 
-  return await hasUserBillingFeature({
+  const entitlement = await hasUserBillingFeature({
     feature: "gmailAutomation",
     organizationId: selectedMailbox.organizationId ?? undefined,
     userId: input.userId,
   });
+  return {
+    ...entitlement,
+    emailAddress: selectedMailbox.emailAddress,
+  };
 };
 
 export const createGmailLiveSyncConnection = async (input: {
@@ -63,7 +71,10 @@ export const createGmailLiveSyncConnection = async (input: {
     return { url: null };
   }
 
-  const { token } = createGmailLiveSyncToken(input, configuration.secret);
+  const { token } = createGmailLiveSyncToken(
+    { ...input, emailAddress: access.emailAddress },
+    configuration.secret,
+  );
   configuration.url.searchParams.set("token", token);
 
   return { url: configuration.url.toString() };

@@ -10,6 +10,12 @@ const gmailPubSubVariableNames = [
 ] as const;
 
 const polarProductVariableNames = ["POLAR_PRODUCT_MANAGED_ID", "POLAR_PRODUCT_PRO_ID"] as const;
+const r2VariableNames = [
+  "R2_ACCESS_KEY_ID",
+  "R2_ACCOUNT_ID",
+  "R2_BUCKET",
+  "R2_SECRET_ACCESS_KEY",
+] as const;
 
 export const createSstEnv = (
   options: { production: boolean },
@@ -34,6 +40,11 @@ export const createSstEnv = (
       POLAR_PRODUCT_MANAGED_ID: runtimeEnv.POLAR_PRODUCT_MANAGED_ID,
       POLAR_PRODUCT_PRO_ID: runtimeEnv.POLAR_PRODUCT_PRO_ID,
       POLAR_SANDBOX: runtimeEnv.POLAR_SANDBOX,
+      R2_ACCESS_KEY_ID: runtimeEnv.R2_ACCESS_KEY_ID,
+      R2_ACCOUNT_ID: runtimeEnv.R2_ACCOUNT_ID,
+      R2_BUCKET: runtimeEnv.R2_BUCKET,
+      R2_ENDPOINT: runtimeEnv.R2_ENDPOINT,
+      R2_SECRET_ACCESS_KEY: runtimeEnv.R2_SECRET_ACCESS_KEY,
     },
     server: {
       DATABASE_URL: z.string().trim().url(),
@@ -52,6 +63,11 @@ export const createSstEnv = (
       POLAR_PRODUCT_MANAGED_ID: optionalString,
       POLAR_PRODUCT_PRO_ID: optionalString,
       POLAR_SANDBOX: optionalBooleanString,
+      R2_ACCESS_KEY_ID: optionalString,
+      R2_ACCOUNT_ID: optionalString,
+      R2_BUCKET: optionalString,
+      R2_ENDPOINT: optionalString,
+      R2_SECRET_ACCESS_KEY: optionalString,
     },
   });
   const missingGmailPubSubVariables = gmailPubSubVariableNames.filter((name) => !env[name]);
@@ -77,6 +93,12 @@ export const createSstEnv = (
   if (options.production && missingPolarProductVariables.length > 0) {
     throw new Error(
       `Polar product configuration is required in production: ${missingPolarProductVariables.join(", ")}`,
+    );
+  }
+  const missingR2Variables = r2VariableNames.filter((name) => !env[name]);
+  if (options.production && missingR2Variables.length > 0) {
+    throw new Error(
+      `R2 raw mail storage configuration is required in production: ${missingR2Variables.join(", ")}`,
     );
   }
 

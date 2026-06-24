@@ -11,11 +11,13 @@
     "./gmail-pubsub-consumer": "./src/gmail-pubsub-consumer.ts",
     "./gmail-pubsub-ingress": "./src/gmail-pubsub-ingress.ts",
     "./gmail-pubsub-maintenance": "./src/gmail-pubsub-maintenance.ts",
+    "./gmail-pubsub-process": "./src/gmail-pubsub-process.ts",
     "./inbound": "./src/inbound.ts",
     "./outbound": "./src/outbound.ts",
     "./receipt": "./src/receipt.ts"
   },
   "scripts": {
+    "backfill:managed-mail-r2": "bun --env-file=../../.env.local scripts/backfill-managed-mail-r2.ts",
     "check:boundaries": "bun scripts/check-import-boundaries.ts",
     "check:bundles": "bun scripts/check-handler-bundles.ts",
     "dev": "bun ../../scripts/sst.ts dev",
