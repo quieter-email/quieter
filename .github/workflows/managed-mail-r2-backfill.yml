@@ -1,0 +1,108 @@
+name: Backfill Managed Mail R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch_size:
+        description: Rows to read per batch
+        required: true
+        default: "100"
+      concurrency:
+        description: Parallel object copies per batch
+        required: true
+        default: "5"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: quieter-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    name: Backfill managed mail raw objects
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    environment: production
+    timeout-minutes: 60
+    env:
+      AWS_DEFAULT_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      SST_STAGE: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Read production SST outputs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_DEFAULT_ACCOUNT_ID: ${{ vars.CLOUDFLARE_DEFAULT_ACCOUNT_ID || secrets.CLOUDFLARE_DEFAULT_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GMAIL_PUBSUB_PUSH_AUDIENCE: ${{ vars.GMAIL_PUBSUB_PUSH_AUDIENCE || secrets.GMAIL_PUBSUB_PUSH_AUDIENCE }}
+          GMAIL_PUBSUB_PROCESS_TOKEN: ${{ secrets.GMAIL_PUBSUB_PROCESS_TOKEN }}
+          GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: ${{ vars.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT || secrets.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT }}
+          GMAIL_PUBSUB_SUBSCRIPTION: ${{ vars.GMAIL_PUBSUB_SUBSCRIPTION || secrets.GMAIL_PUBSUB_SUBSCRIPTION }}
+          GMAIL_PUBSUB_TOPIC: ${{ vars.GMAIL_PUBSUB_TOPIC || secrets.GMAIL_PUBSUB_TOPIC }}
+          GMAIL_TOKEN_ENCRYPTION_KEY: ${{ secrets.GMAIL_TOKEN_ENCRYPTION_KEY }}
+          GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: ${{ secrets.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT }}
+          GOOGLE_GMAIL_CLIENT_ID: ${{ secrets.GOOGLE_GMAIL_CLIENT_ID }}
+          GOOGLE_GMAIL_CLIENT_SECRET: ${{ secrets.GOOGLE_GMAIL_CLIENT_SECRET }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
+          POLAR_METER_CREDIT_USAGE_ID: ${{ vars.POLAR_METER_CREDIT_USAGE_ID || secrets.POLAR_METER_CREDIT_USAGE_ID }}
+          POLAR_ORGANIZATION_ID: ${{ vars.POLAR_ORGANIZATION_ID || secrets.POLAR_ORGANIZATION_ID }}
+          POLAR_PRODUCT_MANAGED_ID: ${{ vars.POLAR_PRODUCT_MANAGED_ID || secrets.POLAR_PRODUCT_MANAGED_ID }}
+          POLAR_PRODUCT_PRO_ID: ${{ vars.POLAR_PRODUCT_PRO_ID || secrets.POLAR_PRODUCT_PRO_ID }}
+          POLAR_SANDBOX: ${{ vars.POLAR_SANDBOX }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID || secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_BUCKET || secrets.R2_BUCKET }}
+          R2_ENDPOINT: ${{ vars.R2_ENDPOINT || secrets.R2_ENDPOINT }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID || secrets.VERCEL_TEAM_ID || vars.VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GMAIL_PUBSUB_PROCESS_TOKEN}" ]; then
+            echo "GMAIL_PUBSUB_PROCESS_TOKEN is required to seed the GmailPubSubProcessToken SST secret." >&2
+            exit 1
+          fi
+
+          bunx sst secret set GmailPubSubProcessToken "$GMAIL_PUBSUB_PROCESS_TOKEN" --config sst.config.ts --stage "$SST_STAGE"
+          bunx sst deploy --config sst.config.ts --stage "$SST_STAGE"
+
+          bun run - <<'EOF' >> "$GITHUB_ENV"
+          const outputs = await Bun.file(".sst/outputs.json").json();
+          if (!outputs.mailBucket) {
+            throw new Error("mailBucket is missing from SST outputs.");
+          }
+          console.log(`MAIL_BUCKET=${outputs.mailBucket}`);
+          EOF
+
+      - name: Backfill managed mail raw objects to R2
+        env:
+          BACKFILL_BATCH_SIZE: ${{ inputs.batch_size }}
+          BACKFILL_CONCURRENCY: ${{ inputs.concurrency }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID || secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_BUCKET || secrets.R2_BUCKET }}
+          R2_ENDPOINT: ${{ vars.R2_ENDPOINT || secrets.R2_ENDPOINT }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: bun packages/aws/scripts/backfill-managed-mail-r2.ts
