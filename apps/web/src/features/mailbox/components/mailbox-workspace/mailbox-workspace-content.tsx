@@ -1,10 +1,10 @@
 "use client";
 
-import type { ComponentProps } from "react";
 import { Loading03Icon, Mail01Icon, Settings01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, LinkButton, cn } from "@quieter/ui";
 import { domAnimation, LazyMotion, m } from "motion/react";
+import { useState, type ComponentProps } from "react";
 import type { ComposeDraftState } from "~/features/compose";
 import type { MailboxWorkspaceView } from "~/features/mailbox/domain/mailbox-workspace-view";
 import type { MailboxSwitcherOrder } from "~/features/navigation/components/mailbox-switcher";
@@ -12,6 +12,7 @@ import type { MailboxCategory } from "~/lib/gmail/gmail";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
 import { ChatView } from "~/features/chat/components/chat-view";
 import { MailSidebar } from "~/features/navigation/components/mail-sidebar";
+import { FirstRunManagedMailSetup } from "./first-run-managed-mail-setup";
 import { MailboxMessagesPanel } from "./mailbox-messages-panel";
 
 type MailboxSidebarGroups = ComponentProps<typeof MailSidebar>["groups"];
@@ -69,64 +70,111 @@ const workspaceContentMotion = {
 const NoMailboxWorkspace = ({
   connectError,
   isConnectingGmail,
+  mailboxGroups,
   onConnectGmail,
 }: {
   connectError: string | null;
   isConnectingGmail: boolean;
+  mailboxGroups: MailboxSidebarGroups;
   onConnectGmail: () => void;
-}) => (
-  <LazyMotion features={domAnimation}>
-    <m.section
-      initial={{ opacity: 0, scale: 0.96, filter: "blur(14px)" }}
-      animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-      exit={{ opacity: 0, scale: 0.96, filter: "blur(14px)" }}
-      transition={{ duration: 0.6, ease: "easeOut" }}
-      className="absolute inset-0 flex items-center justify-center px-6"
-    >
-      <LinkButton
-        aria-label="Settings"
-        className="group absolute bottom-5 left-5 justify-start"
-        search={{ from: "/", tab: "general" }}
-        to="/settings"
-        variant="ghost"
+}) => {
+  const [setupMode, setSetupMode] = useState<"choice" | "managed">("choice");
+
+  return (
+    <LazyMotion features={domAnimation}>
+      <m.section
+        initial={{ opacity: 0, scale: 0.96, filter: "blur(14px)" }}
+        animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+        exit={{ opacity: 0, scale: 0.96, filter: "blur(14px)" }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        className="absolute inset-0 flex items-center justify-center overflow-y-auto px-6 py-8"
       >
-        <HugeiconsIcon
-          className="size-4 shrink-0 rotate-0 transition-transform duration-1000 ease-in-out group-hover:rotate-360"
-          icon={Settings01Icon}
-          strokeWidth={1.5}
-        />
-        Settings
-      </LinkButton>
-      <m.div className="max-w-sm text-center" {...workspaceContentMotion}>
-        <HugeiconsIcon
-          aria-hidden
-          className="mx-auto size-5 text-muted-foreground"
-          icon={Mail01Icon}
-        />
-        <h1 className="mt-5 text-lg font-semibold tracking-tight text-foreground">
-          Connect a mailbox
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Add Gmail or set up a managed organization address.
-        </p>
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-          <Button disabled={isConnectingGmail} onClick={onConnectGmail} type="button">
+        <LinkButton
+          aria-label="Settings"
+          className="group absolute bottom-5 left-5 justify-start"
+          search={{ from: "/", tab: "general" }}
+          to="/settings"
+          variant="ghost"
+        >
+          <HugeiconsIcon
+            className="size-4 shrink-0 rotate-0 transition-transform duration-1000 ease-in-out group-hover:rotate-360"
+            icon={Settings01Icon}
+            strokeWidth={1.5}
+          />
+          Settings
+        </LinkButton>
+        {setupMode === "managed" ? (
+          <m.div className="w-full" {...workspaceContentMotion}>
+            <FirstRunManagedMailSetup
+              onBack={() => setSetupMode("choice")}
+              organizations={mailboxGroups.map((group) => ({
+                id: group.id,
+                mailboxes: group.mailboxes.map((mailbox) => ({
+                  provider: mailbox.provider as "gmail" | "managed",
+                })),
+                name: group.name,
+              }))}
+            />
+          </m.div>
+        ) : (
+          <m.div className="w-full max-w-2xl text-center" {...workspaceContentMotion}>
             <HugeiconsIcon
               aria-hidden
-              className={cn("size-4", { "animate-spin": isConnectingGmail })}
-              icon={isConnectingGmail ? Loading03Icon : Mail01Icon}
+              className="mx-auto size-5 text-muted-foreground"
+              icon={Mail01Icon}
             />
-            {isConnectingGmail ? "Opening Google" : "Connect Gmail"}
-          </Button>
-          <LinkButton search={{ from: "/", tab: "mailboxes" }} to="/settings" variant="ghost">
-            Set up managed mailbox
-          </LinkButton>
-        </div>
-        {connectError && <p className="mt-3 text-sm text-destructive">{connectError}</p>}
-      </m.div>
-    </m.section>
-  </LazyMotion>
-);
+            <h1 className="mt-5 text-lg font-semibold tracking-tight text-foreground">
+              Connect a mailbox
+            </h1>
+            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+              Connect Gmail, or set up managed mail to send and receive from your own domain with
+              managed mailboxes and API keys.
+            </p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <button
+                className="rounded-lg border border-border/70 bg-background/80 p-4 text-left shadow-sm transition-colors hover:bg-secondary/35 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
+                disabled={isConnectingGmail}
+                onClick={onConnectGmail}
+                type="button"
+              >
+                <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <HugeiconsIcon
+                    aria-hidden
+                    className={cn("size-4", { "animate-spin": isConnectingGmail })}
+                    icon={isConnectingGmail ? Loading03Icon : Mail01Icon}
+                  />
+                  {isConnectingGmail ? "Opening Google" : "Connect Gmail"}
+                </span>
+                <span className="mt-2 block text-sm text-muted-foreground">
+                  Add an existing Gmail or Google Workspace inbox.
+                </span>
+              </button>
+              <button
+                className="rounded-lg border border-border/70 bg-background/80 p-4 text-left shadow-sm transition-colors hover:bg-secondary/35 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
+                onClick={() => setSetupMode("managed")}
+                type="button"
+              >
+                <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <HugeiconsIcon aria-hidden className="size-4" icon={Mail01Icon} />
+                  Set up managed mail
+                </span>
+                <span className="mt-2 block text-sm text-muted-foreground">
+                  Use your own domain with managed mailboxes and API keys.
+                </span>
+              </button>
+            </div>
+            <div className="mt-4">
+              <LinkButton search={{ from: "/", tab: "general" }} to="/settings" variant="ghost">
+                Open settings
+              </LinkButton>
+            </div>
+            {connectError && <p className="mt-3 text-sm text-destructive">{connectError}</p>}
+          </m.div>
+        )}
+      </m.section>
+    </LazyMotion>
+  );
+};
 
 export const MailboxWorkspaceContent = ({
   activeMailbox,
@@ -202,6 +250,7 @@ export const MailboxWorkspaceContent = ({
             <NoMailboxWorkspace
               connectError={reconnectError}
               isConnectingGmail={isConnectingGmail}
+              mailboxGroups={mailboxGroups}
               onConnectGmail={onConnectGmail}
             />
           ) : selectedView === "chat" ? (
