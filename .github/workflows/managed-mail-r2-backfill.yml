@@ -48,6 +48,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Build environment package
+        run: bun --cwd packages/env run build
+
       - name: Read production SST outputs
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
