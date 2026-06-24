@@ -66,6 +66,7 @@ export {
   type ManagedMailDirection,
   type ManagedMailHeader,
   type ManagedMailLabelAssignmentSource,
+  type ManagedMailRawObjectProvider,
   type ManagedMailRuleBackfillStatus,
   type ManagedMailRuleMatchMode,
   type ManagedMailSavedViewSort,

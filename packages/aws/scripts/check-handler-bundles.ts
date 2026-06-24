@@ -11,6 +11,7 @@ const entrypoints = [
   "gmail-pubsub-consumer.ts",
   "gmail-pubsub-ingress.ts",
   "gmail-pubsub-maintenance.ts",
+  "gmail-pubsub-process.ts",
   "inbound.ts",
   "receipt.ts",
 ].map((fileName) => join(packageRoot, "src", fileName));

@@ -4,6 +4,11 @@ import { serverEnv } from "@quieter/env/server";
 import { recordInboundManagedMessage } from "@quieter/orpc/managed-mail/ingestion";
 import { Resource } from "sst";
 import { deleteMailObjectUnlessTracked } from "./mail-object-retention";
+import {
+  getCanonicalRawMailBucket,
+  getCanonicalRawMailProvider,
+  putRawMailObject,
+} from "./raw-mail-object";
 
 type SnsRecord = {
   Sns?: {
@@ -105,20 +110,57 @@ export const handler = async (event: SnsEvent) => {
       const receivedAt = new Date(
         notification.receipt?.timestamp || notification.mail?.timestamp || Date.now(),
       );
+      const rawObjectProvider = getCanonicalRawMailProvider();
+      const rawObjectBucket = getCanonicalRawMailBucket(Resource.MailBucket.name);
+      if (rawObjectProvider === "r2") {
+        await putRawMailObject(
+          {
+            bucket: rawObjectBucket,
+            key: s3Key,
+            provider: rawObjectProvider,
+          },
+          {
+            Body: rawMessage,
+            ContentLength: rawMessage.byteLength,
+            ContentType: "message/rfc822",
+          },
+        );
+      }
 
-      const mailboxIds = await recordInboundManagedMessage({
-        providerMessageId,
-        rawMessage,
-        rawSizeBytes: messageSizeBytes,
-        receivedAt,
-        recipients,
-        s3Bucket: Resource.MailBucket.name,
-        s3Key,
-      });
+      let mailboxIds: string[];
+      try {
+        mailboxIds = await recordInboundManagedMessage({
+          providerMessageId,
+          rawMessage,
+          rawObjectBucket,
+          rawObjectKey: s3Key,
+          rawObjectProvider,
+          rawSizeBytes: messageSizeBytes,
+          receivedAt,
+          recipients,
+          s3Bucket: rawObjectProvider === "s3" ? Resource.MailBucket.name : undefined,
+          s3Key: rawObjectProvider === "s3" ? s3Key : undefined,
+        });
+      } catch (error) {
+        if (rawObjectProvider === "r2") {
+          await deleteMailObjectUnlessTracked({
+            bucket: rawObjectBucket,
+            key: s3Key,
+            provider: "r2",
+          });
+        }
+        throw error;
+      }
+      if (rawObjectProvider === "r2") {
+        await deleteMailObjectUnlessTracked({
+          bucket: rawObjectBucket,
+          key: s3Key,
+          provider: "r2",
+        });
+      }
       const stored = await deleteMailObjectUnlessTracked({
         bucket: Resource.MailBucket.name,
         key: s3Key,
-        s3Client: getS3Client(),
       });
       await recordInboundOrganizationMailUsage({
         messageSizeBytes,

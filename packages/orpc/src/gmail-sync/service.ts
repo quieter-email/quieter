@@ -877,12 +877,48 @@ export const maintainGmailPubSubMailbox = async (input: {
   }
 };
 
+export const acceptGmailPubSubNotification = async (input: { emailAddress: string }) => {
+  const [gmailMailbox] = await db
+    .select({
+      id: mailbox.id,
+      status: mailbox.status,
+    })
+    .from(mailbox)
+    .where(
+      and(
+        eq(mailbox.emailAddress, input.emailAddress.trim().toLowerCase()),
+        eq(mailbox.provider, "gmail"),
+      ),
+    )
+    .limit(1);
+
+  if (!gmailMailbox || gmailMailbox.status !== "connected") {
+    return { accepted: false as const, reason: "mailbox_not_connected" as const };
+  }
+
+  await ensureWatchState(gmailMailbox.id);
+  await db
+    .update(gmailWatchState)
+    .set({
+      lastNotificationAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(gmailWatchState.mailboxId, gmailMailbox.id));
+
+  return {
+    accepted: true as const,
+    mailboxId: gmailMailbox.id,
+  };
+};
+
+export type GmailPubSubNotificationMessage = {
+  emailAddress: string;
+  historyId: string;
+  pubSubMessageId: string;
+};
+
 export const processGmailPubSubNotification = async (
-  input: {
-    emailAddress: string;
-    historyId: string;
-    pubSubMessageId: string;
-  },
+  input: GmailPubSubNotificationMessage,
   options?: {
     onAccepted?: (input: { mailboxId: string }) => Promise<void>;
     onProcessed?: (input: { mailboxId: string }) => Promise<void>;

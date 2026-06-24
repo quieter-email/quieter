@@ -9,7 +9,7 @@ import {
 } from "@quieter/database";
 import { serverEnv } from "@quieter/env/server";
 import { APIError } from "better-auth/api";
-import { and, eq, notInArray, sql } from "drizzle-orm";
+import { and, eq, notInArray, or, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 
 type AuthUser = typeof user.$inferSelect;
@@ -110,16 +110,44 @@ export const cleanupOrganizationsForDeletedUser = async (userId: string) => {
   await db.delete(member).where(eq(member.userId, userId));
 };
 
-const deleteUntrackedManagedMailObject = async (input: { bucket: string; key: string }) => {
+type RawMailObjectProvider = "r2" | "s3";
+
+const deleteUntrackedManagedMailObject = async (input: {
+  bucket: string;
+  key: string;
+  provider: RawMailObjectProvider;
+}) => {
   const region = serverEnv.AWS_REGION || serverEnv.AWS_DEFAULT_REGION;
-  if (!region) {
+  if (input.provider === "s3" && !region) {
     throw new Error("Managed mail cleanup is temporarily unavailable.");
   }
 
   const { DeleteObjectCommand, S3Client } = await import("@aws-sdk/client-s3");
-  const s3Client = new S3Client({ region });
+  const endpoint =
+    serverEnv.R2_ENDPOINT ||
+    (serverEnv.R2_ACCOUNT_ID
+      ? `https://${serverEnv.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
+      : null);
+  if (
+    input.provider === "r2" &&
+    (!endpoint || !serverEnv.R2_ACCESS_KEY_ID || !serverEnv.R2_SECRET_ACCESS_KEY)
+  ) {
+    throw new Error("Managed mail cleanup is temporarily unavailable.");
+  }
+  const r2Endpoint = endpoint ?? "";
+  const client =
+    input.provider === "r2"
+      ? new S3Client({
+          credentials: {
+            accessKeyId: serverEnv.R2_ACCESS_KEY_ID!,
+            secretAccessKey: serverEnv.R2_SECRET_ACCESS_KEY!,
+          },
+          endpoint: r2Endpoint,
+          region: "auto",
+        })
+      : new S3Client({ region });
 
-  await s3Client.send(
+  await client.send(
     new DeleteObjectCommand({
       Bucket: input.bucket,
       Key: input.key,
@@ -131,6 +159,9 @@ export const cleanupMailboxesForDeletedOrganization = async (organizationId: str
   const managedMessages = await db
     .select({
       id: managedMailMessage.id,
+      rawObjectBucket: managedMailMessage.rawObjectBucket,
+      rawObjectKey: managedMailMessage.rawObjectKey,
+      rawObjectProvider: managedMailMessage.rawObjectProvider,
       s3Bucket: managedMailMessage.s3Bucket,
       s3Key: managedMailMessage.s3Key,
     })
@@ -138,13 +169,26 @@ export const cleanupMailboxesForDeletedOrganization = async (organizationId: str
     .innerJoin(mailbox, eq(mailbox.id, managedMailMessage.mailboxId))
     .where(and(eq(mailbox.organizationId, organizationId), eq(mailbox.provider, "managed")));
   const managedMessageIds = managedMessages.map((message) => message.id);
-  const objects = new Map<string, { bucket: string; key: string }>();
+  const objects = new Map<
+    string,
+    { bucket: string; key: string; provider: RawMailObjectProvider }
+  >();
 
   for (const message of managedMessages) {
-    if (message.s3Bucket && message.s3Key) {
-      objects.set(`${message.s3Bucket}\0${message.s3Key}`, {
+    if (message.rawObjectProvider && message.rawObjectBucket && message.rawObjectKey) {
+      objects.set(
+        `${message.rawObjectProvider}\0${message.rawObjectBucket}\0${message.rawObjectKey}`,
+        {
+          bucket: message.rawObjectBucket,
+          key: message.rawObjectKey,
+          provider: message.rawObjectProvider,
+        },
+      );
+    } else if (message.s3Bucket && message.s3Key) {
+      objects.set(`s3\0${message.s3Bucket}\0${message.s3Key}`, {
         bucket: message.s3Bucket,
         key: message.s3Key,
+        provider: "s3",
       });
     }
   }
@@ -188,11 +232,27 @@ export const cleanupMailboxesForDeletedOrganization = async (organizationId: str
       .select({ id: managedMailMessage.id })
       .from(managedMailMessage)
       .where(
-        and(
-          eq(managedMailMessage.s3Bucket, object.bucket),
-          eq(managedMailMessage.s3Key, object.key),
-          notInArray(managedMailMessage.id, managedMessageIds),
-        ),
+        object.provider === "s3"
+          ? and(
+              notInArray(managedMailMessage.id, managedMessageIds),
+              or(
+                and(
+                  eq(managedMailMessage.rawObjectProvider, object.provider),
+                  eq(managedMailMessage.rawObjectBucket, object.bucket),
+                  eq(managedMailMessage.rawObjectKey, object.key),
+                ),
+                and(
+                  eq(managedMailMessage.s3Bucket, object.bucket),
+                  eq(managedMailMessage.s3Key, object.key),
+                ),
+              ),
+            )
+          : and(
+              eq(managedMailMessage.rawObjectProvider, object.provider),
+              eq(managedMailMessage.rawObjectBucket, object.bucket),
+              eq(managedMailMessage.rawObjectKey, object.key),
+              notInArray(managedMailMessage.id, managedMessageIds),
+            ),
       )
       .limit(1);
 

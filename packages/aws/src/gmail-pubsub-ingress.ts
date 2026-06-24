@@ -1,5 +1,6 @@
 import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import { requireServerEnv, serverEnv } from "@quieter/env/server";
+import { acceptGmailPubSubNotification } from "@quieter/orpc/gmail-pubsub";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -83,6 +84,19 @@ export const handler = async (
 
     const notification = parseGmailPubSubNotification(envelope.message.data);
     const emailAddress = notification.emailAddress.trim().toLowerCase();
+    const accepted = await acceptGmailPubSubNotification({ emailAddress });
+    if (accepted.accepted) {
+      try {
+        const { notifyGmailLiveSyncConnections } = await import("./gmail-live-sync");
+        await notifyGmailLiveSyncConnections(accepted.mailboxId);
+      } catch (error) {
+        console.error(
+          `Could not fan out fast Gmail live-sync notification for mailbox ${accepted.mailboxId}.`,
+          error instanceof Error ? error.message : "Unknown error.",
+        );
+      }
+    }
+
     await getSqsClient().send(
       new SendMessageCommand({
         MessageBody: JSON.stringify({

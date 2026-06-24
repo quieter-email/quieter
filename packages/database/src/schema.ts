@@ -43,6 +43,7 @@ export type GmailUsefulDetailKind =
 export type GmailUsefulDetailRelevanceSource = "explicit" | "inferred";
 export type GmailUsefulDetailFeedbackSignal = "not_useful" | "useful";
 export type ManagedMailDirection = "inbound" | "outbound";
+export type ManagedMailRawObjectProvider = "r2" | "s3";
 export type ManagedMailLabelAssignmentSource = "backfill" | "inherited" | "manual" | "rule";
 export type ManagedMailRuleBackfillStatus =
   | "cancelled"
@@ -624,6 +625,9 @@ export const managedMailMessage = pgTable(
     sentAt: timestamp("sentAt").notNull(),
     s3Bucket: text("s3Bucket"),
     s3Key: text("s3Key"),
+    rawObjectProvider: text("rawObjectProvider").$type<ManagedMailRawObjectProvider>(),
+    rawObjectBucket: text("rawObjectBucket"),
+    rawObjectKey: text("rawObjectKey"),
     rawSizeBytes: integer("rawSizeBytes"),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
@@ -632,6 +636,10 @@ export const managedMailMessage = pgTable(
     check(
       "managed_mail_message_direction_check",
       sql`${table.direction} in ('inbound', 'outbound')`,
+    ),
+    check(
+      "managed_mail_message_raw_object_provider_check",
+      sql`${table.rawObjectProvider} is null or ${table.rawObjectProvider} in ('r2', 's3')`,
     ),
     index("managed_mail_message_mailbox_direction_sent_at_idx").on(
       table.mailboxId,
@@ -647,6 +655,11 @@ export const managedMailMessage = pgTable(
       table.mailboxId,
       table.sentAt,
       table.id,
+    ),
+    index("managed_mail_message_raw_object_idx").on(
+      table.rawObjectProvider,
+      table.rawObjectBucket,
+      table.rawObjectKey,
     ),
     index("managed_mail_message_s3_bucket_key_idx").on(table.s3Bucket, table.s3Key),
     unique("managed_mail_message_mailbox_provider_message_unique").on(

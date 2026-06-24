@@ -12,6 +12,11 @@ import {
   type LambdaFunctionUrlResponse,
 } from "./function-url";
 import { deleteMailObjectUnlessTracked } from "./mail-object-retention";
+import {
+  getCanonicalRawMailBucket,
+  getCanonicalRawMailProvider,
+  putRawMailObject,
+} from "./raw-mail-object";
 
 const inboundPayloadSchema = z
   .object({
@@ -94,15 +99,32 @@ export const handler = async (
     const rawMessage = parsed.data.rawMimeBase64
       ? Buffer.from(parsed.data.rawMimeBase64, "base64")
       : Buffer.from(parsed.data.rawMime ?? "", "utf8");
+    const rawObjectProvider = getCanonicalRawMailProvider();
+    const rawObjectBucket = getCanonicalRawMailBucket(Resource.MailBucket.name);
 
-    await getS3Client().send(
-      new PutObjectCommand({
-        Body: rawMessage,
-        Bucket: Resource.MailBucket.name,
-        ContentType: "message/rfc822",
-        Key: s3Key,
-      }),
-    );
+    if (rawObjectProvider === "s3") {
+      await getS3Client().send(
+        new PutObjectCommand({
+          Body: rawMessage,
+          Bucket: Resource.MailBucket.name,
+          ContentType: "message/rfc822",
+          Key: s3Key,
+        }),
+      );
+    } else {
+      await putRawMailObject(
+        {
+          bucket: rawObjectBucket,
+          key: s3Key,
+          provider: rawObjectProvider,
+        },
+        {
+          Body: rawMessage,
+          ContentLength: rawMessage.byteLength,
+          ContentType: "message/rfc822",
+        },
+      );
+    }
     const recipients = Array.from(
       new Set(
         parsed.data.recipients.map((recipient) => recipient.trim().toLowerCase()).filter(Boolean),
@@ -113,24 +135,27 @@ export const handler = async (
       mailboxIds = await recordInboundManagedMessage({
         providerMessageId,
         rawMessage,
+        rawObjectBucket,
+        rawObjectKey: s3Key,
+        rawObjectProvider,
         rawSizeBytes: rawMessage.byteLength,
         receivedAt,
         recipients,
-        s3Bucket: Resource.MailBucket.name,
-        s3Key,
+        s3Bucket: rawObjectProvider === "s3" ? Resource.MailBucket.name : undefined,
+        s3Key: rawObjectProvider === "s3" ? s3Key : undefined,
       });
     } catch (error) {
       await deleteMailObjectUnlessTracked({
-        bucket: Resource.MailBucket.name,
+        bucket: rawObjectBucket,
         key: s3Key,
-        s3Client: getS3Client(),
+        provider: rawObjectProvider,
       });
       throw error;
     }
     const stored = await deleteMailObjectUnlessTracked({
-      bucket: Resource.MailBucket.name,
+      bucket: rawObjectBucket,
       key: s3Key,
-      s3Client: getS3Client(),
+      provider: rawObjectProvider,
     });
 
     return toJson(
@@ -138,8 +163,9 @@ export const handler = async (
         mailboxIds,
         providerMessageId,
         recipients,
-        s3Bucket: Resource.MailBucket.name,
-        s3Key,
+        rawObjectBucket,
+        rawObjectKey: s3Key,
+        rawObjectProvider,
         stored,
       },
       201,
