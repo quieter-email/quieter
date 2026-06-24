@@ -184,6 +184,7 @@ jobs:
           CLOUDFLARE_DEFAULT_ACCOUNT_ID: ${{ vars.CLOUDFLARE_DEFAULT_ACCOUNT_ID || secrets.CLOUDFLARE_DEFAULT_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GMAIL_PUBSUB_PUSH_AUDIENCE: ${{ vars.GMAIL_PUBSUB_PUSH_AUDIENCE || secrets.GMAIL_PUBSUB_PUSH_AUDIENCE }}
+          GMAIL_PUBSUB_PROCESS_TOKEN: ${{ secrets.GMAIL_PUBSUB_PROCESS_TOKEN }}
           GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: ${{ vars.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT || secrets.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT }}
           GMAIL_PUBSUB_SUBSCRIPTION: ${{ vars.GMAIL_PUBSUB_SUBSCRIPTION || secrets.GMAIL_PUBSUB_SUBSCRIPTION }}
           GMAIL_PUBSUB_TOPIC: ${{ vars.GMAIL_PUBSUB_TOPIC || secrets.GMAIL_PUBSUB_TOPIC }}
@@ -205,7 +206,14 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID || secrets.VERCEL_TEAM_ID || vars.VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
-        run: bunx sst deploy --config sst.config.ts --stage "$SST_STAGE"
+        run: |
+          if [ -z "${GMAIL_PUBSUB_PROCESS_TOKEN}" ]; then
+            echo "GMAIL_PUBSUB_PROCESS_TOKEN is required to seed the GmailPubSubProcessToken SST secret." >&2
+            exit 1
+          fi
+
+          bunx sst secret set GmailPubSubProcessToken "$GMAIL_PUBSUB_PROCESS_TOKEN" --config sst.config.ts --stage "$SST_STAGE"
+          bunx sst deploy --config sst.config.ts --stage "$SST_STAGE"
 
       - name: Sync SST outputs to Vercel
         if: ${{ env.SST_STAGE == 'production' }}
