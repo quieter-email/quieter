@@ -10,7 +10,7 @@ type GmailPubSubQueueMessage = {
 
 type Env = {
   GmailLiveSyncMailbox: DurableObjectNamespace;
-  GmailPubSubCloudflareQueue: Queue<GmailPubSubQueueMessage>;
+  GmailPsQueue: Queue<GmailPubSubQueueMessage>;
   GMAIL_PUBSUB_PROCESS_URL: string;
   GMAIL_PUBSUB_PUSH_AUDIENCE: string;
   GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: string;
@@ -148,7 +148,7 @@ const handlePubSub = async (request: Request, env: Env) => {
     body: JSON.stringify({ type: "mailbox-dirty" }),
     method: "POST",
   });
-  await env.GmailPubSubCloudflareQueue.send({
+  await env.GmailPsQueue.send({
     emailAddress,
     historyId: notification.historyId,
     pubSubMessageId: envelope.message.messageId,
