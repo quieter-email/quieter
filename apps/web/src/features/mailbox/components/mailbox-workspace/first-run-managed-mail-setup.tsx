@@ -127,12 +127,12 @@ export const FirstRunManagedMailSetup = ({
     },
   });
   const createApiKeyMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (requestOrgId: string) => {
       const response = await authClient.apiKey.create({
         configId: ORGANIZATION_API_KEY_CONFIG_ID,
         expiresIn: 60 * 60 * 24 * 365,
         name: "Managed mail setup",
-        organizationId,
+        organizationId: requestOrgId,
         prefix: "quieter_",
       });
 
@@ -144,17 +144,21 @@ export const FirstRunManagedMailSetup = ({
         throw new Error("Could not read the created API key.");
       }
 
-      return response.data.key;
+      return { key: response.data.key, organizationId: requestOrgId };
     },
     mutationKey: ["first-run", "organization-api-key", organizationId],
     onError: (error) => toast.error(getErrorMessage(error, "Could not create API key.")),
-    onSuccess: async (key) => {
-      setCreatedApiKey(key);
-      await navigator.clipboard.writeText(key).catch(() => undefined);
+    onSuccess: async (result) => {
+      // Only apply the response if it matches the currently selected organization
+      if (result.organizationId === organizationId) {
+        setCreatedApiKey(result.key);
+        await navigator.clipboard.writeText(result.key).catch(() => undefined);
+        toast.success("API key created and copied.");
+      }
+      // Always invalidate for the originating organization
       await queryClient.invalidateQueries({
-        queryKey: getOrganizationApiKeysQueryKey(organizationId),
+        queryKey: getOrganizationApiKeysQueryKey(result.organizationId),
       });
-      toast.success("API key created and copied.");
     },
   });
 
@@ -460,7 +464,7 @@ export const FirstRunManagedMailSetup = ({
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   disabled={!hasManagedAccess || createApiKeyMutation.isPending}
-                  onClick={() => createApiKeyMutation.mutate()}
+                  onClick={() => createApiKeyMutation.mutate(organizationId)}
                   size="sm"
                   type="button"
                 >
