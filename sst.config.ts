@@ -327,10 +327,8 @@ export default $config({
       });
       gmailPubSubProcessUrl = gmailPubSubProcess.url;
 
-      const gmailPubSubCloudflareDeadLetterQueue = new sst.cloudflare.Queue(
-        "GmailPubSubCloudflareDeadLetterQueue",
-      );
-      const gmailPubSubCloudflareQueue = new sst.cloudflare.Queue("GmailPubSubCloudflareQueue", {
+      const gmailPubSubCloudflareDeadLetterQueue = new sst.cloudflare.Queue("GmailPsDlq");
+      const gmailPubSubCloudflareQueue = new sst.cloudflare.Queue("GmailPsQueue", {
         dlq: {
           queue: gmailPubSubCloudflareDeadLetterQueue.nodes.queue.queueName,
           retry: 10,
