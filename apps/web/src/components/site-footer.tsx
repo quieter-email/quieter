@@ -15,6 +15,9 @@ export const SiteFooter = () => (
       <Link className="hover:text-foreground" to="/terms">
         Terms
       </Link>
+      <Link className="hover:text-foreground" to="/imprint">
+        Imprint
+      </Link>
       <ConsentPreferencesLink className="hover:text-foreground">Preferences</ConsentPreferencesLink>
       <a
         className="hover:text-foreground"

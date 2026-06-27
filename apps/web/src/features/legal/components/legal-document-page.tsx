@@ -38,6 +38,9 @@ export const LegalDocumentPage = ({
         <Link className="underline hover:text-foreground" to="/terms">
           Terms of Service
         </Link>
+        <Link className="underline hover:text-foreground" to="/imprint">
+          Imprint
+        </Link>
         <ConsentPreferencesLink />
       </footer>
     </div>

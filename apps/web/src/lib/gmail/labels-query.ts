@@ -1,7 +1,7 @@
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
-import { DEMO_MAILBOX_ID, getDemoLabels } from "./demo-mail";
+import { isSandboxMailboxId, getDemoLabels } from "./demo-mail";
 
 export const getLabelsQueryKey = (mailboxId: string) => ["gmail-labels", mailboxId] as const;
 
@@ -9,7 +9,7 @@ export const labelsQueryOptions = (mailboxId: string, enabled = true) =>
   queryOptions<MailboxLabel[]>({
     queryKey: getLabelsQueryKey(mailboxId),
     queryFn: async ({ signal }) => {
-      if (mailboxId === DEMO_MAILBOX_ID) {
+      if (isSandboxMailboxId(mailboxId)) {
         return getDemoLabels().map((label, position) => ({
           ...label,
           color: null,

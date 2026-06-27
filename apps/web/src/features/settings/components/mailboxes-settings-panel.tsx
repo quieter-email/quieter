@@ -458,7 +458,7 @@ export const MailboxesSettingsPanel = () => {
               </SelectContent>
             </Select>
 
-            <div className="squircle flex h-9 w-72 items-center rounded-md border border-input bg-background shadow-sm transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
+            <div className="flex h-9 w-72 items-center rounded-md border border-input bg-background shadow-sm transition-colors squircle focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
               <TextFieldInput
                 aria-label="Mailbox address"
                 chrome="ghost"

@@ -161,7 +161,7 @@ export const MessageAttachments = ({
             <button
               aria-busy={isDownloading}
               className={cn(
-                "squircle inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-xs text-foreground",
+                "inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-xs text-foreground squircle",
                 "bg-muted/25 shadow-xs ring-1 ring-border/55 ring-inset",
                 "transition-colors hover:bg-muted/45",
                 "focus-visible:ring-2 focus-visible:ring-ring/35 focus-visible:outline-none",

@@ -499,7 +499,7 @@ export const SidebarLabelNav = ({
                     active={isActive}
                     aria-pressed={isActive}
                     className={cn(
-                      "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light",
+                      "h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light squircle",
                       {
                         "text-foreground": isActive || isHovered,
                         "text-muted-foreground": !isActive && !isHovered,
@@ -796,7 +796,7 @@ export const SidebarLabelNav = ({
                                 <FieldLabel>What this label is for</FieldLabel>
                                 <textarea
                                   aria-label="What this label is for"
-                                  className="squircle min-h-20 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="min-h-20 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none squircle placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50"
                                   disabled={updateLabelDetailsMutation.isPending}
                                   maxLength={2000}
                                   onChange={(event) => {
@@ -817,7 +817,7 @@ export const SidebarLabelNav = ({
                                   <FieldLabel>Emails to include</FieldLabel>
                                   <textarea
                                     aria-label="Emails to include"
-                                    className="squircle min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none squircle placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50"
                                     disabled={updateLabelDetailsMutation.isPending}
                                     maxLength={4000}
                                     onChange={(event) => {

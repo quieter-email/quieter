@@ -1,3 +1,4 @@
+import { isSandboxMailboxId } from "~/lib/gmail/demo-mail";
 import { rpc } from "~/lib/orpc";
 
 const loadAttachmentFromServer = async (
@@ -23,6 +24,10 @@ export const downloadAttachmentFromServer = async (
   mimeType: string,
   signal?: AbortSignal,
 ) => {
+  if (isSandboxMailboxId(mailboxId)) {
+    return;
+  }
+
   const file = await loadAttachmentFromServer(
     mailboxId,
     messageId,

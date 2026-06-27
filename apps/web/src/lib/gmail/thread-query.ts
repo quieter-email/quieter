@@ -1,7 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
 import { queryPersister } from "~/lib/query-persister";
-import { DEMO_MAILBOX_ID, getDemoThread } from "./demo-mail";
+import { isSandboxMailboxId, getDemoThread } from "./demo-mail";
 import {
   GMAIL_QUERY_STALE_TIME_MS,
   hasRenderableMessageBody,
@@ -21,8 +21,8 @@ export const getThreadWithDetailsOptions = (mailboxId: string, threadId: string,
   queryOptions({
     queryKey: getThreadQueryKey(mailboxId, threadId),
     queryFn: ({ signal }) =>
-      mailboxId === DEMO_MAILBOX_ID
-        ? getDemoThread(threadId)
+      isSandboxMailboxId(mailboxId)
+        ? getDemoThread(mailboxId, threadId)
         : rpc.mail.getThread({ mailboxId, threadId }, { signal }),
     enabled,
     persister: queryPersister.persisterFn,

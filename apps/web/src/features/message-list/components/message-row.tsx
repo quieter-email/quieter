@@ -69,7 +69,7 @@ const MessageRowMetaBadge = ({
   title: string;
 }) => (
   <span
-    className="squircle inline-flex h-4.5 shrink-0 items-center gap-1 rounded-md border border-border/70 bg-background/75 px-1 text-[10.5px] font-medium text-muted-foreground tabular-nums shadow-xs"
+    className="inline-flex h-4.5 shrink-0 items-center gap-1 rounded-md border border-border/70 bg-background/75 px-1 text-[10.5px] font-medium text-muted-foreground tabular-nums shadow-xs squircle"
     title={title}
   >
     <HugeiconsIcon aria-hidden className="size-3" icon={icon} />

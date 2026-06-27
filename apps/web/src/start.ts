@@ -19,7 +19,7 @@ const sitePasswordPaths = new Set([
   "/api/site-password",
   "/api/waitlist",
 ]);
-const publicLegalPaths = new Set(["/cookies", "/privacy", "/terms"]);
+const publicLegalPaths = new Set(["/cookies", "/imprint", "/privacy", "/terms"]);
 const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
 const publicPathPrefixes = ["/_build/", "/assets/"];

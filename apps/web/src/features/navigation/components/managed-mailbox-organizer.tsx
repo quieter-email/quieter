@@ -191,7 +191,7 @@ export const ManagedMailboxOrganizer = ({
                 active={active}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light",
+                  "h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light squircle",
                   {
                     "text-foreground": active,
                     "text-muted-foreground": !active,

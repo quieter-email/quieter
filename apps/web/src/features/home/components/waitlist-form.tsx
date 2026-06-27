@@ -59,7 +59,7 @@ export const WaitlistForm = () => {
   return (
     <form action="/api/waitlist" className="grid gap-2" method="post" onSubmit={handleSubmit}>
       <Field>
-        <FieldLabel className="text-white/70 min-[2560px]:text-[15px]" htmlFor="waitlist-email">
+        <FieldLabel className="text-white/70" htmlFor="waitlist-email">
           Join the waitlist
         </FieldLabel>
         <div className="relative">
@@ -67,7 +67,7 @@ export const WaitlistForm = () => {
             autoCapitalize="none"
             autoComplete="off"
             autoCorrect="off"
-            className="h-9 border-white/15 bg-white/5 pr-11 text-sm text-white placeholder:text-white/30 min-[2560px]:h-10 min-[2560px]:pr-12 min-[2560px]:text-[15px]"
+            className="h-9 border-white/15 bg-white/5 pr-11 text-sm text-white placeholder:text-white/30"
             disabled={iconState === "loading"}
             id="waitlist-email"
             inputMode="email"
@@ -79,7 +79,7 @@ export const WaitlistForm = () => {
           <IconButtonTooltip label="Join waitlist">
             <Button
               aria-label="Join waitlist"
-              className="absolute top-1/2 right-1 size-7! -translate-y-1/2 bg-transparent text-white/70 shadow-none hover:bg-white/10 hover:text-white min-[2560px]:right-1.5 min-[2560px]:size-8!"
+              className="absolute top-1/2 right-1 size-7! -translate-y-1/2 bg-transparent text-white/70 shadow-none hover:bg-white/10 hover:text-white"
               disabled={iconState === "loading"}
               size="icon-sm"
               type="submit"

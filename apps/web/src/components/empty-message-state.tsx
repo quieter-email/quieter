@@ -1,5 +1,10 @@
-import { LazyMotion, domAnimation, m } from "motion/react";
+import { m } from "motion/react";
 import { VerticalSlot } from "~/components/vertical-slot";
+
+const waveDots = Array.from({ length: 20 }, (_, index) => ({
+  column: index % 10,
+  id: index,
+}));
 
 export const EmptyMessageState = ({
   description = "Select an email to view.",
@@ -8,28 +13,34 @@ export const EmptyMessageState = ({
   description?: string | null;
   title?: string | null;
 }) => (
-  <LazyMotion features={domAnimation}>
-    <div className="flex flex-1 items-center justify-center">
-      <div className="relative max-w-sm p-8">
-        <m.div
-          aria-hidden
-          className="squircle pointer-events-none absolute top-1/2 left-1/2 size-52 -translate-1/2 rounded-5xl border"
-          initial={{ rotate: 0, opacity: 0 }}
-          animate={{ rotate: 45, opacity: 1 }}
-          transition={{
-            ease: "easeOut",
-            duration: 1,
-          }}
-        />
-        <VerticalSlot className="relative z-10 text-center">
-          <div>
-            {title && (
-              <p className="text-sm font-semibold tracking-tight text-foreground">{title}</p>
-            )}
-            {description && <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>}
-          </div>
-        </VerticalSlot>
+  <div className="flex flex-1 items-center justify-center">
+    <div className="max-w-sm p-8 text-center">
+      <div aria-hidden className="mx-auto mb-6 grid w-max grid-cols-10 gap-1.5">
+        {waveDots.map(({ column, id }) => (
+          <m.span
+            animate={{ opacity: [0, 0.5, 0] }}
+            className="size-1.5 bg-muted-foreground"
+            key={id}
+            transition={{
+              delay: (9 - column) * 0.18,
+              duration: 2,
+              ease: "easeInOut",
+              repeat: Infinity,
+              repeatDelay: 0,
+            }}
+          />
+        ))}
       </div>
+      <VerticalSlot>
+        <div>
+          {title ? (
+            <p className="text-sm font-semibold tracking-tight text-foreground">{title}</p>
+          ) : null}
+          {description ? (
+            <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>
+          ) : null}
+        </div>
+      </VerticalSlot>
     </div>
-  </LazyMotion>
+  </div>
 );

@@ -40,7 +40,7 @@ export const ChatComposer = ({
 }: ChatComposerProps) => (
   <LazyMotion features={domMax}>
     <m.form
-      className="squircle flex w-full flex-col rounded-xl border bg-background/85 shadow-xl"
+      className="flex w-full flex-col rounded-xl border bg-background/85 shadow-xl squircle"
       layout
       layoutId="composer"
       onSubmit={onSubmit}

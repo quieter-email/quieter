@@ -20,6 +20,11 @@ import {
 } from "./gmail";
 
 export const DEMO_MAILBOX_ID = "demo:mailbox";
+export const LANDING_DEMO_MAILBOX_ID = "landing:mailbox";
+
+export const isSandboxMailboxId = (mailboxId: string) =>
+  mailboxId === DEMO_MAILBOX_ID || mailboxId === LANDING_DEMO_MAILBOX_ID;
+
 const DEMO_EMAIL_ADDRESS = "demo@quieter.email";
 
 const DEMO_MAIL_STORAGE_KEY = "quieter:demo-mail-state";
@@ -28,6 +33,12 @@ const DEMO_MAIL_STATE_VERSION = 3;
 type DemoMailState = {
   version: number;
   messages: MessageListItem[];
+};
+
+let landingDemoState: DemoMailState | null = null;
+
+export const resetLandingDemoMail = () => {
+  landingDemoState = createInitialDemoState();
 };
 
 const now = Date.now();
@@ -433,20 +444,54 @@ const writeDemoState = (state: DemoMailState) => {
   window.localStorage.setItem(DEMO_MAIL_STORAGE_KEY, JSON.stringify(state));
 };
 
+const readLandingDemoState = (): DemoMailState => {
+  if (!landingDemoState) {
+    landingDemoState = createInitialDemoState();
+  }
+
+  return landingDemoState;
+};
+
+const readSandboxState = (mailboxId: string): DemoMailState => {
+  if (mailboxId === LANDING_DEMO_MAILBOX_ID) {
+    return readLandingDemoState();
+  }
+
+  return readDemoState();
+};
+
+const writeSandboxState = (mailboxId: string, state: DemoMailState) => {
+  if (mailboxId === LANDING_DEMO_MAILBOX_ID) {
+    landingDemoState = state;
+    return;
+  }
+
+  writeDemoState(state);
+};
+
 const updateDemoState = (updater: (state: DemoMailState) => DemoMailState) => {
   writeDemoState(updater(readDemoState()));
 };
 
-const invalidateDemoMail = async (queryClient: QueryClient) => {
+const updateSandboxState = (
+  mailboxId: string,
+  updater: (state: DemoMailState) => DemoMailState,
+) => {
+  writeSandboxState(mailboxId, updater(readSandboxState(mailboxId)));
+};
+
+const invalidateSandboxMail = async (queryClient: QueryClient, mailboxId: string) => {
   await Promise.all([
-    queryClient.invalidateQueries({ queryKey: ["messages", DEMO_MAILBOX_ID] }),
-    queryClient.invalidateQueries({ queryKey: ["message-thread", DEMO_MAILBOX_ID] }),
-    queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() }),
+    queryClient.invalidateQueries({ queryKey: ["messages", mailboxId] }),
+    queryClient.invalidateQueries({ queryKey: ["message-thread", mailboxId] }),
+    ...(mailboxId === DEMO_MAILBOX_ID
+      ? [queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() })]
+      : []),
   ]);
 };
 
-const getSortedMessages = () =>
-  readDemoState().messages.toSorted(
+const getSortedMessages = (mailboxId: string) =>
+  readSandboxState(mailboxId).messages.toSorted(
     (left, right) =>
       Number(new Date(right.internalDate ?? right.date ?? 0)) -
       Number(new Date(left.internalDate ?? left.date ?? 0)),
@@ -570,19 +615,50 @@ export const getDemoMailboxes = () => ({
   ],
 });
 
+export const getLandingDemoMailboxes = () => ({
+  defaultMailboxId: LANDING_DEMO_MAILBOX_ID,
+  groups: [
+    {
+      id: "landing-demo-team",
+      kind: "organization" as const,
+      name: "Demo",
+      slug: "landing-demo-team",
+      mailboxes: [
+        {
+          connectionStatus: "connected" as const,
+          displayName: "Demo Mailbox",
+          emailAddress: DEMO_EMAIL_ADDRESS,
+          grantRole: null,
+          gmailAutoLabelEnabled: false,
+          gmailUsefulDetailsEnabled: false,
+          groupId: "landing-demo-team",
+          groupKind: "organization" as const,
+          groupName: "Demo",
+          id: LANDING_DEMO_MAILBOX_ID,
+          organizationId: "landing-demo-team",
+          ownerUserId: "landing-demo-user",
+          provider: "gmail" as const,
+        },
+      ],
+    },
+  ],
+});
+
 export const listDemoMessages = ({
+  mailboxId = DEMO_MAILBOX_ID,
   category,
   maxResults = 50,
   pageToken,
   query,
 }: {
+  mailboxId?: string;
   category: MailboxCategory;
   maxResults?: number;
   pageToken?: string;
   query?: string;
 }): ListMessagesPageResult => {
   const start = pageToken ? Number(pageToken) || 0 : 0;
-  const messages = getSortedMessages().filter(
+  const messages = getSortedMessages(mailboxId).filter(
     (message) => isMessageInMailbox(message, category) && messageMatchesQuery(message, query),
   );
   const page = messages.slice(start, start + maxResults);
@@ -596,8 +672,8 @@ export const listDemoMessages = ({
   };
 };
 
-export const getDemoThread = (threadId: string): ThreadMessagesResult => {
-  const messages = getSortedMessages().filter((message) => message.threadId === threadId);
+export const getDemoThread = (mailboxId: string, threadId: string): ThreadMessagesResult => {
+  const messages = getSortedMessages(mailboxId).filter((message) => message.threadId === threadId);
 
   return {
     messages,
@@ -626,8 +702,11 @@ export const getDemoLabels = (): Array<
   },
 ];
 
-export const getDemoMessageInspector = (messageId: string): MessageInspectorResult => {
-  const message = readDemoState().messages.find((entry) => entry.id === messageId);
+export const getDemoMessageInspector = (
+  mailboxId: string,
+  messageId: string,
+): MessageInspectorResult => {
+  const message = readSandboxState(mailboxId).messages.find((entry) => entry.id === messageId);
 
   return {
     id: messageId,
@@ -647,35 +726,52 @@ export const getDemoMessageInspector = (messageId: string): MessageInspectorResu
 };
 
 const updateMessages = (
+  mailboxId: string,
   predicate: (message: MessageListItem) => boolean,
   update: (message: MessageListItem) => MessageListItem,
 ) => {
-  updateDemoState((state) => ({
+  updateSandboxState(mailboxId, (state) => ({
     ...state,
     messages: state.messages.map((message) => (predicate(message) ? update(message) : message)),
   }));
 };
 
-const removeMessages = (predicate: (message: MessageListItem) => boolean) => {
-  updateDemoState((state) => ({
+const removeMessages = (mailboxId: string, predicate: (message: MessageListItem) => boolean) => {
+  updateSandboxState(mailboxId, (state) => ({
     ...state,
     messages: state.messages.filter((message) => !predicate(message)),
   }));
 };
 
-const getThreadIdForItem = (itemId: string) =>
-  readDemoState().messages.find((message) => message.id === itemId)?.threadId ?? itemId;
+const getThreadIdForItem = (mailboxId: string, itemId: string) =>
+  readSandboxState(mailboxId).messages.find((message) => message.id === itemId)?.threadId ?? itemId;
 
-const markItemReadState = async (queryClient: QueryClient, itemId: string, unread: boolean) => {
-  await markDemoThreadReadState(queryClient, getThreadIdForItem(itemId), unread);
+const markItemReadState = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  itemId: string,
+  unread: boolean,
+) => {
+  await markDemoThreadReadState(
+    queryClient,
+    mailboxId,
+    getThreadIdForItem(mailboxId, itemId),
+    unread,
+  );
 };
 
 const updateItemLabels = async (
   queryClient: QueryClient,
+  mailboxId: string,
   itemId: string,
   changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
 ) => {
-  await updateDemoThreadLabels(queryClient, getThreadIdForItem(itemId), changes);
+  await updateDemoThreadLabels(
+    queryClient,
+    mailboxId,
+    getThreadIdForItem(mailboxId, itemId),
+    changes,
+  );
 };
 
 const moveToTrashChanges = {
@@ -703,101 +799,112 @@ const moveToInboxFromTrashChanges = {
   removeLabelIds: [MAILBOX_LABELS.trash],
 };
 
-export const createDemoMailboxActions = (queryClient: QueryClient) => ({
+export const createDemoMailboxActions = (
+  queryClient: QueryClient,
+  mailboxId = DEMO_MAILBOX_ID,
+) => ({
   deleteDraft: async (message: MessageListItem) => {
-    await removeDemoThread(queryClient, message.threadId);
+    await removeDemoThread(queryClient, mailboxId, message.threadId);
   },
   deleteDrafts: async (threads: ThreadListEntry[]) => {
-    await Promise.all(threads.map((thread) => removeDemoThread(queryClient, thread.threadId)));
+    await Promise.all(
+      threads.map((thread) => removeDemoThread(queryClient, mailboxId, thread.threadId)),
+    );
   },
   markMessageAsRead: async (messageId: string) => {
-    await markItemReadState(queryClient, messageId, false);
+    await markItemReadState(queryClient, mailboxId, messageId, false);
   },
   markMessageAsSpam: async (messageId: string) => {
-    await updateItemLabels(queryClient, messageId, markAsSpamChanges);
+    await updateItemLabels(queryClient, mailboxId, messageId, markAsSpamChanges);
   },
   markMessageAsUnread: async (messageId: string) => {
-    await markItemReadState(queryClient, messageId, true);
+    await markItemReadState(queryClient, mailboxId, messageId, true);
   },
   markThreadAsRead: async (threadId: string) => {
-    await markDemoThreadReadState(queryClient, threadId, false);
+    await markDemoThreadReadState(queryClient, mailboxId, threadId, false);
   },
   markThreadAsSpam: async (threadId: string) => {
-    await updateDemoThreadLabels(queryClient, threadId, markAsSpamChanges);
+    await updateDemoThreadLabels(queryClient, mailboxId, threadId, markAsSpamChanges);
   },
   markThreadsAsRead: async (threads: ThreadListEntry[]) => {
     await Promise.all(
-      threads.map((thread) => markDemoThreadReadState(queryClient, thread.threadId, false)),
+      threads.map((thread) =>
+        markDemoThreadReadState(queryClient, mailboxId, thread.threadId, false),
+      ),
     );
   },
   markThreadsAsSpam: async (threads: ThreadListEntry[]) => {
     await Promise.all(
       threads.map((thread) =>
-        updateDemoThreadLabels(queryClient, thread.threadId, markAsSpamChanges),
+        updateDemoThreadLabels(queryClient, mailboxId, thread.threadId, markAsSpamChanges),
       ),
     );
   },
   markThreadsAsUnread: async (threads: ThreadListEntry[]) => {
     await Promise.all(
-      threads.map((thread) => markDemoThreadReadState(queryClient, thread.threadId, true)),
+      threads.map((thread) =>
+        markDemoThreadReadState(queryClient, mailboxId, thread.threadId, true),
+      ),
     );
   },
   markThreadAsUnread: async (threadId: string) => {
-    await markDemoThreadReadState(queryClient, threadId, true);
+    await markDemoThreadReadState(queryClient, mailboxId, threadId, true);
   },
   moveMessageToTrash: async (messageId: string) => {
-    await updateItemLabels(queryClient, messageId, moveToTrashChanges);
+    await updateItemLabels(queryClient, mailboxId, messageId, moveToTrashChanges);
   },
   moveThreadToTrash: async (threadId: string) => {
-    await updateDemoThreadLabels(queryClient, threadId, moveToTrashChanges);
+    await updateDemoThreadLabels(queryClient, mailboxId, threadId, moveToTrashChanges);
   },
   moveThreadsToTrash: async (threads: ThreadListEntry[]) => {
     await Promise.all(
       threads.map((thread) =>
-        updateDemoThreadLabels(queryClient, thread.threadId, moveToTrashChanges),
+        updateDemoThreadLabels(queryClient, mailboxId, thread.threadId, moveToTrashChanges),
       ),
     );
   },
   unmarkMessageAsSpam: async (messageId: string) => {
-    await updateItemLabels(queryClient, messageId, moveToInboxFromSpamChanges);
+    await updateItemLabels(queryClient, mailboxId, messageId, moveToInboxFromSpamChanges);
   },
   unmarkThreadAsSpam: async (threadId: string) => {
-    await updateDemoThreadLabels(queryClient, threadId, moveToInboxFromSpamChanges);
+    await updateDemoThreadLabels(queryClient, mailboxId, threadId, moveToInboxFromSpamChanges);
   },
   unmarkThreadsAsSpam: async (threads: ThreadListEntry[]) => {
     await Promise.all(
       threads.map((thread) =>
-        updateDemoThreadLabels(queryClient, thread.threadId, moveToInboxFromSpamChanges),
+        updateDemoThreadLabels(queryClient, mailboxId, thread.threadId, moveToInboxFromSpamChanges),
       ),
     );
   },
   unsubscribeFromMessage: async () => {},
   untrashMessage: async (messageId: string) => {
-    await updateItemLabels(queryClient, messageId, moveToInboxFromTrashChanges);
+    await updateItemLabels(queryClient, mailboxId, messageId, moveToInboxFromTrashChanges);
   },
   untrashThread: async (threadId: string) => {
-    await updateDemoThreadLabels(queryClient, threadId, moveToInboxFromTrashChanges);
+    await updateDemoThreadLabels(queryClient, mailboxId, threadId, moveToInboxFromTrashChanges);
   },
   updateMessageLabels: async (
     messageId: string,
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => {
-    await updateItemLabels(queryClient, messageId, changes);
+    await updateItemLabels(queryClient, mailboxId, messageId, changes);
   },
   updateThreadLabels: async (
     threadId: string,
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => {
-    await updateDemoThreadLabels(queryClient, threadId, changes);
+    await updateDemoThreadLabels(queryClient, mailboxId, threadId, changes);
   },
 });
 
 const markDemoThreadReadState = async (
   queryClient: QueryClient,
+  mailboxId: string,
   threadId: string,
   unread: boolean,
 ) => {
   updateMessages(
+    mailboxId,
     (message) => message.threadId === threadId,
     (message) => ({
       ...message,
@@ -805,24 +912,26 @@ const markDemoThreadReadState = async (
       labelIds: unread ? addUnreadLabel(message.labelIds) : removeUnreadLabel(message.labelIds),
     }),
   );
-  await invalidateDemoMail(queryClient);
+  await invalidateSandboxMail(queryClient, mailboxId);
 };
 
 const updateDemoThreadLabels = async (
   queryClient: QueryClient,
+  mailboxId: string,
   threadId: string,
   changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
 ) => {
   updateMessages(
+    mailboxId,
     (message) => message.threadId === threadId,
     (message) => ({ ...message, labelIds: applyLabelIdChanges(message.labelIds, changes) }),
   );
-  await invalidateDemoMail(queryClient);
+  await invalidateSandboxMail(queryClient, mailboxId);
 };
 
-const removeDemoThread = async (queryClient: QueryClient, threadId: string) => {
-  removeMessages((message) => message.threadId === threadId);
-  await invalidateDemoMail(queryClient);
+const removeDemoThread = async (queryClient: QueryClient, mailboxId: string, threadId: string) => {
+  removeMessages(mailboxId, (message) => message.threadId === threadId);
+  await invalidateSandboxMail(queryClient, mailboxId);
 };
 
 export const saveDemoDraft = async (draft: ComposeDraftState): Promise<ComposeDraftState> => {
@@ -887,5 +996,8 @@ export const sendDemoDraft = async (draft: ComposeDraftState) => {
 };
 
 export const deleteDemoDraft = async (draft: ComposeDraftState) => {
-  removeMessages((message) => message.id === draft.messageId || message.draftId === draft.draftId);
+  removeMessages(
+    DEMO_MAILBOX_ID,
+    (message) => message.id === draft.messageId || message.draftId === draft.draftId,
+  );
 };
