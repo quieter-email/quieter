@@ -332,7 +332,7 @@ export const FirstRunManagedMailSetup = ({
               </p>
             ) : (
               <div className="flex flex-wrap items-center gap-3">
-                <div className="squircle flex h-9 w-full max-w-md items-center rounded-md border border-input bg-background shadow-sm transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
+                <div className="flex h-9 w-full max-w-md items-center rounded-md border border-input bg-background shadow-sm transition-colors squircle focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
                   <TextFieldInput
                     aria-label="Managed mailbox local part"
                     chrome="ghost"
@@ -437,7 +437,7 @@ export const FirstRunManagedMailSetup = ({
                   {createdApiKey}
                 </button>
                 <a
-                  className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-background-dark px-3.5 text-[13px] text-foreground shadow-sm transition-transform duration-100 ease-out outline-none select-none hover:bg-input/40 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] active:bg-input/60"
+                  className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-background-dark px-3.5 text-[13px] text-foreground shadow-sm transition-transform duration-100 ease-out outline-none select-none squircle hover:bg-input/40 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] active:bg-input/60"
                   href="/api/openapi"
                   rel="noreferrer"
                   target="_blank"
@@ -452,7 +452,7 @@ export const FirstRunManagedMailSetup = ({
                   This organization already has an API key.
                 </p>
                 <a
-                  className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-background-dark px-3.5 text-[13px] text-foreground shadow-sm transition-transform duration-100 ease-out outline-none select-none hover:bg-input/40 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] active:bg-input/60"
+                  className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-background-dark px-3.5 text-[13px] text-foreground shadow-sm transition-transform duration-100 ease-out outline-none select-none squircle hover:bg-input/40 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] active:bg-input/60"
                   href="/api/openapi"
                   rel="noreferrer"
                   target="_blank"
@@ -480,7 +480,7 @@ export const FirstRunManagedMailSetup = ({
                   Create API key
                 </Button>
                 <a
-                  className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-[13px] text-muted-foreground transition-transform duration-100 ease-out outline-none select-none hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] active:bg-muted/80 active:text-foreground"
+                  className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-[13px] text-muted-foreground transition-transform duration-100 ease-out outline-none select-none squircle hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] active:bg-muted/80 active:text-foreground"
                   href="/api/openapi"
                   rel="noreferrer"
                   target="_blank"

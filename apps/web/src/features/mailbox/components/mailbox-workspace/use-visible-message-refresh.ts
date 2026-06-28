@@ -3,7 +3,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import type { ListMessagesPageResult, MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
-import { DEMO_MAILBOX_ID } from "~/lib/gmail/demo-mail";
+import { isSandboxMailboxId } from "~/lib/gmail/demo-mail";
 import { refreshVisibleMailboxMessages } from "~/lib/gmail/inbox-query";
 import {
   collectVisibleMessageRefreshBatch,
@@ -58,7 +58,7 @@ export const useVisibleMessageRefresh = ({
   const flushQueue = useCallback(() => {
     if (inFlightRef.current) return;
 
-    if (!selectedMailboxId || selectedMailboxId === DEMO_MAILBOX_ID || activeMailbox === "drafts") {
+    if (!selectedMailboxId || isSandboxMailboxId(selectedMailboxId) || activeMailbox === "drafts") {
       queueRef.current.clear();
       return;
     }
@@ -108,7 +108,7 @@ export const useVisibleMessageRefresh = ({
     (messageIds: readonly string[]) => {
       if (
         !selectedMailboxId ||
-        selectedMailboxId === DEMO_MAILBOX_ID ||
+        isSandboxMailboxId(selectedMailboxId) ||
         activeMailbox === "drafts" ||
         messageIds.length === 0
       ) {

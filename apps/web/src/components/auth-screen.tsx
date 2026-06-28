@@ -37,7 +37,7 @@ const AuthLastUsedHint = () => (
   <LazyMotion features={domAnimation}>
     <span
       aria-hidden
-      className="squircle pointer-events-none absolute -inset-e-2.5 -top-2.5 isolate overflow-hidden rounded-md p-px shadow-sm"
+      className="pointer-events-none absolute -inset-e-2.5 -top-2.5 isolate overflow-hidden rounded-md p-px shadow-sm squircle"
     >
       <m.span
         animate={{ rotate: 360 }}
@@ -49,7 +49,7 @@ const AuthLastUsedHint = () => (
         }}
         transition={{ duration: 5, ease: "linear", repeat: Infinity }}
       />
-      <span className="squircle relative block rounded-[inherit] bg-background px-2 py-1 text-[0.625rem] font-medium tracking-wide text-muted-foreground">
+      <span className="relative block rounded-[inherit] bg-background px-2 py-1 text-[0.625rem] font-medium tracking-wide text-muted-foreground squircle">
         Last used
       </span>
     </span>

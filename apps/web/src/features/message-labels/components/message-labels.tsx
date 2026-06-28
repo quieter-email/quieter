@@ -51,7 +51,7 @@ export const MessageLabels = ({
       {visibleLabels.map((label) => (
         <span
           className={cn(
-            "squircle inline-flex min-w-0 items-center rounded-md border font-medium",
+            "inline-flex min-w-0 items-center rounded-md border font-medium squircle",
             labelColorClassNames[label.color ?? "gray"],
             {
               "h-4 max-w-24 px-1.5 text-[10px]": compact,

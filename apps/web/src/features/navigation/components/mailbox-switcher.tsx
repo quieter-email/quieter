@@ -64,6 +64,7 @@ type MailboxDefaultButtonProps = {
 
 type MailboxSwitcherDropdownProps = {
   defaultMailboxId: string | null;
+  embedded?: boolean;
   groups: MailboxSwitcherGroup[];
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
   onReconnectMailbox: (mailbox: Pick<MailboxSwitcherMailbox, "emailAddress" | "id">) => void;
@@ -78,6 +79,7 @@ type SortableGroupProps = {
   children: ReactNode;
   collapsed: boolean;
   disabled: boolean;
+  embedded?: boolean;
   group: MailboxSwitcherGroup;
   index: number;
   onToggle: (groupId: string) => void;
@@ -185,6 +187,7 @@ const SortableGroup = ({
   children,
   collapsed,
   disabled,
+  embedded = false,
   group,
   index,
   onToggle,
@@ -216,7 +219,7 @@ const SortableGroup = ({
         <div className="group/header flex min-h-7 items-center rounded-xs transition-colors focus-within:bg-muted/40 hover:bg-muted/40">
           <button
             aria-expanded={!collapsed}
-            className="squircle flex min-w-0 flex-1 items-center gap-2 rounded-xs px-2 py-1 text-left outline-none"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-xs px-2 py-1 text-left outline-none squircle"
             onClick={() => onToggle(group.id)}
             ref={headerRef}
             type="button"
@@ -230,7 +233,7 @@ const SortableGroup = ({
               {group.name}
             </span>
           </button>
-          {group.kind === "organization" && (
+          {group.kind === "organization" && !embedded && (
             <IconButtonTooltip label={`Open ${group.name} settings`}>
               <LinkButton
                 aria-label={`Open ${group.name} settings`}
@@ -337,6 +340,7 @@ const SortableMailboxRow = ({
 
 export const MailboxSwitcherDropdown = ({
   defaultMailboxId,
+  embedded = false,
   groups,
   onReorderMailboxSwitcher,
   onReconnectMailbox,
@@ -394,7 +398,7 @@ export const MailboxSwitcherDropdown = ({
         <AnimatedHoverSurface layoutId="mailbox-switcher-hover" visible={isTriggerHovered} />
         <DropdownMenuTrigger
           aria-label="Switch mailbox"
-          className="squircle relative z-10 w-full min-w-0 rounded-md px-4 py-3 text-left outline-none hover:bg-transparent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-100"
+          className="relative z-10 w-full min-w-0 rounded-md px-4 py-3 text-left outline-none squircle hover:bg-transparent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-100"
         >
           <VerticalSlot className="min-w-0">
             <div>
@@ -424,6 +428,7 @@ export const MailboxSwitcherDropdown = ({
                   <SortableGroup
                     collapsed={isCollapsed}
                     disabled={!canReorderGroups}
+                    embedded={embedded}
                     group={group}
                     index={groupIndex}
                     key={group.id}

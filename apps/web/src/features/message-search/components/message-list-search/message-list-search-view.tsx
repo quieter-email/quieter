@@ -127,7 +127,7 @@ export const MessageListSearchView = ({
           </IconButtonTooltip>
 
           <div ref={fieldRef} className="relative min-w-0 flex-1" onBlur={handleSearchFieldBlur}>
-            <div className="squircle flex h-8 min-w-0 items-center gap-1 rounded-md border border-input bg-background-dark pr-1 shadow-sm transition-colors duration-150 ease-out focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
+            <div className="flex h-8 min-w-0 items-center gap-1 rounded-md border border-input bg-background-dark pr-1 shadow-sm transition-colors duration-150 ease-out squircle focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
               <div
                 className={cn(
                   "flex h-8 min-w-0 flex-1 scrollbar-none items-center gap-1 overflow-x-auto pr-2 [&::-webkit-scrollbar]:hidden",
@@ -155,7 +155,7 @@ export const MessageListSearchView = ({
                       <button
                         className={cn(
                           filterChipClassName,
-                          "squircle gap-1 rounded-xs px-2 outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20",
+                          "gap-1 rounded-xs px-2 outline-none squircle hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20",
                         )}
                         key={`label:${normalizeLabelSelectionKey(filter.value)}`}
                         onClick={(event) => {
@@ -188,7 +188,7 @@ export const MessageListSearchView = ({
                       <button
                         className={cn(
                           filterChipClassName,
-                          "squircle gap-1 rounded-xs px-2 outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20",
+                          "gap-1 rounded-xs px-2 outline-none squircle hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20",
                         )}
                         key={`${filter.type}:${filter.value}`}
                         onClick={(event) => {
@@ -219,7 +219,7 @@ export const MessageListSearchView = ({
                     <div
                       className={cn(
                         filterChipClassName,
-                        "squircle gap-1 rounded-xs px-1.5 transition-colors",
+                        "gap-1 rounded-xs px-1.5 transition-colors squircle",
                         {
                           "border-ring ring-2 ring-ring/20": activeDateFilterIndex === index,
                         },

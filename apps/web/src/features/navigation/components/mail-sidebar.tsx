@@ -52,6 +52,7 @@ type MailSidebarProps = {
     updatedAt: Date;
   }>;
   defaultMailboxId: string | null;
+  embedded?: boolean;
   groups: Array<{
     id: string;
     kind: "organization";
@@ -220,6 +221,7 @@ const SidebarContent = ({
   animateEntrance,
   chats,
   defaultMailboxId,
+  embedded = false,
   onCreateChat,
   onDeleteChat,
   onRenameChat,
@@ -242,7 +244,7 @@ const SidebarContent = ({
   selectedView,
   switcherSide = "right",
 }: SidebarContentProps) => {
-  const isInboxView = selectedView === "inbox";
+  const isInboxView = embedded || selectedView === "inbox";
   const selectedMailboxGrantRole = groups
     .flatMap((group) => group.mailboxes)
     .find((mailbox) => mailbox.id === selectedMailboxId)?.grantRole;
@@ -308,6 +310,7 @@ const SidebarContent = ({
       >
         <MailboxSwitcherDropdown
           defaultMailboxId={defaultMailboxId}
+          embedded={embedded}
           groups={groups}
           onReorderMailboxSwitcher={onReorderMailboxSwitcher}
           onReconnectMailbox={onReconnectMailbox}
@@ -334,55 +337,57 @@ const SidebarContent = ({
         )}
       </m.div>
 
-      <m.div
-        className="mt-2.5 will-change-[transform,opacity,filter]"
-        initial={getSidebarEntranceInitial(animateEntrance)}
-        animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-        transition={{ delay: getSidebarEntranceDelay(1), duration: 0.5, ease: "easeOut" }}
-      >
-        <div
-          aria-label="Workspace view"
-          className="relative grid grid-cols-2 rounded-lg bg-muted/40 p-0.5"
-          role="group"
+      {!embedded && (
+        <m.div
+          className="mt-2.5 will-change-[transform,opacity,filter]"
+          initial={getSidebarEntranceInitial(animateEntrance)}
+          animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+          transition={{ delay: getSidebarEntranceDelay(1), duration: 0.5, ease: "easeOut" }}
         >
-          <m.div
-            aria-hidden
-            className="pointer-events-none absolute inset-y-0.5 w-[calc(50%-2px)] rounded-md bg-background shadow-sm will-change-transform"
-            initial={false}
-            animate={{ left: selectedView === "inbox" ? 2 : "50%" }}
-            transition={{ type: "spring", stiffness: 520, damping: 38, mass: 0.75 }}
-          />
-          {WORKSPACE_VIEW_OPTIONS.map(({ id, label, icon }) => {
-            const isActive = selectedView === id;
+          <div
+            aria-label="Workspace view"
+            className="relative grid grid-cols-2 rounded-lg bg-muted/40 p-0.5"
+            role="group"
+          >
+            <m.div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0.5 w-[calc(50%-2px)] rounded-md bg-background shadow-sm will-change-transform"
+              initial={false}
+              animate={{ left: selectedView === "inbox" ? 2 : "50%" }}
+              transition={{ type: "spring", stiffness: 520, damping: 38, mass: 0.75 }}
+            />
+            {WORKSPACE_VIEW_OPTIONS.map(({ id, label, icon }) => {
+              const isActive = selectedView === id;
 
-            return (
-              <button
-                key={id}
-                aria-pressed={isActive}
-                className={cn(
-                  "relative z-10 flex h-8 touch-manipulation items-center justify-center gap-1.5 rounded-md text-[13px] font-medium outline-none select-none",
-                  "transition-[color,transform] duration-150 ease-out",
-                  "active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100",
-                  "focus-visible:ring-2 focus-visible:ring-ring/30",
-                  {
-                    "text-foreground": isActive,
-                    "text-muted-foreground hover:text-foreground/90": !isActive,
-                  },
-                )}
-                onClick={() => handleSelectView(id)}
-                type="button"
-              >
-                <HugeiconsIcon
-                  className="relative size-3.5 shrink-0"
-                  icon={icon}
-                  strokeWidth={1.5}
-                />
-                <span className="relative">{label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </m.div>
+              return (
+                <button
+                  key={id}
+                  aria-pressed={isActive}
+                  className={cn(
+                    "relative z-10 flex h-8 touch-manipulation items-center justify-center gap-1.5 rounded-md text-[13px] font-medium outline-none select-none",
+                    "transition-[color,transform] duration-150 ease-out",
+                    "active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100",
+                    "focus-visible:ring-2 focus-visible:ring-ring/30",
+                    {
+                      "text-foreground": isActive,
+                      "text-muted-foreground hover:text-foreground/90": !isActive,
+                    },
+                  )}
+                  onClick={() => handleSelectView(id)}
+                  type="button"
+                >
+                  <HugeiconsIcon
+                    className="relative size-3.5 shrink-0"
+                    icon={icon}
+                    strokeWidth={1.5}
+                  />
+                  <span className="relative">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </m.div>
+      )}
 
       {isInboxView && (
         <m.div
@@ -392,8 +397,9 @@ const SidebarContent = ({
           transition={{ delay: getSidebarEntranceDelay(2), duration: 0.5, ease: "easeOut" }}
         >
           <Button
+            aria-disabled={embedded}
             className="w-full justify-start rounded-md px-4"
-            disabled={!selectedMailboxId}
+            disabled={!selectedMailboxId || embedded}
             onClick={handleComposeNewMail}
             type="button"
           >
@@ -425,7 +431,8 @@ const SidebarContent = ({
           <SidebarLabelNav
             animateEntrance={animateEntrance}
             canManage={
-              selectedMailboxProvider === "gmail" || selectedMailboxGrantRole === "manager"
+              !embedded &&
+              (selectedMailboxProvider === "gmail" || selectedMailboxGrantRole === "manager")
             }
             mailboxId={selectedMailboxId}
             mailboxProvider={selectedMailboxProvider ?? "gmail"}
@@ -489,38 +496,40 @@ const SidebarContent = ({
         </>
       )}
 
-      <m.div
-        className="mt-auto p-2 will-change-[transform,opacity,filter]"
-        initial={getSidebarEntranceInitial(animateEntrance)}
-        animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-        transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
-      >
-        <div
-          className="relative rounded-md"
-          onMouseEnter={() => setIsSettingsHovered(true)}
-          onMouseLeave={() => setIsSettingsHovered(false)}
+      {!embedded && (
+        <m.div
+          className="mt-auto p-2 will-change-[transform,opacity,filter]"
+          initial={getSidebarEntranceInitial(animateEntrance)}
+          animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+          transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
         >
-          <AnimatedHoverSurface layoutId="sidebar-settings-hover" visible={isSettingsHovered} />
-          <LinkButton
-            aria-label="Settings"
-            className="group relative z-10 w-full justify-start bg-transparent hover:bg-transparent active:scale-100"
-            onClick={onRequestClose}
-            search={{
-              from: "/",
-              tab: "general",
-            }}
-            variant="ghost"
-            to="/settings"
+          <div
+            className="relative rounded-md"
+            onMouseEnter={() => setIsSettingsHovered(true)}
+            onMouseLeave={() => setIsSettingsHovered(false)}
           >
-            <HugeiconsIcon
-              className="size-4 shrink-0 rotate-0 transition-transform duration-1000 ease-in-out group-hover:rotate-360"
-              icon={Settings01Icon}
-              strokeWidth={1.5}
-            />
-            Settings
-          </LinkButton>
-        </div>
-      </m.div>
+            <AnimatedHoverSurface layoutId="sidebar-settings-hover" visible={isSettingsHovered} />
+            <LinkButton
+              aria-label="Settings"
+              className="group relative z-10 w-full justify-start bg-transparent hover:bg-transparent active:scale-100"
+              onClick={onRequestClose}
+              search={{
+                from: "/",
+                tab: "general",
+              }}
+              variant="ghost"
+              to="/settings"
+            >
+              <HugeiconsIcon
+                className="size-4 shrink-0 rotate-0 transition-transform duration-1000 ease-in-out group-hover:rotate-360"
+                icon={Settings01Icon}
+                strokeWidth={1.5}
+              />
+              Settings
+            </LinkButton>
+          </div>
+        </m.div>
+      )}
     </div>
   );
 };

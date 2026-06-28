@@ -19,6 +19,19 @@ function PrivacyPage() {
         our website, create an account, connect mailboxes, and use billing or AI features.
       </p>
 
+      <h2>Controller</h2>
+      <p>
+        Leander Timon Riefel
+        <br />
+        Cosimaplatz 5
+        <br />
+        Berlin, Germany
+        <br />
+        <a className="underline hover:text-foreground" href="mailto:legal@quieter.email">
+          legal@quieter.email
+        </a>
+      </p>
+
       <h2>Data we process</h2>
       <ul>
         <li>Account data such as your name, email address, and authentication identifiers.</li>
@@ -54,8 +67,11 @@ function PrivacyPage() {
       <h2>Your rights</h2>
       <p>
         Depending on your location, you may have rights to access, correct, delete, or restrict
-        processing of your personal data. Contact us at privacy@quieter.email to exercise these
-        rights.
+        processing of your personal data. Contact us at{" "}
+        <a className="underline hover:text-foreground" href="mailto:legal@quieter.email">
+          legal@quieter.email
+        </a>{" "}
+        to exercise these rights.
       </p>
 
       <h2>Retention</h2>

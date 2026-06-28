@@ -13,6 +13,7 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SitePasswordRouteImport } from './routes/site-password'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as ImprintRouteImport } from './routes/imprint'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as CookiesRouteImport } from './routes/cookies'
 import { Route as AuthRouteImport } from './routes/auth'
@@ -45,6 +46,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImprintRoute = ImprintRouteImport.update({
+  id: '/imprint',
+  path: '/imprint',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HomeRoute = HomeRouteImport.update({
@@ -119,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/cookies': typeof CookiesRoute
   '/home': typeof HomeRoute
+  '/imprint': typeof ImprintRoute
   '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/cookies': typeof CookiesRoute
   '/home': typeof HomeRoute
+  '/imprint': typeof ImprintRoute
   '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
@@ -158,6 +166,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/cookies': typeof CookiesRoute
   '/home': typeof HomeRoute
+  '/imprint': typeof ImprintRoute
   '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
@@ -179,6 +188,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/cookies'
     | '/home'
+    | '/imprint'
     | '/privacy'
     | '/settings'
     | '/site-password'
@@ -198,6 +208,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/cookies'
     | '/home'
+    | '/imprint'
     | '/privacy'
     | '/settings'
     | '/site-password'
@@ -217,6 +228,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/cookies'
     | '/home'
+    | '/imprint'
     | '/privacy'
     | '/settings'
     | '/site-password'
@@ -237,6 +249,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   CookiesRoute: typeof CookiesRoute
   HomeRoute: typeof HomeRoute
+  ImprintRoute: typeof ImprintRoute
   PrivacyRoute: typeof PrivacyRoute
   SettingsRoute: typeof SettingsRoute
   SitePasswordRoute: typeof SitePasswordRoute
@@ -280,6 +293,13 @@ declare module '@tanstack/react-router' {
       path: '/privacy'
       fullPath: '/privacy'
       preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/imprint': {
+      id: '/imprint'
+      path: '/imprint'
+      fullPath: '/imprint'
+      preLoaderRoute: typeof ImprintRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/home': {
@@ -381,6 +401,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   CookiesRoute: CookiesRoute,
   HomeRoute: HomeRoute,
+  ImprintRoute: ImprintRoute,
   PrivacyRoute: PrivacyRoute,
   SettingsRoute: SettingsRoute,
   SitePasswordRoute: SitePasswordRoute,

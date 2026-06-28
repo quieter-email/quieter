@@ -34,7 +34,7 @@ export const AccordionTrigger = ({
 }) => (
   <AccordionPrimitive.Trigger
     className={cn(
-      "squircle flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-foreground transition-transform duration-100 ease-out outline-none hover:bg-muted/40 focus-visible:bg-muted/40 active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      "flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-foreground transition-transform duration-100 ease-out outline-none squircle hover:bg-muted/40 focus-visible:bg-muted/40 active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
       className,
     )}
     {...props}
