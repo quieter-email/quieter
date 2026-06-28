@@ -19,7 +19,7 @@ export const EmptyMessageState = ({
         {waveDots.map(({ column, id }) => (
           <m.span
             animate={{ opacity: [0, 0.5, 0] }}
-            className="size-1.5 bg-muted-foreground"
+            className="inline-block size-1.5 bg-muted-foreground"
             key={id}
             transition={{
               delay: (9 - column) * 0.18,

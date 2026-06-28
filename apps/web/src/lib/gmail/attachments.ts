@@ -25,7 +25,7 @@ export const downloadAttachmentFromServer = async (
   signal?: AbortSignal,
 ) => {
   if (isSandboxMailboxId(mailboxId)) {
-    return;
+    throw new Error("This attachment can't be downloaded here.");
   }
 
   const file = await loadAttachmentFromServer(

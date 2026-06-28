@@ -207,13 +207,6 @@
   }
 }
 
-@utility squircle-* {
-  @supports (corner-shape: squircle) {
-    corner-shape: superellipse(1.825);
-    border-radius: --value(--radius-squircle- *);
-  }
-}
-
 @layer utilities {
   @supports (corner-shape: squircle) {
     .squircle {

@@ -18,6 +18,7 @@ import {
   type MessageListItem,
   type ThreadMessagesResult,
 } from "./gmail";
+import { getMailboxThreadQueriesKey } from "./thread-query";
 
 export const DEMO_MAILBOX_ID = "demo:mailbox";
 export const LANDING_DEMO_MAILBOX_ID = "landing:mailbox";
@@ -483,7 +484,7 @@ const updateSandboxState = (
 const invalidateSandboxMail = async (queryClient: QueryClient, mailboxId: string) => {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: ["messages", mailboxId] }),
-    queryClient.invalidateQueries({ queryKey: ["message-thread", mailboxId] }),
+    queryClient.invalidateQueries({ queryKey: getMailboxThreadQueriesKey(mailboxId) }),
     ...(mailboxId === DEMO_MAILBOX_ID
       ? [queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() })]
       : []),

@@ -25,12 +25,10 @@ const featureEnter = {
 } as const;
 
 const LandingFeatureHero = ({
-  alt,
   children,
   headline,
   src,
 }: {
-  alt: string;
   children?: ReactNode;
   headline: string;
   src: string;
@@ -38,11 +36,16 @@ const LandingFeatureHero = ({
   <div className="flex flex-col gap-16 md:gap-24">
     <m.div
       {...featureEnter}
-      aria-label={alt}
       className="relative aspect-16/10 overflow-hidden rounded-2xl squircle md:rounded-4xl"
-      role="img"
     >
-      <img alt="" aria-hidden className="absolute inset-0 size-full object-cover" src={src} />
+      <img
+        alt=""
+        aria-hidden
+        className="absolute inset-0 size-full object-cover"
+        decoding="async"
+        loading="lazy"
+        src={src}
+      />
       <div className="absolute inset-0 bg-neutral-950/55" />
       <div className="relative flex h-full items-center justify-center px-6 md:px-10">
         <h2 className="max-w-3xl text-center text-2xl font-light tracking-tight text-balance text-white md:text-3xl lg:text-4xl">
@@ -222,7 +225,7 @@ export const HomePage = () => (
 
     <m.div className="relative z-0 w-full overflow-hidden bg-neutral-950 px-6 py-20 text-white md:px-8 md:py-32">
       <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col gap-24 md:gap-32">
-        <LandingFeatureHero alt="Gmail" headline="Connect your gmail" src="/landing_gmail.webp" />
+        <LandingFeatureHero headline="Connect your gmail" src="/landing_gmail.webp" />
 
         <LandingGmailFeature
           description="Stack structured filters for status, dates, people, content, and your own labels to compose a precise query in seconds."
@@ -251,7 +254,6 @@ export const HomePage = () => (
     <m.div className="relative z-0 w-full overflow-hidden bg-neutral-200 px-6 py-16 md:px-8 md:py-24">
       <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col gap-24 md:gap-32">
         <LandingFeatureHero
-          alt="Managed mail"
           headline="Or use your domain with managed mail"
           src="/landing_managed.webp"
         />
