@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { jsx } from "react/jsx-runtime";
 import { Quieter, QuieterApiError } from "../src";
 import { quieter } from "../src/email-sdk";
-import { sendReactEmail } from "../src/react-email";
 
 describe("Quieter", () => {
   beforeEach(() => {
@@ -53,7 +52,7 @@ describe("Quieter", () => {
       },
     });
 
-    await sendReactEmail(client, {
+    await client.send({
       from: "demo@example.com",
       react: jsx("div", { children: "Welcome" }),
       subject: "Hello",

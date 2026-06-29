@@ -1,3 +1,6 @@
+import type { ReactElement } from "react";
+import { render } from "@react-email/render";
+
 export type QuieterAddress = string | string[];
 
 export type QuieterAttachment = {
@@ -41,6 +44,10 @@ export type QuieterSendInput =
     })
   | (QuieterSendBaseInput & {
       html?: never;
+      react: ReactElement;
+    })
+  | (QuieterSendBaseInput & {
+      html?: never;
       react?: never;
     });
 
@@ -61,7 +68,7 @@ export type QuieterOptions = {
   fetch?: typeof fetch;
 };
 
-type SendRequest = Omit<QuieterSendInput, "attachments"> & {
+type SendRequest = Omit<QuieterSendInput, "attachments" | "react"> & {
   attachments?: Array<Omit<QuieterAttachment, "content" | "contentEncoding"> & { content: string }>;
 };
 
@@ -147,14 +154,17 @@ export const normalizeSendInput = async (
   input: QuieterSendInput,
   options: QuieterSendOptions = {},
 ): Promise<SendRequest> => {
+  const { react: _react, ...request } = input;
+
   return {
-    ...input,
+    ...request,
     attachments: await Promise.all(
       (input.attachments ?? []).map(async ({ content, contentEncoding, ...attachment }) => ({
         ...attachment,
         content: await encodeAttachmentContent(content, contentEncoding),
       })),
     ),
+    html: input.react ? await render(input.react) : input.html,
     idempotencyKey: input.idempotencyKey ?? options.idempotencyKey,
     text: input.text,
   };

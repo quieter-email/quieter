@@ -20,12 +20,10 @@ await quieter.send({
 
 ## React Email
 
-Install `@react-email/render`, then render through the React Email subpath.
+Pass a React Email component directly to `send`. Quieter renders it before calling the API.
 
 ```tsx
-import { sendReactEmail } from "quieter/react-email";
-
-await sendReactEmail(quieter, {
+await quieter.send({
   from: "Demo <demo@quieter.email>",
   to: ["to@example.com"],
   subject: "Welcome",
