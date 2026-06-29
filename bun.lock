@@ -331,7 +331,7 @@
     },
     "packages/sdk": {
       "name": "quieter",
-      "version": "0.0.0",
+      "version": "0.0.1",
       "devDependencies": {
         "@opencoredev/email-sdk": "^0.6.5",
         "@quieter/config": "workspace:*",

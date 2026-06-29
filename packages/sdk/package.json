@@ -1,6 +1,6 @@
 {
   "name": "quieter",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "TypeScript SDK for the Quieter send API.",
   "license": "MIT",
   "files": [
