@@ -21,7 +21,7 @@ const getAuthMailApiUrl = () => {
     (serverEnv.VERCEL_URL && `https://${serverEnv.VERCEL_URL}`) ||
     "http://localhost:3000";
 
-  return new URL("/api/messages", baseUrl).href;
+  return new URL("/api/v1/send", baseUrl).href;
 };
 
 const escapeHtml = (value: string) =>
@@ -51,8 +51,8 @@ export const sendAuthMail = async (input: AuthMailInput) => {
 
   const response = await fetch(getAuthMailApiUrl(), {
     body: JSON.stringify({
+      from: authMailSender,
       html: input.html,
-      sender: authMailSender,
       subject: input.subject,
       text: input.text,
       to: [input.to],

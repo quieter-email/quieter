@@ -37,7 +37,7 @@
 - Managed mailboxes are organization-owned and visible only through explicit `mailboxGrant` records.
 - `user.defaultMailboxId` pins the global default mailbox across all organizations. Invalid or missing `mailboxId` should resolve to that global default, then the first accessible mailbox.
 - Google authentication requests identity scopes only. Gmail authorization requests `https://mail.google.com/` plus identity scopes and uses the exact-mailbox reconnect flow.
-- Auth emails send through `POST /api/messages` using `QUIETER_MAIL_API_KEY` and `auth@quieter.email` by default.
+- Auth emails send through `POST /api/v1/send` using `QUIETER_MAIL_API_KEY` and `auth@quieter.email` by default.
 - If Gmail exposes `List-Unsubscribe` mailto, use the single unsubscribe action that sends the email.
 - Mailbox list selection supports Shift range, Ctrl/Cmd toggle, `Mod+A`, and `Escape`.
 - Cookie consent uses [c15t](https://c15t.com/) offline mode with browser-only preference storage and a conservative opt-in banner. PostHog and Vercel Speed Insights load only after `measurement` consent (`@c15t/scripts`, `loadMode: 'after-consent'`). Client Sentry stays on in production; disclose in the Privacy Policy.
@@ -74,9 +74,9 @@
 ## Mail Infra
 
 - SST owns the standalone SES/S3/SNS mail infrastructure.
-- The web app exposes `POST /api/messages` for organization API-key outbound mail. It verifies the Better Auth `organization` API key, requires the `sender` domain to be a verified `mailDomain` for that organization, and sends through SES from `packages/orpc/src/organization-mail.ts`.
+- The web app exposes `POST /api/v1/send` for organization API-key outbound mail. It verifies the Better Auth `organization` API key, requires the `from` domain to be a verified `mailDomain` for that organization, and sends through SES from `packages/orpc/src/organization-mail.ts`.
 - Better Auth email hooks call that endpoint from `packages/auth/src/email.ts`. Set `QUIETER_MAIL_API_KEY` to an organization API key for the organization that owns the auth sender domain. Override `QUIETER_AUTH_MAIL_SENDER` or `QUIETER_MAIL_API_URL` only when needed.
-- Managed mailbox messages are persisted in `managedMailMessage`. Inbound SES receipt processing parses the raw S3 object and writes one row per exact managed mailbox recipient; managed app sends and exact-sender `POST /api/messages` sends write outbound rows.
+- Managed mailbox messages are persisted in `managedMailMessage`. Inbound SES receipt processing parses the raw S3 object and writes one row per exact managed mailbox recipient; managed app sends and exact-sender `POST /api/v1/send` sends write outbound rows.
 - Managed mailbox UI supports Inbox, Sent, read/unread state, structured search, shared conversation labels, shared and personal saved views, manager-controlled automatic label rules, threads, replies, forwards, and compose. Drafts, spam, and trash remain Gmail-only.
 - Managed labels are shared mailbox workflow state. Readers can browse and filter labels, responders can apply them, and managers own label definitions, shared views, rules, and historical rule backfills. Personal saved views remain private to their owner.
 - Domain registration should not be added back without rebuilding the integration intentionally.

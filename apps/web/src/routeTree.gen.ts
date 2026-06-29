@@ -21,7 +21,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
 import { Route as ApiSitePasswordRouteImport } from './routes/api/site-password'
 import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
-import { Route as ApiMessagesRouteImport } from './routes/api/messages'
+import { Route as ApiV1SendRouteImport } from './routes/api/v1/send'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
 import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callback'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
@@ -88,9 +88,9 @@ const ApiOpenapiRoute = ApiOpenapiRouteImport.update({
   path: '/api/openapi',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiMessagesRoute = ApiMessagesRouteImport.update({
-  id: '/api/messages',
-  path: '/api/messages',
+const ApiV1SendRoute = ApiV1SendRouteImport.update({
+  id: '/api/v1/send',
+  path: '/api/v1/send',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiOrpcSplatRoute = ApiOrpcSplatRouteImport.update({
@@ -130,13 +130,13 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
   '/terms': typeof TermsRoute
-  '/api/messages': typeof ApiMessagesRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
+  '/api/v1/send': typeof ApiV1SendRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
@@ -150,13 +150,13 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
   '/terms': typeof TermsRoute
-  '/api/messages': typeof ApiMessagesRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
+  '/api/v1/send': typeof ApiV1SendRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
@@ -171,13 +171,13 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
   '/terms': typeof TermsRoute
-  '/api/messages': typeof ApiMessagesRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
+  '/api/v1/send': typeof ApiV1SendRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
@@ -193,13 +193,13 @@ export interface FileRouteTypes {
     | '/settings'
     | '/site-password'
     | '/terms'
-    | '/api/messages'
     | '/api/openapi'
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
     | '/api/gmail/callback'
     | '/api/orpc/$'
+    | '/api/v1/send'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/chat/runs/$runId/stream'
   fileRoutesByTo: FileRoutesByTo
@@ -213,13 +213,13 @@ export interface FileRouteTypes {
     | '/settings'
     | '/site-password'
     | '/terms'
-    | '/api/messages'
     | '/api/openapi'
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
     | '/api/gmail/callback'
     | '/api/orpc/$'
+    | '/api/v1/send'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/chat/runs/$runId/stream'
   id:
@@ -233,13 +233,13 @@ export interface FileRouteTypes {
     | '/settings'
     | '/site-password'
     | '/terms'
-    | '/api/messages'
     | '/api/openapi'
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
     | '/api/gmail/callback'
     | '/api/orpc/$'
+    | '/api/v1/send'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/chat/runs/$runId/stream'
   fileRoutesById: FileRoutesById
@@ -254,13 +254,13 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   SitePasswordRoute: typeof SitePasswordRoute
   TermsRoute: typeof TermsRoute
-  ApiMessagesRoute: typeof ApiMessagesRoute
   ApiOpenapiRoute: typeof ApiOpenapiRoute
   ApiSitePasswordRoute: typeof ApiSitePasswordRoute
   ApiWaitlistRoute: typeof ApiWaitlistRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiGmailCallbackRoute: typeof ApiGmailCallbackRoute
   ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
+  ApiV1SendRoute: typeof ApiV1SendRoute
   ApiInternalGmailCredentialsRotateRoute: typeof ApiInternalGmailCredentialsRotateRoute
   ApiChatRunsRunIdStreamRoute: typeof ApiChatRunsRunIdStreamRoute
 }
@@ -351,11 +351,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOpenapiRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/messages': {
-      id: '/api/messages'
-      path: '/api/messages'
-      fullPath: '/api/messages'
-      preLoaderRoute: typeof ApiMessagesRouteImport
+    '/api/v1/send': {
+      id: '/api/v1/send'
+      path: '/api/v1/send'
+      fullPath: '/api/v1/send'
+      preLoaderRoute: typeof ApiV1SendRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/orpc/$': {
@@ -406,13 +406,13 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   SitePasswordRoute: SitePasswordRoute,
   TermsRoute: TermsRoute,
-  ApiMessagesRoute: ApiMessagesRoute,
   ApiOpenapiRoute: ApiOpenapiRoute,
   ApiSitePasswordRoute: ApiSitePasswordRoute,
   ApiWaitlistRoute: ApiWaitlistRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiGmailCallbackRoute: ApiGmailCallbackRoute,
   ApiOrpcSplatRoute: ApiOrpcSplatRoute,
+  ApiV1SendRoute: ApiV1SendRoute,
   ApiInternalGmailCredentialsRotateRoute:
     ApiInternalGmailCredentialsRotateRoute,
   ApiChatRunsRunIdStreamRoute: ApiChatRunsRunIdStreamRoute,

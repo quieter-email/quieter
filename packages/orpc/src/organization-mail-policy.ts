@@ -1,4 +1,5 @@
 import { db, mailDomain } from "@quieter/database";
+import { extractMailAddress } from "@quieter/mail/compose";
 import { and, eq } from "drizzle-orm";
 
 export class OrganizationMailSendError extends Error {
@@ -12,7 +13,7 @@ export class OrganizationMailSendError extends Error {
 }
 
 const getSenderDomain = (sender: string) => {
-  const domain = sender.trim().toLowerCase().split("@").at(1);
+  const domain = extractMailAddress(sender).trim().toLowerCase().split("@").at(1);
 
   if (!domain) {
     throw new OrganizationMailSendError("Sender must be an email address.", 400);

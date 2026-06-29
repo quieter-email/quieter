@@ -1,14 +1,15 @@
 import { auth } from "@quieter/auth";
+import { MAX_SEND_PAYLOAD_BYTES } from "@quieter/mail/send";
 import {
   sendOrganizationMailMessage,
   ORGANIZATION_API_KEY_CONFIG_ID,
-  organizationMailMessageSchema,
+  sendMessageInputSchema,
   OrganizationMailSendError,
 } from "@quieter/orpc/organization-mail";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
-export const Route = createFileRoute("/api/messages")({
+export const Route = createFileRoute("/api/v1/send")({
   server: {
     handlers: {
       POST: async ({ request }) => {
@@ -33,9 +34,14 @@ export const Route = createFileRoute("/api/messages")({
           return Response.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        const body = await request.text();
+        if (new TextEncoder().encode(body).byteLength > MAX_SEND_PAYLOAD_BYTES) {
+          return Response.json({ error: "Message payload is too large." }, { status: 413 });
+        }
+
         let json: unknown;
         try {
-          json = await request.json();
+          json = JSON.parse(body);
         } catch {
           return Response.json(
             { error: "Could not parse the json message payload." },
@@ -43,7 +49,9 @@ export const Route = createFileRoute("/api/messages")({
           );
         }
 
-        const parsedMessage = organizationMailMessageSchema.safeParse(json);
+        const parsedMessage = sendMessageInputSchema.safeParse(
+          mergeIdempotencyHeader(json, request.headers),
+        );
 
         if (!parsedMessage.success) {
           return Response.json(
@@ -61,7 +69,7 @@ export const Route = createFileRoute("/api/messages")({
             organizationId: verifiedApiKey.key.referenceId,
           });
 
-          return Response.json(result, { status: 201 });
+          return Response.json(result, { status: result.idempotent ? 200 : 201 });
         } catch (error) {
           if (error instanceof OrganizationMailSendError) {
             return Response.json({ error: error.message }, { status: error.status });
@@ -83,4 +91,23 @@ const getBearerToken = (headers: Headers) => {
   }
 
   return authorization.slice("Bearer ".length).trim() || null;
+};
+
+const mergeIdempotencyHeader = (json: unknown, headers: Headers) => {
+  const idempotencyKey = headers.get("idempotency-key")?.trim();
+
+  if (
+    !idempotencyKey ||
+    !json ||
+    typeof json !== "object" ||
+    Array.isArray(json) ||
+    "idempotencyKey" in json
+  ) {
+    return json;
+  }
+
+  return {
+    ...json,
+    idempotencyKey,
+  };
 };

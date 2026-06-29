@@ -9,6 +9,7 @@
     "./mailbox-organization": "./src/mailbox-organization.ts",
     "./raw-message": "./src/raw-message.ts",
     "./search": "./src/search.ts",
+    "./send": "./src/send.ts",
     "./sender-avatar": "./src/sender-avatar.ts"
   },
   "scripts": {

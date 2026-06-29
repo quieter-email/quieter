@@ -119,7 +119,7 @@ Inbound:
 Outbound:
 
 - Managed compose and replies send through server-side mail logic.
-- `POST /api/messages` authenticates an organization API key and requires a verified sender domain.
+- `POST /api/v1/send` authenticates an organization API key and requires a verified sender domain.
 - Better Auth email hooks call the same endpoint.
 
 ## Chat
