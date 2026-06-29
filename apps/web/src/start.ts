@@ -15,7 +15,7 @@ import {
 const sitePasswordPaths = new Set([
   "/api/auth/polar/webhooks",
   "/api/internal/gmail-credentials/rotate",
-  "/api/messages",
+  "/api/v1/send",
   "/api/site-password",
   "/api/waitlist",
 ]);
@@ -34,8 +34,8 @@ const getRateLimitPolicy = (pathname: string) => {
   if (pathname === "/api/waitlist") {
     return { group: "waitlist", limit: 5, windowMs: 60 * 60_000 };
   }
-  if (pathname === "/api/messages") {
-    return { group: "messages", limit: 60, windowMs: 60_000 };
+  if (pathname === "/api/v1/send") {
+    return { group: "send", limit: 60, windowMs: 60_000 };
   }
   if (pathname.includes("/chat")) return { group: "chat", limit: 30, windowMs: 60_000 };
   return { group: "default", limit: 120, windowMs: 60_000 };

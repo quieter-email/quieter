@@ -1,4 +1,5 @@
 import type { SESv2Client } from "@aws-sdk/client-sesv2";
+import type { SendHeader } from "@quieter/mail/send";
 import type { z } from "zod";
 import { ORPCError } from "@orpc/server";
 import {
@@ -577,22 +578,28 @@ export const recordOutboundManagedMessageForSender = async (input: {
   bodyHtml?: string;
   bodyText?: string;
   cc?: string[];
+  headers?: SendHeader[];
   messageHeaderId?: string;
   organizationId: string;
   providerMessageId: string;
+  rawSizeBytes?: number | null;
   replyTo?: string[];
   sender: string;
+  senderAddress?: string;
   sentAt?: Date;
   subject: string;
   threadId?: string;
   to: string[];
 }) => {
+  const senderAddress = normalizeEmailAddress(
+    input.senderAddress ?? extractMailAddress(input.sender),
+  );
   const [senderMailbox] = await db
     .select({ id: mailbox.id })
     .from(mailbox)
     .where(
       and(
-        eq(mailbox.emailAddress, normalizeEmailAddress(input.sender)),
+        eq(mailbox.emailAddress, senderAddress),
         eq(mailbox.organizationId, input.organizationId),
         eq(mailbox.provider, "managed"),
       ),
@@ -615,14 +622,14 @@ export const recordOutboundManagedMessageForSender = async (input: {
       direction: "outbound",
       from: input.sender,
       fromNormalized: normalizeManagedSearchValue(input.sender),
-      headers: [],
+      headers: input.headers ?? [],
       id,
       inReplyTo: null,
       isRead: true,
       mailboxId: senderMailbox.id,
       messageHeaderId: input.messageHeaderId ?? null,
       providerMessageId: input.providerMessageId,
-      rawSizeBytes: null,
+      rawSizeBytes: input.rawSizeBytes ?? null,
       references: null,
       replyTo: input.replyTo?.join(", ") || null,
       s3Bucket: null,

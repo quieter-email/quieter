@@ -417,7 +417,7 @@ export const FirstRunManagedMailSetup = ({
               <h2 className="text-sm font-medium text-foreground">4. Create an API key</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 Use an organization API key to send messages through{" "}
-                <span className="font-mono">/api/messages</span>.
+                <span className="font-mono">/api/v1/send</span>.
               </p>
             </div>
             {createdApiKey ? (

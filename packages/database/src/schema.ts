@@ -1036,6 +1036,35 @@ export const organizationMailUsageEvent = pgTable(
   ],
 );
 
+export const organizationMailSendIdempotency = pgTable(
+  "organizationMailSendIdempotency",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    idempotencyKey: text("idempotencyKey").notNull(),
+    requestHash: text("requestHash").notNull(),
+    response: jsonb("response").$type<{
+      messageId: string | null;
+      sent: true;
+    }>(),
+    status: text("status").default("completed").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    index("organization_mail_send_idempotency_organization_created_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
+    unique("organization_mail_send_idempotency_organization_key_unique").on(
+      table.organizationId,
+      table.idempotencyKey,
+    ),
+  ],
+);
+
 export const rateLimitBucket = pgTable(
   "rateLimitBucket",
   {
@@ -1253,6 +1282,7 @@ export const tables = {
   managedMailSavedView,
   mailDomain,
   organizationMailUsageAlertEvent,
+  organizationMailSendIdempotency,
   organizationMailUsageEvent,
   organizationMailUsageSettings,
   waitlistSignup,
@@ -1352,6 +1382,10 @@ export const authRelations = defineRelations(tables, (r) => ({
     organizationMailUsageEvents: r.many.organizationMailUsageEvent({
       from: r.organization.id,
       to: r.organizationMailUsageEvent.organizationId,
+    }),
+    organizationMailSendIdempotency: r.many.organizationMailSendIdempotency({
+      from: r.organization.id,
+      to: r.organizationMailSendIdempotency.organizationId,
     }),
     organizationMailUsageSettings: r.one.organizationMailUsageSettings({
       from: r.organization.id,
@@ -1692,6 +1726,13 @@ export const authRelations = defineRelations(tables, (r) => ({
   organizationMailUsageEvent: {
     organization: r.one.organization({
       from: r.organizationMailUsageEvent.organizationId,
+      to: r.organization.id,
+      optional: false,
+    }),
+  },
+  organizationMailSendIdempotency: {
+    organization: r.one.organization({
+      from: r.organizationMailSendIdempotency.organizationId,
       to: r.organization.id,
       optional: false,
     }),

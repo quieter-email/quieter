@@ -23,51 +23,112 @@ const openApiDocument = {
       SendMessageRequest: {
         type: "object",
         additionalProperties: false,
-        required: ["sender", "subject", "to"],
+        required: ["from", "subject", "text", "to"],
         properties: {
-          bcc: {
+          attachments: {
             type: "array",
-            items: { type: "string", format: "email" },
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["filename", "content"],
+              properties: {
+                content: {
+                  type: "string",
+                  description: "Base64 encoded attachment bytes.",
+                },
+                contentId: { type: "string" },
+                contentType: {
+                  type: "string",
+                  default: "application/octet-stream",
+                },
+                disposition: {
+                  type: "string",
+                  enum: ["attachment", "inline"],
+                  default: "attachment",
+                },
+                filename: { type: "string", minLength: 1 },
+              },
+            },
+          },
+          bcc: {
+            oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }],
           },
           cc: {
-            type: "array",
-            items: { type: "string", format: "email" },
+            oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }],
+          },
+          from: {
+            type: "string",
+            description:
+              "Sender address. Display names are supported; the email domain must be verified for the team that owns the API key.",
+            examples: ["Demo <demo@quieter.email>"],
+          },
+          headers: {
+            oneOf: [
+              { type: "object", additionalProperties: { type: "string" } },
+              {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["name", "value"],
+                  properties: {
+                    name: { type: "string" },
+                    value: { type: "string" },
+                  },
+                },
+              },
+            ],
           },
           html: {
             type: "string",
             minLength: 1,
           },
-          replyTo: {
-            type: "array",
-            items: { type: "string", format: "email" },
-          },
-          sender: {
+          idempotencyKey: {
             type: "string",
-            format: "email",
-            description:
-              "Sender address. The domain must be verified for the team that owns the API key.",
+          },
+          metadata: {
+            type: "object",
+            additionalProperties: {
+              type: ["string", "number", "boolean", "null"],
+            },
+          },
+          replyTo: {
+            oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }],
           },
           subject: {
             type: "string",
             minLength: 1,
+          },
+          tags: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["name", "value"],
+              properties: {
+                name: { type: "string" },
+                value: { type: "string" },
+              },
+            },
           },
           text: {
             type: "string",
             minLength: 1,
           },
           to: {
-            type: "array",
-            minItems: 1,
-            items: { type: "string", format: "email" },
+            oneOf: [{ type: "string" }, { type: "array", minItems: 1, items: { type: "string" } }],
           },
         },
-        anyOf: [{ required: ["text"] }, { required: ["html"] }],
       },
       SendMessageResponse: {
         type: "object",
         additionalProperties: false,
         required: ["messageId", "sent"],
         properties: {
+          idempotent: {
+            type: "boolean",
+            description: "Present when an idempotency key returned a previous result.",
+          },
           messageId: {
             type: ["string", "null"],
           },
@@ -90,7 +151,7 @@ const openApiDocument = {
     },
   },
   paths: {
-    "/api/messages": {
+    "/api/v1/send": {
       post: {
         operationId: "sendMessage",
         summary: "Send a mail message",
@@ -105,11 +166,35 @@ const openApiDocument = {
           },
         },
         responses: {
+          "200": {
+            description: "Idempotent replay returned a previously accepted message result.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/SendMessageResponse" },
+              },
+            },
+          },
           "201": {
             description: "Message accepted by the mail provider.",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/SendMessageResponse" },
+              },
+            },
+          },
+          "409": {
+            description: "The idempotency key was already used with a different message.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "413": {
+            description: "Message payload is too large.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },
