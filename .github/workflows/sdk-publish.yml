@@ -34,8 +34,8 @@ jobs:
         with:
           bun-version-file: package.json
 
-      - name: Use pinned npm
-        run: sudo npm install --global npm@11.4.2
+      - name: Use latest npm
+        run: sudo npm install --global npm@latest
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -81,4 +81,4 @@ jobs:
 
       - name: Publish
         working-directory: packages/sdk
-        run: npm publish --access public
+        run: npm publish --access public --provenance
