@@ -19,17 +19,13 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./email-sdk": {
-      "types": "./dist/email-sdk.d.ts",
-      "default": "./dist/email-sdk.js"
     }
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && bun build ./src/index.ts ./src/email-sdk.ts --outdir ./dist --target browser --format esm --packages external && tsgo --project ./tsconfig.build.json",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && bun build ./src/index.ts --outdir ./dist --target browser --format esm --packages external && tsgo --project ./tsconfig.build.json",
     "fmt": "oxfmt --config ../../oxfmt.json .",
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
     "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/sdk",
@@ -44,19 +40,10 @@
     "react": "^19.2.7"
   },
   "devDependencies": {
-    "@opencoredev/email-sdk": "^0.6.5",
     "@quieter/config": "workspace:*",
     "@typescript/native-preview": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "typescript": "catalog:"
-  },
-  "peerDependencies": {
-    "@opencoredev/email-sdk": "^0.6.5"
-  },
-  "peerDependenciesMeta": {
-    "@opencoredev/email-sdk": {
-      "optional": true
-    }
   }
 }

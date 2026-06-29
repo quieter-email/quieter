@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { jsx } from "react/jsx-runtime";
 import { Quieter, QuieterApiError } from "../src";
-import { quieter } from "../src/email-sdk";
 
 describe("Quieter", () => {
   beforeEach(() => {
@@ -81,44 +80,5 @@ describe("Quieter", () => {
         to: "to@example.com",
       }),
     ).rejects.toBeInstanceOf(QuieterApiError);
-  });
-});
-
-describe("email-sdk adapter", () => {
-  test("maps Email SDK messages to Quieter sends", async () => {
-    let body: unknown;
-    const provider = quieter({
-      apiKey: "quieter_test",
-      fetch: async (_input, init) => {
-        body = JSON.parse(String(init?.body));
-        return Response.json({ messageId: "message-1", sent: true }, { status: 201 });
-      },
-    });
-
-    const result = await provider.send(
-      {
-        attachments: [
-          {
-            content: new TextEncoder().encode("hello"),
-            filename: "hello.txt",
-          },
-        ],
-        from: { email: "demo@example.com", name: "Demo" },
-        html: "<strong>Hello</strong>",
-        subject: "Hello",
-        text: "Hello",
-        to: "to@example.com",
-      },
-      { attempt: 1, idempotencyKey: "idem-1" },
-    );
-
-    expect(result).toMatchObject({
-      messageId: "message-1",
-      provider: "quieter",
-    });
-    expect(body).toMatchObject({
-      from: "Demo <demo@example.com>",
-      idempotencyKey: "idem-1",
-    });
   });
 });
