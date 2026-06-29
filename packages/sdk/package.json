@@ -1,6 +1,6 @@
 {
   "name": "quieter",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "TypeScript SDK for the Quieter send API.",
   "license": "MIT",
   "repository": {
@@ -19,21 +19,13 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./email-sdk": {
-      "types": "./dist/email-sdk.d.ts",
-      "default": "./dist/email-sdk.js"
-    },
-    "./react-email": {
-      "types": "./dist/react-email.d.ts",
-      "default": "./dist/react-email.js"
     }
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && bun build ./src/index.ts ./src/email-sdk.ts ./src/react-email.ts --outdir ./dist --target browser --format esm --packages external && tsgo --project ./tsconfig.build.json",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && bun build ./src/index.ts --outdir ./dist --target browser --format esm --packages external && tsgo --project ./tsconfig.build.json",
     "fmt": "oxfmt --config ../../oxfmt.json .",
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
     "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/sdk",
@@ -42,31 +34,16 @@
     "test": "bun test",
     "typecheck": "tsgo --noEmit"
   },
-  "devDependencies": {
-    "@opencoredev/email-sdk": "^0.6.5",
-    "@quieter/config": "workspace:*",
+  "dependencies": {
     "@react-email/render": "^2.0.9",
-    "@types/react": "catalog:",
+    "@types/react": "^19.2.17",
+    "react": "^19.2.7"
+  },
+  "devDependencies": {
+    "@quieter/config": "workspace:*",
     "@typescript/native-preview": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
-    "react": "catalog:",
     "typescript": "catalog:"
-  },
-  "peerDependencies": {
-    "@opencoredev/email-sdk": "^0.6.5",
-    "@react-email/render": "^2.0.9",
-    "react": "catalog:"
-  },
-  "peerDependenciesMeta": {
-    "@opencoredev/email-sdk": {
-      "optional": true
-    },
-    "@react-email/render": {
-      "optional": true
-    },
-    "react": {
-      "optional": true
-    }
   }
 }

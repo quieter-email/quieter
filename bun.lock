@@ -331,28 +331,19 @@
     },
     "packages/sdk": {
       "name": "quieter",
-      "version": "0.0.1",
-      "devDependencies": {
-        "@opencoredev/email-sdk": "^0.6.5",
-        "@quieter/config": "workspace:*",
+      "version": "0.0.2",
+      "dependencies": {
         "@react-email/render": "^2.0.9",
-        "@types/react": "catalog:",
+        "@types/react": "^19.2.17",
+        "react": "^19.2.7",
+      },
+      "devDependencies": {
+        "@quieter/config": "workspace:*",
         "@typescript/native-preview": "catalog:",
         "oxfmt": "catalog:",
         "oxlint": "catalog:",
-        "react": "catalog:",
         "typescript": "catalog:",
       },
-      "peerDependencies": {
-        "@opencoredev/email-sdk": "^0.6.5",
-        "@react-email/render": "^2.0.9",
-        "react": "catalog:",
-      },
-      "optionalPeers": [
-        "@opencoredev/email-sdk",
-        "@react-email/render",
-        "react",
-      ],
     },
     "packages/ui": {
       "name": "@quieter/ui",
@@ -952,8 +943,6 @@
     "@oozcitak/url": ["@oozcitak/url@3.0.0", "", { "dependencies": { "@oozcitak/infra": "^2.0.2", "@oozcitak/util": "^10.0.0" } }, "sha512-ZKfET8Ak1wsLAiLWNfFkZc/BraDccuTJKR6svTYc7sVjbR+Iu0vtXdiDMY4o6jaFl5TW2TlS7jbLl4VovtAJWQ=="],
 
     "@oozcitak/util": ["@oozcitak/util@10.0.0", "", {}, "sha512-hAX0pT/73190NLqBPPWSdBVGtbY6VOhWYK3qqHqtXQ1gK7kS2yz4+ivsN07hpJ6I3aeMtKP6J6npsEKOAzuTLA=="],
-
-    "@opencoredev/email-sdk": ["@opencoredev/email-sdk@0.6.5", "", { "bin": { "email-sdk": "dist/cli.js" } }, "sha512-CuEfbOSjjr4/bsCz7g/X7l7ha1D/QLq0Q4glX4CRsj0uUCnuhdBYRDXv6ffi9myaVx3afw3P8RzAnw+1++jLMg=="],
 
     "@openrouter/sdk": ["@openrouter/sdk@0.12.14", "", { "dependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-G32CZ1IkmtsGfQF7/mzcvt7W0Lmd6HUHFGjDWv5knBvL6sJcMmX6i3VPSIpHQYSgEqRQSxFuDROP6iErTu7XcA=="],
 
