@@ -166,6 +166,14 @@ const openApiDocument = {
           },
         },
         responses: {
+          "200": {
+            description: "Idempotent replay returned a previously accepted message result.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/SendMessageResponse" },
+              },
+            },
+          },
           "201": {
             description: "Message accepted by the mail provider.",
             content: {

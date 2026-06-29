@@ -16,7 +16,7 @@ import {
   type SendMessageInput,
   type SendMessageResult,
 } from "@quieter/mail/send";
-import { and, eq } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { recordOutboundManagedMessageForSender } from "./managed-mail/messages/service";
 import {
@@ -28,6 +28,8 @@ export { ORGANIZATION_API_KEY_CONFIG_ID };
 export { assertOrganizationOwnsVerifiedSenderDomain, OrganizationMailSendError };
 export { sendMessageInputSchema };
 export type { SendMessageInput, SendMessageResult };
+
+const IDEMPOTENCY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 const getAwsRegion = () => {
   const region = serverEnv.AWS_REGION || serverEnv.AWS_DEFAULT_REGION;
@@ -66,6 +68,20 @@ const stableJsonStringify = (value: unknown): string => {
 const createRequestHash = (message: SendMessageInput) =>
   createHash("sha256").update(stableJsonStringify(message)).digest("hex");
 
+const deleteExpiredIdempotencyRecords = async (organizationId: string) => {
+  await db
+    .delete(organizationMailSendIdempotency)
+    .where(
+      and(
+        eq(organizationMailSendIdempotency.organizationId, organizationId),
+        lt(
+          organizationMailSendIdempotency.createdAt,
+          new Date(Date.now() - IDEMPOTENCY_RETENTION_MS),
+        ),
+      ),
+    );
+};
+
 const getIdempotentResult = async (input: {
   idempotencyKey: string;
   organizationId: string;
@@ -75,6 +91,7 @@ const getIdempotentResult = async (input: {
     .select({
       requestHash: organizationMailSendIdempotency.requestHash,
       response: organizationMailSendIdempotency.response,
+      status: organizationMailSendIdempotency.status,
     })
     .from(organizationMailSendIdempotency)
     .where(
@@ -94,10 +111,48 @@ const getIdempotentResult = async (input: {
     );
   }
 
-  return {
-    ...existing.response,
-    idempotent: true,
-  };
+  if (existing.status === "completed" && existing.response) {
+    return {
+      ...existing.response,
+      idempotent: true,
+    };
+  }
+
+  throw new OrganizationMailSendError(
+    "Idempotency key is already in use by an in-progress send.",
+    409,
+  );
+};
+
+const claimIdempotentSend = async (input: {
+  idempotencyKey: string;
+  organizationId: string;
+  requestHash: string;
+}): Promise<SendMessageResult | null> => {
+  const now = new Date();
+  const claimed = await db
+    .insert(organizationMailSendIdempotency)
+    .values({
+      createdAt: now,
+      id: randomUUID(),
+      idempotencyKey: input.idempotencyKey,
+      organizationId: input.organizationId,
+      requestHash: input.requestHash,
+      response: null,
+      status: "pending",
+      updatedAt: now,
+    })
+    .onConflictDoNothing({
+      target: [
+        organizationMailSendIdempotency.organizationId,
+        organizationMailSendIdempotency.idempotencyKey,
+      ],
+    })
+    .returning({ id: organizationMailSendIdempotency.id });
+
+  if (claimed.length > 0) return null;
+
+  return await getIdempotentResult(input);
 };
 
 const persistIdempotentResult = async (input: {
@@ -106,27 +161,24 @@ const persistIdempotentResult = async (input: {
   requestHash: string;
   response: SendMessageResult;
 }) => {
-  const now = new Date();
   await db
-    .insert(organizationMailSendIdempotency)
-    .values({
-      createdAt: now,
-      id: randomUUID(),
-      idempotencyKey: input.idempotencyKey,
-      organizationId: input.organizationId,
-      requestHash: input.requestHash,
+    .update(organizationMailSendIdempotency)
+    .set({
       response: {
         messageId: input.response.messageId,
         sent: true,
       },
-      updatedAt: now,
+      status: "completed",
+      updatedAt: new Date(),
     })
-    .onConflictDoNothing({
-      target: [
-        organizationMailSendIdempotency.organizationId,
-        organizationMailSendIdempotency.idempotencyKey,
-      ],
-    });
+    .where(
+      and(
+        eq(organizationMailSendIdempotency.organizationId, input.organizationId),
+        eq(organizationMailSendIdempotency.idempotencyKey, input.idempotencyKey),
+        eq(organizationMailSendIdempotency.requestHash, input.requestHash),
+        eq(organizationMailSendIdempotency.status, "pending"),
+      ),
+    );
 };
 
 export const sendOrganizationMailMessage = async (input: {
@@ -137,6 +189,8 @@ export const sendOrganizationMailMessage = async (input: {
   const requestHash = idempotencyKey ? createRequestHash(input.message) : null;
 
   return await withOrganizationMailUsageLock(input.organizationId, async () => {
+    await deleteExpiredIdempotencyRecords(input.organizationId);
+
     if (idempotencyKey && requestHash) {
       const idempotentResult = await getIdempotentResult({
         idempotencyKey,
@@ -176,6 +230,16 @@ export const sendOrganizationMailMessage = async (input: {
       organizationId: input.organizationId,
       sender: input.message.from,
     });
+
+    if (idempotencyKey && requestHash) {
+      const idempotentResult = await claimIdempotentSend({
+        idempotencyKey,
+        organizationId: input.organizationId,
+        requestHash,
+      });
+
+      if (idempotentResult) return idempotentResult;
+    }
 
     const { SendEmailCommand } = await import("@aws-sdk/client-sesv2");
     const client = await getSesv2Client();

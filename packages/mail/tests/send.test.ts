@@ -17,7 +17,19 @@ describe("sendMessageInputSchema", () => {
     }
   });
 
-  test("rejects structural custom headers and malformed attachment content", () => {
+  test("rejects structural custom headers", () => {
+    const result = sendMessageInputSchema.safeParse({
+      from: "demo@example.com",
+      headers: { Subject: "Injected" },
+      subject: "Hello",
+      text: "Hello",
+      to: ["to@example.com"],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects malformed attachment content", () => {
     const result = sendMessageInputSchema.safeParse({
       attachments: [
         {
@@ -26,7 +38,24 @@ describe("sendMessageInputSchema", () => {
         },
       ],
       from: "demo@example.com",
-      headers: { Subject: "Injected" },
+      subject: "Hello",
+      text: "Hello",
+      to: ["to@example.com"],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects inline attachments without html", () => {
+    const result = sendMessageInputSchema.safeParse({
+      attachments: [
+        {
+          content: Buffer.from("hello").toString("base64"),
+          disposition: "inline",
+          filename: "hello.txt",
+        },
+      ],
+      from: "demo@example.com",
       subject: "Hello",
       text: "Hello",
       to: ["to@example.com"],
@@ -69,5 +98,27 @@ describe("buildSendMimeMessage", () => {
     expect(built.attachmentSizeBytes).toBe(5);
     expect(built.to).toEqual(["to@example.com"]);
     expect(built.bcc).toEqual(["hidden@example.com"]);
+  });
+
+  test("folds long headers and wraps quoted-printable body lines", () => {
+    const built = buildSendMimeMessage(
+      {
+        attachments: [],
+        from: "demo@example.com",
+        headers: [{ name: "X-Long", value: "x".repeat(160) }],
+        subject: "Hello ".repeat(40),
+        text: "a".repeat(180),
+        to: ["to@example.com"],
+      },
+      {
+        messageId: "<message@example.com>",
+        sentAt: new Date("2026-06-29T12:00:00.000Z"),
+      },
+    );
+
+    expect(built.raw).toContain("\r\n ");
+    for (const line of built.raw.split("\r\n")) {
+      expect(line.length).toBeLessThanOrEqual(998);
+    }
   });
 });

@@ -1,0 +1,1 @@
+ALTER TABLE "organizationMailSendIdempotency" ALTER COLUMN "status" SET DEFAULT 'completed';

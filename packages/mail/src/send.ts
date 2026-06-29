@@ -99,6 +99,14 @@ export const sendMessageInputSchema = z
     text: z.string().min(1),
     to: addressListSchema,
   })
+  .refine(
+    (input) =>
+      input.html || input.attachments.every((attachment) => attachment.disposition !== "inline"),
+    {
+      message: "Inline attachments require an html body.",
+      path: ["attachments"],
+    },
+  )
   .superRefine((input, ctx) => {
     const addressFields = [
       ["from", [input.from]],
@@ -221,20 +229,26 @@ export const buildSendMimeMessage = (
       size: bytes.byteLength,
     };
   });
+  const inlineAttachments = attachmentRecords.filter((attachment) => attachment.inline);
+  if (inlineAttachments.length > 0 && !message.html) {
+    throw new Error("Inline attachments require an html body.");
+  }
+
   const headerLines = [
-    `From: ${encodeMimeHeaderValue(message.from)}`,
-    `To: ${message.to.map(encodeMimeHeaderValue).join(", ")}`,
-    ...(message.cc?.length ? [`Cc: ${message.cc.map(encodeMimeHeaderValue).join(", ")}`] : []),
-    ...(message.replyTo?.length
-      ? [`Reply-To: ${message.replyTo.map(encodeMimeHeaderValue).join(", ")}`]
+    formatMimeHeader("From", message.from),
+    formatMimeHeader("To", message.to.map(encodeMimeHeaderValue).join(", ")),
+    ...(message.cc?.length
+      ? [formatMimeHeader("Cc", message.cc.map(encodeMimeHeaderValue).join(", "))]
       : []),
-    `Subject: ${encodeMimeHeaderValue(message.subject)}`,
+    ...(message.replyTo?.length
+      ? [formatMimeHeader("Reply-To", message.replyTo.map(encodeMimeHeaderValue).join(", "))]
+      : []),
+    formatMimeHeader("Subject", message.subject),
     `Message-ID: ${messageHeaderId}`,
     `Date: ${sentAt.toUTCString()}`,
-    ...headers.map((header) => `${header.name}: ${encodeMimeHeaderValue(header.value)}`),
+    ...headers.map((header) => formatMimeHeader(header.name, header.value)),
     "MIME-Version: 1.0",
   ];
-  const inlineAttachments = attachmentRecords.filter((attachment) => attachment.inline);
   const regularAttachments = attachmentRecords.filter((attachment) => !attachment.inline);
   const body = buildBodyParts({
     html: message.html,
@@ -410,27 +424,63 @@ const base64WithCrlf = (value: Uint8Array) =>
     .replace(/.{1,76}/g, "$&\r\n")
     .trim();
 
+const formatMimeHeader = (name: string, value: string) =>
+  foldMimeHeaderLine(`${name}: ${encodeMimeHeaderValue(value)}`);
+
 const encodeMimeHeaderValue = (value: string) => {
   if (/^[\x20-\x7E]*$/.test(value)) return value;
-  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
+  return Buffer.from(value, "utf8")
+    .toString("base64")
+    .match(/.{1,48}/g)!
+    .map((chunk) => `=?UTF-8?B?${chunk}?=`)
+    .join(" ");
+};
+
+const foldMimeHeaderLine = (line: string) => {
+  if (line.length <= 78) return line;
+
+  const folded: string[] = [];
+  let remaining = line;
+
+  while (remaining.length > 78) {
+    const preferredBreak = remaining.lastIndexOf(" ", 78);
+    const breakAt = preferredBreak > 0 ? preferredBreak : 78;
+    folded.push(remaining.slice(0, breakAt));
+    remaining = ` ${remaining.slice(breakAt).trimStart()}`;
+  }
+
+  folded.push(remaining);
+  return folded.join("\r\n");
 };
 
 const encodeQuotedPrintable = (value: string) => {
   const bytes = new TextEncoder().encode(value.replaceAll("\r\n", "\n"));
-  let output = "";
+  const lines: string[] = [];
+  let line = "";
+
+  const append = (token: string) => {
+    if (line.length + token.length > 75) {
+      lines.push(`${line}=`);
+      line = "";
+    }
+
+    line += token;
+  };
 
   for (const byte of bytes) {
     const isPrintable = (byte >= 33 && byte <= 60) || (byte >= 62 && byte <= 126);
     if (isPrintable || byte === 9 || byte === 32) {
-      output += String.fromCharCode(byte);
+      append(String.fromCharCode(byte));
     } else if (byte === 10) {
-      output += "\r\n";
+      lines.push(line);
+      line = "";
     } else {
-      output += `=${byte.toString(16).toUpperCase().padStart(2, "0")}`;
+      append(`=${byte.toString(16).toUpperCase().padStart(2, "0")}`);
     }
   }
 
-  return output;
+  lines.push(line);
+  return lines.join("\r\n");
 };
 
 const escapeMimeParameter = (value: string) => value.replaceAll(/["\r\n]/g, "_");

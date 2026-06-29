@@ -34,8 +34,8 @@ export const Route = createFileRoute("/api/v1/send")({
           return Response.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const body = await request.text();
-        if (new TextEncoder().encode(body).byteLength > MAX_SEND_PAYLOAD_BYTES) {
+        const body = await readBoundedRequestBody(request);
+        if (body === null) {
           return Response.json({ error: "Message payload is too large." }, { status: 413 });
         }
 
@@ -91,6 +91,41 @@ const getBearerToken = (headers: Headers) => {
   }
 
   return authorization.slice("Bearer ".length).trim() || null;
+};
+
+const readBoundedRequestBody = async (request: Request) => {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength && Number(contentLength) > MAX_SEND_PAYLOAD_BYTES) {
+    return null;
+  }
+
+  if (!request.body) return "";
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    byteLength += value.byteLength;
+    if (byteLength > MAX_SEND_PAYLOAD_BYTES) {
+      await reader.cancel();
+      return null;
+    }
+
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return new TextDecoder().decode(body);
 };
 
 const mergeIdempotencyHeader = (json: unknown, headers: Headers) => {

@@ -1,14 +1,9 @@
+import type { ReactElement } from "react";
 import { render } from "@react-email/render";
-import type {
-  Quieter,
-  QuieterReactElement,
-  QuieterSendInput,
-  QuieterSendOptions,
-  QuieterSendResult,
-} from "./index";
+import type { Quieter, QuieterSendBaseInput, QuieterSendOptions, QuieterSendResult } from "./index";
 
-export type QuieterReactEmailInput = Omit<QuieterSendInput, "html" | "react"> & {
-  react: QuieterReactElement;
+export type QuieterReactEmailInput = QuieterSendBaseInput & {
+  react: ReactElement;
 };
 
 export const renderQuieterReactEmail = async (input: QuieterReactEmailInput) => {

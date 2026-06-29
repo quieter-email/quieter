@@ -1,5 +1,3 @@
-import type { ReactElement } from "react";
-
 export type QuieterAddress = string | string[];
 
 export type QuieterAttachment = {
@@ -21,7 +19,7 @@ export type QuieterTag = {
   value: string;
 };
 
-type QuieterSendBaseInput = {
+export type QuieterSendBaseInput = {
   attachments?: QuieterAttachment[];
   bcc?: QuieterAddress;
   cc?: QuieterAddress;
@@ -36,16 +34,10 @@ type QuieterSendBaseInput = {
   to: QuieterAddress;
 };
 
-export type QuieterReactElement = ReactElement;
-
 export type QuieterSendInput =
   | (QuieterSendBaseInput & {
       html: string;
       react?: never;
-    })
-  | (QuieterSendBaseInput & {
-      html?: never;
-      react: QuieterReactElement;
     })
   | (QuieterSendBaseInput & {
       html?: never;
@@ -69,8 +61,8 @@ export type QuieterOptions = {
   fetch?: typeof fetch;
 };
 
-type SendRequest = Omit<QuieterSendInput, "attachments" | "react"> & {
-  attachments?: Array<Omit<QuieterAttachment, "content"> & { content: string }>;
+type SendRequest = Omit<QuieterSendInput, "attachments"> & {
+  attachments?: Array<Omit<QuieterAttachment, "content" | "contentEncoding"> & { content: string }>;
 };
 
 const SEND_PATH = "/api/v1/send";
@@ -115,14 +107,16 @@ export class Quieter {
     input: QuieterSendInput,
     options: QuieterSendOptions = {},
   ): Promise<QuieterSendResult> {
-    const request = await normalizeSendInput(input, options);
+    const request = await normalizeSendInput(input, {
+      idempotencyKey: input.idempotencyKey ?? options.idempotencyKey,
+    });
     const response = await this.fetch(new URL(SEND_PATH, this.baseUrl), {
       body: JSON.stringify(request),
       headers: {
         accept: "application/json",
         authorization: `Bearer ${this.apiKey}`,
         "content-type": "application/json",
-        ...(options.idempotencyKey ? { "idempotency-key": options.idempotencyKey } : {}),
+        ...(request.idempotencyKey ? { "idempotency-key": request.idempotencyKey } : {}),
       },
       method: "POST",
       signal: options.signal,
@@ -153,25 +147,14 @@ export const normalizeSendInput = async (
   input: QuieterSendInput,
   options: QuieterSendOptions = {},
 ): Promise<SendRequest> => {
-  let html = input.html;
-  if (input.react) {
-    const { render } = (await import("@react-email/render")) as {
-      render: (element: QuieterReactElement) => Promise<string> | string;
-    };
-    html = await render(input.react);
-  }
-
-  const { react: _react, ...request } = input;
-
   return {
-    ...request,
+    ...input,
     attachments: await Promise.all(
-      (input.attachments ?? []).map(async (attachment) => ({
+      (input.attachments ?? []).map(async ({ content, contentEncoding, ...attachment }) => ({
         ...attachment,
-        content: await encodeAttachmentContent(attachment.content, attachment.contentEncoding),
+        content: await encodeAttachmentContent(content, contentEncoding),
       })),
     ),
-    html,
     idempotencyKey: input.idempotencyKey ?? options.idempotencyKey,
     text: input.text,
   };

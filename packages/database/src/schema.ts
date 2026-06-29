@@ -1045,12 +1045,11 @@ export const organizationMailSendIdempotency = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     idempotencyKey: text("idempotencyKey").notNull(),
     requestHash: text("requestHash").notNull(),
-    response: jsonb("response")
-      .$type<{
-        messageId: string | null;
-        sent: true;
-      }>()
-      .notNull(),
+    response: jsonb("response").$type<{
+      messageId: string | null;
+      sent: true;
+    }>(),
+    status: text("status").default("completed").notNull(),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
   },
