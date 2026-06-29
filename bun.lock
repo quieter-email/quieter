@@ -331,7 +331,7 @@
     },
     "packages/sdk": {
       "name": "quieter",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@react-email/render": "^2.0.9",
         "@types/react": "^19.2.17",
