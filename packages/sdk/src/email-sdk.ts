@@ -43,6 +43,10 @@ const toQuieterMessage = (
   message: EmailMessage,
   context: EmailProviderContext,
 ): QuieterSendInput => {
+  if (!message.text) {
+    throw new Error("Quieter email-sdk adapter requires text content.");
+  }
+
   const base = {
     attachments: message.attachments?.map(toQuieterAttachment),
     bcc: message.bcc ? toAddressList(message.bcc) : undefined,
@@ -54,13 +58,11 @@ const toQuieterMessage = (
     replyTo: message.replyTo ? toAddressList(message.replyTo) : undefined,
     subject: message.subject,
     tags: message.tags,
+    text: message.text,
     to: toAddressList(message.to),
   };
 
-  if (message.html) return { ...base, html: message.html, text: message.text };
-  if (message.text) return { ...base, text: message.text };
-
-  throw new Error("Quieter email-sdk adapter requires html or text content.");
+  return message.html ? { ...base, html: message.html } : base;
 };
 
 const toAddressList = (value: EmailAddress | EmailAddress[]) =>

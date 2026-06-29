@@ -13,6 +13,7 @@ await quieter.send({
   from: "Demo <demo@quieter.email>",
   to: ["to@example.com"],
   subject: "Hello World",
+  text: "It works!",
   html: "<strong>It works!</strong>",
 });
 ```
@@ -26,6 +27,7 @@ await quieter.send({
   from: "Demo <demo@quieter.email>",
   to: ["to@example.com"],
   subject: "Welcome",
+  text: "Welcome, Ada.",
   react: <WelcomeEmail name="Ada" />,
 });
 ```
@@ -45,6 +47,7 @@ await email.send({
   from: "Demo <demo@quieter.email>",
   to: "to@example.com",
   subject: "Hello World",
+  text: "It works!",
   html: "<strong>It works!</strong>",
 });
 ```

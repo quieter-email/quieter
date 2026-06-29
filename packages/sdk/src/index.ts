@@ -1,3 +1,5 @@
+import type { ReactElement } from "react";
+
 export type QuieterAddress = string | string[];
 
 export type QuieterAttachment = {
@@ -30,27 +32,25 @@ type QuieterSendBaseInput = {
   replyTo?: QuieterAddress;
   subject: string;
   tags?: QuieterTag[];
+  text: string;
   to: QuieterAddress;
 };
 
-export type QuieterSendInput = QuieterSendBaseInput &
-  (
-    | {
-        html: string;
-        react?: unknown;
-        text?: string;
-      }
-    | {
-        html?: string;
-        react?: unknown;
-        text: string;
-      }
-    | {
-        html?: string;
-        react: unknown;
-        text?: string;
-      }
-  );
+export type QuieterReactElement = ReactElement;
+
+export type QuieterSendInput =
+  | (QuieterSendBaseInput & {
+      html: string;
+      react?: never;
+    })
+  | (QuieterSendBaseInput & {
+      html?: never;
+      react: QuieterReactElement;
+    })
+  | (QuieterSendBaseInput & {
+      html?: never;
+      react?: never;
+    });
 
 export type QuieterSendOptions = {
   idempotencyKey?: string;
@@ -71,11 +71,6 @@ export type QuieterOptions = {
 
 type SendRequest = Omit<QuieterSendInput, "attachments" | "react"> & {
   attachments?: Array<Omit<QuieterAttachment, "content"> & { content: string }>;
-};
-
-type ErrorResponse = {
-  error?: unknown;
-  issues?: unknown;
 };
 
 const SEND_PATH = "/api/v1/send";
@@ -106,7 +101,9 @@ export class Quieter {
     }
 
     this.apiKey = options.apiKey;
-    this.baseUrl = normalizeBaseUrl(options.baseUrl ?? DEFAULT_BASE_URL);
+    const baseUrl = new URL(options.baseUrl ?? DEFAULT_BASE_URL);
+    baseUrl.pathname = baseUrl.pathname.endsWith("/") ? baseUrl.pathname : `${baseUrl.pathname}/`;
+    this.baseUrl = baseUrl.href;
     this.fetch = options.fetch ?? globalThis.fetch;
 
     if (!this.fetch) {
@@ -130,30 +127,25 @@ export class Quieter {
       method: "POST",
       signal: options.signal,
     });
-    const json = await readJson(response);
+    const json = (await response.json().catch(() => null)) as
+      | QuieterSendResult
+      | {
+          error?: string;
+          issues?: unknown;
+        }
+      | null;
 
     if (!response.ok) {
-      const error = isRecord(json) ? (json as ErrorResponse) : {};
+      const error = json as { error?: string; issues?: unknown } | null;
       throw new QuieterApiError({
-        issues: error.issues,
-        message:
-          typeof error.error === "string"
-            ? error.error
-            : `Quieter API returned ${response.status}.`,
+        issues: error?.issues,
+        message: error?.error ?? `Quieter API returned ${response.status}.`,
         response: json,
         status: response.status,
       });
     }
 
-    if (!isSendResult(json)) {
-      throw new QuieterApiError({
-        message: "Quieter API returned an unexpected response.",
-        response: json,
-        status: response.status,
-      });
-    }
-
-    return json;
+    return json as QuieterSendResult;
   }
 }
 
@@ -161,24 +153,29 @@ export const normalizeSendInput = async (
   input: QuieterSendInput,
   options: QuieterSendOptions = {},
 ): Promise<SendRequest> => {
-  const rendered = input.react ? await renderReactEmail(input.react, input.text) : null;
+  let html = input.html;
+  if (input.react) {
+    const { render } = (await import("@react-email/render")) as {
+      render: (element: QuieterReactElement) => Promise<string> | string;
+    };
+    html = await render(input.react);
+  }
+
   const { react: _react, ...request } = input;
 
   return {
     ...request,
-    attachments: await Promise.all((input.attachments ?? []).map(normalizeAttachment)),
-    html: rendered?.html ?? input.html,
+    attachments: await Promise.all(
+      (input.attachments ?? []).map(async (attachment) => ({
+        ...attachment,
+        content: await encodeAttachmentContent(attachment.content, attachment.contentEncoding),
+      })),
+    ),
+    html,
     idempotencyKey: input.idempotencyKey ?? options.idempotencyKey,
-    text: input.text ?? rendered?.text,
+    text: input.text,
   };
 };
-
-const normalizeAttachment = async (
-  attachment: QuieterAttachment,
-): Promise<Omit<QuieterAttachment, "content"> & { content: string }> => ({
-  ...attachment,
-  content: await encodeAttachmentContent(attachment.content, attachment.contentEncoding),
-});
 
 export const encodeAttachmentContent = async (
   content: QuieterAttachment["content"],
@@ -199,24 +196,6 @@ export const encodeAttachmentContent = async (
   return bytesToBase64(new Uint8Array(await content.arrayBuffer()));
 };
 
-const renderReactEmail = async (react: unknown, text: string | undefined) => {
-  const { render } = (await import("@react-email/render")) as {
-    render: (element: unknown, options?: { plainText?: boolean }) => Promise<string> | string;
-  };
-  const html = await render(react);
-
-  return {
-    html,
-    text: text ?? (await render(react, { plainText: true })),
-  };
-};
-
-const normalizeBaseUrl = (baseUrl: string) => {
-  const url = new URL(baseUrl);
-  url.pathname = url.pathname.endsWith("/") ? url.pathname : `${url.pathname}/`;
-  return url.href;
-};
-
 const bytesToBase64 = (bytes: Uint8Array) => {
   let binary = "";
   for (const byte of bytes) {
@@ -224,22 +203,3 @@ const bytesToBase64 = (bytes: Uint8Array) => {
   }
   return btoa(binary);
 };
-
-const readJson = async (response: Response) => {
-  const text = await response.text();
-  if (!text) return null;
-
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return text;
-  }
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  !!value && typeof value === "object" && !Array.isArray(value);
-
-const isSendResult = (value: unknown): value is QuieterSendResult =>
-  isRecord(value) &&
-  value.sent === true &&
-  ("messageId" in value ? typeof value.messageId === "string" || value.messageId === null : false);

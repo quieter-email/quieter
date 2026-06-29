@@ -336,18 +336,22 @@
         "@opencoredev/email-sdk": "^0.6.5",
         "@quieter/config": "workspace:*",
         "@react-email/render": "^2.0.9",
+        "@types/react": "catalog:",
         "@typescript/native-preview": "catalog:",
         "oxfmt": "catalog:",
         "oxlint": "catalog:",
+        "react": "catalog:",
         "typescript": "catalog:",
       },
       "peerDependencies": {
         "@opencoredev/email-sdk": "^0.6.5",
         "@react-email/render": "^2.0.9",
+        "react": "catalog:",
       },
       "optionalPeers": [
         "@opencoredev/email-sdk",
         "@react-email/render",
+        "react",
       ],
     },
     "packages/ui": {

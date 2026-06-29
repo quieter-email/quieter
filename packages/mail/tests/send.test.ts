@@ -7,6 +7,7 @@ describe("sendMessageInputSchema", () => {
       from: "Demo <demo@example.com>",
       html: "<strong>Hello</strong>",
       subject: "Hello",
+      text: "Hello",
       to: "to@example.com",
     });
 

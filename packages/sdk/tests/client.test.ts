@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { jsx } from "react/jsx-runtime";
 import { Quieter, QuieterApiError } from "../src";
 import { quieter } from "../src/email-sdk";
 
 describe("Quieter", () => {
   beforeEach(() => {
     mock.module("@react-email/render", () => ({
-      render: async (_react: unknown, options?: { plainText?: boolean }) =>
-        options?.plainText ? "Rendered text" : "<strong>Rendered html</strong>",
+      render: async () => "<strong>Rendered html</strong>",
     }));
   });
 
@@ -29,6 +29,7 @@ describe("Quieter", () => {
       from: "Demo <demo@example.com>",
       html: "<strong>It works</strong>",
       subject: "Hello",
+      text: "It works",
       to: ["to@example.com"],
     });
 
@@ -53,14 +54,15 @@ describe("Quieter", () => {
 
     await client.send({
       from: "demo@example.com",
-      react: { type: "WelcomeEmail" },
+      react: jsx("div", { children: "Welcome" }),
       subject: "Hello",
+      text: "Welcome",
       to: "to@example.com",
     });
 
     expect(body).toMatchObject({
       html: "<strong>Rendered html</strong>",
-      text: "Rendered text",
+      text: "Welcome",
     });
     expect(body).not.toHaveProperty("react");
   });
@@ -104,6 +106,7 @@ describe("email-sdk adapter", () => {
         from: { email: "demo@example.com", name: "Demo" },
         html: "<strong>Hello</strong>",
         subject: "Hello",
+        text: "Hello",
         to: "to@example.com",
       },
       { attempt: 1, idempotencyKey: "idem-1" },

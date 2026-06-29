@@ -1,8 +1,14 @@
 import { render } from "@react-email/render";
-import type { Quieter, QuieterSendInput, QuieterSendOptions, QuieterSendResult } from "./index";
+import type {
+  Quieter,
+  QuieterReactElement,
+  QuieterSendInput,
+  QuieterSendOptions,
+  QuieterSendResult,
+} from "./index";
 
 export type QuieterReactEmailInput = Omit<QuieterSendInput, "html" | "react"> & {
-  react: unknown;
+  react: QuieterReactElement;
 };
 
 export const renderQuieterReactEmail = async (input: QuieterReactEmailInput) => {
@@ -10,7 +16,6 @@ export const renderQuieterReactEmail = async (input: QuieterReactEmailInput) => 
   return {
     ...message,
     html: await render(react),
-    text: input.text ?? (await render(react, { plainText: true })),
   };
 };
 

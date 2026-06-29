@@ -96,12 +96,8 @@ export const sendMessageInputSchema = z
     replyTo: addressListSchema.optional(),
     subject: z.string().trim().min(1),
     tags: z.array(sendTagSchema).default([]),
-    text: z.string().min(1).optional(),
+    text: z.string().min(1),
     to: addressListSchema,
-  })
-  .refine((input) => !!input.html || !!input.text, {
-    message: "Either html or text is required.",
-    path: ["html"],
   })
   .superRefine((input, ctx) => {
     const addressFields = [

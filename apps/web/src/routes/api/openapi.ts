@@ -23,7 +23,7 @@ const openApiDocument = {
       SendMessageRequest: {
         type: "object",
         additionalProperties: false,
-        required: ["from", "subject", "to"],
+        required: ["from", "subject", "text", "to"],
         properties: {
           attachments: {
             type: "array",
@@ -119,7 +119,6 @@ const openApiDocument = {
             oneOf: [{ type: "string" }, { type: "array", minItems: 1, items: { type: "string" } }],
           },
         },
-        anyOf: [{ required: ["text"] }, { required: ["html"] }],
       },
       SendMessageResponse: {
         type: "object",
