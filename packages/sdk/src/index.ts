@@ -19,22 +19,38 @@ export type QuieterTag = {
   value: string;
 };
 
-export type QuieterSendInput = {
+type QuieterSendBaseInput = {
   attachments?: QuieterAttachment[];
   bcc?: QuieterAddress;
   cc?: QuieterAddress;
   from: string;
   headers?: Record<string, string> | QuieterHeader[];
-  html?: string;
   idempotencyKey?: string;
   metadata?: Record<string, string | number | boolean | null>;
-  react?: unknown;
   replyTo?: QuieterAddress;
   subject: string;
   tags?: QuieterTag[];
-  text?: string;
   to: QuieterAddress;
 };
+
+export type QuieterSendInput = QuieterSendBaseInput &
+  (
+    | {
+        html: string;
+        react?: unknown;
+        text?: string;
+      }
+    | {
+        html?: string;
+        react?: unknown;
+        text: string;
+      }
+    | {
+        html?: string;
+        react: unknown;
+        text?: string;
+      }
+  );
 
 export type QuieterSendOptions = {
   idempotencyKey?: string;

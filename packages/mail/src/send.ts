@@ -25,27 +25,57 @@ const STRUCTURAL_HEADER_NAMES = new Set([
 
 const jsonMetadataValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
+const sendHeaderNameSchema = z
+  .string()
+  .refine((name) => isSafeHeaderName(name) && !STRUCTURAL_HEADER_NAMES.has(name.toLowerCase()), {
+    message: "Header name is not allowed.",
+  });
+
+const sendHeaderValueSchema = z.string().refine((value) => !hasHeaderInjection(value), {
+  message: "Header values cannot contain line breaks.",
+});
+
 const addressListSchema = z
   .union([z.string(), z.array(z.string())])
   .transform((value) => (Array.isArray(value) ? value : [value]))
-  .pipe(z.array(z.string().trim().min(1)));
+  .pipe(z.array(z.string().trim().min(1)).min(1, "Add at least one recipient."));
 
 const headerSchema = z.union([
-  z.record(z.string(), z.string()),
+  z.record(sendHeaderNameSchema, sendHeaderValueSchema),
   z.array(
     z.object({
-      name: z.string(),
-      value: z.string(),
+      name: sendHeaderNameSchema,
+      value: sendHeaderValueSchema,
     }),
   ),
 ]);
 
 export const sendAttachmentSchema = z.object({
-  content: z.string().min(1),
-  contentId: z.string().trim().min(1).optional(),
-  contentType: z.string().trim().min(1).default("application/octet-stream"),
+  content: z.string().min(1).refine(isValidBase64, "Attachment content must be base64 encoded."),
+  contentId: z
+    .string()
+    .trim()
+    .min(1)
+    .refine((value) => !hasHeaderInjection(value), {
+      message: "Attachment content IDs cannot contain line breaks.",
+    })
+    .optional(),
+  contentType: z
+    .string()
+    .trim()
+    .min(1)
+    .refine((value) => !hasHeaderInjection(value), {
+      message: "Attachment content types cannot contain line breaks.",
+    })
+    .default("application/octet-stream"),
   disposition: z.enum(["attachment", "inline"]).default("attachment"),
-  filename: z.string().trim().min(1),
+  filename: z
+    .string()
+    .trim()
+    .min(1)
+    .refine((value) => !hasHeaderInjection(value), {
+      message: "Attachment filenames cannot contain line breaks.",
+    }),
 });
 
 export const sendTagSchema = z.object({
@@ -69,23 +99,11 @@ export const sendMessageInputSchema = z
     text: z.string().min(1).optional(),
     to: addressListSchema,
   })
+  .refine((input) => !!input.html || !!input.text, {
+    message: "Either html or text is required.",
+    path: ["html"],
+  })
   .superRefine((input, ctx) => {
-    if (!input.html && !input.text) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Either html or text is required.",
-        path: ["html"],
-      });
-    }
-
-    if (input.to.length === 0) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Add at least one recipient.",
-        path: ["to"],
-      });
-    }
-
     const addressFields = [
       ["from", [input.from]],
       ["to", input.to],
@@ -104,45 +122,6 @@ export const sendMessageInputSchema = z
             path: [field],
           });
         }
-      }
-    }
-
-    for (const header of normalizeSendHeaders(input.headers)) {
-      if (
-        !isSafeHeaderName(header.name) ||
-        STRUCTURAL_HEADER_NAMES.has(header.name.toLowerCase())
-      ) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Header name is not allowed.",
-          path: ["headers"],
-        });
-      }
-
-      if (hasHeaderInjection(header.value)) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Header values cannot contain line breaks.",
-          path: ["headers"],
-        });
-      }
-    }
-
-    for (const [index, attachment] of input.attachments.entries()) {
-      if (hasHeaderInjection(attachment.filename) || hasHeaderInjection(attachment.contentType)) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Attachment filenames and content types cannot contain line breaks.",
-          path: ["attachments", index],
-        });
-      }
-
-      if (!isValidBase64(attachment.content)) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Attachment content must be base64 encoded.",
-          path: ["attachments", index, "content"],
-        });
       }
     }
   });
@@ -205,7 +184,7 @@ export const getSendEnvelopeAddress = (value: string) =>
 export const getSendEnvelopeAddressList = (values: readonly string[] | undefined) =>
   Array.from(new Set((values ?? []).map(getSendEnvelopeAddress).filter(Boolean)));
 
-export const isValidBase64 = (value: string) => {
+export function isValidBase64(value: string) {
   const normalized = value.replace(/\s+/g, "");
   if (!normalized || normalized.length % 4 !== 0 || !BASE64_PATTERN.test(normalized)) {
     return false;
@@ -217,7 +196,7 @@ export const isValidBase64 = (value: string) => {
   } catch {
     return false;
   }
-};
+}
 
 export const buildSendMimeMessage = (
   message: SendMessageInput,

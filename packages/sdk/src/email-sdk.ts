@@ -42,21 +42,26 @@ export const quieter = (options: QuieterEmailSdkProviderOptions): EmailProvider<
 const toQuieterMessage = (
   message: EmailMessage,
   context: EmailProviderContext,
-): QuieterSendInput => ({
-  attachments: message.attachments?.map(toQuieterAttachment),
-  bcc: message.bcc ? toAddressList(message.bcc) : undefined,
-  cc: message.cc ? toAddressList(message.cc) : undefined,
-  from: toAddress(message.from),
-  headers: message.headers,
-  html: message.html,
-  idempotencyKey: message.idempotencyKey ?? context.idempotencyKey,
-  metadata: normalizeMetadata(message.metadata),
-  replyTo: message.replyTo ? toAddressList(message.replyTo) : undefined,
-  subject: message.subject,
-  tags: message.tags,
-  text: message.text,
-  to: toAddressList(message.to),
-});
+): QuieterSendInput => {
+  const base = {
+    attachments: message.attachments?.map(toQuieterAttachment),
+    bcc: message.bcc ? toAddressList(message.bcc) : undefined,
+    cc: message.cc ? toAddressList(message.cc) : undefined,
+    from: toAddress(message.from),
+    headers: message.headers,
+    idempotencyKey: message.idempotencyKey ?? context.idempotencyKey,
+    metadata: normalizeMetadata(message.metadata),
+    replyTo: message.replyTo ? toAddressList(message.replyTo) : undefined,
+    subject: message.subject,
+    tags: message.tags,
+    to: toAddressList(message.to),
+  };
+
+  if (message.html) return { ...base, html: message.html, text: message.text };
+  if (message.text) return { ...base, text: message.text };
+
+  throw new Error("Quieter email-sdk adapter requires html or text content.");
+};
 
 const toAddressList = (value: EmailAddress | EmailAddress[]) =>
   (Array.isArray(value) ? value : [value]).map(toAddress);
