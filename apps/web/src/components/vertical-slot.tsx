@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@quieter/ui";
+import { cn } from "@quieter/ui/cn";
 import {
   Children,
   isValidElement,

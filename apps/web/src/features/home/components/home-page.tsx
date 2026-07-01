@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { ChromeIcon, CodeIcon, ComputerIcon, SmartPhoneIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { LinkButton } from "@quieter/ui";
+import { LinkButton } from "@quieter/ui/button";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import { lazy, Suspense } from "react";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";

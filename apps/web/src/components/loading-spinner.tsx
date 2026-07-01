@@ -1,7 +1,7 @@
 import type { ComponentPropsWithoutRef, CSSProperties } from "react";
-import { cn } from "@quieter/ui";
+import { cn } from "@quieter/ui/cn";
 
-type LoadingSpinnerProps = ComponentPropsWithoutRef<"div">;
+type LoadingSpinnerProps = ComponentPropsWithoutRef<"output">;
 
 const particleCount = 128;
 const squircleExponent = 3.5;
@@ -101,7 +101,7 @@ const particles: SpinnerParticle[] = (() => {
 })();
 
 export const LoadingSpinner = ({ className, ...props }: LoadingSpinnerProps) => (
-  <div {...props} className={cn("relative isolate size-20 text-primary", className)} role="status">
+  <output {...props} className={cn("relative isolate size-20 text-primary", className)}>
     <svg
       aria-hidden="true"
       className="absolute inset-0 size-full"
@@ -125,5 +125,5 @@ export const LoadingSpinner = ({ className, ...props }: LoadingSpinnerProps) => 
         />
       ))}
     </svg>
-  </div>
+  </output>
 );

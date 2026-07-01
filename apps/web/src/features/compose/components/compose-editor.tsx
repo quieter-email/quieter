@@ -1,17 +1,22 @@
 "use client";
 
 import {
+  AiMicIcon,
   ArrowTurnBackwardIcon,
   ArrowTurnForwardIcon,
   LeftToRightListBulletIcon,
   LeftToRightListNumberIcon,
   QuoteUpIcon,
+  StopIcon,
   TextBoldIcon,
   TextItalicIcon,
   TextUnderlineIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, cn, IconButtonTooltip, TooltipGroup } from "@quieter/ui";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { TooltipGroup } from "@quieter/ui/tooltip";
 import FileHandler from "@tiptap/extension-file-handler";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
@@ -33,6 +38,17 @@ const ComposeImage = Image.extend({
   },
 });
 
+const audioWaveBars = [
+  { id: "low-left", scale: 0.42 },
+  { id: "mid-left", scale: 0.7 },
+  { id: "peak-left", scale: 0.95 },
+  { id: "soft-left", scale: 0.58 },
+  { id: "peak-right", scale: 0.82 },
+  { id: "soft-right", scale: 0.48 },
+  { id: "mid-right", scale: 0.72 },
+  { id: "low-right", scale: 0.52 },
+];
+
 type ComposeEditorProps = {
   html: string;
   className?: string;
@@ -41,7 +57,12 @@ type ComposeEditorProps = {
   onChange: (payload: { html: string; text: string }) => void;
   onBlur?: () => void;
   onInlineImageFiles: (files: File[]) => void | Promise<void>;
+  onRecordingStart?: () => void;
+  onRecordingStop?: () => void;
+  recording?: boolean;
+  recordingSupported?: boolean;
   showToolbar?: boolean;
+  transcribing?: boolean;
 };
 
 export const ComposeEditor = ({
@@ -52,9 +73,15 @@ export const ComposeEditor = ({
   onBlur,
   onChange,
   onInlineImageFiles,
+  onRecordingStart,
+  onRecordingStop,
+  recording = false,
+  recordingSupported = false,
   showToolbar = true,
+  transcribing = false,
 }: ComposeEditorProps) => {
   const lastSyncedHtmlRef = useRef(html);
+  const audioActive = recording || transcribing;
 
   const editor = useEditor({
     autofocus: false,
@@ -201,13 +228,37 @@ export const ComposeEditor = ({
   return (
     <div
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden rounded-lg border border-input bg-background transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20",
+        "keyboard-focus-within flex min-h-0 flex-col overflow-hidden rounded-lg border border-input bg-background transition-colors",
         className,
         { "pointer-events-none opacity-80": disabled },
       )}
     >
       <div className={cn("min-h-0 flex-1 overflow-y-auto", compact ? "p-3" : "p-4")}>
-        {editor ? (
+        {audioActive ? (
+          <output
+            aria-label={recording ? "Recording audio" : "Transcribing audio"}
+            className={cn("flex items-center justify-center", {
+              "min-h-28": compact,
+              "min-h-72": !compact,
+            })}
+          >
+            <div className="flex h-10 items-center gap-1.5 rounded-full border border-border/70 bg-secondary/35 px-4">
+              {audioWaveBars.map((bar, index) => (
+                <span
+                  className={cn("h-6 w-1 animate-pulse rounded-full bg-foreground/75", {
+                    "bg-primary": recording,
+                    "bg-muted-foreground": transcribing,
+                  })}
+                  key={bar.id}
+                  style={{
+                    animationDelay: `${index * 70}ms`,
+                    transform: `scaleY(${bar.scale})`,
+                  }}
+                />
+              ))}
+            </div>
+          </output>
+        ) : editor ? (
           <EditorContent editor={editor} />
         ) : (
           <div
@@ -249,6 +300,37 @@ export const ComposeEditor = ({
               );
             })}
           </TooltipGroup>
+          {recording ? (
+            <IconButtonTooltip label="Stop recording">
+              <Button
+                aria-label="Stop recording"
+                className="ml-auto text-primary"
+                disabled={disabled}
+                onClick={onRecordingStop}
+                onMouseDown={(event) => event.preventDefault()}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <HugeiconsIcon className="size-4" icon={StopIcon} />
+              </Button>
+            </IconButtonTooltip>
+          ) : (
+            <IconButtonTooltip label={recordingSupported ? "Dictate" : "Recording unavailable"}>
+              <Button
+                aria-label={recordingSupported ? "Dictate" : "Recording unavailable"}
+                className="ml-auto"
+                disabled={disabled || transcribing || !recordingSupported}
+                onClick={onRecordingStart}
+                onMouseDown={(event) => event.preventDefault()}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <HugeiconsIcon className="size-4" icon={AiMicIcon} />
+              </Button>
+            </IconButtonTooltip>
+          )}
         </div>
       ) : null}
     </div>

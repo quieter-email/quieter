@@ -1,4 +1,4 @@
-import type { ChatMessagePart } from "@quieter/database";
+import type { ChatMessagePart } from "@quieter/database/schema";
 import type { MessagePart } from "@tanstack/ai";
 
 export const hasVisibleAssistantContent = (parts: Array<ChatMessagePart | MessagePart>) =>

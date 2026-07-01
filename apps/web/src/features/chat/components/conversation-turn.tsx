@@ -2,7 +2,8 @@
 
 import { Copy01Icon, Edit01Icon, Refresh01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, IconButtonTooltip } from "@quieter/ui";
+import { Button } from "@quieter/ui/button";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { type KeyboardEvent, useState } from "react";
 import type { ChatTurn, ResolveComposeTool } from "../types";
 import { getCopyableMessageText } from "../domain/copy-message-text";
@@ -84,7 +85,7 @@ export const ConversationTurn = ({
             <div className="flex w-full max-w-[85%] flex-col gap-2 sm:max-w-[75%]">
               <textarea
                 aria-label="Edit message"
-                className="min-h-20 w-full resize-none rounded-lg border border-border bg-muted px-3.5 py-2 text-sm/relaxed text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                className="keyboard-focus-ring min-h-20 w-full resize-none rounded-lg border border-border bg-muted px-3.5 py-2 text-sm/relaxed text-foreground focus:outline-none"
                 onChange={(event) => setEditDraft(event.target.value)}
                 onKeyDown={handleEditKeyDown}
                 value={editDraft}

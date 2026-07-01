@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { cn } from "@quieter/ui";
+import { cn } from "@quieter/ui/cn";
 import { AnimatePresence, m } from "motion/react";
 
 type ToolStepProps = {

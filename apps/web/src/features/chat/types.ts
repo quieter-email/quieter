@@ -4,13 +4,14 @@ import type { MailboxCategory } from "~/lib/gmail/gmail";
 export type {
   ComposeEmailInput,
   ComposeEmailResult,
+  GoogleCalendarCreateEventResult as GoogleCalendarEventToolResult,
   GmailLabelListResult as GmailLabelListToolResult,
   GmailMessageResult as GmailMessageToolResult,
   GmailSearchResult as GmailSearchToolResult,
   GmailThreadResult as GmailThreadToolResult,
   MailboxOverviewResult as MailboxOverviewToolResult,
   ModifyMailResult as ModifyMailToolResult,
-} from "@quieter/ai";
+} from "@quieter/ai/chat-agent";
 
 export type ChatViewProps = {
   activeMailbox: MailboxCategory;
