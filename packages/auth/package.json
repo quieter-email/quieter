@@ -24,7 +24,7 @@
     "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
-    "quieter": "workspace:*",
+    "@react-email/render": "^2.0.9",
     "react": "catalog:"
   },
   "devDependencies": {
