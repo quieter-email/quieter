@@ -24,16 +24,22 @@ export const createMailboxThreadMessageActionHandlers = ({
   onOpenDraft,
   supportsFolders = true,
   supportsLabels = true,
+  supportsReadState = true,
   supportsUnsubscribe = true,
 }: {
   mailboxActions: MailboxActions;
   onOpenDraft?: (message: MessageListItem) => void | Promise<void>;
   supportsFolders?: boolean;
   supportsLabels?: boolean;
+  supportsReadState?: boolean;
   supportsUnsubscribe?: boolean;
 }): ThreadActionHandlers => ({
-  onMarkAsRead: (threadId) => mailboxActions.markThreadAsRead(threadId),
-  onMarkAsUnread: (threadId) => mailboxActions.markThreadAsUnread(threadId),
+  ...(supportsReadState
+    ? {
+        onMarkAsRead: (threadId: string) => mailboxActions.markThreadAsRead(threadId),
+        onMarkAsUnread: (threadId: string) => mailboxActions.markThreadAsUnread(threadId),
+      }
+    : {}),
   ...(supportsUnsubscribe ? { onUnsubscribe: mailboxActions.unsubscribeFromMessage } : {}),
   ...(supportsFolders
     ? {

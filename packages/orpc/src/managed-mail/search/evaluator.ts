@@ -1,4 +1,4 @@
-import { managedMailAttachment, managedMailMessage } from "@quieter/database";
+import { managedMailAttachment, managedMailMessage } from "@quieter/database/schema";
 import {
   normalizeStructuredMailSearch,
   type MailSearchFilter,
@@ -55,7 +55,13 @@ const matchesFilter = (
       matches =
         (value === "read" && message.isRead) ||
         (value === "unread" && !message.isRead) ||
-        value === message.direction;
+        value === message.direction ||
+        (value === "spam" && message.mailboxState === "spam") ||
+        (value === "trash" && message.mailboxState === "trash") ||
+        (value === "inbox" &&
+          message.direction === "inbound" &&
+          message.mailboxState === "active") ||
+        (value === "sent" && message.direction === "outbound" && message.mailboxState === "active");
       break;
     case "after":
     case "before": {

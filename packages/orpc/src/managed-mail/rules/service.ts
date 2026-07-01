@@ -1,16 +1,16 @@
 import { ORPCError } from "@orpc/server";
+import { db } from "@quieter/database/client";
 import {
-  db,
   managedMailAttachment,
   managedMailMessage,
   managedMailRule,
   managedMailRuleBackfill,
-} from "@quieter/database";
+} from "@quieter/database/schema";
 import {
   managedMailboxRuleDefinitionSchema,
-  structuredMailSearchSchema,
   type ManagedMailboxRuleDefinition,
-} from "@quieter/mail";
+} from "@quieter/mail/mailbox-organization";
+import { structuredMailSearchSchema } from "@quieter/mail/search";
 import { and, asc, countDistinct, desc, eq, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";

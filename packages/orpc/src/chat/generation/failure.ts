@@ -1,4 +1,5 @@
-import { chatMessage, chatRun, db, type ChatMessagePart } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { chatMessage, chatRun, type ChatMessagePart } from "@quieter/database/schema";
 import { eq } from "drizzle-orm";
 import { updateAssistantMessage, updateRunStatus } from "../../chat-run-store";
 import { publishChatRunEvent } from "../../chat-run-stream";

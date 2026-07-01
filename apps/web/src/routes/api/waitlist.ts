@@ -1,4 +1,4 @@
-import { db, waitlistSignup } from "@quieter/database";
+import { recordWaitlistSignup } from "@quieter/orpc/waitlist";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
@@ -35,25 +35,12 @@ export const Route = createFileRoute("/api/waitlist")({
           });
         }
 
-        const createdSignups = await db
-          .insert(waitlistSignup)
-          .values({
-            createdAt: new Date(),
-            email: email.data,
-          })
-          .onConflictDoNothing({
-            target: waitlistSignup.email,
-          })
-          .returning({
-            email: waitlistSignup.email,
-          });
-
-        const status = createdSignups.length > 0 ? "created" : "existing";
+        const signup = await recordWaitlistSignup(email.data);
 
         if (wantsJson)
           return Response.json({
-            email: email.data,
-            status,
+            email: signup.email,
+            status: signup.status,
           });
 
         const url = new URL("/home", request.url);

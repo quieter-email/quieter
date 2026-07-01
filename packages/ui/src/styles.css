@@ -8,37 +8,37 @@
 /* The styles are darkmode-first, meaning in lightmode, background-dark is actually the lightest color and background-light is actually the darkest color. */
 
 :root {
-  --background: oklch(0.975 0 0);
-  --foreground: oklch(0.15 0 0);
-  --background-light: oklch(0.97 0 0);
-  --background-dark: oklch(0.98 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(0.975 0 0);
-  --popover-foreground: oklch(0.15 0 0);
-  --primary: oklch(0.37 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.875 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.925 0 0);
-  --muted-foreground: oklch(0.45 0 0);
-  --accent: oklch(0.952 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --background: oklch(0.975 0.002 264);
+  --foreground: oklch(0.15 0.002 264);
+  --background-light: oklch(1 0.002 264);
+  --background-dark: oklch(0.9 0.002 264);
+  --card: oklch(1 0.002 264);
+  --card-foreground: oklch(0.145 0.002 264);
+  --popover: oklch(0.975 0.002 264);
+  --popover-foreground: oklch(0.15 0.002 264);
+  --primary: oklch(0.37 0.002 264);
+  --primary-foreground: oklch(0.985 0.002 264);
+  --secondary: oklch(0.875 0.002 264);
+  --secondary-foreground: oklch(0.205 0.002 264);
+  --muted: oklch(0.925 0.002 264);
+  --muted-foreground: oklch(0.45 0.003 264);
+  --accent: oklch(0.952 0.002 264);
+  --accent-foreground: oklch(0.205 0.002 264);
   --destructive: oklch(0.5 0.23 27.33);
-  --destructive-foreground: oklch(0.985 0 0);
+  --destructive-foreground: oklch(0.985 0.002 264);
   --success: oklch(0.62 0.145 149.57);
-  --success-foreground: oklch(0.12 0 0);
+  --success-foreground: oklch(0.12 0.002 264);
   --warning: oklch(0.73 0.145 70.08);
-  --warning-foreground: oklch(0.205 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --warning-foreground: oklch(0.205 0.002 264);
+  --border: oklch(0.84 0.002 264);
+  --input: oklch(0.922 0.002 264);
+  --ring: oklch(0.708 0.003 264);
   --scrollbar-thumb: var(--secondary);
-  --chart-1: oklch(0.32 0 0);
-  --chart-2: oklch(0.42 0 0);
-  --chart-3: oklch(0.52 0 0);
-  --chart-4: oklch(0.62 0 0);
-  --chart-5: oklch(0.72 0 0);
+  --chart-1: oklch(0.32 0.002 264);
+  --chart-2: oklch(0.42 0.002 264);
+  --chart-3: oklch(0.52 0.002 264);
+  --chart-4: oklch(0.62 0.002 264);
+  --chart-5: oklch(0.72 0.002 264);
   --font-sans: "Geist", ui-sans-serif, sans-serif;
   --font-serif: "Times New Roman", Georgia, ui-serif, serif;
   --font-mono: "Geist Mono", ui-monospace, monospace;
@@ -61,42 +61,55 @@
   --shadow-elevation-sm: 0 4px 12px -4px hsl(0 0% 0% / 0.06);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
+  --keyboard-focus-destructive-ring-shadow: color-mix(
+    in oklab,
+    var(--destructive) 30%,
+    transparent
+  );
+  --keyboard-focus-ring-shadow: color-mix(in oklab, var(--ring) 36%, transparent);
+}
+
+@supports not (color: color-mix(in oklab, black, transparent)) {
+  :root {
+    --keyboard-focus-destructive-ring-shadow: var(--destructive);
+    --keyboard-focus-ring-shadow: var(--ring);
+  }
 }
 
 .dark,
 :root[data-theme="dark"],
 :root[data-kb-theme="dark"] {
-  --background: oklch(0.218 0 0);
-  --background-light: oklch(0.248 0 0);
-  --background-dark: oklch(0.2 0 0);
-  --foreground: oklch(1 0 0);
-  --card: oklch(0.252 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.235 0 0);
-  --popover-foreground: oklch(0.9 0 0);
-  --primary: oklch(0.95 0 0);
-  --primary-foreground: oklch(0.141 0 0);
-  --secondary: oklch(0.26 0 0);
-  --secondary-foreground: oklch(1 0 0);
-  --muted: oklch(0.3 0 0);
-  --muted-foreground: oklch(0.74 0 0);
-  --accent: oklch(0.285 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.218 0.003 264);
+  --background-light: oklch(0.255 0.003 264);
+  --background-dark: oklch(0.145 0 264);
+  --foreground: oklch(1 0.002 264);
+  --card: oklch(0.275 0.003 264);
+  --card-foreground: oklch(0.985 0.002 264);
+  --popover: oklch(0.28 0.003 264);
+  --popover-foreground: oklch(0.9 0.002 264);
+  --primary: oklch(0.95 0.002 264);
+  --primary-foreground: oklch(0.141 0.003 264);
+  --secondary: oklch(0.31 0.003 264);
+  --secondary-foreground: oklch(1 0.002 264);
+  --muted: oklch(0.35 0.003 264);
+  --muted-foreground: oklch(0.74 0.004 264);
+  --accent: oklch(0.33 0.003 264);
+  --accent-foreground: oklch(0.985 0.002 264);
   --destructive: oklch(0.577 0.245 27.33);
-  --destructive-foreground: oklch(0.985 0 0);
+  --destructive-foreground: oklch(0.985 0.002 264);
   --success: oklch(0.6 0.174 149.57);
-  --success-foreground: oklch(0.985 0 0);
+  --success-foreground: oklch(0.985 0.002 264);
   --warning: oklch(0.769 0.189 70.08);
-  --warning-foreground: oklch(0.12 0 0);
-  --border: oklch(0.256 0 0);
-  --input: oklch(0.256 0 0);
-  --ring: oklch(0.44 0 0);
+  --warning-foreground: oklch(0.12 0.003 264);
+  --border: oklch(0.25 0.004 264);
+  --input: oklch(0.32 0.003 264);
+  --ring: oklch(0.44 0.004 264);
   --scrollbar-thumb: var(--secondary);
-  --chart-1: oklch(0.42 0 0);
-  --chart-2: oklch(0.52 0 0);
-  --chart-3: oklch(0.62 0 0);
-  --chart-4: oklch(0.72 0 0);
-  --chart-5: oklch(0.82 0 0);
+  --chart-1: oklch(0.42 0.003 264);
+  --chart-2: oklch(0.52 0.003 264);
+  --chart-3: oklch(0.62 0.003 264);
+  --chart-4: oklch(0.72 0.003 264);
+  --chart-5: oklch(0.82 0.003 264);
   --shadow-2xs: 0 1px 2px 0 hsl(0 0% 0% / 0.15);
   --shadow-xs: 0 1px 2px 0 hsl(0 0% 0% / 0.2);
   --shadow-sm: 0 1px 3px 0 hsl(0 0% 0% / 0.2), 0 1px 2px -1px hsl(0 0% 0% / 0.15);
@@ -208,6 +221,27 @@
 }
 
 @layer utilities {
+  .keyboard-focus-ring,
+  .keyboard-focus-within {
+    outline: none;
+  }
+
+  :root[data-keyboard-focus="true"] .keyboard-focus-ring:focus,
+  :root[data-keyboard-focus="true"] .keyboard-focus-within:focus-within,
+  .keyboard-focus-ring:focus-visible,
+  .keyboard-focus-within:has(:focus-visible) {
+    border-color: var(--ring);
+    box-shadow: 0 0 0 2px var(--keyboard-focus-ring-shadow);
+  }
+
+  :root[data-keyboard-focus="true"] .keyboard-focus-ring[aria-invalid="true"]:focus,
+  :root[data-keyboard-focus="true"] .keyboard-focus-within:has([aria-invalid="true"]):focus-within,
+  .keyboard-focus-ring[aria-invalid="true"]:focus-visible,
+  .keyboard-focus-within:has([aria-invalid="true"]:focus-visible) {
+    border-color: var(--destructive);
+    box-shadow: 0 0 0 2px var(--keyboard-focus-destructive-ring-shadow);
+  }
+
   @supports (corner-shape: squircle) {
     .squircle {
       corner-shape: superellipse(1.825);

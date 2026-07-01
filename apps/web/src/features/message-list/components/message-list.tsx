@@ -8,10 +8,9 @@ import {
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Button } from "@quieter/ui/button";
+import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import {
-  Button,
-  Checkbox,
-  CheckboxIndicator,
   Dialog,
   DialogBody,
   DialogCloseButton,
@@ -19,12 +18,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  toast,
-} from "@quieter/ui";
+} from "@quieter/ui/dialog";
+import { toast } from "@quieter/ui/toast";
+import { useHotkeys } from "@tanstack/react-hotkeys";
 import { useQuery } from "@tanstack/react-query";
 import { m } from "motion/react";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { MessageListItem } from "~/lib/gmail/gmail";
+import { shouldIgnoreAppShortcut } from "~/features/hotkeys/domain/hotkey-guards";
 import { MessageListSearch } from "~/features/message-search/components/message-list-search";
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
 import { buildThreadListEntries, type ThreadListEntry } from "~/lib/gmail/thread-list";
@@ -54,10 +55,17 @@ const buildDraftListEntry = (message: MessageListItem): ThreadListEntry => ({
   unreadCount: 0,
 });
 
+const formatConversationCount = (count: number) =>
+  `${count} ${count === 1 ? "conversation" : "conversations"}`;
+
 export const MessageList = (props: MessageListProps) => {
   const [isBulkLabelsOpen, setIsBulkLabelsOpen] = useState(false);
   const [bulkLabelIds, setBulkLabelIds] = useState<string[]>([]);
-  const { data: gmailLabels = [] } = useQuery(labelsQueryOptions(props.mailboxId));
+  const { data: gmailLabels = [] } = useQuery(
+    labelsQueryOptions(props.mailboxId, props.mailboxProvider !== "api"),
+  );
+  const userLabels = gmailLabels.filter((label) => label.type === "user");
+  const labelNounPlural = "labels";
   const flattenedMessages = props.messages.flatMap((page) => page.messages);
   const threadedMessages =
     props.activeMailbox === "drafts"
@@ -94,96 +102,293 @@ export const MessageList = (props: MessageListProps) => {
       );
     }
   };
+  const getActionThreads = () =>
+    selection.selectedThreads.length > 0
+      ? selection.selectedThreads
+      : selection.focusedThread
+        ? [selection.focusedThread]
+        : [];
+  const runActionThreads = async (
+    action: (threads: ThreadListEntry[]) => void | Promise<void>,
+    successMessage: (threads: ThreadListEntry[]) => string,
+  ) => {
+    const threads = getActionThreads();
+    if (threads.length === 0) return;
 
+    try {
+      await action(threads);
+      toast.success(successMessage(threads));
+    } catch (error) {
+      toast.error(
+        error instanceof Error && error.message ? error.message : "Could not update messages.",
+      );
+    }
+  };
+  const openBulkLabels = () => {
+    if (userLabels.length === 0) return;
+
+    if (selection.selectedThreads.length === 0 && selection.focusedThread) {
+      selection.selectSingleThread(selection.focusedThread.threadId);
+    }
+
+    setIsBulkLabelsOpen(true);
+  };
   const bulkActions: MessageListBulkAction[] =
-    props.activeMailbox === "drafts"
-      ? [
-          {
-            destructive: true,
-            icon: Delete02Icon,
-            id: "delete-drafts",
-            label: "Delete drafts",
-            onSelect: async () => {
-              await runBulkAction(props.mailboxActions.deleteDrafts);
+    props.mailboxProvider === "api"
+      ? []
+      : props.activeMailbox === "drafts"
+        ? [
+            {
+              destructive: true,
+              icon: Delete02Icon,
+              id: "delete-drafts",
+              label: "Delete drafts",
+              onSelect: async () => {
+                await runBulkAction(props.mailboxActions.deleteDrafts);
+              },
             },
-          },
-        ]
-      : [
-          {
-            icon: MailOpen02Icon,
-            id: "mark-threads-read",
-            label: "Mark as Read",
-            onSelect: async () => {
-              await runBulkAction(props.mailboxActions.markThreadsAsRead);
+          ]
+        : [
+            {
+              icon: MailOpen02Icon,
+              id: "mark-threads-read",
+              label: "Mark as Read",
+              onSelect: async () => {
+                await runBulkAction(props.mailboxActions.markThreadsAsRead);
+              },
             },
-          },
-          ...(gmailLabels.length > 0
-            ? [
-                {
-                  icon: Tag01Icon,
-                  id: "modify-thread-labels",
-                  label: "Modify labels",
-                  onSelect: () => setIsBulkLabelsOpen(true),
-                } satisfies MessageListBulkAction,
-              ]
-            : []),
-          {
-            icon: Mail01Icon,
-            id: "mark-threads-unread",
-            label: "Mark as Unread",
-            onSelect: async () => {
-              await runBulkAction(props.mailboxActions.markThreadsAsUnread);
+            ...(userLabels.length > 0
+              ? [
+                  {
+                    icon: Tag01Icon,
+                    id: "modify-thread-labels",
+                    label: `Modify ${labelNounPlural}`,
+                    onSelect: openBulkLabels,
+                  } satisfies MessageListBulkAction,
+                ]
+              : []),
+            {
+              icon: Mail01Icon,
+              id: "mark-threads-unread",
+              label: "Mark as Unread",
+              onSelect: async () => {
+                await runBulkAction(props.mailboxActions.markThreadsAsUnread);
+              },
             },
-          },
-          ...(props.mailboxProvider === "managed"
-            ? []
-            : [
-                ...(props.activeMailbox === "inbox"
-                  ? [
-                      {
-                        destructive: true,
-                        icon: Delete02Icon,
-                        id: "mark-threads-spam",
-                        label: "Mark as Spam",
-                        onSelect: async () => {
-                          await runBulkAction(props.mailboxActions.markThreadsAsSpam);
-                        },
-                      } satisfies MessageListBulkAction,
-                    ]
-                  : []),
-                ...(props.activeMailbox === "spam"
-                  ? [
-                      {
-                        icon: Mail01Icon,
-                        id: "unmark-threads-spam",
-                        label: "Unmark as Spam",
-                        onSelect: async () => {
-                          await runBulkAction(props.mailboxActions.unmarkThreadsAsSpam);
-                        },
-                      } satisfies MessageListBulkAction,
-                    ]
-                  : []),
-                ...(props.activeMailbox === "trash"
-                  ? []
-                  : [
-                      {
-                        destructive: true,
-                        icon: Delete01Icon,
-                        id: "move-threads-trash",
-                        label: "Move to Trash",
-                        onSelect: async () => {
-                          await runBulkAction(props.mailboxActions.moveThreadsToTrash);
-                        },
-                      } satisfies MessageListBulkAction,
-                    ]),
-              ]),
-        ];
+            ...(props.mailboxProvider === "gmail" && props.activeMailbox === "inbox"
+              ? [
+                  {
+                    destructive: true,
+                    icon: Delete02Icon,
+                    id: "mark-threads-spam",
+                    label: "Mark as Spam",
+                    onSelect: async () => {
+                      await runBulkAction(props.mailboxActions.markThreadsAsSpam);
+                    },
+                  } satisfies MessageListBulkAction,
+                ]
+              : []),
+            ...(props.mailboxProvider === "gmail" && props.activeMailbox === "spam"
+              ? [
+                  {
+                    icon: Mail01Icon,
+                    id: "unmark-threads-spam",
+                    label: "Unmark as Spam",
+                    onSelect: async () => {
+                      await runBulkAction(props.mailboxActions.unmarkThreadsAsSpam);
+                    },
+                  } satisfies MessageListBulkAction,
+                ]
+              : []),
+            ...(props.mailboxProvider !== "gmail" || props.activeMailbox === "trash"
+              ? []
+              : [
+                  {
+                    destructive: true,
+                    icon: Delete01Icon,
+                    id: "move-threads-trash",
+                    label: "Move to Trash",
+                    onSelect: async () => {
+                      await runBulkAction(props.mailboxActions.moveThreadsToTrash);
+                    },
+                  } satisfies MessageListBulkAction,
+                ]),
+          ];
 
-  const scrollPaneKey = `${props.activeMailbox}:${props.searchQuery}`;
+  const scrollPaneKey = `${props.mailboxId}:${props.activeMailbox}:${props.searchQuery}`;
+  const actionHotkeysEnabled =
+    props.mailboxProvider !== "api" && !props.activeMessageId && props.activeMailbox !== "drafts";
+  const previousActiveMessageIdRef = useRef(props.activeMessageId);
+
+  useLayoutEffect(() => {
+    const previousActiveMessageId = previousActiveMessageIdRef.current;
+    previousActiveMessageIdRef.current = props.activeMessageId;
+
+    const keyboardFocusedThreadId = selection.keyboardFocusedThreadId;
+
+    if (!previousActiveMessageId || props.activeMessageId || !keyboardFocusedThreadId) {
+      return;
+    }
+
+    const showFocusRing = selection.consumeFocusRingRequest();
+
+    const frameId = requestAnimationFrame(() => {
+      const focusedRowTrigger = selection.scrollRef.current?.querySelector<HTMLButtonElement>(
+        `li[data-thread-id="${CSS.escape(keyboardFocusedThreadId)}"] [data-message-row-trigger]`,
+      );
+      focusedRowTrigger?.focus({ preventScroll: true, focusVisible: showFocusRing });
+
+      if (!showFocusRing) {
+        focusedRowTrigger
+          ?.closest<HTMLElement>("[data-message-row]")
+          ?.removeAttribute("data-focus-visible");
+        return;
+      }
+
+      requestAnimationFrame(() => {
+        const row = focusedRowTrigger?.closest<HTMLElement>("[data-message-row]");
+        if (focusedRowTrigger?.matches(":focus-visible")) {
+          row?.setAttribute("data-focus-visible", "");
+        } else {
+          row?.removeAttribute("data-focus-visible");
+        }
+      });
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [
+    props.activeMessageId,
+    selection.consumeFocusRingRequest,
+    selection.keyboardFocusedThreadId,
+    selection.scrollRef,
+  ]);
+
+  useHotkeys(
+    [
+      {
+        hotkey: "J",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          selection.focusThreadByOffset(1);
+        },
+        options: { enabled: threadedMessages.length > 0 },
+      },
+      {
+        hotkey: "K",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          selection.focusThreadByOffset(-1);
+        },
+        options: { enabled: threadedMessages.length > 0 },
+      },
+      {
+        hotkey: "O",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          selection.openFocusedThread();
+        },
+        options: { enabled: threadedMessages.length > 0 },
+      },
+      {
+        hotkey: "Enter",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          selection.openFocusedThread();
+        },
+        options: { enabled: threadedMessages.length > 0 },
+      },
+      {
+        hotkey: "X",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          selection.toggleFocusedThreadSelection();
+        },
+        options: { enabled: threadedMessages.length > 0 },
+      },
+      {
+        hotkey: "U",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          if (props.activeMessageId) {
+            selection.requestFocusRing();
+            props.onDeactivateActiveMessage();
+            return;
+          }
+          selection.clearSelection();
+        },
+        options: { enabled: threadedMessages.length > 0 || !!props.activeMessageId },
+      },
+      {
+        hotkey: "Shift+3",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          void runActionThreads(
+            props.mailboxActions.moveThreadsToTrash,
+            (threads) => `${formatConversationCount(threads.length)} moved to Trash.`,
+          );
+        },
+        options: {
+          enabled:
+            actionHotkeysEnabled &&
+            props.mailboxProvider === "gmail" &&
+            props.activeMailbox !== "trash",
+        },
+      },
+      {
+        hotkey: "Shift+1",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          void runActionThreads(
+            props.mailboxActions.markThreadsAsSpam,
+            (threads) => `${formatConversationCount(threads.length)} marked as Spam.`,
+          );
+        },
+        options: {
+          enabled:
+            actionHotkeysEnabled &&
+            props.mailboxProvider === "gmail" &&
+            props.activeMailbox === "inbox",
+        },
+      },
+      {
+        hotkey: "Shift+I",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          void runActionThreads(
+            props.mailboxActions.markThreadsAsRead,
+            (threads) => `${formatConversationCount(threads.length)} marked as Read.`,
+          );
+        },
+        options: { enabled: actionHotkeysEnabled },
+      },
+      {
+        hotkey: "Shift+U",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          void runActionThreads(
+            props.mailboxActions.markThreadsAsUnread,
+            (threads) => `${formatConversationCount(threads.length)} marked as Unread.`,
+          );
+        },
+        options: { enabled: actionHotkeysEnabled },
+      },
+      {
+        hotkey: "L",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          openBulkLabels();
+        },
+        options: { enabled: actionHotkeysEnabled && userLabels.length > 0 },
+      },
+    ],
+    {
+      ignoreInputs: true,
+    },
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {selection.selectedThreadIds.size > 0 ? (
+      {selection.selectedThreadIds.size > 0 && props.mailboxProvider !== "api" ? (
         <MessageListSelectionToolbar
           actions={bulkActions}
           allSelected={selection.allSelected}
@@ -235,33 +440,31 @@ export const MessageList = (props: MessageListProps) => {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Modify labels</DialogTitle>
+            <DialogTitle>Modify {labelNounPlural}</DialogTitle>
           </DialogHeader>
           <DialogBody className="max-h-[50vh] space-y-2 overflow-y-auto">
-            {gmailLabels
-              .filter((label) => label.type === "user")
-              .map((label) => (
-                <label className="flex items-center gap-2 text-sm" key={label.id}>
-                  <Checkbox
-                    checked={bulkLabelIds.includes(label.id)}
-                    onCheckedChange={(checked) =>
-                      setBulkLabelIds((current) =>
-                        checked
-                          ? [...current, label.id]
-                          : current.filter((labelId) => labelId !== label.id),
-                      )
-                    }
-                  >
-                    <CheckboxIndicator />
-                  </Checkbox>
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-3.5 text-muted-foreground"
-                    icon={Tag01Icon}
-                  />
-                  {label.name}
-                </label>
-              ))}
+            {userLabels.map((label) => (
+              <label className="flex items-center gap-2 text-sm" key={label.id}>
+                <Checkbox
+                  checked={bulkLabelIds.includes(label.id)}
+                  onCheckedChange={(checked) =>
+                    setBulkLabelIds((current) =>
+                      checked
+                        ? [...current, label.id]
+                        : current.filter((labelId) => labelId !== label.id),
+                    )
+                  }
+                >
+                  <CheckboxIndicator />
+                </Checkbox>
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-3.5 text-muted-foreground"
+                  icon={Tag01Icon}
+                />
+                {label.name}
+              </label>
+            ))}
           </DialogBody>
           <DialogFooter>
             <DialogCloseButton>Cancel</DialogCloseButton>

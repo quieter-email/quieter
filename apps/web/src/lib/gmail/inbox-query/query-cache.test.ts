@@ -1,10 +1,11 @@
 import { QueryClient } from "@tanstack/react-query";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import type { MessageListItem, ThreadMessagesResult } from "../gmail";
 import type { MessagesQueryData } from "./data";
+import { queryPersister } from "../../query-persister";
 import { getThreadQueryKey } from "../thread-query";
 import { getMessagesQueryKey } from "./keys";
-import { applyVisibleMailboxMessagesRefreshToCache } from "./query-cache";
+import { applyVisibleMailboxMessagesRefreshToCache, persistQueryKeys } from "./query-cache";
 
 const message = (id: string, extras: Partial<MessageListItem> = {}): MessageListItem => ({
   id,
@@ -110,5 +111,25 @@ describe("applyVisibleMailboxMessagesRefreshToCache", () => {
       bodyHtml: "<p>loaded</p>",
       isUnread: true,
     });
+  });
+});
+
+describe("persistQueryKeys", () => {
+  test("persists allowlisted message lists and skips search and thread queries", async () => {
+    const queryClient = new QueryClient();
+    const inboxQueryKey = getMessagesQueryKey("mailbox-a", "inbox");
+    const searchQueryKey = getMessagesQueryKey("mailbox-a", "inbox", "from:alex");
+    const threadQueryKey = getThreadQueryKey("mailbox-a", "thread-a");
+    const persistSpy = spyOn(queryPersister, "persistQueryByKey").mockImplementation(
+      async () => {},
+    );
+
+    try {
+      await persistQueryKeys(queryClient, [inboxQueryKey, searchQueryKey, threadQueryKey]);
+
+      expect(persistSpy.mock.calls.map(([queryKey]) => queryKey)).toEqual([inboxQueryKey]);
+    } finally {
+      persistSpy.mockRestore();
+    }
   });
 });

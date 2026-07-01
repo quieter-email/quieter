@@ -2,14 +2,14 @@
 
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { cn } from "@quieter/ui/cn";
 import {
   ScrollArea,
   ScrollAreaContent,
   ScrollAreaScrollbar,
   ScrollAreaThumb,
   ScrollAreaViewport,
-} from "@quieter/ui";
-import { cn } from "@quieter/ui";
+} from "@quieter/ui/scroll-area";
 import { AnimatePresence, m } from "motion/react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ChatTurn, ResolveComposeTool } from "../types";

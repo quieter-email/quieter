@@ -24,6 +24,7 @@ import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
 import { Route as ApiV1SendRouteImport } from './routes/api/v1/send'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
 import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callback'
+import { Route as ApiConnectorsCallbackRouteImport } from './routes/api/connectors.callback'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 import { Route as ApiInternalGmailCredentialsRotateRouteImport } from './routes/api.internal.gmail-credentials.rotate'
 import { Route as ApiChatRunsRunIdStreamRouteImport } from './routes/api/chat.runs.$runId.stream'
@@ -103,6 +104,11 @@ const ApiGmailCallbackRoute = ApiGmailCallbackRouteImport.update({
   path: '/api/gmail/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiConnectorsCallbackRoute = ApiConnectorsCallbackRouteImport.update({
+  id: '/api/connectors/callback',
+  path: '/api/connectors/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -134,6 +140,7 @@ export interface FileRoutesByFullPath {
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
   '/api/v1/send': typeof ApiV1SendRoute
@@ -154,6 +161,7 @@ export interface FileRoutesByTo {
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
   '/api/v1/send': typeof ApiV1SendRoute
@@ -175,6 +183,7 @@ export interface FileRoutesById {
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
   '/api/v1/send': typeof ApiV1SendRoute
@@ -197,6 +206,7 @@ export interface FileRouteTypes {
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
+    | '/api/connectors/callback'
     | '/api/gmail/callback'
     | '/api/orpc/$'
     | '/api/v1/send'
@@ -217,6 +227,7 @@ export interface FileRouteTypes {
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
+    | '/api/connectors/callback'
     | '/api/gmail/callback'
     | '/api/orpc/$'
     | '/api/v1/send'
@@ -237,6 +248,7 @@ export interface FileRouteTypes {
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
+    | '/api/connectors/callback'
     | '/api/gmail/callback'
     | '/api/orpc/$'
     | '/api/v1/send'
@@ -258,6 +270,7 @@ export interface RootRouteChildren {
   ApiSitePasswordRoute: typeof ApiSitePasswordRoute
   ApiWaitlistRoute: typeof ApiWaitlistRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiConnectorsCallbackRoute: typeof ApiConnectorsCallbackRoute
   ApiGmailCallbackRoute: typeof ApiGmailCallbackRoute
   ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
   ApiV1SendRoute: typeof ApiV1SendRoute
@@ -372,6 +385,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGmailCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/connectors/callback': {
+      id: '/api/connectors/callback'
+      path: '/api/connectors/callback'
+      fullPath: '/api/connectors/callback'
+      preLoaderRoute: typeof ApiConnectorsCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -410,6 +430,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSitePasswordRoute: ApiSitePasswordRoute,
   ApiWaitlistRoute: ApiWaitlistRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiConnectorsCallbackRoute: ApiConnectorsCallbackRoute,
   ApiGmailCallbackRoute: ApiGmailCallbackRoute,
   ApiOrpcSplatRoute: ApiOrpcSplatRoute,
   ApiV1SendRoute: ApiV1SendRoute,

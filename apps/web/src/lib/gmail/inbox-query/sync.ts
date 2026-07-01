@@ -1,9 +1,11 @@
 import type { QueryClient, QueryPersister } from "@tanstack/react-query";
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
+import { listManagedDemoMessages } from "~/lib/managed-mail/demo-managed-mail";
 import { rpc } from "~/lib/orpc";
 import { shouldRetryOrpcError } from "~/lib/orpc-errors";
-import { queryPersister } from "~/lib/query-persister";
-import { isSandboxMailboxId, listDemoMessages } from "../demo-mail";
+import { persistQueryByKey, queryPersister } from "~/lib/query-persister";
+import { isManagedSandboxMailboxId, isSandboxMailboxId } from "~/lib/sandbox-mailbox";
+import { listDemoMessages } from "../demo-mail";
 import {
   GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
   GMAIL_QUERY_STALE_TIME_MS,
@@ -60,6 +62,15 @@ const fetchMessagesPage = async (
   searchQuery?: string | null,
   signal?: AbortSignal,
 ) => {
+  if (isManagedSandboxMailboxId(mailboxId)) {
+    return listManagedDemoMessages({
+      category: mailbox,
+      pageToken,
+      maxResults: pageToken ? 25 : 50,
+      query: normalizeSearchQuery(searchQuery),
+    });
+  }
+
   if (isSandboxMailboxId(mailboxId)) {
     return listDemoMessages({
       mailboxId,
@@ -122,7 +133,7 @@ export const refreshLoadedMessagesPages = async (
         options.preserveUnrefreshedPages ?? refreshedPageCount < loadedPageCount,
     }),
   );
-  await queryPersister.persistQueryByKey(messagesQueryKey, queryClient);
+  await persistQueryByKey(messagesQueryKey, queryClient);
   return refreshedPages[0];
 };
 
@@ -195,7 +206,7 @@ export const applyMailboxSyncDelta = async (
     );
   }
 
-  await queryPersister.persistQueryByKey(messagesQueryKey, queryClient);
+  await persistQueryByKey(messagesQueryKey, queryClient);
 
   const touchedThreadQueryKeys = new Map<string, ReturnType<typeof getThreadQueryKey>>();
 
@@ -209,7 +220,7 @@ export const applyMailboxSyncDelta = async (
 
   await Promise.all(
     Array.from(touchedThreadQueryKeys.values(), (threadQueryKey) =>
-      queryPersister.persistQueryByKey(threadQueryKey, queryClient),
+      persistQueryByKey(threadQueryKey, queryClient),
     ),
   );
 };
@@ -295,7 +306,7 @@ export const messagesQueryOptions = (
     getNextPageParam: (lastPage: ListMessagesPageResult) => lastPage.nextPageToken ?? undefined,
     staleTime: GMAIL_QUERY_STALE_TIME_MS,
     enabled,
-    persister: messagesQueryPersister,
+    ...(normalizeSearchQuery(searchQuery) ? {} : { persister: messagesQueryPersister }),
     retry: shouldRetryOrpcError,
     refetchOnMount: false,
     refetchOnWindowFocus: false,

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChatMessagePart, ChatRunStatus } from "@quieter/database";
+import type { ChatMessagePart, ChatRunStatus } from "@quieter/database/schema";
 import { useEffect, useRef } from "react";
 import { ChatRunStreamError, consumeChatRunStream } from "../lib/chat-run-stream";
 
@@ -45,9 +45,11 @@ export const useChatRunStream = ({
   const onDraftRef = useRef(onDraft);
   const onErrorRef = useRef(onError);
 
-  onDoneRef.current = onDone;
-  onDraftRef.current = onDraft;
-  onErrorRef.current = onError;
+  useEffect(() => {
+    onDoneRef.current = onDone;
+    onDraftRef.current = onDraft;
+    onErrorRef.current = onError;
+  }, [onDone, onDraft, onError]);
 
   useEffect(() => {
     if (!enabled || !runId) {

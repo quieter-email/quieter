@@ -2,17 +2,16 @@
 
 import { Cancel01Icon, MoreVerticalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Button } from "@quieter/ui/button";
+import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
+import { cn } from "@quieter/ui/cn";
 import {
-  Button,
-  Checkbox,
-  CheckboxIndicator,
-  cn,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  IconButtonTooltip,
-} from "@quieter/ui";
+} from "@quieter/ui/dropdown-menu";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import type { MessageListBulkAction } from "./message-list-types";
 
 const MessageListBulkActions = ({

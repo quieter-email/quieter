@@ -2,27 +2,23 @@
 
 import {
   Cancel01Icon,
-  Chat01Icon,
   ChatAddIcon,
   Delete01Icon,
   Edit01Icon,
-  InboxIcon,
   Loading03Icon,
   MoreVerticalIcon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Button, LinkButton } from "@quieter/ui/button";
 import {
-  Button,
-  cn,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  IconButtonTooltip,
-  Input,
-  LinkButton,
-} from "@quieter/ui";
+} from "@quieter/ui/dropdown-menu";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Input } from "@quieter/ui/input";
 import { AnimatePresence, domMax, LazyMotion, m } from "motion/react";
 import {
   type FormEvent,
@@ -33,7 +29,6 @@ import {
 } from "react";
 import type { MailboxWorkspaceView } from "~/features/mailbox/domain/mailbox-workspace-view";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
-import { AnimatedHoverSurface } from "~/components/animated-hover-surface";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
 import {
   type MailboxSwitcherOrder,
@@ -42,6 +37,8 @@ import {
 import { ManagedMailboxOrganizer } from "~/features/navigation/components/managed-mailbox-organizer";
 import { SidebarLabelNav } from "~/features/navigation/components/sidebar-label-nav";
 import { SidebarMailboxNav } from "~/features/navigation/components/sidebar-mailbox-nav";
+import { SidebarSimpleHoverSurface } from "~/features/navigation/components/sidebar-surfaces";
+import { SidebarWorkspaceViewSwitch } from "~/features/navigation/components/sidebar-workspace-view-switch";
 
 type MailSidebarProps = {
   activeChatId: string | null;
@@ -55,9 +52,10 @@ type MailSidebarProps = {
   embedded?: boolean;
   groups: Array<{
     id: string;
-    kind: "organization";
+    kind: "division" | "organization" | "unassigned";
     mailboxes: Array<{
       connectionStatus: "connected" | "needs_reconnect";
+      divisionName?: string | null;
       grantRole?: "manager" | "reader" | "responder" | null;
       id: string;
       emailAddress: string;
@@ -68,7 +66,7 @@ type MailSidebarProps = {
     name: string;
   }>;
   selectedMailboxId: string | null;
-  selectedMailboxProvider: "gmail" | "managed" | null;
+  selectedMailboxProvider: "api" | "gmail" | "managed" | null;
   selectedMailbox: MailboxCategory;
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
   onReconnectMailbox: (mailbox: { emailAddress: string; id: string }) => void;
@@ -101,15 +99,6 @@ const getSidebarEntranceInitial = (animateEntrance: boolean) =>
   animateEntrance ? { opacity: 0, x: -20, filter: "blur(8px)" } : false;
 
 let hasPlayedSidebarEntrance = false;
-
-const WORKSPACE_VIEW_OPTIONS: {
-  id: MailboxWorkspaceView;
-  label: string;
-  icon: typeof InboxIcon;
-}[] = [
-  { id: "inbox", label: "Inbox", icon: InboxIcon },
-  { id: "chat", label: "Chat", icon: Chat01Icon },
-];
 
 type SidebarChat = MailSidebarProps["chats"][number];
 
@@ -245,6 +234,7 @@ const SidebarContent = ({
   switcherSide = "right",
 }: SidebarContentProps) => {
   const isInboxView = embedded || selectedView === "inbox";
+  const isApiMailbox = selectedMailboxProvider === "api";
   const selectedMailboxGrantRole = groups
     .flatMap((group) => group.mailboxes)
     .find((mailbox) => mailbox.id === selectedMailboxId)?.grantRole;
@@ -303,7 +293,7 @@ const SidebarContent = ({
   return (
     <div className="relative z-10 flex min-h-0 flex-1 flex-col p-6">
       <m.div
-        className="flex min-w-0 items-start gap-2 rounded-md will-change-[transform,opacity,filter]"
+        className="flex min-w-0 items-start gap-2 rounded-md px-1 will-change-[transform,opacity,filter]"
         initial={getSidebarEntranceInitial(animateEntrance)}
         animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
         transition={{ delay: getSidebarEntranceDelay(0), duration: 0.5, ease: "easeOut" }}
@@ -325,7 +315,7 @@ const SidebarContent = ({
           <IconButtonTooltip label="Close sidebar">
             <Button
               aria-label="Close sidebar"
-              className="-mr-2 lg:hidden"
+              className="lg:hidden"
               onClick={onRequestClose}
               size="icon-sm"
               type="button"
@@ -337,56 +327,14 @@ const SidebarContent = ({
         )}
       </m.div>
 
-      {!embedded && (
-        <m.div
-          className="mt-2.5 will-change-[transform,opacity,filter]"
-          initial={getSidebarEntranceInitial(animateEntrance)}
-          animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-          transition={{ delay: getSidebarEntranceDelay(1), duration: 0.5, ease: "easeOut" }}
-        >
-          <div
-            aria-label="Workspace view"
-            className="relative grid grid-cols-2 rounded-lg bg-muted/40 p-0.5"
-            role="group"
-          >
-            <m.div
-              aria-hidden
-              className="pointer-events-none absolute inset-y-0.5 w-[calc(50%-2px)] rounded-md bg-background shadow-sm will-change-transform"
-              initial={false}
-              animate={{ left: selectedView === "inbox" ? 2 : "50%" }}
-              transition={{ type: "spring", stiffness: 520, damping: 38, mass: 0.75 }}
-            />
-            {WORKSPACE_VIEW_OPTIONS.map(({ id, label, icon }) => {
-              const isActive = selectedView === id;
-
-              return (
-                <button
-                  key={id}
-                  aria-pressed={isActive}
-                  className={cn(
-                    "relative z-10 flex h-8 touch-manipulation items-center justify-center gap-1.5 rounded-md text-[13px] font-medium outline-none select-none",
-                    "transition-[color,transform] duration-150 ease-out",
-                    "active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100",
-                    "focus-visible:ring-2 focus-visible:ring-ring/30",
-                    {
-                      "text-foreground": isActive,
-                      "text-muted-foreground hover:text-foreground/90": !isActive,
-                    },
-                  )}
-                  onClick={() => handleSelectView(id)}
-                  type="button"
-                >
-                  <HugeiconsIcon
-                    className="relative size-3.5 shrink-0"
-                    icon={icon}
-                    strokeWidth={1.5}
-                  />
-                  <span className="relative">{label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </m.div>
+      {!embedded && !isApiMailbox && (
+        <div className="mt-2 p-1">
+          <SidebarWorkspaceViewSwitch
+            animateEntrance={animateEntrance}
+            onSelectView={handleSelectView}
+            selectedView={selectedView}
+          />
+        </div>
       )}
 
       {isInboxView && (
@@ -397,9 +345,9 @@ const SidebarContent = ({
           transition={{ delay: getSidebarEntranceDelay(2), duration: 0.5, ease: "easeOut" }}
         >
           <Button
-            aria-disabled={embedded}
+            aria-disabled={embedded || isApiMailbox}
             className="w-full justify-start rounded-md px-4"
-            disabled={!selectedMailboxId || embedded}
+            disabled={!selectedMailboxId || embedded || isApiMailbox}
             onClick={handleComposeNewMail}
             type="button"
           >
@@ -428,20 +376,22 @@ const SidebarContent = ({
               searchQuery={searchQuery}
             />
           ) : null}
-          <SidebarLabelNav
-            animateEntrance={animateEntrance}
-            canManage={
-              !embedded &&
-              (selectedMailboxProvider === "gmail" || selectedMailboxGrantRole === "manager")
-            }
-            mailboxId={selectedMailboxId}
-            mailboxProvider={selectedMailboxProvider ?? "gmail"}
-            onSearch={(query) => {
-              onSearch(query);
-              onRequestClose?.();
-            }}
-            searchQuery={searchQuery}
-          />
+          {selectedMailboxProvider !== "api" && (
+            <SidebarLabelNav
+              animateEntrance={animateEntrance}
+              canManage={
+                !embedded &&
+                (selectedMailboxProvider === "gmail" || selectedMailboxGrantRole === "manager")
+              }
+              mailboxId={selectedMailboxId}
+              mailboxProvider={selectedMailboxProvider ?? "gmail"}
+              onSearch={(query) => {
+                onSearch(query);
+                onRequestClose?.();
+              }}
+              searchQuery={searchQuery}
+            />
+          )}
         </div>
       )}
 
@@ -504,18 +454,20 @@ const SidebarContent = ({
           transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
         >
           <div
-            className="relative rounded-md"
+            className="relative rounded-md squircle"
             onMouseEnter={() => setIsSettingsHovered(true)}
             onMouseLeave={() => setIsSettingsHovered(false)}
           >
-            <AnimatedHoverSurface layoutId="sidebar-settings-hover" visible={isSettingsHovered} />
+            <SidebarSimpleHoverSurface
+              layoutId="sidebar-settings-hover"
+              visible={isSettingsHovered}
+            />
             <LinkButton
               aria-label="Settings"
               className="group relative z-10 w-full justify-start bg-transparent hover:bg-transparent active:scale-100"
               onClick={onRequestClose}
               search={{
                 from: "/",
-                tab: "general",
               }}
               variant="ghost"
               to="/settings"

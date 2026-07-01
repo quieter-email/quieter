@@ -2,10 +2,11 @@ import type { Subscription } from "@polar-sh/sdk/models/components/subscription.
 import type {
   BillingPlan as StoredBillingPlan,
   BillingSubscriptionStatus,
-} from "@quieter/database";
+} from "@quieter/database/schema";
 import { ORPCError } from "@orpc/server";
 import { ResourceNotFound } from "@polar-sh/sdk/models/errors/resourcenotfound.js";
-import { billingSubscription, db, mailbox, member, organization } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { billingSubscription, mailbox, member, organization } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { getBillingCreditUsage, recordBillingCreditUsage, type BillingUsageKind } from "./credits";
@@ -510,6 +511,29 @@ export const reportAiUsage = async (input: {
   );
   if (costMicroCents <= 0) return;
 
+  await recordAiCreditUsage({
+    chatId: input.chatId,
+    costMicroCents,
+    externalId: input.externalId,
+    mailboxId: input.mailboxId,
+    metadata: {
+      completionTokens: input.completionTokens,
+      model: input.model,
+      promptTokens: input.promptTokens,
+      usageKind: input.usageKind,
+    },
+    userId: input.userId,
+  });
+};
+
+const recordAiCreditUsage = async (input: {
+  chatId?: string | null;
+  costMicroCents: number;
+  externalId: string;
+  mailboxId?: string;
+  metadata: Record<string, number | string>;
+  userId: string;
+}) => {
   if (!input.mailboxId) return;
   const [mailboxRow] = await db
     .select({ organizationId: mailbox.organizationId })
@@ -528,14 +552,40 @@ export const reportAiUsage = async (input: {
   await recordBillingCreditUsage({
     account: entitlement.account,
     category: "ai",
-    costMicroCents,
+    costMicroCents: input.costMicroCents,
     dedupeKey: `ai:${input.externalId}`,
     metadata: {
       chatId: input.chatId ?? "",
-      completionTokens: input.completionTokens,
+      ...input.metadata,
+    },
+  });
+};
+
+export const reportAiUsageCost = async (input: {
+  chatId?: string | null;
+  costMicroCents: number;
+  durationSeconds?: number;
+  externalId: string;
+  mailboxId?: string;
+  model: string;
+  totalTokens?: number;
+  usageKind: Extract<BillingUsageKind, "aiChat" | "autoLabel" | "usefulDetails">;
+  userId: string;
+}) => {
+  const costMicroCents = applyAiUsageMarkup(input.costMicroCents);
+  if (costMicroCents <= 0 || !input.mailboxId) return;
+
+  await recordAiCreditUsage({
+    chatId: input.chatId,
+    costMicroCents,
+    externalId: input.externalId,
+    mailboxId: input.mailboxId,
+    metadata: {
+      durationSeconds: input.durationSeconds ?? 0,
       model: input.model,
-      promptTokens: input.promptTokens,
+      totalTokens: input.totalTokens ?? 0,
       usageKind: input.usageKind,
     },
+    userId: input.userId,
   });
 };

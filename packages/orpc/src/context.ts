@@ -2,7 +2,7 @@ import type {
   RequestHeadersPluginContext,
   ResponseHeadersPluginContext,
 } from "@orpc/server/plugins";
-import { assertDatabaseConfigured, db } from "@quieter/database";
+import { assertDatabaseConfigured, db } from "@quieter/database/client";
 
 export type OrpcContext = {
   db: typeof db;

@@ -2,7 +2,6 @@
 
 import {
   Add01Icon,
-  ArrowLeft01Icon,
   Calendar03Icon,
   Delete02Icon,
   Key02Icon,
@@ -20,7 +19,9 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  Button,
+} from "@quieter/ui/alert-dialog";
+import { Button } from "@quieter/ui/button";
+import {
   Dialog,
   DialogBody,
   DialogCloseButton,
@@ -29,7 +30,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  FieldLabel,
+} from "@quieter/ui/dialog";
+import { FieldLabel } from "@quieter/ui/field";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -38,15 +41,15 @@ import {
   SelectScrollUpArrow,
   SelectTrigger,
   SelectValue,
-  TextField,
-  TextFieldInput,
-  toast,
-} from "@quieter/ui";
+} from "@quieter/ui/select";
+import { TextField, TextFieldInput } from "@quieter/ui/text-field";
+import { toast } from "@quieter/ui/toast";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
+import { SettingsBackButton } from "../settings-layout";
 import { getOrganizationApiKeysQueryKey, organizationApiKeysQueryOptions } from "./api-keys";
 import { formatCount, type FullOrganization } from "./domain";
 import { MutedActionButton } from "./settings-row";
@@ -211,7 +214,7 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
             <>
               <DialogBody className="space-y-3">
                 <button
-                  className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-xs break-all text-foreground outline-none hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring/30"
+                  className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-xs break-all text-foreground outline-none squircle hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring/30"
                   onClick={() => void copyText(createdKey)}
                   type="button"
                 >
@@ -481,8 +484,13 @@ export const ApiKeysView = ({
   onBack: () => void;
   organization: FullOrganization;
 }) => {
-  const apiKeysQuery = useQuery(organizationApiKeysQueryOptions(organization.id));
-  const apiKeys = (apiKeysQuery.data?.apiKeys ?? []) as OrganizationApiKey[];
+  const {
+    data: apiKeysData,
+    error: apiKeysError,
+    isError: isApiKeysError,
+    isPending: isApiKeysPending,
+  } = useQuery(organizationApiKeysQueryOptions(organization.id));
+  const apiKeys = (apiKeysData?.apiKeys ?? []) as OrganizationApiKey[];
   const manageApiKeysReason =
     (billingPending && "Loading billing access…") ||
     (billingAccessUnknown && "Could not load billing access.") ||
@@ -493,20 +501,14 @@ export const ApiKeysView = ({
 
   return (
     <div className="space-y-6">
-      <Button
-        className="w-fit text-muted-foreground hover:text-foreground"
-        onClick={onBack}
-        size="sm"
-        variant="ghost"
-      >
-        <HugeiconsIcon aria-hidden className="size-4" icon={ArrowLeft01Icon} />
-        {organization.name}
-      </Button>
+      <SettingsBackButton onClick={onBack}>{organization.name}</SettingsBackButton>
 
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="text-base font-semibold text-foreground">API keys</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{formatCount(apiKeys.length, "key")}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {formatCount(apiKeys.length, "Key", "Keys")}
+          </p>
         </div>
 
         {manageApiKeysReason ? (
@@ -521,14 +523,14 @@ export const ApiKeysView = ({
       </div>
 
       <div>
-        {apiKeysQuery.isPending ? (
+        {isApiKeysPending ? (
           <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
             <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
             Loading API keys…
           </div>
-        ) : apiKeysQuery.isError ? (
+        ) : isApiKeysError ? (
           <p className="py-6 text-sm text-destructive">
-            {apiKeysQuery.error.message ?? "Could not load API keys."}
+            {apiKeysError?.message ?? "Could not load API keys."}
           </p>
         ) : apiKeys.length > 0 ? (
           apiKeys.map((apiKey) => (

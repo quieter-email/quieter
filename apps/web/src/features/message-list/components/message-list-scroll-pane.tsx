@@ -92,15 +92,17 @@ export const MessageListScrollPane = ({
     threadedMessages.length === 0 && (list.isPending || list.isRefreshing);
 
   // Track when we first see each thread ID to identify new messages
-  const seenTimestampsRef = useRef<Map<string, number>>(new Map());
+  const seenTimestampsRef = useRef<Map<string, number> | null>(null);
+  seenTimestampsRef.current ??= new Map();
+  const seenTimestamps = seenTimestampsRef.current;
   const now = Date.now();
-  const isFirstLoad = seenTimestampsRef.current.size === 0;
+  const isFirstLoad = seenTimestamps.size === 0;
 
   for (const thread of threadedMessages) {
     if (thread.threadId) {
       const compositeKey = `${list.mailboxId}-${thread.threadId}`;
-      if (!seenTimestampsRef.current.has(compositeKey)) {
-        seenTimestampsRef.current.set(compositeKey, isFirstLoad ? 0 : now);
+      if (!seenTimestamps.has(compositeKey)) {
+        seenTimestamps.set(compositeKey, isFirstLoad ? 0 : now);
       }
     }
   }
@@ -108,7 +110,7 @@ export const MessageListScrollPane = ({
   // Identify threads that are new (seen in the last 2 seconds)
   const newThreads = threadedMessages.filter((t) => {
     const compositeKey = `${list.mailboxId}-${t.threadId}`;
-    return (seenTimestampsRef.current.get(compositeKey) ?? 0) > now - 2000;
+    return (seenTimestamps.get(compositeKey) ?? 0) > now - 2000;
   });
 
   // react-doctor-disable-next-line react-hooks-js/incompatible-library
@@ -155,9 +157,45 @@ export const MessageListScrollPane = ({
     list.onVisibleMessageIdsChange?.(visibleMessageIdsRef.current);
   }, [list.onVisibleMessageIdsChange, visibleMessageIdsKey]);
 
+  useLayoutEffect(() => {
+    const threadId = selection.keyboardFocusedThreadId;
+    if (!threadId) return;
+
+    if (!selection.consumeFocusRingRequest()) return;
+
+    const focusedIndex = threadedMessages.findIndex((thread) => thread.threadId === threadId);
+    if (focusedIndex === -1) return;
+
+    messageVirtualizer.scrollToIndex(focusedIndex, { align: "auto" });
+
+    const frameId = requestAnimationFrame(() => {
+      const trigger = selection.scrollRef.current?.querySelector<HTMLButtonElement>(
+        `li[data-thread-id="${CSS.escape(threadId)}"] [data-message-row-trigger]`,
+      );
+      trigger?.focus({ preventScroll: true, focusVisible: true });
+
+      requestAnimationFrame(() => {
+        const row = trigger?.closest<HTMLElement>("[data-message-row]");
+        if (trigger?.matches(":focus-visible")) {
+          row?.setAttribute("data-focus-visible", "");
+        } else {
+          row?.removeAttribute("data-focus-visible");
+        }
+      });
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [
+    messageVirtualizer,
+    selection.consumeFocusRingRequest,
+    selection.keyboardFocusedThreadId,
+    selection.scrollRef,
+    threadedMessages,
+  ]);
+
   return (
     <div
-      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 pt-1.5 pb-3 contain-strict"
+      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pt-1 pb-4 contain-strict"
       onScroll={() => {
         if (selection.isProgrammaticScrollToTopRef.current) return;
         loadMoreIfNeeded({
@@ -190,7 +228,7 @@ export const MessageListScrollPane = ({
             const thread = threadedMessages[virtualItem.index];
             const compositeKey = thread?.threadId ? `${list.mailboxId}-${thread.threadId}` : "";
             const isNew = thread?.threadId
-              ? (seenTimestampsRef.current.get(compositeKey) ?? 0) > now - 2000
+              ? (seenTimestamps.get(compositeKey) ?? 0) > now - 2000
               : false;
             const staggerIndex =
               isNew && thread?.threadId
@@ -204,20 +242,23 @@ export const MessageListScrollPane = ({
                   className="absolute top-0 left-0 w-full"
                   dataIndex={virtualItem.index}
                   gmailLabels={gmailLabels}
-                  isActive={activeThreadId === thread.threadId}
                   isNew={isNew}
-                  isSelected={selection.selectedThreadIds.has(thread.threadId)}
-                  isSelectionMode={selection.selectedThreadIds.size > 0}
                   key={thread.threadId}
                   mailboxActions={list.mailboxActions}
                   mailboxId={list.mailboxId}
                   mailboxProvider={list.mailboxProvider}
                   offsetY={virtualItem.start}
+                  onThreadFocus={selection.focusThread}
                   onOpenDraft={list.onOpenDraft}
                   onThreadPress={selection.handleThreadPress}
                   onThreadSelectionPress={selection.handleThreadSelectionPress}
                   pendingActions={list.pendingActions}
                   staggerIndex={staggerIndex}
+                  state={{
+                    active: activeThreadId === thread.threadId,
+                    selected: selection.selectedThreadIds.has(thread.threadId),
+                    selectionMode: selection.selectedThreadIds.size > 0,
+                  }}
                   thread={thread}
                 />
               )

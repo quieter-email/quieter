@@ -1,4 +1,4 @@
-import type { ComposeDraftAnchor } from "@quieter/mail/compose";
+import type { ComposeDraftAnchor } from "@quieter/mail/compose/schema";
 import { rpc } from "~/lib/orpc";
 
 const MAX_TOTAL_ATTACHMENT_BYTES = 24 * 1024 * 1024;
@@ -220,7 +220,7 @@ export const escapeComposeHtml = (value: string) =>
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 
-const textToComposeBodyHtml = (value: string): string => {
+export const textToComposeBodyHtml = (value: string): string => {
   const normalized = value.trim();
   if (!normalized) return "";
 

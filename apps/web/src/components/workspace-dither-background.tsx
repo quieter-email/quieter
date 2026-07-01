@@ -1,6 +1,7 @@
 "use client";
 
-import { cn, useColorModeValue } from "@quieter/ui";
+import { cn } from "@quieter/ui/cn";
+import { useColorModeValue } from "@quieter/ui/color-mode";
 import { useEffect, useRef } from "react";
 
 const DITHER_STEP = 3;

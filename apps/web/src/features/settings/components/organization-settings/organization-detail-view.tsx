@@ -5,7 +5,9 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useQuery } from "@tanstack/react-query";
 import type { OrganizationSettingsView } from "~/features/settings/domain/organization-settings-view";
 import { getTeamBilling, userBillingQueryOptions } from "~/features/settings/domain/billing";
+import { SettingsBackButton } from "../settings-layout";
 import { ApiKeysView } from "./api-keys-view";
+import { DivisionsView } from "./divisions-view";
 import {
   type OrganizationSummary,
   fullOrganizationQueryOptions,
@@ -20,6 +22,7 @@ export const OrganizationDetailView = ({
   onBackToList,
   onBackToOrganization,
   onOpenApiKeys,
+  onOpenDivisions,
   onOpenDomains,
   onOpenMembers,
   organization,
@@ -29,6 +32,7 @@ export const OrganizationDetailView = ({
   onBackToList: () => void;
   onBackToOrganization: () => void;
   onOpenApiKeys: () => void;
+  onOpenDivisions: () => void;
   onOpenDomains: () => void;
   onOpenMembers: () => void;
   organization: OrganizationSummary;
@@ -74,23 +78,34 @@ export const OrganizationDetailView = ({
 
   if (isFullOrganizationPending) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-        Loading team…
-      </div>
+      <>
+        <SettingsBackButton onClick={onBackToList}>Teams</SettingsBackButton>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+          Loading team…
+        </div>
+      </>
     );
   }
 
   if (isFullOrganizationError) {
     return (
-      <p className="text-sm text-destructive">
-        {fullOrganizationError.message ?? "Could not load team."}
-      </p>
+      <>
+        <SettingsBackButton onClick={onBackToList}>Teams</SettingsBackButton>
+        <p className="text-sm text-destructive">
+          {fullOrganizationError.message ?? "Could not load team."}
+        </p>
+      </>
     );
   }
 
   if (!fullOrganization) {
-    return <p className="text-sm text-muted-foreground">Team not found.</p>;
+    return (
+      <>
+        <SettingsBackButton onClick={onBackToList}>Teams</SettingsBackButton>
+        <p className="text-sm text-muted-foreground">Team not found.</p>
+      </>
+    );
   }
 
   if (view === "members") {
@@ -116,6 +131,17 @@ export const OrganizationDetailView = ({
         billingPending={isBillingPending}
         canManageDomains={canUpdateOrganization}
         canUseOrganizationDomains={canUseTeamFeatures}
+        onBack={onBackToOrganization}
+        organization={fullOrganization}
+      />
+    );
+  }
+
+  if (view === "divisions") {
+    return (
+      <DivisionsView
+        canManageDivisions={canUpdateOrganization}
+        members={fullOrganization.members}
         onBack={onBackToOrganization}
         organization={fullOrganization}
       />
@@ -149,6 +175,7 @@ export const OrganizationDetailView = ({
       fullOrganization={fullOrganization}
       onBackToList={onBackToList}
       onOpenApiKeys={onOpenApiKeys}
+      onOpenDivisions={onOpenDivisions}
       onOpenDomains={onOpenDomains}
       onOpenMembers={onOpenMembers}
       organization={organization}

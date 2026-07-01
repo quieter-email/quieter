@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
+import { queryPersister } from "~/lib/query-persister";
 
 export const getMailboxesQueryKey = () => ["mailboxes"] as const;
 
@@ -10,6 +11,7 @@ export const mailboxesQueryOptions = (enabled = true) =>
     queryKey: getMailboxesQueryKey(),
     queryFn: ({ signal }) => rpc.mail.listMailboxes(undefined, { signal }),
     enabled,
+    persister: queryPersister.persisterFn,
     staleTime: 0,
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",

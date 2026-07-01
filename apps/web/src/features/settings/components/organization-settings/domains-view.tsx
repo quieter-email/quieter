@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowLeft01Icon,
   ArrowRight01Icon,
   CheckmarkCircle01Icon,
   Delete02Icon,
@@ -10,8 +9,9 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
-  Button,
   Dialog,
   DialogBody,
   DialogCloseButton,
@@ -20,12 +20,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  cn,
-  toast,
-} from "@quieter/ui";
+} from "@quieter/ui/dialog";
+import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { orpc } from "~/lib/orpc";
+import { SettingsBackButton } from "../settings-layout";
 import { formatCount, type FullOrganization } from "./domain";
 import {
   formatMailDomainStatus,
@@ -51,7 +51,7 @@ const DomainStatusBadge = ({ domain }: { domain: OrganizationMailDomain }) => {
   return (
     <span
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 rounded-md border px-3.5 text-xs font-medium",
+        "inline-flex h-8 items-center gap-1.5 rounded-md border px-3.5 text-xs font-medium squircle",
         verified
           ? "border-success bg-success/10 text-success"
           : "border-border/70 bg-secondary/40 text-muted-foreground",
@@ -206,8 +206,13 @@ export const DomainsView = ({
   onBack: () => void;
   organization: FullOrganization;
 }) => {
-  const domainsQuery = useQuery(organizationMailDomainsQueryOptions(organization.id));
-  const domains = domainsQuery.data?.domains ?? [];
+  const {
+    data: domainsData,
+    error: domainsError,
+    isError: isDomainsError,
+    isPending: isDomainsPending,
+  } = useQuery(organizationMailDomainsQueryOptions(organization.id));
+  const domains = domainsData?.domains ?? [];
   const manageDomainsReason =
     (billingPending && "Loading billing access…") ||
     (billingAccessUnknown && "Could not load billing access.") ||
@@ -218,21 +223,13 @@ export const DomainsView = ({
 
   return (
     <div className="space-y-6">
-      <Button
-        className="w-fit text-muted-foreground hover:text-foreground"
-        onClick={onBack}
-        size="sm"
-        variant="ghost"
-      >
-        <HugeiconsIcon aria-hidden className="size-4" icon={ArrowLeft01Icon} />
-        {organization.name}
-      </Button>
+      <SettingsBackButton onClick={onBack}>{organization.name}</SettingsBackButton>
 
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="text-base font-semibold text-foreground">Domains</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {formatCount(domains.length, "domain")}
+            {formatCount(domains.length, "Domain", "Domains")}
           </p>
         </div>
 
@@ -248,14 +245,14 @@ export const DomainsView = ({
       </div>
 
       <div>
-        {domainsQuery.isPending ? (
+        {isDomainsPending ? (
           <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
             <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
             Loading domains…
           </div>
-        ) : domainsQuery.isError ? (
+        ) : isDomainsError ? (
           <p className="py-6 text-sm text-destructive">
-            {domainsQuery.error.message ?? "Could not load domains."}
+            {domainsError?.message ?? "Could not load domains."}
           </p>
         ) : domains.length > 0 ? (
           domains.map((domain) => (

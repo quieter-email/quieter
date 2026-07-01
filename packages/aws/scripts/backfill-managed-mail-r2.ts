@@ -1,5 +1,6 @@
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { db, managedMailMessage } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { managedMailMessage } from "@quieter/database/schema";
 import { requireServerEnv, serverEnv } from "@quieter/env/server";
 import { and, asc, eq, gt, isNotNull, isNull } from "drizzle-orm";
 

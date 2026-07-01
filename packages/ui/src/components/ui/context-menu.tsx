@@ -13,7 +13,7 @@ export const ContextMenuTrigger = ({
 }: ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Trigger>) => (
   <ContextMenuPrimitive.Trigger
     className={cn(
-      "transition-transform duration-100 ease-out squircle active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      "transition-transform duration-100 ease-out outline-none squircle active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
       className,
     )}
     {...props}

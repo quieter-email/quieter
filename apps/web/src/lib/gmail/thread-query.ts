@@ -1,7 +1,8 @@
 import { queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
-import { queryPersister } from "~/lib/query-persister";
-import { isSandboxMailboxId, getDemoThread } from "./demo-mail";
+import { isManagedSandboxMailboxId, isSandboxMailboxId } from "~/lib/sandbox-mailbox";
+import { getManagedDemoThread } from "../managed-mail/demo-managed-mail";
+import { getDemoThread } from "./demo-mail";
 import {
   GMAIL_QUERY_STALE_TIME_MS,
   hasRenderableMessageBody,
@@ -23,12 +24,16 @@ const shouldRefreshThreadContent = (data: ThreadMessagesResult | undefined) =>
 export const getThreadWithDetailsOptions = (mailboxId: string, threadId: string, enabled = true) =>
   queryOptions({
     queryKey: getThreadQueryKey(mailboxId, threadId),
-    queryFn: ({ signal }) =>
-      isSandboxMailboxId(mailboxId)
+    queryFn: ({ signal }) => {
+      if (isManagedSandboxMailboxId(mailboxId)) {
+        return getManagedDemoThread(threadId);
+      }
+
+      return isSandboxMailboxId(mailboxId)
         ? getDemoThread(mailboxId, threadId)
-        : rpc.mail.getThread({ mailboxId, threadId }, { signal }),
+        : rpc.mail.getThread({ mailboxId, threadId }, { signal });
+    },
     enabled,
-    persister: queryPersister.persisterFn,
     staleTime: GMAIL_QUERY_STALE_TIME_MS,
     refetchOnMount: (query) => (shouldRefreshThreadContent(query.state.data) ? "always" : true),
     refetchOnWindowFocus: false,

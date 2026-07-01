@@ -1,8 +1,9 @@
 import type { GetEmailIdentityCommandOutput } from "@aws-sdk/client-sesv2";
-import type { MailDomainCheckResult } from "@quieter/database";
+import type { MailDomainCheckResult } from "@quieter/database/schema";
 import { ORPCError } from "@orpc/server";
 import { getOrganizationBillingEntitlement } from "@quieter/billing/entitlements";
-import { db, mailDomain } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { mailDomain } from "@quieter/database/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import {

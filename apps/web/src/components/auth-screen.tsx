@@ -2,7 +2,9 @@
 
 import { Key02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, Checkbox, CheckboxIndicator, TextField, TextFieldInput } from "@quieter/ui";
+import { Button } from "@quieter/ui/button";
+import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
+import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
@@ -22,6 +24,18 @@ type AuthErrorKey = "signup_disabled";
 
 const AUTH_ERROR_MESSAGES: Record<AuthErrorKey, string> = {
   signup_disabled: "No account exists for that Google account. Sign up first to create one.",
+};
+
+const normalizeAuthReturnTo = (returnTo?: string) => {
+  if (!returnTo) return "/";
+
+  try {
+    const url = new URL(returnTo, "https://quieter.local");
+    if (url.origin !== "https://quieter.local") return "/";
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return "/";
+  }
 };
 
 const isAuthErrorKey = (key: string): key is AuthErrorKey => key in AUTH_ERROR_MESSAGES;
@@ -59,9 +73,11 @@ const AuthLastUsedHint = () => (
 const AuthCredentials = ({
   mode,
   navigate,
+  returnTo,
 }: {
   mode: "login" | "signup";
   navigate: AuthNavigate;
+  returnTo?: string;
 }) => {
   const queryClient = useQueryClient();
   const [errors, setErrors] = useState<{
@@ -72,6 +88,7 @@ const AuthCredentials = ({
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   const isSignup = mode === "signup";
+  const callbackUrl = normalizeAuthReturnTo(returnTo);
 
   const ensureTermsAccepted = () => {
     if (!isSignup || termsAccepted) {
@@ -93,10 +110,16 @@ const AuthCredentials = ({
     setTermsAcceptanceCookie();
   };
 
+  const errorCallbackParams = new URLSearchParams({
+    mode: isSignup ? "signup" : "login",
+  });
+  if (callbackUrl !== "/") {
+    errorCallbackParams.set("returnTo", callbackUrl);
+  }
   const errorCallbackHref =
     typeof globalThis.window !== "undefined"
-      ? `${globalThis.window.location.origin}/auth?mode=${isSignup ? "signup" : "login"}`
-      : "/auth";
+      ? `${globalThis.window.location.origin}/auth?${errorCallbackParams}`
+      : `/auth?${errorCallbackParams}`;
 
   const googleMutation = useMutation({
     mutationFn: async () => {
@@ -108,7 +131,7 @@ const AuthCredentials = ({
 
       const response = await authClient.signIn.social({
         provider: "google",
-        callbackURL: "/",
+        callbackURL: callbackUrl,
         errorCallbackURL: errorCallbackHref,
         requestSignUp: isSignup,
       });
@@ -157,10 +180,15 @@ const AuthCredentials = ({
       setErrors((prev) => ({ ...prev, passkey: undefined }));
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries();
-      await navigate({
-        to: "/",
-      });
+      if (callbackUrl === "/") {
+        await queryClient.invalidateQueries();
+        await navigate({
+          to: "/",
+        });
+        return;
+      }
+
+      globalThis.window.location.assign(callbackUrl);
     },
   });
 
@@ -184,11 +212,11 @@ const AuthCredentials = ({
 
         try {
           const response = await authClient.signIn.magicLink({
-            callbackURL: "/",
+            callbackURL: callbackUrl,
             email: normalizedEmail,
             errorCallbackURL: errorCallbackHref,
             name: isSignup ? value.name.trim() : undefined,
-            newUserCallbackURL: "/",
+            newUserCallbackURL: callbackUrl,
           });
 
           if (response.error) {
@@ -395,7 +423,7 @@ const AuthCredentials = ({
 };
 
 export const AuthScreen = () => {
-  const { error, mode } = authRouteApi.useSearch();
+  const { error, mode, returnTo } = authRouteApi.useSearch();
   const navigate = authRouteApi.useNavigate();
   const authError = error
     ? isAuthErrorKey(error)
@@ -414,7 +442,12 @@ export const AuthScreen = () => {
             {mode === "signup" ? "Sign up" : "Log in"}
           </h1>
 
-          <AuthCredentials key={mode} mode={mode} navigate={navigate} />
+          <AuthCredentials
+            key={`${mode}:${returnTo ?? ""}`}
+            mode={mode}
+            navigate={navigate}
+            returnTo={returnTo}
+          />
 
           {authError ? (
             <p aria-live="assertive" className="mt-4 text-sm text-destructive" role="status">
@@ -425,7 +458,7 @@ export const AuthScreen = () => {
           <p className="mt-6 text-sm text-muted-foreground">
             <Link
               className="text-foreground underline"
-              search={{ mode: mode === "signup" ? "login" : "signup" }}
+              search={{ mode: mode === "signup" ? "login" : "signup", returnTo }}
               to="/auth"
             >
               {mode === "signup" ? "Log in" : "Sign up"}

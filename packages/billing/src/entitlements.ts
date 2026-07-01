@@ -1,13 +1,13 @@
 import { ORPCError } from "@orpc/server";
+import { db } from "@quieter/database/client";
 import {
   billingEntitlementOverride,
   billingSubscription,
-  db,
   member,
   organization,
   type BillingPlan as StoredBillingPlan,
   type BillingSubscriptionStatus,
-} from "@quieter/database";
+} from "@quieter/database/schema";
 import { and, asc, desc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import {
   BILLING_FEATURES,

@@ -9,6 +9,8 @@ import { inboxRouteApi } from "~/lib/route-apis";
 
 type MailboxSearchPatch = {
   chatId?: string | null;
+  compose?: "mailto" | null;
+  mailto?: string | null;
   mailbox?: MailboxCategory;
   mailboxId?: string | null;
   messageId?: string | null;
@@ -22,6 +24,8 @@ type MailboxSearchOptions = {
 };
 
 type InboxRouteState = {
+  compose?: "mailto";
+  mailto?: string;
   mailbox: MailboxCategory;
   mailboxId?: string;
   messageId?: string;
@@ -31,6 +35,8 @@ type InboxRouteState = {
 
 type ChatRouteState = {
   chatId?: string;
+  compose?: "mailto";
+  mailto?: string;
   mailboxId?: string;
 };
 
@@ -43,7 +49,11 @@ const defaultChatRouteState: ChatRouteState = {};
 
 const normalizeSearchValue = (value: string | null | undefined) => value?.trim() || undefined;
 
+const normalizeComposeValue = (value: "mailto" | null | undefined) => value ?? undefined;
+
 const applyInboxPatch = (state: InboxRouteState, patch: MailboxSearchPatch): InboxRouteState => ({
+  compose: patch.compose === undefined ? state.compose : normalizeComposeValue(patch.compose),
+  mailto: patch.mailto === undefined ? state.mailto : normalizeSearchValue(patch.mailto),
   mailbox: patch.mailbox ?? state.mailbox,
   mailboxId:
     patch.mailboxId === undefined ? state.mailboxId : normalizeSearchValue(patch.mailboxId),
@@ -60,6 +70,8 @@ const applyInboxPatch = (state: InboxRouteState, patch: MailboxSearchPatch): Inb
 
 const applyChatPatch = (state: ChatRouteState, patch: MailboxSearchPatch): ChatRouteState => ({
   chatId: patch.chatId === undefined ? state.chatId : normalizeSearchValue(patch.chatId),
+  compose: patch.compose === undefined ? state.compose : normalizeComposeValue(patch.compose),
+  mailto: patch.mailto === undefined ? state.mailto : normalizeSearchValue(patch.mailto),
   mailboxId:
     patch.mailboxId === undefined ? state.mailboxId : normalizeSearchValue(patch.mailboxId),
 });
@@ -80,10 +92,14 @@ export const useMailboxSearchActions = () => {
           if (previous.view === "chat") {
             chatStateRef.current = {
               chatId: previous.chatId,
+              compose: previous.compose,
+              mailto: previous.mailto,
               mailboxId: previous.mailboxId,
             };
           } else {
             inboxStateRef.current = {
+              compose: previous.compose,
+              mailto: previous.mailto,
               mailbox: previous.mailbox,
               mailboxId: previous.mailboxId,
               messageId: previous.messageId,
@@ -100,6 +116,8 @@ export const useMailboxSearchActions = () => {
 
             return {
               chatId: nextChatState.chatId,
+              compose: nextChatState.compose,
+              mailto: nextChatState.mailto,
               mailboxId: nextChatState.mailboxId,
               view: "chat",
             } as MailboxSearch;
@@ -109,6 +127,8 @@ export const useMailboxSearchActions = () => {
           inboxStateRef.current = nextInboxState;
 
           return {
+            compose: nextInboxState.compose,
+            mailto: nextInboxState.mailto,
             mailbox: nextInboxState.mailbox,
             mailboxId: nextInboxState.mailboxId,
             messageId: nextInboxState.messageId,
@@ -144,6 +164,12 @@ export const useMailboxRouteSearch = () => {
   const mailboxId = inboxRouteApi.useSearch({
     select: (search) => search.mailboxId,
   });
+  const compose = inboxRouteApi.useSearch({
+    select: (search) => search.compose,
+  });
+  const mailto = inboxRouteApi.useSearch({
+    select: (search) => search.mailto,
+  });
   const query = inboxRouteApi.useSearch({
     select: (search) => search.query,
   });
@@ -155,6 +181,8 @@ export const useMailboxRouteSearch = () => {
   return {
     activeMailbox,
     chatId,
+    compose,
+    mailto,
     mailboxId,
     query,
     setMailboxSearch,

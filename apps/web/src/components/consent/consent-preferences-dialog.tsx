@@ -1,8 +1,8 @@
 "use client";
 
 import { useConsentManager, useHeadlessConsentUI, useTranslations } from "@c15t/react";
+import { Button } from "@quieter/ui/button";
 import {
-  Button,
   Dialog,
   DialogBody,
   DialogContent,
@@ -10,21 +10,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  Switch,
-  SwitchThumb,
-} from "@quieter/ui";
+} from "@quieter/ui/dialog";
+import { Switch, SwitchThumb } from "@quieter/ui/switch";
 
 export const ConsentPreferencesDialog = () => {
   const translations = useTranslations();
-  const { consentCategories, consentTypes, selectedConsents, setSelectedConsent } =
-    useConsentManager();
+  const { getDisplayedConsents, selectedConsents, setSelectedConsent } = useConsentManager();
   const { closeUI, dialog, openDialog, performDialogAction, saveCustomPreferences } =
     useHeadlessConsentUI();
-
-  const visibleCategories = consentCategories.flatMap((category) => {
-    const config = consentTypes.find((type) => type.name === category);
-    return config?.display === false ? [] : [{ category, config }];
-  });
 
   return (
     <Dialog
@@ -45,9 +38,10 @@ export const ConsentPreferencesDialog = () => {
         </DialogHeader>
 
         <DialogBody className="space-y-4 pt-0">
-          {visibleCategories.map(({ category, config }) => {
+          {getDisplayedConsents().map((config) => {
+            const category = config.name;
             const copy = translations.consentTypes[category];
-            const isDisabled = category === "necessary" || config?.disabled === true;
+            const isDisabled = category === "necessary" || config.disabled === true;
 
             return (
               <div

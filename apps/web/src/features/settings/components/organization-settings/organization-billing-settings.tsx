@@ -2,12 +2,19 @@
 
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, toast } from "@quieter/ui";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
+import { toast } from "@quieter/ui/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BillingCreditSummary,
   BillingProductCard,
 } from "~/features/settings/components/billing-product-card";
+import {
+  settingsInsetDividerClass,
+  settingsRowValueClass,
+  SettingsRowText,
+} from "~/features/settings/components/settings-layout";
 import {
   normalizeBillingProduct,
   type UserBillingOverview,
@@ -49,7 +56,13 @@ export const OrganizationBillingSettings = ({
 
   if (billingPending) {
     return (
-      <section className="flex items-center gap-2 border-b border-border/70 py-6 text-sm text-muted-foreground">
+      <section
+        className={cn(
+          settingsInsetDividerClass,
+          "flex items-center gap-2 p-4 md:px-6",
+          settingsRowValueClass,
+        )}
+      >
         <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
         Loading billing…
       </section>
@@ -58,18 +71,23 @@ export const OrganizationBillingSettings = ({
 
   if (!billing && !billingAccessUnknown) {
     return (
-      <section className="border-b border-border/70 py-6">
-        <h2 className="text-sm font-medium text-foreground">Billing</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
+      <section className={cn(settingsInsetDividerClass, "p-4 md:px-6")}>
+        <SettingsRowText title="Billing">
           Billing details are unavailable for this team.
-        </p>
+        </SettingsRowText>
       </section>
     );
   }
 
   if (!billing) {
     return (
-      <section className="flex items-center gap-2 border-b border-border/70 py-6 text-sm text-muted-foreground">
+      <section
+        className={cn(
+          settingsInsetDividerClass,
+          "flex items-center gap-2 p-4 md:px-6",
+          settingsRowValueClass,
+        )}
+      >
         <HugeiconsIcon aria-hidden className="size-4" icon={Loading03Icon} />
         Could not load billing.
       </section>
@@ -79,21 +97,15 @@ export const OrganizationBillingSettings = ({
   const currentProduct = normalizeBillingProduct(billing.product);
 
   return (
-    <section className="border-b border-border/70 py-6">
+    <section className={cn(settingsInsetDividerClass, "px-4 py-6 md:px-6")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-medium text-foreground">Billing</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Choose the shared monthly credits and features for this team.
-          </p>
-          <div className="mt-2">
-            <BillingCreditSummary
-              creditAmountCents={billing.creditAmountCents}
-              product={currentProduct}
-              usage={billing.usage}
-            />
-          </div>
-        </div>
+        <SettingsRowText title="Billing">
+          <BillingCreditSummary
+            creditAmountCents={billing.creditAmountCents}
+            product={currentProduct}
+            usage={billing.usage}
+          />
+        </SettingsRowText>
         {currentProduct && billing.canManageBilling && (
           <Button
             disabled={portalMutation.isPending}

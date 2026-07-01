@@ -3,7 +3,10 @@
 import type { RouterOutputs } from "@quieter/orpc";
 import { Cancel01Icon, ThumbsDownIcon, ThumbsUpIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, IconButtonTooltip, cn, toast } from "@quieter/ui";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { toast } from "@quieter/ui/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { getGmailUsefulDetailsQueryKey } from "~/lib/gmail/useful-details-query";
 import { orpc } from "~/lib/orpc";
@@ -27,6 +30,18 @@ const eventDateFormatter = new Intl.DateTimeFormat(undefined, {
   timeStyle: "short",
 });
 
+const summaryFirstKinds = new Set<GmailUsefulDetail["kind"]>([
+  "application",
+  "appointment",
+  "bill",
+  "document_expiry",
+  "reservation",
+  "return",
+  "security_alert",
+  "task",
+  "travel",
+]);
+
 const copyText = async (value: string) => {
   try {
     await navigator.clipboard.writeText(value);
@@ -47,6 +62,20 @@ const getDetailMetadata = (detail: GmailUsefulDetail) => {
     detail.location,
     detail.reference,
   ].filter((value): value is string => Boolean(value));
+};
+
+const getDetailText = (detail: GmailUsefulDetail, metadata: string[]) => {
+  if (detail.summary && summaryFirstKinds.has(detail.kind)) {
+    return {
+      headline: detail.summary,
+      kicker: metadata.includes(detail.title) ? null : detail.title,
+    };
+  }
+
+  return {
+    headline: detail.title,
+    kicker: detail.summary,
+  };
 };
 
 export const GmailUsefulDetailCard = ({
@@ -73,26 +102,27 @@ export const GmailUsefulDetailCard = ({
   const copyValue =
     detail.kind === "verification_code" ? detail.code : (detail.trackingNumber ?? detail.reference);
   const metadata = getDetailMetadata(detail);
+  const detailText = getDetailText(detail, metadata);
   const feedback = feedbackMutation.isError
     ? detail.feedback
     : (feedbackMutation.variables?.feedback ?? detail.feedback);
   const content = (
     <span className="block min-w-0">
       <span className="block text-sm/5 font-semibold wrap-break-word text-foreground">
-        {detail.title}
+        {detailText.headline}
       </span>
-      {detail.summary && (
-        <span className="mt-1 block text-sm/5 wrap-break-word text-foreground/80">
-          {detail.summary}
-        </span>
-      )}
       {metadata.length > 0 && (
-        <span className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs/4 text-muted-foreground">
+        <span className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs/4 font-medium text-foreground/70">
           {metadata.map((value) => (
             <span className="wrap-break-word" key={value}>
               {value}
             </span>
           ))}
+        </span>
+      )}
+      {detailText.kicker && (
+        <span className="mt-1.5 block text-xs/4 wrap-break-word text-muted-foreground">
+          {detailText.kicker}
         </span>
       )}
     </span>

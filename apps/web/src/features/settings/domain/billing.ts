@@ -36,5 +36,9 @@ export const hasOrganizationAiAccess = (
   organizationId: string,
 ) =>
   billing?.teams.some(
-    (team) => team.organizationId === organizationId && team.product === "pro" && team.hasAccess,
+    (team) =>
+      team.organizationId === organizationId &&
+      team.product === "pro" &&
+      team.hasAccess &&
+      (team.hasUnlimitedAccess || (team.usage?.remainingCreditCents ?? 0) > 0),
   ) === true;

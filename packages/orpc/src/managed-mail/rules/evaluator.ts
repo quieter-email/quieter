@@ -1,11 +1,11 @@
+import { db } from "@quieter/database/client";
 import {
-  db,
   managedMailAttachment,
   managedMailMessage,
   managedMailRule,
   managedMailRuleApplication,
-} from "@quieter/database";
-import { structuredMailSearchSchema } from "@quieter/mail";
+} from "@quieter/database/schema";
+import { structuredMailSearchSchema } from "@quieter/mail/search";
 import { and, asc, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { updateManagedMessageLabelAssignments } from "../labels/repository";

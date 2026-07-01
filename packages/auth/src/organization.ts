@@ -1,12 +1,12 @@
+import { db } from "@quieter/database/client";
 import {
-  db,
   invitation,
   mailbox,
   managedMailMessage,
   member,
   organization,
   user,
-} from "@quieter/database";
+} from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { APIError } from "better-auth/api";
 import { and, eq, notInArray, or, sql } from "drizzle-orm";

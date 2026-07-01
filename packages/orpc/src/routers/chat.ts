@@ -1,22 +1,27 @@
+import type { ChatMiddleware } from "@tanstack/ai";
 import { ORPCError } from "@orpc/server";
 import {
-  chatModelSchema,
   composeEmailInputSchema,
   composeEmailResultSchema,
-  generateChatTitle,
-  type ChatMiddleware,
   type ComposeEmailResult,
-} from "@quieter/ai";
-import { reportAiUsage } from "@quieter/billing";
+} from "@quieter/ai/chat-agent";
+import { chatModelSchema } from "@quieter/ai/chat-models";
+import {
+  OPENROUTER_TRANSCRIPTION_MODEL,
+  openRouterAudioFormatSchema,
+} from "@quieter/ai/transcription-format";
+import { reportAiUsage, reportAiUsageCost } from "@quieter/billing";
+import { getBillingCreditUsage } from "@quieter/billing/credits";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
-import { chat, chatMessage, chatRun, db, type ChatMessagePart } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { chat, chatMessage, chatRun, type ChatMessagePart } from "@quieter/database/schema";
 import {
   composeDraftFormValuesSchema,
   composeDraftInputSchema,
   composeMessageInputSchema,
   composeSendFormValuesSchema,
-} from "@quieter/mail/compose";
+} from "@quieter/mail/compose/schema";
 import { and, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -35,6 +40,15 @@ import { callGmail, mailboxCategorySchema, mailboxIdSchema, protectedProcedure }
 const chatIdSchema = z.string().trim().min(1);
 const chatTitleSchema = z.string().trim().min(1).max(120);
 const chatPromptSchema = z.string().trim().min(1).max(10_000);
+const chatAudioBase64Schema = z.string().trim().min(1).max(14_000_000);
+const chatAudioTranscriptionSchema = z.object({
+  audioBase64: chatAudioBase64Schema,
+  chatId: chatIdSchema.optional(),
+  durationMs: z.number().int().nonnegative().max(60_000),
+  format: openRouterAudioFormatSchema,
+  mailboxId: mailboxIdSchema,
+  mode: z.enum(["chat", "email"]).default("chat"),
+});
 const resolveComposeToolInputSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("decline"),
@@ -140,11 +154,7 @@ const assertCanRunChatGeneration = async (input: {
     });
   }
 
-  if (!entitlement.hasAccess) {
-    throw new ORPCError("FORBIDDEN", {
-      message: `AI chat requires ${BILLING_FEATURES.aiChat.requirementLabel}.`,
-    });
-  }
+  await assertCanUseAiCredits(entitlement);
 
   if (await hasActiveChatRun(authorizedChat.id)) {
     throw new ORPCError("CONFLICT", {
@@ -199,6 +209,28 @@ const startAssistantRunOrThrow = (input: Parameters<typeof startAssistantRun>[0]
 
 const continueAssistantRunOrThrow = (input: Parameters<typeof continueAssistantRun>[0]) =>
   continueAssistantRun(input).catch(rethrowChatRunConflict);
+
+const dollarsToMicroCents = (dollars: number) => Math.round(dollars * 100 * 1_000_000);
+
+const assertCanUseAiCredits = async (
+  entitlement: Awaited<ReturnType<typeof hasUserBillingFeature>>,
+) => {
+  if (!entitlement.hasAccess) {
+    throw new ORPCError("FORBIDDEN", {
+      message: `AI chat requires ${BILLING_FEATURES.aiChat.requirementLabel}.`,
+    });
+  }
+
+  if (entitlement.hasUnlimitedAccess) return;
+  if (!entitlement.account) return;
+
+  const usage = await getBillingCreditUsage(entitlement.account);
+  if (usage.costMicroCents >= usage.creditAmountMicroCents) {
+    throw new ORPCError("FORBIDDEN", {
+      message: "AI chat requires available credits.",
+    });
+  }
+};
 
 const buildRunResponse = async ({
   assistantMessageId,
@@ -303,6 +335,92 @@ export const chatRouter = {
       return updatedChat!;
     }),
 
+  transcribeAudio: protectedProcedure
+    .input(chatAudioTranscriptionSchema)
+    .handler(async ({ context, input }) => {
+      const accessibleMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      const entitlement = await hasUserBillingFeature({
+        feature: "aiChat",
+        organizationId: accessibleMailbox.organizationId ?? undefined,
+        userId: context.userId,
+      });
+
+      await assertCanUseAiCredits(entitlement);
+
+      if (input.chatId) {
+        await findAuthorizedChat(input.chatId, input.mailboxId, context.userId);
+      }
+
+      const { generateOpenRouterTranscription } =
+        await import("@quieter/ai/openrouter-transcription");
+      const result = await generateOpenRouterTranscription({
+        audioBase64: input.audioBase64,
+        format: input.format,
+      });
+      const text = result.text.trim();
+
+      if (!text) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "No speech was detected.",
+        });
+      }
+
+      const responseText =
+        input.mode === "email"
+          ? await (async () => {
+              const { formatTranscribedEmail, TRANSCRIBED_EMAIL_FORMAT_MODEL } =
+                await import("@quieter/ai/format-transcribed-email");
+              return await formatTranscribedEmail({
+                middleware: [
+                  {
+                    name: "polar-ai-transcribed-email-format-usage",
+                    onUsage: (usageContext, usage) => {
+                      usageContext.defer(
+                        reportAiUsage({
+                          chatId: input.chatId ?? null,
+                          completionTokens: usage.completionTokens,
+                          externalId: `chat-transcription-format:${result.id}`,
+                          mailboxId: input.mailboxId,
+                          model: TRANSCRIBED_EMAIL_FORMAT_MODEL,
+                          promptTokens: usage.promptTokens,
+                          usageKind: "aiChat",
+                          userId: context.userId,
+                        }).catch((error) => {
+                          console.error(
+                            "Could not report transcribed email formatting AI usage to Polar.",
+                            error instanceof Error ? error.message : "Unknown error.",
+                          );
+                        }),
+                      );
+                    },
+                  },
+                ],
+                transcript: text,
+              }).catch(() => text);
+            })()
+          : text;
+
+      const cost = result.usage?.cost;
+      if (typeof cost === "number" && Number.isFinite(cost) && cost > 0) {
+        await reportAiUsageCost({
+          chatId: input.chatId ?? null,
+          costMicroCents: dollarsToMicroCents(cost),
+          durationSeconds: result.duration ?? input.durationMs / 1_000,
+          externalId: `chat-transcription:${result.id}`,
+          mailboxId: input.mailboxId,
+          model: OPENROUTER_TRANSCRIPTION_MODEL,
+          totalTokens: result.usage?.totalTokens,
+          usageKind: "aiChat",
+          userId: context.userId,
+        });
+      }
+
+      return { text: responseText };
+    }),
+
   generateTitle: protectedProcedure
     .input(
       z.object({
@@ -325,11 +443,7 @@ export const chatRouter = {
         userId: context.userId,
       });
 
-      if (!entitlement.hasAccess) {
-        throw new ORPCError("FORBIDDEN", {
-          message: `AI chat requires ${BILLING_FEATURES.aiChat.requirementLabel}.`,
-        });
-      }
+      await assertCanUseAiCredits(entitlement);
 
       if (authorizedChat.title) {
         return authorizedChat;
@@ -357,6 +471,7 @@ export const chatRouter = {
           );
         },
       };
+      const { generateChatTitle } = await import("@quieter/ai/generate-chat-title");
       const title = await generateChatTitle({
         middleware: [usageMiddleware],
         prompt: input.message,

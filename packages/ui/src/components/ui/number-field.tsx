@@ -18,7 +18,7 @@ export const NumberFieldGroup = ({
 }: ComponentPropsWithoutRef<typeof NumberFieldPrimitive.Group>) => (
   <NumberFieldPrimitive.Group
     className={cn(
-      "flex items-center overflow-hidden rounded-md border border-input bg-background shadow-sm focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20",
+      "keyboard-focus-within flex items-center overflow-hidden rounded-md border border-input bg-background-light shadow-sm",
       className,
     )}
     {...props}
@@ -31,7 +31,7 @@ export const NumberFieldInput = ({
 }: ComponentPropsWithoutRef<typeof NumberFieldPrimitive.Input>) => (
   <NumberFieldPrimitive.Input
     className={cn(
-      "h-9 w-full border-0 bg-transparent px-3 text-center text-sm text-foreground shadow-none transition-colors duration-150 ease-out outline-none placeholder:text-muted-foreground read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:ring-destructive/20",
+      "h-9 w-full border-0 bg-transparent px-3 text-center text-sm text-foreground shadow-none transition-colors duration-150 ease-out outline-none placeholder:text-muted-foreground read-only:bg-transparent disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive",
       className,
     )}
     {...props}

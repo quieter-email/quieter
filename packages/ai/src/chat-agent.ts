@@ -89,6 +89,12 @@ Lead with the answer or outcome. Use short paragraphs or bullets for lists, acti
 
 Be helpful, direct, and confident — not hesitant, not overly verbose, and not robotic.`;
 
+export const googleCalendarToolsPrompt = `Google Calendar is connected for this user.
+
+Use create_google_calendar_event only when the user clearly asks to create or schedule a calendar event. Ask a concise clarifying question if the date, start time, or end time is missing or materially ambiguous. Use the user's timezone when they state one; otherwise use a timezone already present in the conversation when possible.
+
+The tool creates events on the user's primary Google Calendar. Do not claim an event was created unless the tool returns success.`;
+
 const toolErrorSchema = z.object({
   error: z.string(),
   status: z.literal("error"),
@@ -367,6 +373,71 @@ export const modifyMailToolDef = toolDefinition({
   outputSchema: modifyMailResultSchema,
 });
 
+const googleCalendarEventDateSchema = z
+  .object({
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .meta({
+        description: "All-day event date in YYYY-MM-DD format.",
+      }),
+    dateTime: z.string().trim().min(1).optional().meta({
+      description: "Timed event start or end as an ISO-like date-time.",
+    }),
+    timeZone: z.string().trim().min(1).optional().meta({
+      description: "IANA timezone name for dateTime values, such as Europe/Berlin.",
+    }),
+  })
+  .refine((value) => Boolean(value.date) !== Boolean(value.dateTime), {
+    message: "Provide exactly one of date or dateTime.",
+  });
+
+export const googleCalendarCreateEventInputSchema = z
+  .object({
+    summary: z.string().trim().min(1).max(200).meta({
+      description: "Event title.",
+    }),
+    description: z.string().trim().max(5_000).optional().meta({
+      description: "Optional event notes.",
+    }),
+    location: z.string().trim().max(1_000).optional().meta({
+      description: "Optional event location.",
+    }),
+    start: googleCalendarEventDateSchema.meta({
+      description: "Event start date or date-time.",
+    }),
+    end: googleCalendarEventDateSchema.meta({
+      description: "Event end date or date-time.",
+    }),
+  })
+  .refine((value) => Boolean(value.start.date) === Boolean(value.end.date), {
+    message: "Start and end must both be all-day dates or both be date-times.",
+    path: ["end"],
+  });
+
+export const googleCalendarCreateEventResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    htmlLink: z.string().optional(),
+    id: z.string(),
+    status: z.literal("success"),
+    summary: z.string(),
+  }),
+  toolErrorSchema.extend({
+    summary: z.string(),
+  }),
+]);
+
+export type GoogleCalendarCreateEventInput = z.infer<typeof googleCalendarCreateEventInputSchema>;
+export type GoogleCalendarCreateEventResult = z.infer<typeof googleCalendarCreateEventResultSchema>;
+
+export const googleCalendarCreateEventToolDef = toolDefinition({
+  name: "create_google_calendar_event",
+  description: "Create an event on the user's connected Google Calendar.",
+  inputSchema: googleCalendarCreateEventInputSchema,
+  outputSchema: googleCalendarCreateEventResultSchema,
+});
+
 export type GmailToolsContext = {
   category: MailboxCategory;
   getMailboxOverview: () => Promise<MailboxOverviewResult>;
@@ -379,6 +450,12 @@ export type GmailToolsContext = {
   readGmailMessage: (input: { messageId: string }) => Promise<GmailMessageResult>;
   readGmailThread: (input: { threadId: string }) => Promise<GmailThreadResult>;
   searchGmail: (input: { maxResults: number; query: string }) => Promise<GmailSearchResult>;
+};
+
+export type GoogleCalendarToolsContext = {
+  createGoogleCalendarEvent: (
+    input: GoogleCalendarCreateEventInput,
+  ) => Promise<GoogleCalendarCreateEventResult>;
 };
 
 export const createGmailSearchServerTool = (context: GmailToolsContext): ServerTool =>
@@ -461,6 +538,21 @@ export const createModifyMailServerTool = (context: GmailToolsContext): ServerTo
         id,
         status: "error",
         target,
+      };
+    }
+  });
+
+export const createGoogleCalendarEventServerTool = (
+  context: GoogleCalendarToolsContext,
+): ServerTool =>
+  googleCalendarCreateEventToolDef.server(async (input) => {
+    try {
+      return await context.createGoogleCalendarEvent(input);
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : "Could not create the calendar event.",
+        status: "error",
+        summary: input.summary,
       };
     }
   });

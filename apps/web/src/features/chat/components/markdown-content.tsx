@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentPropsWithoutRef } from "react";
-import { cn } from "@quieter/ui";
+import { cn } from "@quieter/ui/cn";
 import { Remark } from "react-remark";
 
 const markdownLink = ({ children, className, href, ...props }: ComponentPropsWithoutRef<"a">) => (

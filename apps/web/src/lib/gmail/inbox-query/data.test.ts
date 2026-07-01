@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ListMessagesPageResult, MessageListItem, ThreadMessagesResult } from "../gmail";
 import {
+  applyMessageLabelChangesLocally,
   mergeRefreshedMailboxPagesIntoQueryData,
   upsertMessageInThreadData,
   type MessagesQueryData,
@@ -104,5 +105,16 @@ describe("upsertMessageInThreadData", () => {
       id: "a",
       isUnread: false,
     });
+  });
+});
+
+describe("applyMessageLabelChangesLocally", () => {
+  test("archives a message by removing the inbox label only", () => {
+    const next = applyMessageLabelChangesLocally(
+      message("a", { labelIds: ["INBOX", "IMPORTANT", "UNREAD"] }),
+      { removeLabelIds: ["INBOX"] },
+    );
+
+    expect(next.labelIds).toEqual(["IMPORTANT", "UNREAD"]);
   });
 });

@@ -1,13 +1,13 @@
 import { ORPCError } from "@orpc/server";
+import { db } from "@quieter/database/client";
 import {
-  db,
   mailDomain,
   organizationMailUsageAlertEvent,
   organizationMailUsageEvent,
   organizationMailUsageSettings,
   type OrganizationMailUsageAlertTarget,
   type OrganizationMailUsageDirection,
-} from "@quieter/database";
+} from "@quieter/database/schema";
 import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits";
 import { getOrganizationBillingEntitlement } from "./entitlements";

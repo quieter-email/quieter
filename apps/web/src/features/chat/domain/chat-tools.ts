@@ -1,14 +1,16 @@
 import {
   composeEmailResultSchema,
+  googleCalendarCreateEventResultSchema,
   gmailLabelListResultSchema,
   gmailMessageResultSchema,
   gmailSearchResultSchema,
   gmailThreadResultSchema,
   mailboxOverviewResultSchema,
   modifyMailResultSchema,
-} from "@quieter/ai";
+} from "@quieter/ai/chat-agent";
 import type {
   ComposeEmailResult,
+  GoogleCalendarEventToolResult,
   GmailLabelListToolResult,
   GmailMessageToolResult,
   GmailSearchToolResult,
@@ -17,7 +19,15 @@ import type {
   ModifyMailToolResult,
 } from "../types";
 
-export const parseToolArguments = (value: string): Record<string, unknown> => {
+export const parseToolArguments = (value: unknown): Record<string, unknown> => {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  if (typeof value !== "string") {
+    return {};
+  }
+
   try {
     const parsed = JSON.parse(value);
     return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
@@ -28,7 +38,11 @@ export const parseToolArguments = (value: string): Record<string, unknown> => {
   }
 };
 
-const parseToolJson = (value: string): unknown => {
+const parseToolJson = (value: unknown): unknown => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
   try {
     return JSON.parse(value);
   } catch {
@@ -56,6 +70,7 @@ const parseLegacyGmailSearchResult = (value: unknown): GmailSearchToolResult | n
 
 export type ParsedToolResult =
   | { data: ComposeEmailResult; kind: "compose-email" }
+  | { data: GoogleCalendarEventToolResult; kind: "google-calendar-event" }
   | { data: GmailLabelListToolResult; kind: "gmail-labels" }
   | { data: GmailMessageToolResult; kind: "gmail-message" }
   | { data: GmailSearchToolResult; kind: "gmail-search" }
@@ -64,13 +79,20 @@ export type ParsedToolResult =
   | { data: ModifyMailToolResult; kind: "modify-mail" }
   | { kind: "unknown"; value: unknown };
 
-export const parseToolResult = (toolName: string, value: string): ParsedToolResult => {
+export const parseToolResult = (toolName: string, value: unknown): ParsedToolResult => {
   const parsed = parseToolJson(value);
 
   if (toolName === "compose_email") {
     const result = composeEmailResultSchema.safeParse(parsed);
     return result.success
       ? { data: result.data, kind: "compose-email" }
+      : { kind: "unknown", value: parsed };
+  }
+
+  if (toolName === "create_google_calendar_event") {
+    const result = googleCalendarCreateEventResultSchema.safeParse(parsed);
+    return result.success
+      ? { data: result.data, kind: "google-calendar-event" }
       : { kind: "unknown", value: parsed };
   }
 

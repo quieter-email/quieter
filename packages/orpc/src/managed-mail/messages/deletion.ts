@@ -1,6 +1,7 @@
 import type { S3Client } from "@aws-sdk/client-s3";
 import { ORPCError } from "@orpc/server";
-import { db, managedMailMessage } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { managedMailMessage } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { and, eq, or, type SQL } from "drizzle-orm";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";

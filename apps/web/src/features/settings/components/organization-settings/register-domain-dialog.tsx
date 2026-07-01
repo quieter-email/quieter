@@ -10,8 +10,9 @@ import {
   Refresh01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
-  Button,
   Dialog,
   DialogBody,
   DialogCloseButton,
@@ -20,11 +21,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  TextField,
-  TextFieldInput,
-  cn,
-  toast,
-} from "@quieter/ui";
+} from "@quieter/ui/dialog";
+import { TextField, TextFieldInput } from "@quieter/ui/text-field";
+import { toast } from "@quieter/ui/toast";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
@@ -122,7 +121,7 @@ const CopyableDnsValue = ({
 }) => (
   <button
     className={cn(
-      "group min-w-0 cursor-copy rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
+      "group min-w-0 cursor-copy rounded-sm text-left outline-none squircle focus-visible:ring-2 focus-visible:ring-ring/30",
       className,
     )}
     onClick={() => {
@@ -432,7 +431,7 @@ export const RegisterDomainDialog = ({
 
                 <div
                   className={cn(
-                    "rounded-md border px-3 py-2 text-sm",
+                    "rounded-md border px-3 py-2 text-sm squircle",
                     verified
                       ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                       : "border-border/70 bg-secondary/30 text-muted-foreground",
@@ -451,7 +450,7 @@ export const RegisterDomainDialog = ({
                 </div>
 
                 {setupChecks.length > 0 && (
-                  <div className="space-y-2 rounded-md border border-border/70 px-3 py-2">
+                  <div className="space-y-2 rounded-md border border-border/70 px-3 py-2 squircle">
                     {setupChecks.map((check) => (
                       <div
                         className="grid grid-cols-[1rem_minmax(0,1fr)] gap-2 text-sm"
@@ -500,7 +499,7 @@ export const RegisterDomainDialog = ({
             {step === "success" && setup && (
               <>
                 <div className="py-8 text-center">
-                  <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                  <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-700 squircle dark:text-emerald-300">
                     <HugeiconsIcon aria-hidden className="size-6" icon={CheckmarkCircle01Icon} />
                   </div>
                   <h2 className="mt-4 text-base font-semibold text-foreground">

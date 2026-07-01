@@ -2,7 +2,8 @@
 
 import { ArrowUp01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, type ButtonProps, cn } from "@quieter/ui";
+import { Button, type ButtonProps } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import { LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { useState } from "react";
 

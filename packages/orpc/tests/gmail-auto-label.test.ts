@@ -1,4 +1,7 @@
-import { resolveAutoLabelDecisions, sanitizeAutoLabelSelection } from "@quieter/ai";
+import {
+  resolveAutoLabelDecisions,
+  sanitizeAutoLabelSelection,
+} from "@quieter/ai/classify-gmail-message";
 import { describe, expect, test } from "bun:test";
 
 describe("Gmail auto-label selection", () => {

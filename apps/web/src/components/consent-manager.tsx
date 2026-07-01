@@ -38,7 +38,7 @@ export const ConsentManager = ({ children }: PropsWithChildren) => {
   return (
     <ConsentManagerProvider
       options={{
-        consentCategories: ["necessary", "measurement", "marketing"],
+        consentCategories: ["necessary", "measurement"],
         i18n: consentEnglishI18n,
         legalLinks: consentLegalLinks,
         mode: "offline",

@@ -1,6 +1,7 @@
 "use client";
 
-import { cn, useColorMode } from "@quieter/ui";
+import { cn } from "@quieter/ui/cn";
+import { useColorMode } from "@quieter/ui/color-mode";
 import { useState } from "react";
 
 type SenderAvatarProps = {

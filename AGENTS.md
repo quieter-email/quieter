@@ -109,6 +109,8 @@
 - Keep migrations compatible with the currently running release. Use expand/contract deployments for renames, required columns, destructive changes, type rewrites, and large backfills. Use reviewed custom SQL with concurrent index creation for large indexes.
 - Do not hand-edit Drizzle migration snapshots unless repairing generated output.
 - Do not hand-edit `apps/web/src/routeTree.gen.ts`.
+- Database scripts use the Drizzle Kit programmatic SDK (`check`, `generate`, `push` from `drizzle-kit/cli`) via `packages/database/scripts/drizzle-kit.ts`. `migrate` is still CLI-only (`runKitMigrate` in the same file). See [Drizzle Kit SDK](https://github.com/drizzle-team/drizzle-orm/blob/v1.0.0-rc.4/drizzle-kit/SDK.md).
+- **Upgrading `drizzle-kit` / `drizzle-orm`:** after bumping the workspace catalog in the root `package.json`, run `bun install`, then verify `require.resolve("drizzle-kit/cli")` works without the vendor workaround. As of `1.0.0-rc.4`, npm tarballs omit the `drizzle-kit/cli` bundle even though the tag declares it; `packages/database/scripts/ensure-drizzle-kit-cli.ts` restores `cli.mjs` from `packages/database/vendor/drizzle-kit-cli/` on `postinstall`. If the new release ships `drizzle-kit/cli` in npm, delete `packages/database/vendor/drizzle-kit-cli/`, remove `ensure-drizzle-kit-cli.ts` and its `postinstall`, simplify `drizzle-kit.ts` to a static `drizzle-kit/cli` import, and regenerate the vendor bundle only if the workaround is still required. Re-run `bun run db:check`, `bun run db:generate`, and `packages/database` script tests before finishing.
 
 ## Style Rules
 

@@ -1,4 +1,8 @@
-import { Button, Field, FieldLabel, IconButtonTooltip, Input, toast } from "@quieter/ui";
+import { Button } from "@quieter/ui/button";
+import { Field, FieldLabel } from "@quieter/ui/field";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Input } from "@quieter/ui/input";
+import { toast } from "@quieter/ui/toast";
 import { useState, type SubmitEvent } from "react";
 import { type WaitlistIconState, WaitlistSubmitIcon } from "./waitlist-submit-icon";
 

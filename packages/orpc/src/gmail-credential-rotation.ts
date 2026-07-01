@@ -1,4 +1,5 @@
-import { db, gmailCredential } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { gmailCredential } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { like, or } from "drizzle-orm";
 import { rotateGmailCredentialSecrets } from "./gmail-mailbox-access";

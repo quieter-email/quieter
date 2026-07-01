@@ -1,9 +1,11 @@
 "use client";
 
-import { ArrowLeft01Icon, Search01Icon } from "@hugeicons/core-free-icons";
+import { Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, Separator, TextField, TextFieldInput } from "@quieter/ui";
+import { Separator } from "@quieter/ui/separator";
+import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { useState } from "react";
+import { SettingsBackButton } from "../settings-layout";
 import {
   type FullOrganization,
   type OrganizationMember,
@@ -49,20 +51,12 @@ export const MembersView = ({
 
   return (
     <div className="space-y-6">
-      <Button
-        className="w-fit text-muted-foreground hover:text-foreground"
-        onClick={onBack}
-        size="sm"
-        variant="ghost"
-      >
-        <HugeiconsIcon aria-hidden className="size-4" icon={ArrowLeft01Icon} />
-        {organization.name}
-      </Button>
+      <SettingsBackButton onClick={onBack}>{organization.name}</SettingsBackButton>
 
       <div>
         <h1 className="text-base font-semibold text-foreground">Members</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {formatCount(organization.members.length, "member")}
+          {formatCount(organization.members.length, "Member", "Members")}
         </p>
       </div>
 

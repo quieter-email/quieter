@@ -6,12 +6,8 @@ import {
   type GmailMessage,
 } from "@quieter/gmail";
 import { parseDraftMessage } from "@quieter/gmail/compose";
-import {
-  arrayBufferToBase64Url,
-  buildMimeMessage,
-  composeDraftInputSchema,
-  composeMessageInputSchema,
-} from "@quieter/mail/compose";
+import { arrayBufferToBase64Url, buildMimeMessage } from "@quieter/mail/compose/mime";
+import { composeDraftInputSchema, composeMessageInputSchema } from "@quieter/mail/compose/schema";
 import { z } from "zod";
 
 type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;

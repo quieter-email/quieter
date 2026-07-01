@@ -4,7 +4,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { MailboxCategory } from "./gmail";
 import { rpc } from "../orpc";
-import { getLiveSyncQueryKey } from "./inbox-query";
+import { getLiveSyncQueryKey } from "./inbox-query/keys";
 import { getGmailUsefulDetailsQueryKey } from "./useful-details-query";
 
 const KEEPALIVE_INTERVAL_MS = 1000 * 60 * 5;

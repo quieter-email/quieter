@@ -6,6 +6,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import type { MailboxSwitcherOrder } from "~/features/navigation/components/mailbox-switcher";
 import { getDemoMailboxes } from "~/lib/gmail/demo-mail";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
+import { getManagedDemoMailboxes } from "~/lib/managed-mail/demo-managed-mail";
 import { orpc } from "~/lib/orpc";
 
 type MailboxesQueryData = RouterOutputs["mail"]["listMailboxes"];
@@ -57,15 +58,24 @@ const reorderMailboxQueryData = (
 
 export const useMailboxSelection = ({
   isDemoMode,
+  isManagedDemoMode,
   mailboxId,
   queryClient,
 }: {
   isDemoMode: boolean;
+  isManagedDemoMode: boolean;
   mailboxId?: string;
   queryClient: QueryClient;
 }) => {
-  const mailboxesQuery = useQuery(mailboxesQueryOptions(!isDemoMode));
-  const mailboxesData = isDemoMode ? getDemoMailboxes() : mailboxesQuery.data;
+  const isSandboxMode = isDemoMode || isManagedDemoMode;
+  const { data: queriedMailboxesData, isPending: isMailboxesPending } = useQuery(
+    mailboxesQueryOptions(!isSandboxMode),
+  );
+  const mailboxesData = isManagedDemoMode
+    ? getManagedDemoMailboxes()
+    : isDemoMode
+      ? getDemoMailboxes()
+      : queriedMailboxesData;
   const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
   const mailboxGroups = (mailboxesData?.groups ?? []).map((group) => ({
     id: group.id,
@@ -75,6 +85,7 @@ export const useMailboxSelection = ({
       connectionStatus: mailbox.connectionStatus,
       displayName: mailbox.displayName,
       emailAddress: mailbox.emailAddress,
+      grantRole: mailbox.grantRole,
       groupName: mailbox.groupName,
       id: mailbox.id,
       provider: mailbox.provider,
@@ -131,7 +142,7 @@ export const useMailboxSelection = ({
     defaultMailboxId,
     mailboxGroups,
     mailboxes,
-    mailboxesQuery,
+    mailboxesQuery: { isPending: isMailboxesPending },
     selectedMailboxId,
     selectedMailboxProvider,
     selectedMailboxNeedsReconnect,

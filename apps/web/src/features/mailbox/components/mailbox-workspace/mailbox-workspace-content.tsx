@@ -2,7 +2,8 @@
 
 import { Loading03Icon, Mail01Icon, Settings01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, LinkButton, cn } from "@quieter/ui";
+import { Button, LinkButton } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import { useState, type ComponentProps } from "react";
 import type { ComposeDraftState } from "~/features/compose";
@@ -31,6 +32,7 @@ type MailboxWorkspaceContentProps = {
   draftChatKey: string;
   isConnectingGmail: boolean;
   isDemoMode: boolean;
+  isManagedDemoMode: boolean;
   layoutState: MailboxWorkspaceLayoutState;
   mailboxGroups: MailboxSidebarGroups;
   onConnectGmail: () => void;
@@ -54,7 +56,7 @@ type MailboxWorkspaceContentProps = {
   reconnectingMailboxId: string | null;
   searchQuery: string;
   selectedMailboxId: string | null;
-  selectedMailboxProvider: "gmail" | "managed" | null;
+  selectedMailboxProvider: "api" | "gmail" | "managed" | null;
   selectedMailboxNeedsReconnect: boolean;
   selectedView: MailboxWorkspaceView;
 };
@@ -92,7 +94,7 @@ const NoMailboxWorkspace = ({
         <LinkButton
           aria-label="Settings"
           className="group absolute bottom-5 left-5 justify-start"
-          search={{ from: "/", tab: "general" }}
+          search={{ from: "/" }}
           to="/settings"
           variant="ghost"
         >
@@ -109,9 +111,11 @@ const NoMailboxWorkspace = ({
               onBack={() => setSetupMode("choice")}
               organizations={mailboxGroups.map((group) => ({
                 id: group.id,
-                mailboxes: group.mailboxes.map((mailbox) => ({
-                  provider: mailbox.provider as "gmail" | "managed",
-                })),
+                mailboxes: group.mailboxes.flatMap((mailbox) =>
+                  mailbox.provider === "api"
+                    ? []
+                    : [{ provider: mailbox.provider as "gmail" | "managed" }],
+                ),
                 name: group.name,
               }))}
             />
@@ -164,7 +168,7 @@ const NoMailboxWorkspace = ({
               </button>
             </div>
             <div className="mt-4">
-              <LinkButton search={{ from: "/", tab: "general" }} to="/settings" variant="ghost">
+              <LinkButton search={{ from: "/" }} to="/settings" variant="ghost">
                 Open settings
               </LinkButton>
             </div>
@@ -185,6 +189,7 @@ export const MailboxWorkspaceContent = ({
   draftChatKey,
   isConnectingGmail,
   isDemoMode,
+  isManagedDemoMode,
   layoutState,
   mailboxGroups,
   onConnectGmail,
@@ -322,6 +327,7 @@ export const MailboxWorkspaceContent = ({
                   activeMailbox={activeMailbox}
                   currentUserEmail={currentUserEmail}
                   isDemoMode={isDemoMode}
+                  isManagedDemoMode={isManagedDemoMode}
                   mailboxId={selectedMailboxId}
                   mailboxProvider={selectedMailboxProvider!}
                   onComposeDraftRequested={onComposeDraftRequested}

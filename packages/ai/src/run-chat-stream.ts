@@ -46,10 +46,10 @@ export const runChatStream = async ({
     abortController,
     adapter: createOpenRouterAdapter(model),
     agentLoopStrategy: maxIterations(CHAT_AGENT_MAX_ITERATIONS),
-    maxTokens: CHAT_AGENT_MAX_TOKENS,
     messages: processor.getMessages(),
     middleware,
     modelOptions: {
+      maxCompletionTokens: CHAT_AGENT_MAX_TOKENS,
       parallelToolCalls: true,
       reasoning: {
         effort: "medium",

@@ -23,8 +23,7 @@ import { getMailboxThreadQueriesKey } from "./thread-query";
 export const DEMO_MAILBOX_ID = "demo:mailbox";
 export const LANDING_DEMO_MAILBOX_ID = "landing:mailbox";
 
-export const isSandboxMailboxId = (mailboxId: string) =>
-  mailboxId === DEMO_MAILBOX_ID || mailboxId === LANDING_DEMO_MAILBOX_ID;
+export { isSandboxMailboxId } from "~/lib/sandbox-mailbox";
 
 const DEMO_EMAIL_ADDRESS = "demo@quieter.email";
 
@@ -790,6 +789,10 @@ const markAsSpamChanges = {
   removeLabelIds: [MAILBOX_LABELS.inbox],
 };
 
+const archiveChanges = {
+  removeLabelIds: [MAILBOX_LABELS.inbox],
+};
+
 const moveToInboxFromSpamChanges = {
   addLabelIds: [MAILBOX_LABELS.inbox],
   removeLabelIds: [MAILBOX_LABELS.spam],
@@ -804,6 +807,19 @@ export const createDemoMailboxActions = (
   queryClient: QueryClient,
   mailboxId = DEMO_MAILBOX_ID,
 ) => ({
+  archiveMessage: async (messageId: string) => {
+    await updateItemLabels(queryClient, mailboxId, messageId, archiveChanges);
+  },
+  archiveThread: async (threadId: string) => {
+    await updateDemoThreadLabels(queryClient, mailboxId, threadId, archiveChanges);
+  },
+  archiveThreads: async (threads: ThreadListEntry[]) => {
+    await Promise.all(
+      threads.map((thread) =>
+        updateDemoThreadLabels(queryClient, mailboxId, thread.threadId, archiveChanges),
+      ),
+    );
+  },
   deleteDraft: async (message: MessageListItem) => {
     await removeDemoThread(queryClient, mailboxId, message.threadId);
   },

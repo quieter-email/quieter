@@ -1,30 +1,37 @@
 import type { MailboxCategory } from "@quieter/gmail";
+import type { ChatMiddleware, UIMessage } from "@tanstack/ai";
 import {
-  chatModelSchema,
   composeEmailToolDef,
+  createGoogleCalendarEventServerTool,
   createGmailLabelListServerTool,
   createGmailMessageServerTool,
   createGmailSearchServerTool,
   createGmailThreadServerTool,
   createMailboxOverviewServerTool,
   createModifyMailServerTool,
+  googleCalendarToolsPrompt,
   gmailToolsPrompt,
-  runChatStream,
-  type ChatMiddleware,
+  type GoogleCalendarToolsContext,
   type GmailToolsContext,
-  type UIMessage,
-} from "@quieter/ai";
+} from "@quieter/ai/chat-agent";
+import { chatModelSchema } from "@quieter/ai/chat-models";
+import { runChatStream } from "@quieter/ai/run-chat-stream";
 import { reportAiUsage } from "@quieter/billing";
+import { db } from "@quieter/database/client";
 import {
   chatMessage,
   chatRun,
-  db,
   type ChatMessagePart,
   type ChatMessageStatus,
-} from "@quieter/database";
+} from "@quieter/database/schema";
 import { and, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { isCancelRequested, updateAssistantMessage, updateRunStatus } from "../../chat-run-store";
 import { isActiveChatRunStatus, publishChatRunEvent } from "../../chat-run-stream";
+import {
+  createGoogleCalendarEventForUser,
+  GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
+  hasConnectedConnector,
+} from "../../connectors/runtime";
 import {
   getMailboxOverviewForUser,
   listGmailLabelsForUser,
@@ -283,6 +290,13 @@ export const runChatGeneration = async (runId: string) => {
       visibleMessages.filter((message) => message.id !== run.assistantMessageId),
     );
     const streamStartMessageCount = streamInitialMessages.length;
+    const hasGoogleCalendarConnector = await hasConnectedConnector({
+      provider: GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
+      userId: run.userId,
+    }).catch((error) => {
+      console.error("Could not inspect Google Calendar connector state.", error);
+      return false;
+    });
 
     const finalMessages = await runChatStream({
       abortController,
@@ -302,7 +316,9 @@ export const runChatGeneration = async (runId: string) => {
         void updateRunStatus(runId, "waiting_on_tool");
         publishChatRunEvent(runId, { status: "waiting_on_tool", type: "status" });
       },
-      systemPrompts: [gmailToolsPrompt],
+      systemPrompts: hasGoogleCalendarConnector
+        ? [gmailToolsPrompt, googleCalendarToolsPrompt]
+        : [gmailToolsPrompt],
       tools: (() => {
         const category = run.mailboxCategory as MailboxCategory;
         const context: GmailToolsContext = {
@@ -357,8 +373,7 @@ export const runChatGeneration = async (runId: string) => {
               userId: run.userId,
             }),
         };
-
-        return [
+        const tools = [
           composeEmailToolDef,
           createGmailLabelListServerTool(context),
           createGmailMessageServerTool(context),
@@ -367,6 +382,20 @@ export const runChatGeneration = async (runId: string) => {
           createMailboxOverviewServerTool(context),
           createModifyMailServerTool(context),
         ];
+
+        if (hasGoogleCalendarConnector) {
+          const calendarContext: GoogleCalendarToolsContext = {
+            createGoogleCalendarEvent: (event) =>
+              createGoogleCalendarEventForUser({
+                event,
+                signal: abortController.signal,
+                userId: run.userId,
+              }),
+          };
+          tools.push(createGoogleCalendarEventServerTool(calendarContext));
+        }
+
+        return tools;
       })(),
     });
 

@@ -11,8 +11,14 @@ import {
   findInvalidMailAddresses,
   getMailAddressKey,
   splitMailAddressList,
-} from "@quieter/mail/compose";
-import { Button, Dialog, DialogContent, IconButtonTooltip, cn } from "@quieter/ui";
+} from "@quieter/mail/compose/schema";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
+import { Dialog, DialogContent } from "@quieter/ui/dialog";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { type UseAudioRecorderReturn, useAudioRecorder } from "@tanstack/ai-react";
+import { useHotkey } from "@tanstack/react-hotkeys";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import {
   type ClipboardEvent,
@@ -22,9 +28,17 @@ import {
   useImperativeHandle,
   useState,
 } from "react";
+import { USER_BILLING_QUERY_KEY } from "~/features/settings/domain/billing";
+import { type BrowserAudioRecording, getTranscriptionAudioFormat } from "~/lib/audio-transcription";
 import { parseSender } from "~/lib/gmail/message-utils";
+import { orpc } from "~/lib/orpc";
 import type { ComposeFormValues } from "../domain/compose-form";
-import { hasComposeDraftContent, type ComposeDraftState } from "../domain/draft";
+import {
+  hasComposeDraftContent,
+  normalizeComposeBodyHtml,
+  textToComposeBodyHtml,
+  type ComposeDraftState,
+} from "../domain/draft";
 import { ComposeEditor } from "./compose-editor";
 import {
   getDraftStatusMessage,
@@ -39,6 +53,7 @@ export type ComposeDialogHandle = {
 
 type ComposeDialogProps = {
   demoMode?: boolean;
+  managedDemoMode?: boolean;
   mailboxId: string | null;
   persistDrafts?: boolean;
   ref?: Ref<ComposeDialogHandle>;
@@ -92,7 +107,7 @@ type RecipientInputState = {
 };
 
 const composeInputFrameClass =
-  "flex min-h-10 items-center gap-3 rounded-md border border-input bg-background px-3.5 transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20";
+  "keyboard-focus-within flex min-h-10 items-center gap-3 rounded-md border border-input bg-background px-3.5 transition-colors";
 
 const serializeRecipientValue = (tokens: readonly string[], inputValue: string) =>
   [...tokens, inputValue.trim()].filter(Boolean).join(", ");
@@ -454,11 +469,18 @@ const AnimatedRecipientField = ({
 
 export const ComposeDialog = ({
   demoMode = false,
+  managedDemoMode = false,
   mailboxId,
   persistDrafts = true,
   ref,
 }: ComposeDialogProps) => {
-  const compose = useComposeDialogController({ demoMode, mailboxId, persistDrafts });
+  const queryClient = useQueryClient();
+  const compose = useComposeDialogController({
+    demoMode,
+    managedDemoMode,
+    mailboxId,
+    persistDrafts,
+  });
   const {
     state,
     addInlineImageFiles,
@@ -468,6 +490,16 @@ export const ComposeDialog = ({
     handleDialogOpenChange,
     toggleRecipientVisibility,
   } = compose;
+  const audioRecorder = useAudioRecorder({
+    mimeType: "audio/webm;codecs=opus",
+  }) as UseAudioRecorderReturn<BrowserAudioRecording>;
+  const transcribeAudioMutation = useMutation({
+    ...orpc.chat.transcribeAudio.mutationOptions(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
+    },
+  });
+  const isTranscribingAudio = transcribeAudioMutation.isPending;
 
   useImperativeHandle(ref, () => ({
     openDraft: (draft) => {
@@ -479,10 +511,81 @@ export const ComposeDialog = ({
   }));
 
   const canDiscardDraft = !!(state.draft.draftId || hasComposeDraftContent(state.draft));
+  const canEditBody = state.draft.saveStatus !== "sending" && !!mailboxId;
+  const audioBusy = audioRecorder.isRecording || isTranscribingAudio;
+  const canSubmitCompose = canEditBody && !audioBusy;
+
+  const handleRecordingStart = () => {
+    if (!canEditBody || isTranscribingAudio) return;
+
+    if (!audioRecorder.isSupported) {
+      compose.setActiveDraftError("Audio recording is not supported in this browser.");
+      return;
+    }
+
+    void audioRecorder.start().catch(() => {
+      compose.setActiveDraftError("Could not start recording.");
+    });
+  };
+
+  const handleRecordingStop = () => {
+    void (async () => {
+      try {
+        const recording = await audioRecorder.stop();
+        const format = getTranscriptionAudioFormat(recording.mimeType);
+
+        if (!format) {
+          compose.setActiveDraftError("This audio format is not supported.");
+          return;
+        }
+
+        const result = await transcribeAudioMutation.mutateAsync({
+          audioBase64: recording.base64,
+          durationMs: recording.durationMs,
+          format,
+          mailboxId: mailboxId!,
+          mode: "email",
+        });
+        const currentHtml = normalizeComposeBodyHtml(form.state.values.bodyHtml);
+        const currentText = form.state.values.bodyText.trim();
+        const nextText = currentText ? `${currentText}\n\n${result.text}` : result.text;
+        const nextHtml = `${currentHtml}${textToComposeBodyHtml(result.text)}`;
+
+        clearActiveDraftError();
+        form.setFieldValue("bodyHtml", nextHtml);
+        form.setFieldValue("bodyText", nextText);
+      } catch (error) {
+        compose.setActiveDraftError(
+          error instanceof Error && error.message
+            ? error.message
+            : "Could not transcribe recording.",
+        );
+      }
+    })();
+  };
+
+  useHotkey(
+    "Mod+Enter",
+    (event) => {
+      const target = event.target;
+      if (target instanceof Element && !target.closest("[data-compose-dialog-content]")) {
+        return;
+      }
+
+      void form.handleSubmit();
+    },
+    {
+      enabled: state.open && canSubmitCompose,
+      ignoreInputs: false,
+    },
+  );
 
   return (
     <Dialog onOpenChange={handleDialogOpenChange} open={state.open}>
-      <DialogContent className="max-h-[85vh] w-[min(92vw,46rem)] overflow-hidden bg-background-light p-0 transition-opacity duration-100 data-ending-style:scale-100 data-starting-style:scale-100">
+      <DialogContent
+        className="max-h-[85vh] w-[min(92vw,46rem)] overflow-hidden bg-background-light p-0 transition-opacity duration-100 data-ending-style:scale-100 data-starting-style:scale-100"
+        data-compose-dialog-content
+      >
         <form
           action={async () => {
             await form.handleSubmit();
@@ -578,15 +681,26 @@ export const ComposeDialog = ({
               {(field) => (
                 <ComposeEditor
                   className="flex-1"
-                  disabled={state.draft.saveStatus === "sending" || !mailboxId}
+                  disabled={!canEditBody}
                   html={field.state.value}
                   onBlur={() => field.handleBlur()}
                   onChange={({ html, text }) => {
-                    clearActiveDraftError();
+                    if (
+                      normalizeComposeBodyHtml(html) !==
+                        normalizeComposeBodyHtml(field.state.value) ||
+                      text !== form.state.values.bodyText
+                    ) {
+                      clearActiveDraftError();
+                    }
                     field.handleChange(html);
                     form.setFieldValue("bodyText", text);
                   }}
                   onInlineImageFiles={addInlineImageFiles}
+                  onRecordingStart={handleRecordingStart}
+                  onRecordingStop={handleRecordingStop}
+                  recording={audioRecorder.isRecording}
+                  recordingSupported={audioRecorder.isSupported}
+                  transcribing={isTranscribingAudio}
                 />
               )}
             </form.Field>
@@ -595,10 +709,11 @@ export const ComposeDialog = ({
               {state.draft.errorMessage && (
                 <div
                   aria-live="polite"
-                  className="mr-auto flex min-w-0 items-center gap-2 text-sm text-destructive"
+                  role="alert"
+                  className="mr-auto flex min-w-0 items-start gap-2 text-sm text-destructive"
                 >
-                  <HugeiconsIcon className="size-4 shrink-0" icon={AlertCircleIcon} />
-                  <span className="truncate">{state.draft.errorMessage}</span>
+                  <HugeiconsIcon className="mt-0.5 size-4 shrink-0" icon={AlertCircleIcon} />
+                  <span className="min-w-0 wrap-break-word">{state.draft.errorMessage}</span>
                 </div>
               )}
 
@@ -618,7 +733,7 @@ export const ComposeDialog = ({
               )}
 
               <Button
-                disabled={state.draft.saveStatus === "sending" || !mailboxId}
+                disabled={!canSubmitCompose}
                 size="sm"
                 type="submit"
                 variant={state.draft.saveStatus === "sending" ? "outline" : "default"}
