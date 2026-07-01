@@ -221,6 +221,7 @@ const assertCanUseAiCredits = async (
     });
   }
 
+  if (entitlement.hasUnlimitedAccess) return;
   if (!entitlement.account) return;
 
   const usage = await getBillingCreditUsage(entitlement.account);

@@ -354,7 +354,16 @@ const messageMatchesQuery = (message: MessageListItem, query: string | undefined
     }
 
     if (filter.type === "is") {
-      if (filter.value === "unread" ? !isMessageUnread(message) : isMessageUnread(message)) {
+      if (filter.value === "unread" && !isMessageUnread(message)) {
+        return false;
+      }
+      if (filter.value === "spam" && !messageLabelIds.has(MAILBOX_LABELS.spam)) {
+        return false;
+      }
+      if (filter.value === "trash" && !messageLabelIds.has(MAILBOX_LABELS.trash)) {
+        return false;
+      }
+      if (filter.value === "read" && isMessageUnread(message)) {
         return false;
       }
       continue;

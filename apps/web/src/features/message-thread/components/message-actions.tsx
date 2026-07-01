@@ -223,6 +223,7 @@ const MessageActionsDialogs = ({
     isPending: areLabelsPending,
   } = useQuery(labelsQueryOptions(mailboxId, openLabelsDialog));
   const userLabels = getUserLabels(labels ?? []);
+  const labelsUnavailable = isLabelsError && !labels;
   const currentUserLabelIds = (message.labelIds ?? []).filter((labelId) =>
     userLabels.some((label) => label.id === labelId),
   );
@@ -307,7 +308,7 @@ const MessageActionsDialogs = ({
               <HugeiconsIcon aria-hidden className="animate-spin" icon={Loading03Icon} />
               <span>Loading {labelNounPlural}…</span>
             </div>
-          ) : isLabelsError ? (
+          ) : labelsUnavailable ? (
             <p className="text-sm text-destructive">
               {labelsError?.message ?? `Could not load ${labelNounPlural}.`}
             </p>
@@ -337,7 +338,7 @@ const MessageActionsDialogs = ({
         <DialogFooter>
           <DialogCloseButton>Cancel</DialogCloseButton>
           <Button
-            disabled={!labelsChanged || areLabelsPending || isLabelsError || isLabelsBusy}
+            disabled={!labelsChanged || areLabelsPending || labelsUnavailable || isLabelsBusy}
             onClick={() => void applyLabels()}
           >
             Apply

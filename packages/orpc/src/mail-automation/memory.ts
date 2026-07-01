@@ -147,7 +147,7 @@ const listLabelNames = async (mailboxId: string, provider: MailboxProvider, labe
   return new Map(labels.map((label) => [label.id, label.name]));
 };
 
-const listManagedMessageSources = async (messageIds: string[]) => {
+const listManagedMessageSources = async (mailboxId: string, messageIds: string[]) => {
   if (messageIds.length === 0) return new Map<string, string | null>();
 
   const rows = await db
@@ -156,7 +156,12 @@ const listManagedMessageSources = async (messageIds: string[]) => {
       id: managedMailMessage.id,
     })
     .from(managedMailMessage)
-    .where(inArray(managedMailMessage.id, Array.from(new Set(messageIds))));
+    .where(
+      and(
+        eq(managedMailMessage.mailboxId, mailboxId),
+        inArray(managedMailMessage.id, Array.from(new Set(messageIds))),
+      ),
+    );
 
   return new Map(rows.map((row) => [row.id, getSenderSource(row.from)]));
 };
@@ -196,7 +201,7 @@ export const recordMailAutoLabelFeedback = async (input: {
   ]);
   const sources =
     selectedMailbox.provider === "managed"
-      ? await listManagedMessageSources(providerMessageIds)
+      ? await listManagedMessageSources(input.mailboxId, providerMessageIds)
       : new Map<string, string | null>();
   const now = new Date();
   const values = providerMessageIds.flatMap((providerMessageId) => [

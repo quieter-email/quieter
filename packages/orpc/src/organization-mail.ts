@@ -289,6 +289,12 @@ export const sendOrganizationMailMessage = async (input: {
           sentAt,
           subject: input.message.subject,
           to: builtMessage.to,
+        }).catch((error) => {
+          console.error("Failed to persist API mail record after send.", {
+            error,
+            organizationId: input.organizationId,
+            providerMessageId: response.MessageId,
+          });
         }),
         recordOutboundManagedMessageForSender({
           attachments: builtMessage.attachments,

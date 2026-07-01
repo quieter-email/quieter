@@ -54,10 +54,7 @@ export const SiteFooter = () => {
 
   return (
     <footer className="pointer-events-none fixed right-0 bottom-0 z-20 max-w-[min(100vw-1rem,42rem)] p-4">
-      <FooterLinks
-        className="pointer-events-auto justify-end text-[10px] leading-none text-muted-foreground/75"
-        tabIndex={-1}
-      />
+      <FooterLinks className="pointer-events-auto justify-end text-[10px] leading-none text-muted-foreground/75" />
     </footer>
   );
 };

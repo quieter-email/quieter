@@ -10,7 +10,7 @@ import { createDemoMailboxActions } from "~/lib/gmail/demo-mail";
 import { type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
 import { createManagedDemoMailboxActions } from "~/lib/managed-mail/demo-managed-mail";
 import { orpc } from "~/lib/orpc";
-import { createMailboxActionHandlers } from "../mailbox-action-handlers";
+import { createMailboxActionHandlers, type MailboxActions } from "../mailbox-action-handlers";
 import { useMailboxMessages } from "./use-mailbox-messages";
 import { useMailboxPendingActions } from "./use-mailbox-pending-actions";
 import {
@@ -31,6 +31,35 @@ type MailboxMessagesPanelProps = {
   onSearchQueryChange: (query: string) => void;
   searchQuery: string;
 };
+
+const createReadOnlyMailboxActions = () =>
+  ({
+    archiveMessage: async () => {},
+    archiveThread: async () => {},
+    archiveThreads: async () => {},
+    deleteDraft: async () => {},
+    deleteDrafts: async () => {},
+    markMessageAsRead: async () => {},
+    markMessageAsSpam: async () => {},
+    markMessageAsUnread: async () => {},
+    markThreadAsRead: async () => {},
+    markThreadAsSpam: async () => {},
+    markThreadsAsRead: async () => {},
+    markThreadsAsSpam: async () => {},
+    markThreadsAsUnread: async () => {},
+    markThreadAsUnread: async () => {},
+    moveMessageToTrash: async () => {},
+    moveThreadToTrash: async () => {},
+    moveThreadsToTrash: async () => {},
+    unmarkMessageAsSpam: async () => {},
+    unmarkThreadAsSpam: async () => {},
+    unmarkThreadsAsSpam: async () => {},
+    unsubscribeFromMessage: async () => {},
+    untrashMessage: async () => {},
+    untrashThread: async () => {},
+    updateMessageLabels: async () => {},
+    updateThreadLabels: async () => {},
+  }) satisfies MailboxActions;
 
 export const MailboxMessagesPanel = ({
   activeMailbox,
@@ -108,23 +137,9 @@ export const MailboxMessagesPanel = ({
     setMessageActionsPending([id], pending);
   const setThreadActionPending = (id: string, pending: boolean) =>
     setThreadActionsPending([id], pending);
-  const readOnlyMailboxActions = createMailboxActionHandlers({
-    activeMailbox,
-    activeSearchQuery: normalizedSearchQuery,
-    queryClient,
-    refreshSearchResultsIfNeeded,
-    isMessageActionPending,
-    isThreadActionPending,
-    setMessageActionPending,
-    setMessageActionsPending,
-    setThreadActionPending,
-    setThreadActionsPending,
-    unsubscribeFromMessageMutation: async () => {},
-    mailboxId,
-  });
   const mailboxActions =
     mailboxProvider === "api"
-      ? readOnlyMailboxActions
+      ? createReadOnlyMailboxActions()
       : isManagedDemoMode
         ? createManagedDemoMailboxActions(queryClient)
         : isDemoMode

@@ -135,7 +135,9 @@ export const listManagedMailboxAdministration = async (input: {
   const rows = await db
     .select({
       directRole: mailboxGrant.role,
+      directUserId: mailboxGrant.userId,
       displayName: mailbox.displayName,
+      divisionGrantDivisionId: mailboxDivisionGrant.divisionId,
       divisionGrantRole: mailboxDivisionGrant.role,
       divisionId: mailbox.divisionId,
       divisionName: organizationDivision.name,
@@ -159,12 +161,15 @@ export const listManagedMailboxAdministration = async (input: {
     string,
     {
       directGrantCount: number;
+      directGrantIds: Set<string>;
       displayName: string | null;
       divisionGrantCount: number;
+      divisionGrantIds: Set<string>;
       divisionId: string | null;
       divisionName: string | null;
       emailAddress: string;
       id: string;
+      managerGrantIds: Set<string>;
       managerCount: number;
       status: "connected" | "needs_reconnect";
     }
@@ -173,24 +178,50 @@ export const listManagedMailboxAdministration = async (input: {
   for (const row of rows) {
     const record = mailboxes.get(row.id) ?? {
       directGrantCount: 0,
+      directGrantIds: new Set<string>(),
       displayName: row.displayName,
       divisionGrantCount: 0,
+      divisionGrantIds: new Set<string>(),
       divisionId: row.divisionId,
       divisionName: row.divisionName,
       emailAddress: row.emailAddress,
       id: row.id,
+      managerGrantIds: new Set<string>(),
       managerCount: 0,
       status: row.status,
     };
-    if (row.directRole) record.directGrantCount += 1;
-    if (row.divisionGrantRole) record.divisionGrantCount += 1;
-    if (row.directRole === "manager" || row.divisionGrantRole === "manager") {
-      record.managerCount += 1;
+    if (row.directRole && row.directUserId && !record.directGrantIds.has(row.directUserId)) {
+      record.directGrantIds.add(row.directUserId);
+      record.directGrantCount += 1;
     }
+    if (
+      row.divisionGrantRole &&
+      row.divisionGrantDivisionId &&
+      !record.divisionGrantIds.has(row.divisionGrantDivisionId)
+    ) {
+      record.divisionGrantIds.add(row.divisionGrantDivisionId);
+      record.divisionGrantCount += 1;
+    }
+    if (row.directRole === "manager" && row.directUserId) {
+      record.managerGrantIds.add(`direct:${row.directUserId}`);
+    }
+    if (row.divisionGrantRole === "manager" && row.divisionGrantDivisionId) {
+      record.managerGrantIds.add(`division:${row.divisionGrantDivisionId}`);
+    }
+    record.managerCount = record.managerGrantIds.size;
     mailboxes.set(row.id, record);
   }
 
-  return { mailboxes: [...mailboxes.values()] };
+  return {
+    mailboxes: [...mailboxes.values()].map(
+      ({
+        directGrantIds: _directGrantIds,
+        divisionGrantIds: _divisionGrantIds,
+        managerGrantIds: _managerGrantIds,
+        ...record
+      }) => record,
+    ),
+  };
 };
 
 export const getManagedMailboxDetails = async (input: { mailboxId: string; userId: string }) => {

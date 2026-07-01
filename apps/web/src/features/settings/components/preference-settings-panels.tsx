@@ -79,6 +79,7 @@ export const ReadingSettingsPanel = () => {
         <SettingsRow
           action={
             <Switch
+              aria-label="Allow external images"
               checked={externalImagesEnabled}
               className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
               id="external-images-toggle"

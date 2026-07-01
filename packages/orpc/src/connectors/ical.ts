@@ -134,6 +134,51 @@ const addHours = (date: GoogleCalendarEventDate, hours: number): GoogleCalendarE
     : { dateTime: formatLocalDateTime(value), timeZone: date.timeZone };
 };
 
+const parseIcsDuration = (value: string) => {
+  const match = value
+    .trim()
+    .match(/^P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/i);
+  if (!match) {
+    throw new Error("Calendar invitation includes an invalid event duration.");
+  }
+
+  const [, weeks = "0", days = "0", hours = "0", minutes = "0", seconds = "0"] = match;
+  return {
+    days: Number(weeks) * 7 + Number(days),
+    hours: Number(hours),
+    minutes: Number(minutes),
+    seconds: Number(seconds),
+  };
+};
+
+const addDuration = (date: GoogleCalendarEventDate, duration: string): GoogleCalendarEventDate => {
+  const parsed = parseIcsDuration(duration);
+  if (date.date) {
+    if (parsed.hours > 0 || parsed.minutes > 0 || parsed.seconds > 0) {
+      throw new Error("Calendar invitation includes an invalid all-day duration.");
+    }
+
+    return { date: addDays(date.date, parsed.days || 1) };
+  }
+
+  const dateTime = date.dateTime;
+  if (!dateTime) {
+    throw new Error("Calendar invitation includes an invalid event time.");
+  }
+
+  const value = new Date(dateTime.endsWith("Z") ? dateTime : `${dateTime}Z`);
+  value.setUTCSeconds(
+    value.getUTCSeconds() +
+      parsed.days * 24 * 60 * 60 +
+      parsed.hours * 60 * 60 +
+      parsed.minutes * 60 +
+      parsed.seconds,
+  );
+  return dateTime.endsWith("Z")
+    ? { dateTime: value.toISOString().replace(/\.\d{3}Z$/, "Z") }
+    : { dateTime: formatLocalDateTime(value), timeZone: date.timeZone };
+};
+
 const parseIcsDate = (property: IcsProperty): GoogleCalendarEventDate => {
   const trimmedValue = property.value.trim();
   const dateMatch = trimmedValue.match(datePattern);
@@ -177,7 +222,12 @@ export const parseIcsToGoogleCalendarEvent = (input: string): GoogleCalendarEven
 
   const start = parseIcsDate(startProperty);
   const endProperty = firstProperty(properties, "DTEND");
-  const end = endProperty ? parseIcsDate(endProperty) : addHours(start, 1);
+  const durationProperty = firstProperty(properties, "DURATION");
+  const end = endProperty
+    ? parseIcsDate(endProperty)
+    : durationProperty
+      ? addDuration(start, durationProperty.value)
+      : addHours(start, 1);
   const summary = unescapeText(firstProperty(properties, "SUMMARY")?.value ?? "").trim();
   const description = unescapeText(firstProperty(properties, "DESCRIPTION")?.value ?? "").trim();
   const location = unescapeText(firstProperty(properties, "LOCATION")?.value ?? "").trim();

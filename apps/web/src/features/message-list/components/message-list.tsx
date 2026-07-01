@@ -175,7 +175,7 @@ export const MessageList = (props: MessageListProps) => {
                 await runBulkAction(props.mailboxActions.markThreadsAsUnread);
               },
             },
-            ...(props.activeMailbox === "inbox"
+            ...(props.mailboxProvider === "gmail" && props.activeMailbox === "inbox"
               ? [
                   {
                     destructive: true,
@@ -188,7 +188,7 @@ export const MessageList = (props: MessageListProps) => {
                   } satisfies MessageListBulkAction,
                 ]
               : []),
-            ...(props.activeMailbox === "spam"
+            ...(props.mailboxProvider === "gmail" && props.activeMailbox === "spam"
               ? [
                   {
                     icon: Mail01Icon,
@@ -200,7 +200,7 @@ export const MessageList = (props: MessageListProps) => {
                   } satisfies MessageListBulkAction,
                 ]
               : []),
-            ...(props.activeMailbox === "trash"
+            ...(props.mailboxProvider !== "gmail" || props.activeMailbox === "trash"
               ? []
               : [
                   {
@@ -215,7 +215,7 @@ export const MessageList = (props: MessageListProps) => {
                 ]),
           ];
 
-  const scrollPaneKey = `${props.activeMailbox}:${props.searchQuery}`;
+  const scrollPaneKey = `${props.mailboxId}:${props.activeMailbox}:${props.searchQuery}`;
   const actionHotkeysEnabled =
     props.mailboxProvider !== "api" && !props.activeMessageId && props.activeMailbox !== "drafts";
   const previousActiveMessageIdRef = useRef(props.activeMessageId);
@@ -327,7 +327,12 @@ export const MessageList = (props: MessageListProps) => {
             (threads) => `${formatConversationCount(threads.length)} moved to Trash.`,
           );
         },
-        options: { enabled: actionHotkeysEnabled && props.activeMailbox !== "trash" },
+        options: {
+          enabled:
+            actionHotkeysEnabled &&
+            props.mailboxProvider === "gmail" &&
+            props.activeMailbox !== "trash",
+        },
       },
       {
         hotkey: "Shift+1",
@@ -407,12 +412,14 @@ export const MessageList = (props: MessageListProps) => {
         />
       )}
 
-      {props.mailboxProvider !== "api" && props.activeMailbox === "inbox" && !props.searchQuery && (
-        <GmailUsefulDetails
-          mailboxId={props.mailboxId}
-          onActivateMessage={props.onActivateMessage}
-        />
-      )}
+      {props.mailboxProvider === "gmail" &&
+        props.activeMailbox === "inbox" &&
+        !props.searchQuery && (
+          <GmailUsefulDetails
+            mailboxId={props.mailboxId}
+            onActivateMessage={props.onActivateMessage}
+          />
+        )}
 
       <m.div className="flex min-h-0 flex-1 flex-col" {...messageListContentMotion}>
         <MessageListScrollPane

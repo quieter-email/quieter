@@ -511,6 +511,29 @@ export const reportAiUsage = async (input: {
   );
   if (costMicroCents <= 0) return;
 
+  await recordAiCreditUsage({
+    chatId: input.chatId,
+    costMicroCents,
+    externalId: input.externalId,
+    mailboxId: input.mailboxId,
+    metadata: {
+      completionTokens: input.completionTokens,
+      model: input.model,
+      promptTokens: input.promptTokens,
+      usageKind: input.usageKind,
+    },
+    userId: input.userId,
+  });
+};
+
+const recordAiCreditUsage = async (input: {
+  chatId?: string | null;
+  costMicroCents: number;
+  externalId: string;
+  mailboxId?: string;
+  metadata: Record<string, number | string>;
+  userId: string;
+}) => {
   if (!input.mailboxId) return;
   const [mailboxRow] = await db
     .select({ organizationId: mailbox.organizationId })
@@ -529,14 +552,11 @@ export const reportAiUsage = async (input: {
   await recordBillingCreditUsage({
     account: entitlement.account,
     category: "ai",
-    costMicroCents,
+    costMicroCents: input.costMicroCents,
     dedupeKey: `ai:${input.externalId}`,
     metadata: {
       chatId: input.chatId ?? "",
-      completionTokens: input.completionTokens,
-      model: input.model,
-      promptTokens: input.promptTokens,
-      usageKind: input.usageKind,
+      ...input.metadata,
     },
   });
 };
@@ -555,31 +575,17 @@ export const reportAiUsageCost = async (input: {
   const costMicroCents = applyAiUsageMarkup(input.costMicroCents);
   if (costMicroCents <= 0 || !input.mailboxId) return;
 
-  const [mailboxRow] = await db
-    .select({ organizationId: mailbox.organizationId })
-    .from(mailbox)
-    .where(eq(mailbox.id, input.mailboxId))
-    .limit(1);
-  if (!mailboxRow) return;
-
-  const entitlement = await hasUserBillingFeature({
-    feature: "aiChat",
-    organizationId: mailboxRow.organizationId,
-    userId: input.userId,
-  });
-  if (!entitlement.account) return;
-
-  await recordBillingCreditUsage({
-    account: entitlement.account,
-    category: "ai",
+  await recordAiCreditUsage({
+    chatId: input.chatId,
     costMicroCents,
-    dedupeKey: `ai:${input.externalId}`,
+    externalId: input.externalId,
+    mailboxId: input.mailboxId,
     metadata: {
-      chatId: input.chatId ?? "",
       durationSeconds: input.durationSeconds ?? 0,
       model: input.model,
       totalTokens: input.totalTokens ?? 0,
       usageKind: input.usageKind,
     },
+    userId: input.userId,
   });
 };

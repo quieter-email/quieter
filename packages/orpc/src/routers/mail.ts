@@ -49,6 +49,7 @@ import {
   upsertSyncedGmailLabel,
 } from "../gmail-labels";
 import { recordMailAutoLabelFeedback } from "../mail-automation/memory";
+import { assertUserOrganizationMember } from "../mail-domain/service";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
   createManagedLabel,
@@ -74,6 +75,7 @@ import {
   getOrganizationApiMailThread,
   isOrganizationApiMailboxId,
   listOrganizationApiMailMessages,
+  parseOrganizationApiMailboxId,
 } from "../organization-api-mail";
 import {
   callGmail,
@@ -199,6 +201,11 @@ export const mailRouter = {
     )
     .handler(async ({ context, input }) => {
       if (isOrganizationApiMailboxId(input.mailboxId)) {
+        const organizationId = parseOrganizationApiMailboxId(input.mailboxId);
+        if (!organizationId) {
+          throw new ORPCError("NOT_FOUND", { message: "API mailbox not found." });
+        }
+        await assertUserOrganizationMember({ organizationId, userId: context.userId });
         return {
           hasChanges: true,
           refreshFirstPage: true,
@@ -242,6 +249,11 @@ export const mailRouter = {
     )
     .handler(async ({ context, input }) => {
       if (isOrganizationApiMailboxId(input.mailboxId)) {
+        const organizationId = parseOrganizationApiMailboxId(input.mailboxId);
+        if (!organizationId) {
+          throw new ORPCError("NOT_FOUND", { message: "API mailbox not found." });
+        }
+        await assertUserOrganizationMember({ organizationId, userId: context.userId });
         return { removedMessageIds: [], updatedMessages: [] };
       }
 

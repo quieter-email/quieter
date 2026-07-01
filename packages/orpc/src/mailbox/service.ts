@@ -21,7 +21,7 @@ import {
   user,
 } from "@quieter/database/schema";
 import { getGmailProfile, isGmailServiceError } from "@quieter/gmail";
-import { and, asc, count, eq, lt } from "drizzle-orm";
+import { and, asc, count, eq, inArray, lt } from "drizzle-orm";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { MailboxGroup, MailboxGroupMetadata, MailboxListItem } from "./types";
@@ -139,7 +139,7 @@ const toMailboxListItem = (
     record.provider === MAILBOX_PROVIDER_GMAIL && !record.gmailCredentialMailboxId
       ? "needs_reconnect"
       : record.status,
-  directGrantRole: record.directGrantRole ?? record.grantRole ?? null,
+  directGrantRole: record.directGrantRole ?? null,
   displayName: record.displayName,
   divisionGrantRoles: record.divisionGrantRoles ?? [],
   divisionId: record.divisionId ?? null,
@@ -275,14 +275,31 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
           organizationId: organizationApiMailMessage.organizationId,
         })
         .from(organizationApiMailMessage)
+        .where(
+          organizations.length > 0
+            ? inArray(
+                organizationApiMailMessage.organizationId,
+                organizations.map((organization) => organization.id),
+              )
+            : undefined,
+        )
         .groupBy(organizationApiMailMessage.organizationId),
     ]);
   const apiMessageCountsByOrganizationId = new Map(
     apiMessageCounts.map((record) => [record.organizationId, Number(record.count)]),
   );
-  const divisions = await db
-    .select({ id: organizationDivision.id, name: organizationDivision.name })
-    .from(organizationDivision);
+  const divisions =
+    organizations.length === 0
+      ? []
+      : await db
+          .select({ id: organizationDivision.id, name: organizationDivision.name })
+          .from(organizationDivision)
+          .where(
+            inArray(
+              organizationDivision.organizationId,
+              organizations.map((organization) => organization.id),
+            ),
+          );
   const divisionNamesById = new Map(divisions.map((division) => [division.id, division.name]));
 
   type ManagedMailboxRecord = {

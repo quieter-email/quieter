@@ -512,6 +512,8 @@ export const ComposeDialog = ({
 
   const canDiscardDraft = !!(state.draft.draftId || hasComposeDraftContent(state.draft));
   const canEditBody = state.draft.saveStatus !== "sending" && !!mailboxId;
+  const audioBusy = audioRecorder.isRecording || isTranscribingAudio;
+  const canSubmitCompose = canEditBody && !audioBusy;
 
   const handleRecordingStart = () => {
     if (!canEditBody || isTranscribingAudio) return;
@@ -573,7 +575,7 @@ export const ComposeDialog = ({
       void form.handleSubmit();
     },
     {
-      enabled: state.open && state.draft.saveStatus !== "sending" && !!mailboxId,
+      enabled: state.open && canSubmitCompose,
       ignoreInputs: false,
     },
   );
@@ -731,7 +733,7 @@ export const ComposeDialog = ({
               )}
 
               <Button
-                disabled={state.draft.saveStatus === "sending" || !mailboxId}
+                disabled={!canSubmitCompose}
                 size="sm"
                 type="submit"
                 variant={state.draft.saveStatus === "sending" ? "outline" : "default"}

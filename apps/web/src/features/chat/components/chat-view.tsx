@@ -20,6 +20,7 @@ import {
 import { type BrowserAudioRecording, getTranscriptionAudioFormat } from "~/lib/audio-transcription";
 import { chatQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-query";
 import { orpc } from "~/lib/orpc";
+import { persistQueryByKey } from "~/lib/query-persister";
 import type { ChatViewProps, ResolveComposeToolInput } from "../types";
 import { createChatTurns } from "../domain/chat-turns";
 import { useChatRunStream, type ChatRunStreamDone } from "../hooks/use-chat-run-stream";
@@ -31,6 +32,9 @@ type ChatsQueryData = RouterOutputs["chat"]["list"];
 type StoredChatMessage = ChatQueryData["messages"][number];
 type ActiveChatRun = ChatQueryData["activeRun"];
 type ChatRunStartResult = RouterOutputs["chat"]["sendMessage"];
+
+const MAX_TRANSCRIPTION_AUDIO_DURATION_MS = 60_000;
+const MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH = 14_000_000;
 
 const isActiveRun = (activeRun: ActiveChatRun | null | undefined) =>
   !!activeRun &&
@@ -103,15 +107,21 @@ export const ChatView = ({
   const generateTitleMutation = useMutation({
     ...orpc.chat.generateTitle.mutationOptions(),
     onSuccess: (updatedChat, variables) => {
-      queryClient.setQueryData<ChatsQueryData>(getChatsQueryKey(variables.mailboxId), (current) =>
+      const chatsQueryKey = getChatsQueryKey(variables.mailboxId);
+      const chatQueryKey = getChatQueryKey(variables.mailboxId, variables.chatId);
+
+      queryClient.setQueryData<ChatsQueryData>(chatsQueryKey, (current) =>
         current?.map((chat) =>
           chat.id === updatedChat.id ? { ...chat, title: updatedChat.title } : chat,
         ),
       );
-      queryClient.setQueryData<ChatQueryData>(
-        getChatQueryKey(variables.mailboxId, variables.chatId),
-        (current) => (current ? { ...current, title: updatedChat.title } : current),
+      queryClient.setQueryData<ChatQueryData>(chatQueryKey, (current) =>
+        current ? { ...current, title: updatedChat.title } : current,
       );
+      void Promise.all([
+        persistQueryByKey(chatsQueryKey, queryClient),
+        persistQueryByKey(chatQueryKey, queryClient),
+      ]);
     },
   });
   const cancelGenerationMutation = useMutation({
@@ -147,6 +157,7 @@ export const ChatView = ({
           }
         : current,
     );
+    void persistQueryByKey(queryKey, queryClient);
 
     setStreamRunId(result.runId);
     setStreamingAssistant({
@@ -189,6 +200,7 @@ export const ChatView = ({
         ),
       };
     });
+    void persistQueryByKey(queryKey, queryClient);
   };
 
   useChatRunStream({
@@ -216,6 +228,7 @@ export const ChatView = ({
         queryClient.setQueryData<ChatQueryData>(queryKey, (current) =>
           current ? { ...current, activeRun: null } : current,
         );
+        void persistQueryByKey(queryKey, queryClient);
         void queryClient.invalidateQueries({ queryKey });
       }
 
@@ -251,7 +264,7 @@ export const ChatView = ({
 
   const submitPrompt = async () => {
     const prompt = input.trim();
-    if (!prompt || isComposerLoading || composerDisabled) return;
+    if (!prompt || isComposerLoading || composerDisabled || audioRecorder.isRecording) return;
 
     try {
       let nextChatId = chatId;
@@ -326,6 +339,16 @@ export const ChatView = ({
 
         if (!format) {
           toast.error("This audio format is not supported.");
+          return;
+        }
+
+        if (recording.durationMs > MAX_TRANSCRIPTION_AUDIO_DURATION_MS) {
+          toast.error("Recordings must be 60 seconds or shorter.");
+          return;
+        }
+
+        if (recording.base64.length > MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH) {
+          toast.error("This recording is too large to transcribe.");
           return;
         }
 

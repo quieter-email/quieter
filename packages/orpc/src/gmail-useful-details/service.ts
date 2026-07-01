@@ -14,6 +14,7 @@ import {
   gmailUsefulDetail,
   gmailUsefulDetailEvent,
   gmailUsefulDetailFeedback,
+  mailbox,
   mailboxAutomationSettings,
   type GmailDeliveryStatus,
   type GmailUsefulDetailFeedbackSignal,
@@ -28,7 +29,6 @@ import {
   loadAutomationMemoryPrompt,
   refreshUsefulDetailMemoryProfile,
 } from "../mail-automation/memory";
-import { assertAccessibleMailbox } from "../mailbox/service";
 
 const RETRY_BASE_MS = 1000 * 60 * 5;
 const RETRY_MAX_MS = 1000 * 60 * 60 * 24;
@@ -82,6 +82,30 @@ const SUPPRESSED_AUTOMATION_KINDS = new Set<GmailUsefulDetailKind>([
   "security_alert",
   "task",
 ]);
+
+const assertAccessibleGmailMailbox = async (input: { mailboxId: string; userId: string }) => {
+  const [selectedMailbox] = await db
+    .select({
+      id: mailbox.id,
+      organizationId: mailbox.organizationId,
+      provider: mailbox.provider,
+    })
+    .from(mailbox)
+    .where(
+      and(
+        eq(mailbox.id, input.mailboxId),
+        eq(mailbox.ownerUserId, input.userId),
+        eq(mailbox.provider, "gmail"),
+      ),
+    )
+    .limit(1);
+
+  if (!selectedMailbox) {
+    throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
+  }
+
+  return selectedMailbox;
+};
 
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message.slice(0, 2_000) : "Unknown useful-details error.";
@@ -927,7 +951,7 @@ export const reportPendingGmailUsefulDetailUsage = async (mailboxId: string, use
 };
 
 export const listGmailUsefulDetails = async (input: { mailboxId: string; userId: string }) => {
-  const selectedMailbox = await assertAccessibleMailbox(input);
+  const selectedMailbox = await assertAccessibleGmailMailbox(input);
   const [[settings], entitlement] = await Promise.all([
     db
       .select({ enabled: mailboxAutomationSettings.usefulDetailsEnabled })
@@ -1001,7 +1025,21 @@ export const listGmailThreadUsefulDetails = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
-  await assertAccessibleMailbox(input);
+  const selectedMailbox = await assertAccessibleGmailMailbox(input);
+  const [[settings], entitlement] = await Promise.all([
+    db
+      .select({ enabled: mailboxAutomationSettings.usefulDetailsEnabled })
+      .from(mailboxAutomationSettings)
+      .where(eq(mailboxAutomationSettings.mailboxId, input.mailboxId))
+      .limit(1),
+    hasUserBillingFeature({
+      feature: "gmailAutomation",
+      organizationId: selectedMailbox.organizationId ?? undefined,
+      userId: input.userId,
+    }),
+  ]);
+  if (!settings?.enabled || !entitlement.hasAccess) return [];
+
   const items = await db
     .select({
       detail: gmailUsefulDetail,
@@ -1032,7 +1070,7 @@ export const dismissGmailUsefulDetail = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
-  await assertAccessibleMailbox(input);
+  await assertAccessibleGmailMailbox(input);
   const [dismissed] = await db
     .update(gmailUsefulDetail)
     .set({ dismissedAt: new Date(), updatedAt: new Date() })
@@ -1054,7 +1092,7 @@ export const setGmailUsefulDetailFeedback = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
-  await assertAccessibleMailbox(input);
+  await assertAccessibleGmailMailbox(input);
   const [detail] = await db
     .select({
       id: gmailUsefulDetail.id,

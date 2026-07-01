@@ -175,7 +175,7 @@ const MessageRowContent = ({
     onThreadPress(thread, gesture);
   };
   const handleRowKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key !== " ") {
+    if (event.key !== " " || (!event.metaKey && !event.ctrlKey && !event.shiftKey)) {
       return;
     }
 

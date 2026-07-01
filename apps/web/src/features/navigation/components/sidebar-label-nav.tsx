@@ -257,6 +257,7 @@ export const SidebarLabelNav = ({
     isError: areLabelsError,
     isPending: areLabelsPending,
   } = useQuery(labelsQueryOptions(mailboxId ?? "", !!mailboxId));
+  const labelsUnavailable = areLabelsError && !labels;
 
   const [isLabelEntranceSlotOpen, openLabelEntranceSlot] = useReducer(() => true, !animateEntrance);
 
@@ -501,7 +502,7 @@ export const SidebarLabelNav = ({
             >
               Loading {labelNounPlural}…
             </m.p>
-          ) : !isLabelEntranceSlotOpen ? null : areLabelsError ? (
+          ) : !isLabelEntranceSlotOpen ? null : labelsUnavailable ? (
             <m.p
               className="px-2 py-1 text-xs text-destructive will-change-[transform,opacity,filter]"
               initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
@@ -544,7 +545,11 @@ export const SidebarLabelNav = ({
                     onBlur={(event) => clearLabelHoverIfLeavingNav(event.relatedTarget)}
                     onClick={() => onSearch(updateLabelFilter(searchQuery, label.name, !isActive))}
                     onFocus={() => {
-                      if (!isActive) setLabelHover(label.id);
+                      if (isActive) {
+                        clearLabelHover();
+                        return;
+                      }
+                      setLabelHover(label.id);
                     }}
                     onHoverExitComplete={onHoverExitComplete}
                     onMouseEnter={() => {
@@ -674,7 +679,7 @@ export const SidebarLabelNav = ({
               <div>
                 {areLabelsPending ? (
                   <p className="py-3 text-sm text-muted-foreground">Loading {labelNounPlural}…</p>
-                ) : areLabelsError ? (
+                ) : labelsUnavailable ? (
                   <p className="py-3 text-sm text-destructive">Could not load {labelNounPlural}.</p>
                 ) : userLabels.length === 0 ? (
                   <p className="py-3 text-sm text-muted-foreground">No {labelNounPlural} yet.</p>

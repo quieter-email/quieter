@@ -8,11 +8,33 @@ import {
   organizationDivisionMember,
   user,
 } from "@quieter/database/schema";
-import { and, asc, count, eq, inArray, max } from "drizzle-orm";
+import { and, asc, count, eq, inArray, max, ne } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 const normalizeDivisionName = (name: string) => name.trim().replace(/\s+/g, " ");
 const normalizeDivisionKey = (name: string) => normalizeDivisionName(name).toLowerCase();
+
+const assertDivisionNameAvailable = async (input: {
+  divisionId?: string;
+  name: string;
+  organizationId: string;
+}) => {
+  const [existingDivision] = await db
+    .select({ id: organizationDivision.id })
+    .from(organizationDivision)
+    .where(
+      and(
+        eq(organizationDivision.organizationId, input.organizationId),
+        eq(organizationDivision.normalizedName, normalizeDivisionKey(input.name)),
+        input.divisionId ? ne(organizationDivision.id, input.divisionId) : undefined,
+      ),
+    )
+    .limit(1);
+
+  if (existingDivision) {
+    throw new ORPCError("CONFLICT", { message: "A division with this name already exists." });
+  }
+};
 
 const assertOrganizationMember = async (input: { organizationId: string; userId: string }) => {
   const [membership] = await db
@@ -139,6 +161,7 @@ export const createOrganizationDivision = async (input: {
   if (!name) {
     throw new ORPCError("BAD_REQUEST", { message: "Division name is required." });
   }
+  await assertDivisionNameAvailable({ name, organizationId: input.organizationId });
 
   const [positionRow] = await db
     .select({ value: max(organizationDivision.position) })
@@ -169,10 +192,17 @@ export const updateOrganizationDivision = async (input: {
   position?: number;
   userId: string;
 }) => {
-  await getDivisionWithManagerAccess(input);
+  const division = await getDivisionWithManagerAccess(input);
   const nextName = input.name === undefined ? undefined : normalizeDivisionName(input.name);
   if (nextName !== undefined && !nextName) {
     throw new ORPCError("BAD_REQUEST", { message: "Division name is required." });
+  }
+  if (nextName !== undefined) {
+    await assertDivisionNameAvailable({
+      divisionId: input.divisionId,
+      name: nextName,
+      organizationId: division.organizationId,
+    });
   }
 
   await db

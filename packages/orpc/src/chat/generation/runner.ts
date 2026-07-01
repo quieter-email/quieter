@@ -31,7 +31,7 @@ import {
   createGoogleCalendarEventForUser,
   GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
   hasConnectedConnector,
-} from "../../connectors/service";
+} from "../../connectors/runtime";
 import {
   getMailboxOverviewForUser,
   listGmailLabelsForUser,

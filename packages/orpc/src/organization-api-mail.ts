@@ -30,6 +30,8 @@ import {
 
 const API_MAILBOX_ID_PREFIX = "api:";
 const API_MESSAGE_PAGE_SIZE = 50;
+const API_MESSAGE_BACKFILL_LIMIT = 500;
+const MAILBOX_EMAIL_UNIQUE_CONSTRAINT = "mailbox_email_address_unique";
 
 export const getOrganizationApiMailboxId = (organizationId: string) =>
   `${API_MAILBOX_ID_PREFIX}${organizationId}`;
@@ -73,6 +75,55 @@ const encodePageCursor = (record: { id: string; sentAt: Date }) =>
     "base64url",
   );
 
+type ApiMessageMailboxState = {
+  canCreateMailbox: boolean;
+  canManageMailbox: boolean;
+  includedInMailbox: boolean;
+  mailboxId: string | null;
+};
+
+const canManageOrganization = (role: string) =>
+  role
+    .split(",")
+    .map((part) => part.trim().toLowerCase())
+    .some((part) => part === "admin" || part === "owner");
+
+const getPostgresErrorField = (error: unknown, field: "code" | "constraint"): string | undefined =>
+  error && typeof error === "object"
+    ? typeof Reflect.get(error, field) === "string"
+      ? Reflect.get(error, field)
+      : getPostgresErrorField(Reflect.get(error, "cause"), field)
+    : undefined;
+
+const isMailboxEmailUniqueError = (error: unknown) =>
+  getPostgresErrorField(error, "code") === "23505" &&
+  [undefined, MAILBOX_EMAIL_UNIQUE_CONSTRAINT].includes(getPostgresErrorField(error, "constraint"));
+
+const findMailboxByAddress = async (organizationId: string, emailAddress: string) => {
+  const [existingMailbox] = await db
+    .select({ id: mailbox.id, provider: mailbox.provider })
+    .from(mailbox)
+    .where(and(eq(mailbox.organizationId, organizationId), eq(mailbox.emailAddress, emailAddress)))
+    .limit(1);
+  return existingMailbox ?? null;
+};
+
+const toApiMessageMailboxState = (
+  senderMailbox: {
+    id: string;
+    includeApiSentMessages: boolean;
+    provider: string;
+    emailAddress?: string;
+  } | null,
+  canManageTeam: boolean,
+): ApiMessageMailboxState => ({
+  canCreateMailbox: !senderMailbox && canManageTeam,
+  canManageMailbox: senderMailbox?.provider === "managed" && canManageTeam,
+  includedInMailbox:
+    senderMailbox?.provider === "managed" ? senderMailbox.includeApiSentMessages : false,
+  mailboxId: senderMailbox?.provider === "managed" ? senderMailbox.id : null,
+});
+
 const getMessageMailboxState = async (input: {
   organizationId: string;
   senderAddress: string;
@@ -99,18 +150,7 @@ const getMessageMailboxState = async (input: {
       userId: input.userId,
     }),
   ]);
-  const canManageTeam = membership.role
-    .split(",")
-    .map((part) => part.trim().toLowerCase())
-    .some((part) => part === "admin" || part === "owner");
-
-  return {
-    canCreateMailbox: !senderMailbox && canManageTeam,
-    canManageMailbox: senderMailbox?.provider === "managed" && canManageTeam,
-    includedInMailbox:
-      senderMailbox?.provider === "managed" ? senderMailbox.includeApiSentMessages : false,
-    mailboxId: senderMailbox?.provider === "managed" ? senderMailbox.id : null,
-  };
+  return toApiMessageMailboxState(senderMailbox, canManageOrganization(membership.role));
 };
 
 const toMessageListItem = async (
@@ -118,16 +158,19 @@ const toMessageListItem = async (
   options: {
     attachmentCount?: number;
     includeApiSource?: boolean;
+    mailboxState?: ApiMessageMailboxState | null;
     userId: string;
   },
 ): Promise<MessageListItem> => {
-  const mailboxState = options.includeApiSource
-    ? await getMessageMailboxState({
-        organizationId: record.organizationId,
-        senderAddress: record.senderAddress,
-        userId: options.userId,
-      })
-    : null;
+  const mailboxState =
+    options.mailboxState ??
+    (options.includeApiSource
+      ? await getMessageMailboxState({
+          organizationId: record.organizationId,
+          senderAddress: record.senderAddress,
+          userId: options.userId,
+        })
+      : null);
 
   return {
     apiSource: mailboxState
@@ -293,7 +336,7 @@ export const listOrganizationApiMailMessages = async (input: {
   if (!organizationId) {
     throw new ORPCError("NOT_FOUND", { message: "API mailbox not found." });
   }
-  await assertUserOrganizationMember({ organizationId, userId: input.userId });
+  const membership = await assertUserOrganizationMember({ organizationId, userId: input.userId });
   if (input.category !== "sent") {
     return { messages: [], resultSizeEstimate: 0 };
   }
@@ -347,6 +390,28 @@ export const listOrganizationApiMailMessages = async (input: {
   const attachmentCountByMessageId = new Map(
     attachmentCounts.map((record) => [record.messageId, Number(record.count)]),
   );
+  const mailboxRows =
+    pageRecords.length === 0
+      ? []
+      : await db
+          .select({
+            emailAddress: mailbox.emailAddress,
+            id: mailbox.id,
+            includeApiSentMessages: mailbox.includeApiSentMessages,
+            provider: mailbox.provider,
+          })
+          .from(mailbox)
+          .where(
+            and(
+              eq(mailbox.organizationId, organizationId),
+              inArray(
+                mailbox.emailAddress,
+                Array.from(new Set(pageRecords.map((record) => record.senderAddress))),
+              ),
+            ),
+          );
+  const mailboxBySenderAddress = new Map(mailboxRows.map((row) => [row.emailAddress, row]));
+  const canManageTeam = canManageOrganization(membership.role);
 
   return {
     messages: await Promise.all(
@@ -354,6 +419,10 @@ export const listOrganizationApiMailMessages = async (input: {
         toMessageListItem(record, {
           attachmentCount: attachmentCountByMessageId.get(record.id) ?? 0,
           includeApiSource: true,
+          mailboxState: toApiMessageMailboxState(
+            mailboxBySenderAddress.get(record.senderAddress) ?? null,
+            canManageTeam,
+          ),
           userId: input.userId,
         }),
       ),
@@ -447,15 +516,36 @@ export const backfillApiMessagesForManagedMailbox = async (input: {
         eq(organizationApiMailMessage.senderAddress, targetMailbox.emailAddress),
       ),
     )
-    .orderBy(asc(organizationApiMailMessage.sentAt));
+    .orderBy(asc(organizationApiMailMessage.sentAt))
+    .limit(API_MESSAGE_BACKFILL_LIMIT);
+  if (records.length === 0) return;
+
+  const attachments = await db
+    .select()
+    .from(organizationApiMailAttachment)
+    .where(
+      and(
+        eq(organizationApiMailAttachment.organizationId, targetMailbox.organizationId),
+        inArray(
+          organizationApiMailAttachment.messageId,
+          records.map((record) => record.id),
+        ),
+      ),
+    );
+  const attachmentsByMessageId = new Map<
+    string,
+    Array<typeof organizationApiMailAttachment.$inferSelect>
+  >();
+  for (const attachment of attachments) {
+    const messageAttachments = attachmentsByMessageId.get(attachment.messageId) ?? [];
+    messageAttachments.push(attachment);
+    attachmentsByMessageId.set(attachment.messageId, messageAttachments);
+  }
 
   for (const record of records) {
-    const attachments = await db
-      .select()
-      .from(organizationApiMailAttachment)
-      .where(eq(organizationApiMailAttachment.messageId, record.id));
+    const messageAttachments = attachmentsByMessageId.get(record.id) ?? [];
     await recordOutboundManagedMessageForSender({
-      attachments: attachments.map((attachment) => ({
+      attachments: messageAttachments.map((attachment) => ({
         contentId: attachment.contentId,
         fileName: attachment.fileName,
         inline: attachment.inline,
@@ -498,16 +588,7 @@ export const createManagedMailboxForApiMessage = async (input: {
     userId: input.userId,
   });
 
-  const [existingMailbox] = await db
-    .select({ id: mailbox.id, provider: mailbox.provider })
-    .from(mailbox)
-    .where(
-      and(
-        eq(mailbox.organizationId, organizationId),
-        eq(mailbox.emailAddress, record.senderAddress),
-      ),
-    )
-    .limit(1);
+  const existingMailbox = await findMailboxByAddress(organizationId, record.senderAddress);
   if (existingMailbox?.provider === "managed") {
     await db
       .update(mailbox)
@@ -531,6 +612,21 @@ export const createManagedMailboxForApiMessage = async (input: {
     includeApiSentMessages: true,
     organizationId,
     userId: input.userId,
+  }).catch(async (error) => {
+    if (!isMailboxEmailUniqueError(error)) throw error;
+
+    const racedMailbox = await findMailboxByAddress(organizationId, record.senderAddress);
+    if (racedMailbox?.provider !== "managed") {
+      throw new ORPCError("CONFLICT", {
+        message: "A mailbox with this address already exists.",
+      });
+    }
+
+    await db
+      .update(mailbox)
+      .set({ includeApiSentMessages: true, updatedAt: new Date() })
+      .where(eq(mailbox.id, racedMailbox.id));
+    return { mailboxId: racedMailbox.id };
   });
   await backfillApiMessagesForManagedMailbox({
     mailboxId: created.mailboxId,

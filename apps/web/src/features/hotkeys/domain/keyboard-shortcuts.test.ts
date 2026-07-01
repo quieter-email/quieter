@@ -15,7 +15,7 @@ describe("keyboard shortcuts registry", () => {
 
       const keys = shortcut.sequence
         ? [shortcut.sequence.map(bindingKey).join(" ")]
-        : shortcut.keys;
+        : shortcut.keys.map(bindingKey);
       return keys.map((key) => `${shortcut.scope}:${key}`);
     });
 

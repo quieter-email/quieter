@@ -1,5 +1,4 @@
 import { ORPCError } from "@orpc/server";
-import { auth } from "@quieter/auth";
 import { db } from "@quieter/database/client";
 import {
   connectorCredential,
@@ -329,6 +328,7 @@ export const completeConnectorOAuth = async (input: {
   headers: Headers;
   state: string;
 }) => {
+  const { auth } = await import("@quieter/auth");
   const session = await auth.api.getSession({ headers: input.headers });
   if (!session?.user || !session.session) {
     throw new ORPCError("UNAUTHORIZED", { message: "Sign in before connecting this account." });
@@ -365,6 +365,7 @@ export const completeConnectorOAuth = async (input: {
     .select({
       encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
       id: connectorCredential.id,
+      providerAccountId: connectorCredential.providerAccountId,
     })
     .from(connectorCredential)
     .where(
@@ -374,6 +375,12 @@ export const completeConnectorOAuth = async (input: {
       ),
     )
     .limit(1);
+  if (existingCredential && existingCredential.providerAccountId !== tokenInfo.sub) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: `Reconnect ${connectorDefinitions[oauthState.provider].displayName} with the same Google account, or disconnect it first.`,
+    });
+  }
+
   const encryptedRefreshToken = tokenResponse.refresh_token
     ? encryptConnectorSecret(tokenResponse.refresh_token)
     : existingCredential?.encryptedRefreshToken;
@@ -721,7 +728,15 @@ export const addIcsAttachmentToGoogleCalendar = async (input: {
     });
   }
 
-  const parsedEvent = parseIcsToGoogleCalendarEvent(decodeBase64UrlText(attachment.data));
+  const parsedEvent = (() => {
+    try {
+      return parseIcsToGoogleCalendarEvent(decodeBase64UrlText(attachment.data));
+    } catch {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "This calendar invitation could not be imported.",
+      });
+    }
+  })();
   const importedEvent = await runAuthorizedConnector(
     {
       provider: GOOGLE_CALENDAR_CONNECTOR_PROVIDER,

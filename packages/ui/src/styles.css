@@ -61,11 +61,17 @@
   --shadow-elevation-sm: 0 4px 12px -4px hsl(0 0% 0% / 0.06);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
+  --keyboard-focus-destructive-ring-shadow: color-mix(
+    in oklab,
+    var(--destructive) 30%,
+    transparent
+  );
   --keyboard-focus-ring-shadow: color-mix(in oklab, var(--ring) 36%, transparent);
 }
 
 @supports not (color: color-mix(in oklab, black, transparent)) {
   :root {
+    --keyboard-focus-destructive-ring-shadow: var(--destructive);
     --keyboard-focus-ring-shadow: var(--ring);
   }
 }
@@ -221,9 +227,19 @@
   }
 
   :root[data-keyboard-focus="true"] .keyboard-focus-ring:focus,
-  :root[data-keyboard-focus="true"] .keyboard-focus-within:focus-within {
+  :root[data-keyboard-focus="true"] .keyboard-focus-within:focus-within,
+  .keyboard-focus-ring:focus-visible,
+  .keyboard-focus-within:has(:focus-visible) {
     border-color: var(--ring);
     box-shadow: 0 0 0 2px var(--keyboard-focus-ring-shadow);
+  }
+
+  :root[data-keyboard-focus="true"] .keyboard-focus-ring[aria-invalid="true"]:focus,
+  :root[data-keyboard-focus="true"] .keyboard-focus-within:has([aria-invalid="true"]):focus-within,
+  .keyboard-focus-ring[aria-invalid="true"]:focus-visible,
+  .keyboard-focus-within:has([aria-invalid="true"]:focus-visible) {
+    border-color: var(--destructive);
+    box-shadow: 0 0 0 2px var(--keyboard-focus-destructive-ring-shadow);
   }
 
   @supports (corner-shape: squircle) {

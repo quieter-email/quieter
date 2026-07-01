@@ -26,6 +26,18 @@ const AUTH_ERROR_MESSAGES: Record<AuthErrorKey, string> = {
   signup_disabled: "No account exists for that Google account. Sign up first to create one.",
 };
 
+const normalizeAuthReturnTo = (returnTo?: string) => {
+  if (!returnTo) return "/";
+
+  try {
+    const url = new URL(returnTo, "https://quieter.local");
+    if (url.origin !== "https://quieter.local") return "/";
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return "/";
+  }
+};
+
 const isAuthErrorKey = (key: string): key is AuthErrorKey => key in AUTH_ERROR_MESSAGES;
 
 type AuthNavigate = ReturnType<(typeof authRouteApi)["useNavigate"]>;
@@ -76,7 +88,7 @@ const AuthCredentials = ({
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   const isSignup = mode === "signup";
-  const callbackUrl = returnTo ?? "/";
+  const callbackUrl = normalizeAuthReturnTo(returnTo);
 
   const ensureTermsAccepted = () => {
     if (!isSignup || termsAccepted) {
@@ -101,8 +113,8 @@ const AuthCredentials = ({
   const errorCallbackParams = new URLSearchParams({
     mode: isSignup ? "signup" : "login",
   });
-  if (returnTo) {
-    errorCallbackParams.set("returnTo", returnTo);
+  if (callbackUrl !== "/") {
+    errorCallbackParams.set("returnTo", callbackUrl);
   }
   const errorCallbackHref =
     typeof globalThis.window !== "undefined"

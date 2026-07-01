@@ -23,7 +23,8 @@
     "./gmail-live-sync-token": "./src/gmail-live-sync-token.ts",
     "./gmail-credential-rotation": "./src/gmail-credential-rotation.ts",
     "./gmail-pubsub": "./src/gmail-sync/service.ts",
-    "./stream-chat-run": "./src/stream-chat-run.ts"
+    "./stream-chat-run": "./src/stream-chat-run.ts",
+    "./waitlist": "./src/waitlist.ts"
   },
   "scripts": {
     "fmt": "oxfmt --config ../../oxfmt.json .",

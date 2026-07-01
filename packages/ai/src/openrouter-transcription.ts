@@ -8,6 +8,8 @@ type OpenRouterTranscriptionOptions = {
   format: OpenRouterAudioFormat;
 };
 
+const OPENROUTER_TRANSCRIPTION_TIMEOUT_MS = 60_000;
+
 const openRouterTranscriptionResponseSchema = z.object({
   text: z.string(),
   usage: z
@@ -71,6 +73,7 @@ export const createOpenRouterTranscriptionAdapter = (
             "X-Title": "quieter",
           },
           method: "POST",
+          signal: AbortSignal.timeout(OPENROUTER_TRANSCRIPTION_TIMEOUT_MS),
         });
 
         if (!response.ok) {

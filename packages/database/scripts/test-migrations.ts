@@ -22,6 +22,7 @@ if (!databaseUrl) {
 }
 
 assertLocalDatabaseUrl(databaseUrl, "quieter_migration_test");
+process.env.DATABASE_URL = databaseUrl;
 const sql = postgres(databaseUrl, { max: 1 });
 const temporaryDirectory = mkdtempSync(join(packageDirectory, ".migration-test-"));
 

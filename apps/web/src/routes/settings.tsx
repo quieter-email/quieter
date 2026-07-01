@@ -33,7 +33,6 @@ export const Route = createFileRoute("/settings")({
     }),
   ),
   ssr: "data-only",
-  staleTime: Number.POSITIVE_INFINITY,
   loader: async () => {
     const user = await getSessionUser();
 

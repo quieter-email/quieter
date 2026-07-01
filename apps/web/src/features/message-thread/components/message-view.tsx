@@ -868,7 +868,7 @@ export const MessageView = ({
     },
   });
   const { data: usefulDetails = [] } = useQuery(
-    gmailThreadUsefulDetailsQueryOptions(mailboxId, message.threadId, mailboxProvider !== "api"),
+    gmailThreadUsefulDetailsQueryOptions(mailboxId, message.threadId, mailboxProvider === "gmail"),
   );
   const createApiMailboxMutation = useMutation({
     ...orpc.mail.createManagedMailboxForApiMessage.mutationOptions(),
@@ -1009,7 +1009,9 @@ export const MessageView = ({
             "Conversation marked as Read.",
           );
         },
-        options: { enabled: !isActionPending && activeMailbox !== "drafts" },
+        options: {
+          enabled: !isActionPending && mailboxProvider !== "api" && activeMailbox !== "drafts",
+        },
       },
       {
         hotkey: "Shift+U",
@@ -1020,7 +1022,9 @@ export const MessageView = ({
             "Conversation marked as Unread.",
           );
         },
-        options: { enabled: !isActionPending && activeMailbox !== "drafts" },
+        options: {
+          enabled: !isActionPending && mailboxProvider !== "api" && activeMailbox !== "drafts",
+        },
       },
       {
         hotkey: "U",
@@ -1069,7 +1073,7 @@ export const MessageView = ({
       return;
     }
 
-    if (isActionPending || autoMarkedThreadIds.has(message.threadId)) {
+    if (mailboxProvider === "api" || isActionPending || autoMarkedThreadIds.has(message.threadId)) {
       return;
     }
 
@@ -1078,7 +1082,14 @@ export const MessageView = ({
     Promise.resolve(mailboxActions.markThreadAsRead(message.threadId)).catch(() => {
       autoMarkedThreadIds.delete(message.threadId);
     });
-  }, [autoMarkedThreadIds, isActionPending, mailboxActions, message.threadId, threadIsUnread]);
+  }, [
+    autoMarkedThreadIds,
+    isActionPending,
+    mailboxActions,
+    mailboxProvider,
+    message.threadId,
+    threadIsUnread,
+  ]);
 
   return (
     <article className="w-full">

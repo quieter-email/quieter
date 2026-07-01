@@ -168,7 +168,7 @@ export const ChatComposer = ({
                 <Button
                   aria-label="Send"
                   className="shrink-0 transition-opacity"
-                  disabled={disabled || busy || !input.trim()}
+                  disabled={disabled || busy || audioActive || !input.trim()}
                   size="icon"
                   type="submit"
                   variant="ghost"
