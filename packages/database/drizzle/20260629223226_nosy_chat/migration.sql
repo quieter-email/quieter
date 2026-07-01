@@ -1,0 +1,3 @@
+ALTER TABLE "managedMailMessage" ADD COLUMN "mailboxState" text DEFAULT 'active' NOT NULL;--> statement-breakpoint
+CREATE INDEX "managed_mail_message_mailbox_state_sent_at_idx" ON "managedMailMessage" ("mailboxId","mailboxState","sentAt");--> statement-breakpoint
+ALTER TABLE "managedMailMessage" ADD CONSTRAINT "managed_mail_message_mailbox_state_check" CHECK ("mailboxState" in ('active', 'spam', 'trash'));

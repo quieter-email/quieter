@@ -10,7 +10,6 @@ export const generateChatTitle = async ({
 }) => {
   const title = await chat({
     adapter: createOpenRouterAdapter("openai/gpt-5-nano"),
-    maxTokens: 24,
     messages: [
       {
         content: `<chat_request>\n${prompt}\n</chat_request>`,
@@ -19,6 +18,7 @@ export const generateChatTitle = async ({
     ],
     middleware,
     modelOptions: {
+      maxCompletionTokens: 24,
       reasoning: {
         effort: "minimal",
       },

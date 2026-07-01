@@ -16,9 +16,12 @@ import {
 import { defineRelations } from "drizzle-orm/relations";
 
 export type MailDomainStatus = "failed" | "pending_dns" | "verified";
+export type ConnectorConnectionStatus = "connected" | "needs_reconnect";
+export type ConnectorProvider = "google_calendar";
 export type MailboxConnectionStatus = "connected" | "needs_reconnect";
 export type MailboxGrantRole = "manager" | "reader" | "responder";
 export type MailboxProvider = "gmail" | "managed";
+export type MailboxAccessSource = "direct" | "division";
 export type GmailDeliveryStatus =
   | "delayed"
   | "delivered"
@@ -42,9 +45,17 @@ export type GmailUsefulDetailKind =
   | "verification_code";
 export type GmailUsefulDetailRelevanceSource = "explicit" | "inferred";
 export type GmailUsefulDetailFeedbackSignal = "not_useful" | "useful";
+export type MailAutomationAgent = "auto_label" | "useful_detail";
+export type MailAutoLabelFeedbackSignal = "added" | "removed";
 export type ManagedMailDirection = "inbound" | "outbound";
+export type ManagedMailMailboxState = "active" | "spam" | "trash";
 export type ManagedMailRawObjectProvider = "r2" | "s3";
-export type ManagedMailLabelAssignmentSource = "backfill" | "inherited" | "manual" | "rule";
+export type ManagedMailLabelAssignmentSource =
+  | "ai_auto_label"
+  | "backfill"
+  | "inherited"
+  | "manual"
+  | "rule";
 export type ManagedMailRuleBackfillStatus =
   | "cancelled"
   | "completed"
@@ -57,6 +68,7 @@ export type ManagedMailHeader = {
   name: string;
   value: string;
 };
+export type OrganizationApiMailHeader = ManagedMailHeader;
 export type BillingPlan = "managed" | "pro";
 export type BillingProvider = "polar";
 export type BillingScope = "team";
@@ -263,6 +275,54 @@ export const invitation = pgTable(
   ],
 );
 
+export const organizationDivision = pgTable(
+  "organizationDivision",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    normalizedName: text("normalizedName").notNull(),
+    description: text("description"),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    index("organization_division_organization_position_idx").on(
+      table.organizationId,
+      table.position,
+    ),
+    unique("organization_division_organization_name_unique").on(
+      table.organizationId,
+      table.normalizedName,
+    ),
+  ],
+);
+
+export const organizationDivisionMember = pgTable(
+  "organizationDivisionMember",
+  {
+    id: text("id").primaryKey(),
+    divisionId: text("divisionId")
+      .notNull()
+      .references(() => organizationDivision.id, { onDelete: "cascade" }),
+    memberId: text("memberId")
+      .notNull()
+      .references(() => member.id, { onDelete: "cascade" }),
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => [
+    index("organization_division_member_division_id_idx").on(table.divisionId),
+    index("organization_division_member_member_id_idx").on(table.memberId),
+    unique("organization_division_member_division_member_unique").on(
+      table.divisionId,
+      table.memberId,
+    ),
+  ],
+);
+
 export const mailbox = pgTable(
   "mailbox",
   {
@@ -278,7 +338,11 @@ export const mailbox = pgTable(
       .references(() => organization.id, {
         onDelete: "cascade",
       }),
+    divisionId: text("divisionId").references(() => organizationDivision.id, {
+      onDelete: "set null",
+    }),
     status: text("status").$type<MailboxConnectionStatus>().notNull().default("connected"),
+    includeApiSentMessages: boolean("includeApiSentMessages").notNull().default(false),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
   },
@@ -295,6 +359,7 @@ export const mailbox = pgTable(
     check("mailbox_status_check", sql`${table.status} in ('connected', 'needs_reconnect')`),
     index("mailbox_owner_user_id_idx").on(table.ownerUserId),
     index("mailbox_organization_id_idx").on(table.organizationId),
+    index("mailbox_division_id_idx").on(table.divisionId),
     unique("mailbox_email_address_unique").on(table.emailAddress),
   ],
 );
@@ -314,6 +379,36 @@ export const gmailCredential = pgTable(
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [unique("gmail_credential_google_subject_unique").on(table.googleSubject)],
+);
+
+export const connectorCredential = pgTable(
+  "connectorCredential",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    provider: text("provider").$type<ConnectorProvider>().notNull(),
+    providerAccountId: text("providerAccountId").notNull(),
+    accountEmail: text("accountEmail"),
+    displayName: text("displayName"),
+    encryptedAccessToken: text("encryptedAccessToken"),
+    encryptedRefreshToken: text("encryptedRefreshToken"),
+    accessTokenExpiresAt: timestamp("accessTokenExpiresAt"),
+    scopes: text("scopes").notNull(),
+    status: text("status").$type<ConnectorConnectionStatus>().notNull().default("connected"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check("connector_credential_provider_check", sql`${table.provider} in ('google_calendar')`),
+    check(
+      "connector_credential_status_check",
+      sql`${table.status} in ('connected', 'needs_reconnect')`,
+    ),
+    index("connector_credential_user_id_idx").on(table.userId),
+    unique("connector_credential_user_provider_unique").on(table.userId, table.provider),
+  ],
 );
 
 export const gmailLabel = pgTable(
@@ -547,6 +642,77 @@ export const gmailUsefulDetailFeedback = pgTable(
   ],
 );
 
+export const mailboxAutomationSettings = pgTable("mailboxAutomationSettings", {
+  mailboxId: text("mailboxId")
+    .primaryKey()
+    .references(() => mailbox.id, { onDelete: "cascade" }),
+  autoLabelEnabled: boolean("autoLabelEnabled").notNull().default(false),
+  usefulDetailsEnabled: boolean("usefulDetailsEnabled").notNull().default(false),
+  createdAt: timestamp("createdAt").notNull(),
+  updatedAt: timestamp("updatedAt").notNull(),
+});
+
+export const mailAutomationMemoryProfile = pgTable(
+  "mailAutomationMemoryProfile",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    agent: text("agent").$type<MailAutomationAgent>().notNull(),
+    profile: jsonb("profile").$type<unknown>().notNull(),
+    revision: integer("revision").notNull().default(1),
+    lastMergedAt: timestamp("lastMergedAt").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "mail_automation_memory_profile_agent_check",
+      sql`${table.agent} in ('auto_label', 'useful_detail')`,
+    ),
+    index("mail_automation_memory_profile_mailbox_agent_idx").on(table.mailboxId, table.agent),
+    unique("mail_automation_memory_profile_mailbox_agent_unique").on(table.mailboxId, table.agent),
+  ],
+);
+
+export const mailAutoLabelFeedback = pgTable(
+  "mailAutoLabelFeedback",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    provider: text("provider").$type<MailboxProvider>().notNull(),
+    providerMessageId: text("providerMessageId").notNull(),
+    labelId: text("labelId").notNull(),
+    labelName: text("labelName"),
+    signal: text("signal").$type<MailAutoLabelFeedbackSignal>().notNull(),
+    source: text("source"),
+    createdByUserId: text("createdByUserId").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "mail_auto_label_feedback_provider_check",
+      sql`${table.provider} in ('gmail', 'managed')`,
+    ),
+    check("mail_auto_label_feedback_signal_check", sql`${table.signal} in ('added', 'removed')`),
+    index("mail_auto_label_feedback_profile_idx").on(
+      table.mailboxId,
+      table.labelId,
+      table.source,
+      table.signal,
+    ),
+    unique("mail_auto_label_feedback_message_label_unique").on(
+      table.mailboxId,
+      table.providerMessageId,
+      table.labelId,
+    ),
+  ],
+);
+
 export const gmailOAuthState = pgTable(
   "gmailOAuthState",
   {
@@ -568,6 +734,26 @@ export const gmailOAuthState = pgTable(
   (table) => [
     index("gmail_oauth_state_user_id_idx").on(table.userId),
     index("gmail_oauth_state_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
+export const connectorOAuthState = pgTable(
+  "connectorOAuthState",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    provider: text("provider").$type<ConnectorProvider>().notNull(),
+    codeVerifier: text("codeVerifier").notNull(),
+    returnTo: text("returnTo").notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => [
+    check("connector_oauth_state_provider_check", sql`${table.provider} in ('google_calendar')`),
+    index("connector_oauth_state_user_id_idx").on(table.userId),
+    index("connector_oauth_state_expires_at_idx").on(table.expiresAt),
   ],
 );
 
@@ -593,6 +779,31 @@ export const mailboxGrant = pgTable(
   ],
 );
 
+export const mailboxDivisionGrant = pgTable(
+  "mailboxDivisionGrant",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    divisionId: text("divisionId")
+      .notNull()
+      .references(() => organizationDivision.id, { onDelete: "cascade" }),
+    role: text("role").$type<MailboxGrantRole>().notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "mailbox_division_grant_role_check",
+      sql`${table.role} in ('reader', 'responder', 'manager')`,
+    ),
+    index("mailbox_division_grant_mailbox_id_idx").on(table.mailboxId),
+    index("mailbox_division_grant_division_id_idx").on(table.divisionId),
+    unique("mailbox_division_grant_mailbox_division_unique").on(table.mailboxId, table.divisionId),
+  ],
+);
+
 export const managedMailMessage = pgTable(
   "managedMailMessage",
   {
@@ -601,6 +812,7 @@ export const managedMailMessage = pgTable(
       .notNull()
       .references(() => mailbox.id, { onDelete: "cascade" }),
     direction: text("direction").$type<ManagedMailDirection>().notNull(),
+    mailboxState: text("mailboxState").$type<ManagedMailMailboxState>().notNull().default("active"),
     providerMessageId: text("providerMessageId").notNull(),
     threadId: text("threadId").notNull(),
     messageHeaderId: text("messageHeaderId"),
@@ -638,12 +850,21 @@ export const managedMailMessage = pgTable(
       sql`${table.direction} in ('inbound', 'outbound')`,
     ),
     check(
+      "managed_mail_message_mailbox_state_check",
+      sql`${table.mailboxState} in ('active', 'spam', 'trash')`,
+    ),
+    check(
       "managed_mail_message_raw_object_provider_check",
       sql`${table.rawObjectProvider} is null or ${table.rawObjectProvider} in ('r2', 's3')`,
     ),
     index("managed_mail_message_mailbox_direction_sent_at_idx").on(
       table.mailboxId,
       table.direction,
+      table.sentAt,
+    ),
+    index("managed_mail_message_mailbox_state_sent_at_idx").on(
+      table.mailboxId,
+      table.mailboxState,
       table.sentAt,
     ),
     index("managed_mail_message_mailbox_thread_id_idx").on(table.mailboxId, table.threadId),
@@ -666,6 +887,80 @@ export const managedMailMessage = pgTable(
       table.mailboxId,
       table.providerMessageId,
     ),
+  ],
+);
+
+export const organizationApiMailMessage = pgTable(
+  "organizationApiMailMessage",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    providerMessageId: text("providerMessageId").notNull(),
+    messageHeaderId: text("messageHeaderId"),
+    from: text("from").notNull(),
+    fromNormalized: text("fromNormalized").notNull().default(""),
+    senderAddress: text("senderAddress").notNull(),
+    to: text("to"),
+    toNormalized: text("toNormalized").notNull().default(""),
+    cc: text("cc"),
+    ccNormalized: text("ccNormalized").notNull().default(""),
+    bcc: text("bcc"),
+    bccNormalized: text("bccNormalized").notNull().default(""),
+    replyTo: text("replyTo"),
+    subject: text("subject"),
+    snippet: text("snippet"),
+    bodyHtml: text("bodyHtml"),
+    bodyText: text("bodyText"),
+    searchText: text("searchText").notNull().default(""),
+    headers: jsonb("headers").$type<OrganizationApiMailHeader[]>().notNull().default([]),
+    rawSizeBytes: integer("rawSizeBytes"),
+    sentAt: timestamp("sentAt").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    index("organization_api_mail_message_org_sent_at_idx").on(
+      table.organizationId,
+      table.sentAt,
+      table.id,
+    ),
+    index("organization_api_mail_message_org_sender_idx").on(
+      table.organizationId,
+      table.senderAddress,
+    ),
+    unique("organization_api_mail_message_org_provider_unique").on(
+      table.organizationId,
+      table.providerMessageId,
+    ),
+  ],
+);
+
+export const organizationApiMailAttachment = pgTable(
+  "organizationApiMailAttachment",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    messageId: text("messageId")
+      .notNull()
+      .references(() => organizationApiMailMessage.id, { onDelete: "cascade" }),
+    fileName: text("fileName").notNull(),
+    normalizedFileName: text("normalizedFileName").notNull().default(""),
+    mimeType: text("mimeType").notNull(),
+    size: integer("size").notNull(),
+    inline: boolean("inline").notNull().default(false),
+    contentId: text("contentId"),
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => [
+    index("organization_api_mail_attachment_org_name_idx").on(
+      table.organizationId,
+      table.normalizedFileName,
+    ),
+    index("organization_api_mail_attachment_message_idx").on(table.messageId),
   ],
 );
 
@@ -790,7 +1085,7 @@ export const managedMailMessageLabel = pgTable(
   (table) => [
     check(
       "managed_mail_message_label_source_check",
-      sql`${table.source} in ('manual', 'rule', 'inherited', 'backfill')`,
+      sql`${table.source} in ('manual', 'rule', 'inherited', 'backfill', 'ai_auto_label')`,
     ),
     index("managed_mail_message_label_mailbox_label_idx").on(table.mailboxId, table.labelId),
     index("managed_mail_message_label_message_idx").on(table.messageId),
@@ -1251,6 +1546,8 @@ export const tables = {
   chat,
   chatMessage,
   chatRun,
+  connectorCredential,
+  connectorOAuthState,
   user,
   organization,
   session,
@@ -1260,6 +1557,8 @@ export const tables = {
   rateLimitBucket,
   member,
   invitation,
+  organizationDivision,
+  organizationDivisionMember,
   gmailCredential,
   gmailAutoLabelEvent,
   gmailAutoLabelSettings,
@@ -1267,10 +1566,14 @@ export const tables = {
   gmailUsefulDetailEvent,
   gmailUsefulDetailFeedback,
   gmailUsefulDetailSettings,
+  mailAutomationMemoryProfile,
+  mailAutoLabelFeedback,
+  mailboxAutomationSettings,
   gmailLabel,
   gmailOAuthState,
   gmailWatchState,
   mailbox,
+  mailboxDivisionGrant,
   mailboxGrant,
   managedMailAttachment,
   managedMailLabel,
@@ -1281,6 +1584,8 @@ export const tables = {
   managedMailRuleBackfill,
   managedMailSavedView,
   mailDomain,
+  organizationApiMailAttachment,
+  organizationApiMailMessage,
   organizationMailUsageAlertEvent,
   organizationMailSendIdempotency,
   organizationMailUsageEvent,
@@ -1300,6 +1605,14 @@ export const authRelations = defineRelations(tables, (r) => ({
       to: r.billingCreditUsageEvent.userId,
     }),
     chats: r.many.chat({ from: r.user.id, to: r.chat.userId }),
+    connectorCredentials: r.many.connectorCredential({
+      from: r.user.id,
+      to: r.connectorCredential.userId,
+    }),
+    connectorOAuthStates: r.many.connectorOAuthState({
+      from: r.user.id,
+      to: r.connectorOAuthState.userId,
+    }),
     invitations: r.many.invitation({ from: r.user.id, to: r.invitation.inviterId }),
     gmailOAuthStates: r.many.gmailOAuthState({
       from: r.user.id,
@@ -1376,9 +1689,21 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.organization.id,
       to: r.invitation.organizationId,
     }),
+    divisions: r.many.organizationDivision({
+      from: r.organization.id,
+      to: r.organizationDivision.organizationId,
+    }),
     mailboxes: r.many.mailbox({ from: r.organization.id, to: r.mailbox.organizationId }),
     mailDomains: r.many.mailDomain({ from: r.organization.id, to: r.mailDomain.organizationId }),
     members: r.many.member({ from: r.organization.id, to: r.member.organizationId }),
+    organizationApiMailAttachments: r.many.organizationApiMailAttachment({
+      from: r.organization.id,
+      to: r.organizationApiMailAttachment.organizationId,
+    }),
+    organizationApiMailMessages: r.many.organizationApiMailMessage({
+      from: r.organization.id,
+      to: r.organizationApiMailMessage.organizationId,
+    }),
     organizationMailUsageEvents: r.many.organizationMailUsageEvent({
       from: r.organization.id,
       to: r.organizationMailUsageEvent.organizationId,
@@ -1416,6 +1741,20 @@ export const authRelations = defineRelations(tables, (r) => ({
       optional: false,
     }),
   },
+  connectorCredential: {
+    user: r.one.user({
+      from: r.connectorCredential.userId,
+      to: r.user.id,
+      optional: false,
+    }),
+  },
+  connectorOAuthState: {
+    user: r.one.user({
+      from: r.connectorOAuthState.userId,
+      to: r.user.id,
+      optional: false,
+    }),
+  },
   passkey: {
     user: r.one.user({
       from: r.passkey.userId,
@@ -1424,6 +1763,10 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
   },
   member: {
+    divisionMemberships: r.many.organizationDivisionMember({
+      from: r.member.id,
+      to: r.organizationDivisionMember.memberId,
+    }),
     organization: r.one.organization({
       from: r.member.organizationId,
       to: r.organization.id,
@@ -1444,6 +1787,37 @@ export const authRelations = defineRelations(tables, (r) => ({
     organization: r.one.organization({
       from: r.invitation.organizationId,
       to: r.organization.id,
+      optional: false,
+    }),
+  },
+  organizationDivision: {
+    organization: r.one.organization({
+      from: r.organizationDivision.organizationId,
+      to: r.organization.id,
+      optional: false,
+    }),
+    members: r.many.organizationDivisionMember({
+      from: r.organizationDivision.id,
+      to: r.organizationDivisionMember.divisionId,
+    }),
+    mailboxes: r.many.mailbox({
+      from: r.organizationDivision.id,
+      to: r.mailbox.divisionId,
+    }),
+    mailboxGrants: r.many.mailboxDivisionGrant({
+      from: r.organizationDivision.id,
+      to: r.mailboxDivisionGrant.divisionId,
+    }),
+  },
+  organizationDivisionMember: {
+    division: r.one.organizationDivision({
+      from: r.organizationDivisionMember.divisionId,
+      to: r.organizationDivision.id,
+      optional: false,
+    }),
+    member: r.one.member({
+      from: r.organizationDivisionMember.memberId,
+      to: r.member.id,
       optional: false,
     }),
   },
@@ -1475,6 +1849,19 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.mailbox.id,
       to: r.gmailUsefulDetail.mailboxId,
     }),
+    automationSettings: r.one.mailboxAutomationSettings({
+      from: r.mailbox.id,
+      to: r.mailboxAutomationSettings.mailboxId,
+      optional: true,
+    }),
+    automationMemoryProfiles: r.many.mailAutomationMemoryProfile({
+      from: r.mailbox.id,
+      to: r.mailAutomationMemoryProfile.mailboxId,
+    }),
+    autoLabelFeedback: r.many.mailAutoLabelFeedback({
+      from: r.mailbox.id,
+      to: r.mailAutoLabelFeedback.mailboxId,
+    }),
     gmailCredential: r.one.gmailCredential({
       from: r.mailbox.id,
       to: r.gmailCredential.mailboxId,
@@ -1485,6 +1872,15 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.mailbox.id,
       to: r.gmailWatchState.mailboxId,
       optional: true,
+    }),
+    division: r.one.organizationDivision({
+      from: r.mailbox.divisionId,
+      to: r.organizationDivision.id,
+      optional: true,
+    }),
+    divisionGrants: r.many.mailboxDivisionGrant({
+      from: r.mailbox.id,
+      to: r.mailboxDivisionGrant.mailboxId,
     }),
     grants: r.many.mailboxGrant({ from: r.mailbox.id, to: r.mailboxGrant.mailboxId }),
     managedMessages: r.many.managedMailMessage({
@@ -1567,6 +1963,32 @@ export const authRelations = defineRelations(tables, (r) => ({
       optional: false,
     }),
   },
+  mailboxAutomationSettings: {
+    mailbox: r.one.mailbox({
+      from: r.mailboxAutomationSettings.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+  },
+  mailAutomationMemoryProfile: {
+    mailbox: r.one.mailbox({
+      from: r.mailAutomationMemoryProfile.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+  },
+  mailAutoLabelFeedback: {
+    mailbox: r.one.mailbox({
+      from: r.mailAutoLabelFeedback.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+    user: r.one.user({
+      from: r.mailAutoLabelFeedback.createdByUserId,
+      to: r.user.id,
+      optional: true,
+    }),
+  },
   gmailLabel: {
     mailbox: r.one.mailbox({
       from: r.gmailLabel.mailboxId,
@@ -1610,6 +2032,18 @@ export const authRelations = defineRelations(tables, (r) => ({
       optional: false,
     }),
   },
+  mailboxDivisionGrant: {
+    division: r.one.organizationDivision({
+      from: r.mailboxDivisionGrant.divisionId,
+      to: r.organizationDivision.id,
+      optional: false,
+    }),
+    mailbox: r.one.mailbox({
+      from: r.mailboxDivisionGrant.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+  },
   managedMailMessage: {
     attachments: r.many.managedMailAttachment({
       from: r.managedMailMessage.id,
@@ -1634,6 +2068,29 @@ export const authRelations = defineRelations(tables, (r) => ({
     message: r.one.managedMailMessage({
       from: r.managedMailAttachment.messageId,
       to: r.managedMailMessage.id,
+      optional: false,
+    }),
+  },
+  organizationApiMailMessage: {
+    attachments: r.many.organizationApiMailAttachment({
+      from: r.organizationApiMailMessage.id,
+      to: r.organizationApiMailAttachment.messageId,
+    }),
+    organization: r.one.organization({
+      from: r.organizationApiMailMessage.organizationId,
+      to: r.organization.id,
+      optional: false,
+    }),
+  },
+  organizationApiMailAttachment: {
+    message: r.one.organizationApiMailMessage({
+      from: r.organizationApiMailAttachment.messageId,
+      to: r.organizationApiMailMessage.id,
+      optional: false,
+    }),
+    organization: r.one.organization({
+      from: r.organizationApiMailAttachment.organizationId,
+      to: r.organization.id,
       optional: false,
     }),
   },

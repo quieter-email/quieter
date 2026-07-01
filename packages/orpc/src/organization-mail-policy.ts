@@ -1,5 +1,6 @@
-import { db, mailDomain } from "@quieter/database";
-import { extractMailAddress } from "@quieter/mail/compose";
+import { db } from "@quieter/database/client";
+import { mailDomain } from "@quieter/database/schema";
+import { extractMailAddress } from "@quieter/mail/compose/schema";
 import { and, eq } from "drizzle-orm";
 
 export class OrganizationMailSendError extends Error {

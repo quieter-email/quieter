@@ -1,13 +1,13 @@
-import type { ChatModel } from "@quieter/ai";
+import type { ChatModel } from "@quieter/ai/chat-models";
+import { db } from "@quieter/database/client";
 import {
   chat,
   chatMessage,
   chatRun,
-  db,
   type ChatMessagePart,
   type ChatMessageStatus,
   type ChatRunStatus,
-} from "@quieter/database";
+} from "@quieter/database/schema";
 import { and, desc, eq, gt, inArray } from "drizzle-orm";
 import { ACTIVE_CHAT_RUN_STATUSES } from "./chat-run-stream";
 

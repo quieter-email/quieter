@@ -1,19 +1,19 @@
+import type { ChatMiddleware } from "@tanstack/ai";
 import {
-  classifyGmailMessage,
+  classifyMailMessage,
   GMAIL_AUTO_LABEL_MODEL,
-  type ChatMiddleware,
-  type GmailAutoLabelCandidate,
-} from "@quieter/ai";
+  type MailAutoLabelCandidate,
+} from "@quieter/ai/classify-gmail-message";
 import { reportAiUsage } from "@quieter/billing";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
+import { db } from "@quieter/database/client";
 import {
-  db,
   gmailAutoLabelEvent,
-  gmailAutoLabelSettings,
   gmailUsefulDetailSettings,
   gmailWatchState,
+  mailboxAutomationSettings,
   mailbox,
-} from "@quieter/database";
+} from "@quieter/database/schema";
 import {
   getGmailProfile,
   getMessageWithDetails,
@@ -35,6 +35,7 @@ import {
   processGmailUsefulDetailMessage,
   reportPendingGmailUsefulDetailUsage,
 } from "../gmail-useful-details/service";
+import { loadAutomationMemoryPrompt } from "../mail-automation/memory";
 
 const WATCH_RENEWAL_INTERVAL_MS = 1000 * 60 * 60 * 20;
 const WATCH_EXPIRATION_BUFFER_MS = 1000 * 60 * 60 * 48;
@@ -52,7 +53,8 @@ const AUTO_LABEL_EXCLUDED_LABELS = new Set<string>([
 
 type AutoLabelContext = {
   availableLabelIds: Set<string>;
-  labels: GmailAutoLabelCandidate[];
+  labels: MailAutoLabelCandidate[];
+  memoryProfile: string | null;
 };
 
 const getErrorMessage = (error: unknown) =>
@@ -324,8 +326,9 @@ const processAutoLabelMessage = async ({
           completionTokens += usage.completionTokens;
         },
       };
-      const labelIds = await classifyGmailMessage({
+      const labelIds = await classifyMailMessage({
         labels: autoLabelContext.labels,
+        memoryProfile: autoLabelContext.memoryProfile,
         message,
         middleware: [usageMiddleware],
       });
@@ -607,11 +610,14 @@ const processMailboxHistory = async ({
 
   try {
     await runAuthorizedGmailMailbox({ mailboxId, userId }, async (accessToken) => {
-      const [[autoLabelSettings], [usefulDetailsSettings]] = await Promise.all([
+      const [[automationSettings], [usefulDetailsSettings]] = await Promise.all([
         db
-          .select({ enabled: gmailAutoLabelSettings.enabled })
-          .from(gmailAutoLabelSettings)
-          .where(eq(gmailAutoLabelSettings.mailboxId, mailboxId))
+          .select({
+            autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
+            usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
+          })
+          .from(mailboxAutomationSettings)
+          .where(eq(mailboxAutomationSettings.mailboxId, mailboxId))
           .limit(1),
         db
           .select({ enabled: gmailUsefulDetailSettings.enabled })
@@ -619,13 +625,14 @@ const processMailboxHistory = async ({
           .where(eq(gmailUsefulDetailSettings.mailboxId, mailboxId))
           .limit(1),
       ]);
-      const autoLabelEnabled = autoLabelSettings?.enabled ?? false;
-      const usefulDetailsEnabled = usefulDetailsSettings?.enabled ?? false;
+      const autoLabelEnabled = automationSettings?.autoLabelEnabled ?? false;
+      const usefulDetailsEnabled =
+        automationSettings?.usefulDetailsEnabled ?? usefulDetailsSettings?.enabled ?? false;
       let autoLabelContextPromise: Promise<AutoLabelContext> | null = null;
       const getAutoLabelContext = () => {
         autoLabelContextPromise ??= listLabels(accessToken)
           .then((labels) => syncGmailLabels(mailboxId, labels))
-          .then((gmailLabels) => {
+          .then(async (gmailLabels) => {
             const labels = gmailLabels
               .filter((label) => label.type === "user")
               .map((label) => ({
@@ -638,6 +645,10 @@ const processMailboxHistory = async ({
             return {
               availableLabelIds: new Set(labels.map((label) => label.id)),
               labels,
+              memoryProfile: await loadAutomationMemoryPrompt({
+                agent: "auto_label",
+                mailboxId,
+              }),
             };
           });
 

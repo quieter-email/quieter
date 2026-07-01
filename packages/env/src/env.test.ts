@@ -14,6 +14,23 @@ const requiredSstEnvironment = {
   POLAR_ACCESS_TOKEN: "polar-token",
 };
 
+const completeProductionSstEnvironment = {
+  ...requiredSstEnvironment,
+  CONNECTOR_TOKEN_ENCRYPTION_KEY: "connector-encryption-secret",
+  GOOGLE_CALENDAR_CLIENT_ID: "calendar-client-id",
+  GOOGLE_CALENDAR_CLIENT_SECRET: "calendar-client-secret",
+  GMAIL_PUBSUB_PUSH_AUDIENCE: "https://example.com/gmail",
+  GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: "gmail@example.iam.gserviceaccount.com",
+  GMAIL_PUBSUB_SUBSCRIPTION: "projects/example/subscriptions/gmail",
+  GMAIL_PUBSUB_TOPIC: "projects/example/topics/gmail",
+  POLAR_PRODUCT_MANAGED_ID: "managed-product",
+  POLAR_PRODUCT_PRO_ID: "pro-product",
+  R2_ACCESS_KEY_ID: "r2-access-key",
+  R2_ACCOUNT_ID: "r2-account",
+  R2_BUCKET: "r2-bucket",
+  R2_SECRET_ACCESS_KEY: "r2-secret",
+};
+
 describe("server environment", () => {
   test("normalizes defaults and boolean strings", () => {
     const env = createServerEnv({
@@ -100,19 +117,41 @@ describe("SST environment", () => {
     ).toThrow("GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT is required in production");
   });
 
-  test("requires Polar product configuration in production", () => {
+  test("rejects partial connector configuration", () => {
     expect(() =>
       createSstEnv(
-        { production: true },
+        { production: false },
         {
           ...requiredSstEnvironment,
-          GMAIL_PUBSUB_PUSH_AUDIENCE: "https://example.com/gmail",
-          GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: "gmail@example.iam.gserviceaccount.com",
-          GMAIL_PUBSUB_SUBSCRIPTION: "projects/example/subscriptions/gmail",
-          GMAIL_PUBSUB_TOPIC: "projects/example/topics/gmail",
+          GOOGLE_CALENDAR_CLIENT_ID: "calendar-client-id",
         },
       ),
-    ).toThrow("Polar product configuration is required in production");
+    ).toThrow("Connector configuration is incomplete");
+  });
+
+  test("requires connector configuration in production", () => {
+    const {
+      CONNECTOR_TOKEN_ENCRYPTION_KEY: _key,
+      GOOGLE_CALENDAR_CLIENT_ID: _id,
+      GOOGLE_CALENDAR_CLIENT_SECRET: _secret,
+      ...environment
+    } = completeProductionSstEnvironment;
+
+    expect(() => createSstEnv({ production: true }, environment)).toThrow(
+      "Connector configuration is required in production",
+    );
+  });
+
+  test("requires Polar product configuration in production", () => {
+    const {
+      POLAR_PRODUCT_MANAGED_ID: _managed,
+      POLAR_PRODUCT_PRO_ID: _pro,
+      ...environment
+    } = completeProductionSstEnvironment;
+
+    expect(() => createSstEnv({ production: true }, environment)).toThrow(
+      "Polar product configuration is required in production",
+    );
   });
 });
 

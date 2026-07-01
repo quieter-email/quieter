@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/server";
-import { db, gmailCredential, mailbox } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { gmailCredential, mailbox } from "@quieter/database/schema";
 import { requireServerEnv, serverEnv } from "@quieter/env/server";
 import { isGmailServiceError } from "@quieter/gmail";
 import { and, eq, isNull } from "drizzle-orm";
@@ -125,6 +126,10 @@ const refreshGmailAccessToken = async (record: {
   id: string;
 }) => {
   if (!record.encryptedRefreshToken) {
+    await db
+      .update(mailbox)
+      .set({ status: "needs_reconnect", updatedAt: new Date() })
+      .where(eq(mailbox.id, record.id));
     throw getGmailRepairRequiredError(record);
   }
 

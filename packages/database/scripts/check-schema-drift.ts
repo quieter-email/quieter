@@ -2,6 +2,7 @@ import { cpSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { exitOnKitError, generate } from "./drizzle-kit";
 
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
 const migrationsDirectory = join(packageDirectory, "drizzle");
@@ -16,26 +17,12 @@ try {
       .map((entry) => entry.name),
   );
 
-  const generationProcess = Bun.spawn(
-    [
-      "bunx",
-      "drizzle-kit",
-      "generate",
-      "--dialect=postgresql",
-      "--schema=src/schema.ts",
-      `--out=${temporaryMigrationsDirectory}`,
-    ],
-    {
-      cwd: packageDirectory,
-      stderr: "inherit",
-      stdout: "inherit",
-    },
-  );
-
-  const exitCode = await generationProcess.exited;
-  if (exitCode !== 0) {
-    globalThis.process.exit(exitCode);
-  }
+  const response = await generate({
+    dialect: "postgresql",
+    schema: "./src/schema.ts",
+    out: temporaryMigrationsDirectory,
+  });
+  exitOnKitError(response);
 
   const generatedMigrations = readdirSync(temporaryMigrationsDirectory, {
     withFileTypes: true,

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 import { assertLocalDatabaseUrl } from "./database-url";
+import { runKitMigrate } from "./drizzle-kit";
 
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
 const migrationsDirectory = join(packageDirectory, "drizzle");
@@ -23,22 +24,6 @@ if (!databaseUrl) {
 assertLocalDatabaseUrl(databaseUrl, "quieter_migration_test");
 const sql = postgres(databaseUrl, { max: 1 });
 const temporaryDirectory = mkdtempSync(join(packageDirectory, ".migration-test-"));
-
-const runMigrations = async (configPath = join(packageDirectory, "drizzle.config.ts")) => {
-  const process = Bun.spawn(["bunx", "drizzle-kit", "migrate", `--config=${configPath}`], {
-    cwd: packageDirectory,
-    env: {
-      ...globalThis.process.env,
-      DATABASE_URL: databaseUrl,
-    },
-    stderr: "inherit",
-    stdout: "inherit",
-  });
-
-  if ((await process.exited) !== 0) {
-    throw new Error("Drizzle migration command failed");
-  }
-};
 
 const resetDatabase = async () => {
   await sql`DROP SCHEMA IF EXISTS drizzle CASCADE`;
@@ -66,10 +51,10 @@ const assertMigrationHistory = async () => {
 
 try {
   await resetDatabase();
-  await runMigrations();
+  await runKitMigrate();
   await assertMigrationHistory();
 
-  await runMigrations();
+  await runKitMigrate();
   await assertMigrationHistory();
 
   await resetDatabase();
@@ -93,8 +78,8 @@ export default defineConfig({
 `,
   );
 
-  await runMigrations(temporaryConfigPath);
-  await runMigrations();
+  await runKitMigrate(temporaryConfigPath);
+  await runKitMigrate();
   await assertMigrationHistory();
 } finally {
   await sql.end();

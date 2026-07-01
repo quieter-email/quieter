@@ -1,7 +1,9 @@
-import { db, mailbox, managedMailAttachment, managedMailMessage } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { mailbox, managedMailAttachment, managedMailMessage } from "@quieter/database/schema";
 import { parseRawMailMessage, type ParsedRawMailMessage } from "@quieter/mail/raw-message";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
+import { processManagedMailAutomation } from "../automation";
 import { inheritManagedThreadLabels } from "../labels/repository";
 import { applyManagedRulesToMessage } from "../rules/evaluator";
 import {
@@ -164,6 +166,10 @@ export const recordInboundManagedMessage = async (input: {
           threadId: inserted.threadId,
         });
         await applyManagedRulesToMessage({
+          mailboxId: inserted.mailboxId,
+          messageId: inserted.id,
+        });
+        await processManagedMailAutomation({
           mailboxId: inserted.mailboxId,
           messageId: inserted.id,
         });

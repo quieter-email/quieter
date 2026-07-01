@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/server";
-import { db, user } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { user } from "@quieter/database/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import type { MailboxListItem } from "../../mailbox/types";
@@ -14,8 +15,13 @@ import {
 import { setGmailUsefulDetails } from "../../gmail-useful-details/settings";
 import {
   createManagedMailbox,
+  getManagedMailboxDetails,
+  listManagedMailboxAdministration,
+  removeManagedMailboxDivisionGrant,
   removeManagedMailboxGrant,
+  setManagedMailboxDivisionGrant,
   setManagedMailboxGrant,
+  updateManagedMailbox,
 } from "../../mailbox/managed-grants";
 import {
   applyMailboxSwitcherOrder,
@@ -29,6 +35,10 @@ import {
   moveGmailMailbox,
   startGmailOAuth,
 } from "../../mailbox/service";
+import {
+  backfillApiMessagesForManagedMailbox,
+  createManagedMailboxForApiMessage,
+} from "../../organization-api-mail";
 import { mailboxIdSchema, mailboxSwitcherOrderSchema, protectedProcedure } from "../base";
 
 export const mailboxProcedures = {
@@ -120,13 +130,56 @@ export const mailboxProcedures = {
   createManagedMailbox: protectedProcedure
     .input(
       z.object({
+        divisionId: z.string().trim().min(1).nullable().optional(),
         displayName: z.string().trim().max(120).nullable().optional(),
         emailAddress: z.string().trim().email(),
+        includeApiSentMessages: z.boolean().optional(),
         organizationId: z.string().trim().min(1),
       }),
     )
     .handler(async ({ context, input }) =>
       createManagedMailbox({ ...input, userId: context.userId }),
+    ),
+  getManagedMailboxDetails: protectedProcedure
+    .route({ method: "GET" })
+    .input(z.object({ mailboxId: mailboxIdSchema }))
+    .handler(async ({ context, input }) =>
+      getManagedMailboxDetails({ ...input, userId: context.userId }),
+    ),
+  listManagedMailboxAdministration: protectedProcedure
+    .route({ method: "GET" })
+    .input(z.object({ organizationId: z.string().trim().min(1) }))
+    .handler(async ({ context, input }) =>
+      listManagedMailboxAdministration({ ...input, userId: context.userId }),
+    ),
+  updateManagedMailbox: protectedProcedure
+    .input(
+      z.object({
+        displayName: z.string().trim().max(120).nullable().optional(),
+        divisionId: z.string().trim().min(1).nullable().optional(),
+        includeApiSentMessages: z.boolean().optional(),
+        mailboxId: mailboxIdSchema,
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      const result = await updateManagedMailbox({ ...input, userId: context.userId });
+      if (input.includeApiSentMessages) {
+        await backfillApiMessagesForManagedMailbox({
+          mailboxId: input.mailboxId,
+          userId: context.userId,
+        });
+      }
+      return result;
+    }),
+  createManagedMailboxForApiMessage: protectedProcedure
+    .input(
+      z.object({
+        mailboxId: mailboxIdSchema,
+        messageId: z.string().trim().min(1),
+      }),
+    )
+    .handler(async ({ context, input }) =>
+      createManagedMailboxForApiMessage({ ...input, userId: context.userId }),
     ),
   setManagedMailboxGrant: protectedProcedure
     .input(
@@ -157,6 +210,27 @@ export const mailboxProcedures = {
         targetUserId: input.userId,
         userId: context.userId,
       }),
+    ),
+  setManagedMailboxDivisionGrant: protectedProcedure
+    .input(
+      z.object({
+        divisionId: z.string().trim().min(1),
+        mailboxId: mailboxIdSchema,
+        role: z.enum(["reader", "responder", "manager"]),
+      }),
+    )
+    .handler(async ({ context, input }) =>
+      setManagedMailboxDivisionGrant({ ...input, userId: context.userId }),
+    ),
+  removeManagedMailboxDivisionGrant: protectedProcedure
+    .input(
+      z.object({
+        divisionId: z.string().trim().min(1),
+        mailboxId: mailboxIdSchema,
+      }),
+    )
+    .handler(async ({ context, input }) =>
+      removeManagedMailboxDivisionGrant({ ...input, userId: context.userId }),
     ),
   setDefaultMailbox: protectedProcedure
     .input(z.object({ mailboxId: mailboxIdSchema.nullable() }))

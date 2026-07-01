@@ -7,13 +7,14 @@ import {
   estimateOutboundOrganizationMailUsage,
   recordOrganizationMailUsage,
 } from "@quieter/billing/organization-mail-usage";
+import { db } from "@quieter/database/client";
 import {
-  db,
   mailbox,
   managedMailAttachment,
   managedMailMessage,
   managedMailMessageLabel,
-} from "@quieter/database";
+  type ManagedMailMailboxState,
+} from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import {
   MAILBOX_LABELS,
@@ -23,12 +24,12 @@ import {
   type MessageListItem,
   type ThreadMessagesResult,
 } from "@quieter/gmail";
+import { buildMimeMessage } from "@quieter/mail/compose/mime";
 import {
-  buildMimeMessage,
   composeMessageInputSchema,
   extractMailAddress,
   splitMailAddressList,
-} from "@quieter/mail/compose";
+} from "@quieter/mail/compose/schema";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
 import { and, asc, count, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -50,6 +51,30 @@ type ComposeMessageInput = z.infer<typeof composeMessageInputSchema>;
 const MANAGED_MESSAGE_PAGE_SIZE = 50;
 
 const normalizeEmailAddress = (value: string) => value.trim().toLowerCase();
+
+const getManagedSystemLabelIds = (message: {
+  direction: "inbound" | "outbound";
+  isRead: boolean;
+  mailboxState: ManagedMailMailboxState;
+}) => [
+  message.mailboxState === "trash"
+    ? MAILBOX_LABELS.trash
+    : message.mailboxState === "spam"
+      ? MAILBOX_LABELS.spam
+      : message.direction === "inbound"
+        ? MAILBOX_LABELS.inbox
+        : MAILBOX_LABELS.sent,
+  ...(!message.isRead ? [MAILBOX_LABELS.unread] : []),
+];
+
+export const getManagedMessageLabelIds = (
+  message: {
+    direction: "inbound" | "outbound";
+    isRead: boolean;
+    mailboxState: ManagedMailMailboxState;
+  },
+  customLabelIds: string[] = [],
+) => [...getManagedSystemLabelIds(message), ...customLabelIds];
 
 const getAwsRegion = () => {
   const region = serverEnv.AWS_REGION || serverEnv.AWS_DEFAULT_REGION;
@@ -87,11 +112,7 @@ const toMessageListItem = async (
   inReplyTo: record.inReplyTo ?? undefined,
   internalDate: String(record.sentAt.getTime()),
   isUnread: !record.isRead,
-  labelIds: [
-    record.direction === "inbound" ? MAILBOX_LABELS.inbox : MAILBOX_LABELS.sent,
-    ...(!record.isRead ? [MAILBOX_LABELS.unread] : []),
-    ...(options.labelIds ?? []),
-  ],
+  labelIds: getManagedMessageLabelIds(record, options.labelIds),
   messageHeaderId: record.messageHeaderId ?? undefined,
   references: record.references ?? undefined,
   replyTo: record.replyTo ?? undefined,
@@ -105,11 +126,27 @@ const toMessageListItem = async (
 });
 
 const getCategoryCondition = (category: MailboxCategory) => {
-  if (category === "inbox") return eq(managedMailMessage.direction, "inbound");
-  if (category === "unread") {
-    return and(eq(managedMailMessage.direction, "inbound"), eq(managedMailMessage.isRead, false));
+  if (category === "inbox") {
+    return and(
+      eq(managedMailMessage.direction, "inbound"),
+      eq(managedMailMessage.mailboxState, "active"),
+    );
   }
-  if (category === "sent") return eq(managedMailMessage.direction, "outbound");
+  if (category === "unread") {
+    return and(
+      eq(managedMailMessage.direction, "inbound"),
+      eq(managedMailMessage.isRead, false),
+      eq(managedMailMessage.mailboxState, "active"),
+    );
+  }
+  if (category === "sent") {
+    return and(
+      eq(managedMailMessage.direction, "outbound"),
+      eq(managedMailMessage.mailboxState, "active"),
+    );
+  }
+  if (category === "spam") return eq(managedMailMessage.mailboxState, "spam");
+  if (category === "trash") return eq(managedMailMessage.mailboxState, "trash");
   return null;
 };
 
@@ -446,11 +483,6 @@ export const refreshManagedMessages = async (input: {
   };
 };
 
-const getManagedMessageLabelIds = (direction: "inbound" | "outbound", read: boolean) => [
-  direction === "inbound" ? MAILBOX_LABELS.inbox : MAILBOX_LABELS.sent,
-  ...(!read ? [MAILBOX_LABELS.unread] : []),
-];
-
 export const setManagedMessageReadState = async (input: {
   mailboxId: string;
   messageId: string;
@@ -462,7 +494,10 @@ export const setManagedMessageReadState = async (input: {
     userId: input.userId,
   });
   const [record] = await db
-    .select({ direction: managedMailMessage.direction })
+    .select({
+      direction: managedMailMessage.direction,
+      mailboxState: managedMailMessage.mailboxState,
+    })
     .from(managedMailMessage)
     .where(
       and(
@@ -492,10 +527,10 @@ export const setManagedMessageReadState = async (input: {
   return {
     id: input.messageId,
     isUnread: !input.read,
-    labelIds: [
-      ...getManagedMessageLabelIds(record.direction, input.read),
-      ...customLabels.map((assignment) => assignment.labelId),
-    ],
+    labelIds: getManagedMessageLabelIds(
+      { ...record, isRead: input.read },
+      customLabels.map((assignment) => assignment.labelId),
+    ),
   };
 };
 
@@ -513,6 +548,7 @@ export const setManagedThreadReadState = async (input: {
     .select({
       direction: managedMailMessage.direction,
       id: managedMailMessage.id,
+      mailboxState: managedMailMessage.mailboxState,
     })
     .from(managedMailMessage)
     .where(
@@ -557,10 +593,132 @@ export const setManagedThreadReadState = async (input: {
     messages: records.map((record) => ({
       id: record.id,
       isUnread: !input.read,
-      labelIds: [
-        ...getManagedMessageLabelIds(record.direction, input.read),
-        ...(labelIdsByMessageId.get(record.id) ?? []),
-      ],
+      labelIds: getManagedMessageLabelIds(
+        { ...record, isRead: input.read },
+        labelIdsByMessageId.get(record.id) ?? [],
+      ),
+    })),
+    threadId: input.threadId,
+  };
+};
+
+export const setManagedMessageMailboxState = async (input: {
+  mailboxId: string;
+  messageId: string;
+  state: ManagedMailMailboxState;
+  userId: string;
+}) => {
+  await getAuthorizedManagedMailbox({
+    mailboxId: input.mailboxId,
+    requiredRoles: ["manager", "responder"],
+    userId: input.userId,
+  });
+  const [record] = await db
+    .select({
+      direction: managedMailMessage.direction,
+      id: managedMailMessage.id,
+      isRead: managedMailMessage.isRead,
+    })
+    .from(managedMailMessage)
+    .where(
+      and(
+        eq(managedMailMessage.mailboxId, input.mailboxId),
+        eq(managedMailMessage.id, input.messageId),
+      ),
+    )
+    .limit(1);
+  if (!record) {
+    throw new ORPCError("NOT_FOUND", { message: "Message not found." });
+  }
+
+  await db
+    .update(managedMailMessage)
+    .set({ mailboxState: input.state, updatedAt: new Date() })
+    .where(
+      and(
+        eq(managedMailMessage.mailboxId, input.mailboxId),
+        eq(managedMailMessage.id, input.messageId),
+      ),
+    );
+  const customLabels = await db
+    .select({ labelId: managedMailMessageLabel.labelId })
+    .from(managedMailMessageLabel)
+    .where(eq(managedMailMessageLabel.messageId, input.messageId));
+
+  return {
+    id: input.messageId,
+    isUnread: !record.isRead,
+    labelIds: getManagedMessageLabelIds(
+      { ...record, mailboxState: input.state },
+      customLabels.map((assignment) => assignment.labelId),
+    ),
+  };
+};
+
+export const setManagedThreadMailboxState = async (input: {
+  mailboxId: string;
+  state: ManagedMailMailboxState;
+  threadId: string;
+  userId: string;
+}) => {
+  await getAuthorizedManagedMailbox({
+    mailboxId: input.mailboxId,
+    requiredRoles: ["manager", "responder"],
+    userId: input.userId,
+  });
+  const records = await db
+    .select({
+      direction: managedMailMessage.direction,
+      id: managedMailMessage.id,
+      isRead: managedMailMessage.isRead,
+    })
+    .from(managedMailMessage)
+    .where(
+      and(
+        eq(managedMailMessage.mailboxId, input.mailboxId),
+        eq(managedMailMessage.threadId, input.threadId),
+      ),
+    );
+  if (records.length === 0) {
+    throw new ORPCError("NOT_FOUND", { message: "Message thread not found." });
+  }
+
+  await db
+    .update(managedMailMessage)
+    .set({ mailboxState: input.state, updatedAt: new Date() })
+    .where(
+      and(
+        eq(managedMailMessage.mailboxId, input.mailboxId),
+        eq(managedMailMessage.threadId, input.threadId),
+      ),
+    );
+  const customLabels = await db
+    .select({
+      labelId: managedMailMessageLabel.labelId,
+      messageId: managedMailMessageLabel.messageId,
+    })
+    .from(managedMailMessageLabel)
+    .where(
+      inArray(
+        managedMailMessageLabel.messageId,
+        records.map((record) => record.id),
+      ),
+    );
+  const labelIdsByMessageId = new Map<string, string[]>();
+  for (const assignment of customLabels) {
+    const labelIds = labelIdsByMessageId.get(assignment.messageId) ?? [];
+    labelIds.push(assignment.labelId);
+    labelIdsByMessageId.set(assignment.messageId, labelIds);
+  }
+
+  return {
+    messages: records.map((record) => ({
+      id: record.id,
+      isUnread: !record.isRead,
+      labelIds: getManagedMessageLabelIds(
+        { ...record, mailboxState: input.state },
+        labelIdsByMessageId.get(record.id) ?? [],
+      ),
     })),
     threadId: input.threadId,
   };
@@ -584,6 +742,7 @@ export const recordOutboundManagedMessageForSender = async (input: {
   providerMessageId: string;
   rawSizeBytes?: number | null;
   replyTo?: string[];
+  requireApiSentMessageInclusion?: boolean;
   sender: string;
   senderAddress?: string;
   sentAt?: Date;
@@ -602,6 +761,7 @@ export const recordOutboundManagedMessageForSender = async (input: {
         eq(mailbox.emailAddress, senderAddress),
         eq(mailbox.organizationId, input.organizationId),
         eq(mailbox.provider, "managed"),
+        input.requireApiSentMessageInclusion ? eq(mailbox.includeApiSentMessages, true) : undefined,
       ),
     )
     .limit(1);

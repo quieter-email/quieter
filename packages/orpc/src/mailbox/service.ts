@@ -1,24 +1,32 @@
-import type { MailboxGrantRole } from "@quieter/database";
+import type {
+  MailboxConnectionStatus,
+  MailboxGrantRole,
+  MailboxProvider,
+} from "@quieter/database/schema";
 import { ORPCError } from "@orpc/server";
 import { auth } from "@quieter/auth";
+import { db } from "@quieter/database/client";
 import {
-  db,
-  gmailAutoLabelSettings,
   gmailCredential,
   gmailOAuthState,
-  gmailUsefulDetailSettings,
   mailbox,
+  mailboxAutomationSettings,
+  mailboxDivisionGrant,
   mailboxGrant,
   member,
   organization,
+  organizationApiMailMessage,
+  organizationDivision,
+  organizationDivisionMember,
   user,
-} from "@quieter/database";
+} from "@quieter/database/schema";
 import { getGmailProfile, isGmailServiceError } from "@quieter/gmail";
-import { and, asc, eq, lt } from "drizzle-orm";
+import { and, asc, count, eq, lt } from "drizzle-orm";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { MailboxGroup, MailboxGroupMetadata, MailboxListItem } from "./types";
 import { encryptSecret, getGmailOAuthConfig, GMAIL_SCOPES } from "../gmail-mailbox-access";
+import { getOrganizationApiMailboxId } from "../organization-api-mail";
 
 export {
   GMAIL_SCOPES,
@@ -33,7 +41,12 @@ export {
   MAILBOX_PROVIDER_GMAIL,
   MAILBOX_PROVIDER_MANAGED,
 } from "./access";
-import { MAILBOX_PROVIDER_GMAIL, MAILBOX_PROVIDER_MANAGED } from "./access";
+import {
+  getAuthorizedManagedMailbox,
+  getStrongestMailboxGrantRole,
+  MAILBOX_PROVIDER_GMAIL,
+  MAILBOX_PROVIDER_MANAGED,
+} from "./access";
 
 const GMAIL_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const GOOGLE_AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -99,16 +112,25 @@ const assertOrganizationMembership = async (userId: string, organizationId: stri
 
 const toMailboxListItem = (
   record: {
+    directGrantRole?: MailboxGrantRole | null;
     displayName: string | null;
+    divisionGrantRoles?: Array<{
+      divisionId: string;
+      divisionName: string;
+      role: MailboxGrantRole;
+    }>;
+    divisionId?: string | null;
+    divisionName?: string | null;
     emailAddress: string;
     grantRole: MailboxGrantRole | null;
     gmailAutoLabelEnabled?: boolean | null;
     gmailCredentialMailboxId?: string | null;
     gmailUsefulDetailsEnabled?: boolean | null;
     id: string;
+    includeApiSentMessages?: boolean | null;
     organizationId: string;
     ownerUserId: string | null;
-    provider: "gmail" | "managed";
+    provider: "api" | "gmail" | "managed";
     status: "connected" | "needs_reconnect";
   },
   group: MailboxGroupMetadata,
@@ -117,7 +139,11 @@ const toMailboxListItem = (
     record.provider === MAILBOX_PROVIDER_GMAIL && !record.gmailCredentialMailboxId
       ? "needs_reconnect"
       : record.status,
+  directGrantRole: record.directGrantRole ?? record.grantRole ?? null,
   displayName: record.displayName,
+  divisionGrantRoles: record.divisionGrantRoles ?? [],
+  divisionId: record.divisionId ?? null,
+  divisionName: record.divisionName ?? null,
   emailAddress: record.emailAddress,
   grantRole: record.grantRole,
   gmailAutoLabelEnabled: record.gmailAutoLabelEnabled ?? false,
@@ -126,6 +152,7 @@ const toMailboxListItem = (
   groupKind: group.groupKind,
   groupName: group.groupName,
   id: record.id,
+  includeApiSentMessages: record.includeApiSentMessages ?? false,
   organizationId: record.organizationId,
   ownerUserId: record.ownerUserId,
   provider: record.provider,
@@ -134,84 +161,295 @@ const toMailboxListItem = (
 export const listAccessibleMailboxState = async (input: { userId: string }) => {
   const organizations = await listUserOrganizations(input.userId);
 
-  const [gmailMailboxes, managedMailboxes] = await Promise.all([
-    db
-      .select({
-        displayName: mailbox.displayName,
-        emailAddress: mailbox.emailAddress,
-        gmailAutoLabelEnabled: gmailAutoLabelSettings.enabled,
-        gmailCredentialMailboxId: gmailCredential.mailboxId,
-        gmailUsefulDetailsEnabled: gmailUsefulDetailSettings.enabled,
-        id: mailbox.id,
-        organizationId: mailbox.organizationId,
-        ownerUserId: mailbox.ownerUserId,
-        provider: mailbox.provider,
-        status: mailbox.status,
-      })
-      .from(mailbox)
-      .leftJoin(gmailCredential, eq(gmailCredential.mailboxId, mailbox.id))
-      .leftJoin(gmailAutoLabelSettings, eq(gmailAutoLabelSettings.mailboxId, mailbox.id))
-      .leftJoin(gmailUsefulDetailSettings, eq(gmailUsefulDetailSettings.mailboxId, mailbox.id))
-      .where(
-        and(eq(mailbox.ownerUserId, input.userId), eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)),
-      )
-      .orderBy(asc(mailbox.emailAddress)),
-    db
-      .select({
-        displayName: mailbox.displayName,
-        emailAddress: mailbox.emailAddress,
-        grantRole: mailboxGrant.role,
-        gmailAutoLabelEnabled: gmailAutoLabelSettings.enabled,
-        gmailUsefulDetailsEnabled: gmailUsefulDetailSettings.enabled,
-        id: mailbox.id,
-        organizationId: mailbox.organizationId,
-        ownerUserId: mailbox.ownerUserId,
-        provider: mailbox.provider,
-        status: mailbox.status,
-      })
-      .from(mailboxGrant)
-      .innerJoin(mailbox, eq(mailbox.id, mailboxGrant.mailboxId))
-      .leftJoin(gmailAutoLabelSettings, eq(gmailAutoLabelSettings.mailboxId, mailbox.id))
-      .leftJoin(gmailUsefulDetailSettings, eq(gmailUsefulDetailSettings.mailboxId, mailbox.id))
-      .innerJoin(
-        member,
-        and(eq(member.userId, input.userId), eq(member.organizationId, mailbox.organizationId)),
-      )
-      .where(
-        and(eq(mailboxGrant.userId, input.userId), eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED)),
-      )
-      .orderBy(asc(mailbox.emailAddress)),
-  ]);
-
-  const groups: MailboxGroup[] = organizations.map((organization) => ({
-    id: organization.id,
-    kind: "organization" as const,
-    mailboxes: [
-      ...gmailMailboxes
-        .filter((record) => record.organizationId === organization.id)
-        .map((record) =>
-          toMailboxListItem(
-            { ...record, grantRole: null },
-            {
-              groupId: organization.id,
-              groupKind: "organization",
-              groupName: organization.name,
-            },
+  const [gmailMailboxes, directManagedMailboxes, divisionManagedMailboxes, apiMessageCounts] =
+    await Promise.all([
+      db
+        .select({
+          divisionId: mailbox.divisionId,
+          divisionName: organizationDivision.name,
+          displayName: mailbox.displayName,
+          emailAddress: mailbox.emailAddress,
+          gmailAutoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
+          gmailCredentialMailboxId: gmailCredential.mailboxId,
+          gmailUsefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
+          id: mailbox.id,
+          includeApiSentMessages: mailbox.includeApiSentMessages,
+          organizationId: mailbox.organizationId,
+          ownerUserId: mailbox.ownerUserId,
+          provider: mailbox.provider,
+          status: mailbox.status,
+        })
+        .from(mailbox)
+        .leftJoin(gmailCredential, eq(gmailCredential.mailboxId, mailbox.id))
+        .leftJoin(mailboxAutomationSettings, eq(mailboxAutomationSettings.mailboxId, mailbox.id))
+        .leftJoin(organizationDivision, eq(organizationDivision.id, mailbox.divisionId))
+        .where(
+          and(eq(mailbox.ownerUserId, input.userId), eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)),
+        )
+        .orderBy(asc(mailbox.emailAddress)),
+      db
+        .select({
+          directGrantRole: mailboxGrant.role,
+          divisionId: mailbox.divisionId,
+          divisionName: organizationDivision.name,
+          displayName: mailbox.displayName,
+          emailAddress: mailbox.emailAddress,
+          grantRole: mailboxGrant.role,
+          gmailAutoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
+          gmailUsefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
+          id: mailbox.id,
+          includeApiSentMessages: mailbox.includeApiSentMessages,
+          organizationId: mailbox.organizationId,
+          ownerUserId: mailbox.ownerUserId,
+          provider: mailbox.provider,
+          status: mailbox.status,
+        })
+        .from(mailboxGrant)
+        .innerJoin(mailbox, eq(mailbox.id, mailboxGrant.mailboxId))
+        .leftJoin(mailboxAutomationSettings, eq(mailboxAutomationSettings.mailboxId, mailbox.id))
+        .leftJoin(organizationDivision, eq(organizationDivision.id, mailbox.divisionId))
+        .innerJoin(
+          member,
+          and(eq(member.userId, input.userId), eq(member.organizationId, mailbox.organizationId)),
+        )
+        .where(
+          and(
+            eq(mailboxGrant.userId, input.userId),
+            eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED),
           ),
-        ),
-      ...managedMailboxes
-        .filter((record) => record.organizationId === organization.id)
-        .map((record) =>
-          toMailboxListItem(record, {
-            groupId: organization.id,
+        )
+        .orderBy(asc(mailbox.emailAddress)),
+      db
+        .select({
+          accessDivisionId: organizationDivision.id,
+          accessDivisionName: organizationDivision.name,
+          directGrantRole: mailboxGrant.role,
+          divisionGrantRole: mailboxDivisionGrant.role,
+          divisionId: mailbox.divisionId,
+          divisionName: organizationDivision.name,
+          displayName: mailbox.displayName,
+          emailAddress: mailbox.emailAddress,
+          grantRole: mailboxDivisionGrant.role,
+          gmailAutoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
+          gmailUsefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
+          id: mailbox.id,
+          includeApiSentMessages: mailbox.includeApiSentMessages,
+          organizationId: mailbox.organizationId,
+          ownerUserId: mailbox.ownerUserId,
+          provider: mailbox.provider,
+          status: mailbox.status,
+        })
+        .from(mailboxDivisionGrant)
+        .innerJoin(mailbox, eq(mailbox.id, mailboxDivisionGrant.mailboxId))
+        .innerJoin(
+          organizationDivision,
+          eq(organizationDivision.id, mailboxDivisionGrant.divisionId),
+        )
+        .innerJoin(
+          organizationDivisionMember,
+          eq(organizationDivisionMember.divisionId, organizationDivision.id),
+        )
+        .innerJoin(
+          member,
+          and(
+            eq(member.id, organizationDivisionMember.memberId),
+            eq(member.userId, input.userId),
+            eq(member.organizationId, mailbox.organizationId),
+          ),
+        )
+        .leftJoin(
+          mailboxGrant,
+          and(eq(mailboxGrant.mailboxId, mailbox.id), eq(mailboxGrant.userId, input.userId)),
+        )
+        .leftJoin(mailboxAutomationSettings, eq(mailboxAutomationSettings.mailboxId, mailbox.id))
+        .where(
+          and(
+            eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED),
+            eq(organizationDivision.organizationId, mailbox.organizationId),
+          ),
+        )
+        .orderBy(asc(mailbox.emailAddress)),
+      db
+        .select({
+          count: count(),
+          organizationId: organizationApiMailMessage.organizationId,
+        })
+        .from(organizationApiMailMessage)
+        .groupBy(organizationApiMailMessage.organizationId),
+    ]);
+  const apiMessageCountsByOrganizationId = new Map(
+    apiMessageCounts.map((record) => [record.organizationId, Number(record.count)]),
+  );
+  const divisions = await db
+    .select({ id: organizationDivision.id, name: organizationDivision.name })
+    .from(organizationDivision);
+  const divisionNamesById = new Map(divisions.map((division) => [division.id, division.name]));
+
+  type ManagedMailboxRecord = {
+    directGrantRole: MailboxGrantRole | null;
+    displayName: string | null;
+    divisionGrantRoles: Array<{
+      divisionId: string;
+      divisionName: string;
+      role: MailboxGrantRole;
+    }>;
+    divisionId: string | null;
+    divisionName: string | null;
+    emailAddress: string;
+    grantRole: MailboxGrantRole | null;
+    gmailAutoLabelEnabled: boolean | null;
+    gmailUsefulDetailsEnabled: boolean | null;
+    id: string;
+    includeApiSentMessages: boolean | null;
+    organizationId: string;
+    ownerUserId: string | null;
+    provider: MailboxProvider;
+    status: MailboxConnectionStatus;
+  };
+  const managedMailboxRecords = new Map<string, ManagedMailboxRecord>();
+
+  for (const record of directManagedMailboxes) {
+    managedMailboxRecords.set(record.id, { ...record, divisionGrantRoles: [] });
+  }
+
+  for (const record of divisionManagedMailboxes) {
+    const normalizedRecord = {
+      ...record,
+      divisionName: record.divisionId ? (divisionNamesById.get(record.divisionId) ?? null) : null,
+    };
+    const divisionGrant = {
+      divisionId: normalizedRecord.accessDivisionId,
+      divisionName: normalizedRecord.accessDivisionName,
+      role: normalizedRecord.divisionGrantRole,
+    };
+    const existing = managedMailboxRecords.get(normalizedRecord.id);
+    if (existing) {
+      existing.divisionGrantRoles.push(divisionGrant);
+      existing.grantRole =
+        getStrongestMailboxGrantRole([existing.grantRole, normalizedRecord.divisionGrantRole]) ??
+        normalizedRecord.divisionGrantRole;
+      continue;
+    }
+    managedMailboxRecords.set(normalizedRecord.id, {
+      ...normalizedRecord,
+      grantRole:
+        getStrongestMailboxGrantRole([
+          normalizedRecord.directGrantRole,
+          normalizedRecord.divisionGrantRole,
+        ]) ?? normalizedRecord.divisionGrantRole,
+      divisionGrantRoles: [divisionGrant],
+    });
+  }
+
+  const managedMailboxes = [...managedMailboxRecords.values()].sort((left, right) =>
+    left.emailAddress.localeCompare(right.emailAddress),
+  );
+
+  const groups: MailboxGroup[] = organizations.flatMap((organizationRecord) => {
+    const organizationGmailMailboxes = gmailMailboxes
+      .filter((record) => record.organizationId === organizationRecord.id)
+      .map((record) =>
+        toMailboxListItem(
+          { ...record, directGrantRole: null, grantRole: null },
+          {
+            groupId: organizationRecord.id,
             groupKind: "organization",
-            groupName: organization.name,
-          }),
+            groupName: organizationRecord.name,
+          },
         ),
-    ].sort((left, right) => left.emailAddress.localeCompare(right.emailAddress)),
-    name: organization.name,
-    slug: organization.slug,
-  }));
+      );
+    const organizationManagedMailboxes = managedMailboxes.filter(
+      (record) => record.organizationId === organizationRecord.id,
+    );
+    const divisionIds = Array.from(
+      new Set(
+        organizationManagedMailboxes.flatMap((record) =>
+          record.divisionId && record.divisionName ? [record.divisionId] : [],
+        ),
+      ),
+    );
+    const managedGroups = divisionIds.map((divisionId) => {
+      const divisionName =
+        organizationManagedMailboxes.find((record) => record.divisionId === divisionId)
+          ?.divisionName ?? "Division";
+      return {
+        id: `division:${divisionId}`,
+        kind: "division" as const,
+        mailboxes: organizationManagedMailboxes
+          .filter((record) => record.divisionId === divisionId)
+          .map((record) =>
+            toMailboxListItem(record, {
+              groupId: `division:${divisionId}`,
+              groupKind: "division",
+              groupName: divisionName,
+            }),
+          ),
+        name: divisionName,
+        organizationId: organizationRecord.id,
+        slug: organizationRecord.slug,
+      };
+    });
+    const unassignedMailboxes = organizationManagedMailboxes
+      .filter((record) => !record.divisionId)
+      .map((record) =>
+        toMailboxListItem(record, {
+          groupId: `team:${organizationRecord.id}:unassigned`,
+          groupKind: "unassigned",
+          groupName: "Unassigned",
+        }),
+      );
+    const apiMailboxes =
+      (apiMessageCountsByOrganizationId.get(organizationRecord.id) ?? 0) > 0
+        ? [
+            toMailboxListItem(
+              {
+                displayName: "API messages",
+                emailAddress: "API messages",
+                grantRole: null,
+                id: getOrganizationApiMailboxId(organizationRecord.id),
+                includeApiSentMessages: false,
+                organizationId: organizationRecord.id,
+                ownerUserId: null,
+                provider: "api",
+                status: "connected",
+              },
+              {
+                groupId: organizationRecord.id,
+                groupKind: "organization",
+                groupName: organizationRecord.name,
+              },
+            ),
+          ]
+        : [];
+
+    return [
+      ...(organizationGmailMailboxes.length || apiMailboxes.length
+        ? [
+            {
+              id: organizationRecord.id,
+              kind: "organization" as const,
+              mailboxes: [...apiMailboxes, ...organizationGmailMailboxes],
+              name: organizationRecord.name,
+              organizationId: organizationRecord.id,
+              slug: organizationRecord.slug,
+            },
+          ]
+        : []),
+      ...managedGroups,
+      ...(unassignedMailboxes.length
+        ? [
+            {
+              id: `team:${organizationRecord.id}:unassigned`,
+              kind: "unassigned" as const,
+              mailboxes: unassignedMailboxes,
+              name: "Unassigned",
+              organizationId: organizationRecord.id,
+              slug: organizationRecord.slug,
+            },
+          ]
+        : []),
+    ];
+  });
 
   return { groups };
 };
@@ -237,32 +475,19 @@ export const assertAccessibleMailbox = async (input: { mailboxId: string; userId
     return ownedGmailMailbox;
   }
 
-  const [grantedManagedMailbox] = await db
-    .select({
-      id: mailbox.id,
-      organizationId: mailbox.organizationId,
-      provider: mailbox.provider,
-    })
-    .from(mailboxGrant)
-    .innerJoin(mailbox, eq(mailbox.id, mailboxGrant.mailboxId))
-    .innerJoin(
-      member,
-      and(eq(member.userId, input.userId), eq(member.organizationId, mailbox.organizationId)),
-    )
-    .where(
-      and(
-        eq(mailbox.id, input.mailboxId),
-        eq(mailboxGrant.userId, input.userId),
-        eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED),
-      ),
-    )
-    .limit(1);
-
-  if (!grantedManagedMailbox) {
+  try {
+    const grantedManagedMailbox = await getAuthorizedManagedMailbox(input);
+    return {
+      id: grantedManagedMailbox.id,
+      organizationId: grantedManagedMailbox.organizationId,
+      provider: grantedManagedMailbox.provider,
+    };
+  } catch (error) {
+    if (!(error instanceof ORPCError)) {
+      throw error;
+    }
     throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
   }
-
-  return grantedManagedMailbox;
 };
 
 export const startGmailOAuth = async (input: {

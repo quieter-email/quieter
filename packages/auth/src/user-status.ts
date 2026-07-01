@@ -1,4 +1,5 @@
-import { db, tables } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { tables } from "@quieter/database/schema";
 import { eq, sql } from "drizzle-orm";
 
 export const getAuthUserStatus = async (email: string) => {

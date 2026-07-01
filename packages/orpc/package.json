@@ -18,6 +18,7 @@
     "./router": "./src/routers/index.ts",
     "./chat-generation": "./src/chat/generation/runner.ts",
     "./chat-run-stream": "./src/chat-run-stream.ts",
+    "./connectors": "./src/connectors/service.ts",
     "./gmail-live-sync": "./src/gmail-live-sync.ts",
     "./gmail-live-sync-token": "./src/gmail-live-sync-token.ts",
     "./gmail-credential-rotation": "./src/gmail-credential-rotation.ts",
@@ -42,7 +43,8 @@
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
     "@quieter/gmail": "workspace:*",
-    "@quieter/mail": "workspace:*"
+    "@quieter/mail": "workspace:*",
+    "@tanstack/ai": "catalog:"
   },
   "devDependencies": {
     "@orpc/client": "catalog:",

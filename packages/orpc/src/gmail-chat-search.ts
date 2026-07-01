@@ -5,7 +5,7 @@ import type {
   GmailThreadResult,
   MailboxOverviewResult,
   ModifyMailResult,
-} from "@quieter/ai";
+} from "@quieter/ai/chat-agent";
 import {
   getGmailMessageCount,
   getGmailProfile,

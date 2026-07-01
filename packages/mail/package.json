@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./compose": "./src/compose/index.ts",
+    "./compose/draft-anchor": "./src/compose/draft-anchor.ts",
+    "./compose/mime": "./src/compose/mime.ts",
+    "./compose/schema": "./src/compose/schema.ts",
     "./message-content": "./src/message-content.ts",
     "./mailbox-organization": "./src/mailbox-organization.ts",
     "./raw-message": "./src/raw-message.ts",
@@ -22,7 +23,7 @@
   },
   "dependencies": {
     "@quieter/env": "workspace:*",
-    "postal-mime": "^2.7.4",
+    "postal-mime": "^2.7.5",
     "zod": "catalog:"
   },
   "devDependencies": {

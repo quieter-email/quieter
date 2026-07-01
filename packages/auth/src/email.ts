@@ -1,45 +1,42 @@
+import type { ReactElement } from "react";
 import { serverEnv } from "@quieter/env/server";
+import { MagicLinkEmail, VerificationEmail } from "./emails";
 
 type AuthMailInput = {
-  html?: string;
+  react: ReactElement;
   subject: string;
   text: string;
   to: string;
 };
 
+const SEND_API_PATH = "/api/v1/send";
 const authMailSender = serverEnv.QUIETER_AUTH_MAIL_SENDER;
 
-const getAuthMailApiUrl = () => {
+const getAuthMailBaseUrl = () => {
   const configuredUrl = serverEnv.QUIETER_MAIL_API_URL;
 
   if (configuredUrl) {
-    return configuredUrl;
+    return getBaseUrlFromConfiguredMailUrl(configuredUrl);
   }
 
-  const baseUrl =
+  return (
     serverEnv.BETTER_AUTH_URL ||
     (serverEnv.VERCEL_URL && `https://${serverEnv.VERCEL_URL}`) ||
-    "http://localhost:3000";
-
-  return new URL("/api/v1/send", baseUrl).href;
+    "http://localhost:3000"
+  );
 };
 
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+const getBaseUrlFromConfiguredMailUrl = (value: string) => {
+  const url = new URL(value);
+  const normalizedPath = url.pathname.replace(/\/+$/, "");
 
-const createLinkEmailHtml = (input: { body: string; cta: string; url: string }) => {
-  const safeUrl = escapeHtml(input.url);
+  if (normalizedPath.endsWith(SEND_API_PATH)) {
+    url.pathname = normalizedPath.slice(0, -SEND_API_PATH.length) || "/";
+    url.search = "";
+    url.hash = "";
+  }
 
-  return [
-    `<p>${escapeHtml(input.body)}</p>`,
-    `<p><a href="${safeUrl}">${escapeHtml(input.cta)}</a></p>`,
-    `<p>If the link does not open, paste this URL into your browser:</p>`,
-    `<p>${safeUrl}</p>`,
-  ].join("\n");
+  return url.href;
 };
 
 export const sendAuthMail = async (input: AuthMailInput) => {
@@ -49,60 +46,34 @@ export const sendAuthMail = async (input: AuthMailInput) => {
     throw new Error("QUIETER_MAIL_API_KEY is required to send auth email.");
   }
 
-  const response = await fetch(getAuthMailApiUrl(), {
-    body: JSON.stringify({
-      from: authMailSender,
-      html: input.html,
-      subject: input.subject,
-      text: input.text,
-      to: [input.to],
-    }),
-    headers: {
-      accept: "application/json",
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
-    },
-    method: "POST",
+  const { Quieter, QuieterApiError } = await import("quieter");
+  const quieter = new Quieter({
+    apiKey,
+    baseUrl: getAuthMailBaseUrl(),
   });
 
-  if (!response.ok) {
-    throw new Error(await getMailApiErrorMessage(response));
-  }
-};
-
-const getMailApiErrorMessage = async (response: Response) => {
-  const detail = await getMailApiErrorDetail(response);
-  return [
-    `Could not send auth email. Mail API returned ${response.status}`,
-    response.statusText,
-    detail,
-  ]
-    .filter(Boolean)
-    .join(": ");
-};
-
-const getMailApiErrorDetail = async (response: Response) => {
-  const body = await response.text();
-
-  if (!body) {
-    return null;
-  }
-
   try {
-    const parsed = JSON.parse(body) as { error?: unknown };
-    return typeof parsed.error === "string" ? parsed.error : body;
-  } catch {
-    return body;
+    await quieter.send({
+      from: authMailSender,
+      react: input.react,
+      subject: input.subject,
+      text: input.text,
+      to: input.to,
+    });
+  } catch (error) {
+    if (error instanceof QuieterApiError) {
+      throw new Error(
+        `Could not send auth email. Mail API returned ${error.status}: ${error.message}`,
+      );
+    }
+
+    throw error;
   }
 };
 
 export const sendVerificationEmail = async (input: { email: string; url: string }) => {
   await sendAuthMail({
-    html: createLinkEmailHtml({
-      body: "Confirm this email address to finish setting up Quieter.",
-      cta: "Verify email",
-      url: input.url,
-    }),
+    react: VerificationEmail({ url: input.url }),
     subject: "Verify your Quieter email",
     text: `Confirm this email address to finish setting up Quieter.\n\n${input.url}`,
     to: input.email,
@@ -111,11 +82,7 @@ export const sendVerificationEmail = async (input: { email: string; url: string 
 
 export const sendMagicLinkEmail = async (input: { email: string; url: string }) => {
   await sendAuthMail({
-    html: createLinkEmailHtml({
-      body: "Use this link to sign in to Quieter.",
-      cta: "Sign in",
-      url: input.url,
-    }),
+    react: MagicLinkEmail({ url: input.url }),
     subject: "Sign in to Quieter",
     text: `Use this link to sign in to Quieter.\n\n${input.url}`,
     to: input.email,

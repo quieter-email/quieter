@@ -1,5 +1,6 @@
-import type { MailboxSwitcherOrder } from "@quieter/database";
-import { db, user } from "@quieter/database";
+import type { MailboxSwitcherOrder } from "@quieter/database/schema";
+import { db } from "@quieter/database/client";
+import { user } from "@quieter/database/schema";
 import { eq } from "drizzle-orm";
 import type { MailboxGroup } from "./types";
 

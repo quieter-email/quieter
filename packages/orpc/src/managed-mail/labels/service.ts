@@ -1,20 +1,20 @@
 import { ORPCError } from "@orpc/server";
+import { db } from "@quieter/database/client";
 import {
-  db,
   managedMailLabel,
   managedMailMessage,
   managedMailMessageLabel,
   managedMailRule,
   managedMailSavedView,
-} from "@quieter/database";
-import {
-  mailboxLabelColorSchema,
-  structuredMailSearchSchema,
-  type MailboxLabel,
-} from "@quieter/mail";
+  type ManagedMailMailboxState,
+} from "@quieter/database/schema";
+import { MAILBOX_LABELS } from "@quieter/gmail";
+import { mailboxLabelColorSchema, type MailboxLabel } from "@quieter/mail/mailbox-organization";
+import { structuredMailSearchSchema } from "@quieter/mail/search";
 import { and, asc, countDistinct, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
+import { getManagedMessageLabelIds } from "../messages/service";
 import { normalizeManagedOrganizationName } from "../organization/normalize-name";
 import {
   assertManagedLabelsBelongToMailbox,
@@ -32,6 +32,32 @@ const toMailboxLabel = (record: typeof managedMailLabel.$inferSelect): MailboxLa
   type: "user",
   visible: record.visible,
 });
+
+const MANAGED_SYSTEM_LABEL_IDS = new Set<string>(Object.values(MAILBOX_LABELS));
+
+const getCustomLabelIds = (labelIds: string[] | undefined) =>
+  labelIds?.filter((labelId) => !MANAGED_SYSTEM_LABEL_IDS.has(labelId));
+
+const getMailboxStateFromLabelChanges = (input: {
+  addLabelIds?: string[];
+  removeLabelIds?: string[];
+}): ManagedMailMailboxState | null => {
+  const addLabelIds = new Set(input.addLabelIds ?? []);
+  const removeLabelIds = new Set(input.removeLabelIds ?? []);
+
+  if (addLabelIds.has(MAILBOX_LABELS.trash)) return "trash";
+  if (addLabelIds.has(MAILBOX_LABELS.spam)) return "spam";
+  if (
+    addLabelIds.has(MAILBOX_LABELS.inbox) ||
+    addLabelIds.has(MAILBOX_LABELS.sent) ||
+    removeLabelIds.has(MAILBOX_LABELS.trash) ||
+    removeLabelIds.has(MAILBOX_LABELS.spam)
+  ) {
+    return "active";
+  }
+
+  return null;
+};
 
 export const listManagedLabels = async (input: { mailboxId: string; userId: string }) => {
   await getAuthorizedManagedMailbox(input);
@@ -227,7 +253,12 @@ export const updateManagedThreadLabels = async (input: {
     userId: input.userId,
   });
   const messages = await db
-    .select({ id: managedMailMessage.id, isRead: managedMailMessage.isRead })
+    .select({
+      direction: managedMailMessage.direction,
+      id: managedMailMessage.id,
+      isRead: managedMailMessage.isRead,
+      mailboxState: managedMailMessage.mailboxState,
+    })
     .from(managedMailMessage)
     .where(
       and(
@@ -238,16 +269,41 @@ export const updateManagedThreadLabels = async (input: {
   if (messages.length === 0) {
     throw new ORPCError("NOT_FOUND", { message: "Message thread not found." });
   }
+  const mailboxState = getMailboxStateFromLabelChanges(input);
+  if (mailboxState) {
+    await db
+      .update(managedMailMessage)
+      .set({ mailboxState, updatedAt: new Date() })
+      .where(
+        and(
+          eq(managedMailMessage.mailboxId, input.mailboxId),
+          eq(managedMailMessage.threadId, input.threadId),
+        ),
+      );
+  }
   const updated = await updateManagedMessageLabelAssignments({
     ...input,
+    addLabelIds: getCustomLabelIds(input.addLabelIds),
     messageIds: messages.map((message) => message.id),
+    removeLabelIds: getCustomLabelIds(input.removeLabelIds),
     source: "manual",
   });
+  const messagesById = new Map(messages.map((message) => [message.id, message]));
   return {
-    messages: updated.map((message) => ({
-      ...message,
-      isUnread: !messages.find((record) => record.id === message.id)!.isRead,
-    })),
+    messages: updated.map((message) => {
+      const record = messagesById.get(message.id);
+      if (!record) {
+        throw new ORPCError("INTERNAL_SERVER_ERROR", { message: "Message metadata is missing." });
+      }
+      return {
+        ...message,
+        isUnread: !record.isRead,
+        labelIds: getManagedMessageLabelIds(
+          { ...record, mailboxState: mailboxState ?? record.mailboxState },
+          message.labelIds,
+        ),
+      };
+    }),
     threadId: input.threadId,
   };
 };
@@ -265,7 +321,12 @@ export const updateSingleManagedMessageLabels = async (input: {
     userId: input.userId,
   });
   const [message] = await db
-    .select({ id: managedMailMessage.id, isRead: managedMailMessage.isRead })
+    .select({
+      direction: managedMailMessage.direction,
+      id: managedMailMessage.id,
+      isRead: managedMailMessage.isRead,
+      mailboxState: managedMailMessage.mailboxState,
+    })
     .from(managedMailMessage)
     .where(
       and(
@@ -275,10 +336,31 @@ export const updateSingleManagedMessageLabels = async (input: {
     )
     .limit(1);
   if (!message) throw new ORPCError("NOT_FOUND", { message: "Message not found." });
+  const mailboxState = getMailboxStateFromLabelChanges(input);
+  if (mailboxState) {
+    await db
+      .update(managedMailMessage)
+      .set({ mailboxState, updatedAt: new Date() })
+      .where(
+        and(
+          eq(managedMailMessage.mailboxId, input.mailboxId),
+          eq(managedMailMessage.id, input.messageId),
+        ),
+      );
+  }
   const [updated] = await updateManagedMessageLabelAssignments({
     ...input,
+    addLabelIds: getCustomLabelIds(input.addLabelIds),
     messageIds: [message.id],
+    removeLabelIds: getCustomLabelIds(input.removeLabelIds),
     source: "manual",
   });
-  return { ...updated, isUnread: !message.isRead };
+  return {
+    ...updated,
+    isUnread: !message.isRead,
+    labelIds: getManagedMessageLabelIds(
+      { ...message, mailboxState: mailboxState ?? message.mailboxState },
+      updated.labelIds,
+    ),
+  };
 };

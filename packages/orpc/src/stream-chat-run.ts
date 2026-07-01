@@ -1,4 +1,5 @@
-import { chatMessage, db } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { chatMessage } from "@quieter/database/schema";
 import { eq } from "drizzle-orm";
 import { getAuthorizedChatRun } from "./chat-run-store";
 import {
