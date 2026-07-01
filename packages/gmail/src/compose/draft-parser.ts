@@ -1,4 +1,4 @@
-import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose";
+import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
 import {
   extractInlineMessageAttachments,
   extractMessageAttachments,

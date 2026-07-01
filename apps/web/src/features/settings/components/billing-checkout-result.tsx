@@ -1,6 +1,6 @@
 "use client";
 
-import { toast } from "@quieter/ui";
+import { toast } from "@quieter/ui/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";

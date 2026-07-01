@@ -1,7 +1,8 @@
 import type { SESClient } from "@aws-sdk/client-ses";
 import type { SESv2Client, GetEmailIdentityCommandOutput } from "@aws-sdk/client-sesv2";
 import { ORPCError } from "@orpc/server";
-import { db, member, type MailDomainDnsRecord } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { member, type MailDomainDnsRecord } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
 import { createHash } from "node:crypto";

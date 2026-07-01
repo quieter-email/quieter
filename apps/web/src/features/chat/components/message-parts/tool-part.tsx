@@ -1,7 +1,7 @@
 "use client";
 
 import type { MessagePart } from "@tanstack/ai";
-import { composeEmailInputSchema } from "@quieter/ai";
+import { composeEmailInputSchema } from "@quieter/ai/chat-agent";
 import { useNavigate } from "@tanstack/react-router";
 import { m } from "motion/react";
 import type { GmailSearchToolResult, ModifyMailToolResult, ResolveComposeTool } from "../../types";
@@ -193,6 +193,26 @@ export const ToolPart = ({
             ? (args.target as ModifyMailToolResult["target"])
             : undefined
         }
+      />
+    );
+  }
+
+  if (name === "create_google_calendar_event") {
+    const data = parsed.kind === "google-calendar-event" ? parsed.data : undefined;
+    const summary =
+      data?.status === "success"
+        ? data.summary
+        : typeof args.summary === "string"
+          ? args.summary
+          : undefined;
+
+    return (
+      <ToolStep
+        nested={nested}
+        detail={summary}
+        error={error}
+        label={pending ? "Adding calendar event" : "Added calendar event"}
+        pending={pending}
       />
     );
   }

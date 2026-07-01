@@ -1,22 +1,25 @@
 "use client";
 
-import type { ChatMessagePart } from "@quieter/database";
+import type { ChatMessagePart } from "@quieter/database/schema";
 import type { RouterOutputs } from "@quieter/orpc";
 import type { UIMessage } from "@tanstack/ai";
-import { defaultChatModel, type ChatModel } from "@quieter/ai";
+import { defaultChatModel, type ChatModel } from "@quieter/ai/chat-models";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
-import { Button, toast } from "@quieter/ui";
+import { Button } from "@quieter/ui/button";
+import { toast } from "@quieter/ui/toast";
+import { type UseAudioRecorderReturn, useAudioRecorder } from "@tanstack/ai-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { LayoutGroup } from "motion/react";
 import { type FormEvent, type KeyboardEvent, useRef, useState } from "react";
 import {
   hasOrganizationAiAccess,
+  USER_BILLING_QUERY_KEY,
   userBillingQueryOptions,
 } from "~/features/settings/domain/billing";
+import { type BrowserAudioRecording, getTranscriptionAudioFormat } from "~/lib/audio-transcription";
 import { chatQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-query";
 import { orpc } from "~/lib/orpc";
-import { queryPersister } from "~/lib/query-persister";
 import type { ChatViewProps, ResolveComposeToolInput } from "../types";
 import { createChatTurns } from "../domain/chat-turns";
 import { useChatRunStream, type ChatRunStreamDone } from "../hooks/use-chat-run-stream";
@@ -74,6 +77,12 @@ export const ChatView = ({
     ...chatQueryOptions(mailboxId, chatId),
     refetchOnWindowFocus: true,
   });
+  const audioRecorder = useAudioRecorder({
+    mimeType: "audio/webm;codecs=opus",
+    onError: () => {
+      toast.error("Could not access your microphone.");
+    },
+  }) as UseAudioRecorderReturn<BrowserAudioRecording>;
   const createChatMutation = useMutation({
     ...orpc.chat.create.mutationOptions(),
     onSuccess: async () => {
@@ -116,6 +125,12 @@ export const ChatView = ({
   const editUserMessageMutation = useMutation(orpc.chat.editUserMessage.mutationOptions());
   const regenerateResponseMutation = useMutation(orpc.chat.regenerateResponse.mutationOptions());
   const resolveComposeToolMutation = useMutation(orpc.chat.resolveComposeTool.mutationOptions());
+  const transcribeAudioMutation = useMutation({
+    ...orpc.chat.transcribeAudio.mutationOptions(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
+    },
+  });
 
   const streamChatIdRef = useRef<string | null>(null);
 
@@ -132,7 +147,6 @@ export const ChatView = ({
           }
         : current,
     );
-    void queryPersister.persistQueryByKey(queryKey, queryClient);
 
     setStreamRunId(result.runId);
     setStreamingAssistant({
@@ -175,7 +189,6 @@ export const ChatView = ({
         ),
       };
     });
-    void queryPersister.persistQueryByKey(queryKey, queryClient);
   };
 
   useChatRunStream({
@@ -203,7 +216,6 @@ export const ChatView = ({
         queryClient.setQueryData<ChatQueryData>(queryKey, (current) =>
           current ? { ...current, activeRun: null } : current,
         );
-        void queryPersister.persistQueryByKey(queryKey, queryClient);
         void queryClient.invalidateQueries({ queryKey });
       }
 
@@ -223,6 +235,7 @@ export const ChatView = ({
   const turns = createChatTurns(visibleMessages);
   const isStreaming = !!liveRunId;
   const hasMessages = visibleMessages.length > 0 || !!chatId;
+  const isTranscribingAudio = transcribeAudioMutation.isPending;
   const isComposerLoading =
     isStreaming ||
     createChatMutation.isPending ||
@@ -290,6 +303,51 @@ export const ChatView = ({
     }
 
     void cancelGenerationMutation.mutateAsync({ chatId: activeChatId, mailboxId });
+  };
+
+  const handleRecordingStart = () => {
+    if (composerDisabled || isComposerLoading || isTranscribingAudio) return;
+
+    if (!audioRecorder.isSupported) {
+      toast.error("Audio recording is not supported in this browser.");
+      return;
+    }
+
+    void audioRecorder.start().catch(() => {
+      toast.error("Could not start recording.");
+    });
+  };
+
+  const handleRecordingStop = () => {
+    void (async () => {
+      try {
+        const recording = await audioRecorder.stop();
+        const format = getTranscriptionAudioFormat(recording.mimeType);
+
+        if (!format) {
+          toast.error("This audio format is not supported.");
+          return;
+        }
+
+        const result = await transcribeAudioMutation.mutateAsync({
+          audioBase64: recording.base64,
+          chatId: chatId ?? undefined,
+          durationMs: recording.durationMs,
+          format,
+          mailboxId,
+        });
+
+        setInput((current) =>
+          current.trim() ? `${current.trimEnd()}\n${result.text}` : result.text,
+        );
+      } catch (error) {
+        toast.error(
+          error instanceof Error && error.message
+            ? error.message
+            : "Could not transcribe recording.",
+        );
+      }
+    })();
   };
 
   const handleEditSubmit = async (userMessageId: string, message: string) => {
@@ -409,16 +467,21 @@ export const ChatView = ({
                     />
                   )}
                   <ChatComposer
-                    busy={isComposerLoading}
+                    busy={isComposerLoading || isTranscribingAudio}
                     disabled={composerDisabled}
                     input={input}
                     model={model}
                     onInputChange={setInput}
                     onInputKeyDown={handleInputKeyDown}
                     onModelChange={setModel}
+                    onRecordingStart={handleRecordingStart}
+                    onRecordingStop={handleRecordingStop}
                     onStop={handleStop}
                     onSubmit={handleSubmit}
+                    recording={audioRecorder.isRecording}
+                    recordingSupported={audioRecorder.isSupported}
                     streaming={isStreaming}
+                    transcribing={isTranscribingAudio}
                   />
                 </div>
               </div>
@@ -433,16 +496,21 @@ export const ChatView = ({
                   />
                 )}
                 <ChatComposer
-                  busy={isComposerLoading}
+                  busy={isComposerLoading || isTranscribingAudio}
                   disabled={composerDisabled}
                   input={input}
                   model={model}
                   onInputChange={setInput}
                   onInputKeyDown={handleInputKeyDown}
                   onModelChange={setModel}
+                  onRecordingStart={handleRecordingStart}
+                  onRecordingStop={handleRecordingStop}
                   onStop={handleStop}
                   onSubmit={handleSubmit}
+                  recording={audioRecorder.isRecording}
+                  recordingSupported={audioRecorder.isSupported}
                   streaming={isStreaming}
+                  transcribing={isTranscribingAudio}
                 />
               </div>
             </div>

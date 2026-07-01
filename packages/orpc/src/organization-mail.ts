@@ -7,7 +7,8 @@ import {
   recordOrganizationMailUsage,
   withOrganizationMailUsageLock,
 } from "@quieter/billing/organization-mail-usage";
-import { db, organizationMailSendIdempotency } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { organizationMailSendIdempotency } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import {
   buildSendMimeMessage,
@@ -19,6 +20,7 @@ import {
 import { and, eq, lt } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { recordOutboundManagedMessageForSender } from "./managed-mail/messages/service";
+import { recordOrganizationApiMailMessage } from "./organization-api-mail";
 import {
   assertOrganizationOwnsVerifiedSenderDomain,
   OrganizationMailSendError,
@@ -270,6 +272,24 @@ export const sendOrganizationMailMessage = async (input: {
 
     if (response.MessageId) {
       await Promise.all([
+        recordOrganizationApiMailMessage({
+          attachments: builtMessage.attachments,
+          bcc: builtMessage.bcc,
+          bodyHtml: input.message.html,
+          bodyText: input.message.text,
+          cc: builtMessage.cc,
+          headers: builtMessage.headers,
+          messageHeaderId: builtMessage.messageHeaderId,
+          organizationId: input.organizationId,
+          providerMessageId: response.MessageId,
+          rawSizeBytes: builtMessage.rawSizeBytes,
+          replyTo: builtMessage.replyTo,
+          sender: input.message.from,
+          senderAddress: getSendEnvelopeAddress(input.message.from),
+          sentAt,
+          subject: input.message.subject,
+          to: builtMessage.to,
+        }),
         recordOutboundManagedMessageForSender({
           attachments: builtMessage.attachments,
           bcc: builtMessage.bcc,
@@ -282,6 +302,7 @@ export const sendOrganizationMailMessage = async (input: {
           providerMessageId: response.MessageId,
           rawSizeBytes: builtMessage.rawSizeBytes,
           replyTo: builtMessage.replyTo,
+          requireApiSentMessageInclusion: true,
           sender: input.message.from,
           senderAddress: getSendEnvelopeAddress(input.message.from),
           sentAt,

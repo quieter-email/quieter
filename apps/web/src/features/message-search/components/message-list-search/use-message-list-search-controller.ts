@@ -4,6 +4,7 @@ import {
   getSupportedMailSearchFilterTypes,
   isMailSearchFilterSupported,
 } from "@quieter/mail/search";
+import { useHotkey } from "@tanstack/react-hotkeys";
 import { useQuery } from "@tanstack/react-query";
 import {
   type FocusEvent as ReactFocusEvent,
@@ -15,6 +16,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { shouldIgnoreAppShortcut } from "~/features/hotkeys/domain/hotkey-guards";
 import {
   getUserLabels,
   normalizeSearchText,
@@ -77,7 +79,7 @@ export const useMessageListSearchController = ({
   const rowRef = useRef<HTMLDivElement>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
   const segmentRefs = useRef<Array<HTMLElement | null>>([]);
-  const dateTokenRefs = useRef(new Map<number, HTMLDivElement>());
+  const [dateTokenRefs] = useState(() => ({ current: new Map<number, HTMLDivElement>() }));
   const pendingFocusRef = useRef<PendingFocusTarget | null>(null);
   const suppressNextBlurCommitRef = useRef(false);
   const committedSearchQuery = searchQuery.trim();
@@ -127,8 +129,12 @@ export const useMessageListSearchController = ({
       ? draftState.state
       : null;
   const currentState = activeDraftState ?? committedState;
-  const labelsQuery = useQuery(labelsQueryOptions(mailboxId, isDropdownOpen));
-  const userLabels = getUserLabels(labelsQuery.data ?? []);
+  const {
+    data: labelsData,
+    error: labelsError,
+    isPending: isLabelsPending,
+  } = useQuery(labelsQueryOptions(mailboxId, isDropdownOpen));
+  const userLabels = getUserLabels(labelsData ?? []);
   const activeDateFilter =
     activeDateFilterIndex === null ? null : (currentState.filters[activeDateFilterIndex] ?? null);
   const supportedFilterTypes = getSupportedMailSearchFilterTypes(mailboxProvider);
@@ -407,7 +413,7 @@ export const useMessageListSearchController = ({
       key: `filter:${option.filter.type}:${option.filter.value}`,
       onSelect: () => handleFilterSelection(option.filter),
     })),
-    ...(labelsQuery.isPending || labelsQuery.error
+    ...(isLabelsPending || labelsError
       ? []
       : userLabels.map((label) => ({
           key: `label:${normalizeLabelSelectionKey(label.name)}`,
@@ -705,6 +711,18 @@ export const useMessageListSearchController = ({
     pendingFocusRef.current = { kind: "text", toEnd: true };
   };
 
+  useHotkey(
+    "/",
+    (event) => {
+      if (shouldIgnoreAppShortcut(event)) return;
+      openSearchDropdown();
+      focusTextInput({ toEnd: true });
+    },
+    {
+      ignoreInputs: true,
+    },
+  );
+
   useEffect(() => {
     if (!isDropdownOpen && activeDateFilterIndex === null) {
       return;
@@ -758,7 +776,7 @@ export const useMessageListSearchController = ({
     const tokenRect = token.getBoundingClientRect();
     const maxLeft = Math.max(field.clientWidth - 270, 0);
     setDatePopoverLeft(Math.max(0, Math.min(tokenRect.left - fieldRect.left, maxLeft)));
-  }, [activeDateFilterIndex, currentState.filters]);
+  }, [activeDateFilterIndex, currentState.filters, dateTokenRefs]);
 
   return {
     activeDateFilter,
@@ -777,9 +795,9 @@ export const useMessageListSearchController = ({
     handleTokenKeyDown,
     highlightedDropdownItemKey,
     isDropdownOpen,
-    isLoadingLabels: labelsQuery.isPending,
+    isLoadingLabels: isLabelsPending,
     isRefreshing,
-    labelsErrorMessage: labelsQuery.isPending ? null : (labelsQuery.error?.message ?? null),
+    labelsErrorMessage: isLabelsPending ? null : (labelsError?.message ?? null),
     onOpenSidebar,
     onRefresh,
     onScrollToTop,
@@ -798,7 +816,7 @@ export const useMessageListSearchController = ({
     toggleLabelToken,
     updateFilterValue,
     updateSearchText,
-    userLabels: labelsQuery.isPending ? [] : userLabels,
+    userLabels: isLabelsPending ? [] : userLabels,
   };
 };
 

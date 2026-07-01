@@ -20,6 +20,12 @@
     }
   ],
   "name": "quieter",
+  "protocol_handlers": [
+    {
+      "protocol": "mailto",
+      "url": "/?compose=mailto&mailto=%s"
+    }
+  ],
   "short_name": "quieter",
   "start_url": "/",
   "theme_color": "#f7f4ee"

@@ -56,6 +56,10 @@ function PrivacyPage() {
           monitoring is not consent-gated.
         </li>
         <li>
+          Browser-local mailbox and navigation metadata, such as mailbox lists, labels, and message
+          list metadata, to make recently used mailbox views faster.
+        </li>
+        <li>
           Performance metrics and limited product analytics only when you consent to measurement
           cookies.
         </li>
@@ -97,7 +101,9 @@ function PrivacyPage() {
         service, comply with law, prevent abuse, and resolve disputes. Turning off Gmail useful
         details deletes stored useful-detail items for that mailbox. Disabling a mailbox or deleting
         account data may not immediately remove backups, logs, invoices, or records we must keep for
-        legal, security, or accounting reasons.
+        legal, security, or accounting reasons. The browser may keep selected mailbox and navigation
+        metadata in localStorage for up to 24 hours; signing out or deleting your account clears
+        this query cache from the browser.
       </p>
 
       <h2>International transfers</h2>

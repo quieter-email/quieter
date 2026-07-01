@@ -1,5 +1,5 @@
 import type { MessagePart } from "@tanstack/ai";
-import { cn } from "@quieter/ui";
+import { cn } from "@quieter/ui/cn";
 import type { ResolveComposeTool } from "../../types";
 import { hasVisibleAssistantContent } from "../../domain/assistant-content";
 import { shouldUngroupTool } from "../../domain/tool-summaries";

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowLeft01Icon,
   ArrowRight01Icon,
   Delete02Icon,
   Edit01Icon,
@@ -12,10 +11,11 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
-import { Button } from "@quieter/ui";
+import { Button } from "@quieter/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import type { UserBillingOverview } from "~/features/settings/domain/billing";
 import { authClient } from "~/lib/auth";
+import { SettingsBackButton, SettingsCard, SettingsSection } from "../settings-layout";
 import { organizationApiKeysQueryOptions } from "./api-keys";
 import {
   type FullOrganization,
@@ -44,6 +44,7 @@ export const OrganizationOverviewView = ({
   canUseOrganizationMail,
   onBackToList,
   onOpenApiKeys,
+  onOpenDivisions,
   onOpenDomains,
   onOpenMembers,
   organization,
@@ -61,6 +62,7 @@ export const OrganizationOverviewView = ({
   canUseOrganizationMail: boolean;
   onBackToList: () => void;
   onOpenApiKeys: () => void;
+  onOpenDivisions: () => void;
   onOpenDomains: () => void;
   onOpenMembers: () => void;
   organization: OrganizationSummary;
@@ -128,19 +130,11 @@ export const OrganizationOverviewView = ({
 
   return (
     <section className="space-y-6">
-      <Button
-        className="w-fit text-muted-foreground hover:text-foreground"
-        onClick={onBackToList}
-        size="sm"
-        variant="ghost"
-      >
-        <HugeiconsIcon aria-hidden className="size-4" icon={ArrowLeft01Icon} />
-        Teams
-      </Button>
+      <SettingsBackButton onClick={onBackToList}>Teams</SettingsBackButton>
 
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-base font-semibold text-foreground">{organization.name}</h1>
+          <h1 className="text-base font-normal text-foreground">{organization.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{organization.slug}</p>
         </div>
 
@@ -155,103 +149,124 @@ export const OrganizationOverviewView = ({
         )}
       </div>
 
-      <div>
-        <SettingsRow
-          action={
-            <Button onClick={onOpenMembers} size="sm" variant="outline">
-              <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
-              Open
-            </Button>
-          }
-          label="Members"
-          value={
-            <span className="inline-flex items-center gap-1.5">
-              <HugeiconsIcon aria-hidden className="size-4" icon={UserGroupIcon} />
-              {peopleSummary}
-            </span>
-          }
-        />
+      <SettingsSection title="Team settings">
+        <SettingsCard>
+          <SettingsRow
+            action={
+              <Button onClick={onOpenMembers} size="sm" variant="outline">
+                <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
+                Open
+              </Button>
+            }
+            label="Members"
+            value={
+              <span className="inline-flex items-center gap-1.5">
+                <HugeiconsIcon aria-hidden className="size-4" icon={UserGroupIcon} />
+                {peopleSummary}
+              </span>
+            }
+          />
 
-        <SettingsRow
-          action={
-            <Button onClick={onOpenDomains} size="sm" variant="outline">
-              <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
-              Open
-            </Button>
-          }
-          label="Domains"
-          value={
-            <span className="inline-flex items-center gap-1.5">
-              <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
-              {domainsSummary}
-            </span>
-          }
-        />
+          <SettingsRow
+            action={
+              <Button onClick={onOpenDivisions} size="sm" variant="outline">
+                <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
+                Open
+              </Button>
+            }
+            label="Divisions"
+            value={
+              <span className="inline-flex items-center gap-1.5">
+                <HugeiconsIcon aria-hidden className="size-4" icon={UserGroupIcon} />
+                Mailbox access groups
+              </span>
+            }
+          />
 
-        <SettingsRow
-          action={
-            <Button onClick={onOpenApiKeys} size="sm" variant="outline">
-              <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
-              Open
-            </Button>
-          }
-          label="API keys"
-          value={
-            <span className="inline-flex items-center gap-1.5">
-              <HugeiconsIcon aria-hidden className="size-4" icon={Key02Icon} />
-              {apiKeysSummary}
-            </span>
-          }
-        />
+          <SettingsRow
+            action={
+              <Button onClick={onOpenDomains} size="sm" variant="outline">
+                <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
+                Open
+              </Button>
+            }
+            label="Domains"
+            value={
+              <span className="inline-flex items-center gap-1.5">
+                <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
+                {domainsSummary}
+              </span>
+            }
+          />
 
-        <OrganizationBillingSettings
-          billing={billing}
-          billingAccessUnknown={billingAccessUnknown}
-          billingPending={billingPending}
-          organizationId={organization.id}
-        />
+          <SettingsRow
+            action={
+              <Button onClick={onOpenApiKeys} size="sm" variant="outline">
+                <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
+                Open
+              </Button>
+            }
+            label="API keys"
+            value={
+              <span className="inline-flex items-center gap-1.5">
+                <HugeiconsIcon aria-hidden className="size-4" icon={Key02Icon} />
+                {apiKeysSummary}
+              </span>
+            }
+          />
 
-        <OrganizationMailUsageSettings
-          billingAccessUnknown={billingAccessUnknown}
-          billingPending={billingPending}
-          canManageOrganizationMailUsage={canUpdateOrganization}
-          canUseOrganizationMail={canUseOrganizationMail}
-          organizationId={organization.id}
-        />
+          <OrganizationBillingSettings
+            billing={billing}
+            billingAccessUnknown={billingAccessUnknown}
+            billingPending={billingPending}
+            organizationId={organization.id}
+          />
 
-        <SettingsRow
-          action={
-            leaveOrganizationReason ? (
-              <MutedActionButton
-                icon={<HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />}
-                label="Leave"
-                reason={leaveOrganizationReason}
-              />
-            ) : (
-              <LeaveOrganizationDialog onLeft={onBackToList} organization={fullOrganization} />
-            )
-          }
-          label="Membership"
-          value={activeRole ? formatRoleLabel(activeRole) : "Team member"}
-        />
+          <OrganizationMailUsageSettings
+            billingAccessUnknown={billingAccessUnknown}
+            billingPending={billingPending}
+            canManageOrganizationMailUsage={canUpdateOrganization}
+            canUseOrganizationMail={canUseOrganizationMail}
+            organizationId={organization.id}
+          />
 
-        <SettingsRow
-          action={
-            deleteOrganizationReason ? (
-              <MutedActionButton
-                buttonClassName="pointer-events-none border-destructive/25 bg-destructive/10 text-destructive/80 opacity-100 hover:bg-destructive/10 hover:text-destructive/80"
-                icon={<HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />}
-                label="Delete"
-                reason={deleteOrganizationReason}
-              />
-            ) : (
-              <DeleteOrganizationDialog onDeleted={onBackToList} organization={fullOrganization} />
-            )
-          }
-          label="Delete team"
-          value="Permanent"
-        />
-      </div>
+          <SettingsRow
+            action={
+              leaveOrganizationReason ? (
+                <MutedActionButton
+                  icon={<HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />}
+                  label="Leave"
+                  reason={leaveOrganizationReason}
+                />
+              ) : (
+                <LeaveOrganizationDialog onLeft={onBackToList} organization={fullOrganization} />
+              )
+            }
+            label="Membership"
+            value={activeRole ? formatRoleLabel(activeRole) : "Team member"}
+          />
+
+          <SettingsRow
+            action={
+              deleteOrganizationReason ? (
+                <MutedActionButton
+                  buttonClassName="pointer-events-none border-destructive/25 bg-destructive/10 text-destructive/80 opacity-100 hover:bg-destructive/10 hover:text-destructive/80"
+                  icon={<HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />}
+                  label="Delete"
+                  reason={deleteOrganizationReason}
+                />
+              ) : (
+                <DeleteOrganizationDialog
+                  onDeleted={onBackToList}
+                  organization={fullOrganization}
+                />
+              )
+            }
+            label="Delete team"
+            value="Permanent"
+          />
+        </SettingsCard>
+      </SettingsSection>
     </section>
   );
 };

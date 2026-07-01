@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@quieter/ui";
+import { cn } from "@quieter/ui/cn";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLayoutEffect } from "react";
 import { useMailboxMessages } from "~/features/mailbox/components/mailbox-workspace/use-mailbox-messages";
@@ -45,6 +45,7 @@ export const LandingMailboxMessagesPanel = ({
   } = useMailboxMessages({
     activeMailbox,
     isDemoMode: true,
+    isManagedDemoMode: false,
     mailboxProvider: "gmail",
     messageId: messageId ?? undefined,
     threadId: threadId ?? undefined,
@@ -105,7 +106,7 @@ export const LandingMailboxMessagesPanel = ({
     <>
       <section
         className={cn(
-          "m-1.5 ml-0 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 squircle lg:flex",
+          "m-2 ml-0 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 squircle lg:flex",
           {
             "flex flex-1": !isMessageRouteOpen,
             hidden: isMessageRouteOpen,
@@ -140,7 +141,7 @@ export const LandingMailboxMessagesPanel = ({
 
       <div
         className={cn(
-          "m-1.5 ml-0 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 squircle lg:flex",
+          "m-2 ml-0 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 squircle lg:flex",
           {
             "flex flex-1": isMessageRouteOpen,
             hidden: !isMessageRouteOpen,

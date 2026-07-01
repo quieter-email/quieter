@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { cn } from "@quieter/ui";
+import { cn } from "@quieter/ui/cn";
 
 export const MessageActions = ({
   align,

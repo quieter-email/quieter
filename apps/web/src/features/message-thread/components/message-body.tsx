@@ -2,8 +2,10 @@
 
 import { Image01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, cn, useColorMode } from "@quieter/ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
+import { useColorMode } from "@quieter/ui/color-mode";
+import { useEffect, useRef, useState } from "react";
 import { useExternalImagesEnabled } from "~/features/settings/domain/external-images-setting";
 import {
   applyEmailPreferences,
@@ -37,10 +39,11 @@ const HtmlMessageBodyContent = ({
   const shadowRootRef = useRef<ShadowRoot | null>(null);
   // react-doctor-disable-next-line react-doctor/no-event-handler
   const shouldLoadImages = (loadExternalImages ?? externalImagesEnabled) || temporaryImagesEnabled;
-  const preprocessedHtml = useMemo(() => preprocessEmailHtml(html), [html]);
-  const processedMail = useMemo<ProcessedMailHtml>(
-    () => applyEmailPreferences(preprocessedHtml, shouldLoadImages, colorMode),
-    [colorMode, preprocessedHtml, shouldLoadImages],
+  const preprocessedHtml = preprocessEmailHtml(html);
+  const processedMail: ProcessedMailHtml = applyEmailPreferences(
+    preprocessedHtml,
+    shouldLoadImages,
+    colorMode,
   );
   const remoteImagesPresent = !shouldLoadImages && processedMail.hasBlockedImages;
   const handleImageErrorRef = useRef<(event: Event) => void>(() => {});
@@ -54,7 +57,13 @@ const HtmlMessageBodyContent = ({
       shadowRootRef.current = shadowRoot;
     }
 
-    shadowRoot.innerHTML = processedMail.processedHtml;
+    const parsedDocument = new DOMParser().parseFromString(
+      processedMail.processedHtml,
+      "text/html",
+    );
+    shadowRoot.replaceChildren(
+      ...Array.from(parsedDocument.body.childNodes).map((node) => document.importNode(node, true)),
+    );
     fixNonReadableColors(shadowRoot, {
       defaultBackground: colorMode === "dark" ? "#1A1A1A" : "#ffffff",
     });

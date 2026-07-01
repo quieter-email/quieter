@@ -1,10 +1,10 @@
 import { ORPCError } from "@orpc/server";
+import { db } from "@quieter/database/client";
 import {
-  db,
   managedMailLabel,
   managedMailMessage,
   managedMailMessageLabel,
-} from "@quieter/database";
+} from "@quieter/database/schema";
 import { and, eq, inArray, ne } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
@@ -32,7 +32,7 @@ export const updateManagedMessageLabelAssignments = async (input: {
   mailboxId: string;
   messageIds: string[];
   removeLabelIds?: string[];
-  source: "backfill" | "inherited" | "manual" | "rule";
+  source: "ai_auto_label" | "backfill" | "inherited" | "manual" | "rule";
   ruleId?: string;
   userId?: string;
 }) => {

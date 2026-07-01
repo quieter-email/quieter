@@ -1,4 +1,5 @@
-import { db, rateLimitBucket } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { rateLimitBucket } from "@quieter/database/schema";
 import { sql } from "drizzle-orm";
 
 export const consumeRateLimit = async (input: { key: string; limit: number; windowMs: number }) => {

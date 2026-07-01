@@ -14,14 +14,16 @@ import {
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
-  Button,
-  cn,
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
+} from "@quieter/ui/context-menu";
+import {
   Dialog,
   DialogBody,
   DialogCloseButton,
@@ -29,13 +31,15 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+} from "@quieter/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  IconButtonTooltip,
-} from "@quieter/ui";
+} from "@quieter/ui/dropdown-menu";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { useQuery } from "@tanstack/react-query";
 import { useReducer, useState } from "react";
 import { getUserLabels } from "~/features/message-search/state/message-list-search-state";
@@ -51,6 +55,7 @@ type MessageActionsSharedProps = {
   mailbox: MailboxCategory;
   isUnread?: boolean;
   isPending?: boolean;
+  labelNounPlural?: "labels";
 };
 
 type MessageActionsDropdownProps = MessageActionsSharedProps;
@@ -201,16 +206,23 @@ const MessageActionsDialogs = ({
   onOpenLabelsDialog,
   onUpdateLabels,
   openLabelsDialog,
+  labelNounPlural = "labels",
 }: {
   mailboxId: string;
   message: MessageListItem;
   isPending: boolean;
+  labelNounPlural?: "labels";
   openLabelsDialog: boolean;
   onOpenLabelsDialog: (open: boolean) => void;
   onUpdateLabels?: (threadId: string, changes: LabelChanges) => void | Promise<void>;
 }) => {
-  const labelsQuery = useQuery(labelsQueryOptions(mailboxId, openLabelsDialog));
-  const userLabels = getUserLabels(labelsQuery.data ?? []);
+  const {
+    data: labels,
+    error: labelsError,
+    isError: isLabelsError,
+    isPending: areLabelsPending,
+  } = useQuery(labelsQueryOptions(mailboxId, openLabelsDialog));
+  const userLabels = getUserLabels(labels ?? []);
   const currentUserLabelIds = (message.labelIds ?? []).filter((labelId) =>
     userLabels.some((label) => label.id === labelId),
   );
@@ -286,18 +298,18 @@ const MessageActionsDialogs = ({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Modify Labels</DialogTitle>
+          <DialogTitle>Modify {labelNounPlural}</DialogTitle>
         </DialogHeader>
 
         <DialogBody className="max-h-[50vh] space-y-3 overflow-y-auto">
-          {labelsQuery.isPending ? (
+          {areLabelsPending ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <HugeiconsIcon aria-hidden className="animate-spin" icon={Loading03Icon} />
-              <span>Loading labels…</span>
+              <span>Loading {labelNounPlural}…</span>
             </div>
-          ) : labelsQuery.isError ? (
+          ) : isLabelsError ? (
             <p className="text-sm text-destructive">
-              {labelsQuery.error?.message ?? "Could not load labels."}
+              {labelsError?.message ?? `Could not load ${labelNounPlural}.`}
             </p>
           ) : userLabels.length > 0 ? (
             <div className="space-y-2">
@@ -316,7 +328,7 @@ const MessageActionsDialogs = ({
               ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No custom labels.</p>
+            <p className="text-sm text-muted-foreground">No custom {labelNounPlural}.</p>
           )}
 
           {state.labelError && <p className="text-sm text-destructive">{state.labelError}</p>}
@@ -325,9 +337,7 @@ const MessageActionsDialogs = ({
         <DialogFooter>
           <DialogCloseButton>Cancel</DialogCloseButton>
           <Button
-            disabled={
-              !labelsChanged || labelsQuery.isPending || labelsQuery.isError || isLabelsBusy
-            }
+            disabled={!labelsChanged || areLabelsPending || isLabelsError || isLabelsBusy}
             onClick={() => void applyLabels()}
           >
             Apply
@@ -353,6 +363,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
     (isSpamMailbox && !!actions.onUnmarkAsSpam) ||
     (isTrashMailbox && !!actions.onUntrash) ||
     (!isTrashMailbox && !!actions.onMoveToTrash);
+  const hasReadStateAction = !!actions.onMarkAsRead || !!actions.onMarkAsUnread;
 
   if (isDraftMailbox) {
     return {
@@ -388,22 +399,35 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
     };
   }
 
-  const entries: MenuEntry[] = [
-    {
-      type: "item",
-      id: "toggle-read-state",
-      disabled: isBusy || (isUnread ? !actions.onMarkAsRead : !actions.onMarkAsUnread),
-      icon: isUnread ? MailOpen02Icon : Mail01Icon,
-      label: isUnread ? "Mark as Read" : "Mark as Unread",
-      onSelect: () => {
-        if (isUnread) {
-          void actions.onMarkAsRead?.(props.message.threadId);
-          return;
-        }
+  if (
+    !hasReadStateAction &&
+    !actions.onUpdateLabels &&
+    !actions.onUnsubscribe &&
+    !hasFolderAction
+  ) {
+    return { dialogs: null, entries: [], isBusy };
+  }
 
-        void actions.onMarkAsUnread?.(props.message.threadId);
-      },
-    },
+  const entries: MenuEntry[] = [
+    ...(hasReadStateAction
+      ? [
+          {
+            type: "item" as const,
+            id: "toggle-read-state",
+            disabled: isBusy || (isUnread ? !actions.onMarkAsRead : !actions.onMarkAsUnread),
+            icon: isUnread ? MailOpen02Icon : Mail01Icon,
+            label: isUnread ? "Mark as Read" : "Mark as Unread",
+            onSelect: () => {
+              if (isUnread) {
+                void actions.onMarkAsRead?.(props.message.threadId);
+                return;
+              }
+
+              void actions.onMarkAsUnread?.(props.message.threadId);
+            },
+          },
+        ]
+      : []),
     ...(actions.onUpdateLabels
       ? [
           {
@@ -411,7 +435,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
             id: "modify-labels",
             disabled: isBusy,
             icon: Tag01Icon,
-            label: "Modify Labels",
+            label: `Modify ${props.labelNounPlural ?? "labels"}`,
             onSelect: () => setOpenLabelsDialog(true),
           },
         ]
@@ -500,6 +524,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
   const dialogs = actions.onUpdateLabels ? (
     <MessageActionsDialogs
       isPending={isBusy}
+      labelNounPlural={props.labelNounPlural}
       mailboxId={props.mailboxId}
       message={props.message}
       onOpenLabelsDialog={setOpenLabelsDialog}
@@ -517,6 +542,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
 
 export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
   const { dialogs, entries, isBusy } = useMessageActionEntries(props);
+  if (entries.length === 0) return dialogs;
 
   return (
     <>
@@ -549,6 +575,7 @@ export const MessageActionsContextMenu = ({
   ...props
 }: MessageActionsContextMenuProps) => {
   const { dialogs, entries } = useMessageActionEntries(props);
+  if (entries.length === 0) return <>{children}</>;
 
   return (
     <>

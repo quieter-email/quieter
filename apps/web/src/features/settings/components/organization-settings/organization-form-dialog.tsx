@@ -2,8 +2,8 @@
 
 import { Edit01Icon, Loading03Icon, UserGroupIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Button } from "@quieter/ui/button";
 import {
-  Button,
   Dialog,
   DialogBody,
   DialogCloseButton,
@@ -11,9 +11,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  TextField,
-  TextFieldInput,
-} from "@quieter/ui";
+} from "@quieter/ui/dialog";
+import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";

@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { queryPersister } from "~/lib/query-persister";
+import { persistQueryByKey } from "~/lib/query-persister";
 import {
   isMessageInMailbox,
   type MailboxCategory,
@@ -131,9 +131,7 @@ export const persistQueryKeys = async (
     uniqueQueryKeys.push(queryKey);
   }
 
-  await Promise.all(
-    uniqueQueryKeys.map((queryKey) => queryPersister.persistQueryByKey(queryKey, queryClient)),
-  );
+  await Promise.all(uniqueQueryKeys.map((queryKey) => persistQueryByKey(queryKey, queryClient)));
 };
 
 export const findMessageInCachedMailboxQueries = (

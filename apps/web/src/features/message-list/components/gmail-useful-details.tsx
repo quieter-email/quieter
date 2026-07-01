@@ -1,7 +1,7 @@
 "use client";
 
 import type { RouterOutputs } from "@quieter/orpc";
-import { toast } from "@quieter/ui";
+import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { GmailUsefulDetailCard } from "~/features/gmail-useful-details/components/gmail-useful-detail-card";

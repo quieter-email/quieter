@@ -56,7 +56,7 @@ export const ToolbarInput = ({
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Input>) => (
   <ToolbarPrimitive.Input
     className={cn(
-      "h-8 w-full min-w-32 rounded-md border border-input bg-background px-3 text-[13px] text-foreground shadow-sm transition-colors duration-150 ease-out outline-none squircle placeholder:text-muted-foreground read-only:cursor-default read-only:bg-muted/30 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:ring-destructive/20",
+      "keyboard-focus-ring h-8 w-full min-w-32 rounded-md border border-input bg-background-light px-3 text-[13px] text-foreground shadow-sm transition-colors duration-150 ease-out outline-none squircle placeholder:text-muted-foreground read-only:cursor-default read-only:bg-muted/30 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive",
       className,
     )}
     {...props}

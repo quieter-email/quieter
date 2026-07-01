@@ -1,12 +1,20 @@
 "use client";
 
-import { composeDraftFormValuesSchema, composeSendFormValuesSchema } from "@quieter/mail/compose";
+import {
+  composeDraftFormValuesSchema,
+  composeSendFormValuesSchema,
+} from "@quieter/mail/compose/schema";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { deleteDemoDraft, saveDemoDraft, sendDemoDraft } from "~/lib/gmail/demo-mail";
 import { refreshCachedMailboxQueries, removeDraftMessageFromCaches } from "~/lib/gmail/inbox-query";
 import { getThreadQueryKey } from "~/lib/gmail/thread-query";
+import {
+  deleteManagedDemoDraft,
+  saveManagedDemoDraft,
+  sendManagedDemoDraft,
+} from "~/lib/managed-mail/demo-managed-mail";
 import {
   composeFormValuesToDraft,
   draftToComposeFormValues,
@@ -53,10 +61,12 @@ export const getDraftStatusMessage = (draft: ComposeDraftState, persistDrafts = 
 
 export const useComposeDialogController = ({
   demoMode = false,
+  managedDemoMode = false,
   mailboxId,
   persistDrafts = true,
 }: {
   demoMode?: boolean;
+  managedDemoMode?: boolean;
   mailboxId: string | null;
   persistDrafts?: boolean;
 }) => {
@@ -64,8 +74,10 @@ export const useComposeDialogController = ({
   const [state, setState] = useState(createDialogState);
   const activeDraftRef = useRef(state.draft);
   const openIdRef = useRef(0);
-  const saveQueueRef = useRef(Promise.resolve());
-  const savedDraftByLocalIdRef = useRef(new Map<string, ComposeDraftState>());
+  const [saveQueueRef] = useState(() => ({ current: Promise.resolve() }));
+  const [savedDraftByLocalIdRef] = useState(() => ({
+    current: new Map<string, ComposeDraftState>(),
+  }));
 
   const form = useForm({
     defaultValues: emptyComposeFormValues,
@@ -177,7 +189,9 @@ export const useComposeDialogController = ({
 
         const savedDraft = demoMode
           ? await saveDemoDraft(draft)
-          : await saveComposeDraft(mailboxId, draft);
+          : managedDemoMode
+            ? await saveManagedDemoDraft(draft)
+            : await saveComposeDraft(mailboxId, draft);
         savedDraftByLocalIdRef.current.set(draft.localId, savedDraft);
 
         if (
@@ -213,6 +227,14 @@ export const useComposeDialogController = ({
       errorMessage: null,
       saveStatus: current.saveStatus === "error" ? "idle" : current.saveStatus,
     }));
+  };
+
+  const setActiveDraftError = (message: string) => {
+    setDraft({
+      ...activeDraftRef.current,
+      errorMessage: message,
+      saveStatus: "error",
+    });
   };
 
   const openComposeDraft = (nextDraft: ComposeDraftState | null) => {
@@ -260,6 +282,8 @@ export const useComposeDialogController = ({
     try {
       if (demoMode) {
         await sendDemoDraft(message);
+      } else if (managedDemoMode) {
+        await sendManagedDemoDraft(message);
       } else {
         await sendComposeMessage(mailboxId, message);
       }
@@ -274,25 +298,26 @@ export const useComposeDialogController = ({
 
     closeDialog();
 
-    try {
-      await saveQueueRef.current.catch(() => {});
-      const savedDraft = savedDraftByLocalIdRef.current.get(message.localId) ?? message;
+    await saveQueueRef.current.catch(() => {});
+    const savedDraft = savedDraftByLocalIdRef.current.get(message.localId) ?? message;
 
-      if (savedDraft.draftId) {
-        await (
-          demoMode ? deleteDemoDraft(savedDraft) : deleteComposeDraft(mailboxId, savedDraft)
-        ).catch(() => {});
-      }
-
-      savedDraftByLocalIdRef.current.delete(message.localId);
-      await Promise.all([
-        refreshCachedMailboxQueries(queryClient, mailboxId, "drafts"),
-        refreshCachedMailboxQueries(queryClient, mailboxId, "sent"),
-        refreshThread(message),
-      ]).catch(() => {});
-    } finally {
-      clearComposeDraftRuntimeFiles(message);
+    if (savedDraft.draftId) {
+      await (
+        demoMode
+          ? deleteDemoDraft(savedDraft)
+          : managedDemoMode
+            ? deleteManagedDemoDraft(savedDraft)
+            : deleteComposeDraft(mailboxId, savedDraft)
+      ).catch(() => {});
     }
+
+    savedDraftByLocalIdRef.current.delete(message.localId);
+    await Promise.all([
+      refreshCachedMailboxQueries(queryClient, mailboxId, "drafts"),
+      refreshCachedMailboxQueries(queryClient, mailboxId, "sent"),
+      refreshThread(message),
+    ]).catch(() => {});
+    clearComposeDraftRuntimeFiles(message);
   };
 
   const discardActiveDraft = () => {
@@ -323,6 +348,8 @@ export const useComposeDialogController = ({
       if (savedDraft.draftId) {
         if (demoMode) {
           await deleteDemoDraft(savedDraft);
+        } else if (managedDemoMode) {
+          await deleteManagedDemoDraft(savedDraft);
         } else {
           await deleteComposeDraft(mailboxId, savedDraft);
         }
@@ -390,6 +417,7 @@ export const useComposeDialogController = ({
     form,
     handleDialogOpenChange,
     openComposeDraft,
+    setActiveDraftError,
     state,
     toggleRecipientVisibility,
   };

@@ -1,4 +1,4 @@
-import type { GmailUsefulDetailCandidate } from "@quieter/ai";
+import type { GmailUsefulDetailCandidate } from "@quieter/ai/extract-gmail-useful-detail";
 import type { MessageListItem } from "@quieter/gmail";
 import { describe, expect, test } from "bun:test";
 import {
@@ -225,7 +225,7 @@ describe("Gmail useful-detail materialization", () => {
     });
   });
 
-  test("clamps relevance start to the message receive time", () => {
+  test("delays early appointment windows until the reminder window", () => {
     const detail = materializeGmailUsefulDetail({
       candidate: candidate({
         eventAt: "2026-06-20T09:00:00.000Z",
@@ -239,7 +239,51 @@ describe("Gmail useful-detail materialization", () => {
       now: NOW,
     });
 
-    expect(detail?.relevantFrom.toISOString()).toBe("2026-06-14T11:58:00.000Z");
+    expect(detail?.relevantFrom.toISOString()).toBe("2026-06-19T09:00:00.000Z");
+  });
+
+  test("does not show future reservations immediately after receipt", () => {
+    const detail = materializeGmailUsefulDetail({
+      candidate: candidate({
+        eventAt: "2026-07-25T18:30:00.000Z",
+        kind: "reservation",
+        location: "Zoo Palast Berlin",
+        relevanceSource: "inferred",
+        relevantFrom: "2026-06-14T11:58:00.000Z",
+        relevantUntil: "2026-07-25T20:30:00.000Z",
+        service: "Zoo Palast Berlin",
+        summary: "Die Odyssee-70mm is booked for July 25 at 20:30 at Zoo Palast Berlin.",
+      }),
+      message: message(),
+      now: NOW,
+    });
+
+    expect(detail).toMatchObject({
+      kind: "reservation",
+      location: "Zoo Palast Berlin",
+      title: "Zoo Palast Berlin",
+    });
+    expect(detail?.relevantFrom.toISOString()).toBe("2026-07-24T18:30:00.000Z");
+  });
+
+  test("trims long summaries at a word boundary", () => {
+    const detail = materializeGmailUsefulDetail({
+      candidate: candidate({
+        eventAt: "2026-07-25T18:30:00.000Z",
+        kind: "reservation",
+        relevanceSource: "inferred",
+        relevantFrom: "2026-07-24T18:30:00.000Z",
+        relevantUntil: "2026-07-25T20:30:00.000Z",
+        service: "Zoo Palast Berlin",
+        summary:
+          "Die Odyssee-70mm is booked for July 25 at 20:30 at Zoo Palast Berlin, with the booking confirmation and calendar entry available in the original message for reference.",
+      }),
+      message: message(),
+      now: NOW,
+    });
+
+    expect(detail?.summary?.endsWith("referen")).toBe(false);
+    expect(detail?.summary?.endsWith("referenc")).toBe(false);
   });
 
   test("drops medium-confidence classifications", () => {

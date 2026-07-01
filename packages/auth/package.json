@@ -23,7 +23,9 @@
     "@polar-sh/sdk": "^0.48.1",
     "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*",
-    "@quieter/env": "workspace:*"
+    "@quieter/env": "workspace:*",
+    "quieter": "workspace:*",
+    "react": "catalog:"
   },
   "devDependencies": {
     "@better-auth/api-key": "1.5.0",

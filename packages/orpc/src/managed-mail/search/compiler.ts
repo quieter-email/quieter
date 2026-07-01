@@ -3,7 +3,7 @@ import {
   managedMailLabel,
   managedMailMessage,
   managedMailMessageLabel,
-} from "@quieter/database";
+} from "@quieter/database/schema";
 import {
   normalizeStructuredMailSearch,
   type MailSearchFilter,
@@ -74,6 +74,18 @@ const createFilterCondition = (
         condition = eq(managedMailMessage.isRead, value === "read");
       } else if (value === "inbound" || value === "outbound") {
         condition = eq(managedMailMessage.direction, value);
+      } else if (value === "spam" || value === "trash") {
+        condition = eq(managedMailMessage.mailboxState, value);
+      } else if (value === "inbox") {
+        condition = and(
+          eq(managedMailMessage.direction, "inbound"),
+          eq(managedMailMessage.mailboxState, "active"),
+        );
+      } else if (value === "sent") {
+        condition = and(
+          eq(managedMailMessage.direction, "outbound"),
+          eq(managedMailMessage.mailboxState, "active"),
+        );
       }
       break;
     case "after":

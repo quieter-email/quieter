@@ -4,21 +4,29 @@ import { z } from "zod";
 import { AuthRouteComponent } from "~/components/auth-route-component";
 import { LoadingPage } from "~/components/loading-page";
 import { getSessionUser } from "~/lib/auth.functions";
+import { getSafeAuthReturnTo } from "~/lib/return-to";
 
 export const Route = createFileRoute("/auth")({
   validateSearch: zodValidator(
     z.object({
       error: z.string().optional(),
       mode: z.enum(["login", "signup"]).catch("login").default("login"),
+      returnTo: z
+        .string()
+        .optional()
+        .catch(undefined)
+        .transform((returnTo) => getSafeAuthReturnTo(returnTo)),
     }),
   ),
   ssr: "data-only",
-  loader: async () => {
+  loader: async ({ location }) => {
     const user = await getSessionUser();
 
     if (user) {
+      const search = location.search as { returnTo?: string };
+
       throw redirect({
-        to: "/",
+        href: getSafeAuthReturnTo(search.returnTo) ?? "/",
       });
     }
   },

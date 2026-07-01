@@ -1,5 +1,5 @@
-import type { ComposeDraftAnchor } from "@quieter/mail/compose";
-import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose";
+import type { ComposeDraftAnchor } from "@quieter/mail/compose/schema";
+import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
 import {
   decodePartBody,
   decodeMimeHeaderValue,
@@ -235,6 +235,14 @@ export type MessageListItem = {
   bodyHtml?: string;
   bodyText?: string;
   attachments?: MessageAttachment[];
+  apiSource?: {
+    canCreateMailbox: boolean;
+    canManageMailbox: boolean;
+    includedInMailbox: boolean;
+    organizationId: string;
+    senderAddress: string;
+    senderMailboxId: string | null;
+  };
   unsubscribeMailto?: string;
   unsubscribeUrl?: string;
   senderAvatarUrls?: { light: string; dark: string };

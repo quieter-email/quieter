@@ -1,6 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
-import { db, mailbox } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { mailbox } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
 import { createGmailLiveSyncToken } from "./gmail-live-sync-token";

@@ -1,6 +1,10 @@
 import { ORPCError } from "@orpc/server";
-import { db, managedMailSavedView } from "@quieter/database";
-import { mailboxSavedViewDefinitionSchema, type MailboxSavedViewDefinition } from "@quieter/mail";
+import { db } from "@quieter/database/client";
+import { managedMailSavedView } from "@quieter/database/schema";
+import {
+  mailboxSavedViewDefinitionSchema,
+  type MailboxSavedViewDefinition,
+} from "@quieter/mail/mailbox-organization";
 import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";

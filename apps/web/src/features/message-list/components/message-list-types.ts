@@ -14,7 +14,7 @@ export type MessageListProps = {
   activeMailbox: MailboxCategory;
   activeMessageId?: string | null;
   mailboxId: string;
-  mailboxProvider: "gmail" | "managed";
+  mailboxProvider: "api" | "gmail" | "managed";
   error: unknown;
   hasNextPage: boolean;
   isError: boolean;

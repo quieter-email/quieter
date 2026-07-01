@@ -10,6 +10,11 @@ const gmailPubSubVariableNames = [
 ] as const;
 
 const polarProductVariableNames = ["POLAR_PRODUCT_MANAGED_ID", "POLAR_PRODUCT_PRO_ID"] as const;
+const connectorVariableNames = [
+  "CONNECTOR_TOKEN_ENCRYPTION_KEY",
+  "GOOGLE_CALENDAR_CLIENT_ID",
+  "GOOGLE_CALENDAR_CLIENT_SECRET",
+] as const;
 const r2VariableNames = [
   "R2_ACCESS_KEY_ID",
   "R2_ACCOUNT_ID",
@@ -25,12 +30,15 @@ export const createSstEnv = (
     emptyStringAsUndefined: true,
     runtimeEnvStrict: {
       DATABASE_URL: runtimeEnv.DATABASE_URL,
+      CONNECTOR_TOKEN_ENCRYPTION_KEY: runtimeEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY,
       GMAIL_PUBSUB_PUSH_AUDIENCE: runtimeEnv.GMAIL_PUBSUB_PUSH_AUDIENCE,
       GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: runtimeEnv.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT,
       GMAIL_PUBSUB_SUBSCRIPTION: runtimeEnv.GMAIL_PUBSUB_SUBSCRIPTION,
       GMAIL_PUBSUB_TOPIC: runtimeEnv.GMAIL_PUBSUB_TOPIC,
       GMAIL_TOKEN_ENCRYPTION_KEY: runtimeEnv.GMAIL_TOKEN_ENCRYPTION_KEY,
       GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: runtimeEnv.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT,
+      GOOGLE_CALENDAR_CLIENT_ID: runtimeEnv.GOOGLE_CALENDAR_CLIENT_ID,
+      GOOGLE_CALENDAR_CLIENT_SECRET: runtimeEnv.GOOGLE_CALENDAR_CLIENT_SECRET,
       GOOGLE_GMAIL_CLIENT_ID: runtimeEnv.GOOGLE_GMAIL_CLIENT_ID,
       GOOGLE_GMAIL_CLIENT_SECRET: runtimeEnv.GOOGLE_GMAIL_CLIENT_SECRET,
       OPENROUTER_API_KEY: runtimeEnv.OPENROUTER_API_KEY,
@@ -48,12 +56,15 @@ export const createSstEnv = (
     },
     server: {
       DATABASE_URL: z.string().trim().url(),
+      CONNECTOR_TOKEN_ENCRYPTION_KEY: optionalString,
       GMAIL_PUBSUB_PUSH_AUDIENCE: optionalString,
       GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: z.string().trim().email().optional(),
       GMAIL_PUBSUB_SUBSCRIPTION: optionalString,
       GMAIL_PUBSUB_TOPIC: optionalString,
       GMAIL_TOKEN_ENCRYPTION_KEY: z.string().trim().min(1),
       GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: optionalString,
+      GOOGLE_CALENDAR_CLIENT_ID: optionalString,
+      GOOGLE_CALENDAR_CLIENT_SECRET: optionalString,
       GOOGLE_GMAIL_CLIENT_ID: z.string().trim().min(1),
       GOOGLE_GMAIL_CLIENT_SECRET: z.string().trim().min(1),
       OPENROUTER_API_KEY: z.string().trim().min(1),
@@ -87,6 +98,22 @@ export const createSstEnv = (
   }
   if (options.production && !env.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT) {
     throw new Error("GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT is required in production.");
+  }
+
+  const missingConnectorVariables = connectorVariableNames.filter((name) => !env[name]);
+
+  if (
+    missingConnectorVariables.length > 0 &&
+    missingConnectorVariables.length < connectorVariableNames.length
+  ) {
+    throw new Error(
+      `Connector configuration is incomplete: ${missingConnectorVariables.join(", ")}`,
+    );
+  }
+  if (options.production && missingConnectorVariables.length > 0) {
+    throw new Error(
+      `Connector configuration is required in production: ${missingConnectorVariables.join(", ")}`,
+    );
   }
 
   const missingPolarProductVariables = polarProductVariableNames.filter((name) => !env[name]);

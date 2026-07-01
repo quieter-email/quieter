@@ -1,29 +1,34 @@
+import type { AutomationMailMessage } from "@quieter/ai/classify-gmail-message";
+import type { ChatMiddleware } from "@tanstack/ai";
 import { ORPCError } from "@orpc/server";
 import {
-  extractGmailUsefulDetail,
+  extractMailUsefulDetail,
   GMAIL_USEFUL_DETAIL_MODEL,
-  type ChatMiddleware,
   type GmailUsefulDetailCandidate,
   type GmailUsefulDetailPreferenceProfile,
-} from "@quieter/ai";
+} from "@quieter/ai/extract-gmail-useful-detail";
 import { reportAiUsage } from "@quieter/billing";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
+import { db } from "@quieter/database/client";
 import {
-  db,
   gmailUsefulDetail,
   gmailUsefulDetailEvent,
   gmailUsefulDetailFeedback,
-  gmailUsefulDetailSettings,
+  mailboxAutomationSettings,
   type GmailDeliveryStatus,
   type GmailUsefulDetailFeedbackSignal,
   type GmailUsefulDetailKind,
   type GmailUsefulDetailRelevanceSource,
-} from "@quieter/database";
-import { MAILBOX_LABELS, type MessageListItem } from "@quieter/gmail";
+} from "@quieter/database/schema";
+import { MAILBOX_LABELS } from "@quieter/gmail";
 import { and, asc, count, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { decryptSecret, encryptSecret } from "../gmail-mailbox-access";
-import { assertOwnedGmailMailbox } from "../mailbox/access";
+import {
+  loadAutomationMemoryPrompt,
+  refreshUsefulDetailMemoryProfile,
+} from "../mail-automation/memory";
+import { assertAccessibleMailbox } from "../mailbox/service";
 
 const RETRY_BASE_MS = 1000 * 60 * 5;
 const RETRY_MAX_MS = 1000 * 60 * 60 * 24;
@@ -54,6 +59,14 @@ const MAX_RELEVANCE_HORIZON_MS = {
   travel: DAY_MS * 365,
   verification_code: 1000 * 60 * 30,
 } as const satisfies Record<GmailUsefulDetailKind, number>;
+const EVENT_DETAIL_VISIBLE_LEAD_MS: Partial<Record<GmailUsefulDetailKind, number>> = {
+  appointment: DAY_MS,
+  bill: DAY_MS * 7,
+  document_expiry: DAY_MS * 30,
+  reservation: DAY_MS,
+  task: DAY_MS,
+  travel: DAY_MS,
+};
 
 const excludedLabels = new Set<string>([
   MAILBOX_LABELS.drafts,
@@ -73,7 +86,7 @@ const SUPPRESSED_AUTOMATION_KINDS = new Set<GmailUsefulDetailKind>([
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message.slice(0, 2_000) : "Unknown useful-details error.";
 
-const getSenderSource = (from?: string) => {
+const getSenderSource = (from?: string | null) => {
   const domain = from?.match(/[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})/i)?.[1];
   return domain?.toLowerCase().slice(0, 253) ?? null;
 };
@@ -131,11 +144,22 @@ const serializeUsefulDetails = async (
 };
 
 const trimText = (value: string | null, maxLength: number) => {
-  const normalized = value?.trim();
-  return normalized ? normalized.slice(0, maxLength) : null;
+  const normalized = value?.trim().replace(/\s+/g, " ");
+  if (!normalized) {
+    return null;
+  }
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  const sliced = normalized.slice(0, maxLength).trimEnd();
+  const lastWhitespaceIndex = sliced.search(/\s+\S*$/);
+  return lastWhitespaceIndex >= maxLength * 0.65
+    ? sliced.slice(0, lastWhitespaceIndex).trimEnd()
+    : sliced;
 };
 
-const getMessageReceivedAt = (message: MessageListItem, now: Date) => {
+const getMessageReceivedAt = (message: AutomationMailMessage, now: Date) => {
   const internalTimestamp = Number(message.internalDate);
   const parsedTimestamp =
     Number.isFinite(internalTimestamp) && internalTimestamp > 0
@@ -162,7 +186,7 @@ const verificationCodePattern =
   /\b(?:code|otp|passcode|pin)\b[^A-Za-z0-9]{0,24}([A-Z0-9]{4,16}|[A-Z0-9]+(?:[ -][A-Z0-9]+)+)\b/gi;
 const numericVerificationCodePattern = /\b(\d(?:[ -]?\d){3,7})\b/g;
 
-const buildVerificationCodeSearchText = (message: MessageListItem) =>
+const buildVerificationCodeSearchText = (message: AutomationMailMessage) =>
   [message.subject, message.snippet, message.bodyText, message.bodyHtml]
     .filter(Boolean)
     .join("\n")
@@ -175,7 +199,7 @@ const looksLikeVerificationContext = (text: string, index: number, length: numbe
   return verificationIntentPattern.test(window);
 };
 
-const extractVerificationCodeFromMessage = (message: MessageListItem) => {
+const extractVerificationCodeFromMessage = (message: AutomationMailMessage) => {
   const text = buildVerificationCodeSearchText(message);
   if (!verificationIntentPattern.test(text)) {
     return null;
@@ -232,6 +256,30 @@ const defaultTitles = {
   verification_code: "Verification code",
 } as const satisfies Record<GmailUsefulDetailKind, string>;
 
+const getVisibleFrom = ({
+  eventAt,
+  kind,
+  receivedAt,
+  relevantFrom,
+}: {
+  eventAt: Date | null;
+  kind: GmailUsefulDetailKind;
+  receivedAt: Date;
+  relevantFrom: Date;
+}) => {
+  let visibleFrom = relevantFrom < receivedAt ? receivedAt : relevantFrom;
+  const leadMs = EVENT_DETAIL_VISIBLE_LEAD_MS[kind];
+
+  if (eventAt && leadMs && eventAt > visibleFrom) {
+    const reminderStart = new Date(eventAt.getTime() - leadMs);
+    if (visibleFrom < reminderStart) {
+      visibleFrom = reminderStart;
+    }
+  }
+
+  return visibleFrom;
+};
+
 export type MaterializedGmailUsefulDetail = {
   carrier: string | null;
   code: string | null;
@@ -280,7 +328,7 @@ export const materializeGmailUsefulDetail = ({
   preferences,
 }: {
   candidate: GmailUsefulDetailCandidate;
-  message: MessageListItem;
+  message: AutomationMailMessage;
   now?: Date;
   preferences?: GmailUsefulDetailPreferenceProfile;
 }): MaterializedGmailUsefulDetail => {
@@ -310,8 +358,6 @@ export const materializeGmailUsefulDetail = ({
   ) {
     return null;
   }
-  const visibleFrom = relevantFrom < receivedAt ? receivedAt : relevantFrom;
-
   const code = candidate.kind === "verification_code" ? normalizeCode(candidate.code) : null;
   if (candidate.kind === "verification_code" && !code) {
     return null;
@@ -327,7 +373,16 @@ export const materializeGmailUsefulDetail = ({
   const reference = trimText(candidate.reference, 120);
   const location = trimText(candidate.location, 160);
   const eventAt = parseTimestamp(candidate.eventAt) ?? expectedAt;
+  const visibleFrom = getVisibleFrom({
+    eventAt,
+    kind: candidate.kind,
+    receivedAt,
+    relevantFrom,
+  });
   const status = candidate.kind === "delivery" ? (candidate.status ?? "unknown") : null;
+  if (visibleFrom >= expiresAt) {
+    return null;
+  }
   if (
     (candidate.kind === "appointment" ||
       candidate.kind === "bill" ||
@@ -387,7 +442,7 @@ export const materializeGmailVerificationCode = ({
   message,
   now = new Date(),
 }: {
-  message: MessageListItem;
+  message: AutomationMailMessage;
   now?: Date;
 }): MaterializedGmailUsefulDetail => {
   const code = extractVerificationCodeFromMessage(message);
@@ -422,8 +477,8 @@ export const materializeGmailVerificationCode = ({
 };
 
 export const isGmailUsefulDetailCandidate = (
-  message: MessageListItem | null,
-): message is MessageListItem =>
+  message: AutomationMailMessage | null,
+): message is AutomationMailMessage =>
   !!message?.labelIds?.includes(MAILBOX_LABELS.inbox) &&
   !message.labelIds.some((labelId) => excludedLabels.has(labelId));
 
@@ -517,7 +572,7 @@ const upsertGmailUsefulDetail = async ({
   detail: NonNullable<MaterializedGmailUsefulDetail>;
   event: typeof gmailUsefulDetailEvent.$inferSelect;
   gmailMessageId: string;
-  message: MessageListItem;
+  message: AutomationMailMessage;
   model: string | null;
   source: string | null;
   usage: { completionTokens: number | null; promptTokens: number | null };
@@ -689,7 +744,10 @@ const getGmailUsefulDetailPreferenceProfile = async (
     return sourceCount > 0 ? [{ ...row, count: sourceCount }] : [];
   });
 
-  return buildGmailUsefulDetailPreferenceProfile({ global, source: sourceSpecific });
+  return {
+    ...buildGmailUsefulDetailPreferenceProfile({ global, source: sourceSpecific }),
+    memoryProfile: await loadAutomationMemoryPrompt({ agent: "useful_detail", mailboxId }),
+  };
 };
 
 export const processGmailUsefulDetailMessage = async ({
@@ -699,7 +757,7 @@ export const processGmailUsefulDetailMessage = async ({
   userId,
 }: {
   gmailMessageId: string;
-  loadMessage: () => Promise<MessageListItem | null>;
+  loadMessage: () => Promise<AutomationMailMessage | null>;
   mailboxId: string;
   userId: string;
 }) => {
@@ -728,9 +786,9 @@ export const processGmailUsefulDetailMessage = async ({
     const source = getSenderSource(message.from);
     const [[currentSettings], preferences] = await Promise.all([
       db
-        .select({ enabled: gmailUsefulDetailSettings.enabled })
-        .from(gmailUsefulDetailSettings)
-        .where(eq(gmailUsefulDetailSettings.mailboxId, mailboxId))
+        .select({ enabled: mailboxAutomationSettings.usefulDetailsEnabled })
+        .from(mailboxAutomationSettings)
+        .where(eq(mailboxAutomationSettings.mailboxId, mailboxId))
         .limit(1),
       getGmailUsefulDetailPreferenceProfile(mailboxId, source),
     ]);
@@ -759,7 +817,7 @@ export const processGmailUsefulDetailMessage = async ({
       return;
     }
 
-    const candidate = await extractGmailUsefulDetail({
+    const candidate = await extractMailUsefulDetail({
       message,
       middleware: [usageMiddleware],
       preferences,
@@ -793,9 +851,9 @@ export const processGmailUsefulDetailMessage = async ({
         usage: { completionTokens, promptTokens },
       });
       const [latestSettings] = await db
-        .select({ enabled: gmailUsefulDetailSettings.enabled })
-        .from(gmailUsefulDetailSettings)
-        .where(eq(gmailUsefulDetailSettings.mailboxId, mailboxId))
+        .select({ enabled: mailboxAutomationSettings.usefulDetailsEnabled })
+        .from(mailboxAutomationSettings)
+        .where(eq(mailboxAutomationSettings.mailboxId, mailboxId))
         .limit(1);
       if (!latestSettings?.enabled) {
         await db.delete(gmailUsefulDetail).where(eq(gmailUsefulDetail.mailboxId, mailboxId));
@@ -869,16 +927,16 @@ export const reportPendingGmailUsefulDetailUsage = async (mailboxId: string, use
 };
 
 export const listGmailUsefulDetails = async (input: { mailboxId: string; userId: string }) => {
-  const gmailMailbox = await assertOwnedGmailMailbox(input);
+  const selectedMailbox = await assertAccessibleMailbox(input);
   const [[settings], entitlement] = await Promise.all([
     db
-      .select({ enabled: gmailUsefulDetailSettings.enabled })
-      .from(gmailUsefulDetailSettings)
-      .where(eq(gmailUsefulDetailSettings.mailboxId, input.mailboxId))
+      .select({ enabled: mailboxAutomationSettings.usefulDetailsEnabled })
+      .from(mailboxAutomationSettings)
+      .where(eq(mailboxAutomationSettings.mailboxId, input.mailboxId))
       .limit(1),
     hasUserBillingFeature({
       feature: "gmailAutomation",
-      organizationId: gmailMailbox.organizationId ?? undefined,
+      organizationId: selectedMailbox.organizationId ?? undefined,
       userId: input.userId,
     }),
   ]);
@@ -943,7 +1001,7 @@ export const listGmailThreadUsefulDetails = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
-  await assertOwnedGmailMailbox(input);
+  await assertAccessibleMailbox(input);
   const items = await db
     .select({
       detail: gmailUsefulDetail,
@@ -974,7 +1032,7 @@ export const dismissGmailUsefulDetail = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
-  await assertOwnedGmailMailbox(input);
+  await assertAccessibleMailbox(input);
   const [dismissed] = await db
     .update(gmailUsefulDetail)
     .set({ dismissedAt: new Date(), updatedAt: new Date() })
@@ -996,7 +1054,7 @@ export const setGmailUsefulDetailFeedback = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
-  await assertOwnedGmailMailbox(input);
+  await assertAccessibleMailbox(input);
   const [detail] = await db
     .select({
       id: gmailUsefulDetail.id,
@@ -1042,6 +1100,8 @@ export const setGmailUsefulDetailFeedback = async (input: {
       .set({ dismissedAt: now, updatedAt: now })
       .where(eq(gmailUsefulDetail.id, detail.id));
   }
+
+  await refreshUsefulDetailMemoryProfile(input.mailboxId);
 
   return { feedback: input.feedback, id: detail.id };
 };

@@ -140,6 +140,9 @@ export default $config({
     });
 
     const openRouterApiKey = env.OPENROUTER_API_KEY;
+    const connectorTokenEncryptionKey = env.CONNECTOR_TOKEN_ENCRYPTION_KEY ?? "";
+    const googleCalendarClientId = env.GOOGLE_CALENDAR_CLIENT_ID ?? "";
+    const googleCalendarClientSecret = env.GOOGLE_CALENDAR_CLIENT_SECRET ?? "";
     const googleGmailClientId = env.GOOGLE_GMAIL_CLIENT_ID;
     const googleGmailClientSecret = env.GOOGLE_GMAIL_CLIENT_SECRET;
     const gmailTokenEncryptionKey = env.GMAIL_TOKEN_ENCRYPTION_KEY;
@@ -157,9 +160,12 @@ export default $config({
     const chatGenerationQueue = new sst.aws.Queue("ChatGenerationQueue");
     const chatGenerationWorkflow = new sst.aws.Workflow("ChatGenerationWorkflow", {
       environment: {
+        CONNECTOR_TOKEN_ENCRYPTION_KEY: connectorTokenEncryptionKey,
         DATABASE_URL: databaseUrl,
         GMAIL_TOKEN_ENCRYPTION_KEY: gmailTokenEncryptionKey,
         GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: gmailTokenEncryptionKeyCurrent,
+        GOOGLE_CALENDAR_CLIENT_ID: googleCalendarClientId,
+        GOOGLE_CALENDAR_CLIENT_SECRET: googleCalendarClientSecret,
         GOOGLE_GMAIL_CLIENT_ID: googleGmailClientId,
         GOOGLE_GMAIL_CLIENT_SECRET: googleGmailClientSecret,
         OPENROUTER_API_KEY: openRouterApiKey,

@@ -11,7 +11,7 @@ const selectTriggerVariants = cva(
   {
     variants: {
       variant: {
-        default: "w-full border border-input bg-background text-foreground shadow-sm",
+        default: "w-full border border-input bg-background-light text-foreground shadow-sm",
         ghost:
           "w-auto bg-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground active:bg-muted/80 active:text-foreground",
       },
@@ -96,7 +96,7 @@ export const SelectContent = ({
       align={align}
       alignOffset={alignOffset}
       alignItemWithTrigger={alignItemWithTrigger}
-      className={cn("z-50", { "min-h-20": alignItemWithTrigger }, positionerClassName)}
+      className={cn("z-50", positionerClassName)}
       side={side}
       sideOffset={sideOffset}
     >

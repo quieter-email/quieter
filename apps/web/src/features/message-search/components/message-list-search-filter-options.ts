@@ -2,6 +2,8 @@ import type { IconSvgElement } from "@hugeicons/react";
 import {
   Calendar01Icon,
   Calendar03Icon,
+  Delete01Icon,
+  Delete02Icon,
   FileAttachmentIcon,
   FileEditIcon,
   Mail01Icon,
@@ -41,6 +43,18 @@ export const searchFilterOptions: ReadonlyArray<{
     hint: "is:outbound",
     icon: MailSend02Icon,
     label: "Outbound",
+  },
+  {
+    filter: { type: "is", value: "spam" },
+    hint: "is:spam",
+    icon: Delete02Icon,
+    label: "Spam",
+  },
+  {
+    filter: { type: "is", value: "trash" },
+    hint: "is:trash",
+    icon: Delete01Icon,
+    label: "Trash",
   },
   { filter: { type: "before", value: "" }, hint: "before:", icon: Calendar01Icon, label: "Before" },
   { filter: { type: "after", value: "" }, hint: "after:", icon: Calendar03Icon, label: "After" },

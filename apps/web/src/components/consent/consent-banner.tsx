@@ -1,7 +1,7 @@
 "use client";
 
 import { useHeadlessConsentUI, useTranslations } from "@c15t/react";
-import { Button } from "@quieter/ui";
+import { Button } from "@quieter/ui/button";
 import { Link } from "@tanstack/react-router";
 
 export const ConsentBanner = () => {

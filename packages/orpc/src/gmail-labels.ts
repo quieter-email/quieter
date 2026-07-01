@@ -1,5 +1,6 @@
 import type { GmailLabelListItem } from "@quieter/gmail";
-import { db, gmailLabel } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { gmailLabel } from "@quieter/database/schema";
 import { and, eq, notInArray, sql } from "drizzle-orm";
 
 export type GmailLabelWithDetails = GmailLabelListItem & {

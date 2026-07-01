@@ -1,9 +1,10 @@
 "use client";
 
-import { TooltipGroup } from "@quieter/ui";
+import { TooltipGroup } from "@quieter/ui/tooltip";
 import { useNavigate } from "@tanstack/react-router";
 import { authClient } from "~/lib/auth";
 import { settingsRouteApi } from "~/lib/route-apis";
+import { SettingsBackButton } from "../settings-layout";
 import { OrganizationDetailView } from "./organization-detail-view";
 import { OrganizationsListView } from "./organizations-list-view";
 
@@ -54,6 +55,16 @@ export const OrganizationSettingsPanel = () => {
     });
   };
 
+  const navigateToDivisions = () => {
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        organizationView: "divisions",
+      }),
+      to: ".",
+    });
+  };
+
   const navigateToDomains = () => {
     void navigate({
       search: (previous) => ({
@@ -88,15 +99,28 @@ export const OrganizationSettingsPanel = () => {
     <TooltipGroup>
       <div className="space-y-6">
         {organizationsState.isPending || sessionState.isPending ? (
-          <p className="text-sm text-muted-foreground">Loading teams…</p>
+          <>
+            {organizationId ? (
+              <SettingsBackButton onClick={navigateToOrganizationsList}>Teams</SettingsBackButton>
+            ) : null}
+            <p className="text-sm text-muted-foreground">Loading teams…</p>
+          </>
         ) : loadError ? (
-          <p className="text-sm text-destructive">{loadError.message ?? "Could not load teams."}</p>
+          <>
+            {organizationId ? (
+              <SettingsBackButton onClick={navigateToOrganizationsList}>Teams</SettingsBackButton>
+            ) : null}
+            <p className="text-sm text-destructive">
+              {loadError.message ?? "Could not load teams."}
+            </p>
+          </>
         ) : selectedOrganization ? (
           <OrganizationDetailView
             key={selectedOrganization.id}
             onOpenApiKeys={navigateToApiKeys}
             onBackToList={navigateToOrganizationsList}
             onBackToOrganization={navigateToOrganizationOverview}
+            onOpenDivisions={navigateToDivisions}
             onOpenDomains={navigateToDomains}
             onOpenMembers={navigateToMembers}
             organization={selectedOrganization}

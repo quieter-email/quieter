@@ -2,7 +2,7 @@ import type {
   MailDomainCheckResult,
   MailDomainDnsRecord,
   MailDomainStatus,
-} from "@quieter/database";
+} from "@quieter/database/schema";
 import { ORPCError } from "@orpc/server";
 import { randomBytes } from "node:crypto";
 

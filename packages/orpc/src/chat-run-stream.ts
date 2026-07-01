@@ -1,4 +1,4 @@
-import type { ChatMessagePart, ChatRunStatus } from "@quieter/database";
+import type { ChatMessagePart, ChatRunStatus } from "@quieter/database/schema";
 
 export const ACTIVE_CHAT_RUN_STATUSES = [
   "queued",

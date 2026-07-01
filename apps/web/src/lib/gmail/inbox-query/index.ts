@@ -10,6 +10,8 @@ export {
 } from "./sync";
 
 export {
+  archiveMessageInMailbox,
+  archiveThreadInMailbox,
   deleteDraftInMailbox,
   markMessageAsReadInMailbox,
   markMessageAsSpamInMailbox,

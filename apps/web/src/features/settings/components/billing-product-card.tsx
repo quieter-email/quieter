@@ -3,7 +3,9 @@
 import { CheckmarkCircle02Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { BILLING_PRODUCTS, type BillingProductId } from "@quieter/billing/plans";
-import { Button, cn } from "@quieter/ui";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
+import { settingsRowValueClass } from "~/features/settings/components/settings-layout";
 import { formatBillingProduct } from "~/features/settings/domain/billing";
 
 const moneyFormatter = new Intl.NumberFormat("en-US", {
@@ -33,34 +35,22 @@ export const BillingProductCard = ({
 
   return (
     <article
-      className={cn("rounded-xl border bg-background p-5", {
+      className={cn("rounded-xl border bg-background p-5 squircle", {
         "border-primary/50 bg-primary/4": isCurrent,
         "border-border/70": !isCurrent,
       })}
     >
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-semibold text-foreground">{product.name}</h3>
             {isCurrent && (
-              <span className="rounded-full border border-primary/40 px-2 py-0.5 text-[11px] font-medium text-primary">
+              <span className="rounded-full border border-primary/40 px-2 py-0.5 text-[11px] font-medium text-primary squircle">
                 Current
               </span>
             )}
           </div>
           <p className="mt-1.5 text-sm/6 text-muted-foreground">{product.description}</p>
-          <ul className="mt-4 flex flex-col gap-2 text-sm text-muted-foreground">
-            {product.features.map((feature) => (
-              <li className="flex items-start gap-2" key={feature}>
-                <HugeiconsIcon
-                  aria-hidden
-                  className="mt-0.5 size-4 shrink-0 text-foreground/60"
-                  icon={CheckmarkCircle02Icon}
-                />
-                <span>{feature}</span>
-              </li>
-            ))}
-          </ul>
         </div>
         <div className="flex shrink-0 flex-col gap-3 sm:items-end">
           <p className="text-2xl font-semibold tracking-tight text-foreground">
@@ -81,6 +71,18 @@ export const BillingProductCard = ({
           </Button>
         </div>
       </div>
+      <ul className="mt-4 flex flex-col gap-2 text-sm text-muted-foreground">
+        {product.features.map((feature) => (
+          <li className="flex items-start gap-2" key={feature}>
+            <HugeiconsIcon
+              aria-hidden
+              className="mt-0.5 size-4 shrink-0 text-foreground/60"
+              icon={CheckmarkCircle02Icon}
+            />
+            <span>{feature}</span>
+          </li>
+        ))}
+      </ul>
     </article>
   );
 };
@@ -94,7 +96,7 @@ export const BillingCreditSummary = ({
   product: BillingProductId | null;
   usage: { billableCostCents: number; costCents: number; remainingCreditCents: number } | null;
 }) => (
-  <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+  <div className={cn("flex flex-wrap gap-x-5 gap-y-1", settingsRowValueClass)}>
     <span>{formatBillingProduct(product)}</span>
     {creditAmountCents != null && (
       <span>

@@ -20,6 +20,7 @@ export const summarizeToolCalls = (
   items: Array<{ call: ToolCall; pending: boolean; result?: ToolResult }>,
 ) => {
   const counts = {
+    calendar: 0,
     compose: 0,
     labels: 0,
     message: 0,
@@ -37,6 +38,11 @@ export const summarizeToolCalls = (
 
     if (call.name === "compose_email") {
       counts.compose += 1;
+      continue;
+    }
+
+    if (call.name === "create_google_calendar_event") {
+      counts.calendar += 1;
       continue;
     }
 
@@ -91,6 +97,10 @@ export const summarizeToolCalls = (
       return "Drafting email";
     }
 
+    if (active?.call.name === "create_google_calendar_event") {
+      return "Adding calendar event";
+    }
+
     return "Working";
   }
 
@@ -122,6 +132,12 @@ export const summarizeToolCalls = (
 
   if (counts.compose > 0) {
     parts.push(counts.compose === 1 ? "drafted email" : `drafted ${counts.compose} emails`);
+  }
+
+  if (counts.calendar > 0) {
+    parts.push(
+      counts.calendar === 1 ? "added calendar event" : `added ${counts.calendar} calendar events`,
+    );
   }
 
   if (parts.length === 0) {
@@ -159,6 +175,18 @@ export const getActiveToolDetail = (call: ToolCall, result?: ToolResult): string
 
   if (call.name === "compose_email" && typeof args.subject === "string" && args.subject.trim()) {
     return truncateToolDetail(args.subject);
+  }
+
+  if (call.name === "create_google_calendar_event") {
+    if (
+      parsed.kind === "google-calendar-event" &&
+      parsed.data.status === "success" &&
+      parsed.data.summary
+    ) {
+      return truncateToolDetail(parsed.data.summary);
+    }
+
+    return typeof args.summary === "string" ? truncateToolDetail(args.summary) : undefined;
   }
 
   return undefined;

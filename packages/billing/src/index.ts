@@ -2,10 +2,11 @@ import type { Subscription } from "@polar-sh/sdk/models/components/subscription.
 import type {
   BillingPlan as StoredBillingPlan,
   BillingSubscriptionStatus,
-} from "@quieter/database";
+} from "@quieter/database/schema";
 import { ORPCError } from "@orpc/server";
 import { ResourceNotFound } from "@polar-sh/sdk/models/errors/resourcenotfound.js";
-import { billingSubscription, db, mailbox, member, organization } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { billingSubscription, mailbox, member, organization } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { getBillingCreditUsage, recordBillingCreditUsage, type BillingUsageKind } from "./credits";
@@ -535,6 +536,49 @@ export const reportAiUsage = async (input: {
       completionTokens: input.completionTokens,
       model: input.model,
       promptTokens: input.promptTokens,
+      usageKind: input.usageKind,
+    },
+  });
+};
+
+export const reportAiUsageCost = async (input: {
+  chatId?: string | null;
+  costMicroCents: number;
+  durationSeconds?: number;
+  externalId: string;
+  mailboxId?: string;
+  model: string;
+  totalTokens?: number;
+  usageKind: Extract<BillingUsageKind, "aiChat" | "autoLabel" | "usefulDetails">;
+  userId: string;
+}) => {
+  const costMicroCents = applyAiUsageMarkup(input.costMicroCents);
+  if (costMicroCents <= 0 || !input.mailboxId) return;
+
+  const [mailboxRow] = await db
+    .select({ organizationId: mailbox.organizationId })
+    .from(mailbox)
+    .where(eq(mailbox.id, input.mailboxId))
+    .limit(1);
+  if (!mailboxRow) return;
+
+  const entitlement = await hasUserBillingFeature({
+    feature: "aiChat",
+    organizationId: mailboxRow.organizationId,
+    userId: input.userId,
+  });
+  if (!entitlement.account) return;
+
+  await recordBillingCreditUsage({
+    account: entitlement.account,
+    category: "ai",
+    costMicroCents,
+    dedupeKey: `ai:${input.externalId}`,
+    metadata: {
+      chatId: input.chatId ?? "",
+      durationSeconds: input.durationSeconds ?? 0,
+      model: input.model,
+      totalTokens: input.totalTokens ?? 0,
       usageKind: input.usageKind,
     },
   });

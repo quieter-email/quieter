@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@quieter/ui";
+import { cn } from "@quieter/ui/cn";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLayoutEffect } from "react";
 import { type ComposeDraftState, buildComposeDraftFromSavedDraftMessage } from "~/features/compose";
@@ -8,6 +8,7 @@ import { MessageList } from "~/features/message-list/components/message-list";
 import { MessageDetail } from "~/features/message-thread/components/message-detail";
 import { createDemoMailboxActions } from "~/lib/gmail/demo-mail";
 import { type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
+import { createManagedDemoMailboxActions } from "~/lib/managed-mail/demo-managed-mail";
 import { orpc } from "~/lib/orpc";
 import { createMailboxActionHandlers } from "../mailbox-action-handlers";
 import { useMailboxMessages } from "./use-mailbox-messages";
@@ -22,8 +23,9 @@ type MailboxMessagesPanelProps = {
   activeMailbox: MailboxCategory;
   currentUserEmail: string | null;
   isDemoMode: boolean;
+  isManagedDemoMode: boolean;
   mailboxId: string;
-  mailboxProvider: "gmail" | "managed";
+  mailboxProvider: "api" | "gmail" | "managed";
   onComposeDraftRequested: (draft: ComposeDraftState) => void;
   onOpenSidebar: () => void;
   onSearchQueryChange: (query: string) => void;
@@ -34,6 +36,7 @@ export const MailboxMessagesPanel = ({
   activeMailbox,
   currentUserEmail,
   isDemoMode,
+  isManagedDemoMode,
   mailboxId,
   mailboxProvider,
   onComposeDraftRequested,
@@ -71,6 +74,7 @@ export const MailboxMessagesPanel = ({
   } = useMailboxMessages({
     activeMailbox,
     isDemoMode,
+    isManagedDemoMode,
     mailboxProvider,
     messageId: messageId ?? undefined,
     threadId: threadId ?? undefined,
@@ -104,24 +108,43 @@ export const MailboxMessagesPanel = ({
     setMessageActionsPending([id], pending);
   const setThreadActionPending = (id: string, pending: boolean) =>
     setThreadActionsPending([id], pending);
-  const mailboxActions = isDemoMode
-    ? createDemoMailboxActions(queryClient)
-    : createMailboxActionHandlers({
-        activeMailbox,
-        activeSearchQuery: normalizedSearchQuery,
-        queryClient,
-        refreshSearchResultsIfNeeded,
-        isMessageActionPending,
-        isThreadActionPending,
-        setMessageActionPending,
-        setMessageActionsPending,
-        setThreadActionPending,
-        setThreadActionsPending,
-        unsubscribeFromMessageMutation: async (messageId) => {
-          await unsubscribeFromMessage({ mailboxId, messageId });
-        },
-        mailboxId,
-      });
+  const readOnlyMailboxActions = createMailboxActionHandlers({
+    activeMailbox,
+    activeSearchQuery: normalizedSearchQuery,
+    queryClient,
+    refreshSearchResultsIfNeeded,
+    isMessageActionPending,
+    isThreadActionPending,
+    setMessageActionPending,
+    setMessageActionsPending,
+    setThreadActionPending,
+    setThreadActionsPending,
+    unsubscribeFromMessageMutation: async () => {},
+    mailboxId,
+  });
+  const mailboxActions =
+    mailboxProvider === "api"
+      ? readOnlyMailboxActions
+      : isManagedDemoMode
+        ? createManagedDemoMailboxActions(queryClient)
+        : isDemoMode
+          ? createDemoMailboxActions(queryClient)
+          : createMailboxActionHandlers({
+              activeMailbox,
+              activeSearchQuery: normalizedSearchQuery,
+              queryClient,
+              refreshSearchResultsIfNeeded,
+              isMessageActionPending,
+              isThreadActionPending,
+              setMessageActionPending,
+              setMessageActionsPending,
+              setThreadActionPending,
+              setThreadActionsPending,
+              unsubscribeFromMessageMutation: async (messageId) => {
+                await unsubscribeFromMessage({ mailboxId, messageId });
+              },
+              mailboxId,
+            });
 
   const openDraft = (message: MessageListItem) => {
     if (!message.draftId) {
@@ -169,7 +192,7 @@ export const MailboxMessagesPanel = ({
     <>
       <section
         className={cn(
-          "m-1.5 ml-0 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 lg:flex",
+          "m-2 ml-0 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 lg:flex",
           {
             "flex flex-1": !isMessageRouteOpen,
             hidden: isMessageRouteOpen,
@@ -204,7 +227,7 @@ export const MailboxMessagesPanel = ({
 
       <div
         className={cn(
-          "m-1.5 ml-0 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 lg:flex",
+          "m-2 ml-0 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 lg:flex",
           {
             "flex flex-1": isMessageRouteOpen,
             hidden: !isMessageRouteOpen,

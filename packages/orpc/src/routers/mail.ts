@@ -32,11 +32,13 @@ import {
   arrayBufferToBase64Url,
   buildMimeMessage,
   buildPlainTextMessage,
+} from "@quieter/mail/compose/mime";
+import {
   composeDraftInputSchema,
   composeMessageInputSchema,
   composeSendDraftInputSchema,
   splitMailAddressList,
-} from "@quieter/mail/compose";
+} from "@quieter/mail/compose/schema";
 import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import { z } from "zod";
 import { saveGmailDraft, sendGmailMessage } from "../gmail-compose";
@@ -46,6 +48,7 @@ import {
   syncGmailLabels,
   upsertSyncedGmailLabel,
 } from "../gmail-labels";
+import { recordMailAutoLabelFeedback } from "../mail-automation/memory";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
   createManagedLabel,
@@ -55,16 +58,23 @@ import {
   updateManagedThreadLabels,
   updateSingleManagedMessageLabels,
 } from "../managed-mail/labels/service";
-import { deleteManagedMessage, deleteManagedThread } from "../managed-mail/messages/deletion";
 import {
   getManagedMessageInspector,
   getManagedThread,
   listManagedMessages,
   refreshManagedMessages,
   sendManagedMailboxMessage,
+  setManagedMessageMailboxState,
   setManagedMessageReadState,
+  setManagedThreadMailboxState,
   setManagedThreadReadState,
 } from "../managed-mail/messages/service";
+import {
+  getOrganizationApiMailInspector,
+  getOrganizationApiMailThread,
+  isOrganizationApiMailboxId,
+  listOrganizationApiMailMessages,
+} from "../organization-api-mail";
 import {
   callGmail,
   historySyncMailboxCategorySchema,
@@ -113,6 +123,20 @@ const parseListUnsubscribeMailto = (value: string) => {
   };
 };
 
+const recordLabelFeedback = async (input: {
+  addLabelIds?: string[];
+  mailboxId: string;
+  providerMessageIds: string[];
+  removeLabelIds?: string[];
+  userId: string;
+}) => {
+  try {
+    await recordMailAutoLabelFeedback(input);
+  } catch (error) {
+    console.error("Could not record mail auto-label feedback.", error);
+  }
+};
+
 export const mailRouter = {
   ...mailboxProcedures,
   ...managedOrganizationMailRouter,
@@ -128,6 +152,13 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      if (isOrganizationApiMailboxId(input.mailboxId)) {
+        return await listOrganizationApiMailMessages({
+          ...input,
+          userId: context.userId,
+        });
+      }
+
       const selectedMailbox = await assertAccessibleMailbox({
         mailboxId: input.mailboxId,
         userId: context.userId,
@@ -167,6 +198,16 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      if (isOrganizationApiMailboxId(input.mailboxId)) {
+        return {
+          hasChanges: true,
+          refreshFirstPage: true,
+          removedMessageIds: [],
+          requiresFullRefresh: true,
+          updatedMessages: [],
+        };
+      }
+
       const selectedMailbox = await assertAccessibleMailbox({
         mailboxId: input.mailboxId,
         userId: context.userId,
@@ -200,6 +241,10 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      if (isOrganizationApiMailboxId(input.mailboxId)) {
+        return { removedMessageIds: [], updatedMessages: [] };
+      }
+
       const selectedMailbox = await assertAccessibleMailbox({
         mailboxId: input.mailboxId,
         userId: context.userId,
@@ -230,6 +275,13 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      if (isOrganizationApiMailboxId(input.mailboxId)) {
+        return await getOrganizationApiMailThread({
+          ...input,
+          userId: context.userId,
+        });
+      }
+
       const selectedMailbox = await assertAccessibleMailbox({
         mailboxId: input.mailboxId,
         userId: context.userId,
@@ -255,6 +307,13 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      if (isOrganizationApiMailboxId(input.mailboxId)) {
+        return await getOrganizationApiMailInspector({
+          ...input,
+          userId: context.userId,
+        });
+      }
+
       const selectedMailbox = await assertAccessibleMailbox({
         mailboxId: input.mailboxId,
         userId: context.userId,
@@ -557,16 +616,32 @@ export const mailRouter = {
         userId: context.userId,
       });
       if (selectedMailbox.provider === "managed") {
-        return await updateManagedThreadLabels({
+        const result = await updateManagedThreadLabels({
           ...input,
           userId: context.userId,
         });
+        void recordLabelFeedback({
+          addLabelIds: input.addLabelIds,
+          mailboxId: input.mailboxId,
+          providerMessageIds: result.messages.map((message) => message.id),
+          removeLabelIds: input.removeLabelIds,
+          userId: context.userId,
+        });
+        return result;
       }
       return await callGmail(context, input.mailboxId, async (accessToken) => {
-        return await updateThreadLabels(accessToken, input.threadId, {
+        const result = await updateThreadLabels(accessToken, input.threadId, {
           addLabelIds: input.addLabelIds,
           removeLabelIds: input.removeLabelIds,
         });
+        void recordLabelFeedback({
+          addLabelIds: input.addLabelIds,
+          mailboxId: input.mailboxId,
+          providerMessageIds: result.messages.map((message) => message.id),
+          removeLabelIds: input.removeLabelIds,
+          userId: context.userId,
+        });
+        return result;
       });
     }),
 
@@ -585,16 +660,32 @@ export const mailRouter = {
         userId: context.userId,
       });
       if (selectedMailbox.provider === "managed") {
-        return await updateSingleManagedMessageLabels({
+        const result = await updateSingleManagedMessageLabels({
           ...input,
           userId: context.userId,
         });
+        void recordLabelFeedback({
+          addLabelIds: input.addLabelIds,
+          mailboxId: input.mailboxId,
+          providerMessageIds: [result.id],
+          removeLabelIds: input.removeLabelIds,
+          userId: context.userId,
+        });
+        return result;
       }
       return await callGmail(context, input.mailboxId, async (accessToken) => {
-        return await updateMessageLabels(accessToken, input.messageId, {
+        const result = await updateMessageLabels(accessToken, input.messageId, {
           addLabelIds: input.addLabelIds,
           removeLabelIds: input.removeLabelIds,
         });
+        void recordLabelFeedback({
+          addLabelIds: input.addLabelIds,
+          mailboxId: input.mailboxId,
+          providerMessageIds: [result.id],
+          removeLabelIds: input.removeLabelIds,
+          userId: context.userId,
+        });
+        return result;
       });
     }),
 
@@ -611,8 +702,9 @@ export const mailRouter = {
         userId: context.userId,
       });
       if (selectedMailbox.provider === "managed") {
-        return await deleteManagedMessage({
+        return await setManagedMessageMailboxState({
           ...input,
+          state: "trash",
           userId: context.userId,
         });
       }
@@ -630,6 +722,18 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return await setManagedMessageMailboxState({
+          ...input,
+          state: "active",
+          userId: context.userId,
+        });
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken) => {
         return await untrashMessage(accessToken, input.messageId);
       });
@@ -643,6 +747,18 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return await setManagedThreadMailboxState({
+          ...input,
+          state: "active",
+          userId: context.userId,
+        });
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken) => {
         return await untrashThread(accessToken, input.threadId);
       });
@@ -661,8 +777,9 @@ export const mailRouter = {
         userId: context.userId,
       });
       if (selectedMailbox.provider === "managed") {
-        return await deleteManagedThread({
+        return await setManagedThreadMailboxState({
           ...input,
+          state: "trash",
           userId: context.userId,
         });
       }

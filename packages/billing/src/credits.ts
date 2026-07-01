@@ -1,9 +1,9 @@
+import { db } from "@quieter/database/client";
 import {
   billingCreditUsageEvent,
   billingSubscription,
-  db,
   type BillingUsageCategory,
-} from "@quieter/database";
+} from "@quieter/database/schema";
 import { and, asc, eq, gt, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { BillingAccount } from "./entitlements";
 import { getPolarApiOrganizationId, ingestPolarEvents } from "./polar";

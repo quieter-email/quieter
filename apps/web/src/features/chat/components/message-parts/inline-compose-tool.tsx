@@ -1,13 +1,20 @@
 "use client";
 
-import type { ComposeEmailInput, ComposeEmailResult } from "@quieter/ai";
-import { composeDraftFormValuesSchema, composeSendFormValuesSchema } from "@quieter/mail/compose";
-import { Button, cn } from "@quieter/ui";
+import type { ComposeEmailInput, ComposeEmailResult } from "@quieter/ai/chat-agent";
+import {
+  composeDraftFormValuesSchema,
+  composeSendFormValuesSchema,
+} from "@quieter/mail/compose/schema";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import { useForm } from "@tanstack/react-form";
 import { type FormEvent, useState } from "react";
 import type { ComposeFormValues } from "~/features/compose/domain/compose-form";
 import { ComposeEditor } from "~/features/compose/components/compose-editor";
-import { getRenderableComposeBodyHtml } from "~/features/compose/domain/draft";
+import {
+  getRenderableComposeBodyHtml,
+  normalizeComposeBodyHtml,
+} from "~/features/compose/domain/draft";
 import type { InlineComposeAction } from "../../types";
 import { ToolStep } from "./tools/tool-step";
 
@@ -289,7 +296,12 @@ export const InlineComposeTool = ({
               html={field.state.value}
               onBlur={field.handleBlur}
               onChange={({ html, text }) => {
-                setError(null);
+                if (
+                  normalizeComposeBodyHtml(html) !== normalizeComposeBodyHtml(field.state.value) ||
+                  text !== form.state.values.bodyText
+                ) {
+                  setError(null);
+                }
                 field.handleChange(html);
                 form.setFieldValue("bodyText", text);
               }}

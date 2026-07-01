@@ -2,7 +2,8 @@
 
 import { ArrowLeft01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, IconButtonTooltip } from "@quieter/ui";
+import { Button } from "@quieter/ui/button";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { m } from "motion/react";
 import { Suspense } from "react";
 import type { ComposeDraftState } from "~/features/compose";
@@ -20,7 +21,7 @@ type MessageDetailProps = {
   isPending?: boolean;
   mailboxActions: MailboxActions;
   mailboxId: string;
-  mailboxProvider: "gmail" | "managed";
+  mailboxProvider: "api" | "gmail" | "managed";
   onBackToList?: () => void;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   pendingActions: MailboxPendingActions;
@@ -125,6 +126,7 @@ export const MessageDetail = ({
                 mailboxId={mailboxId}
                 mailboxProvider={mailboxProvider}
                 message={selectedMessage}
+                onBackToList={onBackToList}
                 onComposeDraftRequested={onComposeDraftRequested}
                 pendingActions={pendingActions}
               />

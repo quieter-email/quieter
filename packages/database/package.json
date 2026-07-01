@@ -3,13 +3,13 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
     "./schema": "./src/schema.ts"
   },
   "scripts": {
-    "db:check": "drizzle-kit check && bun scripts/check-schema-drift.ts && bun scripts/migration-safety.ts",
+    "db:check": "bun scripts/check-migrations.ts && bun scripts/check-schema-drift.ts && bun scripts/migration-safety.ts",
     "db:deploy": "bun --env-file=../../.env.local scripts/run-migrations.ts",
-    "db:generate": "drizzle-kit generate",
+    "db:generate": "bun scripts/generate-migration.ts",
     "db:migrate": "bun --env-file=../../.env.local scripts/run-migrations.ts",
     "db:push": "bun --env-file=../../.env.local scripts/push-schema.ts",
     "db:test-migrations": "bun scripts/test-migrations.ts",
@@ -17,13 +17,14 @@
     "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
     "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/database",
     "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/database",
+    "postinstall": "bun scripts/ensure-drizzle-kit-cli.ts",
     "test": "bun test ./scripts",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
     "@quieter/env": "workspace:*",
     "drizzle-orm": "catalog:",
-    "postgres": "^3.4.7"
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
     "@quieter/config": "workspace:*",

@@ -33,7 +33,7 @@ export const structuredMailSearchSchema = z.object({
 });
 
 export type StructuredMailSearch = z.infer<typeof structuredMailSearchSchema>;
-export type MailboxProvider = "gmail" | "managed";
+export type MailboxProvider = "api" | "gmail" | "managed";
 
 const GMAIL_FILTER_TYPES = new Set<MailSearchFilterType>([
   "after",
@@ -178,7 +178,9 @@ export const parseStructuredSearchFilterToken = (token: string): MailSearchFilte
 
   if (type === "is") {
     const normalizedValue = value.toLocaleLowerCase();
-    return ["inbound", "outbound", "read", "unread"].includes(normalizedValue)
+    return ["inbox", "inbound", "outbound", "read", "sent", "spam", "trash", "unread"].includes(
+      normalizedValue,
+    )
       ? withNegation({ type, value: normalizedValue })
       : null;
   }

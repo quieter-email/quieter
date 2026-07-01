@@ -1345,7 +1345,6 @@ export const AuthVisual = () => {
       aria-hidden="true"
       className="block size-full bg-background"
       ref={canvasRef}
-      role="presentation"
       tabIndex={-1}
     />
   );
