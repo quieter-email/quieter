@@ -18,13 +18,13 @@ describe("structured message search", () => {
 
   test("parses underscore and fixed-value filters", () => {
     expect(
-      parseStructuredSearchQuery("older_than:30d newer_than:1y has:attachment is:unread"),
+      parseStructuredSearchQuery("older_than:30d newer_than:1y has:attachment is:unread is:spam"),
     ).toEqual({
       filters: [
         { type: "older_than", value: "30d" },
         { type: "newer_than", value: "1y" },
         { type: "has", value: "attachment" },
-        { type: "is", value: "unread" },
+        { type: "is", value: "spam" },
       ],
       text: "",
     });
@@ -34,6 +34,11 @@ describe("structured message search", () => {
     expect(parseStructuredSearchFilterToken("has:drive")).toBeNull();
     expect(parseStructuredSearchFilterToken("is:starred")).toBeNull();
     expect(parseStructuredSearchFilterToken("has:")).toBeNull();
+  });
+
+  test("parses managed label filters", () => {
+    expect(parseStructuredSearchFilterToken("is:spam")).toEqual({ type: "is", value: "spam" });
+    expect(parseStructuredSearchFilterToken("is:trash")).toEqual({ type: "is", value: "trash" });
   });
 
   test("serializes quoted values", () => {

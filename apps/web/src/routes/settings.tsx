@@ -20,8 +20,9 @@ export const Route = createFileRoute("/settings")({
         .default("/"),
       billing: z.enum(["canceled", "success"]).optional().catch(undefined),
       checkoutId: z.uuid().optional().catch(undefined),
+      connector: z.enum(["connected", "error"]).optional().catch(undefined),
       gmail: z.enum(["connected", "error"]).optional().catch(undefined),
-      tab: z.string().trim().pipe(z.enum(SETTINGS_TABS)).catch("general").default("general"),
+      tab: z.string().trim().pipe(z.enum(SETTINGS_TABS)).catch("overview").default("overview"),
       organizationId: z.string().trim().catch("").default(""),
       organizationView: z
         .string()
@@ -32,6 +33,7 @@ export const Route = createFileRoute("/settings")({
     }),
   ),
   ssr: "data-only",
+  staleTime: Number.POSITIVE_INFINITY,
   loader: async () => {
     const user = await getSessionUser();
 

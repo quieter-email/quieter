@@ -3,7 +3,7 @@
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { ArrowRight01Icon, Tag01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
-import { cn } from "@quieter/ui";
+import { cn } from "@quieter/ui/cn";
 import { LazyMotion, domAnimation, AnimatePresence, m } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";

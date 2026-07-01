@@ -1,7 +1,6 @@
 "use client";
 
 import type { Passkey as AuthPasskey } from "@better-auth/passkey";
-import type { ReactNode } from "react";
 import {
   Delete02Icon,
   Edit01Icon,
@@ -10,8 +9,8 @@ import {
   Logout03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Button } from "@quieter/ui/button";
 import {
-  Button,
   Dialog,
   DialogBody,
   DialogCloseButton,
@@ -19,9 +18,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  TextField,
-  TextFieldInput,
-} from "@quieter/ui";
+} from "@quieter/ui/dialog";
+import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -30,6 +28,7 @@ import { z } from "zod";
 import { authClient } from "~/lib/auth";
 import { orpc } from "~/lib/orpc";
 import { queryPersister } from "~/lib/query-persister";
+import { SettingsCard, SettingsFieldRow, SettingsSection } from "./settings-layout";
 
 type SettingsUser = {
   email: string;
@@ -39,24 +38,6 @@ type SettingsUser = {
 type AccountSettingsPanelProps = {
   initialUser: SettingsUser;
 };
-
-const SettingsRow = ({
-  action,
-  label,
-  value,
-}: {
-  action: ReactNode;
-  label: string;
-  value: ReactNode;
-}) => (
-  <div className="flex flex-col items-start justify-between gap-4 border-b border-border/70 py-5 last:border-b-0 md:flex-row md:items-center">
-    <div>
-      <p className="text-sm font-medium text-foreground">{label}</p>
-      <div className="mt-1 text-sm text-muted-foreground">{value}</div>
-    </div>
-    <div className="shrink-0">{action}</div>
-  </div>
-);
 
 const passkeyDateFormatter = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
 
@@ -738,58 +719,67 @@ export const AccountSettingsPanel = ({ initialUser }: AccountSettingsPanelProps)
   };
 
   return (
-    <div>
-      <div className="pb-8">
-        <h1 className="text-2xl font-medium tracking-tight text-foreground">{user.name}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{user.email}</p>
-        {sessionError && <p className="mt-4 text-sm text-destructive">{sessionError}</p>}
-      </div>
+    <div className="space-y-12">
+      <SettingsSection title="Profile">
+        <SettingsCard>
+          <SettingsFieldRow
+            action={
+              <EditNameDialog currentName={user.name} onSessionRefresh={sessionState.refetch} />
+            }
+            label="Name"
+            value={user.name}
+          />
 
-      <div>
-        <SettingsRow
-          action={
-            <EditNameDialog currentName={user.name} onSessionRefresh={sessionState.refetch} />
-          }
-          label="Name"
-          value={user.name}
-        />
+          <SettingsFieldRow
+            action={<EditEmailDialog currentEmail={user.email} />}
+            label="Mail"
+            value={user.email}
+          />
+        </SettingsCard>
+      </SettingsSection>
 
-        <SettingsRow
-          action={<EditEmailDialog currentEmail={user.email} />}
-          label="Mail"
-          value={user.email}
-        />
+      <SettingsSection title="Security">
+        <SettingsCard>
+          <SettingsFieldRow
+            action={
+              <PasskeysDialog isPasskeysPending={passkeysState.isPending} passkeys={passkeys} />
+            }
+            label="Passkeys"
+            value={passkeys.length === 1 ? "1 Passkey" : `${passkeys.length} Passkeys`}
+          />
 
-        <SettingsRow
-          action={
-            <PasskeysDialog isPasskeysPending={passkeysState.isPending} passkeys={passkeys} />
-          }
-          label="Passkeys"
-          value={passkeys.length === 1 ? "1 passkey" : `${passkeys.length} passkeys`}
-        />
+          <SettingsFieldRow
+            action={
+              <Button
+                disabled={signOutMutation.isPending}
+                onClick={() => void handleSignOut()}
+                size="sm"
+                variant="outline"
+              >
+                {signOutMutation.isPending ? (
+                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                ) : (
+                  <HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />
+                )}
+                Sign out
+              </Button>
+            }
+            label="Session"
+            value="Current browser session"
+          />
+        </SettingsCard>
+        {sessionError && <p className="px-1 text-sm text-destructive">{sessionError}</p>}
+      </SettingsSection>
 
-        <SettingsRow
-          action={
-            <Button
-              disabled={signOutMutation.isPending}
-              onClick={() => void handleSignOut()}
-              size="sm"
-              variant="outline"
-            >
-              {signOutMutation.isPending ? (
-                <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-              ) : (
-                <HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />
-              )}
-              Sign out
-            </Button>
-          }
-          label="Session"
-          value="Current browser session"
-        />
-
-        <SettingsRow action={<DeleteAccountDialog />} label="Delete account" value="Permanent" />
-      </div>
+      <SettingsSection title="Danger zone">
+        <SettingsCard>
+          <SettingsFieldRow
+            action={<DeleteAccountDialog />}
+            label="Delete account"
+            value="Permanent"
+          />
+        </SettingsCard>
+      </SettingsSection>
     </div>
   );
 };

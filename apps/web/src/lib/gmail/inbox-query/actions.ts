@@ -52,6 +52,10 @@ const MARK_AS_SPAM_LABEL_CHANGES = {
   removeLabelIds: [MAILBOX_LABELS.inbox],
 } as const;
 
+const ARCHIVE_LABEL_CHANGES = {
+  removeLabelIds: [MAILBOX_LABELS.inbox],
+} as const;
+
 const UNMARK_AS_SPAM_LABEL_CHANGES = {
   addLabelIds: [MAILBOX_LABELS.inbox],
   removeLabelIds: [MAILBOX_LABELS.spam],
@@ -399,6 +403,44 @@ export const markThreadAsUnreadInMailbox = async (
       await rpc.mail.markThreadAsUnread({ mailboxId, threadId }, { signal: mutationSignal }),
     optimisticUpdater: markMessageUnreadLocally,
   });
+};
+
+export const archiveMessageInMailbox = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  mailbox: MailboxCategory,
+  searchQuery: string | null | undefined,
+  messageId: string,
+  signal?: AbortSignal,
+) => {
+  await updateMessageLabelsInMailbox(
+    queryClient,
+    mailboxId,
+    mailbox,
+    searchQuery,
+    messageId,
+    ARCHIVE_LABEL_CHANGES,
+    signal,
+  );
+};
+
+export const archiveThreadInMailbox = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  mailbox: MailboxCategory,
+  searchQuery: string | null | undefined,
+  threadId: string,
+  signal?: AbortSignal,
+) => {
+  await updateThreadLabelsInMailbox(
+    queryClient,
+    mailboxId,
+    mailbox,
+    searchQuery,
+    threadId,
+    ARCHIVE_LABEL_CHANGES,
+    signal,
+  );
 };
 
 export const updateMessageLabelsInMailbox = async (

@@ -1,4 +1,5 @@
-import { db, waitlistSignup } from "@quieter/database";
+import { db } from "@quieter/database/client";
+import { waitlistSignup } from "@quieter/database/schema";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 

@@ -2,28 +2,31 @@
 
 import { Add01Icon, Delete02Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import {
-  Button,
-  IconButtonTooltip,
   NumberField,
   NumberFieldDecrement,
   NumberFieldGroup,
   NumberFieldIncrement,
   NumberFieldInput,
-  Progress,
-  ProgressIndicator,
-  ProgressTrack,
-  Switch,
-  SwitchThumb,
-  Tooltip,
-  TooltipArrow,
-  TooltipContent,
-  TooltipTrigger,
-  toast,
-} from "@quieter/ui";
-import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+} from "@quieter/ui/number-field";
+import { Progress, ProgressIndicator, ProgressTrack } from "@quieter/ui/progress";
+import { Switch, SwitchThumb } from "@quieter/ui/switch";
+import { toast } from "@quieter/ui/toast";
+import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import {
+  settingsInsetDividerClass,
+  SettingsRowText,
+} from "~/features/settings/components/settings-layout";
 import { orpc, rpc } from "~/lib/orpc";
+import {
+  getOrganizationMailUsageQueryKey,
+  organizationMailUsageQueryOptions,
+} from "./organization-mail-usage-query";
 
 const centsPerDollar = 100;
 const maximumMilestones = 10;
@@ -33,17 +36,6 @@ type Milestone = {
   id: string;
   percent: number | null;
 };
-
-export const getOrganizationMailUsageQueryKey = (organizationId: string) =>
-  ["organization-mail-usage", organizationId] as const;
-
-export const organizationMailUsageQueryOptions = (organizationId: string, enabled = true) =>
-  queryOptions({
-    enabled,
-    queryFn: () => rpc.organizationMailUsage.overview({ organizationId }),
-    queryKey: getOrganizationMailUsageQueryKey(organizationId),
-    staleTime: 30_000,
-  });
 
 const moneyFormatter = new Intl.NumberFormat("en-US", {
   currency: "EUR",
@@ -79,19 +71,19 @@ const createInitialMilestones = (percents: number[]): Milestone[] =>
   }));
 
 const ManagedUsageLoading = ({ message }: { message: string }) => (
-  <section className="border-b border-border/70 py-6">
-    <h2 className="text-sm font-medium text-foreground">Team credits</h2>
-    <p className="mt-2 inline-flex items-center gap-2 text-sm text-muted-foreground">
-      <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-      {message}
-    </p>
+  <section className={cn(settingsInsetDividerClass, "p-4 md:px-6")}>
+    <SettingsRowText title="Team credits">
+      <span className="inline-flex items-center gap-2">
+        <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+        {message}
+      </span>
+    </SettingsRowText>
   </section>
 );
 
 const ManagedUsageUnavailable = ({ message }: { message: string }) => (
-  <section className="border-b border-border/70 py-6">
-    <h2 className="text-sm font-medium text-foreground">Team credits</h2>
-    <p className="mt-1 text-sm text-muted-foreground">{message}</p>
+  <section className={cn(settingsInsetDividerClass, "p-4 md:px-6")}>
+    <SettingsRowText title="Team credits">{message}</SettingsRowText>
   </section>
 );
 
@@ -159,7 +151,7 @@ const UsageBreakdown = ({
 
   return (
     <div className="mt-3">
-      <div className="flex h-3 overflow-hidden rounded-full bg-muted shadow-inner ring-1 ring-border/60">
+      <div className="flex h-3 overflow-hidden rounded-full bg-muted shadow-inner ring-1 ring-border/60 squircle">
         <div className="flex h-full min-w-1 overflow-hidden" style={{ width: `${usedPercent}%` }}>
           {items.flatMap((item) => {
             if (item.costCents <= 0) return [];
@@ -295,15 +287,12 @@ const ManagedUsageSettingsForm = ({
 
   if (overview.hasUnlimitedAccess) {
     return (
-      <section className="border-b border-border/70 py-6">
+      <section className={cn(settingsInsetDividerClass, "px-4 py-6 md:px-6")}>
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-medium text-foreground">Team credits</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {formatMoney(managedUsageCostCents)} tracked this period
-            </p>
-          </div>
-          <span className="rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
+          <SettingsRowText title="Team credits">
+            {formatMoney(managedUsageCostCents)} tracked this period
+          </SettingsRowText>
+          <span className="rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success squircle">
             Unlimited
           </span>
         </div>
@@ -312,15 +301,14 @@ const ManagedUsageSettingsForm = ({
   }
 
   return (
-    <section className="border-b border-border/70 py-6">
+    <section className={cn(settingsInsetDividerClass, "px-4 py-6 md:px-6")}>
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h2 className="text-sm font-medium text-foreground">Team credits</h2>
-          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
+        <SettingsRowText title="Team credits">
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
             <span>Managed mail rates</span>
             {periodEnd ? <span>Resets {periodEnd}</span> : null}
           </div>
-        </div>
+        </SettingsRowText>
 
         {canManageOrganizationMailUsage && (
           <Button
@@ -384,14 +372,12 @@ const ManagedUsageSettingsForm = ({
 
       <div className="divide-y divide-border/70">
         <div className="flex items-start justify-between gap-6 py-5">
-          <div>
-            <label className="text-sm font-medium text-foreground" htmlFor="managed-overage-toggle">
-              Allow overage
-            </label>
-            <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-              When disabled, new paid usage stops after the team credits are used.
-            </p>
-          </div>
+          <SettingsRowText
+            className="max-w-xl"
+            title={<label htmlFor="managed-overage-toggle">Allow overage</label>}
+          >
+            <span>When disabled, new paid usage stops after the team credits are used.</span>
+          </SettingsRowText>
           <Switch
             checked={overageEnabled}
             className="mt-0.5 h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
@@ -404,12 +390,9 @@ const ManagedUsageSettingsForm = ({
         </div>
 
         <div className="flex flex-col gap-4 py-5 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-sm font-medium text-foreground">Monthly overage limit</p>
-            <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-              Maximum usage billed above the monthly team credits.
-            </p>
-          </div>
+          <SettingsRowText className="max-w-xl" title="Monthly overage limit">
+            <span>Maximum usage billed above the monthly team credits.</span>
+          </SettingsRowText>
 
           <div className="flex items-center gap-2">
             <NumberField
@@ -448,12 +431,11 @@ const ManagedUsageSettingsForm = ({
 
         <div className="py-5">
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-foreground">Alert milestones</p>
-              <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+            <SettingsRowText className="max-w-xl" title="Alert milestones">
+              <span>
                 Alerts are recorded once per billing period when usage crosses each threshold.
-              </p>
-            </div>
+              </span>
+            </SettingsRowText>
 
             {canManageOrganizationMailUsage && (
               <Button

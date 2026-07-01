@@ -13,19 +13,13 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
-import {
-  Button,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  TextFieldInput,
-  cn,
-  toast,
-} from "@quieter/ui";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@quieter/ui/select";
+import { TextFieldInput } from "@quieter/ui/text-field";
+import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { BillingProductCard } from "~/features/settings/components/billing-product-card";
 import {
   getOrganizationApiKeysQueryKey,
@@ -70,16 +64,14 @@ export const FirstRunManagedMailSetup = ({
   organizations: FirstRunOrganization[];
 }) => {
   const queryClient = useQueryClient();
-  const authOrganizations = authClient.useListOrganizations().data ?? [];
-  const selectableOrganizations = useMemo(() => {
-    const names = new Map(
-      authOrganizations.map((organization) => [organization.id, organization.name]),
-    );
-    return organizations.map((organization) => ({
-      ...organization,
-      name: names.get(organization.id) ?? organization.name,
-    }));
-  }, [authOrganizations, organizations]);
+  const authOrganizations = authClient.useListOrganizations().data;
+  const organizationNames = new Map(
+    (authOrganizations ?? []).map((organization) => [organization.id, organization.name]),
+  );
+  const selectableOrganizations = organizations.map((organization) => ({
+    ...organization,
+    name: organizationNames.get(organization.id) ?? organization.name,
+  }));
   const [organizationId, setOrganizationId] = useState(selectableOrganizations[0]?.id ?? "");
   const [localPart, setLocalPart] = useState("");
   const [createdApiKey, setCreatedApiKey] = useState<string | null>(null);
@@ -92,22 +84,22 @@ export const FirstRunManagedMailSetup = ({
   const currentProduct = normalizeBillingProduct(teamBilling?.product);
   const hasManagedAccess = teamBilling?.hasAccess === true;
   const canManageBilling = teamBilling?.canManageBilling === true;
-  const domainsQuery = useQuery({
+  const { data: domainsData, isPending: isDomainsPending } = useQuery({
     ...organizationMailDomainsQueryOptions(organizationId),
     enabled: organizationId.length > 0,
   });
-  const apiKeysQuery = useQuery({
+  const { data: apiKeysData } = useQuery({
     ...organizationApiKeysQueryOptions(organizationId),
     enabled: organizationId.length > 0 && hasManagedAccess,
   });
-  const verifiedDomains = (domainsQuery.data?.domains ?? []).filter(
+  const verifiedDomains = (domainsData?.domains ?? []).filter(
     (domain) => domain.status === "verified",
   );
   const [selectedDomain, setSelectedDomain] = useState<string | undefined>(undefined);
   const domain = selectedDomain ?? verifiedDomains[0]?.domain ?? "";
   const hasManagedMailbox =
     selectedOrganization?.mailboxes.some((mailbox) => mailbox.provider === "managed") === true;
-  const hasApiKey = (apiKeysQuery.data?.apiKeys ?? []).length > 0;
+  const hasApiKey = (apiKeysData?.apiKeys ?? []).length > 0;
   const trimmedLocalPart = localPart.trim();
   const checkoutMutation = useMutation({
     ...orpc.billing.createCheckout.mutationOptions(),
@@ -332,7 +324,7 @@ export const FirstRunManagedMailSetup = ({
               </p>
             ) : (
               <div className="flex flex-wrap items-center gap-3">
-                <div className="flex h-9 w-full max-w-md items-center rounded-md border border-input bg-background shadow-sm transition-colors squircle focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
+                <div className="keyboard-focus-within flex h-9 w-full max-w-md items-center rounded-md border border-input bg-background-light shadow-sm transition-colors squircle">
                   <TextFieldInput
                     aria-label="Managed mailbox local part"
                     chrome="ghost"
@@ -373,7 +365,7 @@ export const FirstRunManagedMailSetup = ({
                     </Select>
                   ) : (
                     <span className="px-2.5 text-sm text-muted-foreground">
-                      {domainsQuery.isPending ? "loading…" : "verified domain"}
+                      {isDomainsPending ? "loading…" : "verified domain"}
                     </span>
                   )}
                 </div>
@@ -437,7 +429,7 @@ export const FirstRunManagedMailSetup = ({
                   {createdApiKey}
                 </button>
                 <a
-                  className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-background-dark px-3.5 text-[13px] text-foreground shadow-sm transition-transform duration-100 ease-out outline-none select-none squircle hover:bg-input/40 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] active:bg-input/60"
+                  className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-background-light px-3.5 text-[13px] text-foreground shadow-sm transition-transform duration-100 ease-out outline-none select-none squircle hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] active:bg-muted/80"
                   href="/api/openapi"
                   rel="noreferrer"
                   target="_blank"
@@ -452,7 +444,7 @@ export const FirstRunManagedMailSetup = ({
                   This organization already has an API key.
                 </p>
                 <a
-                  className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-background-dark px-3.5 text-[13px] text-foreground shadow-sm transition-transform duration-100 ease-out outline-none select-none squircle hover:bg-input/40 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] active:bg-input/60"
+                  className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-background-light px-3.5 text-[13px] text-foreground shadow-sm transition-transform duration-100 ease-out outline-none select-none squircle hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] active:bg-muted/80"
                   href="/api/openapi"
                   rel="noreferrer"
                   target="_blank"

@@ -3,7 +3,7 @@
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Tag01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { cn } from "@quieter/ui";
+import { cn } from "@quieter/ui/cn";
 
 type MessageLabelsProps = {
   className?: string;

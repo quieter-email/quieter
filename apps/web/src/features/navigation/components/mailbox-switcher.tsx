@@ -14,32 +14,35 @@ import {
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { LinkButton } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  IconButtonTooltip,
-  LinkButton,
-  cn,
-} from "@quieter/ui";
+} from "@quieter/ui/dropdown-menu";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Input } from "@quieter/ui/input";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
 import { type ReactNode, useRef, useState } from "react";
-import { AnimatedHoverSurface } from "~/components/animated-hover-surface";
 import { VerticalSlot } from "~/components/vertical-slot";
+import { SidebarSimpleHoverSurface } from "~/features/navigation/components/sidebar-surfaces";
 
 type MailboxSwitcherMailbox = {
   connectionStatus: "connected" | "needs_reconnect";
   displayName: string | null;
+  divisionName?: string | null;
   emailAddress: string;
   groupName: string;
   id: string;
   provider: string;
+  grantRole?: "manager" | "reader" | "responder" | null;
 };
 
 type MailboxSwitcherGroup = {
   id: string;
-  kind: "organization";
+  kind: "division" | "organization" | "unassigned";
   mailboxes: MailboxSwitcherMailbox[];
   name: string;
 };
@@ -143,7 +146,12 @@ const getMailboxSwitcherOrder = (groups: MailboxSwitcherGroup[]): MailboxSwitche
 const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => (
   <div className={cn("flex min-w-0 items-center justify-between gap-3 rounded-md", className)}>
     <div className="min-w-0 flex-1">
-      <p className="truncate text-sm text-foreground">{mailbox.emailAddress}</p>
+      <p className="truncate text-sm text-foreground">
+        {mailbox.displayName?.trim() || mailbox.emailAddress}
+      </p>
+      {mailbox.displayName?.trim() && (
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">{mailbox.emailAddress}</p>
+      )}
       {mailbox.connectionStatus === "needs_reconnect" && (
         <p className="mt-0.5 truncate text-xs text-destructive">
           This account needs to reconnect through Google.
@@ -216,7 +224,7 @@ const SortableGroup = ({
         })}
         ref={sectionRef}
       >
-        <div className="group/header flex min-h-7 items-center rounded-xs transition-colors focus-within:bg-muted/40 hover:bg-muted/40">
+        <div className="group/header flex min-h-7 items-center rounded-xs transition-colors squircle focus-within:bg-background/50 hover:bg-background/50">
           <button
             aria-expanded={!collapsed}
             className="flex min-w-0 flex-1 items-center gap-2 rounded-xs px-2 py-1 text-left outline-none squircle"
@@ -353,11 +361,41 @@ export const MailboxSwitcherDropdown = ({
   const mailboxes = groups.flatMap((group) => group.mailboxes);
   const selectedMailbox =
     mailboxes.find((mailbox) => mailbox.id === selectedMailboxId) ?? mailboxes[0] ?? null;
-  const primaryLabel = selectedMailbox?.emailAddress ?? "no mailbox";
-  const secondaryLabel = selectedMailbox?.groupName ?? "No team";
-  const canReorderGroups = groups.length > 1;
+  const primaryLabel =
+    selectedMailbox?.displayName?.trim() || selectedMailbox?.emailAddress || "no mailbox";
+  const secondaryLabel = selectedMailbox
+    ? [
+        selectedMailbox.displayName?.trim() ? selectedMailbox.emailAddress : null,
+        selectedMailbox.groupName,
+        selectedMailbox.grantRole,
+      ]
+        .filter(Boolean)
+        .join(" / ")
+    : "No team";
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<ReadonlySet<string>>(() => new Set());
   const [isTriggerHovered, setIsTriggerHovered] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const isFiltering = normalizedSearchQuery.length > 0;
+  const canReorderGroups = !isFiltering && groups.length > 1;
+  const filteredGroups = groups.reduce<MailboxSwitcherGroup[]>((nextGroups, group) => {
+    const matchingMailboxes = group.mailboxes.filter((mailbox) =>
+      [
+        mailbox.displayName,
+        mailbox.emailAddress,
+        mailbox.groupName,
+        mailbox.divisionName,
+        mailbox.grantRole,
+        mailbox.provider,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(normalizedSearchQuery)),
+    );
+    if (matchingMailboxes.length > 0) {
+      nextGroups.push({ ...group, mailboxes: matchingMailboxes });
+    }
+    return nextGroups;
+  }, []);
   const toggleGroup = (groupId: string) => {
     setCollapsedGroupIds((current) => {
       const next = new Set(current);
@@ -391,14 +429,14 @@ export const MailboxSwitcherDropdown = ({
   return (
     <DropdownMenu>
       <div
-        className="relative min-w-0 flex-1 rounded-md"
+        className="relative min-w-0 flex-1 rounded-md squircle"
         onMouseEnter={() => setIsTriggerHovered(true)}
         onMouseLeave={() => setIsTriggerHovered(false)}
       >
-        <AnimatedHoverSurface layoutId="mailbox-switcher-hover" visible={isTriggerHovered} />
+        <SidebarSimpleHoverSurface layoutId="mailbox-switcher-hover" visible={isTriggerHovered} />
         <DropdownMenuTrigger
           aria-label="Switch mailbox"
-          className="relative z-10 w-full min-w-0 rounded-md px-4 py-3 text-left outline-none squircle hover:bg-transparent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-100"
+          className="relative z-10 w-full min-w-0 rounded-md px-3 py-2 text-left outline-none squircle hover:bg-transparent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-100"
         >
           <VerticalSlot className="min-w-0">
             <div>
@@ -420,106 +458,123 @@ export const MailboxSwitcherDropdown = ({
         <DragDropProvider onDragEnd={handleGroupDragEnd}>
           <div className="flex max-h-96 flex-col gap-1 overflow-y-auto p-1">
             {mailboxes.length > 0 ? (
-              groups.map((group, groupIndex) => {
-                const isCollapsed = collapsedGroupIds.has(group.id);
-                const canReorderMailboxes = group.mailboxes.length > 1;
+              <>
+                <div className="sticky top-0 z-10 bg-popover p-1">
+                  <Input
+                    aria-label="Search mailboxes"
+                    className="h-8"
+                    onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                    placeholder="Search mailboxes"
+                    size="sm"
+                    value={searchQuery}
+                  />
+                </div>
+                {(isFiltering ? filteredGroups : groups).map((group, groupIndex) => {
+                  const isCollapsed = collapsedGroupIds.has(group.id);
+                  const canReorderMailboxes = !isFiltering && group.mailboxes.length > 1;
 
-                return (
-                  <SortableGroup
-                    collapsed={isCollapsed}
-                    disabled={!canReorderGroups}
-                    embedded={embedded}
-                    group={group}
-                    index={groupIndex}
-                    key={group.id}
-                    onToggle={toggleGroup}
-                  >
-                    {group.mailboxes.length > 0 ? (
-                      <MailboxRows
-                        group={group}
-                        groups={groups}
-                        onReorderMailboxSwitcher={onReorderMailboxSwitcher}
-                      >
-                        {(mailbox, mailboxIndex) => {
-                          const isActive = mailbox.id === selectedMailboxId;
-                          const isDefault = mailbox.id === defaultMailboxId;
-                          const needsReconnect = mailbox.connectionStatus === "needs_reconnect";
-                          const isReconnecting = reconnectingMailboxId === mailbox.id;
-                          const defaultMailboxLabel = isDefault
-                            ? "Unset default mailbox"
-                            : "Set as default mailbox";
+                  return (
+                    <SortableGroup
+                      collapsed={isCollapsed}
+                      disabled={!canReorderGroups}
+                      embedded={embedded}
+                      group={group}
+                      index={groupIndex}
+                      key={group.id}
+                      onToggle={toggleGroup}
+                    >
+                      {group.mailboxes.length > 0 ? (
+                        <MailboxRows
+                          group={group}
+                          groups={groups}
+                          onReorderMailboxSwitcher={onReorderMailboxSwitcher}
+                        >
+                          {(mailbox, mailboxIndex) => {
+                            const isActive = mailbox.id === selectedMailboxId;
+                            const isDefault = mailbox.id === defaultMailboxId;
+                            const needsReconnect = mailbox.connectionStatus === "needs_reconnect";
+                            const isReconnecting = reconnectingMailboxId === mailbox.id;
+                            const canSetDefault = mailbox.provider !== "api";
+                            const defaultMailboxLabel = isDefault
+                              ? "Unset default mailbox"
+                              : "Set as default mailbox";
 
-                          return (
-                            <SortableMailboxRow
-                              disabled={!canReorderMailboxes}
-                              groupId={group.id}
-                              index={mailboxIndex}
-                              key={mailbox.id}
-                              mailbox={mailbox}
-                            >
-                              <DropdownMenuItem
-                                className={cn("group/item rounded-xs px-2 py-1", {
-                                  "bg-muted/70": isActive,
-                                })}
-                                onSelect={() => onSelectMailboxId(mailbox.id)}
+                            return (
+                              <SortableMailboxRow
+                                disabled={!canReorderMailboxes}
+                                groupId={group.id}
+                                index={mailboxIndex}
+                                key={mailbox.id}
+                                mailbox={mailbox}
                               >
-                                {needsReconnect ? (
-                                  <div className="flex w-full min-w-0 items-center gap-2">
-                                    <p className="min-w-0 flex-1 truncate text-sm text-foreground">
-                                      {mailbox.emailAddress}
-                                    </p>
-                                    <button
-                                      aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
-                                      className="flex h-7 shrink-0 items-center gap-1 px-1 text-xs font-medium text-destructive transition-colors hover:text-destructive/80"
-                                      disabled={isReconnecting}
-                                      onClick={(event) => {
-                                        event.preventDefault();
-                                        event.stopPropagation();
-                                        onReconnectMailbox(mailbox);
-                                      }}
-                                      type="button"
-                                    >
-                                      <HugeiconsIcon
-                                        aria-hidden
-                                        className={cn("size-3.5", {
-                                          "animate-spin": isReconnecting,
-                                        })}
-                                        icon={isReconnecting ? Loading03Icon : Mail01Icon}
-                                      />
-                                      Reconnect
-                                    </button>
-                                    <MailboxDefaultButton
-                                      defaultMailboxLabel={defaultMailboxLabel}
-                                      isDefault={isDefault}
-                                      mailboxId={mailbox.id}
-                                      onSetDefaultMailbox={onSetDefaultMailbox}
+                                <DropdownMenuItem
+                                  className={cn("group/item rounded-xs px-2 py-1 squircle", {
+                                    "bg-background": isActive,
+                                  })}
+                                  onSelect={() => onSelectMailboxId(mailbox.id)}
+                                >
+                                  {needsReconnect ? (
+                                    <div className="flex w-full min-w-0 items-center gap-2">
+                                      <p className="min-w-0 flex-1 truncate text-sm text-foreground">
+                                        {mailbox.displayName?.trim() || mailbox.emailAddress}
+                                      </p>
+                                      <button
+                                        aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
+                                        className="flex h-7 shrink-0 items-center gap-1 px-1 text-xs font-medium text-destructive transition-colors hover:text-destructive/80"
+                                        disabled={isReconnecting}
+                                        onClick={(event) => {
+                                          event.preventDefault();
+                                          event.stopPropagation();
+                                          onReconnectMailbox(mailbox);
+                                        }}
+                                        type="button"
+                                      >
+                                        <HugeiconsIcon
+                                          aria-hidden
+                                          className={cn("size-3.5", {
+                                            "animate-spin": isReconnecting,
+                                          })}
+                                          icon={isReconnecting ? Loading03Icon : Mail01Icon}
+                                        />
+                                        Reconnect
+                                      </button>
+                                      {canSetDefault && (
+                                        <MailboxDefaultButton
+                                          defaultMailboxLabel={defaultMailboxLabel}
+                                          isDefault={isDefault}
+                                          mailboxId={mailbox.id}
+                                          onSetDefaultMailbox={onSetDefaultMailbox}
+                                        />
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <MailboxSummary
+                                      action={
+                                        canSetDefault ? (
+                                          <MailboxDefaultButton
+                                            defaultMailboxLabel={defaultMailboxLabel}
+                                            isDefault={isDefault}
+                                            mailboxId={mailbox.id}
+                                            onSetDefaultMailbox={onSetDefaultMailbox}
+                                          />
+                                        ) : null
+                                      }
+                                      className="w-full"
+                                      mailbox={mailbox}
                                     />
-                                  </div>
-                                ) : (
-                                  <MailboxSummary
-                                    action={
-                                      <MailboxDefaultButton
-                                        defaultMailboxLabel={defaultMailboxLabel}
-                                        isDefault={isDefault}
-                                        mailboxId={mailbox.id}
-                                        onSetDefaultMailbox={onSetDefaultMailbox}
-                                      />
-                                    }
-                                    className="w-full"
-                                    mailbox={mailbox}
-                                  />
-                                )}
-                              </DropdownMenuItem>
-                            </SortableMailboxRow>
-                          );
-                        }}
-                      </MailboxRows>
-                    ) : (
-                      <p className="px-2 py-1 text-sm text-muted-foreground">No Mailbox</p>
-                    )}
-                  </SortableGroup>
-                );
-              })
+                                  )}
+                                </DropdownMenuItem>
+                              </SortableMailboxRow>
+                            );
+                          }}
+                        </MailboxRows>
+                      ) : (
+                        <p className="px-2 py-1 text-sm text-muted-foreground">No Mailbox</p>
+                      )}
+                    </SortableGroup>
+                  );
+                })}
+              </>
             ) : (
               <div className="rounded-md px-2.5 py-2 text-sm text-muted-foreground">No Mailbox</div>
             )}

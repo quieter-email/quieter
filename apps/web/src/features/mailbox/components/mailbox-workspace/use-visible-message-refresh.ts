@@ -1,7 +1,7 @@
 "use client";
 
 import type { QueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ListMessagesPageResult, MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
 import { isSandboxMailboxId } from "~/lib/gmail/demo-mail";
 import { refreshVisibleMailboxMessages } from "~/lib/gmail/inbox-query";
@@ -36,9 +36,9 @@ export const useVisibleMessageRefresh = ({
   searchQuery: string;
   selectedMailboxId: string | null;
 }) => {
-  const queueRef = useRef<Set<string>>(new Set());
-  const recentAttemptsRef = useRef<Map<string, number>>(new Map());
-  const inFlightIdsRef = useRef<Set<string>>(new Set());
+  const [queueRef] = useState(() => ({ current: new Set<string>() }));
+  const [recentAttemptsRef] = useState(() => ({ current: new Map<string, number>() }));
+  const [inFlightIdsRef] = useState(() => ({ current: new Set<string>() }));
   const inFlightRef = useRef(false);
   const timeoutRef = useRef<number | null>(null);
   const flushQueueRef = useRef<() => void>(() => {});
@@ -98,7 +98,17 @@ export const useVisibleMessageRefresh = ({
           scheduleRefresh(0);
         }
       });
-  }, [activeMailbox, messages, queryClient, scheduleRefresh, searchQuery, selectedMailboxId]);
+  }, [
+    activeMailbox,
+    inFlightIdsRef,
+    messages,
+    queryClient,
+    queueRef,
+    recentAttemptsRef,
+    scheduleRefresh,
+    searchQuery,
+    selectedMailboxId,
+  ]);
 
   useLayoutEffect(() => {
     flushQueueRef.current = flushQueue;
@@ -125,7 +135,7 @@ export const useVisibleMessageRefresh = ({
         scheduleRefresh();
       }
     },
-    [activeMailbox, messages, scheduleRefresh, selectedMailboxId],
+    [activeMailbox, messages, queueRef, scheduleRefresh, selectedMailboxId],
   );
 
   // react-doctor-disable-next-line react-doctor/exhaustive-deps
@@ -142,7 +152,7 @@ export const useVisibleMessageRefresh = ({
       inFlightIdsRef.current.clear();
       inFlightRef.current = false;
     };
-  }, [activeMailbox, searchQuery, selectedMailboxId]);
+  }, [activeMailbox, inFlightIdsRef, queueRef, recentAttemptsRef, searchQuery, selectedMailboxId]);
 
   return handleVisibleMessageIdsChange;
 };

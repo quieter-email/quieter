@@ -13,8 +13,9 @@ import {
   ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
-  Button,
   Dialog,
   DialogBody,
   DialogCloseButton,
@@ -23,11 +24,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  IconButtonTooltip,
-  TooltipGroup,
-  cn,
-} from "@quieter/ui";
-import { useQuery } from "@tanstack/react-query";
+} from "@quieter/ui/dialog";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { toast } from "@quieter/ui/toast";
+import { TooltipGroup } from "@quieter/ui/tooltip";
+import { useHotkeys } from "@tanstack/react-hotkeys";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type {
   MailboxActions,
@@ -45,6 +47,7 @@ import {
   GmailUsefulDetailCard,
   type GmailUsefulDetail,
 } from "~/features/gmail-useful-details/components/gmail-useful-detail-card";
+import { shouldIgnoreAppShortcut } from "~/features/hotkeys/domain/hotkey-guards";
 import { MessageLabels } from "~/features/message-labels/components/message-labels";
 import {
   hasRenderableMessageBody,
@@ -58,6 +61,8 @@ import { getMessageInspectorOptions } from "~/lib/gmail/message-inspector-query"
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
 import { gmailThreadUsefulDetailsQueryOptions } from "~/lib/gmail/useful-details-query";
+import { getMailboxesQueryKey } from "~/lib/mailboxes-query";
+import { orpc } from "~/lib/orpc";
 import { createMailboxThreadMessageActionHandlers } from "./message-action-handlers";
 import { MessageActionsDropdown } from "./message-actions";
 import { MessageAttachments } from "./message-attachments";
@@ -72,10 +77,11 @@ type MessageViewProps = {
   activeMailbox: MailboxCategory;
   currentUserEmail?: string | null;
   mailboxId: string;
-  mailboxProvider: "gmail" | "managed";
+  mailboxProvider: "api" | "gmail" | "managed";
   mailboxActions: MailboxActions;
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+  onBackToList?: () => void;
   pendingActions: MailboxPendingActions;
 };
 
@@ -135,6 +141,20 @@ const getMessageUnsubscribeAction = (
     kind: "url",
     onClick: () => openUnsubscribeUrl(target.url),
   };
+};
+
+const runHotkeyThreadAction = async (
+  action: () => void | Promise<void>,
+  successMessage: string,
+) => {
+  try {
+    await action();
+    toast.success(successMessage);
+  } catch (error) {
+    toast.error(
+      error instanceof Error && error.message ? error.message : "Could not update message.",
+    );
+  }
 };
 
 const MessageHeaderContent = ({
@@ -824,9 +844,13 @@ export const MessageView = ({
   mailboxActions,
   message,
   onComposeDraftRequested,
+  onBackToList,
   pendingActions,
 }: MessageViewProps) => {
-  const { data: gmailLabels = [] } = useQuery(labelsQueryOptions(mailboxId));
+  const queryClient = useQueryClient();
+  const { data: gmailLabels = [] } = useQuery(
+    labelsQueryOptions(mailboxId, mailboxProvider !== "api"),
+  );
   const {
     data: threadData,
     isError: isThreadError,
@@ -844,8 +868,21 @@ export const MessageView = ({
     },
   });
   const { data: usefulDetails = [] } = useQuery(
-    gmailThreadUsefulDetailsQueryOptions(mailboxId, message.threadId, mailboxProvider === "gmail"),
+    gmailThreadUsefulDetailsQueryOptions(mailboxId, message.threadId, mailboxProvider !== "api"),
   );
+  const createApiMailboxMutation = useMutation({
+    ...orpc.mail.createManagedMailboxForApiMessage.mutationOptions(),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: ["messages", mailboxId] }),
+      ]);
+      toast.success("Mailbox created.");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Could not create mailbox.");
+    },
+  });
   const threadMessages = threadData?.messages?.length
     ? [...threadData.messages].reverse()
     : [message];
@@ -870,6 +907,8 @@ export const MessageView = ({
     "(No subject)";
   const threadIsUnread = visibleMessages.some((entry) => isMessageUnread(entry));
   const isSingleMessageThread = visibleMessages.length === 1;
+  const canComposeFromMailbox = mailboxProvider !== "api";
+  const apiSource = message.apiSource;
   const threadAttachments = visibleMessages.flatMap((threadMessage) =>
     (threadMessage.attachments ?? []).map((attachment) => ({
       ...attachment,
@@ -881,6 +920,119 @@ export const MessageView = ({
   const isActionPending =
     pendingActions.isMessageActionPending(message.id) ||
     pendingActions.isThreadActionPending(message.threadId);
+  const hotkeyMessage = visibleMessages[0] ?? message;
+  const hotkeyLinkedDraftMessage = findLinkedDraftForMessage(threadMessages, hotkeyMessage);
+  const requestComposeAction = (action: "reply" | "reply-all" | "forward") => {
+    if (!canComposeFromMailbox || !onComposeDraftRequested) return;
+
+    onComposeDraftRequested(
+      buildComposeDraftFromMessageAction({
+        action,
+        currentUserEmail,
+        existingDraftMessage: hotkeyLinkedDraftMessage,
+        message: hotkeyMessage,
+      }),
+    );
+  };
+  useHotkeys(
+    [
+      {
+        hotkey: "R",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          requestComposeAction("reply");
+        },
+        options: {
+          enabled: canComposeFromMailbox && !!onComposeDraftRequested && activeMailbox !== "drafts",
+        },
+      },
+      {
+        hotkey: "A",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          requestComposeAction("reply-all");
+        },
+        options: {
+          enabled:
+            !!onComposeDraftRequested &&
+            canComposeFromMailbox &&
+            activeMailbox !== "drafts" &&
+            hasDistinctReplyAllRecipients(hotkeyMessage, currentUserEmail),
+        },
+      },
+      {
+        hotkey: "F",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          requestComposeAction("forward");
+        },
+        options: {
+          enabled: canComposeFromMailbox && !!onComposeDraftRequested && activeMailbox !== "drafts",
+        },
+      },
+      {
+        hotkey: "Shift+3",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          void runHotkeyThreadAction(
+            () => mailboxActions.moveThreadToTrash(hotkeyMessage.threadId),
+            "Conversation moved to Trash.",
+          );
+        },
+        options: {
+          enabled: !isActionPending && activeMailbox !== "drafts" && activeMailbox !== "trash",
+        },
+      },
+      {
+        hotkey: "Shift+1",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          void runHotkeyThreadAction(
+            () => mailboxActions.markThreadAsSpam(hotkeyMessage.threadId),
+            "Conversation marked as Spam.",
+          );
+        },
+        options: {
+          enabled:
+            !isActionPending &&
+            mailboxProvider === "gmail" &&
+            activeMailbox !== "drafts" &&
+            activeMailbox === "inbox",
+        },
+      },
+      {
+        hotkey: "Shift+I",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          void runHotkeyThreadAction(
+            () => mailboxActions.markThreadAsRead(hotkeyMessage.threadId),
+            "Conversation marked as Read.",
+          );
+        },
+        options: { enabled: !isActionPending && activeMailbox !== "drafts" },
+      },
+      {
+        hotkey: "Shift+U",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          void runHotkeyThreadAction(
+            () => mailboxActions.markThreadAsUnread(hotkeyMessage.threadId),
+            "Conversation marked as Unread.",
+          );
+        },
+        options: { enabled: !isActionPending && activeMailbox !== "drafts" },
+      },
+      {
+        hotkey: "U",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          onBackToList?.();
+        },
+        options: { enabled: !!onBackToList },
+      },
+    ],
+    { ignoreInputs: true },
+  );
 
   useEffect(() => {
     if (!hasMissingLoadedBody) {
@@ -936,22 +1088,59 @@ export const MessageView = ({
             {subject}
           </h1>
 
-          <div className="shrink-0 sm:justify-self-end">
-            <MessageActionsDropdown
-              actions={createMailboxThreadMessageActionHandlers({
-                mailboxActions,
-                supportsFolders: mailboxProvider === "gmail",
-                supportsLabels: true,
-                supportsUnsubscribe: mailboxProvider === "gmail",
-              })}
-              isPending={isActionPending}
-              isUnread={threadIsUnread}
-              mailbox={activeMailbox}
-              mailboxId={mailboxId}
-              message={message}
-            />
-          </div>
+          {mailboxProvider !== "api" && (
+            <div className="shrink-0 sm:justify-self-end">
+              <MessageActionsDropdown
+                actions={createMailboxThreadMessageActionHandlers({
+                  mailboxActions,
+                  supportsFolders: mailboxProvider === "gmail",
+                  supportsLabels: true,
+                  supportsUnsubscribe: mailboxProvider === "gmail",
+                })}
+                isPending={isActionPending}
+                isUnread={threadIsUnread}
+                mailbox={activeMailbox}
+                mailboxId={mailboxId}
+                message={message}
+              />
+            </div>
+          )}
         </div>
+
+        {apiSource && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground">
+              Sent through API from {apiSource.senderAddress}.
+            </span>
+            {apiSource.canCreateMailbox ? (
+              <Button
+                disabled={createApiMailboxMutation.isPending}
+                onClick={() =>
+                  createApiMailboxMutation.mutate({
+                    mailboxId,
+                    messageId: message.id,
+                  })
+                }
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {createApiMailboxMutation.isPending && (
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-3.5 animate-spin"
+                    icon={Loading03Icon}
+                  />
+                )}
+                Create mailbox
+              </Button>
+            ) : apiSource.senderMailboxId ? (
+              <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground squircle">
+                {apiSource.includedInMailbox ? "Included in mailbox" : "Mailbox copy disabled"}
+              </span>
+            ) : null}
+          </div>
+        )}
 
         {!isSingleMessageThread && (
           <p className="mt-2 text-sm text-muted-foreground">
@@ -976,7 +1165,7 @@ export const MessageView = ({
           key={message.threadId}
           mailboxId={mailboxId}
           messages={visibleMessages}
-          onComposeDraftRequested={onComposeDraftRequested}
+          onComposeDraftRequested={canComposeFromMailbox ? onComposeDraftRequested : undefined}
           onUnsubscribe={
             mailboxProvider === "gmail" ? mailboxActions.unsubscribeFromMessage : undefined
           }
@@ -993,7 +1182,7 @@ export const MessageView = ({
             linkedDraftMessage={findLinkedDraftForMessage(threadMessages, threadMessage)}
             mailboxId={mailboxId}
             message={threadMessage}
-            onComposeDraftRequested={onComposeDraftRequested}
+            onComposeDraftRequested={canComposeFromMailbox ? onComposeDraftRequested : undefined}
             onUnsubscribe={
               mailboxProvider === "gmail" ? mailboxActions.unsubscribeFromMessage : undefined
             }

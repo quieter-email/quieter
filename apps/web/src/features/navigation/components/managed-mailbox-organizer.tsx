@@ -1,5 +1,6 @@
 "use client";
 
+import type { RouterOutputs } from "@quieter/orpc";
 import {
   ArrowLeft02Icon,
   ArrowDown01Icon,
@@ -18,10 +19,10 @@ import {
   serializeStructuredSearchState,
   structuredMailSearchSchema,
 } from "@quieter/mail/search";
+import { Button } from "@quieter/ui/button";
+import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
+import { cn } from "@quieter/ui/cn";
 import {
-  Button,
-  Checkbox,
-  CheckboxIndicator,
   FullPageDialog,
   FullPageDialogBody,
   FullPageDialogClose,
@@ -29,13 +30,11 @@ import {
   FullPageDialogDescription,
   FullPageDialogHeader,
   FullPageDialogTitle,
-  IconButtonTooltip,
-  Input,
-  Switch,
-  SwitchThumb,
-  cn,
-  toast,
-} from "@quieter/ui";
+} from "@quieter/ui/full-page-dialog";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Input } from "@quieter/ui/input";
+import { Switch, SwitchThumb } from "@quieter/ui/switch";
+import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
@@ -55,7 +54,59 @@ type ManagedMailboxOrganizerProps = {
   searchQuery: string;
 };
 
+type ManagedSavedView = RouterOutputs["mail"]["listManagedSavedViews"][number];
+type SavedViewsSectionProps = {
+  currentSearch: ReturnType<typeof parseStructuredSearchQuery>;
+  emptyMessage: string;
+  onSearch: (query: string) => void;
+  title: string;
+  views: ManagedSavedView[];
+};
+
 const getSearchFromStoredValue = (value: unknown) => structuredMailSearchSchema.parse(value);
+
+const SavedViewsSection = ({
+  currentSearch,
+  emptyMessage,
+  onSearch,
+  title,
+  views,
+}: SavedViewsSectionProps) => (
+  <section className="mt-4">
+    <p className="mb-1 px-2 text-xs font-medium text-muted-foreground">{title}</p>
+    {views.length === 0 ? (
+      <p className="px-2 py-1 text-xs text-muted-foreground">{emptyMessage}</p>
+    ) : (
+      <nav aria-label={title} className="flex flex-col">
+        {views.map((view) => {
+          const search = getSearchFromStoredValue(view.search);
+          const active = areStructuredMailSearchesEqual(currentSearch, search);
+          return (
+            <SidebarNavItem
+              active={active}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light squircle",
+                {
+                  "text-foreground": active,
+                  "text-muted-foreground": !active,
+                },
+              )}
+              key={view.id}
+              onClick={() => onSearch(serializeStructuredSearchState(search))}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <HugeiconsIcon aria-hidden className="size-3.5 shrink-0" icon={Search01Icon} />
+              <span className="truncate">{view.name}</span>
+            </SidebarNavItem>
+          );
+        })}
+      </nav>
+    )}
+  </section>
+);
 
 export const ManagedMailboxOrganizer = ({
   canManage,
@@ -67,7 +118,8 @@ export const ManagedMailboxOrganizer = ({
   const [isOpen, setIsOpen] = useState(false);
   const [viewName, setViewName] = useState("");
   const [ruleName, setRuleName] = useState("");
-  const [ruleQuery, setRuleQuery] = useState(searchQuery);
+  const [ruleQueryDraft, setRuleQueryDraft] = useState<string | null>(null);
+  const ruleQuery = ruleQueryDraft ?? searchQuery;
   const [ruleMatchMode, setRuleMatchMode] = useState<"all" | "any">("all");
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [selectedRuleLabelIds, setSelectedRuleLabelIds] = useState<string[]>([]);
@@ -75,10 +127,10 @@ export const ManagedMailboxOrganizer = ({
   const [preview, setPreview] = useState<{ count: number; samples: Array<{ id: string }> } | null>(
     null,
   );
-  const viewsQuery = useQuery(managedSavedViewsQueryOptions(mailboxId));
-  const rulesQuery = useQuery(managedRulesQueryOptions(mailboxId, isOpen && canManage));
-  const labelsQuery = useQuery(labelsQueryOptions(mailboxId, isOpen));
-  const backfillQuery = useQuery({
+  const { data: viewsData } = useQuery(managedSavedViewsQueryOptions(mailboxId));
+  const { data: rulesData } = useQuery(managedRulesQueryOptions(mailboxId, isOpen && canManage));
+  const { data: labelsData } = useQuery(labelsQueryOptions(mailboxId, isOpen));
+  const { data: backfillData } = useQuery({
     enabled: !!activeBackfillId,
     queryFn: ({ signal }) =>
       rpc.mail.getManagedRuleBackfill({ backfillId: activeBackfillId!, mailboxId }, { signal }),
@@ -87,7 +139,7 @@ export const ManagedMailboxOrganizer = ({
       ["pending", "running"].includes(query.state.data?.status ?? "") ? 1000 : false,
   });
   const currentSearch = parseStructuredSearchQuery(searchQuery);
-  const views = viewsQuery.data ?? [];
+  const views = viewsData ?? [];
   const sharedViews = views.filter((view) => view.ownerUserId === null);
   const personalViews = views.filter((view) => view.ownerUserId !== null);
 
@@ -165,7 +217,7 @@ export const ManagedMailboxOrganizer = ({
         });
       }
       setRuleName("");
-      setRuleQuery("");
+      setRuleQueryDraft("");
       setRuleMatchMode("all");
       setSelectedRuleLabelIds([]);
       setEditingRuleId(null);
@@ -176,56 +228,31 @@ export const ManagedMailboxOrganizer = ({
     }
   };
 
-  const renderViews = (title: string, sectionViews: typeof views, emptyMessage: string) => (
-    <section className="mt-4">
-      <p className="mb-1 px-2 text-xs font-medium text-muted-foreground">{title}</p>
-      {sectionViews.length === 0 ? (
-        <p className="px-2 py-1 text-xs text-muted-foreground">{emptyMessage}</p>
-      ) : (
-        <nav aria-label={title} className="flex flex-col">
-          {sectionViews.map((view) => {
-            const search = getSearchFromStoredValue(view.search);
-            const active = areStructuredMailSearchesEqual(currentSearch, search);
-            return (
-              <SidebarNavItem
-                active={active}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light squircle",
-                  {
-                    "text-foreground": active,
-                    "text-muted-foreground": !active,
-                  },
-                )}
-                key={view.id}
-                onClick={() => onSearch(serializeStructuredSearchState(search))}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                <HugeiconsIcon aria-hidden className="size-3.5 shrink-0" icon={Search01Icon} />
-                <span className="truncate">{view.name}</span>
-              </SidebarNavItem>
-            );
-          })}
-        </nav>
-      )}
-    </section>
-  );
-
   return (
     <>
       <div className="flex items-center justify-between">
         <div className="min-w-0 flex-1">
-          {renderViews("Views", sharedViews, "No shared views.")}
-          {renderViews("My views", personalViews, "No personal views.")}
+          <SavedViewsSection
+            currentSearch={currentSearch}
+            emptyMessage="No shared views."
+            onSearch={onSearch}
+            title="Views"
+            views={sharedViews}
+          />
+          <SavedViewsSection
+            currentSearch={currentSearch}
+            emptyMessage="No personal views."
+            onSearch={onSearch}
+            title="My views"
+            views={personalViews}
+          />
         </div>
         <IconButtonTooltip label="Manage views and rules">
           <Button
             aria-label="Manage views and rules"
             className="mt-4 size-6 self-start text-muted-foreground hover:text-foreground"
             onClick={() => {
-              setRuleQuery(searchQuery);
+              setRuleQueryDraft(searchQuery);
               setIsOpen(true);
             }}
             size="icon-sm"
@@ -450,7 +477,7 @@ export const ManagedMailboxOrganizer = ({
                       />
                       <Input
                         aria-label="Rule search"
-                        onChange={(event) => setRuleQuery(event.target.value)}
+                        onChange={(event) => setRuleQueryDraft(event.target.value)}
                         placeholder="from:vendor@example.com subject:invoice"
                         size="sm"
                         value={ruleQuery}
@@ -474,30 +501,32 @@ export const ManagedMailboxOrganizer = ({
                       </div>
                       <div className="space-y-2 rounded-lg border p-3">
                         <p className="text-xs font-medium text-muted-foreground">Apply labels</p>
-                        {(labelsQuery.data ?? [])
-                          .filter((label) => label.type === "user")
-                          .map((label) => (
-                            <label className="flex items-center gap-2 text-sm" key={label.id}>
-                              <Checkbox
-                                checked={selectedRuleLabelIds.includes(label.id)}
-                                onCheckedChange={(checked) =>
-                                  setSelectedRuleLabelIds((current) =>
-                                    checked
-                                      ? [...current, label.id]
-                                      : current.filter((labelId) => labelId !== label.id),
-                                  )
-                                }
-                              >
-                                <CheckboxIndicator />
-                              </Checkbox>
-                              <HugeiconsIcon
-                                aria-hidden
-                                className="size-3.5 text-muted-foreground"
-                                icon={Tag01Icon}
-                              />
-                              {label.name}
-                            </label>
-                          ))}
+                        {(labelsData ?? []).flatMap((label) =>
+                          label.type === "user"
+                            ? [
+                                <label className="flex items-center gap-2 text-sm" key={label.id}>
+                                  <Checkbox
+                                    checked={selectedRuleLabelIds.includes(label.id)}
+                                    onCheckedChange={(checked) =>
+                                      setSelectedRuleLabelIds((current) =>
+                                        checked
+                                          ? [...current, label.id]
+                                          : current.filter((labelId) => labelId !== label.id),
+                                      )
+                                    }
+                                  >
+                                    <CheckboxIndicator />
+                                  </Checkbox>
+                                  <HugeiconsIcon
+                                    aria-hidden
+                                    className="size-3.5 text-muted-foreground"
+                                    icon={Tag01Icon}
+                                  />
+                                  {label.name}
+                                </label>,
+                              ]
+                            : [],
+                        )}
                       </div>
                       {preview ? (
                         <p className="text-sm text-muted-foreground">
@@ -536,7 +565,7 @@ export const ManagedMailboxOrganizer = ({
                       </div>
                     </div>
                     <div className="mt-5 divide-y">
-                      {(rulesQuery.data ?? []).map((rule, index, rules) => (
+                      {(rulesData ?? []).map((rule, index, rules) => (
                         <div className="flex items-center gap-3 py-2" key={rule.id}>
                           <HugeiconsIcon
                             aria-hidden
@@ -578,7 +607,7 @@ export const ManagedMailboxOrganizer = ({
                               onClick={() => {
                                 setEditingRuleId(rule.id);
                                 setRuleName(rule.name);
-                                setRuleQuery(
+                                setRuleQueryDraft(
                                   serializeStructuredSearchState(
                                     structuredMailSearchSchema.parse(rule.search),
                                   ),
@@ -675,22 +704,22 @@ export const ManagedMailboxOrganizer = ({
                         </div>
                       ))}
                     </div>
-                    {backfillQuery.data ? (
+                    {backfillData ? (
                       <div className="mt-4 rounded-lg border bg-muted/30 p-3 text-sm">
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="font-medium">Historical labeling</p>
                             <p className="text-xs text-muted-foreground">
-                              {backfillQuery.data.processedCount} processed{" "}
-                              {backfillQuery.data.matchedCount} matched
+                              {backfillData.processedCount} processed {backfillData.matchedCount}{" "}
+                              matched
                             </p>
                           </div>
-                          {["pending", "running"].includes(backfillQuery.data.status) ? (
+                          {["pending", "running"].includes(backfillData.status) ? (
                             <Button
                               disabled={cancelBackfillMutation.isPending}
                               onClick={() => {
                                 void cancelBackfillMutation.mutateAsync({
-                                  backfillId: backfillQuery.data.id,
+                                  backfillId: backfillData.id,
                                   mailboxId,
                                 });
                               }}
@@ -702,7 +731,7 @@ export const ManagedMailboxOrganizer = ({
                             </Button>
                           ) : (
                             <span className="text-xs text-muted-foreground capitalize">
-                              {backfillQuery.data.status}
+                              {backfillData.status}
                             </span>
                           )}
                         </div>

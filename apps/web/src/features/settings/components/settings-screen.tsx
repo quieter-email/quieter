@@ -1,19 +1,27 @@
 "use client";
 
-import { SidebarLeftIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, IconButtonTooltip } from "@quieter/ui";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
+import { isDemoModeAvailable } from "~/features/settings/domain/demo-mode-setting";
+import { SETTINGS_DETAIL_TITLES } from "~/features/settings/domain/settings-navigation";
 import { type SettingsTab } from "~/features/settings/domain/settings-tab";
 import { settingsRouteApi } from "~/lib/route-apis";
 import { AccountSettingsPanel } from "./account-settings-panel";
 import { BillingCheckoutResult } from "./billing-checkout-result";
-import { GeneralSettingsPanel } from "./general-settings-panel";
+import { ConnectorConnectionResult } from "./connector-connection-result";
+import { ConnectorsSettingsPanel } from "./connectors-settings-panel";
 import { MailboxesSettingsPanel } from "./mailboxes-settings-panel";
 import { OrganizationSettingsPanel } from "./organization-settings-panel";
-import { SettingsSidebar } from "./settings-sidebar";
+import {
+  AppearanceSettingsPanel,
+  DevelopmentSettingsPanel,
+  DevelopmentSettingsUnavailable,
+  PrivacySettingsPanel,
+  ReadingSettingsPanel,
+  ShortcutsSettingsPanel,
+} from "./preference-settings-panels";
+import { SettingsBackButton } from "./settings-layout";
+import { SettingsOverviewPanel } from "./settings-overview-panel";
 
 type SettingsUser = {
   email: string;
@@ -30,8 +38,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
   const navigate = useNavigate({
     from: "/settings",
   });
-  const { from, tab } = settingsRouteApi.useSearch();
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const { from, organizationId, tab } = settingsRouteApi.useSearch();
 
   const setTab = (nextTab: SettingsTab) => {
     void navigate({
@@ -45,51 +52,53 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
       to: ".",
     });
   };
+  const goBackToApp = () => {
+    void navigate({
+      to: from,
+    });
+  };
+  const detail = tab === "overview" ? null : SETTINGS_DETAIL_TITLES[tab];
 
   return (
     <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-background-dark text-foreground">
       <BillingCheckoutResult />
+      <ConnectorConnectionResult />
       <WorkspaceDitherBackground />
-      <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
-        <SettingsSidebar
-          activeTab={tab}
-          isMobileOpen={isMobileSidebarOpen}
-          onBack={() => {
-            void navigate({
-              to: from,
-            });
-          }}
-          onMobileOpenChange={setIsMobileSidebarOpen}
-          onSelectTab={setTab}
-        />
+      {tab === "overview" ? (
+        <SettingsBackButton onClick={goBackToApp}>Back</SettingsBackButton>
+      ) : tab === "organization" && organizationId ? null : (
+        <SettingsBackButton onClick={() => setTab("overview")}>Settings</SettingsBackButton>
+      )}
+      <div className="relative z-10 min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-205 px-5 py-8 md:px-8 md:py-14">
+          {tab === "overview" ? (
+            <SettingsOverviewPanel initialUser={initialUser} onSelectTab={setTab} />
+          ) : (
+            <div className="space-y-8">
+              {detail && (
+                <header>
+                  <h1 className="text-xl font-normal tracking-tight text-foreground">
+                    {detail.title}
+                  </h1>
+                </header>
+              )}
 
-        <div className="relative min-h-0 flex-1 overflow-hidden bg-transparent">
-          <div className="absolute inset-1.5 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60">
-            {/* Mobile Top Bar */}
-            <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border/40 px-4 md:hidden">
-              <IconButtonTooltip label="Open settings sidebar">
-                <Button
-                  aria-label="Open settings sidebar"
-                  onClick={() => setIsMobileSidebarOpen(true)}
-                  size="icon-sm"
-                  variant="ghost"
-                >
-                  <HugeiconsIcon icon={SidebarLeftIcon} />
-                </Button>
-              </IconButtonTooltip>
-              <span className="text-sm font-semibold text-foreground capitalize">
-                {`${tab} Settings`}
-              </span>
-            </div>
-
-            {/* Scrollable content container */}
-            <div className="min-h-0 flex-1 overflow-y-auto px-12 py-8 md:px-16 md:py-12">
-              {tab === "general" && <GeneralSettingsPanel />}
+              {tab === "appearance" && <AppearanceSettingsPanel />}
+              {tab === "reading" && <ReadingSettingsPanel />}
+              {tab === "shortcuts" && <ShortcutsSettingsPanel />}
+              {tab === "privacy" && <PrivacySettingsPanel />}
+              {tab === "development" &&
+                (isDemoModeAvailable() ? (
+                  <DevelopmentSettingsPanel />
+                ) : (
+                  <DevelopmentSettingsUnavailable />
+                ))}
               {tab === "account" && <AccountSettingsPanel initialUser={initialUser} />}
               {tab === "mailboxes" && <MailboxesSettingsPanel />}
+              {tab === "connectors" && <ConnectorsSettingsPanel />}
               {tab === "organization" && <OrganizationSettingsPanel />}
             </div>
-          </div>
+          )}
         </div>
       </div>
     </main>

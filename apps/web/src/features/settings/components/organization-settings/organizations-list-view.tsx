@@ -1,11 +1,17 @@
 "use client";
 
-import { ArrowRight01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
+import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button } from "@quieter/ui";
+import { Button } from "@quieter/ui/button";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { authClient } from "~/lib/auth";
+import {
+  SettingsCard,
+  SettingsNavigationRow,
+  SettingsRows,
+  SettingsSection,
+} from "../settings-layout";
 import {
   type OrganizationSummary,
   type UserInvitation,
@@ -23,9 +29,11 @@ const PendingInvitationsSection = () => {
   const [error, setError] = useState<string | null>(null);
   const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(null);
   const userId = sessionState.data?.user.id ?? "";
-  const userInvitationsQuery = useQuery(
-    userInvitationsQueryOptions(userId, !!sessionState.data?.user.email),
-  );
+  const {
+    data: userInvitations = [],
+    error: userInvitationsError,
+    isPending: areUserInvitationsPending,
+  } = useQuery(userInvitationsQueryOptions(userId, !!sessionState.data?.user.email));
   const acceptInvitationMutation = useMutation({
     mutationFn: async (invitationId: string) => {
       const response = await authClient.organization.acceptInvitation({ invitationId });
@@ -52,7 +60,7 @@ const PendingInvitationsSection = () => {
       await queryClient.invalidateQueries({ queryKey: getUserInvitationsQueryKey(userId) });
     },
   });
-  const invitations = (userInvitationsQuery.data ?? []).toSorted((left, right) =>
+  const invitations = userInvitations.toSorted((left, right) =>
     left.organizationName.localeCompare(right.organizationName),
   );
 
@@ -82,14 +90,14 @@ const PendingInvitationsSection = () => {
     }
   };
 
-  if (userInvitationsQuery.isPending) {
+  if (areUserInvitationsPending) {
     return <p className="text-sm text-muted-foreground">Loading invitations…</p>;
   }
 
-  if (userInvitationsQuery.error) {
+  if (userInvitationsError) {
     return (
       <p className="text-sm text-destructive">
-        {userInvitationsQuery.error.message ?? "Could not load invitations."}
+        {userInvitationsError.message ?? "Could not load invitations."}
       </p>
     );
   }
@@ -99,7 +107,7 @@ const PendingInvitationsSection = () => {
   }
 
   return (
-    <div>
+    <SettingsCard>
       {invitations.map((invitation) => {
         const isPending =
           pendingInvitationId === invitation.id &&
@@ -147,8 +155,8 @@ const PendingInvitationsSection = () => {
           />
         );
       })}
-      {error && <p className="text-sm text-destructive">{error}</p>}
-    </div>
+      {error && <p className="px-4 py-3 text-sm text-destructive md:px-6">{error}</p>}
+    </SettingsCard>
   );
 };
 
@@ -159,39 +167,31 @@ export const OrganizationsListView = ({
   onSelectOrganization: (organizationId: string) => void;
   organizations: OrganizationSummary[];
 }) => (
-  <>
+  <div className="space-y-8">
     <div className="flex items-center justify-between gap-4">
-      <h1 className="ml-4 text-base font-semibold text-foreground">Teams</h1>
+      <h1 className="text-sm font-normal text-foreground">Teams</h1>
       <OrganizationFormDialog />
     </div>
 
     <PendingInvitationsSection />
 
     {organizations.length > 0 ? (
-      <div className="space-y-2">
-        {organizations
-          .toSorted((left, right) => left.name.localeCompare(right.name))
-          .map((organization) => (
-            <Button
-              variant="ghost"
-              className="h-18 w-full gap-3 text-left"
-              key={organization.id}
-              onClick={() => onSelectOrganization(organization.id)}
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">{organization.name}</p>
-                <p className="mt-1 truncate text-sm text-muted-foreground">{organization.slug}</p>
-              </div>
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4 shrink-0 text-muted-foreground"
-                icon={ArrowRight01Icon}
+      <SettingsSection title="Your teams">
+        <SettingsRows>
+          {organizations
+            .toSorted((left, right) => left.name.localeCompare(right.name))
+            .map((organization) => (
+              <SettingsNavigationRow
+                description={organization.slug}
+                key={organization.id}
+                onClick={() => onSelectOrganization(organization.id)}
+                title={organization.name}
               />
-            </Button>
-          ))}
-      </div>
+            ))}
+        </SettingsRows>
+      </SettingsSection>
     ) : (
       <p className="text-sm text-muted-foreground">No teams yet.</p>
     )}
-  </>
+  </div>
 );

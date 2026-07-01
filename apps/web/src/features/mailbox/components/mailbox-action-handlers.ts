@@ -4,6 +4,8 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import {
+  archiveMessageInMailbox,
+  archiveThreadInMailbox,
   deleteDraftInMailbox,
   markMessageAsReadInMailbox,
   markMessageAsSpamInMailbox,
@@ -227,6 +229,11 @@ export const createMailboxActionHandlers = ({
   };
 
   return {
+    archiveMessage: (messageId: string) =>
+      runMailboxMessageAction(messageId, archiveMessageInMailbox),
+    archiveThread: (threadId: string) => runMailboxThreadAction(threadId, archiveThreadInMailbox),
+    archiveThreads: (threads: ThreadListEntry[]) =>
+      runBulkMailboxThreadAction(threads, archiveThreadInMailbox),
     deleteDraft,
     deleteDrafts,
     markMessageAsRead: (messageId: string) =>

@@ -8,7 +8,10 @@ import {
   SidebarLeftIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, Calendar, IconButtonTooltip, cn } from "@quieter/ui";
+import { Button } from "@quieter/ui/button";
+import { Calendar } from "@quieter/ui/calendar";
+import { cn } from "@quieter/ui/cn";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import { ArrowInteractionButton } from "~/components/arrow-interaction-button";
 import { SpinWhileActive } from "~/components/spin-while-active";
@@ -93,7 +96,6 @@ export const MessageListSearchView = ({
     updateSearchText,
     userLabels,
   } = controller;
-
   return (
     <search className="block bg-transparent p-4">
       <div className="relative">
@@ -127,7 +129,7 @@ export const MessageListSearchView = ({
           </IconButtonTooltip>
 
           <div ref={fieldRef} className="relative min-w-0 flex-1" onBlur={handleSearchFieldBlur}>
-            <div className="flex h-8 min-w-0 items-center gap-1 rounded-md border border-input bg-background-dark pr-1 shadow-sm transition-colors duration-150 ease-out squircle focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
+            <div className="keyboard-focus-within flex h-8 min-w-0 items-center gap-1 rounded-md border border-input bg-background-light pr-1 shadow-sm transition-colors duration-150 ease-out squircle">
               <div
                 className={cn(
                   "flex h-8 min-w-0 flex-1 scrollbar-none items-center gap-1 overflow-x-auto pr-2 [&::-webkit-scrollbar]:hidden",
@@ -238,7 +240,7 @@ export const MessageListSearchView = ({
                         autoCapitalize="off"
                         autoCorrect="off"
                         className={cn(
-                          "field-sizing-content min-w-[1ch] bg-transparent text-foreground outline-none",
+                          "field-sizing-content min-w-[1ch] bg-transparent text-foreground outline-none focus-visible:shadow-none",
                           {
                             "mr-1": index === 0,
                             "mx-1": index > 0,
@@ -283,7 +285,7 @@ export const MessageListSearchView = ({
                   aria-label="Search"
                   autoCapitalize="off"
                   autoCorrect="off"
-                  className="h-6 min-w-[8ch] flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground"
+                  className="h-6 min-w-[8ch] flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:shadow-none"
                   onChange={(event) => updateSearchText(event.currentTarget.value)}
                   onFocus={openSearchDropdown}
                   onKeyDown={handleTextInputKeyDown}

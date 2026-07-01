@@ -16,6 +16,8 @@ export const Route = createFileRoute("/")({
       mailboxId: z.string().trim().min(1).optional().catch(undefined),
       chatId: z.string().trim().min(1).optional().catch(undefined),
       gmailLink: z.literal("complete").optional().catch(undefined),
+      compose: z.literal("mailto").optional().catch(undefined),
+      mailto: z.string().trim().min(1).optional().catch(undefined),
       messageId: z.string().trim().min(1).optional().catch(undefined),
       threadId: z.string().trim().min(1).optional().catch(undefined),
       query: z.string().trim().catch("").default(""),
@@ -23,11 +25,15 @@ export const Route = createFileRoute("/")({
     }),
   ),
   ssr: "data-only",
-  loader: async () => {
+  staleTime: Number.POSITIVE_INFINITY,
+  loader: async ({ location }) => {
     const user = await getSessionUser();
 
     if (!user) {
       throw redirect({
+        search: {
+          returnTo: location.href,
+        },
         to: "/auth",
       });
     }

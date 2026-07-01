@@ -366,10 +366,11 @@ const collapseQuoted = (document: Document, selector: string) => {
     const details = document.createElement("details");
     details.className = "quoted-toggle";
     details.setAttribute("style", "margin-top:1em;");
-    details.innerHTML = `<summary style="cursor:pointer;" data-theme-color="muted">
-            Show quoted text
-          </summary>
-          ${element.innerHTML}`;
+    const summary = document.createElement("summary");
+    summary.setAttribute("style", "cursor:pointer;");
+    summary.setAttribute("data-theme-color", "muted");
+    summary.textContent = "Show quoted text";
+    details.append(summary, ...Array.from(element.childNodes));
     element.replaceWith(details);
   });
 };
