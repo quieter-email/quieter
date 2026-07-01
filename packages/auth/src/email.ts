@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { serverEnv } from "@quieter/env/server";
+import { render } from "@react-email/render";
 import { MagicLinkEmail, VerificationEmail } from "./emails";
 
 type AuthMailInput = {
@@ -11,6 +12,17 @@ type AuthMailInput = {
 
 const SEND_API_PATH = "/api/v1/send";
 const authMailSender = serverEnv.QUIETER_AUTH_MAIL_SENDER;
+
+const parseSendError = async (response: Response) => {
+  const body = await response
+    .json()
+    .then((value: unknown) =>
+      typeof value === "object" && value !== null && "error" in value ? String(value.error) : null,
+    )
+    .catch(() => null);
+
+  return body ?? `Quieter API returned ${response.status}.`;
+};
 
 const getAuthMailBaseUrl = () => {
   const configuredUrl = serverEnv.QUIETER_MAIL_API_URL;
@@ -46,28 +58,28 @@ export const sendAuthMail = async (input: AuthMailInput) => {
     throw new Error("QUIETER_MAIL_API_KEY is required to send auth email.");
   }
 
-  const { Quieter, QuieterApiError } = await import("quieter");
-  const quieter = new Quieter({
-    apiKey,
-    baseUrl: getAuthMailBaseUrl(),
-  });
-
-  try {
-    await quieter.send({
+  const response = await fetch(new URL(SEND_API_PATH, getAuthMailBaseUrl()), {
+    body: JSON.stringify({
       from: authMailSender,
-      react: input.react,
+      html: await render(input.react),
       subject: input.subject,
       text: input.text,
       to: input.to,
-    });
-  } catch (error) {
-    if (error instanceof QuieterApiError) {
-      throw new Error(
-        `Could not send auth email. Mail API returned ${error.status}: ${error.message}`,
-      );
-    }
+    }),
+    headers: {
+      accept: "application/json",
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    method: "POST",
+  });
 
-    throw error;
+  if (!response.ok) {
+    throw new Error(
+      `Could not send auth email. Mail API returned ${response.status}: ${await parseSendError(
+        response,
+      )}`,
+    );
   }
 };
 
