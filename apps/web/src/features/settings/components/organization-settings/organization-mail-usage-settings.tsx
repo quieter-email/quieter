@@ -527,25 +527,23 @@ const ManagedUsageSettingsForm = ({
           </div>
 
           {milestoneError && <p className="mt-2 text-xs text-destructive">{milestoneError}</p>}
-
-          {canManageOrganizationMailUsage && (
-            <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-              {hasUnsavedChanges && (
-                <p className="text-xs text-muted-foreground">Unsaved changes</p>
-              )}
-              <Button
-                disabled={!hasUnsavedChanges || !!milestoneError || updateMutation.isPending}
-                onClick={() => void saveSettings()}
-                size="sm"
-              >
-                {updateMutation.isPending && (
-                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-                )}
-                Save changes
-              </Button>
-            </div>
-          )}
         </div>
+
+        {canManageOrganizationMailUsage && (
+          <div className="flex flex-wrap items-center justify-end gap-3 py-5">
+            {hasUnsavedChanges && <p className="text-xs text-muted-foreground">Unsaved changes</p>}
+            <Button
+              disabled={!hasUnsavedChanges || !!milestoneError || updateMutation.isPending}
+              onClick={() => void saveSettings()}
+              size="sm"
+            >
+              {updateMutation.isPending && (
+                <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+              )}
+              Save changes
+            </Button>
+          </div>
+        )}
       </div>
 
       {!canManageOrganizationMailUsage && (
