@@ -29,6 +29,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { z } from "zod";
 import { orpc } from "~/lib/orpc";
+import { settingsRowPaddingClass } from "../settings-layout";
 import {
   getOrganizationMailDomainsQueryKey,
   type OrganizationMailDomain,
@@ -161,7 +162,12 @@ const DnsRecordRow = ({
   check?: MailDomainCheck;
   record: OrganizationMailDomainDnsRecord;
 }) => (
-  <div className="grid grid-cols-[1rem_minmax(0,1fr)] gap-3 border-b border-border/70 py-3.5 last:border-b-0 sm:py-4">
+  <div
+    className={cn(
+      "grid grid-cols-[1rem_minmax(0,1fr)] gap-3 border-b border-border/70 last:border-b-0",
+      settingsRowPaddingClass,
+    )}
+  >
     <DnsStatusIcon check={check} />
 
     <div className="min-w-0 space-y-3">

@@ -2,10 +2,11 @@
 
 import { Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { cn } from "@quieter/ui/cn";
 import { Separator } from "@quieter/ui/separator";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { useState } from "react";
-import { SettingsBackButton } from "../settings-layout";
+import { SettingsBackButton, settingsRowPaddingClass } from "../settings-layout";
 import {
   type FullOrganization,
   type OrganizationMember,
@@ -100,7 +101,9 @@ export const MembersView = ({
         })}
 
         {visibleMembers.length === 0 && (
-          <p className="py-6 text-center text-sm text-muted-foreground">No members found.</p>
+          <p className={cn("text-center text-sm text-muted-foreground", settingsRowPaddingClass)}>
+            No members found.
+          </p>
         )}
       </div>
 

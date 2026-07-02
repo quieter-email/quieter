@@ -6,6 +6,7 @@ import { Button } from "@quieter/ui/button";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { authClient } from "~/lib/auth";
+import { SettingsInsetRows, SettingsInsetStackedRow } from "../settings-layout";
 import { type FullOrganization, formatRoleLabel, getFullOrganizationQueryKey } from "./domain";
 
 export const PendingOrganizationInvitations = ({
@@ -60,16 +61,13 @@ export const PendingOrganizationInvitations = ({
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">Pending invitations</p>
 
-      <div className="divide-y divide-border/70">
+      <SettingsInsetRows>
         {pendingInvitations.map((invitation) => {
           const isPending =
             pendingInvitationId === invitation.id && cancelInvitationMutation.isPending;
 
           return (
-            <div
-              className="flex flex-col gap-3 py-3 md:flex-row md:items-center"
-              key={invitation.id}
-            >
+            <SettingsInsetStackedRow key={invitation.id}>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm text-foreground">{invitation.email}</p>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -96,10 +94,10 @@ export const PendingOrganizationInvitations = ({
                   Cancel
                 </Button>
               )}
-            </div>
+            </SettingsInsetStackedRow>
           );
         })}
-      </div>
+      </SettingsInsetRows>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
     </div>

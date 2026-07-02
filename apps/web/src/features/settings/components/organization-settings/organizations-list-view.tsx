@@ -3,6 +3,7 @@
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { authClient } from "~/lib/auth";
@@ -11,6 +12,7 @@ import {
   SettingsNavigationRow,
   SettingsRows,
   SettingsSection,
+  settingsRowPaddingClass,
 } from "../settings-layout";
 import {
   type OrganizationSummary,
@@ -155,7 +157,7 @@ const PendingInvitationsSection = () => {
           />
         );
       })}
-      {error && <p className="px-4 py-3 text-sm text-destructive md:px-6">{error}</p>}
+      {error && <p className={cn("text-sm text-destructive", settingsRowPaddingClass)}>{error}</p>}
     </SettingsCard>
   );
 };

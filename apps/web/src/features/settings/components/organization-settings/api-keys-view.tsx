@@ -21,6 +21,7 @@ import {
   AlertDialogTitle,
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
   Dialog,
   DialogBody,
@@ -49,7 +50,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
-import { SettingsBackButton } from "../settings-layout";
+import { SettingsBackButton, settingsRowPaddingClass, SettingsListRow } from "../settings-layout";
 import { getOrganizationApiKeysQueryKey, organizationApiKeysQueryOptions } from "./api-keys";
 import { formatCount, type FullOrganization } from "./domain";
 import { MutedActionButton } from "./settings-row";
@@ -438,7 +439,7 @@ const ApiKeyRow = ({
   canManageApiKeys: boolean;
   organizationId: string;
 }) => (
-  <div className="flex flex-col gap-3 border-b border-border/70 py-4 last:border-b-0 md:flex-row md:items-center md:justify-between">
+  <SettingsListRow>
     <div className="min-w-0">
       <div className="flex min-w-0 items-center gap-2">
         <HugeiconsIcon
@@ -466,7 +467,7 @@ const ApiKeyRow = ({
         <DeleteApiKeyDialog apiKey={apiKey} organizationId={organizationId} />
       </div>
     )}
-  </div>
+  </SettingsListRow>
 );
 
 export const ApiKeysView = ({
@@ -524,12 +525,17 @@ export const ApiKeysView = ({
 
       <div>
         {isApiKeysPending ? (
-          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+          <div
+            className={cn(
+              "flex items-center gap-2 text-sm text-muted-foreground",
+              settingsRowPaddingClass,
+            )}
+          >
             <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
             Loading API keys…
           </div>
         ) : isApiKeysError ? (
-          <p className="py-6 text-sm text-destructive">
+          <p className={cn("text-sm text-destructive", settingsRowPaddingClass)}>
             {apiKeysError?.message ?? "Could not load API keys."}
           </p>
         ) : apiKeys.length > 0 ? (
@@ -542,7 +548,9 @@ export const ApiKeysView = ({
             />
           ))
         ) : (
-          <p className="py-6 text-center text-sm text-muted-foreground">No API keys.</p>
+          <p className={cn("text-center text-sm text-muted-foreground", settingsRowPaddingClass)}>
+            No API keys.
+          </p>
         )}
       </div>
     </div>
