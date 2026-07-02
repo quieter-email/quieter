@@ -598,7 +598,11 @@ export const createUserAiContextMemoryServerTool = (
   userAiContextMemoryToolDef.server(async (input) => {
     try {
       return await context.rememberUserPreference(input);
-    } catch {
+    } catch (error) {
+      console.error("Could not record user AI context preference.", {
+        error: error instanceof Error ? error.message : "Unknown error.",
+        preferenceLength: input.preference.length,
+      });
       return { status: "skipped" };
     }
   });

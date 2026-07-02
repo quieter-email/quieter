@@ -84,11 +84,11 @@ const SUPPRESSED_AUTOMATION_KINDS = new Set<GmailUsefulDetailKind>([
   "task",
 ]);
 const publicCallToActionPattern =
-  /\b(vote|voting|election|campaign|petition|donate|fundraiser|abstimm(?:en|ung)?|wahl(?:en)?|spenden)\b/i;
+  /\b(vote (?:now|today|by|before|for)|cast your vote|sign (?:the )?petition|donate (?:now|today|by|before|to)|fundraiser|abstimm(?:en|ung).{0,40}(?:heute|bis|f.r)|wahl.{0,40}(?:heute|bis|f.r)|spenden.{0,40}(?:jetzt|heute|bis|f.r))\b/i;
 const publicOpportunityPattern =
   /\b(job posting|vacancy|open position|position opening|call for applications|applications? (?:are )?open|apply now|bewerbungsfrist|stellenausschreibung|stellenangebot|ausschreibung|scholarship|stipendium)\b/i;
 const personalApplicationPattern =
-  /\b(your application|application id|case number|we received your application|your interview|missing documents|deine bewerbung|ihre bewerbung|ihr antrag|dein antrag|aktenzeichen|vorgangsnummer|bewerbung.{0,40}eingegangen|interview|vorstellungsgespr.ch)\b/i;
+  /\b(your application|application id|case number|we received your application|your interview|missing documents for your application|deine bewerbung|ihre bewerbung|ihr antrag|dein antrag|aktenzeichen|vorgangsnummer|bewerbung.{0,40}eingegangen|(?:dein|ihr|your).{0,40}vorstellungsgespr.ch)\b/i;
 
 const assertAccessibleGmailMailbox = async (input: { mailboxId: string; userId: string }) => {
   const [selectedMailbox] = await db
@@ -803,11 +803,15 @@ const getGmailUsefulDetailPreferenceProfile = async (
     const sourceCount = Number(row.sourceCount);
     return sourceCount > 0 ? [{ ...row, count: sourceCount }] : [];
   });
+  const [memoryProfile, userAiContext] = await Promise.all([
+    loadAutomationMemoryPrompt({ agent: "useful_detail", mailboxId }),
+    loadUserAiContextPrompt({ userId }),
+  ]);
 
   return {
     ...buildGmailUsefulDetailPreferenceProfile({ global, source: sourceSpecific }),
-    memoryProfile: await loadAutomationMemoryPrompt({ agent: "useful_detail", mailboxId }),
-    userAiContext: await loadUserAiContextPrompt({ userId }),
+    memoryProfile,
+    userAiContext,
   };
 };
 

@@ -24,6 +24,8 @@ CREATE TABLE "userAiContextEvent" (
 	CONSTRAINT "user_ai_context_event_kind_check" CHECK ("kind" in ('auto_label_feedback', 'chat_discovery', 'explicit_preference', 'useful_detail_feedback'))
 );
 --> statement-breakpoint
+CREATE INDEX "mail_auto_label_feedback_mailbox_updated_idx" ON "mailAutoLabelFeedback" ("mailboxId","updatedAt" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "user_ai_context_event_organization_merge_idx" ON "userAiContextEvent" ("organizationId","mergedAt","skippedAt","createdAt");--> statement-breakpoint
 CREATE INDEX "user_ai_context_event_user_merge_idx" ON "userAiContextEvent" ("userId","mergedAt","createdAt");--> statement-breakpoint
 CREATE INDEX "user_ai_context_event_mailbox_created_idx" ON "userAiContextEvent" ("mailboxId","createdAt");--> statement-breakpoint
 ALTER TABLE "userAiContext" ADD CONSTRAINT "userAiContext_userId_user_id_fkey" FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE;--> statement-breakpoint

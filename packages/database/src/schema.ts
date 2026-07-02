@@ -414,6 +414,12 @@ export const userAiContextEvent = pgTable(
       "user_ai_context_event_kind_check",
       sql`${table.kind} in ('auto_label_feedback', 'chat_discovery', 'explicit_preference', 'useful_detail_feedback')`,
     ),
+    index("user_ai_context_event_organization_merge_idx").on(
+      table.organizationId,
+      table.mergedAt,
+      table.skippedAt,
+      table.createdAt,
+    ),
     index("user_ai_context_event_user_merge_idx").on(table.userId, table.mergedAt, table.createdAt),
     index("user_ai_context_event_mailbox_created_idx").on(table.mailboxId, table.createdAt),
   ],
@@ -759,6 +765,10 @@ export const mailAutoLabelFeedback = pgTable(
       table.labelId,
       table.source,
       table.signal,
+    ),
+    index("mail_auto_label_feedback_mailbox_updated_idx").on(
+      table.mailboxId,
+      table.updatedAt.desc(),
     ),
     unique("mail_auto_label_feedback_message_label_unique").on(
       table.mailboxId,

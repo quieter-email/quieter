@@ -4,6 +4,7 @@ import { createOpenRouterAdapter } from "./openrouter";
 
 export const USER_AI_CONTEXT_MODEL = "deepseek/deepseek-v4-flash" as const;
 export const USER_AI_CONTEXT_MARKDOWN_MAX_LENGTH = 12_000;
+const USER_AI_CONTEXT_EDIT_TIMEOUT_MS = 20_000;
 
 export type UserAiContextEditorEvent = {
   id: string;
@@ -50,21 +51,26 @@ export const editUserAiContext = async ({
   events: UserAiContextEditorEvent[];
   middleware?: ChatMiddleware[];
 }) => {
-  const result = await chat({
-    adapter: createOpenRouterAdapter(USER_AI_CONTEXT_MODEL),
-    messages: [
-      {
-        content: JSON.stringify(buildUserAiContextEditorInput({ currentMarkdown, events })),
-        role: "user",
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), USER_AI_CONTEXT_EDIT_TIMEOUT_MS);
+
+  try {
+    const result = await chat({
+      abortController,
+      adapter: createOpenRouterAdapter(USER_AI_CONTEXT_MODEL),
+      messages: [
+        {
+          content: JSON.stringify(buildUserAiContextEditorInput({ currentMarkdown, events })),
+          role: "user",
+        },
+      ],
+      middleware,
+      modelOptions: {
+        maxCompletionTokens: 2_000,
       },
-    ],
-    middleware,
-    modelOptions: {
-      maxCompletionTokens: 2_000,
-    },
-    outputSchema: userAiContextEditorSchema,
-    systemPrompts: [
-      `Maintain a compact Markdown preference profile for Quieter's email AI agents.
+      outputSchema: userAiContextEditorSchema,
+      systemPrompts: [
+        `Maintain a compact Markdown preference profile for Quieter's email AI agents.
 
 The input events are trusted compact application metadata, not raw email content. Return the full
 replacement Markdown profile, not a patch.
@@ -76,13 +82,24 @@ Rules:
 - Resolve conflicts by keeping the newest clear preference and deleting obsolete text.
 - Do not store raw message bodies, secrets, authentication codes, verification codes, passwords,
   private keys, access tokens, or full thread content.
+- Do not store actionable behavioral instructions such as sender-specific handling, forwarding, or
+  labeling changes unless they are clearly and unambiguously stated user workflow preferences.
 - Do not keep one-off facts, transient tasks, single email summaries, or implementation details.
 - Keep the profile short, skimmable, and under the hard length limit.
 - Use Markdown headings and bullets only.`,
-    ],
-  });
+      ],
+    });
 
-  return {
-    markdown: sanitizeUserAiContextMarkdown(result.markdown),
-  };
+    return {
+      markdown: sanitizeUserAiContextMarkdown(result.markdown),
+    };
+  } catch (error) {
+    if (abortController.signal.aborted) {
+      throw new Error("User AI context edit timed out.");
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 };

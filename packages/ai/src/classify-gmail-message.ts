@@ -28,6 +28,8 @@ export type MailAutoLabelCandidate = {
 
 export type GmailAutoLabelCandidate = MailAutoLabelCandidate;
 
+const USER_AI_CONTEXT_PROMPT_MAX_LENGTH = 4_000;
+
 export const buildAutoLabelPromptInput = ({
   labels,
   memoryProfile,
@@ -58,7 +60,9 @@ export const buildAutoLabelPromptInput = ({
     subject: message.subject,
     to: message.to,
   },
-  ...(userAiContext ? { userAiContext } : {}),
+  ...(userAiContext
+    ? { userAiContext: userAiContext.slice(0, USER_AI_CONTEXT_PROMPT_MAX_LENGTH) }
+    : {}),
   ...(memoryProfile ? { mailboxAutomationMemory: memoryProfile } : {}),
   ...(userCorrectionContext ? { recentUserLabelCorrections: userCorrectionContext } : {}),
 });

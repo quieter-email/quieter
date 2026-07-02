@@ -115,4 +115,24 @@ describe("Gmail auto-label selection", () => {
       userAiContext: "## Labeling\n- Treat invoices as receipts.",
     });
   });
+
+  test("caps shared user context in classifier payloads", () => {
+    const input = buildAutoLabelPromptInput({
+      labels: [
+        {
+          description: null,
+          id: "label-receipts",
+          inclusionCriteria: null,
+          name: "Receipts",
+        },
+      ],
+      message: {
+        id: "message-1",
+        subject: "Invoice",
+      },
+      userAiContext: "x".repeat(5_000),
+    });
+
+    expect(input.userAiContext).toHaveLength(4_000);
+  });
 });

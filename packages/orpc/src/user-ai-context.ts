@@ -108,11 +108,58 @@ const canRefreshUserAiContext = async (input: { organizationId: string; userId: 
   return usage.costMicroCents < usage.creditAmountMicroCents;
 };
 
-export const refreshUserAiContext = async (input: {
-  mailboxId: string;
-  triggerEventId?: string | null;
+const applyUserAiContextUpdate = async (input: {
+  currentRevision: number | null;
+  markdown: string;
+  now: Date;
   userId: string;
 }) => {
+  if (input.currentRevision === null) {
+    const [inserted] = await db
+      .insert(userAiContext)
+      .values({
+        createdAt: input.now,
+        id: randomUUID(),
+        lastEditedAt: input.now,
+        markdown: input.markdown,
+        revision: 1,
+        updatedAt: input.now,
+        userId: input.userId,
+      })
+      .onConflictDoNothing({ target: userAiContext.userId })
+      .returning({ id: userAiContext.id });
+
+    return !!inserted;
+  }
+
+  const [updated] = await db
+    .update(userAiContext)
+    .set({
+      lastEditedAt: input.now,
+      markdown: input.markdown,
+      revision: sql`${userAiContext.revision} + 1`,
+      updatedAt: input.now,
+    })
+    .where(
+      and(
+        eq(userAiContext.userId, input.userId),
+        eq(userAiContext.revision, input.currentRevision),
+      ),
+    )
+    .returning({ id: userAiContext.id });
+
+  return !!updated;
+};
+
+const refreshUserAiContextAttempt = async (
+  input: {
+    mailboxId: string;
+    triggerEventId?: string | null;
+    userId: string;
+  },
+  attempt: number,
+) => {
+  const maxAttempts = 2;
   const organizationId = await getMailboxOrganizationId(input.mailboxId);
   if (!organizationId) return { status: "skipped" as const };
 
@@ -151,7 +198,8 @@ export const refreshUserAiContext = async (input: {
     .where(eq(userAiContext.userId, input.userId))
     .limit(1);
 
-  const nextRevision = (current?.revision ?? 0) + 1;
+  const currentRevision = current?.revision ?? null;
+  const nextRevision = (currentRevision ?? 0) + 1;
   let promptTokens = 0;
   let completionTokens = 0;
   const usageMiddleware: ChatMiddleware = {
@@ -186,26 +234,19 @@ export const refreshUserAiContext = async (input: {
       userId: input.userId,
     });
 
-    await db
-      .insert(userAiContext)
-      .values({
-        createdAt: now,
-        id: randomUUID(),
-        lastEditedAt: now,
-        markdown: result.markdown,
-        revision: nextRevision,
-        updatedAt: now,
-        userId: input.userId,
-      })
-      .onConflictDoUpdate({
-        set: {
-          lastEditedAt: now,
-          markdown: result.markdown,
-          revision: sql`${userAiContext.revision} + 1`,
-          updatedAt: now,
-        },
-        target: userAiContext.userId,
-      });
+    const applied = await applyUserAiContextUpdate({
+      currentRevision,
+      markdown: result.markdown,
+      now,
+      userId: input.userId,
+    });
+    if (!applied) {
+      if (attempt < maxAttempts) {
+        return await refreshUserAiContextAttempt(input, attempt + 1);
+      }
+
+      throw new Error("User AI context changed while refreshing.");
+    }
 
     await db
       .update(userAiContextEvent)
@@ -225,6 +266,12 @@ export const refreshUserAiContext = async (input: {
     return { status: "failed" as const };
   }
 };
+
+export const refreshUserAiContext = async (input: {
+  mailboxId: string;
+  triggerEventId?: string | null;
+  userId: string;
+}) => await refreshUserAiContextAttempt(input, 1);
 
 export const recordAndRefreshUserAiContext = async (input: {
   kind: UserAiContextEventKind;

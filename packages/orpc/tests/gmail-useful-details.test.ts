@@ -399,6 +399,28 @@ describe("Gmail useful-detail materialization", () => {
     expect(detail).toBeNull();
   });
 
+  test("drops public job postings that mention interviews", () => {
+    const detail = materializeGmailUsefulDetail({
+      candidate: candidate({
+        eventAt: "2026-06-20T21:59:00.000Z",
+        kind: "application",
+        relevanceSource: "explicit",
+        relevantFrom: "2026-06-19T09:00:00.000Z",
+        relevantUntil: "2026-06-20T22:30:00.000Z",
+        service: "TU Berlin",
+        summary: "Apply for interview-stage research roles by June 20.",
+      }),
+      message: message({
+        bodyText: "Open position with interviews in July. Applications are open until June 20.",
+        from: "TU Berlin <jobs@example.edu>",
+        subject: "Open position with interviews in July",
+      }),
+      now: NOW,
+    });
+
+    expect(detail).toBeNull();
+  });
+
   test("keeps personal application deadlines", () => {
     const detail = materializeGmailUsefulDetail({
       candidate: candidate({

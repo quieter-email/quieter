@@ -141,21 +141,36 @@ const recordLabelFeedback = async (input: {
   }
 };
 
-const listGmailLabelFeedbackSources = async (accessToken: string, messageIds: string[]) =>
-  Object.fromEntries(
-    await Promise.all(
-      Array.from(new Set(messageIds)).map(async (messageId) => {
-        try {
-          return [
-            messageId,
-            getSenderSource(await getGmailMessageSender(accessToken, messageId)),
-          ] as const;
-        } catch {
-          return [messageId, null] as const;
-        }
-      }),
-    ),
-  );
+const GMAIL_LABEL_FEEDBACK_SOURCE_CONCURRENCY = 4;
+
+const listGmailLabelFeedbackSources = async (accessToken: string, messageIds: string[]) => {
+  const uniqueMessageIds = Array.from(new Set(messageIds));
+  const entries: Array<readonly [string, string | null]> = [];
+
+  for (
+    let index = 0;
+    index < uniqueMessageIds.length;
+    index += GMAIL_LABEL_FEEDBACK_SOURCE_CONCURRENCY
+  ) {
+    const chunk = uniqueMessageIds.slice(index, index + GMAIL_LABEL_FEEDBACK_SOURCE_CONCURRENCY);
+    entries.push(
+      ...(await Promise.all(
+        chunk.map(async (messageId) => {
+          try {
+            return [
+              messageId,
+              getSenderSource(await getGmailMessageSender(accessToken, messageId)),
+            ] as const;
+          } catch {
+            return [messageId, null] as const;
+          }
+        }),
+      )),
+    );
+  }
+
+  return Object.fromEntries(entries);
+};
 
 const recordGmailLabelFeedback = async (input: {
   accessToken: string;

@@ -42,7 +42,11 @@ import {
   readGmailThreadForUser,
   searchGmailForUser,
 } from "../../gmail-chat-search";
-import { loadUserAiContextPrompt, recordAndRefreshUserAiContext } from "../../user-ai-context";
+import {
+  loadUserAiContextPrompt,
+  recordUserAiContextEvent,
+  refreshUserAiContext,
+} from "../../user-ai-context";
 import { terminalizeFailedChatRun } from "./failure";
 
 const DRAFT_PERSIST_INTERVAL_MS = 750;
@@ -401,7 +405,7 @@ ${userAiContext}`,
         ];
         const memoryContext: UserAiContextToolsContext = {
           rememberUserPreference: async ({ preference, reason }) => {
-            const result = await recordAndRefreshUserAiContext({
+            const event = await recordUserAiContextEvent({
               kind: "explicit_preference",
               mailboxId: run.mailboxId,
               metadata: {
@@ -412,7 +416,19 @@ ${userAiContext}`,
               userId: run.userId,
             });
 
-            return { status: result.status === "refreshed" ? "recorded" : "skipped" };
+            if (!event) return { status: "skipped" };
+
+            if (!abortController.signal.aborted) {
+              void refreshUserAiContext({
+                mailboxId: run.mailboxId,
+                triggerEventId: event.id,
+                userId: run.userId,
+              }).catch((error) => {
+                console.error("Could not refresh user AI context from chat preference.", error);
+              });
+            }
+
+            return { status: "recorded" };
           },
         };
         tools.push(createUserAiContextMemoryServerTool(memoryContext));
