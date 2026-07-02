@@ -4,6 +4,16 @@ const LOCK_TIMEOUT = "5s";
 const STATEMENT_TIMEOUT = "5min";
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
 const PRODUCTION_REPOSITORY = "quieter-email/quieter";
+const remoteMigrationTargets = {
+  production: {
+    protectedRef: true,
+    ref: "refs/heads/main",
+  },
+  staging: {
+    protectedRef: false,
+    ref: "refs/heads/staging",
+  },
+} as const;
 
 const getHostname = (url: URL) => url.hostname.replace(/^\[(.*)\]$/, "$1");
 
@@ -86,17 +96,22 @@ export const assertMigrationExecutionAllowed = (
     return;
   }
 
-  const isApprovedProductionJob =
+  const target =
+    environment.QUIETER_ALLOW_REMOTE_MIGRATIONS === "production" ||
+    environment.QUIETER_ALLOW_REMOTE_MIGRATIONS === "staging"
+      ? remoteMigrationTargets[environment.QUIETER_ALLOW_REMOTE_MIGRATIONS]
+      : null;
+  const isApprovedRemoteMigrationJob =
+    target !== null &&
     environment.CI === "true" &&
     environment.GITHUB_ACTIONS === "true" &&
-    environment.GITHUB_REF === "refs/heads/main" &&
-    environment.GITHUB_REF_PROTECTED === "true" &&
-    environment.GITHUB_REPOSITORY === PRODUCTION_REPOSITORY &&
-    environment.QUIETER_ALLOW_REMOTE_MIGRATIONS === "production";
+    environment.GITHUB_REF === target.ref &&
+    (!target.protectedRef || environment.GITHUB_REF_PROTECTED === "true") &&
+    environment.GITHUB_REPOSITORY === PRODUCTION_REPOSITORY;
 
-  if (!isApprovedProductionJob) {
+  if (!isApprovedRemoteMigrationJob) {
     throw new Error(
-      "Remote database migrations are restricted to the approved production GitHub Actions job",
+      "Remote database migrations are restricted to approved GitHub Actions deployment jobs",
     );
   }
 };

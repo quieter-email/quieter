@@ -12,6 +12,9 @@ type AuthMailInput = {
 
 const SEND_API_PATH = "/api/v1/send";
 const authMailSender = serverEnv.QUIETER_AUTH_MAIL_SENDER;
+const shouldLogAuthMail = () =>
+  serverEnv.QUIETER_AUTH_MAIL_MODE === "console" ||
+  (serverEnv.NODE_ENV === "development" && !serverEnv.QUIETER_MAIL_API_KEY);
 
 const parseSendError = async (response: Response) => {
   const body = await response
@@ -52,6 +55,17 @@ const getBaseUrlFromConfiguredMailUrl = (value: string) => {
 };
 
 export const sendAuthMail = async (input: AuthMailInput) => {
+  if (shouldLogAuthMail()) {
+    console.info(
+      [
+        `Auth email for ${input.to}: ${input.subject}`,
+        input.text,
+        "Set QUIETER_AUTH_MAIL_MODE=api to send through the configured mail API.",
+      ].join("\n\n"),
+    );
+    return;
+  }
+
   const apiKey = serverEnv.QUIETER_MAIL_API_KEY;
 
   if (!apiKey) {

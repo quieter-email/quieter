@@ -41,6 +41,7 @@ describe("server environment", () => {
 
     expect(env.NODE_ENV).toBe("test");
     expect(env.POLAR_SANDBOX).toBe(true);
+    expect(env.QUIETER_AUTH_MAIL_MODE).toBe("api");
     expect(env.QUIETER_AUTH_MAIL_SENDER).toBe("auth@quieter.email");
   });
 
@@ -175,5 +176,19 @@ describe("deployment environment", () => {
         VERCEL_TOKEN: "token",
       }),
     ).toThrow();
+  });
+
+  test("accepts preview deployment waits", () => {
+    const env = createDeploymentEnv({
+      VERCEL_DEPLOY_HOOK_URL: "https://example.com/deploy",
+      VERCEL_DEPLOYMENT_GIT_REF: "staging",
+      VERCEL_DEPLOYMENT_TARGET: "preview",
+      VERCEL_PROJECT_ID: "project",
+      VERCEL_TEAM_ID: "team",
+      VERCEL_TOKEN: "token",
+    });
+
+    expect(env.VERCEL_DEPLOYMENT_TARGET).toBe("preview");
+    expect(env.VERCEL_DEPLOYMENT_GIT_REF).toBe("staging");
   });
 });

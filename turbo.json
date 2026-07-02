@@ -9,6 +9,7 @@
       "env": [
         "BETTER_AUTH_APP_NAME",
         "BETTER_AUTH_SECRET",
+        "BETTER_AUTH_TRUSTED_ORIGINS",
         "GOOGLE_AUTH_CLIENT_ID",
         "GOOGLE_AUTH_CLIENT_SECRET",
         "GOOGLE_CALENDAR_CLIENT_ID",
@@ -39,6 +40,7 @@
         "SENTRY_ORG",
         "SENTRY_PROJECT",
         "QUIETER_AUTH_MAIL_SENDER",
+        "QUIETER_AUTH_MAIL_MODE",
         "QUIETER_MAIL_API_KEY",
         "QUIETER_MAIL_API_URL",
         "MAIL_BUCKET",
@@ -169,6 +171,7 @@
       "env": [
         "BETTER_AUTH_APP_NAME",
         "BETTER_AUTH_SECRET",
+        "BETTER_AUTH_TRUSTED_ORIGINS",
         "GOOGLE_AUTH_CLIENT_ID",
         "GOOGLE_AUTH_CLIENT_SECRET",
         "GOOGLE_CALENDAR_CLIENT_ID",
@@ -208,6 +211,7 @@
         "SENTRY_DSN",
         "SENTRY_ENVIRONMENT",
         "QUIETER_AUTH_MAIL_SENDER",
+        "QUIETER_AUTH_MAIL_MODE",
         "QUIETER_MAIL_API_KEY",
         "QUIETER_MAIL_API_URL",
         "MAIL_BUCKET",

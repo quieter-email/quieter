@@ -54,6 +54,12 @@ const baseURL =
   serverEnv.BETTER_AUTH_URL ||
   (serverEnv.VERCEL_URL && `https://${serverEnv.VERCEL_URL}`) ||
   "http://localhost:3000";
+const trustedOrigins = [
+  baseURL,
+  ...(serverEnv.BETTER_AUTH_TRUSTED_ORIGINS?.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean) ?? []),
+];
 const polarClient = serverEnv.POLAR_ACCESS_TOKEN
   ? new Polar({
       accessToken: serverEnv.POLAR_ACCESS_TOKEN,
@@ -101,7 +107,7 @@ export const getSessionWithOrganization = async (headers: Headers) => {
 export const auth = betterAuth({
   appName,
   baseURL,
-  trustedOrigins: [baseURL],
+  trustedOrigins,
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: tables,

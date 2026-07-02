@@ -1,0 +1,116 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quieter-deploy-staging
+  cancel-in-progress: true
+
+env:
+  STAGING_URL: https://quieter-staging.vercel.app
+  VERCEL_CLI_VERSION: 54.18.7
+
+jobs:
+  deploy:
+    name: Verify and deploy staging
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    environment: staging
+    timeout-minutes: 20
+    steps:
+      - name: Require staging branch
+        run: |
+          if [ "${GITHUB_REF}" != "refs/heads/staging" ]; then
+            echo "Staging deploys must run from the staging branch." >&2
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Format check
+        run: bun run fmt:check
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Check backend import boundaries
+        run: bun run check:boundaries
+
+      - name: Bundle AWS handlers
+        run: bun run check:bundles
+
+      - name: Test
+        run: bun run test
+
+      - name: Apply staging database migrations
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: staging
+        run: |
+          if [ -z "${DATABASE_MIGRATION_URL}" ]; then
+            echo "DATABASE_MIGRATION_URL is required in the staging GitHub environment." >&2
+            exit 1
+          fi
+
+          bun run db:deploy
+
+      - name: Pull Vercel staging environment
+        env:
+          VERCEL_ORG_ID: ${{ vars.VERCEL_TEAM_ID || secrets.VERCEL_TEAM_ID || vars.VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "${VERCEL_ORG_ID}" ] || [ -z "${VERCEL_PROJECT_ID}" ] || [ -z "${VERCEL_TOKEN}" ]; then
+            echo "VERCEL_ORG_ID, VERCEL_PROJECT_ID, and VERCEL_TOKEN are required for staging." >&2
+            exit 1
+          fi
+
+          bunx vercel@${VERCEL_CLI_VERSION} pull --yes --environment=preview --git-branch=staging --token="${VERCEL_TOKEN}"
+
+      - name: Build Vercel staging preview
+        env:
+          VERCEL_ORG_ID: ${{ vars.VERCEL_TEAM_ID || secrets.VERCEL_TEAM_ID || vars.VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: bunx vercel@${VERCEL_CLI_VERSION} build --token="${VERCEL_TOKEN}"
+
+      - name: Deploy Vercel staging preview
+        env:
+          VERCEL_ORG_ID: ${{ vars.VERCEL_TEAM_ID || secrets.VERCEL_TEAM_ID || vars.VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          bunx vercel@${VERCEL_CLI_VERSION} deploy --prebuilt --yes --token="${VERCEL_TOKEN}" \
+            --meta githubCommitSha="${GITHUB_SHA}" \
+            --meta githubCommitRef="staging" \
+            --meta quieterEnvironment="staging" > deployment-url.txt
+          deployment_url="$(tail -n 1 deployment-url.txt)"
+          cat deployment-url.txt
+          echo "Staging deployment: ${deployment_url}"
+          echo "Staging deployment: ${deployment_url}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Alias Vercel staging preview
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          deployment_url="$(tail -n 1 deployment-url.txt)"
+          bunx vercel@${VERCEL_CLI_VERSION} alias set "${deployment_url}" "${STAGING_URL#https://}" --token="${VERCEL_TOKEN}"
+          echo "Staging alias: ${STAGING_URL}" >> "${GITHUB_STEP_SUMMARY}"

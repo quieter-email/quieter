@@ -15,6 +15,24 @@ Production is not deployed from Vercel git pushes.
 
 `vercel.json` disables commit-triggered deployments.
 
+## Staging
+
+Staging deploys from the `staging` branch through `.github/workflows/staging-deploy.yml`.
+The workflow verifies the repo, applies migrations to the staging database, pulls Vercel Preview
+environment variables scoped to the `staging` branch, builds the app, and uploads a Vercel Preview
+deployment with the Vercel CLI. It does not deploy SST, AWS, Cloudflare, or managed-mail
+infrastructure.
+
+The GitHub `staging` environment needs:
+
+- `DATABASE_MIGRATION_URL`: staging database schema-owner URL, never production
+- `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, and `VERCEL_TEAM_ID`
+
+Configure Vercel preview env vars separately from production. At minimum staging needs
+`DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `APP_SITE_PASSWORD`, and any provider
+credentials for features being tested. Leave production-only mail/live-sync variables unset unless a
+separate staging stack exists.
+
 ## Database Credentials
 
 Production uses separate roles:
@@ -22,8 +40,10 @@ Production uses separate roles:
 - `DATABASE_URL`: least-privilege runtime role used by Vercel and SST functions
 - `DATABASE_MIGRATION_URL`: schema-owner role stored only in the protected GitHub environment
 
-Remote migrations are rejected unless they run in the protected `main` GitHub Actions context with
-the workflow-only production marker. Runtime requests do not execute schema migrations.
+Remote production migrations are rejected unless they run in the protected `main` GitHub Actions
+context with the workflow-only production marker. Remote staging migrations are accepted only from
+the `staging` branch workflow with the staging marker. Runtime requests do not execute schema
+migrations.
 
 See [Database safety](database-safety.md) for role SQL and recovery controls.
 
