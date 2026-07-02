@@ -19,7 +19,12 @@ import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from "@quieter/
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
+  SettingsInsetFieldRow,
+  SettingsInsetRow,
+  SettingsInsetRows,
+  SettingsInsetStackedRow,
   settingsInsetDividerClass,
+  settingsInsetSectionClass,
   SettingsRowText,
 } from "~/features/settings/components/settings-layout";
 import { orpc, rpc } from "~/lib/orpc";
@@ -71,7 +76,7 @@ const createInitialMilestones = (percents: number[]): Milestone[] =>
   }));
 
 const ManagedUsageLoading = ({ message }: { message: string }) => (
-  <section className={cn(settingsInsetDividerClass, "p-4 md:px-6")}>
+  <section className={settingsInsetSectionClass}>
     <SettingsRowText title="Team credits">
       <span className="inline-flex items-center gap-2">
         <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
@@ -82,7 +87,7 @@ const ManagedUsageLoading = ({ message }: { message: string }) => (
 );
 
 const ManagedUsageUnavailable = ({ message }: { message: string }) => (
-  <section className={cn(settingsInsetDividerClass, "p-4 md:px-6")}>
+  <section className={settingsInsetSectionClass}>
     <SettingsRowText title="Team credits">{message}</SettingsRowText>
   </section>
 );
@@ -298,21 +303,21 @@ const ManagedUsageSettingsForm = ({
 
   if (overview.hasUnlimitedAccess) {
     return (
-      <section className={cn(settingsInsetDividerClass, "px-4 py-6 md:px-6")}>
-        <div className="flex items-start justify-between gap-4">
+      <section className={settingsInsetSectionClass}>
+        <SettingsInsetRow className="justify-between gap-4">
           <SettingsRowText title="Team credits">
             {formatMoney(managedUsageCostCents)} tracked this period
           </SettingsRowText>
           <span className="rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success squircle">
             Unlimited
           </span>
-        </div>
+        </SettingsInsetRow>
       </section>
     );
   }
 
   return (
-    <section className={cn(settingsInsetDividerClass, "px-4 py-6 md:px-6")}>
+    <section className={cn(settingsInsetDividerClass, "px-4 pt-6 md:px-6")}>
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <SettingsRowText title="Team credits">
           <div className="flex flex-wrap gap-x-3 gap-y-1">
@@ -367,8 +372,8 @@ const ManagedUsageSettingsForm = ({
         />
       </div>
 
-      <div className="divide-y divide-border/70">
-        <div className="flex items-start justify-between gap-6 py-5">
+      <SettingsInsetRows>
+        <SettingsInsetRow className="justify-between gap-6">
           <SettingsRowText
             className="max-w-xl"
             title={<label htmlFor="managed-overage-toggle">Allow overage</label>}
@@ -377,16 +382,16 @@ const ManagedUsageSettingsForm = ({
           </SettingsRowText>
           <Switch
             checked={overageEnabled}
-            className="mt-0.5 h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
+            className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
             disabled={!canManageOrganizationMailUsage}
             id="managed-overage-toggle"
             onCheckedChange={setOverageEnabled}
           >
             <SwitchThumb className="size-4 bg-background-light data-checked:translate-x-4 data-checked:bg-primary-foreground" />
           </Switch>
-        </div>
+        </SettingsInsetRow>
 
-        <div className="flex flex-col gap-4 py-5 md:flex-row md:items-center md:justify-between">
+        <SettingsInsetFieldRow>
           <SettingsRowText className="max-w-xl" title="Monthly overage limit">
             <span>Maximum usage billed above the monthly team credits.</span>
           </SettingsRowText>
@@ -424,114 +429,113 @@ const ManagedUsageSettingsForm = ({
               Clear
             </Button>
           </div>
-        </div>
+        </SettingsInsetFieldRow>
 
-        <div className="pt-5">
-          <div className="flex items-start justify-between gap-4">
-            <SettingsRowText className="max-w-xl" title="Alert milestones">
-              <span>
-                Alerts are recorded once per billing period when usage crosses each threshold.
-              </span>
-            </SettingsRowText>
+        <SettingsInsetRow className="justify-between gap-4">
+          <SettingsRowText className="max-w-xl" title="Alert milestones">
+            <span>
+              Alerts are recorded once per billing period when usage crosses each threshold.
+            </span>
+          </SettingsRowText>
 
-            {canManageOrganizationMailUsage && (
-              <Button
-                disabled={milestones.length >= maximumMilestones}
-                onClick={addMilestone}
-                size="sm"
-                variant="outline"
+          {canManageOrganizationMailUsage && (
+            <Button
+              disabled={milestones.length >= maximumMilestones}
+              onClick={addMilestone}
+              size="sm"
+              variant="outline"
+            >
+              <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
+              Add
+            </Button>
+          )}
+        </SettingsInsetRow>
+
+        {milestones.map((milestone) => {
+          const includedThresholdCents =
+            milestone.percent == null
+              ? null
+              : Math.round(includedUsageCents * (milestone.percent / 100));
+          const overageThresholdCents =
+            milestone.percent == null || limitCents == null
+              ? null
+              : Math.round(limitCents * (milestone.percent / 100));
+
+          return (
+            <SettingsInsetStackedRow key={milestone.id}>
+              <NumberField
+                className="w-auto shrink-0"
+                disabled={!canManageOrganizationMailUsage}
+                format={{
+                  maximumFractionDigits: 0,
+                  style: "unit",
+                  unit: "percent",
+                  unitDisplay: "narrow",
+                }}
+                max={100}
+                min={1}
+                onValueChange={(value) => updateMilestone(milestone.id, value)}
+                step={5}
+                value={milestone.percent}
               >
-                <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
-                Add
-              </Button>
-            )}
-          </div>
+                <NumberFieldGroup className="w-36">
+                  <NumberFieldDecrement />
+                  <NumberFieldInput aria-label="Alert milestone percentage" />
+                  <NumberFieldIncrement />
+                </NumberFieldGroup>
+              </NumberField>
 
-          <div className="mt-4 divide-y divide-border/70 border-y border-border/70">
-            {milestones.map((milestone) => {
-              const includedThresholdCents =
-                milestone.percent == null
-                  ? null
-                  : Math.round(includedUsageCents * (milestone.percent / 100));
-              const overageThresholdCents =
-                milestone.percent == null || limitCents == null
-                  ? null
-                  : Math.round(limitCents * (milestone.percent / 100));
+              <div className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span>
+                  <span className="font-mono text-foreground">
+                    {includedThresholdCents == null
+                      ? "Enter a threshold"
+                      : formatMoney(includedThresholdCents)}
+                  </span>{" "}
+                  of monthly credits
+                </span>
+                {overageThresholdCents != null && (
+                  <span>
+                    <span className="font-mono text-foreground">
+                      {formatMoney(overageThresholdCents)}
+                    </span>{" "}
+                    of the overage limit
+                  </span>
+                )}
+              </div>
 
-              return (
-                <div
-                  className="flex flex-col gap-3 py-3 md:flex-row md:items-center"
-                  key={milestone.id}
-                >
-                  <NumberField
-                    className="w-auto shrink-0"
-                    disabled={!canManageOrganizationMailUsage}
-                    format={{
-                      maximumFractionDigits: 0,
-                      style: "unit",
-                      unit: "percent",
-                      unitDisplay: "narrow",
-                    }}
-                    max={100}
-                    min={1}
-                    onValueChange={(value) => updateMilestone(milestone.id, value)}
-                    step={5}
-                    value={milestone.percent}
+              {canManageOrganizationMailUsage && (
+                <IconButtonTooltip label="Remove milestone">
+                  <Button
+                    aria-label="Remove milestone"
+                    disabled={milestones.length === 1}
+                    onClick={() =>
+                      setMilestones((current) =>
+                        current.filter((candidate) => candidate.id !== milestone.id),
+                      )
+                    }
+                    size="icon-sm"
+                    variant="ghost"
                   >
-                    <NumberFieldGroup className="w-36">
-                      <NumberFieldDecrement />
-                      <NumberFieldInput aria-label="Alert milestone percentage" />
-                      <NumberFieldIncrement />
-                    </NumberFieldGroup>
-                  </NumberField>
+                    <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+                  </Button>
+                </IconButtonTooltip>
+              )}
+            </SettingsInsetStackedRow>
+          );
+        })}
 
-                  <div className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                    <span>
-                      <span className="font-mono text-foreground">
-                        {includedThresholdCents == null
-                          ? "Enter a threshold"
-                          : formatMoney(includedThresholdCents)}
-                      </span>{" "}
-                      of monthly credits
-                    </span>
-                    {overageThresholdCents != null && (
-                      <span>
-                        <span className="font-mono text-foreground">
-                          {formatMoney(overageThresholdCents)}
-                        </span>{" "}
-                        of the overage limit
-                      </span>
-                    )}
-                  </div>
+        {milestoneError ? (
+          <SettingsInsetRow>
+            <p className="text-xs text-destructive">{milestoneError}</p>
+          </SettingsInsetRow>
+        ) : null}
 
-                  {canManageOrganizationMailUsage && (
-                    <IconButtonTooltip label="Remove milestone">
-                      <Button
-                        aria-label="Remove milestone"
-                        disabled={milestones.length === 1}
-                        onClick={() =>
-                          setMilestones((current) =>
-                            current.filter((candidate) => candidate.id !== milestone.id),
-                          )
-                        }
-                        size="icon-sm"
-                        variant="ghost"
-                      >
-                        <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
-                      </Button>
-                    </IconButtonTooltip>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {milestoneError && <p className="mt-2 text-xs text-destructive">{milestoneError}</p>}
-        </div>
-
-        {canManageOrganizationMailUsage && (
-          <div className="flex flex-wrap items-center justify-end gap-3 py-5">
-            {hasUnsavedChanges && <p className="text-xs text-muted-foreground">Unsaved changes</p>}
+        {canManageOrganizationMailUsage ? (
+          <SettingsInsetRow className="justify-end gap-3">
+            {hasUnsavedChanges ? (
+              <p className="text-xs text-muted-foreground">Unsaved changes</p>
+            ) : null}
             <Button
               disabled={!hasUnsavedChanges || !!milestoneError || updateMutation.isPending}
               onClick={() => void saveSettings()}
@@ -542,9 +546,9 @@ const ManagedUsageSettingsForm = ({
               )}
               Save changes
             </Button>
-          </div>
-        )}
-      </div>
+          </SettingsInsetRow>
+        ) : null}
+      </SettingsInsetRows>
 
       {!canManageOrganizationMailUsage && (
         <p className="mt-4 text-xs text-muted-foreground">

@@ -3,6 +3,7 @@
 import { Loading03Icon, MoreVerticalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +14,7 @@ import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from "@quieter/
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { authClient } from "~/lib/auth";
+import { settingsInsetRowClass, settingsRowPaddingClass } from "../settings-layout";
 import {
   type OrganizationMember,
   type OrganizationRoleOption,
@@ -102,7 +104,7 @@ export const MemberActions = ({
 
   return (
     <div className="space-y-1">
-      <div className="flex h-16 w-full items-center gap-3 px-4">
+      <div className={cn(settingsInsetRowClass, "gap-3")}>
         <div className="min-w-0 flex-1 text-left">
           <p className="truncate text-sm font-medium text-foreground">
             {member.user.name || member.user.email}
@@ -193,7 +195,7 @@ export const MemberActions = ({
       </div>
 
       {error && (
-        <p className="px-4 pb-2 text-sm text-destructive" role="alert">
+        <p className={cn("text-sm text-destructive", settingsRowPaddingClass)} role="alert">
           {error}
         </p>
       )}

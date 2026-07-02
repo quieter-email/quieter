@@ -16,7 +16,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { orpc, rpc } from "~/lib/orpc";
 import type { FullOrganization, OrganizationMember } from "./domain";
-import { SettingsBackButton } from "../settings-layout";
+import {
+  SettingsBackButton,
+  SettingsInsetRows,
+  settingsInsetRowClass,
+  settingsRowPaddingClass,
+} from "../settings-layout";
 
 const getOrganizationDivisionsQueryKey = (organizationId: string) =>
   ["organization", organizationId, "divisions"] as const;
@@ -146,7 +151,7 @@ export const DivisionsView = ({
 
           <div className="overflow-hidden rounded-lg border border-border/70 squircle">
             {isDivisionsPending ? (
-              <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+              <div className={cn(settingsInsetRowClass, "text-sm text-muted-foreground")}>
                 <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
                 Loading divisions...
               </div>
@@ -156,7 +161,8 @@ export const DivisionsView = ({
                 return (
                   <button
                     className={cn(
-                      "flex w-full items-center gap-3 border-b border-border/60 p-3 text-left last:border-b-0",
+                      settingsInsetRowClass,
+                      "gap-3 border-b border-border/60 text-left last:border-b-0",
                       {
                         "bg-muted/50": isSelected,
                         "hover:bg-muted/30": !isSelected,
@@ -183,7 +189,9 @@ export const DivisionsView = ({
                 );
               })
             ) : (
-              <p className="p-3 text-sm text-muted-foreground">No divisions yet.</p>
+              <p className={cn("text-sm text-muted-foreground", settingsRowPaddingClass)}>
+                No divisions yet.
+              </p>
             )}
           </div>
         </div>
@@ -253,18 +261,18 @@ export const DivisionsView = ({
             </form>
 
             <div className="overflow-hidden rounded-lg border border-border/70 squircle">
-              <div className="border-b border-border/60 px-4 py-3">
+              <div className={cn("border-b border-border/60", settingsRowPaddingClass)}>
                 <h2 className="text-sm font-medium text-foreground">Members</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Members inherit mailbox roles granted to this division.
                 </p>
               </div>
-              <div className="divide-y divide-border/60">
+              <SettingsInsetRows className="divide-border/60">
                 {members.map((memberRecord) => {
                   const checked = selectedMemberIds.has(memberRecord.id);
                   return (
                     <label
-                      className="flex cursor-pointer items-center gap-3 px-4 py-3"
+                      className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}
                       key={memberRecord.id}
                     >
                       <Checkbox
@@ -304,7 +312,7 @@ export const DivisionsView = ({
                     </label>
                   );
                 })}
-              </div>
+              </SettingsInsetRows>
             </div>
           </div>
         ) : (

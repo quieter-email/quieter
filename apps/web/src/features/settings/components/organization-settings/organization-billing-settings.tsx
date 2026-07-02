@@ -12,6 +12,7 @@ import {
 } from "~/features/settings/components/billing-product-card";
 import {
   settingsInsetDividerClass,
+  settingsInsetSectionClass,
   settingsRowValueClass,
   SettingsRowText,
 } from "~/features/settings/components/settings-layout";
@@ -57,11 +58,7 @@ export const OrganizationBillingSettings = ({
   if (billingPending) {
     return (
       <section
-        className={cn(
-          settingsInsetDividerClass,
-          "flex items-center gap-2 p-4 md:px-6",
-          settingsRowValueClass,
-        )}
+        className={cn(settingsInsetSectionClass, "flex items-center gap-2", settingsRowValueClass)}
       >
         <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
         Loading billing…
@@ -71,7 +68,7 @@ export const OrganizationBillingSettings = ({
 
   if (!billing && !billingAccessUnknown) {
     return (
-      <section className={cn(settingsInsetDividerClass, "p-4 md:px-6")}>
+      <section className={settingsInsetSectionClass}>
         <SettingsRowText title="Billing">
           Billing details are unavailable for this team.
         </SettingsRowText>
@@ -82,11 +79,7 @@ export const OrganizationBillingSettings = ({
   if (!billing) {
     return (
       <section
-        className={cn(
-          settingsInsetDividerClass,
-          "flex items-center gap-2 p-4 md:px-6",
-          settingsRowValueClass,
-        )}
+        className={cn(settingsInsetSectionClass, "flex items-center gap-2", settingsRowValueClass)}
       >
         <HugeiconsIcon aria-hidden className="size-4" icon={Loading03Icon} />
         Could not load billing.

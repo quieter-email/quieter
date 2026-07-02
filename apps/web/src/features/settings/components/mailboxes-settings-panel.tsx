@@ -19,6 +19,11 @@ import { useState } from "react";
 import { fullOrganizationQueryOptions } from "~/features/settings/components/organization-settings/domain";
 import { organizationMailDomainsQueryOptions } from "~/features/settings/components/organization-settings/mail-domains";
 import {
+  settingsInsetRowClass,
+  settingsRowPaddingClass,
+  SettingsInsetRows,
+} from "~/features/settings/components/settings-layout";
+import {
   hasOrganizationAiAccess,
   userBillingQueryOptions,
 } from "~/features/settings/domain/billing";
@@ -299,7 +304,7 @@ export const MailboxesSettingsPanel = () => {
                     className="overflow-hidden rounded-lg border border-border/70 bg-muted/15 squircle"
                     key={mailbox.id}
                   >
-                    <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
+                    <div className={cn(settingsInsetRowClass, "flex-wrap gap-2")}>
                       <div className="min-w-48 flex-1">
                         <p className="truncate text-sm text-foreground">{mailbox.emailAddress}</p>
                         {mailbox.connectionStatus === "needs_reconnect" && (
@@ -428,7 +433,7 @@ export const MailboxesSettingsPanel = () => {
                     </div>
 
                     <div className="grid border-t border-border/60 sm:grid-cols-2 sm:divide-x sm:divide-border/60">
-                      <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5">
+                      <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
                         <span className="min-w-0 flex-1">
                           <span className="block text-xs font-medium text-foreground">
                             Useful details
@@ -474,7 +479,12 @@ export const MailboxesSettingsPanel = () => {
                         </Switch>
                       </label>
 
-                      <label className="flex cursor-pointer items-center gap-3 border-t border-border/60 px-3 py-2.5 sm:border-t-0">
+                      <label
+                        className={cn(
+                          settingsInsetRowClass,
+                          "cursor-pointer gap-3 border-t border-border/60 sm:border-t-0",
+                        )}
+                      >
                         <span className="min-w-0 flex-1">
                           <span className="block text-xs font-medium text-foreground">
                             Auto-label
@@ -694,9 +704,9 @@ export const MailboxesSettingsPanel = () => {
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
             <div className="overflow-hidden rounded-lg border border-border/70 squircle">
               {(managedAdminData?.mailboxes ?? []).length > 0 ? (
-                <div className="divide-y divide-border/70">
+                <SettingsInsetRows>
                   {(managedAdminData?.mailboxes ?? []).map((mailbox) => (
-                    <div className="flex items-center gap-3 p-3" key={mailbox.id}>
+                    <div className={cn(settingsInsetRowClass, "gap-3")} key={mailbox.id}>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm text-foreground">
                           {mailbox.displayName?.trim() || mailbox.emailAddress}
@@ -716,9 +726,9 @@ export const MailboxesSettingsPanel = () => {
                       </Button>
                     </div>
                   ))}
-                </div>
+                </SettingsInsetRows>
               ) : (
-                <p className="px-3 py-4 text-sm text-muted-foreground">
+                <p className={cn("text-sm text-muted-foreground", settingsRowPaddingClass)}>
                   No managed mailboxes in this team yet.
                 </p>
               )}
@@ -796,7 +806,7 @@ export const MailboxesSettingsPanel = () => {
                 </div>
 
                 <div className="grid border-y border-border/60 sm:grid-cols-3 sm:divide-x sm:divide-border/60">
-                  <label className="flex cursor-pointer items-center gap-3 py-2.5 pr-3">
+                  <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3 pr-3")}>
                     <span className="min-w-0 flex-1">
                       <span className="block text-xs font-medium text-foreground">
                         Useful details
@@ -838,7 +848,12 @@ export const MailboxesSettingsPanel = () => {
                     </Switch>
                   </label>
 
-                  <label className="flex cursor-pointer items-center gap-3 border-t border-border/60 py-2.5 sm:border-t-0 sm:px-3">
+                  <label
+                    className={cn(
+                      settingsInsetRowClass,
+                      "cursor-pointer gap-3 border-t border-border/60 sm:border-t-0 sm:px-3",
+                    )}
+                  >
                     <span className="min-w-0 flex-1">
                       <span className="block text-xs font-medium text-foreground">
                         Auto-label
@@ -880,7 +895,12 @@ export const MailboxesSettingsPanel = () => {
                     </Switch>
                   </label>
 
-                  <div className="flex items-center gap-3 border-t border-border/60 py-2.5 sm:border-t-0 sm:pl-3">
+                  <div
+                    className={cn(
+                      settingsInsetRowClass,
+                      "gap-3 border-t border-border/60 sm:border-t-0 sm:pl-3",
+                    )}
+                  >
                     <span className="min-w-0 flex-1">
                       <span className="block text-xs font-medium text-foreground">
                         API messages
@@ -920,13 +940,13 @@ export const MailboxesSettingsPanel = () => {
 
                 <div>
                   <h4 className="text-xs font-medium text-foreground">Division access</h4>
-                  <div className="mt-2 space-y-2">
+                  <SettingsInsetRows className="-mx-4 md:-mx-6">
                     {(managedDivisionsData?.divisions ?? []).map((division) => {
                       const grant = selectedManagedMailboxDetails.divisionGrants.find(
                         (item) => item.divisionId === division.id,
                       );
                       return (
-                        <div className="flex items-center gap-3" key={division.id}>
+                        <div className={cn(settingsInsetRowClass, "gap-3")} key={division.id}>
                           <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                             {division.name}
                           </span>
@@ -979,18 +999,18 @@ export const MailboxesSettingsPanel = () => {
                         </div>
                       );
                     })}
-                  </div>
+                  </SettingsInsetRows>
                 </div>
 
                 <div>
                   <h4 className="text-xs font-medium text-foreground">Direct member access</h4>
-                  <div className="mt-2 max-h-72 space-y-2 overflow-y-auto pr-1">
+                  <SettingsInsetRows className="-mx-4 mt-2 max-h-72 overflow-y-auto md:-mx-6">
                     {(selectedManagedOrganization?.members ?? []).map((member) => {
                       const grant = selectedManagedMailboxDetails.directGrants.find(
                         (item) => item.userId === member.userId,
                       );
                       return (
-                        <div className="flex items-center gap-3" key={member.id}>
+                        <div className={cn(settingsInsetRowClass, "gap-3")} key={member.id}>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm text-foreground">
                               {member.user.name || member.user.email}
@@ -1051,7 +1071,7 @@ export const MailboxesSettingsPanel = () => {
                         </div>
                       );
                     })}
-                  </div>
+                  </SettingsInsetRows>
                 </div>
               </div>
             ) : (

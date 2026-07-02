@@ -25,7 +25,7 @@ import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { orpc } from "~/lib/orpc";
-import { SettingsBackButton } from "../settings-layout";
+import { SettingsBackButton, settingsRowPaddingClass, SettingsListRow } from "../settings-layout";
 import { formatCount, type FullOrganization } from "./domain";
 import {
   formatMailDomainStatus,
@@ -155,7 +155,7 @@ const DomainRow = ({
   manageDomainsReason: string | null;
   organizationId: string;
 }) => (
-  <div className="flex flex-col gap-3 border-b border-border/70 py-4 last:border-b-0 md:flex-row md:items-center md:justify-between">
+  <SettingsListRow>
     <div className="min-w-0">
       <div className="flex min-w-0 items-center gap-2">
         <HugeiconsIcon
@@ -188,7 +188,7 @@ const DomainRow = ({
       ) : null}
       {canManageDomains && <RemoveDomainDialog domain={domain} organizationId={organizationId} />}
     </div>
-  </div>
+  </SettingsListRow>
 );
 
 export const DomainsView = ({
@@ -246,12 +246,17 @@ export const DomainsView = ({
 
       <div>
         {isDomainsPending ? (
-          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+          <div
+            className={cn(
+              "flex items-center gap-2 text-sm text-muted-foreground",
+              settingsRowPaddingClass,
+            )}
+          >
             <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
             Loading domains…
           </div>
         ) : isDomainsError ? (
-          <p className="py-6 text-sm text-destructive">
+          <p className={cn("text-sm text-destructive", settingsRowPaddingClass)}>
             {domainsError?.message ?? "Could not load domains."}
           </p>
         ) : domains.length > 0 ? (
@@ -265,7 +270,9 @@ export const DomainsView = ({
             />
           ))
         ) : (
-          <p className="py-6 text-center text-sm text-muted-foreground">No domains registered.</p>
+          <p className={cn("text-center text-sm text-muted-foreground", settingsRowPaddingClass)}>
+            No domains registered.
+          </p>
         )}
       </div>
     </div>

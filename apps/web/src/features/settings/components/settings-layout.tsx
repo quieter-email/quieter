@@ -92,14 +92,77 @@ export const settingsInsetDividerClass =
   "relative after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden md:after:inset-x-6";
 export const settingsRowTitleClass = "text-[0.8rem] font-normal text-foreground";
 export const settingsRowValueClass = "text-xs leading-4 text-muted-foreground";
+export const settingsRowPaddingClass = "px-4 py-3 md:px-6";
+export const settingsDivideClass = "divide-y divide-border/70";
+
+export const settingsInsetRowClass = cn("flex w-full items-center gap-4", settingsRowPaddingClass);
+
+export const settingsInsetFieldRowClass = cn(
+  "flex w-full flex-col gap-4 md:flex-row md:items-center md:justify-between",
+  settingsRowPaddingClass,
+);
+
+export const settingsInsetStackedRowClass = cn(
+  "flex w-full flex-col gap-3 md:flex-row md:items-center",
+  settingsRowPaddingClass,
+);
+
+export const settingsListRowClass = cn(
+  "flex flex-col gap-3 border-b border-border/70 last:border-b-0 md:flex-row md:items-center md:justify-between",
+  settingsRowPaddingClass,
+);
+
+export const settingsInsetSectionClass = cn(settingsInsetDividerClass, settingsRowPaddingClass);
+
+export const SettingsInsetRows = ({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) => <div className={cn(settingsDivideClass, className)}>{children}</div>;
+
+export const SettingsInsetRow = ({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) => <div className={cn(settingsInsetRowClass, className)}>{children}</div>;
+
+export const SettingsInsetFieldRow = ({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) => <div className={cn(settingsInsetFieldRowClass, className)}>{children}</div>;
+
+export const SettingsInsetStackedRow = ({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) => <div className={cn(settingsInsetStackedRowClass, className)}>{children}</div>;
+
+export const SettingsListRow = ({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) => <div className={cn(settingsListRowClass, className)}>{children}</div>;
 
 const settingsRowShellClass = cn(
-  "flex w-full items-center gap-4 px-4 py-3 squircle md:px-6",
+  "flex w-full items-center gap-4 squircle",
+  settingsRowPaddingClass,
   settingsInsetDividerClass,
 );
 
 const settingsFieldRowShellClass = cn(
-  "flex min-h-18 w-full flex-col items-start justify-between gap-4 p-4 md:flex-row md:items-center md:px-6",
+  "flex w-full flex-col items-start justify-between gap-4 md:flex-row md:items-center",
+  settingsRowPaddingClass,
   settingsInsetDividerClass,
 );
 
