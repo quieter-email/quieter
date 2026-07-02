@@ -248,7 +248,7 @@ export const passkey = pgTable(
     backedUp: boolean("backedUp").notNull(),
     transports: text("transports"),
     createdAt: timestamp("createdAt").notNull(),
-    updatedAt: timestamp("updatedAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
     aaguid: text("aaguid"),
   },
   (table) => [
