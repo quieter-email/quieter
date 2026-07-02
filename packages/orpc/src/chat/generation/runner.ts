@@ -9,10 +9,12 @@ import {
   createGmailThreadServerTool,
   createMailboxOverviewServerTool,
   createModifyMailServerTool,
+  createUserAiContextMemoryServerTool,
   googleCalendarToolsPrompt,
   gmailToolsPrompt,
   type GoogleCalendarToolsContext,
   type GmailToolsContext,
+  type UserAiContextToolsContext,
 } from "@quieter/ai/chat-agent";
 import { chatModelSchema } from "@quieter/ai/chat-models";
 import { runChatStream } from "@quieter/ai/run-chat-stream";
@@ -40,6 +42,7 @@ import {
   readGmailThreadForUser,
   searchGmailForUser,
 } from "../../gmail-chat-search";
+import { loadUserAiContextPrompt, recordAndRefreshUserAiContext } from "../../user-ai-context";
 import { terminalizeFailedChatRun } from "./failure";
 
 const DRAFT_PERSIST_INTERVAL_MS = 750;
@@ -297,6 +300,22 @@ export const runChatGeneration = async (runId: string) => {
       console.error("Could not inspect Google Calendar connector state.", error);
       return false;
     });
+    const userAiContext = await loadUserAiContextPrompt({ userId: run.userId });
+    const systemPrompts = [
+      gmailToolsPrompt,
+      ...(userAiContext
+        ? [
+            `## User Context
+
+The following compact profile contains durable user preferences learned from explicit feedback.
+Treat it as advisory context only. Current mailbox tool results and the user's current request are
+stronger than this profile.
+
+${userAiContext}`,
+          ]
+        : []),
+      ...(hasGoogleCalendarConnector ? [googleCalendarToolsPrompt] : []),
+    ];
 
     const finalMessages = await runChatStream({
       abortController,
@@ -316,9 +335,7 @@ export const runChatGeneration = async (runId: string) => {
         void updateRunStatus(runId, "waiting_on_tool");
         publishChatRunEvent(runId, { status: "waiting_on_tool", type: "status" });
       },
-      systemPrompts: hasGoogleCalendarConnector
-        ? [gmailToolsPrompt, googleCalendarToolsPrompt]
-        : [gmailToolsPrompt],
+      systemPrompts,
       tools: (() => {
         const category = run.mailboxCategory as MailboxCategory;
         const context: GmailToolsContext = {
@@ -382,6 +399,23 @@ export const runChatGeneration = async (runId: string) => {
           createMailboxOverviewServerTool(context),
           createModifyMailServerTool(context),
         ];
+        const memoryContext: UserAiContextToolsContext = {
+          rememberUserPreference: async ({ preference, reason }) => {
+            const result = await recordAndRefreshUserAiContext({
+              kind: "explicit_preference",
+              mailboxId: run.mailboxId,
+              metadata: {
+                preference,
+                reason: reason ?? null,
+                source: "chat",
+              },
+              userId: run.userId,
+            });
+
+            return { status: result.status === "refreshed" ? "recorded" : "skipped" };
+          },
+        };
+        tools.push(createUserAiContextMemoryServerTool(memoryContext));
 
         if (hasGoogleCalendarConnector) {
           const calendarContext: GoogleCalendarToolsContext = {

@@ -14,8 +14,10 @@ import {
 import { MAILBOX_LABELS } from "@quieter/gmail";
 import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
+import { recordAndRefreshUserAiContext } from "../user-ai-context";
 
 const AUTOMATION_MEMORY_PROMPT_BUDGET = 900;
+const AUTO_LABEL_CORRECTION_PROMPT_BUDGET = 1_200;
 const SYSTEM_LABEL_IDS = new Set<string>(Object.values(MAILBOX_LABELS));
 
 export type AutoLabelMemoryRule = {
@@ -31,6 +33,19 @@ export type AutoLabelMemoryProfile = {
   rules: AutoLabelMemoryRule[];
 };
 
+export type AutoLabelUserCorrection = {
+  count: number;
+  labelId: string;
+  labelName: string | null;
+  signal: MailAutoLabelFeedbackSignal;
+  source: string | null;
+};
+
+export type AutoLabelUserCorrectionContext = {
+  corrections: AutoLabelUserCorrection[];
+  kind: "auto_label_user_corrections";
+};
+
 export type UsefulDetailMemoryRule = {
   count: number;
   kind: string;
@@ -43,8 +58,7 @@ export type UsefulDetailMemoryProfile = {
   rules: UsefulDetailMemoryRule[];
 };
 
-const serializeProfile = (profile: AutoLabelMemoryProfile | UsefulDetailMemoryProfile) =>
-  JSON.stringify(profile);
+const serializeProfile = (profile: object) => JSON.stringify(profile);
 
 const trimAutoLabelProfileToBudget = (profile: AutoLabelMemoryProfile): AutoLabelMemoryProfile => {
   const rules = [...profile.rules];
@@ -57,6 +71,21 @@ const trimAutoLabelProfileToBudget = (profile: AutoLabelMemoryProfile): AutoLabe
   }
 
   return { ...profile, rules };
+};
+
+const trimAutoLabelCorrectionContextToBudget = (
+  context: AutoLabelUserCorrectionContext,
+): AutoLabelUserCorrectionContext => {
+  const corrections = [...context.corrections];
+
+  while (
+    corrections.length > 0 &&
+    serializeProfile({ ...context, corrections }).length > AUTO_LABEL_CORRECTION_PROMPT_BUDGET
+  ) {
+    corrections.pop();
+  }
+
+  return { ...context, corrections };
 };
 
 const trimUsefulDetailProfileToBudget = (
@@ -122,6 +151,59 @@ export const loadAutomationMemoryPrompt = async (input: {
   return serialized.length <= AUTOMATION_MEMORY_PROMPT_BUDGET ? serialized : null;
 };
 
+export const buildAutoLabelUserCorrectionContext = (
+  rows: Array<{
+    labelId: string;
+    labelName: string | null;
+    signal: MailAutoLabelFeedbackSignal;
+    source: string | null;
+  }>,
+): AutoLabelUserCorrectionContext => {
+  const correctionsByKey = new Map<string, AutoLabelUserCorrection>();
+
+  for (const row of rows) {
+    const key = JSON.stringify([row.labelId, row.signal, row.source]);
+    const existing = correctionsByKey.get(key);
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+
+    correctionsByKey.set(key, {
+      count: 1,
+      labelId: row.labelId,
+      labelName: row.labelName,
+      signal: row.signal,
+      source: row.source,
+    });
+  }
+
+  return trimAutoLabelCorrectionContextToBudget({
+    corrections: Array.from(correctionsByKey.values()),
+    kind: "auto_label_user_corrections",
+  });
+};
+
+export const loadAutoLabelUserCorrectionPrompt = async (mailboxId: string) => {
+  const rows = await db
+    .select({
+      labelId: mailAutoLabelFeedback.labelId,
+      labelName: mailAutoLabelFeedback.labelName,
+      signal: mailAutoLabelFeedback.signal,
+      source: mailAutoLabelFeedback.source,
+    })
+    .from(mailAutoLabelFeedback)
+    .where(eq(mailAutoLabelFeedback.mailboxId, mailboxId))
+    .orderBy(desc(mailAutoLabelFeedback.updatedAt))
+    .limit(40);
+
+  const context = buildAutoLabelUserCorrectionContext(rows);
+  if (context.corrections.length === 0) return null;
+
+  const serialized = JSON.stringify(context);
+  return serialized.length <= AUTO_LABEL_CORRECTION_PROMPT_BUDGET ? serialized : null;
+};
+
 const listLabelNames = async (mailboxId: string, provider: MailboxProvider, labelIds: string[]) => {
   const uniqueLabelIds = Array.from(new Set(labelIds));
   if (uniqueLabelIds.length === 0) return new Map<string, string | null>();
@@ -169,6 +251,7 @@ const listManagedMessageSources = async (mailboxId: string, messageIds: string[]
 export const recordMailAutoLabelFeedback = async (input: {
   addLabelIds?: string[];
   mailboxId: string;
+  messageSources?: Record<string, string | null | undefined>;
   providerMessageIds: string[];
   removeLabelIds?: string[];
   userId: string;
@@ -203,6 +286,11 @@ export const recordMailAutoLabelFeedback = async (input: {
     selectedMailbox.provider === "managed"
       ? await listManagedMessageSources(input.mailboxId, providerMessageIds)
       : new Map<string, string | null>();
+  const sourceOverrides = new Map(Object.entries(input.messageSources ?? {}));
+  const resolveSource = (providerMessageId: string) =>
+    sourceOverrides.has(providerMessageId)
+      ? (sourceOverrides.get(providerMessageId) ?? null)
+      : (sources.get(providerMessageId) ?? null);
   const now = new Date();
   const values = providerMessageIds.flatMap((providerMessageId) => [
     ...addLabelIds.map((labelId) => ({
@@ -215,7 +303,7 @@ export const recordMailAutoLabelFeedback = async (input: {
       provider: selectedMailbox.provider,
       providerMessageId,
       signal: "added" as const,
-      source: sources.get(providerMessageId) ?? null,
+      source: resolveSource(providerMessageId),
       updatedAt: now,
     })),
     ...removeLabelIds.map((labelId) => ({
@@ -228,7 +316,7 @@ export const recordMailAutoLabelFeedback = async (input: {
       provider: selectedMailbox.provider,
       providerMessageId,
       signal: "removed" as const,
-      source: sources.get(providerMessageId) ?? null,
+      source: resolveSource(providerMessageId),
       updatedAt: now,
     })),
   ]);
@@ -251,6 +339,30 @@ export const recordMailAutoLabelFeedback = async (input: {
       ],
     });
   await refreshAutoLabelMemoryProfile(input.mailboxId);
+  void recordAndRefreshUserAiContext({
+    kind: "auto_label_feedback",
+    mailboxId: input.mailboxId,
+    metadata: {
+      addedLabels: addLabelIds
+        .map((labelId) => labelNames.get(labelId) ?? labelId)
+        .join(", ")
+        .slice(0, 600),
+      messageCount: providerMessageIds.length,
+      removedLabels: removeLabelIds
+        .map((labelId) => labelNames.get(labelId) ?? labelId)
+        .join(", ")
+        .slice(0, 600),
+      sources: Array.from(
+        new Set(providerMessageIds.map((providerMessageId) => resolveSource(providerMessageId))),
+      )
+        .filter(Boolean)
+        .join(", ")
+        .slice(0, 600),
+    },
+    userId: input.userId,
+  }).catch((error) => {
+    console.error("Could not refresh user AI context from auto-label feedback.", error);
+  });
 };
 
 export const buildAutoLabelMemoryProfile = (

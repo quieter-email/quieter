@@ -74,6 +74,12 @@ When drafting:
 - include a clear subject; use "Re:" / "Fwd:" when appropriate
 - leave to/cc/bcc empty only when truly unknown; otherwise make a reasonable guess and note it briefly
 
+### remember_user_preference
+Record an explicit durable user preference that should improve future Quieter AI behavior. Use only
+when the user clearly states a reusable preference, rule, correction, or stable context. Do not use
+it for one-off facts, secrets, verification codes, message summaries, inferred private facts, or
+temporary tasks.
+
 ## Gmail search syntax
 
 search_gmail accepts free text and Gmail operators. Use operators whenever they improve precision:
@@ -458,6 +464,35 @@ export type GoogleCalendarToolsContext = {
   ) => Promise<GoogleCalendarCreateEventResult>;
 };
 
+export type UserAiContextMemoryResult = {
+  status: "recorded" | "skipped";
+};
+
+export const userAiContextMemoryResultSchema = z.object({
+  status: z.enum(["recorded", "skipped"]),
+});
+
+export const userAiContextMemoryToolDef = toolDefinition({
+  name: "remember_user_preference",
+  description: "Record an explicit durable user preference for future Quieter AI behavior.",
+  inputSchema: z.object({
+    preference: z.string().trim().min(1).max(1_000).meta({
+      description: "The reusable user preference or rule to remember.",
+    }),
+    reason: z.string().trim().max(500).optional().meta({
+      description: "Short reason this is durable context rather than a one-off fact.",
+    }),
+  }),
+  outputSchema: userAiContextMemoryResultSchema,
+});
+
+export type UserAiContextToolsContext = {
+  rememberUserPreference: (input: {
+    preference: string;
+    reason?: string;
+  }) => Promise<UserAiContextMemoryResult>;
+};
+
 export const createGmailSearchServerTool = (context: GmailToolsContext): ServerTool =>
   gmailSearchToolDef.server(async ({ query, maxResults }) => {
     try {
@@ -554,5 +589,16 @@ export const createGoogleCalendarEventServerTool = (
         status: "error",
         summary: input.summary,
       };
+    }
+  });
+
+export const createUserAiContextMemoryServerTool = (
+  context: UserAiContextToolsContext,
+): ServerTool =>
+  userAiContextMemoryToolDef.server(async (input) => {
+    try {
+      return await context.rememberUserPreference(input);
+    } catch {
+      return { status: "skipped" };
     }
   });

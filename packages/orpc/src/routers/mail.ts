@@ -5,6 +5,7 @@ import {
   deleteDraft,
   deleteLabel,
   extractListUnsubscribeTargets,
+  getGmailMessageSender,
   getGmailMessageMetadata,
   getMailboxSyncDelta,
   getMessageAttachment,
@@ -48,7 +49,7 @@ import {
   syncGmailLabels,
   upsertSyncedGmailLabel,
 } from "../gmail-labels";
-import { recordMailAutoLabelFeedback } from "../mail-automation/memory";
+import { getSenderSource, recordMailAutoLabelFeedback } from "../mail-automation/memory";
 import { assertUserOrganizationMember } from "../mail-domain/service";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
@@ -128,6 +129,7 @@ const parseListUnsubscribeMailto = (value: string) => {
 const recordLabelFeedback = async (input: {
   addLabelIds?: string[];
   mailboxId: string;
+  messageSources?: Record<string, string | null | undefined>;
   providerMessageIds: string[];
   removeLabelIds?: string[];
   userId: string;
@@ -137,6 +139,37 @@ const recordLabelFeedback = async (input: {
   } catch (error) {
     console.error("Could not record mail auto-label feedback.", error);
   }
+};
+
+const listGmailLabelFeedbackSources = async (accessToken: string, messageIds: string[]) =>
+  Object.fromEntries(
+    await Promise.all(
+      Array.from(new Set(messageIds)).map(async (messageId) => {
+        try {
+          return [
+            messageId,
+            getSenderSource(await getGmailMessageSender(accessToken, messageId)),
+          ] as const;
+        } catch {
+          return [messageId, null] as const;
+        }
+      }),
+    ),
+  );
+
+const recordGmailLabelFeedback = async (input: {
+  accessToken: string;
+  addLabelIds?: string[];
+  mailboxId: string;
+  providerMessageIds: string[];
+  removeLabelIds?: string[];
+  userId: string;
+}) => {
+  const { accessToken, ...feedback } = input;
+  await recordLabelFeedback({
+    ...feedback,
+    messageSources: await listGmailLabelFeedbackSources(accessToken, input.providerMessageIds),
+  });
 };
 
 export const mailRouter = {
@@ -646,7 +679,8 @@ export const mailRouter = {
           addLabelIds: input.addLabelIds,
           removeLabelIds: input.removeLabelIds,
         });
-        void recordLabelFeedback({
+        void recordGmailLabelFeedback({
+          accessToken,
           addLabelIds: input.addLabelIds,
           mailboxId: input.mailboxId,
           providerMessageIds: result.messages.map((message) => message.id),
@@ -690,7 +724,8 @@ export const mailRouter = {
           addLabelIds: input.addLabelIds,
           removeLabelIds: input.removeLabelIds,
         });
-        void recordLabelFeedback({
+        void recordGmailLabelFeedback({
+          accessToken,
           addLabelIds: input.addLabelIds,
           mailboxId: input.mailboxId,
           providerMessageIds: [result.id],

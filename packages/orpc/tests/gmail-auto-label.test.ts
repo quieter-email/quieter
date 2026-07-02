@@ -1,4 +1,5 @@
 import {
+  buildAutoLabelPromptInput,
   resolveAutoLabelDecisions,
   sanitizeAutoLabelSelection,
 } from "@quieter/ai/classify-gmail-message";
@@ -55,5 +56,63 @@ describe("Gmail auto-label selection", () => {
         availableLabelIds,
       ),
     ).toEqual([]);
+  });
+
+  test("passes recent user corrections as explicit classifier context", () => {
+    const input = buildAutoLabelPromptInput({
+      labels: [
+        {
+          description: null,
+          id: "label-dev",
+          inclusionCriteria: "Only direct repository or build activity.",
+          name: "Dev",
+        },
+      ],
+      message: {
+        from: "GitHub <noreply@github.com>",
+        id: "message-1",
+        subject: "Weekly product digest",
+      },
+      userCorrectionContext: JSON.stringify({
+        corrections: [
+          {
+            count: 2,
+            labelId: "label-dev",
+            labelName: "Dev",
+            signal: "removed",
+            source: "github.com",
+          },
+        ],
+        kind: "auto_label_user_corrections",
+      }),
+    });
+
+    expect(input).toMatchObject({
+      recentUserLabelCorrections: expect.stringContaining('"signal":"removed"'),
+    });
+    expect(input).not.toHaveProperty("pastDecisions");
+  });
+
+  test("passes shared user context as advisory classifier context", () => {
+    const input = buildAutoLabelPromptInput({
+      labels: [
+        {
+          description: null,
+          id: "label-receipts",
+          inclusionCriteria: null,
+          name: "Receipts",
+        },
+      ],
+      message: {
+        from: "Store <orders@example.com>",
+        id: "message-1",
+        subject: "Your invoice",
+      },
+      userAiContext: "## Labeling\n- Treat invoices as receipts.",
+    });
+
+    expect(input).toMatchObject({
+      userAiContext: "## Labeling\n- Treat invoices as receipts.",
+    });
   });
 });

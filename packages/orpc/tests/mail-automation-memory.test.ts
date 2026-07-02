@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildAutoLabelMemoryProfile,
+  buildAutoLabelUserCorrectionContext,
   buildUsefulDetailMemoryProfile,
 } from "../src/mail-automation/memory";
 
@@ -96,6 +97,49 @@ describe("mail automation memory profiles", () => {
 
     expect(JSON.stringify(profile).length).toBeLessThanOrEqual(900);
     expect(profile.rules.every((rule) => rule.count === 5)).toBe(true);
+  });
+
+  test("compresses recent user auto-label corrections without message history", () => {
+    const context = buildAutoLabelUserCorrectionContext([
+      {
+        labelId: "label-dev",
+        labelName: "Dev",
+        signal: "removed",
+        source: "github.com",
+      },
+      {
+        labelId: "label-dev",
+        labelName: "Dev",
+        signal: "removed",
+        source: "github.com",
+      },
+      {
+        labelId: "label-travel",
+        labelName: "Travel",
+        signal: "added",
+        source: "airline.example",
+      },
+    ]);
+
+    expect(context).toEqual({
+      corrections: [
+        {
+          count: 2,
+          labelId: "label-dev",
+          labelName: "Dev",
+          signal: "removed",
+          source: "github.com",
+        },
+        {
+          count: 1,
+          labelId: "label-travel",
+          labelName: "Travel",
+          signal: "added",
+          source: "airline.example",
+        },
+      ],
+      kind: "auto_label_user_corrections",
+    });
   });
 
   test("compresses useful-detail feedback into category policies", () => {

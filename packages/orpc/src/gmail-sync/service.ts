@@ -35,7 +35,11 @@ import {
   processGmailUsefulDetailMessage,
   reportPendingGmailUsefulDetailUsage,
 } from "../gmail-useful-details/service";
-import { loadAutomationMemoryPrompt } from "../mail-automation/memory";
+import {
+  loadAutoLabelUserCorrectionPrompt,
+  loadAutomationMemoryPrompt,
+} from "../mail-automation/memory";
+import { loadUserAiContextPrompt } from "../user-ai-context";
 
 const WATCH_RENEWAL_INTERVAL_MS = 1000 * 60 * 60 * 20;
 const WATCH_EXPIRATION_BUFFER_MS = 1000 * 60 * 60 * 48;
@@ -55,6 +59,8 @@ type AutoLabelContext = {
   availableLabelIds: Set<string>;
   labels: MailAutoLabelCandidate[];
   memoryProfile: string | null;
+  userAiContext: string | null;
+  userCorrectionContext: string | null;
 };
 
 const getErrorMessage = (error: unknown) =>
@@ -331,6 +337,8 @@ const processAutoLabelMessage = async ({
         memoryProfile: autoLabelContext.memoryProfile,
         message,
         middleware: [usageMiddleware],
+        userAiContext: autoLabelContext.userAiContext,
+        userCorrectionContext: autoLabelContext.userCorrectionContext,
       });
       const now = new Date();
       const [classified] = await db
@@ -649,6 +657,8 @@ const processMailboxHistory = async ({
                 agent: "auto_label",
                 mailboxId,
               }),
+              userAiContext: await loadUserAiContextPrompt({ userId }),
+              userCorrectionContext: await loadAutoLabelUserCorrectionPrompt(mailboxId),
             };
           });
 

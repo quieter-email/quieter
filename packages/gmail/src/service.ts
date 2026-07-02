@@ -945,6 +945,12 @@ export const getGmailMessageMetadata = async (
   }
 };
 
+export const getGmailMessageSender = async (
+  accessToken: string,
+  messageId: string,
+  signal?: AbortSignal,
+) => getHeader(await getGmailMessageMetadata(accessToken, messageId, signal), "From");
+
 const getGmailMessageMetadataOrNull = async (
   accessToken: string,
   messageId: string,

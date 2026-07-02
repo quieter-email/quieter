@@ -12,7 +12,8 @@
     "./openrouter": "./src/openrouter.ts",
     "./openrouter-transcription": "./src/openrouter-transcription.ts",
     "./run-chat-stream": "./src/run-chat-stream.ts",
-    "./transcription-format": "./src/transcription-format.ts"
+    "./transcription-format": "./src/transcription-format.ts",
+    "./user-ai-context": "./src/user-ai-context.ts"
   },
   "scripts": {
     "fmt": "oxfmt --config ../../oxfmt.json .",

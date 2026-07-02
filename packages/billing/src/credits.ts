@@ -13,6 +13,7 @@ const MICROCENTS_PER_CENT = 1_000_000;
 
 export const BILLING_USAGE_KINDS = [
   "aiChat",
+  "aiMemory",
   "autoLabel",
   "usefulDetails",
   "inboundMail",
@@ -63,6 +64,8 @@ const getBillingCreditUsageWithClient = async (
       and ${billingCreditUsageEvent.metadata}->>'direction' = 'outbound' then 'outboundMail'
     when ${billingCreditUsageEvent.category} = 'ai'
       and ${billingCreditUsageEvent.metadata}->>'usageKind' = 'autoLabel' then 'autoLabel'
+    when ${billingCreditUsageEvent.category} = 'ai'
+      and ${billingCreditUsageEvent.metadata}->>'usageKind' = 'aiMemory' then 'aiMemory'
     when ${billingCreditUsageEvent.category} = 'ai'
       and ${billingCreditUsageEvent.metadata}->>'usageKind' = 'usefulDetails' then 'usefulDetails'
     when ${billingCreditUsageEvent.category} = 'ai' then 'aiChat'

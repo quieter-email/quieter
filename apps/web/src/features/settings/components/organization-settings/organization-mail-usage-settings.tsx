@@ -104,6 +104,11 @@ const usageBreakdownConfig = [
     label: "AI chat",
   },
   {
+    className: "bg-teal-500 dark:bg-teal-400",
+    kind: "aiMemory",
+    label: "AI memory",
+  },
+  {
     className: "bg-amber-500 dark:bg-amber-400",
     kind: "usefulDetails",
     label: "Useful details",

@@ -29,6 +29,7 @@ import {
   loadAutomationMemoryPrompt,
   refreshUsefulDetailMemoryProfile,
 } from "../mail-automation/memory";
+import { loadUserAiContextPrompt, recordAndRefreshUserAiContext } from "../user-ai-context";
 
 const RETRY_BASE_MS = 1000 * 60 * 5;
 const RETRY_MAX_MS = 1000 * 60 * 60 * 24;
@@ -82,6 +83,12 @@ const SUPPRESSED_AUTOMATION_KINDS = new Set<GmailUsefulDetailKind>([
   "security_alert",
   "task",
 ]);
+const publicCallToActionPattern =
+  /\b(vote|voting|election|campaign|petition|donate|fundraiser|abstimm(?:en|ung)?|wahl(?:en)?|spenden)\b/i;
+const publicOpportunityPattern =
+  /\b(job posting|vacancy|open position|position opening|call for applications|applications? (?:are )?open|apply now|bewerbungsfrist|stellenausschreibung|stellenangebot|ausschreibung|scholarship|stipendium)\b/i;
+const personalApplicationPattern =
+  /\b(your application|application id|case number|we received your application|your interview|missing documents|deine bewerbung|ihre bewerbung|ihr antrag|dein antrag|aktenzeichen|vorgangsnummer|bewerbung.{0,40}eingegangen|interview|vorstellungsgespr.ch)\b/i;
 
 const assertAccessibleGmailMailbox = async (input: { mailboxId: string; userId: string }) => {
   const [selectedMailbox] = await db
@@ -217,6 +224,31 @@ const buildVerificationCodeSearchText = (message: AutomationMailMessage) =>
     .replace(/<[^>]+>/g, " ")
     .replace(/&(?:nbsp|#160);/gi, " ")
     .slice(0, 12_000);
+
+const buildUsefulDetailRejectionText = (message: AutomationMailMessage) =>
+  [message.from, message.subject, message.snippet, message.bodyText, message.bodyHtml]
+    .filter(Boolean)
+    .join("\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&(?:nbsp|#160);/gi, " ")
+    .slice(0, 12_000);
+
+const isOverbroadUsefulDetail = (
+  candidate: GmailUsefulDetailCandidate,
+  message: AutomationMailMessage,
+) => {
+  const text = buildUsefulDetailRejectionText(message);
+
+  if (candidate.kind === "task") {
+    return publicCallToActionPattern.test(text);
+  }
+
+  if (candidate.kind === "application") {
+    return publicOpportunityPattern.test(text) && !personalApplicationPattern.test(text);
+  }
+
+  return false;
+};
 
 const looksLikeVerificationContext = (text: string, index: number, length: number) => {
   const window = text.slice(Math.max(0, index - 80), Math.min(text.length, index + length + 80));
@@ -367,6 +399,9 @@ export const materializeGmailUsefulDetail = ({
     SUPPRESSED_AUTOMATION_KINDS.has(candidate.kind) &&
     automatedEngineeringSenderPattern.test(message.from ?? "")
   ) {
+    return null;
+  }
+  if (isOverbroadUsefulDetail(candidate, message)) {
     return null;
   }
 
@@ -749,6 +784,7 @@ export const buildGmailUsefulDetailPreferenceProfile = ({
 const getGmailUsefulDetailPreferenceProfile = async (
   mailboxId: string,
   source: string | null,
+  userId: string,
 ): Promise<GmailUsefulDetailPreferenceProfile> => {
   const rows = await db
     .select({
@@ -771,6 +807,7 @@ const getGmailUsefulDetailPreferenceProfile = async (
   return {
     ...buildGmailUsefulDetailPreferenceProfile({ global, source: sourceSpecific }),
     memoryProfile: await loadAutomationMemoryPrompt({ agent: "useful_detail", mailboxId }),
+    userAiContext: await loadUserAiContextPrompt({ userId }),
   };
 };
 
@@ -814,7 +851,7 @@ export const processGmailUsefulDetailMessage = async ({
         .from(mailboxAutomationSettings)
         .where(eq(mailboxAutomationSettings.mailboxId, mailboxId))
         .limit(1),
-      getGmailUsefulDetailPreferenceProfile(mailboxId, source),
+      getGmailUsefulDetailPreferenceProfile(mailboxId, source, userId),
     ]);
     if (!currentSettings?.enabled) {
       await markEventProcessedWithoutUsage(event.id);
@@ -1140,6 +1177,18 @@ export const setGmailUsefulDetailFeedback = async (input: {
   }
 
   await refreshUsefulDetailMemoryProfile(input.mailboxId);
+  void recordAndRefreshUserAiContext({
+    kind: "useful_detail_feedback",
+    mailboxId: input.mailboxId,
+    metadata: {
+      detailKind: detail.kind,
+      signal: input.feedback,
+      source: detail.source,
+    },
+    userId: input.userId,
+  }).catch((error) => {
+    console.error("Could not refresh user AI context from useful-detail feedback.", error);
+  });
 
   return { feedback: input.feedback, id: detail.id };
 };
