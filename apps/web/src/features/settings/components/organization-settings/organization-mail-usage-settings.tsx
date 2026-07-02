@@ -3,7 +3,6 @@
 import { Add01Icon, Delete02Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import {
   NumberField,
@@ -317,8 +316,8 @@ const ManagedUsageSettingsForm = ({
   }
 
   return (
-    <section className={cn(settingsInsetDividerClass, "px-4 pt-6 md:px-6")}>
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+    <section className={settingsInsetDividerClass}>
+      <div className="flex flex-col gap-4 px-4 pt-6 md:flex-row md:items-start md:justify-between md:px-6">
         <SettingsRowText title="Team credits">
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             <span>Managed mail rates</span>
@@ -327,7 +326,7 @@ const ManagedUsageSettingsForm = ({
         </SettingsRowText>
       </div>
 
-      <div className="mt-5">
+      <div className="mt-5 px-4 md:px-6">
         <div className="flex items-end justify-between gap-4">
           <div>
             <p className="font-mono text-xl font-semibold text-foreground">
@@ -354,7 +353,7 @@ const ManagedUsageSettingsForm = ({
         </Progress>
       </div>
 
-      <div className="mt-5 grid divide-y divide-border/70 border-y border-border/70 md:grid-cols-3 md:divide-x md:divide-y-0">
+      <div className="mx-4 mt-5 mb-1 grid divide-y divide-border/70 border-y border-border/70 md:mx-6 md:grid-cols-3 md:divide-x md:divide-y-0">
         <Price
           label="Messages"
           suffix="/ 1K"
@@ -551,7 +550,7 @@ const ManagedUsageSettingsForm = ({
       </SettingsInsetRows>
 
       {!canManageOrganizationMailUsage && (
-        <p className="mt-4 text-xs text-muted-foreground">
+        <p className="px-4 pt-1 pb-3 text-xs text-muted-foreground md:px-6">
           Only admins and owners can change team credit settings.
         </p>
       )}
