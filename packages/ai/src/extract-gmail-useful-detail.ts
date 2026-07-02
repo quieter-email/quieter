@@ -55,6 +55,7 @@ export type GmailUsefulDetailPreferenceProfile = {
   avoidKinds: Exclude<GmailUsefulDetailCandidate["kind"], "none">[];
   memoryProfile?: string | null;
   preferKinds: Exclude<GmailUsefulDetailCandidate["kind"], "none">[];
+  userAiContext?: string | null;
 };
 
 const getReceivedAt = (message: AutomationMailMessage) => {
@@ -99,7 +100,8 @@ export const extractMailUsefulDetail = async ({
           ...(preferences &&
           (preferences.avoidKinds.length > 0 ||
             preferences.preferKinds.length > 0 ||
-            preferences.memoryProfile)
+            preferences.memoryProfile ||
+            preferences.userAiContext)
             ? { mailboxPreferences: preferences }
             : {}),
         }),
@@ -119,6 +121,9 @@ mailboxPreferences contains compact category preferences learned from explicit u
 mailboxPreferences.memoryProfile is a compressed mailbox-level profile. Treat it as advisory
 context only; it must never weaken the taxonomy, confidence, time-window, or factual-evidence
 requirements below.
+mailboxPreferences.userAiContext is a compact cross-agent user preference profile. Treat it as
+advisory context only; it must never weaken the taxonomy, confidence, time-window, or factual-
+evidence requirements below.
 Return "none" for a kind listed in avoidKinds. Treat preferKinds only as a tie-breaker; it must never
 weaken the taxonomy, confidence, time-window, or factual-evidence requirements below.
 
@@ -189,6 +194,8 @@ Apply these rules to the other allowed kinds:
   interview times, missing documents, final approvals, and final rejections. Exclude progress
   updates, generic recruiting messages, job recommendations, acknowledgements that merely say an
   application was received, surveys, and support newsletters with no case-specific development.
+  Exclude public opportunities the recipient has not already applied to, including job postings,
+  calls for applications, scholarships, open roles, and general application-deadline announcements.
 
 - "security_alert": A credible unauthorized, suspicious, blocked, or unrecognized login, device,
   transaction, credential change, recovery attempt, or account-security event that the recipient
@@ -206,8 +213,9 @@ Apply these rules to the other allowed kinds:
   request must be written directly by a person rather than inferred from an automated status
   notification. Put the deadline in eventAt. This category should be exceptionally rare. Exclude
   same-day work chatter, code-review requests, issue assignments, approval requests, bot findings,
-  vague requests, optional suggestions, meeting discussion points, FYI messages, open-ended
-  follow-ups, automated engagement prompts, and tasks assigned to someone else.
+  public election or campaign calls to vote, petitions, donation requests, vague requests, optional
+  suggestions, meeting discussion points, FYI messages, open-ended follow-ups, automated engagement
+  prompts, and tasks assigned to someone else.
 
 Do not treat marketing, newsletters, generic account activity, ordinary receipts, informational
 status mail, vague requests, events without a concrete future action/window, or class/tutorial/

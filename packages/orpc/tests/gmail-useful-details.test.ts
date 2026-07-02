@@ -357,6 +357,95 @@ describe("Gmail useful-detail materialization", () => {
     expect(detail).toBeNull();
   });
 
+  test("drops public voting reminders", () => {
+    const detail = materializeGmailUsefulDetail({
+      candidate: candidate({
+        eventAt: "2026-06-14T10:07:00.000Z",
+        kind: "task",
+        relevanceSource: "inferred",
+        relevantFrom: "2026-06-14T08:00:00.000Z",
+        relevantUntil: "2026-06-14T11:07:00.000Z",
+        service: "TU Berlin election",
+        summary: "Vote for Liste 9 by 11:07.",
+      }),
+      message: message({
+        from: "TU Berlin election <election@example.edu>",
+        subject: "Vote for Liste 9 (Fridays for Future TU Berlin)",
+      }),
+      now: NOW,
+    });
+
+    expect(detail).toBeNull();
+  });
+
+  test("drops public job postings the user has not applied to", () => {
+    const detail = materializeGmailUsefulDetail({
+      candidate: candidate({
+        eventAt: "2026-06-20T21:59:00.000Z",
+        kind: "application",
+        relevanceSource: "explicit",
+        relevantFrom: "2026-06-19T09:00:00.000Z",
+        relevantUntil: "2026-06-20T22:30:00.000Z",
+        service: "TU Berlin",
+        summary: "Bewerbungsfrist for KI-Entwicklung roles is June 20.",
+      }),
+      message: message({
+        from: "TU Berlin <jobs@example.edu>",
+        subject: "Stellenausschreibung KI-Entwicklung und KI-Didaktik",
+      }),
+      now: NOW,
+    });
+
+    expect(detail).toBeNull();
+  });
+
+  test("drops public job postings that mention interviews", () => {
+    const detail = materializeGmailUsefulDetail({
+      candidate: candidate({
+        eventAt: "2026-06-20T21:59:00.000Z",
+        kind: "application",
+        relevanceSource: "explicit",
+        relevantFrom: "2026-06-19T09:00:00.000Z",
+        relevantUntil: "2026-06-20T22:30:00.000Z",
+        service: "TU Berlin",
+        summary: "Apply for interview-stage research roles by June 20.",
+      }),
+      message: message({
+        bodyText: "Open position with interviews in July. Applications are open until June 20.",
+        from: "TU Berlin <jobs@example.edu>",
+        subject: "Open position with interviews in July",
+      }),
+      now: NOW,
+    });
+
+    expect(detail).toBeNull();
+  });
+
+  test("keeps personal application deadlines", () => {
+    const detail = materializeGmailUsefulDetail({
+      candidate: candidate({
+        eventAt: "2026-06-20T21:59:00.000Z",
+        kind: "application",
+        reference: "APP-123",
+        relevanceSource: "explicit",
+        relevantFrom: "2026-06-19T09:00:00.000Z",
+        relevantUntil: "2026-06-20T22:30:00.000Z",
+        service: "TU Berlin",
+        summary: "Your application APP-123 is missing documents due June 20.",
+      }),
+      message: message({
+        from: "TU Berlin <admissions@example.edu>",
+        subject: "Your application APP-123",
+      }),
+      now: NOW,
+    });
+
+    expect(detail).toMatchObject({
+      dedupeKey: "reference:APP123",
+      kind: "application",
+    });
+  });
+
   test("supports every conservative reminder category", () => {
     const kinds = [
       "application",

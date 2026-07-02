@@ -131,6 +131,11 @@ export type ChatMessagePart = {
   content?: string;
   [key: string]: unknown;
 };
+export type UserAiContextEventKind =
+  | "auto_label_feedback"
+  | "chat_discovery"
+  | "explicit_preference"
+  | "useful_detail_feedback";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -144,6 +149,25 @@ export const user = pgTable("user", {
   createdAt: timestamp("createdAt").notNull(),
   updatedAt: timestamp("updatedAt").notNull(),
 });
+
+export const userAiContext = pgTable(
+  "userAiContext",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    markdown: text("markdown").notNull(),
+    revision: integer("revision").notNull().default(1),
+    lastEditedAt: timestamp("lastEditedAt").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check("user_ai_context_markdown_length_check", sql`char_length(${table.markdown}) <= 12000`),
+    unique("user_ai_context_user_id_unique").on(table.userId),
+  ],
+);
 
 export const organization = pgTable(
   "organization",
@@ -361,6 +385,43 @@ export const mailbox = pgTable(
     index("mailbox_organization_id_idx").on(table.organizationId),
     index("mailbox_division_id_idx").on(table.divisionId),
     unique("mailbox_email_address_unique").on(table.emailAddress),
+  ],
+);
+
+export const userAiContextEvent = pgTable(
+  "userAiContextEvent",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<UserAiContextEventKind>().notNull(),
+    metadata: jsonb("metadata").$type<Record<string, string | number | boolean | null>>().notNull(),
+    mergedAt: timestamp("mergedAt"),
+    skippedAt: timestamp("skippedAt"),
+    lastError: text("lastError"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "user_ai_context_event_kind_check",
+      sql`${table.kind} in ('auto_label_feedback', 'chat_discovery', 'explicit_preference', 'useful_detail_feedback')`,
+    ),
+    index("user_ai_context_event_organization_merge_idx").on(
+      table.organizationId,
+      table.mergedAt,
+      table.skippedAt,
+      table.createdAt,
+    ),
+    index("user_ai_context_event_user_merge_idx").on(table.userId, table.mergedAt, table.createdAt),
+    index("user_ai_context_event_mailbox_created_idx").on(table.mailboxId, table.createdAt),
   ],
 );
 
@@ -704,6 +765,10 @@ export const mailAutoLabelFeedback = pgTable(
       table.labelId,
       table.source,
       table.signal,
+    ),
+    index("mail_auto_label_feedback_mailbox_updated_idx").on(
+      table.mailboxId,
+      table.updatedAt.desc(),
     ),
     unique("mail_auto_label_feedback_message_label_unique").on(
       table.mailboxId,
@@ -1549,6 +1614,8 @@ export const tables = {
   connectorCredential,
   connectorOAuthState,
   user,
+  userAiContext,
+  userAiContextEvent,
   organization,
   session,
   account,
@@ -1603,6 +1670,14 @@ export const authRelations = defineRelations(tables, (r) => ({
     billingCreditUsageEvents: r.many.billingCreditUsageEvent({
       from: r.user.id,
       to: r.billingCreditUsageEvent.userId,
+    }),
+    aiContext: r.one.userAiContext({
+      from: r.user.id,
+      to: r.userAiContext.userId,
+    }),
+    aiContextEvents: r.many.userAiContextEvent({
+      from: r.user.id,
+      to: r.userAiContextEvent.userId,
     }),
     chats: r.many.chat({ from: r.user.id, to: r.chat.userId }),
     connectorCredentials: r.many.connectorCredential({
@@ -1676,6 +1751,10 @@ export const authRelations = defineRelations(tables, (r) => ({
     billingCreditUsageEvents: r.many.billingCreditUsageEvent({
       from: r.organization.id,
       to: r.billingCreditUsageEvent.organizationId,
+    }),
+    userAiContextEvents: r.many.userAiContextEvent({
+      from: r.organization.id,
+      to: r.userAiContextEvent.organizationId,
     }),
     billingSubscriptions: r.many.billingSubscription({
       from: r.organization.id,
@@ -1822,6 +1901,10 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
   },
   mailbox: {
+    userAiContextEvents: r.many.userAiContextEvent({
+      from: r.mailbox.id,
+      to: r.userAiContextEvent.mailboxId,
+    }),
     chats: r.many.chat({ from: r.mailbox.id, to: r.chat.mailboxId }),
     gmailAutoLabelEvents: r.many.gmailAutoLabelEvent({
       from: r.mailbox.id,

@@ -500,7 +500,7 @@ export const reportAiUsage = async (input: {
   mailboxId?: string;
   model: keyof typeof aiUsageRates;
   promptTokens: number;
-  usageKind: Extract<BillingUsageKind, "aiChat" | "autoLabel" | "usefulDetails">;
+  usageKind: Extract<BillingUsageKind, "aiChat" | "aiMemory" | "autoLabel" | "usefulDetails">;
   userId: string;
 }) => {
   const rates = aiUsageRates[input.model];
@@ -569,7 +569,7 @@ export const reportAiUsageCost = async (input: {
   mailboxId?: string;
   model: string;
   totalTokens?: number;
-  usageKind: Extract<BillingUsageKind, "aiChat" | "autoLabel" | "usefulDetails">;
+  usageKind: Extract<BillingUsageKind, "aiChat" | "aiMemory" | "autoLabel" | "usefulDetails">;
   userId: string;
 }) => {
   const costMicroCents = applyAiUsageMarkup(input.costMicroCents);

@@ -5,6 +5,7 @@ import {
   deleteDraft,
   deleteLabel,
   extractListUnsubscribeTargets,
+  getGmailMessageSender,
   getGmailMessageMetadata,
   getMailboxSyncDelta,
   getMessageAttachment,
@@ -48,7 +49,7 @@ import {
   syncGmailLabels,
   upsertSyncedGmailLabel,
 } from "../gmail-labels";
-import { recordMailAutoLabelFeedback } from "../mail-automation/memory";
+import { getSenderSource, recordMailAutoLabelFeedback } from "../mail-automation/memory";
 import { assertUserOrganizationMember } from "../mail-domain/service";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
@@ -128,6 +129,7 @@ const parseListUnsubscribeMailto = (value: string) => {
 const recordLabelFeedback = async (input: {
   addLabelIds?: string[];
   mailboxId: string;
+  messageSources?: Record<string, string | null | undefined>;
   providerMessageIds: string[];
   removeLabelIds?: string[];
   userId: string;
@@ -137,6 +139,52 @@ const recordLabelFeedback = async (input: {
   } catch (error) {
     console.error("Could not record mail auto-label feedback.", error);
   }
+};
+
+const GMAIL_LABEL_FEEDBACK_SOURCE_CONCURRENCY = 4;
+
+const listGmailLabelFeedbackSources = async (accessToken: string, messageIds: string[]) => {
+  const uniqueMessageIds = Array.from(new Set(messageIds));
+  const entries: Array<readonly [string, string | null]> = [];
+
+  for (
+    let index = 0;
+    index < uniqueMessageIds.length;
+    index += GMAIL_LABEL_FEEDBACK_SOURCE_CONCURRENCY
+  ) {
+    const chunk = uniqueMessageIds.slice(index, index + GMAIL_LABEL_FEEDBACK_SOURCE_CONCURRENCY);
+    entries.push(
+      ...(await Promise.all(
+        chunk.map(async (messageId) => {
+          try {
+            return [
+              messageId,
+              getSenderSource(await getGmailMessageSender(accessToken, messageId)),
+            ] as const;
+          } catch {
+            return [messageId, null] as const;
+          }
+        }),
+      )),
+    );
+  }
+
+  return Object.fromEntries(entries);
+};
+
+const recordGmailLabelFeedback = async (input: {
+  accessToken: string;
+  addLabelIds?: string[];
+  mailboxId: string;
+  providerMessageIds: string[];
+  removeLabelIds?: string[];
+  userId: string;
+}) => {
+  const { accessToken, ...feedback } = input;
+  await recordLabelFeedback({
+    ...feedback,
+    messageSources: await listGmailLabelFeedbackSources(accessToken, input.providerMessageIds),
+  });
 };
 
 export const mailRouter = {
@@ -646,7 +694,8 @@ export const mailRouter = {
           addLabelIds: input.addLabelIds,
           removeLabelIds: input.removeLabelIds,
         });
-        void recordLabelFeedback({
+        void recordGmailLabelFeedback({
+          accessToken,
           addLabelIds: input.addLabelIds,
           mailboxId: input.mailboxId,
           providerMessageIds: result.messages.map((message) => message.id),
@@ -690,7 +739,8 @@ export const mailRouter = {
           addLabelIds: input.addLabelIds,
           removeLabelIds: input.removeLabelIds,
         });
-        void recordLabelFeedback({
+        void recordGmailLabelFeedback({
+          accessToken,
           addLabelIds: input.addLabelIds,
           mailboxId: input.mailboxId,
           providerMessageIds: [result.id],

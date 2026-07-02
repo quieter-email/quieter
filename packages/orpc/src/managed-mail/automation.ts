@@ -25,7 +25,11 @@ import {
   processGmailUsefulDetailMessage,
   reportPendingGmailUsefulDetailUsage,
 } from "../gmail-useful-details/service";
-import { loadAutomationMemoryPrompt } from "../mail-automation/memory";
+import {
+  loadAutoLabelUserCorrectionPrompt,
+  loadAutomationMemoryPrompt,
+} from "../mail-automation/memory";
+import { loadUserAiContextPrompt } from "../user-ai-context";
 import { updateManagedMessageLabelAssignments } from "./labels/repository";
 
 const AUTO_LABEL_RETRY_BASE_MS = 1000 * 60 * 5;
@@ -35,6 +39,8 @@ type ManagedAutoLabelContext = {
   availableLabelIds: Set<string>;
   labels: MailAutoLabelCandidate[];
   memoryProfile: string | null;
+  userAiContext: string | null;
+  userCorrectionContext: string | null;
 };
 
 const toAutomationMessage = (
@@ -78,9 +84,10 @@ const loadManagedAutomationMessage = async (mailboxId: string, messageId: string
   return toAutomationMessage(message, attachments);
 };
 
-const getManagedAutoLabelCandidates = async (
-  mailboxId: string,
-): Promise<ManagedAutoLabelContext> => {
+const getManagedAutoLabelCandidates = async (input: {
+  mailboxId: string;
+  userId: string;
+}): Promise<ManagedAutoLabelContext> => {
   const labels = await db
     .select({
       description: managedMailLabel.description,
@@ -88,7 +95,7 @@ const getManagedAutoLabelCandidates = async (
       name: managedMailLabel.name,
     })
     .from(managedMailLabel)
-    .where(eq(managedMailLabel.mailboxId, mailboxId));
+    .where(eq(managedMailLabel.mailboxId, input.mailboxId));
 
   const candidates = labels.map((label) => ({
     description: label.description,
@@ -102,8 +109,10 @@ const getManagedAutoLabelCandidates = async (
     labels: candidates,
     memoryProfile: await loadAutomationMemoryPrompt({
       agent: "auto_label",
-      mailboxId,
+      mailboxId: input.mailboxId,
     }),
+    userAiContext: await loadUserAiContextPrompt({ userId: input.userId }),
+    userCorrectionContext: await loadAutoLabelUserCorrectionPrompt(input.mailboxId),
   };
 };
 
@@ -258,6 +267,8 @@ const processManagedAutoLabelMessage = async (input: {
         memoryProfile: input.autoLabelContext.memoryProfile,
         message,
         middleware: [usageMiddleware],
+        userAiContext: input.autoLabelContext.userAiContext,
+        userCorrectionContext: input.autoLabelContext.userCorrectionContext,
       });
       const [classified] = await db
         .update(gmailAutoLabelEvent)
@@ -441,7 +452,10 @@ export const processManagedMailAutomation = async (input: {
   ]);
   let autoLabelContextPromise: Promise<ManagedAutoLabelContext> | null = null;
   const getAutoLabelContext = () => {
-    autoLabelContextPromise ??= getManagedAutoLabelCandidates(input.mailboxId);
+    autoLabelContextPromise ??= getManagedAutoLabelCandidates({
+      mailboxId: input.mailboxId,
+      userId: owner.userId,
+    });
     return autoLabelContextPromise;
   };
 
