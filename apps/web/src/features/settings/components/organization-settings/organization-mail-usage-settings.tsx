@@ -249,6 +249,12 @@ const ManagedUsageSettingsForm = ({
       : 0;
   const limitCents = limitDollars == null ? null : Math.round(limitDollars * centsPerDollar);
   const periodEnd = formatPeriodEnd(overview.period.end);
+  const savedMilestonePercents = overview.settings.alertMilestonePercents;
+  const hasUnsavedChanges =
+    overageEnabled !== overview.settings.overageEnabled ||
+    limitCents !== overview.settings.monthlyOverageLimitCents ||
+    milestonePercents.length !== savedMilestonePercents.length ||
+    milestonePercents.some((percent, index) => percent !== savedMilestonePercents[index]);
 
   const updateMilestone = (id: string, percent: number | null) => {
     setMilestones((current) =>
@@ -284,7 +290,7 @@ const ManagedUsageSettingsForm = ({
         organizationId,
         overageEnabled,
       });
-      toast.success("Managed Usage settings updated.");
+      toast.success("Team credit settings saved.");
     } catch (error) {
       toast.error((error as { message?: string })?.message ?? "Could not update usage settings.");
     }
@@ -314,20 +320,6 @@ const ManagedUsageSettingsForm = ({
             {periodEnd ? <span>Resets {periodEnd}</span> : null}
           </div>
         </SettingsRowText>
-
-        {canManageOrganizationMailUsage && (
-          <Button
-            disabled={!!milestoneError || updateMutation.isPending}
-            onClick={() => void saveSettings()}
-            size="sm"
-            variant="outline"
-          >
-            {updateMutation.isPending && (
-              <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-            )}
-            Save changes
-          </Button>
-        )}
       </div>
 
       <div className="mt-5">
@@ -434,7 +426,7 @@ const ManagedUsageSettingsForm = ({
           </div>
         </div>
 
-        <div className="py-5">
+        <div className="pt-5">
           <div className="flex items-start justify-between gap-4">
             <SettingsRowText className="max-w-xl" title="Alert milestones">
               <span>
@@ -535,6 +527,24 @@ const ManagedUsageSettingsForm = ({
           </div>
 
           {milestoneError && <p className="mt-2 text-xs text-destructive">{milestoneError}</p>}
+
+          {canManageOrganizationMailUsage && (
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+              {hasUnsavedChanges && (
+                <p className="text-xs text-muted-foreground">Unsaved changes</p>
+              )}
+              <Button
+                disabled={!hasUnsavedChanges || !!milestoneError || updateMutation.isPending}
+                onClick={() => void saveSettings()}
+                size="sm"
+              >
+                {updateMutation.isPending && (
+                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                )}
+                Save changes
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
