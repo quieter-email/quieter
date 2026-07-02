@@ -25,6 +25,7 @@ import {
   processGmailUsefulDetailMessage,
   reportPendingGmailUsefulDetailUsage,
 } from "../gmail-useful-details/service";
+import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import {
   loadAutoLabelUserCorrectionPrompt,
   loadAutomationMemoryPrompt,
@@ -34,6 +35,7 @@ import { updateManagedMessageLabelAssignments } from "./labels/repository";
 
 const AUTO_LABEL_RETRY_BASE_MS = 1000 * 60 * 5;
 const AUTO_LABEL_RETRY_MAX_MS = 1000 * 60 * 60 * 24;
+const AUTO_LABEL_BUDGET_RETRY_MS = 1000 * 60 * 60 * 6;
 
 type ManagedAutoLabelContext = {
   availableLabelIds: Set<string>;
@@ -181,6 +183,18 @@ const markManagedAutoLabelEventAppliedWithoutUsage = async (eventId: string) => 
     .where(eq(gmailAutoLabelEvent.id, eventId));
 };
 
+const deferManagedAutoLabelAutomation = async (eventId: string, message: string) => {
+  const now = new Date();
+  await db
+    .update(gmailAutoLabelEvent)
+    .set({
+      lastError: message,
+      nextAttemptAt: new Date(now.getTime() + AUTO_LABEL_BUDGET_RETRY_MS),
+      updatedAt: now,
+    })
+    .where(eq(gmailAutoLabelEvent.id, eventId));
+};
+
 const reportManagedAutoLabelUsage = async (event: {
   completionTokens: number | null;
   id: string;
@@ -232,6 +246,7 @@ const processManagedAutoLabelMessage = async (input: {
   autoLabelContext: ManagedAutoLabelContext;
   mailboxId: string;
   messageId: string;
+  organizationId: string;
   userId: string;
 }) => {
   let event = await getOrCreateManagedAutoLabelEvent(input.mailboxId, input.messageId);
@@ -262,6 +277,15 @@ const processManagedAutoLabelMessage = async (input: {
           completionTokens += usage.completionTokens;
         },
       };
+      const budgetStatus = await getMailAutomationAiBudgetStatus({
+        organizationId: input.organizationId,
+        userId: input.userId,
+      });
+      if (!budgetStatus.allowed) {
+        await deferManagedAutoLabelAutomation(event.id, budgetStatus.message);
+        return;
+      }
+
       const labelIds = await classifyMailMessage({
         labels: input.autoLabelContext.labels,
         memoryProfile: input.autoLabelContext.memoryProfile,
@@ -382,6 +406,7 @@ const processManagedAutomationMessageIds = async (input: {
   getAutoLabelContext: () => Promise<ManagedAutoLabelContext>;
   mailboxId: string;
   messageIds: string[];
+  organizationId: string;
   usefulDetailsEnabled: boolean;
   userId: string;
 }) => {
@@ -404,6 +429,7 @@ const processManagedAutomationMessageIds = async (input: {
             autoLabelContext,
             mailboxId: input.mailboxId,
             messageId,
+            organizationId: input.organizationId,
             userId: input.userId,
           })
         : Promise.resolve(),
@@ -466,6 +492,7 @@ export const processManagedMailAutomation = async (input: {
     messageIds: Array.from(
       new Set([input.messageId, ...pendingAutoLabelIds, ...pendingUsefulDetailIds]),
     ),
+    organizationId: owner.organizationId,
     usefulDetailsEnabled: settings.usefulDetailsEnabled,
     userId: owner.userId,
   });

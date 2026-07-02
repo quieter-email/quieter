@@ -41,8 +41,18 @@ describe("server environment", () => {
 
     expect(env.NODE_ENV).toBe("test");
     expect(env.POLAR_SANDBOX).toBe(true);
+    expect(env.QUIETER_GMAIL_AI_AUTOMATION_ENABLED).toBeUndefined();
     expect(env.QUIETER_AUTH_MAIL_MODE).toBe("api");
     expect(env.QUIETER_AUTH_MAIL_SENDER).toBe("auth@quieter.email");
+  });
+
+  test("normalizes the Gmail AI automation runtime switch", () => {
+    const env = createServerEnv({
+      NODE_ENV: "test",
+      QUIETER_GMAIL_AI_AUTOMATION_ENABLED: "on",
+    });
+
+    expect(env.QUIETER_GMAIL_AI_AUTOMATION_ENABLED).toBe(true);
   });
 
   test("rejects non-HTTP service URLs", () => {

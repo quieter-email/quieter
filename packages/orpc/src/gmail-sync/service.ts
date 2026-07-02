@@ -35,6 +35,7 @@ import {
   processGmailUsefulDetailMessage,
   reportPendingGmailUsefulDetailUsage,
 } from "../gmail-useful-details/service";
+import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import {
   loadAutoLabelUserCorrectionPrompt,
   loadAutomationMemoryPrompt,
@@ -48,6 +49,7 @@ const HISTORY_RECOVERY_LOOKBACK_MS = 1000 * 60 * 60 * 24 * 7;
 const HISTORY_RECOVERY_OVERLAP_MS = 1000 * 60 * 60;
 const AUTO_LABEL_RETRY_BASE_MS = 1000 * 60 * 5;
 const AUTO_LABEL_RETRY_MAX_MS = 1000 * 60 * 60 * 24;
+const AUTO_LABEL_BUDGET_RETRY_MS = 1000 * 60 * 60 * 6;
 const AUTO_LABEL_EXCLUDED_LABELS = new Set<string>([
   MAILBOX_LABELS.drafts,
   MAILBOX_LABELS.sent,
@@ -59,6 +61,7 @@ type AutoLabelContext = {
   availableLabelIds: Set<string>;
   labels: MailAutoLabelCandidate[];
   memoryProfile: string | null;
+  organizationId: string | null;
   userAiContext: string | null;
   userCorrectionContext: string | null;
 };
@@ -250,6 +253,18 @@ const isAutoLabelCandidate = (labelIds: string[] | undefined) =>
   !!labelIds?.includes(MAILBOX_LABELS.inbox) &&
   !labelIds.some((labelId) => AUTO_LABEL_EXCLUDED_LABELS.has(labelId));
 
+const deferAutoLabelAutomation = async (eventId: string, message: string) => {
+  const now = new Date();
+  await db
+    .update(gmailAutoLabelEvent)
+    .set({
+      lastError: message,
+      nextAttemptAt: new Date(now.getTime() + AUTO_LABEL_BUDGET_RETRY_MS),
+      updatedAt: now,
+    })
+    .where(eq(gmailAutoLabelEvent.id, eventId));
+};
+
 const processAutoLabelMessage = async ({
   accessToken,
   autoLabelContext,
@@ -332,6 +347,15 @@ const processAutoLabelMessage = async ({
           completionTokens += usage.completionTokens;
         },
       };
+      const budgetStatus = await getMailAutomationAiBudgetStatus({
+        organizationId: autoLabelContext.organizationId,
+        userId,
+      });
+      if (!budgetStatus.allowed) {
+        await deferAutoLabelAutomation(event.id, budgetStatus.message);
+        return;
+      }
+
       const labelIds = await classifyMailMessage({
         labels: autoLabelContext.labels,
         memoryProfile: autoLabelContext.memoryProfile,
@@ -605,10 +629,12 @@ const processHistoryRecoveryPage = async ({
 const processMailboxHistory = async ({
   mailboxId,
   maxHistoryPages,
+  organizationId,
   userId,
 }: {
   mailboxId: string;
   maxHistoryPages: number;
+  organizationId: string | null;
   userId: string;
 }) => {
   const leaseId = await claimMailboxProcessingLease(mailboxId);
@@ -657,6 +683,7 @@ const processMailboxHistory = async ({
                 agent: "auto_label",
                 mailboxId,
               }),
+              organizationId,
               userAiContext: await loadUserAiContextPrompt({ userId }),
               userCorrectionContext: await loadAutoLabelUserCorrectionPrompt(mailboxId),
             };
@@ -889,6 +916,7 @@ export const maintainGmailPubSubMailbox = async (input: {
     const result = await processMailboxHistory({
       mailboxId: gmailMailbox.id,
       maxHistoryPages: 2,
+      organizationId: gmailMailbox.organizationId,
       userId: gmailMailbox.ownerUserId,
     });
     return { status: result.busy ? ("busy" as const) : ("maintained" as const) };
@@ -988,6 +1016,7 @@ export const processGmailPubSubNotification = async (
   const result = await processMailboxHistory({
     mailboxId: gmailMailbox.id,
     maxHistoryPages: 5,
+    organizationId: gmailMailbox.organizationId,
     userId: gmailMailbox.ownerUserId,
   });
   if (!result.busy) {

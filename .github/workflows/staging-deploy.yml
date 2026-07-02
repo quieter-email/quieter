@@ -85,12 +85,15 @@ jobs:
 
           bunx vercel@${VERCEL_CLI_VERSION} pull --yes --environment=preview --git-branch=staging --token="${VERCEL_TOKEN}"
 
+      - name: Build Vercel config dependencies
+        run: bun run --cwd packages/env build
+
       - name: Build Vercel staging preview
         env:
           VERCEL_ORG_ID: ${{ vars.VERCEL_TEAM_ID || secrets.VERCEL_TEAM_ID || vars.VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || secrets.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: bunx vercel@${VERCEL_CLI_VERSION} build --token="${VERCEL_TOKEN}"
+        run: bunx vercel@${VERCEL_CLI_VERSION} build --target=preview --token="${VERCEL_TOKEN}"
 
       - name: Deploy Vercel staging preview
         env:
@@ -98,7 +101,7 @@ jobs:
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || secrets.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          bunx vercel@${VERCEL_CLI_VERSION} deploy --prebuilt --yes --token="${VERCEL_TOKEN}" \
+          bunx vercel@${VERCEL_CLI_VERSION} deploy --prebuilt --target=preview --yes --token="${VERCEL_TOKEN}" \
             --meta githubCommitSha="${GITHUB_SHA}" \
             --meta githubCommitRef="staging" \
             --meta quieterEnvironment="staging" > deployment-url.txt

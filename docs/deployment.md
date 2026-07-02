@@ -33,6 +33,26 @@ Configure Vercel preview env vars separately from production. At minimum staging
 credentials for features being tested. Leave production-only mail/live-sync variables unset unless a
 separate staging stack exists.
 
+Gmail AI automation is disabled outside Vercel production unless
+`QUIETER_GMAIL_AI_AUTOMATION_ENABLED=true` is set. Keep it unset or false for ordinary staging and
+preview deployments; enable it only for controlled tests with isolated provider keys and low
+provider-side spend caps.
+
+## Pull Request Previews
+
+`.github/workflows/vercel-pr-preview.yml` creates Vercel Preview deployments for trusted pull
+requests whose source branch is in this repository. The workflow pulls the Vercel Preview variables
+scoped to the `staging` branch so preview builds use the same isolated non-production service
+credentials as staging without copying them into generic Preview scope. Fork pull requests run
+normal checks but do not receive Vercel tokens or preview environment secrets, because arbitrary
+contributor code can exfiltrate any secret available during a build or runtime preview.
+
+The GitHub `preview` environment needs `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, and `VERCEL_TEAM_ID`
+or `VERCEL_ORG_ID`. Configure Vercel Preview environment variables with non-production values only.
+Do not put production databases, production OAuth clients, production mail credentials, production
+provider keys, or production billing tokens in the generic Preview environment. Branch-specific
+preview variables may be used for trusted long-lived branches such as `staging`.
+
 ## Database Credentials
 
 Production uses separate roles:
