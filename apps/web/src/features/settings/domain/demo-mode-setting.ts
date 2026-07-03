@@ -1,13 +1,15 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { clientEnv } from "~/env";
 
 const DEMO_MODE_STORAGE_KEY = "quieter:demo-mode-enabled";
 const DEMO_MODE_CHANGE_EVENT = "quieter:demo-mode-enabled-change";
 const MANAGED_DEMO_MODE_STORAGE_KEY = "quieter:managed-demo-mode-enabled";
 const MANAGED_DEMO_MODE_CHANGE_EVENT = "quieter:managed-demo-mode-enabled-change";
 
-export const isDemoModeAvailable = () => import.meta.env.DEV;
+export const isDemoModeAvailable = () =>
+  import.meta.env.DEV || clientEnv.VITE_QUIETER_PREVIEW_PERSONAS_ENABLED === "true";
 
 const readDemoModeEnabled = () => {
   if (!isDemoModeAvailable() || typeof window === "undefined") return false;

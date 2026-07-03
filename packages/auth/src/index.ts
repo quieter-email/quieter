@@ -54,8 +54,13 @@ const baseURL =
   serverEnv.BETTER_AUTH_URL ||
   (serverEnv.VERCEL_URL && `https://${serverEnv.VERCEL_URL}`) ||
   "http://localhost:3000";
+const previewTrustedOrigins =
+  serverEnv.VERCEL_ENV === "preview" || serverEnv.QUIETER_PREVIEW_PERSONAS_ENABLED === true
+    ? ["https://*.preview.quieter.email"]
+    : [];
 const trustedOrigins = [
   baseURL,
+  ...previewTrustedOrigins,
   ...(serverEnv.BETTER_AUTH_TRUSTED_ORIGINS?.split(",")
     .map((origin) => origin.trim())
     .filter(Boolean) ?? []),

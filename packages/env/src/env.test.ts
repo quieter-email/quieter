@@ -36,11 +36,13 @@ describe("server environment", () => {
     const env = createServerEnv({
       NODE_ENV: "test",
       POLAR_SANDBOX: "yes",
+      QUIETER_PREVIEW_PERSONAS_ENABLED: "true",
       QUIETER_AUTH_MAIL_SENDER: "",
     });
 
     expect(env.NODE_ENV).toBe("test");
     expect(env.POLAR_SANDBOX).toBe(true);
+    expect(env.QUIETER_PREVIEW_PERSONAS_ENABLED).toBe(true);
     expect(env.QUIETER_GMAIL_AI_AUTOMATION_ENABLED).toBeUndefined();
     expect(env.QUIETER_AUTH_MAIL_MODE).toBe("api");
     expect(env.QUIETER_AUTH_MAIL_SENDER).toBe("auth@quieter.email");
@@ -79,6 +81,13 @@ describe("web client environment", () => {
     const env = createWebClientEnv({});
 
     expect(env.VITE_PUBLIC_POSTHOG_HOST).toBe("https://eu.i.posthog.com");
+    expect(env.VITE_QUIETER_PREVIEW_PERSONAS_ENABLED).toBe("false");
+  });
+
+  test("accepts preview personas flag", () => {
+    const env = createWebClientEnv({ VITE_QUIETER_PREVIEW_PERSONAS_ENABLED: "true" });
+
+    expect(env.VITE_QUIETER_PREVIEW_PERSONAS_ENABLED).toBe("true");
   });
 
   test("rejects non-HTTP public service URLs", () => {
@@ -191,7 +200,7 @@ describe("deployment environment", () => {
   test("accepts preview deployment waits", () => {
     const env = createDeploymentEnv({
       VERCEL_DEPLOY_HOOK_URL: "https://example.com/deploy",
-      VERCEL_DEPLOYMENT_GIT_REF: "staging",
+      VERCEL_DEPLOYMENT_GIT_REF: "feature/pr-preview",
       VERCEL_DEPLOYMENT_TARGET: "preview",
       VERCEL_PROJECT_ID: "project",
       VERCEL_TEAM_ID: "team",
@@ -199,6 +208,6 @@ describe("deployment environment", () => {
     });
 
     expect(env.VERCEL_DEPLOYMENT_TARGET).toBe("preview");
-    expect(env.VERCEL_DEPLOYMENT_GIT_REF).toBe("staging");
+    expect(env.VERCEL_DEPLOYMENT_GIT_REF).toBe("feature/pr-preview");
   });
 });

@@ -9,10 +9,6 @@ const remoteMigrationTargets = {
     protectedRef: true,
     ref: "refs/heads/main",
   },
-  staging: {
-    protectedRef: false,
-    ref: "refs/heads/staging",
-  },
 } as const;
 
 const getHostname = (url: URL) => url.hostname.replace(/^\[(.*)\]$/, "$1");
@@ -97,9 +93,8 @@ export const assertMigrationExecutionAllowed = (
   }
 
   const target =
-    environment.QUIETER_ALLOW_REMOTE_MIGRATIONS === "production" ||
-    environment.QUIETER_ALLOW_REMOTE_MIGRATIONS === "staging"
-      ? remoteMigrationTargets[environment.QUIETER_ALLOW_REMOTE_MIGRATIONS]
+    environment.QUIETER_ALLOW_REMOTE_MIGRATIONS === "production"
+      ? remoteMigrationTargets.production
       : null;
   const isApprovedRemoteMigrationJob =
     target !== null &&

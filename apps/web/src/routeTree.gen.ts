@@ -20,6 +20,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
 import { Route as ApiSitePasswordRouteImport } from './routes/api/site-password'
+import { Route as ApiPreviewPersonaRouteImport } from './routes/api/preview-persona'
 import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
 import { Route as ApiV1SendRouteImport } from './routes/api/v1/send'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
@@ -84,6 +85,11 @@ const ApiSitePasswordRoute = ApiSitePasswordRouteImport.update({
   path: '/api/site-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPreviewPersonaRoute = ApiPreviewPersonaRouteImport.update({
+  id: '/api/preview-persona',
+  path: '/api/preview-persona',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiOpenapiRoute = ApiOpenapiRouteImport.update({
   id: '/api/openapi',
   path: '/api/openapi',
@@ -137,6 +143,7 @@ export interface FileRoutesByFullPath {
   '/site-password': typeof SitePasswordRoute
   '/terms': typeof TermsRoute
   '/api/openapi': typeof ApiOpenapiRoute
+  '/api/preview-persona': typeof ApiPreviewPersonaRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -158,6 +165,7 @@ export interface FileRoutesByTo {
   '/site-password': typeof SitePasswordRoute
   '/terms': typeof TermsRoute
   '/api/openapi': typeof ApiOpenapiRoute
+  '/api/preview-persona': typeof ApiPreviewPersonaRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -180,6 +188,7 @@ export interface FileRoutesById {
   '/site-password': typeof SitePasswordRoute
   '/terms': typeof TermsRoute
   '/api/openapi': typeof ApiOpenapiRoute
+  '/api/preview-persona': typeof ApiPreviewPersonaRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -203,6 +212,7 @@ export interface FileRouteTypes {
     | '/site-password'
     | '/terms'
     | '/api/openapi'
+    | '/api/preview-persona'
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
@@ -224,6 +234,7 @@ export interface FileRouteTypes {
     | '/site-password'
     | '/terms'
     | '/api/openapi'
+    | '/api/preview-persona'
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
@@ -245,6 +256,7 @@ export interface FileRouteTypes {
     | '/site-password'
     | '/terms'
     | '/api/openapi'
+    | '/api/preview-persona'
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
@@ -267,6 +279,7 @@ export interface RootRouteChildren {
   SitePasswordRoute: typeof SitePasswordRoute
   TermsRoute: typeof TermsRoute
   ApiOpenapiRoute: typeof ApiOpenapiRoute
+  ApiPreviewPersonaRoute: typeof ApiPreviewPersonaRoute
   ApiSitePasswordRoute: typeof ApiSitePasswordRoute
   ApiWaitlistRoute: typeof ApiWaitlistRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -357,6 +370,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSitePasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/preview-persona': {
+      id: '/api/preview-persona'
+      path: '/api/preview-persona'
+      fullPath: '/api/preview-persona'
+      preLoaderRoute: typeof ApiPreviewPersonaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/openapi': {
       id: '/api/openapi'
       path: '/api/openapi'
@@ -427,6 +447,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitePasswordRoute: SitePasswordRoute,
   TermsRoute: TermsRoute,
   ApiOpenapiRoute: ApiOpenapiRoute,
+  ApiPreviewPersonaRoute: ApiPreviewPersonaRoute,
   ApiSitePasswordRoute: ApiSitePasswordRoute,
   ApiWaitlistRoute: ApiWaitlistRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

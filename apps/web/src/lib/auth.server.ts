@@ -1,5 +1,6 @@
 import "@tanstack/react-start/server-only";
 import { getSessionWithOrganization } from "@quieter/auth";
+import { getPreviewPersonaUser } from "./preview-personas.server";
 
 type SessionUser = {
   email: string;
@@ -13,7 +14,7 @@ export const getSessionUserForRequest = async (request: Request): Promise<Sessio
   const session = await getSessionWithOrganization(new Headers(request.headers));
 
   if (!session?.user) {
-    return null;
+    return getPreviewPersonaUser(request);
   }
 
   return {

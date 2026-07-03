@@ -54,7 +54,7 @@ const triggerDeployHook = () => {
     );
   }
 
-  console.log("Vercel deploy hook accepted the staging request.");
+  console.log(`Vercel deploy hook accepted the ${target} request.`);
 };
 
 triggerDeployHook();
