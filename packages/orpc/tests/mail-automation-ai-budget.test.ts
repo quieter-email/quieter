@@ -36,6 +36,60 @@ describe("mail automation AI budget", () => {
     });
   });
 
+  test("distinguishes missing organization from plan ineligibility", () => {
+    expect(
+      resolveMailAutomationAiBudgetStatus({
+        hasAccess: false,
+        hasAccount: false,
+        hasUnlimitedAccess: false,
+        missingOrganization: true,
+        runtimeEnabled: true,
+      }),
+    ).toMatchObject({
+      allowed: false,
+      reason: "missing_organization",
+    });
+
+    expect(
+      resolveMailAutomationAiBudgetStatus({
+        hasAccess: false,
+        hasAccount: true,
+        hasUnlimitedAccess: false,
+        runtimeEnabled: true,
+        usage: { costMicroCents: 0, creditAmountMicroCents: 1 },
+      }),
+    ).toMatchObject({
+      allowed: false,
+      reason: "plan_ineligible",
+    });
+  });
+
+  test("denies automation when billing usage cannot be resolved", () => {
+    expect(
+      resolveMailAutomationAiBudgetStatus({
+        hasAccess: true,
+        hasAccount: false,
+        hasUnlimitedAccess: false,
+        runtimeEnabled: true,
+      }),
+    ).toMatchObject({
+      allowed: false,
+      reason: "billing_usage_unavailable",
+    });
+
+    expect(
+      resolveMailAutomationAiBudgetStatus({
+        hasAccess: true,
+        hasAccount: true,
+        hasUnlimitedAccess: false,
+        runtimeEnabled: true,
+      }),
+    ).toMatchObject({
+      allowed: false,
+      reason: "billing_usage_unavailable",
+    });
+  });
+
   test("allows automation while credits remain or access is unlimited", () => {
     expect(
       resolveMailAutomationAiBudgetStatus({

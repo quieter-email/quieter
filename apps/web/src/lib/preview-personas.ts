@@ -2,17 +2,23 @@
 
 import { useSyncExternalStore } from "react";
 import { clientEnv } from "~/env";
+import {
+  isPreviewPersona,
+  previewPersonaCookieMaxAgeMs,
+  previewPersonaCookieName,
+  previewPersonas,
+  type PreviewPersona,
+} from "./preview-personas.shared";
 
-export const previewPersonaCookieName = "quieter_preview_persona";
-export const previewPersonas = ["gmail", "managed", "empty"] as const;
-
-export type PreviewPersona = (typeof previewPersonas)[number];
+export { isPreviewPersona, previewPersonaCookieName, previewPersonas, type PreviewPersona };
 
 const PREVIEW_PERSONA_STORAGE_KEY = "quieter:preview-persona";
 const PREVIEW_PERSONA_CHANGE_EVENT = "quieter:preview-persona-change";
 
-export const isPreviewPersona = (value: unknown): value is PreviewPersona =>
-  typeof value === "string" && previewPersonas.includes(value as PreviewPersona);
+type StoredPreviewPersona = {
+  expiresAt: number;
+  persona: PreviewPersona;
+};
 
 export const isPreviewPersonasAvailable = () =>
   import.meta.env.DEV || clientEnv.VITE_QUIETER_PREVIEW_PERSONAS_ENABLED === "true";
@@ -21,7 +27,22 @@ const readPreviewPersona = () => {
   if (!isPreviewPersonasAvailable() || typeof window === "undefined") return null;
 
   const value = window.localStorage.getItem(PREVIEW_PERSONA_STORAGE_KEY);
-  return isPreviewPersona(value) ? value : null;
+  if (!value) return null;
+
+  try {
+    const stored = JSON.parse(value) as Partial<StoredPreviewPersona>;
+    if (isPreviewPersona(stored.persona) && typeof stored.expiresAt === "number") {
+      if (stored.expiresAt > Date.now()) return stored.persona;
+    }
+  } catch {
+    if (isPreviewPersona(value)) {
+      window.localStorage.removeItem(PREVIEW_PERSONA_STORAGE_KEY);
+      return null;
+    }
+  }
+
+  window.localStorage.removeItem(PREVIEW_PERSONA_STORAGE_KEY);
+  return null;
 };
 
 const subscribeToPreviewPersona = (callback: () => void) => {
@@ -42,7 +63,10 @@ export const setPreviewPersona = (persona: PreviewPersona | null) => {
   if (!isPreviewPersonasAvailable()) return;
 
   if (persona) {
-    window.localStorage.setItem(PREVIEW_PERSONA_STORAGE_KEY, persona);
+    window.localStorage.setItem(
+      PREVIEW_PERSONA_STORAGE_KEY,
+      JSON.stringify({ expiresAt: Date.now() + previewPersonaCookieMaxAgeMs, persona }),
+    );
   } else {
     window.localStorage.removeItem(PREVIEW_PERSONA_STORAGE_KEY);
   }

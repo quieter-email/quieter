@@ -843,11 +843,13 @@ export const processGmailUsefulDetailMessage = async ({
   gmailMessageId,
   loadMessage,
   mailboxId,
+  organizationId,
   userId,
 }: {
   gmailMessageId: string;
   loadMessage: () => Promise<AutomationMailMessage | null>;
   mailboxId: string;
+  organizationId?: string | null;
   userId: string;
 }) => {
   let event = await getOrCreateEvent(mailboxId, gmailMessageId);
@@ -907,7 +909,7 @@ export const processGmailUsefulDetailMessage = async ({
     }
 
     const budgetStatus = await getMailAutomationAiBudgetStatus({
-      organizationId: await getMailboxOrganizationId(mailboxId),
+      organizationId: organizationId ?? (await getMailboxOrganizationId(mailboxId)),
       userId,
     });
     if (!budgetStatus.allowed) {

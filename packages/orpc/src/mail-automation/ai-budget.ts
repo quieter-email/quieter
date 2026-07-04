@@ -14,6 +14,7 @@ export const resolveMailAutomationAiBudgetStatus = (input: {
   hasAccess: boolean;
   hasAccount: boolean;
   hasUnlimitedAccess: boolean;
+  missingOrganization?: boolean;
   runtimeEnabled: boolean;
   usage?: { costMicroCents: number; creditAmountMicroCents: number };
 }) => {
@@ -22,6 +23,14 @@ export const resolveMailAutomationAiBudgetStatus = (input: {
       allowed: false,
       message: "AI automation is disabled in this environment.",
       reason: "environment_disabled",
+    } as const;
+  }
+
+  if (input.missingOrganization) {
+    return {
+      allowed: false,
+      message: "AI automation requires a mailbox assigned to a team.",
+      reason: "missing_organization",
     } as const;
   }
 
@@ -40,8 +49,8 @@ export const resolveMailAutomationAiBudgetStatus = (input: {
   if (!input.hasAccount || !input.usage) {
     return {
       allowed: false,
-      message: `Gmail automation requires ${BILLING_FEATURES.gmailAutomation.requirementLabel}.`,
-      reason: "plan_ineligible",
+      message: "AI automation is unavailable until team billing usage is available.",
+      reason: "billing_usage_unavailable",
     } as const;
   }
 
@@ -61,11 +70,20 @@ export const getMailAutomationAiBudgetStatus = async (input: {
   userId: string;
 }) => {
   const runtimeEnabled = mailAutomationAiRuntimeEnabled();
-  if (!runtimeEnabled || !input.organizationId) {
+  if (!runtimeEnabled) {
     return resolveMailAutomationAiBudgetStatus({
       hasAccess: false,
       hasAccount: false,
       hasUnlimitedAccess: false,
+      runtimeEnabled,
+    });
+  }
+  if (!input.organizationId) {
+    return resolveMailAutomationAiBudgetStatus({
+      hasAccess: false,
+      hasAccount: false,
+      hasUnlimitedAccess: false,
+      missingOrganization: true,
       runtimeEnabled,
     });
   }

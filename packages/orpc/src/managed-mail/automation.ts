@@ -26,6 +26,7 @@ import {
   reportPendingGmailUsefulDetailUsage,
 } from "../gmail-useful-details/service";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
+import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
 import {
   loadAutoLabelUserCorrectionPrompt,
   loadAutomationMemoryPrompt,
@@ -35,7 +36,6 @@ import { updateManagedMessageLabelAssignments } from "./labels/repository";
 
 const AUTO_LABEL_RETRY_BASE_MS = 1000 * 60 * 5;
 const AUTO_LABEL_RETRY_MAX_MS = 1000 * 60 * 60 * 24;
-const AUTO_LABEL_BUDGET_RETRY_MS = 1000 * 60 * 60 * 6;
 
 type ManagedAutoLabelContext = {
   availableLabelIds: Set<string>;
@@ -183,18 +183,6 @@ const markManagedAutoLabelEventAppliedWithoutUsage = async (eventId: string) => 
     .where(eq(gmailAutoLabelEvent.id, eventId));
 };
 
-const deferManagedAutoLabelAutomation = async (eventId: string, message: string) => {
-  const now = new Date();
-  await db
-    .update(gmailAutoLabelEvent)
-    .set({
-      lastError: message,
-      nextAttemptAt: new Date(now.getTime() + AUTO_LABEL_BUDGET_RETRY_MS),
-      updatedAt: now,
-    })
-    .where(eq(gmailAutoLabelEvent.id, eventId));
-};
-
 const reportManagedAutoLabelUsage = async (event: {
   completionTokens: number | null;
   id: string;
@@ -282,7 +270,7 @@ const processManagedAutoLabelMessage = async (input: {
         userId: input.userId,
       });
       if (!budgetStatus.allowed) {
-        await deferManagedAutoLabelAutomation(event.id, budgetStatus.message);
+        await deferAutoLabelAutomation(event.id, budgetStatus.message);
         return;
       }
 
@@ -438,6 +426,7 @@ const processManagedAutomationMessageIds = async (input: {
             gmailMessageId: messageId,
             loadMessage,
             mailboxId: input.mailboxId,
+            organizationId: input.organizationId,
             userId: input.userId,
           })
         : Promise.resolve(),

@@ -36,6 +36,7 @@ import {
   reportPendingGmailUsefulDetailUsage,
 } from "../gmail-useful-details/service";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
+import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
 import {
   loadAutoLabelUserCorrectionPrompt,
   loadAutomationMemoryPrompt,
@@ -49,7 +50,6 @@ const HISTORY_RECOVERY_LOOKBACK_MS = 1000 * 60 * 60 * 24 * 7;
 const HISTORY_RECOVERY_OVERLAP_MS = 1000 * 60 * 60;
 const AUTO_LABEL_RETRY_BASE_MS = 1000 * 60 * 5;
 const AUTO_LABEL_RETRY_MAX_MS = 1000 * 60 * 60 * 24;
-const AUTO_LABEL_BUDGET_RETRY_MS = 1000 * 60 * 60 * 6;
 const AUTO_LABEL_EXCLUDED_LABELS = new Set<string>([
   MAILBOX_LABELS.drafts,
   MAILBOX_LABELS.sent,
@@ -253,18 +253,6 @@ const isAutoLabelCandidate = (labelIds: string[] | undefined) =>
   !!labelIds?.includes(MAILBOX_LABELS.inbox) &&
   !labelIds.some((labelId) => AUTO_LABEL_EXCLUDED_LABELS.has(labelId));
 
-const deferAutoLabelAutomation = async (eventId: string, message: string) => {
-  const now = new Date();
-  await db
-    .update(gmailAutoLabelEvent)
-    .set({
-      lastError: message,
-      nextAttemptAt: new Date(now.getTime() + AUTO_LABEL_BUDGET_RETRY_MS),
-      updatedAt: now,
-    })
-    .where(eq(gmailAutoLabelEvent.id, eventId));
-};
-
 const processAutoLabelMessage = async ({
   accessToken,
   autoLabelContext,
@@ -433,6 +421,7 @@ const processMessageIds = async ({
   getAutoLabelContext,
   mailboxId,
   messageIds,
+  organizationId,
   usefulDetailsEnabled,
   userId,
 }: {
@@ -441,6 +430,7 @@ const processMessageIds = async ({
   getAutoLabelContext: () => Promise<AutoLabelContext>;
   mailboxId: string;
   messageIds: string[];
+  organizationId: string | null;
   usefulDetailsEnabled: boolean;
   userId: string;
 }) => {
@@ -480,6 +470,7 @@ const processMessageIds = async ({
             gmailMessageId: messageId,
             loadMessage,
             mailboxId,
+            organizationId,
             userId,
           })
         : Promise.resolve(),
@@ -492,6 +483,7 @@ const retryPendingAutomationMessages = async ({
   autoLabelEnabled,
   getAutoLabelContext,
   mailboxId,
+  organizationId,
   usefulDetailsEnabled,
   userId,
 }: {
@@ -499,6 +491,7 @@ const retryPendingAutomationMessages = async ({
   autoLabelEnabled: boolean;
   getAutoLabelContext: () => Promise<AutoLabelContext>;
   mailboxId: string;
+  organizationId: string | null;
   usefulDetailsEnabled: boolean;
   userId: string;
 }) => {
@@ -535,6 +528,7 @@ const retryPendingAutomationMessages = async ({
     messageIds: Array.from(
       new Set([...autoLabelEvents.map((event) => event.gmailMessageId), ...usefulDetailMessageIds]),
     ),
+    organizationId,
     usefulDetailsEnabled,
     userId,
   });
@@ -573,6 +567,7 @@ const processHistoryRecoveryPage = async ({
   autoLabelEnabled,
   getAutoLabelContext,
   mailboxId,
+  organizationId,
   usefulDetailsEnabled,
   userId,
 }: {
@@ -580,6 +575,7 @@ const processHistoryRecoveryPage = async ({
   autoLabelEnabled: boolean;
   getAutoLabelContext: () => Promise<AutoLabelContext>;
   mailboxId: string;
+  organizationId: string | null;
   usefulDetailsEnabled: boolean;
   userId: string;
 }) => {
@@ -611,6 +607,7 @@ const processHistoryRecoveryPage = async ({
     getAutoLabelContext,
     mailboxId,
     messageIds: page.messageIds,
+    organizationId,
     usefulDetailsEnabled,
     userId,
   });
@@ -722,6 +719,7 @@ const processMailboxHistory = async ({
           getAutoLabelContext,
           mailboxId,
           messageIds: page.messageIds,
+          organizationId,
           usefulDetailsEnabled,
           userId,
         });
@@ -749,6 +747,7 @@ const processMailboxHistory = async ({
         autoLabelEnabled,
         getAutoLabelContext,
         mailboxId,
+        organizationId,
         usefulDetailsEnabled,
         userId,
       });
@@ -757,6 +756,7 @@ const processMailboxHistory = async ({
         autoLabelEnabled,
         getAutoLabelContext,
         mailboxId,
+        organizationId,
         usefulDetailsEnabled,
         userId,
       });

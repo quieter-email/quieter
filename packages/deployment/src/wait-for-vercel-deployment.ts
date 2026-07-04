@@ -84,7 +84,6 @@ while (Date.now() < deadline) {
       readyState?: string;
       state?: string;
       meta?: {
-        deployHookRef?: string;
         githubCommitRef?: string;
       };
       uid: string;
@@ -95,9 +94,7 @@ while (Date.now() < deadline) {
     (candidate) =>
       candidate.created >= triggeredAt - 5_000 &&
       (!deploymentId || candidate.uid === deploymentId) &&
-      (!gitRef ||
-        candidate.meta?.deployHookRef === gitRef ||
-        candidate.meta?.githubCommitRef === gitRef),
+      (!gitRef || candidate.meta?.githubCommitRef === gitRef),
   );
 
   if (deployment) {

@@ -1,10 +1,13 @@
 import "@tanstack/react-start/server-only";
 import { serverEnv } from "@quieter/env/server";
+import {
+  isPreviewPersona,
+  previewPersonaCookieName,
+  previewPersonas,
+  type PreviewPersona,
+} from "./preview-personas.shared";
 
-export const previewPersonaCookieName = "quieter_preview_persona";
-export const previewPersonas = ["gmail", "managed", "empty"] as const;
-
-export type PreviewPersona = (typeof previewPersonas)[number];
+export { isPreviewPersona, previewPersonaCookieName, previewPersonas, type PreviewPersona };
 
 type PreviewSessionUser = {
   email: string;
@@ -37,9 +40,6 @@ const previewPersonaUsers: Record<PreviewPersona, PreviewSessionUser> = {
     name: "Managed Mail Preview",
   },
 };
-
-export const isPreviewPersona = (value: unknown): value is PreviewPersona =>
-  typeof value === "string" && previewPersonas.includes(value as PreviewPersona);
 
 export const isPreviewPersonasEnabled = () =>
   serverEnv.NODE_ENV === "development" || serverEnv.QUIETER_PREVIEW_PERSONAS_ENABLED === true;

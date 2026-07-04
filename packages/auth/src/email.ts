@@ -60,7 +60,7 @@ export const sendAuthMail = async (input: AuthMailInput) => {
       [
         `Auth email for ${input.to}: ${input.subject}`,
         input.text,
-        "Set QUIETER_AUTH_MAIL_MODE=api to send through the configured mail API.",
+        "Set QUIETER_MAIL_API_KEY to send through the configured mail API.",
       ].join("\n\n"),
     );
     return;

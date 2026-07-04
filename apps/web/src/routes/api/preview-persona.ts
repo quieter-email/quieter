@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { isPreviewPersonasEnabled } from "~/lib/preview-personas.server";
 import {
   isPreviewPersona,
-  isPreviewPersonasEnabled,
+  previewPersonaCookieMaxAgeSeconds,
   previewPersonaCookieName,
-} from "~/lib/preview-personas.server";
+} from "~/lib/preview-personas.shared";
 
 export const Route = createFileRoute("/api/preview-persona")({
   server: {
@@ -42,7 +43,7 @@ const serializePreviewPersonaCookie = (persona: string, requestUrl: string) => {
     "Path=/",
     "HttpOnly",
     "SameSite=Lax",
-    "Max-Age=604800",
+    `Max-Age=${previewPersonaCookieMaxAgeSeconds}`,
     secureCookie,
   ]
     .filter(Boolean)
