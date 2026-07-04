@@ -279,6 +279,14 @@ export const syncMessages = async (
     syncDelta.historyId,
   );
 
+  if (syncDelta.refreshFirstPage) {
+    return await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox, searchQuery, {
+      maxPageCount: 1,
+      preserveUnrefreshedPages: true,
+      signal,
+    });
+  }
+
   return (
     queryClient.getQueryData<MessagesQueryData>(messagesQueryKey)?.pages[0] ??
     currentMessages.pages[0]

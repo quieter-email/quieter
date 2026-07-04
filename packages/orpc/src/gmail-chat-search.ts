@@ -314,6 +314,7 @@ export const getMailboxOverviewForUser = async (
         getGmailMessageCount(accessToken, {
           mailbox: input.category,
           accurateUpTo: 200,
+          countBy: "threads",
           query: getUnreadOverviewQuery(input.category),
           signal: input.signal,
         }),

@@ -851,34 +851,48 @@ export const getGmailMessageCount = async (
   accessToken: string,
   options?: {
     accurateUpTo?: number;
+    countBy?: "messages" | "threads";
     mailbox?: MailboxCategory;
     query?: string;
     signal?: AbortSignal;
   },
 ) => {
   if (options?.accurateUpTo !== undefined) {
-    const { accurateUpTo, ...listOptions } = options;
+    const { accurateUpTo, countBy = "messages", ...listOptions } = options;
     const countLimit = Math.max(0, Math.floor(accurateUpTo));
-    let count = 0;
+    const threadIds = new Set<string>();
+    let messageCount = 0;
     let pageToken: string | undefined;
     let resultSizeEstimate = 0;
+    const getCount = () => (countBy === "threads" ? threadIds.size : messageCount);
 
     do {
+      const count = getCount();
       const result = await listMessages(accessToken, {
         ...listOptions,
-        maxResults: Math.min(500, Math.max(1, countLimit + 1 - count)),
+        maxResults:
+          countBy === "threads"
+            ? Math.min(500, Math.max(1, countLimit + 1))
+            : Math.min(500, Math.max(1, countLimit + 1 - count)),
         pageToken,
       });
       resultSizeEstimate = Math.max(resultSizeEstimate, result.resultSizeEstimate ?? 0);
-      count += result.messages.length;
+      messageCount += result.messages.length;
+      for (const message of result.messages) {
+        threadIds.add(message.threadId);
+      }
       pageToken = result.nextPageToken;
-    } while (pageToken && count <= countLimit);
+    } while (pageToken && getCount() <= countLimit);
 
+    const count = getCount();
+    if (countBy === "threads") return count;
     return pageToken ? Math.max(resultSizeEstimate, count) : count;
   }
 
   const result = await listMessages(accessToken, {
-    ...options,
+    mailbox: options?.mailbox,
+    query: options?.query,
+    signal: options?.signal,
     maxResults: 1,
   });
 
