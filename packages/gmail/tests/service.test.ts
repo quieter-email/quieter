@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
   extractListUnsubscribeTargets,
   getGmailMessageCount,
+  listGmailMessageIds,
   listGmailAddedMessageHistoryPage,
+  listMessagesWithDetails,
   refreshMailboxMessages,
   stopGmailWatch,
   watchGmailMailbox,
@@ -200,6 +202,105 @@ describe("getGmailMessageCount", () => {
           query: "-in:spam -in:trash",
         }),
       ).toBe(2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("listGmailMessageIds", () => {
+  test("excludes spam and trash from the unread mailbox query", async () => {
+    const originalFetch = globalThis.fetch;
+    let requestedUrl = "";
+
+    globalThis.fetch = async (input) => {
+      requestedUrl = String(input);
+      return Response.json({
+        messages: [],
+      });
+    };
+
+    try {
+      await listGmailMessageIds("token", { mailbox: "unread" });
+
+      const searchParams = new URL(requestedUrl).searchParams;
+      expect(searchParams.get("labelIds")).toBe("UNREAD");
+      expect(searchParams.get("q")).toBe("-in:spam -in:trash");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("listMessagesWithDetails", () => {
+  test("filters spam and trash out of unread mailbox details", async () => {
+    const originalFetch = globalThis.fetch;
+
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      if (url.includes("/gmail/v1/users/me/messages") && !url.includes("/batch/")) {
+        return Response.json({
+          messages: [
+            { id: "message-spam", threadId: "thread-spam" },
+            { id: "message-trash", threadId: "thread-trash" },
+            { id: "message-active", threadId: "thread-active" },
+          ],
+          resultSizeEstimate: 3,
+        });
+      }
+
+      if (String(init?.body).includes("/gmail/v1/users/me/messages/")) {
+        return new Response(
+          createBatchResponse("message_boundary", [
+            {
+              id: "message-spam",
+              threadId: "thread-spam",
+              historyId: "10",
+              labelIds: ["UNREAD", "SPAM"],
+              payload: { headers: [{ name: "Subject", value: "Spam" }] },
+            },
+            {
+              id: "message-trash",
+              threadId: "thread-trash",
+              historyId: "10",
+              labelIds: ["UNREAD", "TRASH"],
+              payload: { headers: [{ name: "Subject", value: "Trash" }] },
+            },
+            {
+              id: "message-active",
+              threadId: "thread-active",
+              historyId: "10",
+              labelIds: ["UNREAD"],
+              payload: { headers: [{ name: "Subject", value: "Active" }] },
+            },
+          ]),
+          {
+            headers: {
+              "content-type": "multipart/mixed; boundary=message_boundary",
+            },
+          },
+        );
+      }
+
+      return new Response(
+        createBatchResponse("thread_boundary", [
+          {
+            id: "thread-active",
+            messages: [{ id: "message-active", threadId: "thread-active" }],
+          },
+        ]),
+        {
+          headers: {
+            "content-type": "multipart/mixed; boundary=thread_boundary",
+          },
+        },
+      );
+    };
+
+    try {
+      const result = await listMessagesWithDetails("token", { mailbox: "unread" });
+
+      expect(result.messages.map((message) => message.id)).toEqual(["message-active"]);
     } finally {
       globalThis.fetch = originalFetch;
     }
