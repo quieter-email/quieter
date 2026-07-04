@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
-import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { authClient } from "~/lib/auth";
@@ -159,10 +159,7 @@ export const MemberActions = ({
                   <TooltipTrigger className="block" render={<div />}>
                     {item}
                   </TooltipTrigger>
-                  <TooltipContent side="left">
-                    {getRoleDisabledReason(role)}
-                    <TooltipArrow />
-                  </TooltipContent>
+                  <TooltipContent side="left">{getRoleDisabledReason(role)}</TooltipContent>
                 </Tooltip>
               ) : (
                 <div key={role}>{item}</div>
@@ -176,10 +173,7 @@ export const MemberActions = ({
                     Remove
                   </DropdownMenuItem>
                 </TooltipTrigger>
-                <TooltipContent side="left">
-                  {unavailableReason}
-                  <TooltipArrow />
-                </TooltipContent>
+                <TooltipContent side="left">{unavailableReason}</TooltipContent>
               </Tooltip>
             ) : (
               <DropdownMenuItem

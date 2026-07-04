@@ -14,7 +14,7 @@ import {
 import { Progress, ProgressIndicator, ProgressTrack } from "@quieter/ui/progress";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { toast } from "@quieter/ui/toast";
-import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
@@ -183,7 +183,6 @@ const UsageBreakdown = ({
                     </span>
                   </div>
                   <p className="mt-0.5 text-muted-foreground">{percentage}% of usage</p>
-                  <TooltipArrow />
                 </TooltipContent>
               </Tooltip>,
             ];
