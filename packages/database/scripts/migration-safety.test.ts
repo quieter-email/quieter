@@ -73,6 +73,13 @@ describe("migration execution boundary", () => {
     GITHUB_REPOSITORY: "quieter-email/quieter",
     QUIETER_ALLOW_REMOTE_MIGRATIONS: "production",
   };
+  const approvedStagingEnvironment = {
+    CI: "true",
+    GITHUB_ACTIONS: "true",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_REPOSITORY: "quieter-email/quieter",
+    QUIETER_ALLOW_REMOTE_MIGRATIONS: "staging",
+  };
 
   test("allows local migrations without CI", () => {
     expect(() =>
@@ -89,6 +96,12 @@ describe("migration execution boundary", () => {
   test("allows remote migrations only in the approved production job", () => {
     expect(() =>
       assertMigrationExecutionAllowed(remoteDatabaseUrl, approvedProductionEnvironment),
+    ).not.toThrow();
+  });
+
+  test("allows remote migrations in the staging deployment job", () => {
+    expect(() =>
+      assertMigrationExecutionAllowed(remoteDatabaseUrl, approvedStagingEnvironment),
     ).not.toThrow();
   });
 
@@ -113,6 +126,15 @@ describe("migration execution boundary", () => {
     expect(() => assertMigrationExecutionAllowed(remoteDatabaseUrl, environment)).toThrow(
       "approved GitHub Actions deployment jobs",
     );
+  });
+
+  test("rejects staging migrations from non-main branches", () => {
+    expect(() =>
+      assertMigrationExecutionAllowed(remoteDatabaseUrl, {
+        ...approvedStagingEnvironment,
+        GITHUB_REF: "refs/heads/feature",
+      }),
+    ).toThrow("approved GitHub Actions deployment jobs");
   });
 });
 

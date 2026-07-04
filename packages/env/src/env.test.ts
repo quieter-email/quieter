@@ -200,7 +200,7 @@ describe("deployment environment", () => {
   test("accepts preview deployment waits", () => {
     const env = createDeploymentEnv({
       VERCEL_DEPLOY_HOOK_URL: "https://example.com/deploy",
-      VERCEL_DEPLOYMENT_GIT_REF: "feature/pr-preview",
+      VERCEL_DEPLOYMENT_GIT_REF: "main",
       VERCEL_DEPLOYMENT_TARGET: "preview",
       VERCEL_PROJECT_ID: "project",
       VERCEL_TEAM_ID: "team",
@@ -208,6 +208,6 @@ describe("deployment environment", () => {
     });
 
     expect(env.VERCEL_DEPLOYMENT_TARGET).toBe("preview");
-    expect(env.VERCEL_DEPLOYMENT_GIT_REF).toBe("feature/pr-preview");
+    expect(env.VERCEL_DEPLOYMENT_GIT_REF).toBe("main");
   });
 });
