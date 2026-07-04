@@ -116,6 +116,10 @@ const THREAD_MESSAGE_BODY_LIMIT = 2_000;
 const MESSAGE_BODY_LIMIT = 8_000;
 const GMAIL_STARRED_LABEL = "STARRED";
 const GMAIL_INBOX_LABEL = "INBOX";
+const GMAIL_NON_SPAM_TRASH_UNREAD_QUERY = "is:unread -in:spam -in:trash";
+
+const getUnreadOverviewQuery = (category: MailboxCategory) =>
+  category === "spam" || category === "trash" ? "is:unread" : GMAIL_NON_SPAM_TRASH_UNREAD_QUERY;
 
 export const readGmailThreadForUser = async (
   input: GmailChatRequest & { category: MailboxCategory; threadId: string },
@@ -309,7 +313,8 @@ export const getMailboxOverviewForUser = async (
         }),
         getGmailMessageCount(accessToken, {
           mailbox: input.category,
-          query: "is:unread",
+          accurateUpTo: 200,
+          query: getUnreadOverviewQuery(input.category),
           signal: input.signal,
         }),
         getGmailMessageCount(accessToken, {

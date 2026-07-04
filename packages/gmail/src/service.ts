@@ -850,11 +850,33 @@ export const listGmailMessageIds = async (
 export const getGmailMessageCount = async (
   accessToken: string,
   options?: {
+    accurateUpTo?: number;
     mailbox?: MailboxCategory;
     query?: string;
     signal?: AbortSignal;
   },
 ) => {
+  if (options?.accurateUpTo !== undefined) {
+    const { accurateUpTo, ...listOptions } = options;
+    const countLimit = Math.max(0, Math.floor(accurateUpTo));
+    let count = 0;
+    let pageToken: string | undefined;
+    let resultSizeEstimate = 0;
+
+    do {
+      const result = await listMessages(accessToken, {
+        ...listOptions,
+        maxResults: Math.min(500, Math.max(1, countLimit + 1 - count)),
+        pageToken,
+      });
+      resultSizeEstimate = Math.max(resultSizeEstimate, result.resultSizeEstimate ?? 0);
+      count += result.messages.length;
+      pageToken = result.nextPageToken;
+    } while (pageToken && count <= countLimit);
+
+    return pageToken ? Math.max(resultSizeEstimate, count) : count;
+  }
+
   const result = await listMessages(accessToken, {
     ...options,
     maxResults: 1,
