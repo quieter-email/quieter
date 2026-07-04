@@ -375,6 +375,29 @@ const hasUnreadLabel = (labelIds: string[] | undefined): boolean =>
 const hasDraftLabel = (labelIds: string[] | undefined): boolean =>
   !!labelIds?.includes(MAILBOX_LABELS.drafts);
 
+const isMessageInMailbox = (mailbox: MailboxCategory, labelIds: string[] | undefined): boolean => {
+  if (!labelIds?.includes(MAILBOX_LABELS[mailbox])) return false;
+  if (mailbox === "trash") return true;
+  if (labelIds.includes(MAILBOX_LABELS.trash)) return false;
+  if (mailbox !== "spam" && labelIds.includes(MAILBOX_LABELS.spam)) return false;
+  return true;
+};
+
+const appendGmailQueryTerms = (
+  query: string | undefined,
+  terms: readonly string[],
+): string | undefined => {
+  const normalizedQuery = query?.trim();
+  const existingTerms = new Set(normalizedQuery?.split(/\s+/) ?? []);
+  const missingTerms = terms.filter((term) => !existingTerms.has(term));
+  return [normalizedQuery, ...missingTerms].filter(Boolean).join(" ") || undefined;
+};
+
+const getListMessagesQuery = (mailbox: MailboxCategory | undefined, query: string | undefined) =>
+  mailbox === "unread"
+    ? appendGmailQueryTerms(query, ["-in:spam", "-in:trash"])
+    : query?.trim() || undefined;
+
 const isKnownGmailRateLimit = (details: {
   googleReason?: string;
   googleStatus?: string;
@@ -823,7 +846,7 @@ const listMessages = async (
       pageToken: options?.pageToken,
       labelIds: options?.mailbox ? [MAILBOX_LABELS[options.mailbox]] : undefined,
       includeSpamTrash: includesSpamTrash ? true : undefined,
-      q: options?.query?.trim() || undefined,
+      q: getListMessagesQuery(options?.mailbox, options?.query),
     },
     signal: options?.signal,
   });
@@ -1309,15 +1332,7 @@ export const listMessagesWithDetails = async (
 ): Promise<ListMessagesPageResult> => {
   const list = await listMessages(accessToken, options);
   const messageIds = list.messages.map((message) => message.id);
-  const [details, threadSummariesById] = await Promise.all([
-    getGmailMessagesMetadata(accessToken, messageIds, options?.signal),
-    getThreadListSummaries(
-      accessToken,
-      list.messages.map((message) => message.threadId),
-      { includeDrafts: false },
-      options?.signal,
-    ),
-  ]);
+  const details = await getGmailMessagesMetadata(accessToken, messageIds, options?.signal);
   const detailsById = new Map(
     details
       .filter((message): message is GmailMessage => !!message)
@@ -1326,12 +1341,24 @@ export const listMessagesWithDetails = async (
   const orderedDetails = list.messages
     .map((message) => detailsById.get(message.id))
     .filter((message): message is GmailMessage => !!message);
+  const mailbox = options?.mailbox;
+  const activeDetails = mailbox
+    ? orderedDetails.filter((message) =>
+        isMessageInMailbox(mailbox, normalizeLabelIds(message.labelIds)),
+      )
+    : orderedDetails;
+  const threadSummariesById = await getThreadListSummaries(
+    accessToken,
+    activeDetails.map((message) => message.threadId),
+    { includeDrafts: false },
+    options?.signal,
+  );
   const historyId =
     orderedDetails[0]?.historyId ?? (await getGmailProfile(accessToken, options?.signal)).historyId;
 
   return {
     messages: await Promise.all(
-      orderedDetails.map(
+      activeDetails.map(
         async (message) =>
           await toMessageListItem(accessToken, message, {
             threadSummary: threadSummariesById.get(message.threadId),
@@ -1722,8 +1749,7 @@ export const getMailboxSyncDelta = async (
     for (const changedMessage of changedMessages) {
       if (!changedMessage) continue;
 
-      const labelIds = normalizeLabelIds(changedMessage.labelIds);
-      if (!labelIds?.includes(mailboxLabel)) {
+      if (!isMessageInMailbox(options.mailbox, normalizeLabelIds(changedMessage.labelIds))) {
         removedMessageIds.add(changedMessage.id);
         continue;
       }
@@ -1775,7 +1801,6 @@ export const refreshMailboxMessages = async (
   const messageIds = Array.from(
     new Set(options.messageIds.map((messageId) => messageId.trim()).filter(Boolean)),
   ).slice(0, GMAIL_BATCH_MESSAGE_CHUNK_SIZE);
-  const mailboxLabel = MAILBOX_LABELS[options.mailbox];
   const removedMessageIds = new Set<string>();
   const updatedMessages: MessageListItem[] = [];
 
@@ -1793,8 +1818,7 @@ export const refreshMailboxMessages = async (
       return [];
     }
 
-    const labelIds = normalizeLabelIds(message.labelIds);
-    if (!labelIds?.includes(mailboxLabel)) {
+    if (!isMessageInMailbox(options.mailbox, normalizeLabelIds(message.labelIds))) {
       removedMessageIds.add(message.id);
       return [];
     }
