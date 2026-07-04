@@ -17,9 +17,9 @@ Production is not deployed from Vercel git pushes.
 
 ## Staging
 
-Staging deploys from the `staging` branch through `.github/workflows/staging-deploy.yml`.
+Staging deploys from `main` through `.github/workflows/staging-deploy.yml`.
 The workflow verifies the repo, applies migrations to the staging database, pulls Vercel Preview
-environment variables scoped to the `staging` branch, builds the app, and uploads a Vercel Preview
+environment variables scoped to the `staging` Git branch in Vercel, builds the app, and uploads a Vercel Preview
 deployment with the Vercel CLI. It does not deploy SST, AWS, Cloudflare, or managed-mail
 infrastructure.
 
@@ -62,7 +62,7 @@ Production uses separate roles:
 
 Remote production migrations are rejected unless they run in the protected `main` GitHub Actions
 context with the workflow-only production marker. Remote staging migrations are accepted only from
-the `staging` branch workflow with the staging marker. Runtime requests do not execute schema
+the `main` branch staging workflow with the staging marker. Runtime requests do not execute schema
 migrations.
 
 See [Database safety](database-safety.md) for role SQL and recovery controls.
