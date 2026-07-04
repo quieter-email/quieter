@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from "./tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 type IconButtonTooltipProps = {
   children: ReactNode;
@@ -16,7 +16,6 @@ export const IconButtonTooltip = ({ children, label, sideOffset = 6 }: IconButto
     </TooltipTrigger>
     <TooltipContent className="min-w-0 px-2 py-1 text-center" sideOffset={sideOffset}>
       {label}
-      <TooltipArrow />
     </TooltipContent>
   </Tooltip>
 );
