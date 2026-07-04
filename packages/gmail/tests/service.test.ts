@@ -177,6 +177,33 @@ describe("getGmailMessageCount", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  test("deduplicates Gmail threads for thread-based unread counts", async () => {
+    const originalFetch = globalThis.fetch;
+
+    globalThis.fetch = async () =>
+      Response.json({
+        messages: [
+          { id: "message-1", threadId: "thread-1" },
+          { id: "message-2", threadId: "thread-1" },
+          { id: "message-3", threadId: "thread-2" },
+        ],
+        resultSizeEstimate: 3,
+      });
+
+    try {
+      expect(
+        await getGmailMessageCount("token", {
+          accurateUpTo: 99,
+          countBy: "threads",
+          mailbox: "unread",
+          query: "-in:spam -in:trash",
+        }),
+      ).toBe(2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 describe("Gmail watch and history", () => {
