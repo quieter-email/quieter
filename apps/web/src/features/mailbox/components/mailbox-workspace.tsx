@@ -29,6 +29,14 @@ type MailboxWorkspaceProps = {
   };
 };
 
+const isMailboxSupportedByProvider = (
+  provider: "api" | "gmail" | "managed" | null,
+  mailbox: MailboxCategory,
+) => {
+  if (provider === "api") return mailbox === "sent";
+  return true;
+};
+
 const useChatSidebarActions = ({
   activeChatId,
   chats,
@@ -187,14 +195,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   }, [selectedMailboxProvider, setMailboxSearch, view]);
 
   useLayoutEffect(() => {
-    if (
-      (selectedMailboxProvider !== "managed" && selectedMailboxProvider !== "api") ||
-      (selectedMailboxProvider === "managed" &&
-        (activeMailbox === "inbox" || activeMailbox === "sent")) ||
-      (selectedMailboxProvider === "api" && activeMailbox === "sent")
-    ) {
-      return;
-    }
+    if (isMailboxSupportedByProvider(selectedMailboxProvider, activeMailbox)) return;
 
     void setMailboxSearch({
       mailbox: selectedMailboxProvider === "api" ? "sent" : "inbox",
@@ -275,12 +276,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     void setMailboxSearch({ view: nextView });
   };
   const selectMailboxFromHotkey = (mailbox: MailboxCategory) => {
-    if (
-      (selectedMailboxProvider === "managed" && mailbox !== "inbox" && mailbox !== "sent") ||
-      (selectedMailboxProvider === "api" && mailbox !== "sent")
-    ) {
-      return;
-    }
+    if (!isMailboxSupportedByProvider(selectedMailboxProvider, mailbox)) return;
 
     selectMailbox(mailbox);
   };
@@ -409,7 +405,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
           demoMode={isDemoMode}
           managedDemoMode={isManagedDemoMode}
           mailboxId={selectedMailboxId}
-          persistDrafts={selectedMailboxProvider !== "managed" && selectedMailboxProvider !== "api"}
+          persistDrafts={selectedMailboxProvider !== "api"}
           ref={composeDialogRef}
         />
       </>
@@ -513,11 +509,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         demoMode={isDemoMode}
         managedDemoMode={isManagedDemoMode}
         mailboxId={selectedMailboxId}
-        persistDrafts={
-          !isManagedDemoMode &&
-          selectedMailboxProvider !== "managed" &&
-          selectedMailboxProvider !== "api"
-        }
+        persistDrafts={!isManagedDemoMode && selectedMailboxProvider !== "api"}
         ref={composeDialogRef}
       />
     </>

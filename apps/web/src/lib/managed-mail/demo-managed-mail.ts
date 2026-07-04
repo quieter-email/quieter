@@ -401,6 +401,14 @@ const messageMatchesQuery = (message: MessageListItem, query: string | undefined
   return haystack.includes(structuredQuery.text.toLowerCase());
 };
 
+const getUnreadNonSpamCount = () =>
+  readDemoState().messages.filter(
+    (message) =>
+      isMessageUnread(message) &&
+      !message.labelIds?.includes(MAILBOX_LABELS.spam) &&
+      !message.labelIds?.includes(MAILBOX_LABELS.trash),
+  ).length;
+
 export const getManagedDemoMailboxes = () => ({
   defaultMailboxId: DEMO_MANAGED_MAILBOX_ID,
   groups: [
@@ -424,6 +432,7 @@ export const getManagedDemoMailboxes = () => ({
           organizationId: "demo-managed-team",
           ownerUserId: null,
           provider: "managed" as const,
+          unreadNonSpamCount: getUnreadNonSpamCount(),
         },
       ],
     },

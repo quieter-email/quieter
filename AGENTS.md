@@ -77,7 +77,7 @@
 - The web app exposes `POST /api/v1/send` for organization API-key outbound mail. It verifies the Better Auth `organization` API key, requires the `from` domain to be a verified `mailDomain` for that organization, and sends through SES from `packages/orpc/src/organization-mail.ts`.
 - Better Auth email hooks call that endpoint from `packages/auth/src/email.ts`. Set `QUIETER_MAIL_API_KEY` to an organization API key for the organization that owns the auth sender domain. Override `QUIETER_AUTH_MAIL_SENDER` or `QUIETER_MAIL_API_URL` only when needed.
 - Managed mailbox messages are persisted in `managedMailMessage`. Inbound SES receipt processing parses the raw S3 object and writes one row per exact managed mailbox recipient; managed app sends and exact-sender `POST /api/v1/send` sends write outbound rows.
-- Managed mailbox UI supports Inbox, Sent, read/unread state, structured search, shared conversation labels, shared and personal saved views, manager-controlled automatic label rules, threads, replies, forwards, and compose. Drafts, spam, and trash remain Gmail-only.
+- Managed mailbox UI supports Inbox, Sent, Drafts, Spam, Trash, read/unread state, structured search, shared conversation labels, shared and personal saved views, manager-controlled automatic label rules, threads, replies, forwards, and compose.
 - Managed labels are shared mailbox workflow state. Readers can browse and filter labels, responders can apply them, and managers own label definitions, shared views, rules, and historical rule backfills. Personal saved views remain private to their owner.
 - Domain registration should not be added back without rebuilding the integration intentionally.
 - Mail ingress/outbound auth tokens come from SST linked secrets.

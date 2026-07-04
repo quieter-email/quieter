@@ -1,0 +1,1 @@
+ALTER TABLE "managedMailMessage" DROP CONSTRAINT "managed_mail_message_mailbox_state_check", ADD CONSTRAINT "managed_mail_message_mailbox_state_check" CHECK ("mailboxState" in ('active', 'draft', 'spam', 'trash'));

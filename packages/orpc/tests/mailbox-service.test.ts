@@ -21,9 +21,11 @@ const gmailMailbox = (id: string, emailAddress: string): MailboxListItem => ({
   groupKind: "organization",
   groupName: "Default Team",
   id,
+  includeApiSentMessages: false,
   organizationId: "org_default",
   ownerUserId: "user_1",
   provider: "gmail",
+  unreadNonSpamCount: 0,
 });
 
 const managedMailbox = (
@@ -46,9 +48,11 @@ const managedMailbox = (
   groupKind: "division",
   groupName: organizationName,
   id,
+  includeApiSentMessages: false,
   organizationId,
   ownerUserId: null,
   provider: "managed",
+  unreadNonSpamCount: 0,
 });
 
 const mailboxGroups: MailboxGroup[] = [

@@ -93,6 +93,7 @@ export const useMailboxSelection = ({
       groupName: mailbox.groupName,
       id: mailbox.id,
       provider: mailbox.provider,
+      unreadNonSpamCount: mailbox.unreadNonSpamCount,
     })),
   }));
   const mailboxes = mailboxGroups.flatMap((group) => group.mailboxes);

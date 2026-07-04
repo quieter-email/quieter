@@ -107,10 +107,6 @@
     "better-auth": "1.5.0",
     "better-call": "1.3.2"
   },
-  "lint-staged": {
-    "**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc}": "oxfmt --config oxfmt.json",
-    "**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}": "oxlint --fix --config oxlint.json"
-  },
   "engines": {
     "bun": ">=1.3.9"
   },

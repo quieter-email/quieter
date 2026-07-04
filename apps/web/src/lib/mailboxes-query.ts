@@ -5,6 +5,7 @@ import { queryPersister } from "~/lib/query-persister";
 export const getMailboxesQueryKey = () => ["mailboxes"] as const;
 
 const MAILBOX_ACCOUNT_HEALTH_CHECK_INTERVAL_MS = 1000 * 60 * 30;
+const MAILBOX_METADATA_STALE_MS = 1000 * 30;
 
 export const mailboxesQueryOptions = (enabled = true) =>
   queryOptions({
@@ -12,10 +13,10 @@ export const mailboxesQueryOptions = (enabled = true) =>
     queryFn: ({ signal }) => rpc.mail.listMailboxes(undefined, { signal }),
     enabled,
     persister: queryPersister.persisterFn,
-    staleTime: 0,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: "always",
-    refetchOnReconnect: "always",
+    staleTime: MAILBOX_METADATA_STALE_MS,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     refetchInterval: MAILBOX_ACCOUNT_HEALTH_CHECK_INTERVAL_MS,
     refetchIntervalInBackground: false,
   });

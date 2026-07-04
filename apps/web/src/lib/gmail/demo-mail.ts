@@ -586,6 +586,14 @@ const messageMatchesQuery = (message: MessageListItem, query: string | undefined
   return haystack.includes(structuredQuery.text.toLowerCase());
 };
 
+const getUnreadNonSpamCount = (mailboxId: string) =>
+  readSandboxState(mailboxId).messages.filter(
+    (message) =>
+      isMessageUnread(message) &&
+      !message.labelIds?.includes(MAILBOX_LABELS.spam) &&
+      !message.labelIds?.includes(MAILBOX_LABELS.trash),
+  ).length;
+
 export const getDemoMailboxes = () => ({
   defaultMailboxId: DEMO_MAILBOX_ID,
   groups: [
@@ -609,6 +617,7 @@ export const getDemoMailboxes = () => ({
           organizationId: "demo-team",
           ownerUserId: "demo-user",
           provider: "gmail" as const,
+          unreadNonSpamCount: getUnreadNonSpamCount(DEMO_MAILBOX_ID),
         },
       ],
     },
@@ -638,6 +647,7 @@ export const getLandingDemoMailboxes = () => ({
           organizationId: "landing-demo-team",
           ownerUserId: "landing-demo-user",
           provider: "gmail" as const,
+          unreadNonSpamCount: getUnreadNonSpamCount(LANDING_DEMO_MAILBOX_ID),
         },
       ],
     },

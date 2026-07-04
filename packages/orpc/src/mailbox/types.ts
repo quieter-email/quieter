@@ -28,6 +28,7 @@ export type MailboxListItem = MailboxGroupMetadata & {
   organizationId: string;
   ownerUserId: string | null;
   provider: "api" | "gmail" | "managed";
+  unreadNonSpamCount: number;
 };
 
 export type MailboxGroup = {

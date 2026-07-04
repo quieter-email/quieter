@@ -38,6 +38,7 @@ type MailboxSwitcherMailbox = {
   id: string;
   provider: string;
   grantRole?: "manager" | "reader" | "responder" | null;
+  unreadNonSpamCount: number;
 };
 
 type MailboxSwitcherGroup = {
@@ -143,6 +144,17 @@ const getMailboxSwitcherOrder = (groups: MailboxSwitcherGroup[]): MailboxSwitche
   ),
 });
 
+const formatUnreadCount = (count: number) => (count > 99 ? "99+" : String(Math.max(0, count)));
+
+const MailboxUnreadBadge = ({ count }: { count: number }) => (
+  <span
+    aria-label={`${count} unread non-spam messages`}
+    className="flex h-5 min-w-7 shrink-0 items-center justify-center rounded-full bg-foreground px-1.5 text-[11px]/5 font-medium text-background tabular-nums"
+  >
+    {formatUnreadCount(count)}
+  </span>
+);
+
 const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => (
   <div className={cn("flex min-w-0 items-center justify-between gap-3 rounded-md", className)}>
     <div className="min-w-0 flex-1">
@@ -158,7 +170,10 @@ const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => 
         </p>
       )}
     </div>
-    {action}
+    <div className="flex shrink-0 items-center gap-1">
+      <MailboxUnreadBadge count={mailbox.unreadNonSpamCount} />
+      {action}
+    </div>
   </div>
 );
 
@@ -440,9 +455,14 @@ export const MailboxSwitcherDropdown = ({
         >
           <VerticalSlot className="min-w-0">
             <div>
-              <p className="truncate text-[13px]/5 font-medium tracking-tight text-foreground">
-                {primaryLabel}
-              </p>
+              <div className="flex min-w-0 items-center gap-2">
+                <p className="min-w-0 flex-1 truncate text-[13px]/5 font-medium tracking-tight text-foreground">
+                  {primaryLabel}
+                </p>
+                {selectedMailbox && (
+                  <MailboxUnreadBadge count={selectedMailbox.unreadNonSpamCount} />
+                )}
+              </div>
               <p className="mt-1 truncate text-xs text-muted-foreground">{secondaryLabel}</p>
             </div>
           </VerticalSlot>
@@ -518,6 +538,7 @@ export const MailboxSwitcherDropdown = ({
                                       <p className="min-w-0 flex-1 truncate text-sm text-foreground">
                                         {mailbox.displayName?.trim() || mailbox.emailAddress}
                                       </p>
+                                      <MailboxUnreadBadge count={mailbox.unreadNonSpamCount} />
                                       <button
                                         aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
                                         className="flex h-7 shrink-0 items-center gap-1 px-1 text-xs font-medium text-destructive transition-colors hover:text-destructive/80"

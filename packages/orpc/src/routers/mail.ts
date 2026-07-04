@@ -61,10 +61,12 @@ import {
   updateSingleManagedMessageLabels,
 } from "../managed-mail/labels/service";
 import {
+  deleteManagedDraft,
   getManagedMessageInspector,
   getManagedThread,
   listManagedMessages,
   refreshManagedMessages,
+  saveManagedDraft,
   sendManagedMailboxMessage,
   setManagedMessageMailboxState,
   setManagedMessageReadState,
@@ -859,6 +861,17 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return await saveManagedDraft({
+          ...input,
+          userId: context.userId,
+        });
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken) => {
         return await saveGmailDraft(accessToken, input.draft, context.signal);
       });
@@ -928,6 +941,17 @@ export const mailRouter = {
       }),
     )
     .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return await deleteManagedDraft({
+          ...input,
+          userId: context.userId,
+        });
+      }
+
       return await callGmail(context, input.mailboxId, async (accessToken) => {
         await deleteDraft(accessToken, input.draftId);
         return { deleted: true };

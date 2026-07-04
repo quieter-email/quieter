@@ -13,6 +13,7 @@ import {
   managedMailAttachment,
   managedMailMessage,
   managedMailMessageLabel,
+  type ManagedMailHeader,
   type ManagedMailMailboxState,
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
@@ -24,12 +25,15 @@ import {
   type MessageListItem,
   type ThreadMessagesResult,
 } from "@quieter/gmail";
+import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
 import { buildMimeMessage } from "@quieter/mail/compose/mime";
 import {
+  composeDraftInputSchema,
   composeMessageInputSchema,
   extractMailAddress,
   splitMailAddressList,
 } from "@quieter/mail/compose/schema";
+import { QUIETER_DRAFT_HEADER_NAMES } from "@quieter/mail/compose/schema";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
 import { and, asc, count, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -47,6 +51,7 @@ import {
 } from "../search/normalization";
 
 type ComposeMessageInput = z.infer<typeof composeMessageInputSchema>;
+type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
 
 const MANAGED_MESSAGE_PAGE_SIZE = 50;
 
@@ -57,15 +62,47 @@ const getManagedSystemLabelIds = (message: {
   isRead: boolean;
   mailboxState: ManagedMailMailboxState;
 }) => [
-  message.mailboxState === "trash"
-    ? MAILBOX_LABELS.trash
-    : message.mailboxState === "spam"
-      ? MAILBOX_LABELS.spam
-      : message.direction === "inbound"
-        ? MAILBOX_LABELS.inbox
-        : MAILBOX_LABELS.sent,
+  message.mailboxState === "draft"
+    ? MAILBOX_LABELS.drafts
+    : message.mailboxState === "trash"
+      ? MAILBOX_LABELS.trash
+      : message.mailboxState === "spam"
+        ? MAILBOX_LABELS.spam
+        : message.direction === "inbound"
+          ? MAILBOX_LABELS.inbox
+          : MAILBOX_LABELS.sent,
   ...(!message.isRead ? [MAILBOX_LABELS.unread] : []),
 ];
+
+const getManagedHeader = (headers: ManagedMailHeader[], name: string) =>
+  headers.find((header) => header.name.toLowerCase() === name.toLowerCase())?.value;
+
+const getManagedDraftHeaders = (draft: ComposeDraftInput): ManagedMailHeader[] => {
+  if (!draft.draftAnchor) return [];
+
+  return [
+    {
+      name: QUIETER_DRAFT_HEADER_NAMES.sourceMessageId,
+      value: draft.draftAnchor.sourceMessageId,
+    },
+    {
+      name: QUIETER_DRAFT_HEADER_NAMES.sourceThreadId,
+      value: draft.draftAnchor.sourceThreadId,
+    },
+    {
+      name: QUIETER_DRAFT_HEADER_NAMES.seededBy,
+      value: draft.draftAnchor.seededBy,
+    },
+    ...(draft.draftAnchor.sourceMessageHeaderId?.trim()
+      ? [
+          {
+            name: QUIETER_DRAFT_HEADER_NAMES.sourceMessageHeaderId,
+            value: draft.draftAnchor.sourceMessageHeaderId.trim(),
+          },
+        ]
+      : []),
+  ];
+};
 
 export const getManagedMessageLabelIds = (
   message: {
@@ -107,6 +144,8 @@ const toMessageListItem = async (
   bodyText: record.bodyText ?? undefined,
   cc: record.cc ?? undefined,
   date: record.sentAt.toISOString(),
+  draftAnchor: parseDraftAnchorFromHeaderReader((name) => getManagedHeader(record.headers, name)),
+  draftId: record.mailboxState === "draft" ? record.providerMessageId : undefined,
   from: record.from,
   id: record.id,
   inReplyTo: record.inReplyTo ?? undefined,
@@ -145,6 +184,7 @@ const getCategoryCondition = (category: MailboxCategory) => {
       eq(managedMailMessage.mailboxState, "active"),
     );
   }
+  if (category === "drafts") return eq(managedMailMessage.mailboxState, "draft");
   if (category === "spam") return eq(managedMailMessage.mailboxState, "spam");
   if (category === "trash") return eq(managedMailMessage.mailboxState, "trash");
   return null;
@@ -481,6 +521,175 @@ export const refreshManagedMessages = async (input: {
       ),
     ),
   };
+};
+
+export const saveManagedDraft = async (input: {
+  draft: ComposeDraftInput;
+  mailboxId: string;
+  userId: string;
+}) => {
+  const selectedMailbox = await getAuthorizedManagedMailbox({
+    mailboxId: input.mailboxId,
+    requiredRoles: ["responder", "manager"],
+    userId: input.userId,
+  });
+  const draftId = input.draft.draftId?.trim() || randomUUID();
+  const messageId = input.draft.messageId?.trim() || randomUUID();
+  const now = new Date();
+  const snippet =
+    (input.draft.bodyText || input.draft.bodyHtml.replaceAll(/<[^>]+>/g, " "))
+      .replaceAll(/\s+/g, " ")
+      .trim()
+      .slice(0, 240) ||
+    input.draft.subject.trim() ||
+    null;
+  const existingDraft = input.draft.draftId
+    ? await db
+        .select({ id: managedMailMessage.id, threadId: managedMailMessage.threadId })
+        .from(managedMailMessage)
+        .where(
+          and(
+            eq(managedMailMessage.mailboxId, input.mailboxId),
+            eq(managedMailMessage.providerMessageId, draftId),
+            eq(managedMailMessage.mailboxState, "draft"),
+          ),
+        )
+        .limit(1)
+        .then((rows) => rows[0] ?? null)
+    : null;
+  const resolvedMessageId = existingDraft?.id ?? messageId;
+  const threadId =
+    input.draft.replyContext?.threadId?.trim() ||
+    input.draft.draftAnchor?.sourceThreadId?.trim() ||
+    existingDraft?.threadId ||
+    resolvedMessageId;
+  const draftValues = {
+    bcc: input.draft.recipients.bcc || null,
+    bccNormalized: normalizeManagedSearchValue(input.draft.recipients.bcc),
+    bodyHtml: input.draft.bodyHtml || null,
+    bodyText: input.draft.bodyText || null,
+    cc: input.draft.recipients.cc || null,
+    ccNormalized: normalizeManagedSearchValue(input.draft.recipients.cc),
+    from: selectedMailbox.emailAddress,
+    fromNormalized: normalizeManagedSearchValue(selectedMailbox.emailAddress),
+    headers: getManagedDraftHeaders(input.draft),
+    inReplyTo: input.draft.replyContext?.messageHeaderId ?? null,
+    isRead: true,
+    mailboxState: "draft" as const,
+    rawSizeBytes: null,
+    references: input.draft.replyContext?.references.join(" ") || null,
+    replyTo: selectedMailbox.emailAddress,
+    searchText: createManagedMessageSearchText({
+      bodyText: input.draft.bodyText,
+      snippet,
+      subject: input.draft.subject,
+    }),
+    sentAt: now,
+    snippet,
+    subject: input.draft.subject || null,
+    threadId,
+    to: input.draft.recipients.to || null,
+    toNormalized: normalizeManagedSearchValue(input.draft.recipients.to),
+    updatedAt: now,
+  };
+
+  await db.transaction(async (tx) => {
+    if (existingDraft) {
+      await tx
+        .update(managedMailMessage)
+        .set(draftValues)
+        .where(
+          and(
+            eq(managedMailMessage.id, resolvedMessageId),
+            eq(managedMailMessage.mailboxId, input.mailboxId),
+            eq(managedMailMessage.mailboxState, "draft"),
+          ),
+        );
+    } else {
+      await tx.insert(managedMailMessage).values({
+        ...draftValues,
+        createdAt: now,
+        direction: "outbound",
+        id: resolvedMessageId,
+        mailboxId: input.mailboxId,
+        messageHeaderId: null,
+        providerMessageId: draftId,
+      });
+    }
+
+    await tx
+      .delete(managedMailAttachment)
+      .where(eq(managedMailAttachment.messageId, resolvedMessageId));
+
+    const attachments = [
+      ...input.draft.attachments.map((attachment) => ({
+        contentId: null,
+        fileName: attachment.fileName ?? attachment.name,
+        inline: false,
+        mimeType: attachment.mimeType,
+        size: attachment.size,
+      })),
+      ...input.draft.inlineImages.map((attachment) => ({
+        contentId: attachment.contentId,
+        fileName: attachment.name,
+        inline: true,
+        mimeType: attachment.mimeType,
+        size: attachment.size,
+      })),
+    ];
+
+    if (attachments.length > 0) {
+      await tx.insert(managedMailAttachment).values(
+        attachments.map((attachment) => ({
+          contentId: attachment.contentId,
+          createdAt: now,
+          fileName: attachment.fileName,
+          id: randomUUID(),
+          inline: attachment.inline,
+          mailboxId: input.mailboxId,
+          messageId: resolvedMessageId,
+          mimeType: attachment.mimeType,
+          normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
+          size: attachment.size,
+        })),
+      );
+    }
+  });
+
+  return {
+    bodyHtml: input.draft.bodyHtml,
+    bodyText: input.draft.bodyText,
+    draftAnchor: input.draft.draftAnchor ?? null,
+    draftId,
+    messageId: resolvedMessageId,
+    recipients: input.draft.recipients,
+    replyContext: input.draft.replyContext ?? null,
+    subject: input.draft.subject,
+  };
+};
+
+export const deleteManagedDraft = async (input: {
+  draftId: string;
+  mailboxId: string;
+  userId: string;
+}) => {
+  await getAuthorizedManagedMailbox({
+    mailboxId: input.mailboxId,
+    requiredRoles: ["responder", "manager"],
+    userId: input.userId,
+  });
+
+  await db
+    .delete(managedMailMessage)
+    .where(
+      and(
+        eq(managedMailMessage.mailboxId, input.mailboxId),
+        eq(managedMailMessage.providerMessageId, input.draftId),
+        eq(managedMailMessage.mailboxState, "draft"),
+      ),
+    );
+
+  return { deleted: true };
 };
 
 export const setManagedMessageReadState = async (input: {
