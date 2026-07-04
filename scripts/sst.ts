@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 const args = process.argv.slice(2);
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const envFilePath = resolve(repoRoot, ".env.local");
+const sstEnvFilePath = resolve(repoRoot, ".env.sst.local");
 const passThroughCommands = new Set(["--help", "-h", "help", "version", "upgrade", "telemetry"]);
 const windowsArmRandomProviderVersion = "4.16.6";
 const windowsArmRandomProviderDir = `resource-random-v${windowsArmRandomProviderVersion}`;
@@ -68,13 +69,17 @@ const createSstEnv = () => {
   }
 
   const localEnv = parseEnvFile(envFilePath);
+  const sstEnv = existsSync(sstEnvFilePath) ? parseEnvFile(sstEnvFilePath) : {};
 
   delete localEnv.AWS_CONFIG_FILE;
   delete localEnv.AWS_SHARED_CREDENTIALS_FILE;
+  delete sstEnv.AWS_CONFIG_FILE;
+  delete sstEnv.AWS_SHARED_CREDENTIALS_FILE;
 
   return {
     ...env,
     ...localEnv,
+    ...sstEnv,
   };
 };
 

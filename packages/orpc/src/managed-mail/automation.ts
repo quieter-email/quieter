@@ -25,6 +25,8 @@ import {
   processGmailUsefulDetailMessage,
   reportPendingGmailUsefulDetailUsage,
 } from "../gmail-useful-details/service";
+import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
+import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
 import {
   loadAutoLabelUserCorrectionPrompt,
   loadAutomationMemoryPrompt,
@@ -232,6 +234,7 @@ const processManagedAutoLabelMessage = async (input: {
   autoLabelContext: ManagedAutoLabelContext;
   mailboxId: string;
   messageId: string;
+  organizationId: string;
   userId: string;
 }) => {
   let event = await getOrCreateManagedAutoLabelEvent(input.mailboxId, input.messageId);
@@ -262,6 +265,15 @@ const processManagedAutoLabelMessage = async (input: {
           completionTokens += usage.completionTokens;
         },
       };
+      const budgetStatus = await getMailAutomationAiBudgetStatus({
+        organizationId: input.organizationId,
+        userId: input.userId,
+      });
+      if (!budgetStatus.allowed) {
+        await deferAutoLabelAutomation(event.id, budgetStatus.message);
+        return;
+      }
+
       const labelIds = await classifyMailMessage({
         labels: input.autoLabelContext.labels,
         memoryProfile: input.autoLabelContext.memoryProfile,
@@ -382,6 +394,7 @@ const processManagedAutomationMessageIds = async (input: {
   getAutoLabelContext: () => Promise<ManagedAutoLabelContext>;
   mailboxId: string;
   messageIds: string[];
+  organizationId: string;
   usefulDetailsEnabled: boolean;
   userId: string;
 }) => {
@@ -404,6 +417,7 @@ const processManagedAutomationMessageIds = async (input: {
             autoLabelContext,
             mailboxId: input.mailboxId,
             messageId,
+            organizationId: input.organizationId,
             userId: input.userId,
           })
         : Promise.resolve(),
@@ -412,6 +426,7 @@ const processManagedAutomationMessageIds = async (input: {
             gmailMessageId: messageId,
             loadMessage,
             mailboxId: input.mailboxId,
+            organizationId: input.organizationId,
             userId: input.userId,
           })
         : Promise.resolve(),
@@ -466,6 +481,7 @@ export const processManagedMailAutomation = async (input: {
     messageIds: Array.from(
       new Set([input.messageId, ...pendingAutoLabelIds, ...pendingUsefulDetailIds]),
     ),
+    organizationId: owner.organizationId,
     usefulDetailsEnabled: settings.usefulDetailsEnabled,
     userId: owner.userId,
   });

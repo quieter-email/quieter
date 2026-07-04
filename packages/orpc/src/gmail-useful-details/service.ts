@@ -25,6 +25,7 @@ import { MAILBOX_LABELS } from "@quieter/gmail";
 import { and, asc, count, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { decryptSecret, encryptSecret } from "../gmail-mailbox-access";
+import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import {
   loadAutomationMemoryPrompt,
   refreshUsefulDetailMemoryProfile,
@@ -33,6 +34,7 @@ import { loadUserAiContextPrompt, recordAndRefreshUserAiContext } from "../user-
 
 const RETRY_BASE_MS = 1000 * 60 * 5;
 const RETRY_MAX_MS = 1000 * 60 * 60 * 24;
+const BUDGET_RETRY_MS = 1000 * 60 * 60 * 6;
 const DAY_MS = 1000 * 60 * 60 * 24;
 const USEFUL_DETAIL_KINDS: GmailUsefulDetailKind[] = [
   "application",
@@ -572,6 +574,28 @@ const getOrCreateEvent = async (mailboxId: string, gmailMessageId: string) => {
   return event;
 };
 
+const getMailboxOrganizationId = async (mailboxId: string) => {
+  const [record] = await db
+    .select({ organizationId: mailbox.organizationId })
+    .from(mailbox)
+    .where(eq(mailbox.id, mailboxId))
+    .limit(1);
+
+  return record?.organizationId ?? null;
+};
+
+const deferEventAutomation = async (eventId: string, message: string) => {
+  const now = new Date();
+  await db
+    .update(gmailUsefulDetailEvent)
+    .set({
+      lastError: message,
+      nextAttemptAt: new Date(now.getTime() + BUDGET_RETRY_MS),
+      updatedAt: now,
+    })
+    .where(eq(gmailUsefulDetailEvent.id, eventId));
+};
+
 const reportUsage = async (event: {
   completionTokens: number | null;
   id: string;
@@ -819,11 +843,13 @@ export const processGmailUsefulDetailMessage = async ({
   gmailMessageId,
   loadMessage,
   mailboxId,
+  organizationId,
   userId,
 }: {
   gmailMessageId: string;
   loadMessage: () => Promise<AutomationMailMessage | null>;
   mailboxId: string;
+  organizationId?: string | null;
   userId: string;
 }) => {
   let event = await getOrCreateEvent(mailboxId, gmailMessageId);
@@ -879,6 +905,15 @@ export const processGmailUsefulDetailMessage = async ({
         source,
         usage: { completionTokens: null, promptTokens: null },
       });
+      return;
+    }
+
+    const budgetStatus = await getMailAutomationAiBudgetStatus({
+      organizationId: organizationId ?? (await getMailboxOrganizationId(mailboxId)),
+      userId,
+    });
+    if (!budgetStatus.allowed) {
+      await deferEventAutomation(event.id, budgetStatus.message);
       return;
     }
 

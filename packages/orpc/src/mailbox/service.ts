@@ -13,6 +13,7 @@ import {
   mailboxAutomationSettings,
   mailboxDivisionGrant,
   mailboxGrant,
+  managedMailMessage,
   member,
   organization,
   organizationApiMailMessage,
@@ -20,12 +21,17 @@ import {
   organizationDivisionMember,
   user,
 } from "@quieter/database/schema";
-import { getGmailProfile, isGmailServiceError } from "@quieter/gmail";
+import { getGmailMessageCount, getGmailProfile, isGmailServiceError } from "@quieter/gmail";
 import { and, asc, count, eq, inArray, lt } from "drizzle-orm";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { MailboxGroup, MailboxGroupMetadata, MailboxListItem } from "./types";
-import { encryptSecret, getGmailOAuthConfig, GMAIL_SCOPES } from "../gmail-mailbox-access";
+import {
+  encryptSecret,
+  getGmailOAuthConfig,
+  GMAIL_SCOPES,
+  runAuthorizedGmailMailbox,
+} from "../gmail-mailbox-access";
 import { getOrganizationApiMailboxId } from "../organization-api-mail";
 
 export {
@@ -132,6 +138,7 @@ const toMailboxListItem = (
     ownerUserId: string | null;
     provider: "api" | "gmail" | "managed";
     status: "connected" | "needs_reconnect";
+    unreadNonSpamCount?: number | null;
   },
   group: MailboxGroupMetadata,
 ): MailboxListItem => ({
@@ -156,7 +163,40 @@ const toMailboxListItem = (
   organizationId: record.organizationId,
   ownerUserId: record.ownerUserId,
   provider: record.provider,
+  unreadNonSpamCount: record.unreadNonSpamCount ?? 0,
 });
+
+const getGmailUnreadNonSpamCount = async (input: { mailboxId: string; userId: string }) =>
+  (await runAuthorizedGmailMailbox(input, async (accessToken) =>
+    getGmailMessageCount(accessToken, {
+      mailbox: "unread",
+      query: "-in:spam",
+    }),
+  )) ?? 0;
+
+const listManagedUnreadNonSpamCounts = async (mailboxIds: string[]) => {
+  if (mailboxIds.length === 0) {
+    return new Map<string, number>();
+  }
+
+  const rows = await db
+    .select({
+      count: count(),
+      mailboxId: managedMailMessage.mailboxId,
+    })
+    .from(managedMailMessage)
+    .where(
+      and(
+        inArray(managedMailMessage.mailboxId, mailboxIds),
+        eq(managedMailMessage.direction, "inbound"),
+        eq(managedMailMessage.isRead, false),
+        eq(managedMailMessage.mailboxState, "active"),
+      ),
+    )
+    .groupBy(managedMailMessage.mailboxId);
+
+  return new Map(rows.map((record) => [record.mailboxId, Number(record.count)]));
+};
 
 export const listAccessibleMailboxState = async (input: { userId: string }) => {
   const organizations = await listUserOrganizations(input.userId);
@@ -285,6 +325,23 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         )
         .groupBy(organizationApiMailMessage.organizationId),
     ]);
+  const [gmailUnreadCountsByMailboxId, managedUnreadCountsByMailboxId] = await Promise.all([
+    Promise.all(
+      gmailMailboxes.map(
+        async (record) =>
+          [
+            record.id,
+            record.status === "connected" && record.gmailCredentialMailboxId
+              ? await getGmailUnreadNonSpamCount({ mailboxId: record.id, userId: input.userId })
+              : 0,
+          ] as const,
+      ),
+    ).then((entries) => new Map(entries)),
+    listManagedUnreadNonSpamCounts([
+      ...directManagedMailboxes.map((record) => record.id),
+      ...divisionManagedMailboxes.map((record) => record.id),
+    ]),
+  ]);
   const apiMessageCountsByOrganizationId = new Map(
     apiMessageCounts.map((record) => [record.organizationId, Number(record.count)]),
   );
@@ -367,7 +424,12 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
       .filter((record) => record.organizationId === organizationRecord.id)
       .map((record) =>
         toMailboxListItem(
-          { ...record, directGrantRole: null, grantRole: null },
+          {
+            ...record,
+            directGrantRole: null,
+            grantRole: null,
+            unreadNonSpamCount: gmailUnreadCountsByMailboxId.get(record.id) ?? 0,
+          },
           {
             groupId: organizationRecord.id,
             groupKind: "organization",
@@ -395,11 +457,17 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         mailboxes: organizationManagedMailboxes
           .filter((record) => record.divisionId === divisionId)
           .map((record) =>
-            toMailboxListItem(record, {
-              groupId: `division:${divisionId}`,
-              groupKind: "division",
-              groupName: divisionName,
-            }),
+            toMailboxListItem(
+              {
+                ...record,
+                unreadNonSpamCount: managedUnreadCountsByMailboxId.get(record.id) ?? 0,
+              },
+              {
+                groupId: `division:${divisionId}`,
+                groupKind: "division",
+                groupName: divisionName,
+              },
+            ),
           ),
         name: divisionName,
         organizationId: organizationRecord.id,
@@ -409,11 +477,17 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
     const unassignedMailboxes = organizationManagedMailboxes
       .filter((record) => !record.divisionId)
       .map((record) =>
-        toMailboxListItem(record, {
-          groupId: `team:${organizationRecord.id}:unassigned`,
-          groupKind: "unassigned",
-          groupName: "Unassigned",
-        }),
+        toMailboxListItem(
+          {
+            ...record,
+            unreadNonSpamCount: managedUnreadCountsByMailboxId.get(record.id) ?? 0,
+          },
+          {
+            groupId: `team:${organizationRecord.id}:unassigned`,
+            groupKind: "unassigned",
+            groupName: "Unassigned",
+          },
+        ),
       );
     const apiMailboxes =
       (apiMessageCountsByOrganizationId.get(organizationRecord.id) ?? 0) > 0

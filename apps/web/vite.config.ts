@@ -6,7 +6,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
-import { defineConfig } from "vite";
+import { defineConfig, Environment } from "vite";
 
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
@@ -24,7 +24,7 @@ export default defineConfig(({ command }) => {
         telemetry: false,
       }).map((plugin) => ({
         ...plugin,
-        applyToEnvironment: (environment) => environment.name === "client",
+        applyToEnvironment: (environment: Environment) => environment.name === "client",
       }))
     : [];
 

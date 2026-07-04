@@ -74,7 +74,11 @@
     "db:migrate": "turbo run db:migrate --filter=@quieter/database",
     "db:push": "turbo run db:push --filter=@quieter/database",
     "db:test-migrations": "turbo run db:test-migrations --filter=@quieter/database",
-    "dev": "bun --env-file=.env.local packages/database/scripts/assert-local-development.ts && turbo run dev",
+    "dev": "bun --env-file=.env.local packages/database/scripts/assert-local-development.ts && turbo run dev --filter=@quieter/web",
+    "dev:all": "bun --env-file=.env.local packages/database/scripts/assert-local-development.ts && turbo run dev --filter=@quieter/web --filter=@quieter/aws",
+    "dev:mail": "bun --env-file=.env.local packages/database/scripts/assert-local-development.ts && turbo run dev --filter=@quieter/aws",
+    "dev:web": "bun --env-file=.env.local packages/database/scripts/assert-local-development.ts && turbo run dev --filter=@quieter/web",
+    "env:doctor": "bun scripts/env-doctor.ts",
     "fmt": "turbo run fmt",
     "fmt:check": "turbo run fmt:check",
     "generate:assets": "bun scripts/generate-web-assets.ts",
@@ -102,10 +106,6 @@
     "@better-auth/utils": "0.3.1",
     "better-auth": "1.5.0",
     "better-call": "1.3.2"
-  },
-  "lint-staged": {
-    "**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc}": "oxfmt --config oxfmt.json",
-    "**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}": "oxlint --fix --config oxlint.json"
   },
   "engines": {
     "bun": ">=1.3.9"

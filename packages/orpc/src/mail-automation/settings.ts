@@ -1,4 +1,3 @@
-import { assertUserBillingFeature } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
 import {
   gmailAutoLabelSettings,
@@ -8,6 +7,7 @@ import {
 } from "@quieter/database/schema";
 import { eq } from "drizzle-orm";
 import { assertAccessibleMailbox, getAuthorizedManagedMailbox } from "../mailbox/service";
+import { assertMailAutomationAiBudget } from "./ai-budget";
 
 const assertAutomationAccess = async (input: {
   enabled: boolean;
@@ -28,8 +28,7 @@ const assertAutomationAccess = async (input: {
   }
 
   if (input.enabled) {
-    await assertUserBillingFeature({
-      feature: "gmailAutomation",
+    await assertMailAutomationAiBudget({
       organizationId: selectedMailbox.organizationId ?? undefined,
       userId: input.userId,
     });

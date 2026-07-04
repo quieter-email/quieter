@@ -62,7 +62,7 @@ Prerequisites:
 - Bun 1.3.9 or newer
 - PostgreSQL 16 or newer running locally
 - Provider credentials only for the integrations you intend to exercise
-- AWS credentials only when running the SST development stack
+- Non-production AWS credentials in `.env.sst.local` only when running the SST development stack
 
 ```bash
 bun install --frozen-lockfile
@@ -74,14 +74,18 @@ bun run dev
 
 On PowerShell, use `Copy-Item .env.example .env.local`.
 
-`bun run dev` deliberately refuses remote database URLs. Developers use local PostgreSQL, CI uses a
-temporary PostgreSQL service, and production credentials remain in protected deployment secrets.
-See [Development](docs/development.md) for provider setup and alternative commands.
+`bun run dev` starts the web app only and deliberately refuses remote database URLs. Developers use
+local PostgreSQL, CI uses a temporary PostgreSQL service, and production credentials remain in
+protected deployment secrets. See [Development](docs/development.md) for provider setup, the
+optional mail-infrastructure session, and alternative commands.
 
 ## Common Commands
 
 ```bash
-bun run dev              # web app and SST development stack
+bun run dev              # web app only
+bun run dev:mail         # optional SST mail/background stack
+bun run dev:all          # web app plus optional SST stack
+bun run env:doctor       # verify .env.local is isolated from production-shaped keys
 bun run test             # all tests
 bun run typecheck        # workspace type checking
 bun run lint:fix         # lint and apply safe fixes

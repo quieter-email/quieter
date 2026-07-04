@@ -24,5 +24,11 @@
     "stylesheet": "packages/ui/src/styles.css",
     "functions": ["clsx", "cn", "twMerge"]
   },
-  "ignorePatterns": ["routeTree.gen.ts", "**/.next/**", "**/.vercel/**", "sst-env.d.ts"]
+  "ignorePatterns": [
+    "routeTree.gen.ts",
+    "**/.next/**",
+    "**/.vercel/**",
+    "sst-env.d.ts",
+    "packages/database/drizzle/**/snapshot.json"
+  ]
 }

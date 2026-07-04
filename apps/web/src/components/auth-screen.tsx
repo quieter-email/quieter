@@ -13,7 +13,14 @@ import { useState } from "react";
 import { z } from "zod";
 import { AuthVisual } from "~/components/auth-visual";
 import { GoogleLogo } from "~/components/google-logo";
+import { setDemoModeEnabled } from "~/features/settings/domain/demo-mode-setting";
+import { setManagedDemoModeEnabled } from "~/features/settings/domain/managed-demo-mode-setting";
 import { authClient } from "~/lib/auth";
+import {
+  isPreviewPersonasAvailable,
+  setPreviewPersona,
+  type PreviewPersona,
+} from "~/lib/preview-personas";
 import { setTermsAcceptanceCookie } from "~/lib/terms-acceptance";
 
 const authRouteApi = getRouteApi("/auth");
@@ -46,6 +53,12 @@ type AuthFormValues = {
   email: string;
   name?: string;
 };
+
+const previewPersonaOptions: Array<{ label: string; persona: PreviewPersona }> = [
+  { label: "User with Gmail", persona: "gmail" },
+  { label: "User with managed mail", persona: "managed" },
+  { label: "Onboarding user", persona: "empty" },
+];
 
 const AuthLastUsedHint = () => (
   <LazyMotion features={domAnimation}>
@@ -422,6 +435,73 @@ const AuthCredentials = ({
   );
 };
 
+const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
+  const [error, setError] = useState<string | null>(null);
+  const [pendingPersona, setPendingPersona] = useState<PreviewPersona | null>(null);
+
+  if (!isPreviewPersonasAvailable()) {
+    return null;
+  }
+
+  const startPreviewPersona = async (persona: PreviewPersona) => {
+    setError(null);
+    setPendingPersona(persona);
+
+    const complete = () => setPendingPersona(null);
+
+    try {
+      const response = await fetch("/api/preview-persona", {
+        body: JSON.stringify({ persona }),
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        setError("Could not start preview persona.");
+        complete();
+        return;
+      }
+
+      setPreviewPersona(persona);
+      setDemoModeEnabled(persona === "gmail");
+      setManagedDemoModeEnabled(persona === "managed");
+
+      await navigate({ to: "/" });
+      complete();
+    } catch (previewError) {
+      setError(
+        previewError instanceof Error ? previewError.message : "Could not start preview persona.",
+      );
+      complete();
+    }
+  };
+
+  return (
+    <div className="mt-6 space-y-3">
+      <div className="grid gap-2 sm:grid-cols-3">
+        {previewPersonaOptions.map((option) => (
+          <Button
+            className="justify-center text-center"
+            disabled={pendingPersona !== null}
+            key={option.persona}
+            onClick={() => void startPreviewPersona(option.persona)}
+            type="button"
+            variant="outline"
+          >
+            {pendingPersona === option.persona ? "Opening..." : option.label}
+          </Button>
+        ))}
+      </div>
+      {error ? (
+        <p aria-live="assertive" className="text-sm text-destructive" role="status">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+};
+
 export const AuthScreen = () => {
   const { error, mode, returnTo } = authRouteApi.useSearch();
   const navigate = authRouteApi.useNavigate();
@@ -448,6 +528,8 @@ export const AuthScreen = () => {
             navigate={navigate}
             returnTo={returnTo}
           />
+
+          <PreviewPersonaPicker navigate={navigate} />
 
           {authError ? (
             <p aria-live="assertive" className="mt-4 text-sm text-destructive" role="status">

@@ -7,7 +7,8 @@ Production database access uses two separate Postgres roles:
 - The migration role owns the schema and exists only as the `DATABASE_MIGRATION_URL` secret in the
   protected GitHub `production` environment.
 
-Developers receive neither credential. Local development uses local Postgres, and CI migration tests
+Developers receive neither production credential. Local development uses local Postgres, staging
+uses its own remote database credentials in the GitHub `staging` environment, and CI migration tests
 use the workflow's temporary Postgres service container.
 
 ## Production Role Setup

@@ -105,9 +105,13 @@ describe("migration execution boundary", () => {
       "missing production marker",
       { ...approvedProductionEnvironment, QUIETER_ALLOW_REMOTE_MIGRATIONS: undefined },
     ],
+    [
+      "preview migration marker",
+      { ...approvedProductionEnvironment, QUIETER_ALLOW_REMOTE_MIGRATIONS: "staging" },
+    ],
   ])("rejects remote migrations from %s", (_, environment) => {
     expect(() => assertMigrationExecutionAllowed(remoteDatabaseUrl, environment)).toThrow(
-      "approved production GitHub Actions job",
+      "approved GitHub Actions deployment jobs",
     );
   });
 });

@@ -19,5 +19,12 @@
   "options": {
     "reportUnusedDisableDirectives": "warn"
   },
-  "ignorePatterns": ["**/.next/**", "**/.vercel/**", "**/.sst/**", "sst-env.d.ts", "routeTree.gen.ts"]
+  "ignorePatterns": [
+    "**/.next/**",
+    "**/.vercel/**",
+    "**/.sst/**",
+    "sst-env.d.ts",
+    "routeTree.gen.ts",
+    "packages/database/drizzle/**/snapshot.json"
+  ]
 }

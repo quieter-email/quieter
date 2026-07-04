@@ -15,6 +15,44 @@ Production is not deployed from Vercel git pushes.
 
 `vercel.json` disables commit-triggered deployments.
 
+## Staging
+
+Staging deploys from the `staging` branch through `.github/workflows/staging-deploy.yml`.
+The workflow verifies the repo, applies migrations to the staging database, pulls Vercel Preview
+environment variables scoped to the `staging` branch, builds the app, and uploads a Vercel Preview
+deployment with the Vercel CLI. It does not deploy SST, AWS, Cloudflare, or managed-mail
+infrastructure.
+
+The GitHub `staging` environment needs:
+
+- `DATABASE_MIGRATION_URL`: staging database schema-owner URL, never production
+- `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, and `VERCEL_TEAM_ID`
+
+Configure Vercel preview env vars separately from production. At minimum staging needs
+`DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `APP_SITE_PASSWORD`, and any provider
+credentials for features being tested. Leave production-only mail/live-sync variables unset unless a
+separate staging stack exists.
+
+Gmail AI automation is disabled outside Vercel production unless
+`QUIETER_GMAIL_AI_AUTOMATION_ENABLED=true` is set. Keep it unset or false for ordinary staging and
+preview deployments; enable it only for controlled tests with isolated provider keys and low
+provider-side spend caps.
+
+## Pull Request Previews
+
+`.github/workflows/vercel-pr-preview.yml` creates Vercel Preview deployments for trusted pull
+requests whose source branch is in this repository. The workflow pulls the Vercel Preview variables
+scoped to the `staging` branch so preview builds use the same isolated non-production service
+credentials as staging without copying them into generic Preview scope. Fork pull requests run
+normal checks but do not receive Vercel tokens or preview environment secrets, because arbitrary
+contributor code can exfiltrate any secret available during a build or runtime preview.
+
+The GitHub `preview` environment needs `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, and `VERCEL_TEAM_ID`
+or `VERCEL_ORG_ID`. Configure Vercel Preview environment variables with non-production values only.
+Do not put production databases, production OAuth clients, production mail credentials, production
+provider keys, or production billing tokens in the generic Preview environment. Branch-specific
+preview variables may be used for trusted long-lived branches such as `staging`.
+
 ## Database Credentials
 
 Production uses separate roles:
@@ -22,8 +60,10 @@ Production uses separate roles:
 - `DATABASE_URL`: least-privilege runtime role used by Vercel and SST functions
 - `DATABASE_MIGRATION_URL`: schema-owner role stored only in the protected GitHub environment
 
-Remote migrations are rejected unless they run in the protected `main` GitHub Actions context with
-the workflow-only production marker. Runtime requests do not execute schema migrations.
+Remote production migrations are rejected unless they run in the protected `main` GitHub Actions
+context with the workflow-only production marker. Remote staging migrations are accepted only from
+the `staging` branch workflow with the staging marker. Runtime requests do not execute schema
+migrations.
 
 See [Database safety](database-safety.md) for role SQL and recovery controls.
 

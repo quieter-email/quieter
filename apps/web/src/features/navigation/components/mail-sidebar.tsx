@@ -62,6 +62,7 @@ type MailSidebarProps = {
       displayName: string | null;
       groupName: string;
       provider: string;
+      unreadNonSpamCount: number;
     }>;
     name: string;
   }>;

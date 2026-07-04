@@ -5,7 +5,7 @@
 - Bun 1.3.9 or newer
 - Git
 - PostgreSQL 16 or newer installed locally
-- AWS credentials when running the SST mail and background-processing stack
+- Non-production AWS credentials only when running the SST mail and background-processing stack
 - OAuth and provider credentials for integrations you want to test
 
 Hosted development databases are intentionally unsupported. Every developer uses local PostgreSQL,
@@ -27,6 +27,8 @@ Copy-Item .env.example .env.local
 ```
 
 Do not copy production secrets into `.env.local`.
+Run `bun run env:doctor` after editing `.env.local`; it fails if remote database URLs or
+production-shaped provider keys are present.
 
 ## Local Database
 
@@ -68,6 +70,7 @@ Local development requires only the values needed by the paths you exercise. Imp
 
 - `DATABASE_URL`: local PostgreSQL only
 - Better Auth: application URL and secret
+- Auth email mode: `QUIETER_AUTH_MAIL_MODE=console` prints local auth links without managed mail
 - Google identity OAuth: sign-in only
 - Google Gmail OAuth: separate client for mailbox authorization
 - Gmail credential encryption keys
@@ -80,25 +83,24 @@ Keep `DATABASE_MIGRATION_URL` unset locally. Local migration commands fall back 
 
 ## Running
 
-Run the complete local session:
+Run the normal local web session:
 
 ```bash
 bun run dev
 ```
 
-Turbo starts:
+Turbo starts `apps/web` on `http://localhost:3000`. This path does not start SST and should not
+need AWS, R2, live-sync, or managed-mail provider credentials.
 
-- `apps/web` on `http://localhost:3000`
-- the SST development stage, defaulting to `mail-dev`
-
-The full session needs valid AWS credentials because SST owns mail and background infrastructure.
-For UI work that does not need SST, build the environment package and run the web app directly:
+Run the optional mail and background-processing stack only when you need it:
 
 ```bash
-bun run build --filter=@quieter/env
-cd apps/web
-bun run dev
+bun run dev:mail
 ```
+
+Run both sessions together with `bun run dev:all`. The SST wrapper defaults to the `mail-dev`
+stage and loads `.env.local` plus optional `.env.sst.local`. Keep AWS credentials out of
+`.env.local`; put non-production SST credentials in `.env.sst.local` when the mail stack is needed.
 
 ## Where Changes Belong
 

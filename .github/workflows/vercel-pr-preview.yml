@@ -1,0 +1,161 @@
+name: Vercel PR Preview
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - closed
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: quieter-pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  PR_PREVIEW_HOST: pr-${{ github.event.pull_request.number }}.preview.quieter.email
+  VERCEL_CLI_VERSION: 54.18.7
+
+jobs:
+  deploy:
+    name: Deploy trusted PR preview
+    if: ${{ github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    environment: Preview
+    timeout-minutes: 15
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Pull Vercel preview environment
+        env:
+          VERCEL_ORG_ID: ${{ vars.VERCEL_TEAM_ID || secrets.VERCEL_TEAM_ID || vars.VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "${VERCEL_ORG_ID}" ] || [ -z "${VERCEL_PROJECT_ID}" ] || [ -z "${VERCEL_TOKEN}" ]; then
+            echo "VERCEL_ORG_ID, VERCEL_PROJECT_ID, and VERCEL_TOKEN are required in the GitHub preview environment." >&2
+            exit 1
+          fi
+
+          bunx vercel@${VERCEL_CLI_VERSION} pull --yes --environment=preview --git-branch="${GITHUB_HEAD_REF}" --token="${VERCEL_TOKEN}"
+
+      - name: Build Vercel config dependencies
+        run: bun run --cwd packages/env build
+
+      - name: Build Vercel preview
+        env:
+          VERCEL_ORG_ID: ${{ vars.VERCEL_TEAM_ID || secrets.VERCEL_TEAM_ID || vars.VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: bunx vercel@${VERCEL_CLI_VERSION} build --target=preview --token="${VERCEL_TOKEN}"
+
+      - name: Deploy Vercel preview
+        id: deploy
+        env:
+          VERCEL_ORG_ID: ${{ vars.VERCEL_TEAM_ID || secrets.VERCEL_TEAM_ID || vars.VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          bunx vercel@${VERCEL_CLI_VERSION} deploy --prebuilt --target=preview --yes --token="${VERCEL_TOKEN}" \
+            --meta githubCommitSha="${GITHUB_SHA}" \
+            --meta githubCommitRef="${GITHUB_HEAD_REF}" \
+            --meta githubPullRequest="${{ github.event.pull_request.number }}" \
+            --meta quieterEnvironment="pr-preview" > deployment-url.txt
+          deployment_url="$(tail -n 1 deployment-url.txt)"
+          echo "url=${deployment_url}" >> "${GITHUB_OUTPUT}"
+          echo "immutable_url=${deployment_url}" >> "${GITHUB_OUTPUT}"
+          echo "Preview deployment: ${deployment_url}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Alias Vercel PR preview
+        id: alias
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          deployment_url="${{ steps.deploy.outputs.immutable_url }}"
+          bunx vercel@${VERCEL_CLI_VERSION} alias set "${deployment_url}" "${PR_PREVIEW_HOST}" --token="${VERCEL_TOKEN}"
+          stable_url="https://${PR_PREVIEW_HOST}"
+          echo "url=${stable_url}" >> "${GITHUB_OUTPUT}"
+          echo "Stable preview: ${stable_url}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Comment preview URL
+        uses: actions/github-script@v7
+        env:
+          IMMUTABLE_PREVIEW_URL: ${{ steps.deploy.outputs.immutable_url }}
+          STABLE_PREVIEW_URL: ${{ steps.alias.outputs.url }}
+        with:
+          script: |
+            const marker = '<!-- quieter-pr-preview -->';
+            const body = `${marker}
+            Stable preview: ${process.env.STABLE_PREVIEW_URL}
+            Exact deployment: ${process.env.IMMUTABLE_PREVIEW_URL}`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const previous = comments.find(
+              (comment) => comment.user.type === 'Bot' && comment.body.includes(marker),
+            );
+
+            if (previous) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: previous.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+  skip-fork:
+    name: Skip untrusted fork preview
+    if: ${{ github.event.action != 'closed' && github.event.pull_request.head.repo.full_name != github.repository }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - name: Explain skip
+        run: |
+          echo "Vercel preview deployment skipped." >> "${GITHUB_STEP_SUMMARY}"
+          echo "Fork pull requests do not receive deployment tokens or preview environment secrets." >> "${GITHUB_STEP_SUMMARY}"
+
+  cleanup:
+    name: Remove closed PR preview alias
+    if: ${{ github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    environment: Preview
+    timeout-minutes: 5
+    steps:
+      - name: Remove Vercel PR alias
+        env:
+          VERCEL_ORG_ID: ${{ vars.VERCEL_TEAM_ID || secrets.VERCEL_TEAM_ID || vars.VERCEL_ORG_ID || secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "${VERCEL_ORG_ID}" ] || [ -z "${VERCEL_PROJECT_ID}" ] || [ -z "${VERCEL_TOKEN}" ]; then
+            echo "VERCEL_ORG_ID, VERCEL_PROJECT_ID, and VERCEL_TOKEN are required in the GitHub preview environment." >&2
+            exit 1
+          fi
+
+          bunx vercel@${VERCEL_CLI_VERSION} alias rm "${PR_PREVIEW_HOST}" --yes --token="${VERCEL_TOKEN}" || true
+          echo "Removed stable preview alias: https://${PR_PREVIEW_HOST}" >> "${GITHUB_STEP_SUMMARY}"

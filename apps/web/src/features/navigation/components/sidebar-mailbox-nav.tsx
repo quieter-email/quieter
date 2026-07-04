@@ -27,7 +27,6 @@ const SIDEBAR_MAILBOX_ITEMS: ReadonlyArray<{
   { id: "trash", label: "Trash", icon: Delete01Icon },
   { id: "spam", label: "Spam", icon: Delete02Icon },
 ];
-const MANAGED_MAILBOX_ITEMS = SIDEBAR_MAILBOX_ITEMS.filter((item) => item.id !== "drafts");
 const API_MAILBOX_ITEMS = SIDEBAR_MAILBOX_ITEMS.filter((item) => item.id === "sent");
 
 const getSidebarEntranceDelay = (step: number) => step * 0.1;
@@ -62,65 +61,62 @@ export const SidebarMailboxNav = ({
   return (
     <LayoutGroup id="mailbox-sidebar">
       <nav ref={navRef} aria-label="Mailboxes" className="flex flex-col" onMouseLeave={clearHover}>
-        {(mailboxProvider === "api"
-          ? API_MAILBOX_ITEMS
-          : mailboxProvider === "managed"
-            ? MANAGED_MAILBOX_ITEMS
-            : SIDEBAR_MAILBOX_ITEMS
-        ).map((item, index) => {
-          const isActive = selectedMailbox === item.id;
-          const itemHovered = isHovered(item.id);
+        {(mailboxProvider === "api" ? API_MAILBOX_ITEMS : SIDEBAR_MAILBOX_ITEMS).map(
+          (item, index) => {
+            const isActive = selectedMailbox === item.id;
+            const itemHovered = isHovered(item.id);
 
-          return (
-            <m.div
-              key={item.id}
-              className="w-full will-change-[transform,opacity,filter]"
-              initial={getSidebarEntranceInitial(animateEntrance)}
-              animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-              transition={{
-                delay: getSidebarEntranceDelay(index + 3),
-                duration: 0.5,
-                ease: "easeOut",
-              }}
-            >
-              <SidebarNavItem
-                active={isActive}
-                aria-current={isActive ? "page" : undefined}
-                className={cn("w-full justify-start gap-3 px-3 text-left", {
-                  "text-foreground": isActive || itemHovered,
-                  "text-muted-foreground": !isActive && !itemHovered,
-                })}
-                hover={itemHovered}
-                hoverEnter={itemHovered && hoverEnter}
-                hoverExiting={isHoverExiting(item.id)}
-                hoverLayoutId={hoverLayoutId}
-                onBlur={(event) => clearHoverIfLeavingNav(event.relatedTarget)}
-                onClick={() => onSelectMailbox(item.id)}
-                onFocus={() => {
-                  if (!isActive) setHover(item.id);
+            return (
+              <m.div
+                key={item.id}
+                className="w-full will-change-[transform,opacity,filter]"
+                initial={getSidebarEntranceInitial(animateEntrance)}
+                animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                transition={{
+                  delay: getSidebarEntranceDelay(index + 3),
+                  duration: 0.5,
+                  ease: "easeOut",
                 }}
-                onHoverExitComplete={onHoverExitComplete}
-                onMouseEnter={() => {
-                  if (isActive) {
-                    clearHover();
-                    return;
-                  }
-                  setHover(item.id);
-                }}
-                size="sm"
-                type="button"
-                variant="ghost"
               >
-                <HugeiconsIcon
-                  strokeWidth={1.5}
-                  className="shrink-0 text-foreground"
-                  icon={item.icon}
-                />
-                {item.label}
-              </SidebarNavItem>
-            </m.div>
-          );
-        })}
+                <SidebarNavItem
+                  active={isActive}
+                  aria-current={isActive ? "page" : undefined}
+                  className={cn("w-full justify-start gap-3 px-3 text-left", {
+                    "text-foreground": isActive || itemHovered,
+                    "text-muted-foreground": !isActive && !itemHovered,
+                  })}
+                  hover={itemHovered}
+                  hoverEnter={itemHovered && hoverEnter}
+                  hoverExiting={isHoverExiting(item.id)}
+                  hoverLayoutId={hoverLayoutId}
+                  onBlur={(event) => clearHoverIfLeavingNav(event.relatedTarget)}
+                  onClick={() => onSelectMailbox(item.id)}
+                  onFocus={() => {
+                    if (!isActive) setHover(item.id);
+                  }}
+                  onHoverExitComplete={onHoverExitComplete}
+                  onMouseEnter={() => {
+                    if (isActive) {
+                      clearHover();
+                      return;
+                    }
+                    setHover(item.id);
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <HugeiconsIcon
+                    strokeWidth={1.5}
+                    className="shrink-0 text-foreground"
+                    icon={item.icon}
+                  />
+                  {item.label}
+                </SidebarNavItem>
+              </m.div>
+            );
+          },
+        )}
       </nav>
     </LayoutGroup>
   );

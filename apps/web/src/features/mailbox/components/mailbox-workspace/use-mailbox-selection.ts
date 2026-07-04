@@ -57,25 +57,29 @@ const reorderMailboxQueryData = (
 };
 
 export const useMailboxSelection = ({
+  isEmptyPreviewPersona,
   isDemoMode,
   isManagedDemoMode,
   mailboxId,
   queryClient,
 }: {
+  isEmptyPreviewPersona: boolean;
   isDemoMode: boolean;
   isManagedDemoMode: boolean;
   mailboxId?: string;
   queryClient: QueryClient;
 }) => {
-  const isSandboxMode = isDemoMode || isManagedDemoMode;
+  const isSandboxMode = isDemoMode || isManagedDemoMode || isEmptyPreviewPersona;
   const { data: queriedMailboxesData, isPending: isMailboxesPending } = useQuery(
     mailboxesQueryOptions(!isSandboxMode),
   );
-  const mailboxesData = isManagedDemoMode
-    ? getManagedDemoMailboxes()
-    : isDemoMode
-      ? getDemoMailboxes()
-      : queriedMailboxesData;
+  const mailboxesData = isEmptyPreviewPersona
+    ? { defaultMailboxId: null, groups: [] }
+    : isManagedDemoMode
+      ? getManagedDemoMailboxes()
+      : isDemoMode
+        ? getDemoMailboxes()
+        : queriedMailboxesData;
   const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
   const mailboxGroups = (mailboxesData?.groups ?? []).map((group) => ({
     id: group.id,
@@ -89,6 +93,7 @@ export const useMailboxSelection = ({
       groupName: mailbox.groupName,
       id: mailbox.id,
       provider: mailbox.provider,
+      unreadNonSpamCount: mailbox.unreadNonSpamCount,
     })),
   }));
   const mailboxes = mailboxGroups.flatMap((group) => group.mailboxes);

@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
+import { getMailboxesQueryKey } from "../../mailboxes-query";
 import {
   MAILBOX_LABELS,
   type MailboxCategory,
@@ -108,6 +109,10 @@ const restoreSnapshots = async (
   ]);
 };
 
+const invalidateMailboxCounts = async (queryClient: QueryClient) => {
+  await queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() });
+};
+
 const applyMessageToCaches = (
   queryClient: QueryClient,
   mailboxId: string,
@@ -166,6 +171,7 @@ const runOptimisticMessageMetadataMutation = async (
       args.queryClient,
       applyMessageToCaches(args.queryClient, args.mailboxId, threadQueryKey, resolvedMessage),
     );
+    await invalidateMailboxCounts(args.queryClient);
   } catch (error) {
     await restoreSnapshots(
       args.queryClient,
@@ -235,6 +241,7 @@ const runOptimisticThreadMetadataMutation = async (args: {
     );
 
     await persistQueryKeys(args.queryClient, [...resolvedTouchedQueryKeys, threadQueryKey]);
+    await invalidateMailboxCounts(args.queryClient);
   } catch (error) {
     await restoreSnapshots(args.queryClient, previousMessagesQueries, previousThreadQuery);
     throw error;
@@ -273,6 +280,7 @@ const runOptimisticThreadLabelMutation = async (args: {
   try {
     const updatedThread = await args.mutation(args.signal);
     await applyResolvedThreadMetadataToCaches(args.queryClient, args.mailboxId, updatedThread);
+    await invalidateMailboxCounts(args.queryClient);
   } catch (error) {
     await restoreSnapshots(args.queryClient, previousMessagesQueries, previousThreadQuery);
     throw error;
@@ -315,6 +323,7 @@ const runOptimisticMessageRemoval = async (
 
   try {
     await args.mutation(args.signal);
+    await invalidateMailboxCounts(args.queryClient);
   } catch (error) {
     await restoreSnapshots(
       args.queryClient,

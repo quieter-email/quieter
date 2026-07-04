@@ -14,6 +14,7 @@ import { useManagedDemoModeEnabled } from "~/features/settings/domain/managed-de
 import { chatsQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-query";
 import { openGoogleAccountLink } from "~/lib/google-account-link";
 import { orpc } from "~/lib/orpc";
+import { usePreviewPersona } from "~/lib/preview-personas";
 import type { MailboxWorkspaceView } from "../domain/mailbox-workspace-view";
 import { MailboxWorkspaceContent } from "./mailbox-workspace/mailbox-workspace-content";
 import { useMailboxRouteSearch } from "./mailbox-workspace/use-mailbox-route-search";
@@ -26,6 +27,14 @@ type MailboxWorkspaceProps = {
     email?: string | null;
     name?: string | null;
   };
+};
+
+const isMailboxSupportedByProvider = (
+  provider: "api" | "gmail" | "managed" | null,
+  mailbox: MailboxCategory,
+) => {
+  if (provider === "api") return mailbox === "sent";
+  return true;
 };
 
 const useChatSidebarActions = ({
@@ -108,7 +117,9 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const { isMobileSidebarOpen, setIsMobileSidebarOpen } = useWorkspaceUiState();
   const isDemoMode = useDemoModeEnabled();
   const isManagedDemoMode = useManagedDemoModeEnabled();
-  const isSandboxMode = isDemoMode || isManagedDemoMode;
+  const previewPersona = usePreviewPersona();
+  const isEmptyPreviewPersona = previewPersona === "empty";
+  const isSandboxMode = isDemoMode || isManagedDemoMode || isEmptyPreviewPersona;
   const {
     defaultMailboxId,
     mailboxGroups,
@@ -119,9 +130,17 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     selectedMailboxNeedsReconnect,
     setDefaultMailboxMutation,
     updateMailboxSwitcherOrderMutation,
-  } = useMailboxSelection({ isDemoMode, isManagedDemoMode, mailboxId, queryClient });
+  } = useMailboxSelection({
+    isDemoMode,
+    isEmptyPreviewPersona,
+    isManagedDemoMode,
+    mailboxId,
+    queryClient,
+  });
   const { data: chats = [], isPending: areChatsPending } = useQuery(
-    chatsQueryOptions(selectedMailboxProvider === "api" ? null : selectedMailboxId),
+    chatsQueryOptions(
+      isSandboxMode || selectedMailboxProvider === "api" ? null : selectedMailboxId,
+    ),
   );
   const reconnectingMailboxId = startingReconnectMailboxId;
   const isWorkspaceReady = isSandboxMode || !mailboxesQuery.isPending;
@@ -176,14 +195,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   }, [selectedMailboxProvider, setMailboxSearch, view]);
 
   useLayoutEffect(() => {
-    if (
-      (selectedMailboxProvider !== "managed" && selectedMailboxProvider !== "api") ||
-      (selectedMailboxProvider === "managed" &&
-        (activeMailbox === "inbox" || activeMailbox === "sent")) ||
-      (selectedMailboxProvider === "api" && activeMailbox === "sent")
-    ) {
-      return;
-    }
+    if (isMailboxSupportedByProvider(selectedMailboxProvider, activeMailbox)) return;
 
     void setMailboxSearch({
       mailbox: selectedMailboxProvider === "api" ? "sent" : "inbox",
@@ -264,12 +276,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     void setMailboxSearch({ view: nextView });
   };
   const selectMailboxFromHotkey = (mailbox: MailboxCategory) => {
-    if (
-      (selectedMailboxProvider === "managed" && mailbox !== "inbox" && mailbox !== "sent") ||
-      (selectedMailboxProvider === "api" && mailbox !== "sent")
-    ) {
-      return;
-    }
+    if (!isMailboxSupportedByProvider(selectedMailboxProvider, mailbox)) return;
 
     selectMailbox(mailbox);
   };
@@ -398,7 +405,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
           demoMode={isDemoMode}
           managedDemoMode={isManagedDemoMode}
           mailboxId={selectedMailboxId}
-          persistDrafts={selectedMailboxProvider !== "managed" && selectedMailboxProvider !== "api"}
+          persistDrafts={selectedMailboxProvider !== "api"}
           ref={composeDialogRef}
         />
       </>
@@ -502,11 +509,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         demoMode={isDemoMode}
         managedDemoMode={isManagedDemoMode}
         mailboxId={selectedMailboxId}
-        persistDrafts={
-          !isManagedDemoMode &&
-          selectedMailboxProvider !== "managed" &&
-          selectedMailboxProvider !== "api"
-        }
+        persistDrafts={!isManagedDemoMode && selectedMailboxProvider !== "api"}
         ref={composeDialogRef}
       />
     </>
