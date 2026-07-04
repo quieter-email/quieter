@@ -13,6 +13,7 @@ on:
 permissions:
   contents: read
   issues: write
+  pull-requests: write
 
 concurrency:
   group: quieter-pr-preview-${{ github.event.pull_request.number }}
@@ -108,25 +109,35 @@ jobs:
             Exact deployment: ${process.env.IMMUTABLE_PREVIEW_URL}`;
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner,
-              repo,
-              issue_number,
-              per_page: 100,
-            });
-            const previous = comments.find(
-              (comment) => comment.user.type === 'Bot' && comment.body.includes(marker),
-            );
-
-            if (previous) {
-              await github.rest.issues.updateComment({
+            try {
+              const comments = await github.paginate(github.rest.issues.listComments, {
                 owner,
                 repo,
-                comment_id: previous.id,
-                body,
+                issue_number,
+                per_page: 100,
               });
-            } else {
-              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+              const previous = comments.find(
+                (comment) => comment.user.type === 'Bot' && comment.body.includes(marker),
+              );
+
+              if (previous) {
+                await github.rest.issues.updateComment({
+                  owner,
+                  repo,
+                  comment_id: previous.id,
+                  body,
+                });
+              } else {
+                await github.rest.issues.createComment({ owner, repo, issue_number, body });
+              }
+            } catch (error) {
+              core.warning(`Could not comment preview URL: ${error.message}`);
+              await core.summary
+                .addHeading('Preview URL')
+                .addLink('Stable preview', process.env.STABLE_PREVIEW_URL)
+                .addBreak()
+                .addLink('Exact deployment', process.env.IMMUTABLE_PREVIEW_URL)
+                .write();
             }
 
   skip-fork:

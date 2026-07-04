@@ -120,7 +120,11 @@ describe("migration execution boundary", () => {
     ],
     [
       "preview migration marker",
-      { ...approvedProductionEnvironment, QUIETER_ALLOW_REMOTE_MIGRATIONS: "staging" },
+      {
+        ...approvedProductionEnvironment,
+        GITHUB_REF: "refs/pull/112/merge",
+        QUIETER_ALLOW_REMOTE_MIGRATIONS: "staging",
+      },
     ],
   ])("rejects remote migrations from %s", (_, environment) => {
     expect(() => assertMigrationExecutionAllowed(remoteDatabaseUrl, environment)).toThrow(
