@@ -41,6 +41,7 @@ import {
   loadAutoLabelUserCorrectionPrompt,
   loadAutomationMemoryPrompt,
 } from "../mail-automation/memory";
+import { enqueueMailboxActionsForMessage } from "../mailbox-actions/enqueue";
 import { loadUserAiContextPrompt } from "../user-ai-context";
 
 const WATCH_RENEWAL_INTERVAL_MS = 1000 * 60 * 60 * 20;
@@ -93,6 +94,29 @@ const recordWatchError = async (mailboxId: string, error: unknown) => {
       updatedAt: now,
     })
     .where(eq(gmailWatchState.mailboxId, mailboxId));
+};
+
+const enqueueMailboxActionRuns = async (input: { mailboxId: string; messageIds: string[] }) => {
+  if (input.messageIds.length === 0) {
+    return;
+  }
+
+  const results = await Promise.allSettled(
+    input.messageIds.map((messageId) =>
+      enqueueMailboxActionsForMessage({
+        mailboxId: input.mailboxId,
+        sourceMessageId: messageId,
+      }),
+    ),
+  );
+  for (const result of results) {
+    if (result.status === "rejected") {
+      console.error("Could not enqueue mailbox action for Gmail message.", {
+        error: result.reason,
+        mailboxId: input.mailboxId,
+      });
+    }
+  }
 };
 
 const claimMailboxProcessingLease = async (mailboxId: string) => {
@@ -611,6 +635,7 @@ const processHistoryRecoveryPage = async ({
     usefulDetailsEnabled,
     userId,
   });
+  await enqueueMailboxActionRuns({ mailboxId, messageIds: page.messageIds });
 
   await db
     .update(gmailWatchState)
@@ -723,6 +748,7 @@ const processMailboxHistory = async ({
           usefulDetailsEnabled,
           userId,
         });
+        await enqueueMailboxActionRuns({ mailboxId, messageIds: page.messageIds });
         const now = new Date();
         await db
           .update(gmailWatchState)

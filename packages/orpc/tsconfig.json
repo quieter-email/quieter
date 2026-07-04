@@ -2,7 +2,7 @@
   "extends": "@quieter/config/tsconfig/base.json",
   "compilerOptions": {
     "lib": ["ESNext", "DOM"],
-    "types": ["node"]
+    "types": ["node", "bun"]
   },
   "include": ["src/**/*.ts"]
 }

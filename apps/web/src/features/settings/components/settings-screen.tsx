@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "@quieter/ui/cn";
 import { useNavigate } from "@tanstack/react-router";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
 import { isDemoModeAvailable } from "~/features/settings/domain/demo-mode-setting";
@@ -7,6 +8,7 @@ import { SETTINGS_DETAIL_TITLES } from "~/features/settings/domain/settings-navi
 import { type SettingsTab } from "~/features/settings/domain/settings-tab";
 import { settingsRouteApi } from "~/lib/route-apis";
 import { AccountSettingsPanel } from "./account-settings-panel";
+import { ActionsSettingsPanel } from "./actions-settings-panel";
 import { BillingCheckoutResult } from "./billing-checkout-result";
 import { ConnectorConnectionResult } from "./connector-connection-result";
 import { ConnectorsSettingsPanel } from "./connectors-settings-panel";
@@ -70,7 +72,12 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
         <SettingsBackButton onClick={() => setTab("overview")}>Settings</SettingsBackButton>
       )}
       <div className="relative z-10 min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-205 px-5 py-8 md:px-8 md:py-14">
+        <div
+          className={cn("mx-auto w-full px-5 py-8 md:px-8 md:py-14", {
+            "max-w-375": tab === "actions",
+            "max-w-205": tab !== "actions",
+          })}
+        >
           {tab === "overview" ? (
             <SettingsOverviewPanel initialUser={initialUser} onSelectTab={setTab} />
           ) : (
@@ -94,6 +101,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
                   <DevelopmentSettingsUnavailable />
                 ))}
               {tab === "account" && <AccountSettingsPanel initialUser={initialUser} />}
+              {tab === "actions" && <ActionsSettingsPanel />}
               {tab === "mailboxes" && <MailboxesSettingsPanel />}
               {tab === "connectors" && <ConnectorsSettingsPanel />}
               {tab === "organization" && <OrganizationSettingsPanel />}

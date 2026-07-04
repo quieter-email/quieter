@@ -4,6 +4,7 @@ import { chatRouter } from "./chat";
 import { connectorsRouter } from "./connectors";
 import { mailRouter } from "./mail";
 import { mailDomainsRouter } from "./mail-domains";
+import { mailboxActionsRouter } from "./mailbox-actions";
 import { organizationRouter } from "./organization";
 import { organizationMailUsageRouter } from "./organization-mail-usage";
 
@@ -14,6 +15,7 @@ export const appRouter = {
   connectors: connectorsRouter,
   mail: mailRouter,
   mailDomains: mailDomainsRouter,
+  mailboxActions: mailboxActionsRouter,
   organization: organizationRouter,
   organizationMailUsage: organizationMailUsageRouter,
 };

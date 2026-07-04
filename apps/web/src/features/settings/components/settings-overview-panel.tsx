@@ -47,6 +47,7 @@ const SETTINGS_NAV_ICONS = {
   privacy: SecurityLockIcon,
   development: CodeIcon,
   mailboxes: Mail01Icon,
+  actions: ConnectIcon,
   organization: UserGroupIcon,
   connectors: ConnectIcon,
   account: UserIcon,

@@ -3,6 +3,7 @@ import { mailbox, managedMailAttachment, managedMailMessage } from "@quieter/dat
 import { parseRawMailMessage, type ParsedRawMailMessage } from "@quieter/mail/raw-message";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
+import { enqueueMailboxActionsForMessage } from "../../mailbox-actions/enqueue";
 import { processManagedMailAutomation } from "../automation";
 import { inheritManagedThreadLabels } from "../labels/repository";
 import { applyManagedRulesToMessage } from "../rules/evaluator";
@@ -172,6 +173,11 @@ export const recordInboundManagedMessage = async (input: {
         await processManagedMailAutomation({
           mailboxId: inserted.mailboxId,
           messageId: inserted.id,
+        });
+        await enqueueMailboxActionsForMessage({
+          mailboxId: inserted.mailboxId,
+          sourceMessageId: input.providerMessageId,
+          sourceThreadId: inserted.threadId,
         });
       } catch (error) {
         console.error("Managed message organization failed after ingestion.", {

@@ -217,6 +217,44 @@ export const ToolPart = ({
     );
   }
 
+  if (name === "list_linear_issue_metadata") {
+    const data = parsed.kind === "linear-issue-metadata" ? parsed.data : undefined;
+    const detail =
+      data?.status === "success"
+        ? `${data.teams.length} team${data.teams.length === 1 ? "" : "s"}`
+        : undefined;
+
+    return (
+      <ToolStep
+        nested={nested}
+        detail={detail}
+        error={error}
+        label={pending ? "Reading Linear workspace" : "Read Linear workspace"}
+        pending={pending}
+      />
+    );
+  }
+
+  if (name === "create_linear_issue") {
+    const data = parsed.kind === "linear-issue-create" ? parsed.data : undefined;
+    const detail =
+      data?.status === "success"
+        ? data.identifier
+        : typeof args.title === "string"
+          ? args.title
+          : undefined;
+
+    return (
+      <ToolStep
+        nested={nested}
+        detail={detail}
+        error={error}
+        label={pending ? "Creating Linear issue" : "Created Linear issue"}
+        pending={pending}
+      />
+    );
+  }
+
   return (
     <ToolStep
       nested={nested}

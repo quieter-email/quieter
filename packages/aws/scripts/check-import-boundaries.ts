@@ -7,6 +7,7 @@ const allowedOrpcImports = new Set([
   "@quieter/orpc/gmail-live-sync",
   "@quieter/orpc/gmail-live-sync-token",
   "@quieter/orpc/gmail-pubsub",
+  "@quieter/orpc/mailbox-actions",
   "@quieter/orpc/managed-mail/ingestion",
 ]);
 

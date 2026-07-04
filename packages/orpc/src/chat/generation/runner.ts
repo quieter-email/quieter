@@ -7,13 +7,17 @@ import {
   createGmailMessageServerTool,
   createGmailSearchServerTool,
   createGmailThreadServerTool,
+  createLinearIssueMetadataServerTool,
+  createLinearIssueServerTool,
   createMailboxOverviewServerTool,
   createModifyMailServerTool,
   createUserAiContextMemoryServerTool,
   googleCalendarToolsPrompt,
   gmailToolsPrompt,
+  linearToolsPrompt,
   type GoogleCalendarToolsContext,
   type GmailToolsContext,
+  type LinearToolsContext,
   type UserAiContextToolsContext,
 } from "@quieter/ai/chat-agent";
 import { chatModelSchema } from "@quieter/ai/chat-models";
@@ -31,8 +35,11 @@ import { isCancelRequested, updateAssistantMessage, updateRunStatus } from "../.
 import { isActiveChatRunStatus, publishChatRunEvent } from "../../chat-run-stream";
 import {
   createGoogleCalendarEventForUser,
+  createLinearIssueForUser,
   GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
   hasConnectedConnector,
+  LINEAR_CONNECTOR_PROVIDER,
+  listLinearIssueMetadataForUser,
 } from "../../connectors/runtime";
 import {
   getMailboxOverviewForUser,
@@ -304,6 +311,13 @@ export const runChatGeneration = async (runId: string) => {
       console.error("Could not inspect Google Calendar connector state.", error);
       return false;
     });
+    const hasLinearConnector = await hasConnectedConnector({
+      provider: LINEAR_CONNECTOR_PROVIDER,
+      userId: run.userId,
+    }).catch((error) => {
+      console.error("Could not inspect Linear connector state.", error);
+      return false;
+    });
     const userAiContext = await loadUserAiContextPrompt({ userId: run.userId });
     const systemPrompts = [
       gmailToolsPrompt,
@@ -319,6 +333,7 @@ ${userAiContext}`,
           ]
         : []),
       ...(hasGoogleCalendarConnector ? [googleCalendarToolsPrompt] : []),
+      ...(hasLinearConnector ? [linearToolsPrompt] : []),
     ];
 
     const finalMessages = await runChatStream({
@@ -443,6 +458,24 @@ ${userAiContext}`,
               }),
           };
           tools.push(createGoogleCalendarEventServerTool(calendarContext));
+        }
+
+        if (hasLinearConnector) {
+          const linearContext: LinearToolsContext = {
+            createLinearIssue: (issue) =>
+              createLinearIssueForUser({
+                issue,
+                signal: abortController.signal,
+                userId: run.userId,
+              }),
+            listLinearIssueMetadata: () =>
+              listLinearIssueMetadataForUser({
+                signal: abortController.signal,
+                userId: run.userId,
+              }),
+          };
+          tools.push(createLinearIssueMetadataServerTool(linearContext));
+          tools.push(createLinearIssueServerTool(linearContext));
         }
 
         return tools;

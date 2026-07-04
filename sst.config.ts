@@ -145,6 +145,8 @@ export default $config({
     const googleCalendarClientSecret = env.GOOGLE_CALENDAR_CLIENT_SECRET ?? "";
     const googleGmailClientId = env.GOOGLE_GMAIL_CLIENT_ID;
     const googleGmailClientSecret = env.GOOGLE_GMAIL_CLIENT_SECRET;
+    const linearClientId = env.LINEAR_CLIENT_ID ?? "";
+    const linearClientSecret = env.LINEAR_CLIENT_SECRET ?? "";
     const gmailTokenEncryptionKey = env.GMAIL_TOKEN_ENCRYPTION_KEY;
     const gmailTokenEncryptionKeyCurrent = env.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT ?? "";
     const gmailPubSubEnvironment = {
@@ -197,6 +199,35 @@ export default $config({
       timeout: "30 seconds",
       url: true,
     });
+    const mailboxActionQueue = new sst.aws.Queue("MailboxActionQueue", {
+      visibilityTimeout: "15 minutes",
+    });
+    mailboxActionQueue.subscribe(
+      {
+        environment: {
+          CONNECTOR_TOKEN_ENCRYPTION_KEY: connectorTokenEncryptionKey,
+          DATABASE_URL: databaseUrl,
+          GMAIL_TOKEN_ENCRYPTION_KEY: gmailTokenEncryptionKey,
+          GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: gmailTokenEncryptionKeyCurrent,
+          GOOGLE_GMAIL_CLIENT_ID: googleGmailClientId,
+          GOOGLE_GMAIL_CLIENT_SECRET: googleGmailClientSecret,
+          LINEAR_CLIENT_ID: linearClientId,
+          LINEAR_CLIENT_SECRET: linearClientSecret,
+          OPENROUTER_API_KEY: openRouterApiKey,
+          POLAR_ACCESS_TOKEN: polarAccessToken,
+          POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
+          POLAR_SANDBOX: polarSandbox,
+        },
+        handler: "packages/aws/src/mailbox-action-consumer.handler",
+        timeout: "15 minutes",
+      },
+      {
+        batch: {
+          partialResponses: true,
+          size: 1,
+        },
+      },
+    );
 
     const gmailLiveSyncConnections = new sst.aws.Dynamo("GmailLiveSyncConnections", {
       fields: {
@@ -415,6 +446,7 @@ export default $config({
       mailBucket: mailBucket.name,
       mailIngressUrl: mailIngress.url,
       mailIngestTokenSecretName: mailIngestToken.name,
+      mailboxActionQueueUrl: mailboxActionQueue.url,
       mailReceiptRoleArn: mailReceiptRole.arn,
       mailReceiptRuleSetName,
       mailReceiptTopicArn: mailReceiptTopic.arn,
