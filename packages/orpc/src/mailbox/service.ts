@@ -169,8 +169,9 @@ const toMailboxListItem = (
 const getGmailUnreadNonSpamCount = async (input: { mailboxId: string; userId: string }) =>
   (await runAuthorizedGmailMailbox(input, async (accessToken) =>
     getGmailMessageCount(accessToken, {
+      accurateUpTo: 99,
       mailbox: "unread",
-      query: "-in:spam",
+      query: "-in:spam -in:trash",
     }),
   )) ?? 0;
 

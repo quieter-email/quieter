@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   extractListUnsubscribeTargets,
+  getGmailMessageCount,
   listGmailAddedMessageHistoryPage,
   refreshMailboxMessages,
   stopGmailWatch,
@@ -136,6 +137,42 @@ describe("refreshMailboxMessages", () => {
         subject: "Subject 0",
         threadMessageCount: 2,
       });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("getGmailMessageCount", () => {
+  test("counts exact results under the configured cap instead of trusting stale estimates", async () => {
+    const originalFetch = globalThis.fetch;
+    let requestedUrl = "";
+
+    globalThis.fetch = async (input) => {
+      requestedUrl = String(input);
+      return Response.json({
+        messages: [
+          { id: "message-1", threadId: "thread-1" },
+          { id: "message-2", threadId: "thread-2" },
+          { id: "message-3", threadId: "thread-3" },
+        ],
+        resultSizeEstimate: 201,
+      });
+    };
+
+    try {
+      expect(
+        await getGmailMessageCount("token", {
+          accurateUpTo: 99,
+          mailbox: "unread",
+          query: "-in:spam -in:trash",
+        }),
+      ).toBe(3);
+
+      const searchParams = new URL(requestedUrl).searchParams;
+      expect(searchParams.get("labelIds")).toBe("UNREAD");
+      expect(searchParams.get("q")).toBe("-in:spam -in:trash");
+      expect(searchParams.get("maxResults")).toBe("100");
     } finally {
       globalThis.fetch = originalFetch;
     }
