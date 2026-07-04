@@ -195,6 +195,8 @@ jobs:
           GOOGLE_CALENDAR_CLIENT_SECRET: ${{ secrets.GOOGLE_CALENDAR_CLIENT_SECRET }}
           GOOGLE_GMAIL_CLIENT_ID: ${{ secrets.GOOGLE_GMAIL_CLIENT_ID }}
           GOOGLE_GMAIL_CLIENT_SECRET: ${{ secrets.GOOGLE_GMAIL_CLIENT_SECRET }}
+          LINEAR_CLIENT_ID: ${{ secrets.LINEAR_CLIENT_ID }}
+          LINEAR_CLIENT_SECRET: ${{ secrets.LINEAR_CLIENT_SECRET }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
           POLAR_METER_CREDIT_USAGE_ID: ${{ vars.POLAR_METER_CREDIT_USAGE_ID || secrets.POLAR_METER_CREDIT_USAGE_ID }}
@@ -229,6 +231,8 @@ jobs:
           R2_BUCKET: ${{ vars.R2_BUCKET || secrets.R2_BUCKET }}
           R2_ENDPOINT: ${{ vars.R2_ENDPOINT || secrets.R2_ENDPOINT }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          LINEAR_CLIENT_ID: ${{ secrets.LINEAR_CLIENT_ID }}
+          LINEAR_CLIENT_SECRET: ${{ secrets.LINEAR_CLIENT_SECRET }}
         run: |
           set -euo pipefail
 
@@ -242,10 +246,13 @@ jobs:
           const values = [
             ["CHAT_GENERATION_START_URL", outputs.chatGenerationEnqueueUrl],
             ["GMAIL_LIVE_SYNC_URL", outputs.gmailLiveSyncUrl],
+            ["MAILBOX_ACTION_QUEUE_URL", outputs.mailboxActionQueueUrl],
             ["MAIL_BUCKET", outputs.mailBucket],
             ["MAIL_RECEIPT_TOPIC_ARN", outputs.mailReceiptTopicArn],
             ["MAIL_RECEIPT_ROLE_ARN", outputs.mailReceiptRoleArn],
             ["MAIL_RECEIPT_RULE_SET_NAME", outputs.mailReceiptRuleSetName],
+            ["LINEAR_CLIENT_ID", process.env.LINEAR_CLIENT_ID],
+            ["LINEAR_CLIENT_SECRET", process.env.LINEAR_CLIENT_SECRET],
             ["R2_ACCESS_KEY_ID", process.env.R2_ACCESS_KEY_ID],
             ["R2_ACCOUNT_ID", process.env.R2_ACCOUNT_ID],
             ["R2_BUCKET", process.env.R2_BUCKET],
