@@ -1,12 +1,7 @@
 import { serverEnv } from "@quieter/env/server";
+import { check, generate, push } from "drizzle-kit/cli";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ensureDrizzleKitCli } from "./ensure-drizzle-kit-cli";
-
-// Programmatic Drizzle Kit SDK entrypoint. Upgrade notes: AGENTS.md + vendor/drizzle-kit-cli/README.md
-ensureDrizzleKitCli();
-
-const { check, generate, push } = await import("drizzle-kit/cli");
 
 export { check, generate, push };
 export type { CheckOptions, GenerateOptions, PushOptions } from "drizzle-kit/cli";
