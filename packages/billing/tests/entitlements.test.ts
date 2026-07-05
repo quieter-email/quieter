@@ -37,28 +37,39 @@ describe("organization subscription ownership", () => {
 });
 
 describe("local development billing entitlement", () => {
-  test("fakes paid access only for local development", () => {
+  test("fakes paid access only with an explicit local opt-in", () => {
     expect(
       isLocalDevelopmentBillingEntitlementEnabled({
         NODE_ENV: "development",
+        QUIETER_LOCAL_BILLING_BYPASS: true,
         VERCEL_ENV: undefined,
       }),
     ).toBe(true);
     expect(
       isLocalDevelopmentBillingEntitlementEnabled({
         NODE_ENV: "development",
+        QUIETER_LOCAL_BILLING_BYPASS: undefined,
+        VERCEL_ENV: undefined,
+      }),
+    ).toBe(false);
+    expect(
+      isLocalDevelopmentBillingEntitlementEnabled({
+        NODE_ENV: "development",
+        QUIETER_LOCAL_BILLING_BYPASS: true,
         VERCEL_ENV: "preview",
       }),
     ).toBe(false);
     expect(
       isLocalDevelopmentBillingEntitlementEnabled({
         NODE_ENV: "production",
+        QUIETER_LOCAL_BILLING_BYPASS: true,
         VERCEL_ENV: "preview",
       }),
     ).toBe(false);
     expect(
       isLocalDevelopmentBillingEntitlementEnabled({
         NODE_ENV: "test",
+        QUIETER_LOCAL_BILLING_BYPASS: true,
         VERCEL_ENV: undefined,
       }),
     ).toBe(false);

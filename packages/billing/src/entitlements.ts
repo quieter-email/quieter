@@ -41,12 +41,18 @@ type BillingEntitlement = {
   product: BillingProductId | null;
 };
 
-type BillingRuntimeEnvironment = Pick<typeof serverEnv, "NODE_ENV" | "VERCEL_ENV">;
+type BillingRuntimeEnvironment = Pick<
+  typeof serverEnv,
+  "NODE_ENV" | "QUIETER_LOCAL_BILLING_BYPASS" | "VERCEL_ENV"
+>;
 
 export const isLocalDevelopmentBillingEntitlementEnabled = (
   env: BillingRuntimeEnvironment = serverEnv,
 ) =>
-  env.NODE_ENV === "development" && env.VERCEL_ENV !== "preview" && env.VERCEL_ENV !== "production";
+  env.NODE_ENV === "development" &&
+  env.VERCEL_ENV !== "preview" &&
+  env.VERCEL_ENV !== "production" &&
+  env.QUIETER_LOCAL_BILLING_BYPASS === true;
 
 const localDevelopmentBillingEntitlement = (): BillingEntitlement => ({
   account: null,

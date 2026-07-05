@@ -811,8 +811,8 @@ export const MailboxesSettingsPanel = () => {
 
                 <div>
                   <h4 className="text-xs font-medium text-foreground">Features</h4>
-                  <div className="mt-1 divide-y divide-border/60 rounded-md border border-border/60">
-                    <label className="flex w-full cursor-pointer items-center gap-3 px-3 py-2.5">
+                  <SettingsInsetRows className="mt-2">
+                    <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
                       <span className="min-w-0 flex-1">
                         <span className="block text-xs font-medium text-foreground">
                           Useful details
@@ -857,7 +857,7 @@ export const MailboxesSettingsPanel = () => {
                       </Switch>
                     </label>
 
-                    <label className="flex w-full cursor-pointer items-center gap-3 px-3 py-2.5">
+                    <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
                       <span className="min-w-0 flex-1">
                         <span className="block text-xs font-medium text-foreground">
                           Auto-label
@@ -899,7 +899,7 @@ export const MailboxesSettingsPanel = () => {
                       </Switch>
                     </label>
 
-                    <div className="flex w-full items-center gap-3 px-3 py-2.5">
+                    <div className={cn(settingsInsetRowClass, "gap-3")}>
                       <span className="min-w-0 flex-1">
                         <span className="block text-xs font-medium text-foreground">
                           API messages
@@ -935,12 +935,12 @@ export const MailboxesSettingsPanel = () => {
                         <SwitchThumb className="size-4 data-checked:translate-x-4" />
                       </Switch>
                     </div>
-                  </div>
+                  </SettingsInsetRows>
                 </div>
 
                 <div>
                   <h4 className="text-xs font-medium text-foreground">Division access</h4>
-                  <SettingsInsetRows>
+                  <SettingsInsetRows className="mt-2">
                     {(managedDivisionsData?.divisions ?? []).map((division) => {
                       const grant = selectedManagedMailboxDetails.divisionGrants.find(
                         (item) => item.divisionId === division.id,

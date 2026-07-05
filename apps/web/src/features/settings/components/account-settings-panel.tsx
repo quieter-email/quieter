@@ -707,7 +707,11 @@ export const AccountSettingsPanel = ({ initialUser }: AccountSettingsPanelProps)
       setPreviewPersona(null);
       setDemoModeEnabled(false);
       setManagedDemoModeEnabled(false);
-      await clearPreviewPersonaCookie();
+      try {
+        await clearPreviewPersonaCookie();
+      } catch {
+        // Best-effort cleanup; sign-out teardown must continue.
+      }
       queryClient.clear();
       await queryPersister.removeQueries();
       await navigate({

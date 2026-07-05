@@ -41,7 +41,7 @@
     "@aws-sdk/client-ses": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
     "@aws-sdk/client-sqs": "catalog:",
-    "@linear/sdk": "^88.0.0",
+    "@linear/sdk": "catalog:",
     "@quieter/ai": "workspace:*",
     "@quieter/auth": "workspace:*",
     "@quieter/billing": "workspace:*",

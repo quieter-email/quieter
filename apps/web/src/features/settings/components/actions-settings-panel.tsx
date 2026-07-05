@@ -116,8 +116,7 @@ export const ActionsSettingsPanel = () => {
     actionData?.revisions.find((revision) => revision.id === action?.draftRevisionId) ??
     actionData?.revisions[0];
   const hasActionableMailbox = mailboxOptions.length > 0;
-  const showDemoMailboxHint =
-    previewPersona === "empty" || isDemoMode || isManagedDemoMode || previewPersona !== null;
+  const showDemoMailboxHint = isDemoMode || isManagedDemoMode || previewPersona !== null;
 
   const openMailboxesSettings = () => {
     void navigate({
