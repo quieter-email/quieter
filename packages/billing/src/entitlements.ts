@@ -8,6 +8,7 @@ import {
   type BillingPlan as StoredBillingPlan,
   type BillingSubscriptionStatus,
 } from "@quieter/database/schema";
+import { serverEnv } from "@quieter/env/server";
 import { and, asc, desc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import {
   BILLING_FEATURES,
@@ -39,6 +40,26 @@ type BillingEntitlement = {
   hasUnlimitedAccess: boolean;
   product: BillingProductId | null;
 };
+
+type BillingRuntimeEnvironment = Pick<
+  typeof serverEnv,
+  "NODE_ENV" | "QUIETER_LOCAL_BILLING_BYPASS" | "VERCEL_ENV"
+>;
+
+export const isLocalDevelopmentBillingEntitlementEnabled = (
+  env: BillingRuntimeEnvironment = serverEnv,
+) =>
+  env.NODE_ENV === "development" &&
+  env.VERCEL_ENV !== "preview" &&
+  env.VERCEL_ENV !== "production" &&
+  env.QUIETER_LOCAL_BILLING_BYPASS === true;
+
+const localDevelopmentBillingEntitlement = (): BillingEntitlement => ({
+  account: null,
+  hasAccess: true,
+  hasUnlimitedAccess: true,
+  product: "pro",
+});
 
 type SubscriptionRow = {
   currentPeriodEnd: Date;
@@ -142,12 +163,16 @@ const getOrganizationSubscription = async (organizationId: string) => {
 };
 
 export const hasUnlimitedBillingAccess = async (userId: string) =>
-  !!(await getActiveOverride(userId));
+  isLocalDevelopmentBillingEntitlementEnabled() || !!(await getActiveOverride(userId));
 
 export const getOrganizationBillingEntitlement = async (input: {
   feature: BillingFeature;
   organizationId: string;
 }): Promise<BillingEntitlement> => {
+  if (isLocalDevelopmentBillingEntitlementEnabled()) {
+    return localDevelopmentBillingEntitlement();
+  }
+
   const account = await getOrganizationSubscription(input.organizationId);
   const billingOwnerId = await getOrganizationBillingOwnerId(input.organizationId);
   const hasUnlimitedAccess = !!billingOwnerId && !!(await getActiveOverride(billingOwnerId));

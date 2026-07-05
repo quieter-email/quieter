@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { isPreviewPersonasEnabled } from "~/lib/preview-personas.server";
 import {
+  createPreviewPersonaClearHeaders,
+  createPreviewPersonaSessionHeaders,
   isPreviewPersona,
-  previewPersonaCookieMaxAgeSeconds,
-  previewPersonaCookieName,
-} from "~/lib/preview-personas.shared";
+  isPreviewPersonasEnabled,
+} from "~/lib/preview-personas.server";
 
 export const Route = createFileRoute("/api/preview-persona")({
   server: {
@@ -23,29 +23,16 @@ export const Route = createFileRoute("/api/preview-persona")({
 
         return Response.json(
           { persona },
-          {
-            headers: {
-              "cache-control": "no-store",
-              "set-cookie": serializePreviewPersonaCookie(persona, request.url),
-            },
-          },
+          { headers: await createPreviewPersonaSessionHeaders(persona) },
         );
+      },
+      DELETE: async () => {
+        if (!isPreviewPersonasEnabled()) {
+          return Response.json({ error: "Preview personas are disabled." }, { status: 404 });
+        }
+
+        return Response.json({}, { headers: createPreviewPersonaClearHeaders() });
       },
     },
   },
 });
-
-const serializePreviewPersonaCookie = (persona: string, requestUrl: string) => {
-  const secureCookie = new URL(requestUrl).protocol === "https:" ? "; Secure" : "";
-
-  return [
-    `${previewPersonaCookieName}=${encodeURIComponent(persona)}`,
-    "Path=/",
-    "HttpOnly",
-    "SameSite=Lax",
-    `Max-Age=${previewPersonaCookieMaxAgeSeconds}`,
-    secureCookie,
-  ]
-    .filter(Boolean)
-    .join("; ");
-};

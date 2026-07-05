@@ -13,6 +13,7 @@ import { getBillingCreditUsage, recordBillingCreditUsage, type BillingUsageKind 
 import {
   getOrganizationBillingEntitlement,
   hasUserBillingFeature,
+  isLocalDevelopmentBillingEntitlementEnabled,
   isActiveBillingStatus,
   subscriptionBelongsToOrganization,
 } from "./entitlements";
@@ -180,6 +181,16 @@ export const createBillingCheckout = async (input: {
     });
   }
   const customerName = organizationRecord.name;
+
+  if (isLocalDevelopmentBillingEntitlementEnabled()) {
+    return {
+      checkoutUrl: getSettingsUrl(input.headers, {
+        billing: "success",
+        organizationId: input.organizationId,
+      }),
+    };
+  }
+
   const providerProductId = getBillingProductId(input.product);
   const rows = await db
     .select({
@@ -270,6 +281,11 @@ export const createBillingPortal = async (input: {
   const returnUrl = getSettingsUrl(input.headers, {
     organizationId: input.organizationId,
   });
+
+  if (isLocalDevelopmentBillingEntitlementEnabled()) {
+    return { portalUrl: returnUrl };
+  }
+
   const session = await (
     await getPolarClient()
   ).customerSessions.create(
@@ -450,6 +466,10 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
 };
 
 export const syncBillingCheckout = async (input: { checkoutId: string; userId: string }) => {
+  if (isLocalDevelopmentBillingEntitlementEnabled()) {
+    return { synced: false };
+  }
+
   const polar = await getPolarClient();
   const checkout = await polar.checkouts.get({ id: input.checkoutId });
   const checkoutUserId = checkout.metadata[BILLING_METADATA_USER_ID];

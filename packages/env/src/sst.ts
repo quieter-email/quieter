@@ -11,10 +11,10 @@ const gmailPubSubVariableNames = [
 
 const polarProductVariableNames = ["POLAR_PRODUCT_MANAGED_ID", "POLAR_PRODUCT_PRO_ID"] as const;
 const connectorVariableNames = [
-  "CONNECTOR_TOKEN_ENCRYPTION_KEY",
   "GOOGLE_CALENDAR_CLIENT_ID",
   "GOOGLE_CALENDAR_CLIENT_SECRET",
 ] as const;
+const linearConnectorVariableNames = ["LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET"] as const;
 const r2VariableNames = [
   "R2_ACCESS_KEY_ID",
   "R2_ACCOUNT_ID",
@@ -41,6 +41,8 @@ export const createSstEnv = (
       GOOGLE_CALENDAR_CLIENT_SECRET: runtimeEnv.GOOGLE_CALENDAR_CLIENT_SECRET,
       GOOGLE_GMAIL_CLIENT_ID: runtimeEnv.GOOGLE_GMAIL_CLIENT_ID,
       GOOGLE_GMAIL_CLIENT_SECRET: runtimeEnv.GOOGLE_GMAIL_CLIENT_SECRET,
+      LINEAR_CLIENT_ID: runtimeEnv.LINEAR_CLIENT_ID,
+      LINEAR_CLIENT_SECRET: runtimeEnv.LINEAR_CLIENT_SECRET,
       OPENROUTER_API_KEY: runtimeEnv.OPENROUTER_API_KEY,
       POLAR_ACCESS_TOKEN: runtimeEnv.POLAR_ACCESS_TOKEN,
       POLAR_METER_CREDIT_USAGE_ID: runtimeEnv.POLAR_METER_CREDIT_USAGE_ID,
@@ -67,6 +69,8 @@ export const createSstEnv = (
       GOOGLE_CALENDAR_CLIENT_SECRET: optionalString,
       GOOGLE_GMAIL_CLIENT_ID: z.string().trim().min(1),
       GOOGLE_GMAIL_CLIENT_SECRET: z.string().trim().min(1),
+      LINEAR_CLIENT_ID: optionalString,
+      LINEAR_CLIENT_SECRET: optionalString,
       OPENROUTER_API_KEY: z.string().trim().min(1),
       POLAR_ACCESS_TOKEN: z.string().trim().min(1),
       POLAR_METER_CREDIT_USAGE_ID: optionalString,
@@ -101,6 +105,9 @@ export const createSstEnv = (
   }
 
   const missingConnectorVariables = connectorVariableNames.filter((name) => !env[name]);
+  const missingLinearConnectorVariables = linearConnectorVariableNames.filter((name) => !env[name]);
+  const hasCompleteConnectorProvider =
+    missingConnectorVariables.length === 0 || missingLinearConnectorVariables.length === 0;
 
   if (
     missingConnectorVariables.length > 0 &&
@@ -114,6 +121,22 @@ export const createSstEnv = (
     throw new Error(
       `Connector configuration is required in production: ${missingConnectorVariables.join(", ")}`,
     );
+  }
+  if (
+    missingLinearConnectorVariables.length > 0 &&
+    missingLinearConnectorVariables.length < linearConnectorVariableNames.length
+  ) {
+    throw new Error(
+      `Linear connector configuration is incomplete: ${missingLinearConnectorVariables.join(", ")}`,
+    );
+  }
+  if (options.production && missingLinearConnectorVariables.length > 0) {
+    throw new Error(
+      `Linear connector configuration is required in production: ${missingLinearConnectorVariables.join(", ")}`,
+    );
+  }
+  if ((options.production || hasCompleteConnectorProvider) && !env.CONNECTOR_TOKEN_ENCRYPTION_KEY) {
+    throw new Error("CONNECTOR_TOKEN_ENCRYPTION_KEY is required when connectors are configured.");
   }
 
   const missingPolarProductVariables = polarProductVariableNames.filter((name) => !env[name]);

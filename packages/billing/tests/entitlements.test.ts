@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { isActiveBillingStatus, subscriptionBelongsToOrganization } from "../src/entitlements";
+import {
+  isActiveBillingStatus,
+  isLocalDevelopmentBillingEntitlementEnabled,
+  subscriptionBelongsToOrganization,
+} from "../src/entitlements";
 import { BILLING_PRODUCTS, productHasAi, productHasManagedMail } from "../src/plans";
 
 describe("billing entitlement statuses", () => {
@@ -29,6 +33,46 @@ describe("organization subscription ownership", () => {
     ).toBe(false);
     expect(subscriptionBelongsToOrganization({}, "organization-a")).toBe(false);
     expect(subscriptionBelongsToOrganization(null, "organization-a")).toBe(false);
+  });
+});
+
+describe("local development billing entitlement", () => {
+  test("fakes paid access only with an explicit local opt-in", () => {
+    expect(
+      isLocalDevelopmentBillingEntitlementEnabled({
+        NODE_ENV: "development",
+        QUIETER_LOCAL_BILLING_BYPASS: true,
+        VERCEL_ENV: undefined,
+      }),
+    ).toBe(true);
+    expect(
+      isLocalDevelopmentBillingEntitlementEnabled({
+        NODE_ENV: "development",
+        QUIETER_LOCAL_BILLING_BYPASS: undefined,
+        VERCEL_ENV: undefined,
+      }),
+    ).toBe(false);
+    expect(
+      isLocalDevelopmentBillingEntitlementEnabled({
+        NODE_ENV: "development",
+        QUIETER_LOCAL_BILLING_BYPASS: true,
+        VERCEL_ENV: "preview",
+      }),
+    ).toBe(false);
+    expect(
+      isLocalDevelopmentBillingEntitlementEnabled({
+        NODE_ENV: "production",
+        QUIETER_LOCAL_BILLING_BYPASS: true,
+        VERCEL_ENV: "preview",
+      }),
+    ).toBe(false);
+    expect(
+      isLocalDevelopmentBillingEntitlementEnabled({
+        NODE_ENV: "test",
+        QUIETER_LOCAL_BILLING_BYPASS: true,
+        VERCEL_ENV: undefined,
+      }),
+    ).toBe(false);
   });
 });
 

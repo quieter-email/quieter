@@ -19,6 +19,8 @@ const completeProductionSstEnvironment = {
   CONNECTOR_TOKEN_ENCRYPTION_KEY: "connector-encryption-secret",
   GOOGLE_CALENDAR_CLIENT_ID: "calendar-client-id",
   GOOGLE_CALENDAR_CLIENT_SECRET: "calendar-client-secret",
+  LINEAR_CLIENT_ID: "linear-client-id",
+  LINEAR_CLIENT_SECRET: "linear-client-secret",
   GMAIL_PUBSUB_PUSH_AUDIENCE: "https://example.com/gmail",
   GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: "gmail@example.iam.gserviceaccount.com",
   GMAIL_PUBSUB_SUBSCRIPTION: "projects/example/subscriptions/gmail",
@@ -149,6 +151,21 @@ describe("SST environment", () => {
     ).toThrow("Connector configuration is incomplete");
   });
 
+  test("rejects partial Linear connector configuration", () => {
+    expect(() =>
+      createSstEnv(
+        { production: false },
+        {
+          ...requiredSstEnvironment,
+          CONNECTOR_TOKEN_ENCRYPTION_KEY: "connector-encryption-secret",
+          GOOGLE_CALENDAR_CLIENT_ID: "calendar-client-id",
+          GOOGLE_CALENDAR_CLIENT_SECRET: "calendar-client-secret",
+          LINEAR_CLIENT_ID: "linear-client-id",
+        },
+      ),
+    ).toThrow("Linear connector configuration is incomplete");
+  });
+
   test("requires connector configuration in production", () => {
     const {
       CONNECTOR_TOKEN_ENCRYPTION_KEY: _key,
@@ -159,6 +176,18 @@ describe("SST environment", () => {
 
     expect(() => createSstEnv({ production: true }, environment)).toThrow(
       "Connector configuration is required in production",
+    );
+  });
+
+  test("requires Linear connector configuration in production", () => {
+    const {
+      LINEAR_CLIENT_ID: _id,
+      LINEAR_CLIENT_SECRET: _secret,
+      ...environment
+    } = completeProductionSstEnvironment;
+
+    expect(() => createSstEnv({ production: true }, environment)).toThrow(
+      "Linear connector configuration is required in production",
     );
   });
 

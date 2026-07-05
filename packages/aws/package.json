@@ -13,6 +13,7 @@
     "./gmail-pubsub-maintenance": "./src/gmail-pubsub-maintenance.ts",
     "./gmail-pubsub-process": "./src/gmail-pubsub-process.ts",
     "./inbound": "./src/inbound.ts",
+    "./mailbox-action-consumer": "./src/mailbox-action-consumer.ts",
     "./outbound": "./src/outbound.ts",
     "./receipt": "./src/receipt.ts"
   },

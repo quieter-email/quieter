@@ -21,6 +21,14 @@ const connectorIcons = {
   google_calendar: (
     <img alt="" aria-hidden className="size-4" height={16} src="/google-calendar.svg" width={16} />
   ),
+  linear: (
+    <span
+      aria-hidden
+      className="flex size-4 items-center justify-center rounded-[5px] bg-[#5e6ad2] text-[10px] font-medium text-white"
+    >
+      L
+    </span>
+  ),
 } as const;
 
 export const ConnectorsSettingsPanel = () => {
@@ -70,6 +78,14 @@ export const ConnectorsSettingsPanel = () => {
           const isConnected = connector.status === "connected";
           const needsReconnect = connector.status === "needs_reconnect";
           const isStarting = startingProvider === connector.provider;
+          const accountSummary = connector.accounts
+            .map((account) => {
+              const workspace = account.providerWorkspaceName
+                ? `${account.providerWorkspaceName}: `
+                : "";
+              return `${workspace}${account.accountEmail ?? account.displayName ?? "Connected"}`;
+            })
+            .join(", ");
           const isDisconnecting =
             disconnectConnectorMutation.isPending &&
             disconnectConnectorMutation.variables?.provider === connector.provider;
@@ -120,7 +136,7 @@ export const ConnectorsSettingsPanel = () => {
               title={connector.displayName}
             >
               {isConnected
-                ? `Connected${connector.accountEmail ? ` as ${connector.accountEmail}` : ""}.`
+                ? `Connected${accountSummary ? ` as ${accountSummary}` : ""}.`
                 : needsReconnect
                   ? "Reconnect this service before using its actions."
                   : connector.isConfigured

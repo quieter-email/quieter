@@ -1,7 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
 
-export type ConnectorProvider = "google_calendar";
+export type ConnectorProvider = "google_calendar" | "linear";
 
 export const CONNECTORS_QUERY_KEY = ["connectors"] as const;
 

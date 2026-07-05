@@ -51,6 +51,12 @@ export const SETTINGS_NAV_ITEMS = [
     section: "workspace",
   },
   {
+    tab: "actions",
+    title: "Actions",
+    description: "Build mailbox workflows that react to incoming mail.",
+    section: "workspace",
+  },
+  {
     tab: "organization",
     title: "Teams",
     description: "Manage your teams and organization settings.",

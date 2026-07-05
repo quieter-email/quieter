@@ -8,6 +8,7 @@ import {
   Mail01Icon,
   Moon01Icon,
   SecurityLockIcon,
+  Settings01Icon,
   UserGroupIcon,
   UserIcon,
 } from "@hugeicons/core-free-icons";
@@ -47,6 +48,7 @@ const SETTINGS_NAV_ICONS = {
   privacy: SecurityLockIcon,
   development: CodeIcon,
   mailboxes: Mail01Icon,
+  actions: Settings01Icon,
   organization: UserGroupIcon,
   connectors: ConnectIcon,
   account: UserIcon,

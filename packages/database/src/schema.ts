@@ -17,11 +17,29 @@ import { defineRelations } from "drizzle-orm/relations";
 
 export type MailDomainStatus = "failed" | "pending_dns" | "verified";
 export type ConnectorConnectionStatus = "connected" | "needs_reconnect";
-export type ConnectorProvider = "google_calendar";
+export type ConnectorProvider = "google_calendar" | "linear";
 export type MailboxConnectionStatus = "connected" | "needs_reconnect";
 export type MailboxGrantRole = "manager" | "reader" | "responder";
 export type MailboxProvider = "gmail" | "managed";
 export type MailboxAccessSource = "direct" | "division";
+export type MailboxActionStatus = "needs_attention" | "ready";
+export type MailboxActionRevisionValidationStatus = "invalid" | "valid";
+export type MailboxActionRunStatus =
+  | "failed"
+  | "needs_attention"
+  | "needs_review"
+  | "queued"
+  | "running"
+  | "skipped"
+  | "succeeded";
+export type MailboxActionStepStatus =
+  | "failed"
+  | "needs_review"
+  | "queued"
+  | "running"
+  | "skipped"
+  | "succeeded";
+export type MailboxActionExternalProvider = "linear";
 export type GmailDeliveryStatus =
   | "delayed"
   | "delivered"
@@ -116,6 +134,24 @@ export type MailboxSwitcherOrder = {
   groupIds: string[];
   mailboxIdsByGroupId: Record<string, string[]>;
 };
+export type MailboxActionGraph = {
+  edges: Array<{
+    id: string;
+    label?: string;
+    source: string;
+    sourcePort: string;
+    target: string;
+    targetPort: string;
+  }>;
+  nodes: Array<{
+    config: Record<string, unknown>;
+    id: string;
+    position: { x: number; y: number };
+    type: string;
+  }>;
+  version: 1;
+};
+export type MailboxActionJsonObject = Record<string, unknown>;
 
 export type ChatMessageRole = "system" | "user" | "assistant";
 export type ChatMessageStatus = "draft" | "streaming" | "complete" | "failed";
@@ -451,8 +487,11 @@ export const connectorCredential = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     provider: text("provider").$type<ConnectorProvider>().notNull(),
     providerAccountId: text("providerAccountId").notNull(),
+    providerWorkspaceId: text("providerWorkspaceId"),
+    providerWorkspaceName: text("providerWorkspaceName"),
     accountEmail: text("accountEmail"),
     displayName: text("displayName"),
+    metadata: jsonb("metadata").$type<MailboxActionJsonObject>(),
     encryptedAccessToken: text("encryptedAccessToken"),
     encryptedRefreshToken: text("encryptedRefreshToken"),
     accessTokenExpiresAt: timestamp("accessTokenExpiresAt"),
@@ -462,13 +501,21 @@ export const connectorCredential = pgTable(
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
-    check("connector_credential_provider_check", sql`${table.provider} in ('google_calendar')`),
+    check(
+      "connector_credential_provider_check",
+      sql`${table.provider} in ('google_calendar', 'linear')`,
+    ),
     check(
       "connector_credential_status_check",
       sql`${table.status} in ('connected', 'needs_reconnect')`,
     ),
     index("connector_credential_user_id_idx").on(table.userId),
-    unique("connector_credential_user_provider_unique").on(table.userId, table.provider),
+    index("connector_credential_user_provider_idx").on(table.userId, table.provider),
+    unique("connector_credential_user_provider_account_unique").on(
+      table.userId,
+      table.provider,
+      table.providerAccountId,
+    ),
   ],
 );
 
@@ -713,6 +760,199 @@ export const mailboxAutomationSettings = pgTable("mailboxAutomationSettings", {
   updatedAt: timestamp("updatedAt").notNull(),
 });
 
+export const mailboxAction = pgTable(
+  "mailboxAction",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    createdByUserId: text("createdByUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    name: text("name").notNull(),
+    enabled: boolean("enabled").notNull().default(false),
+    status: text("status").$type<MailboxActionStatus>().notNull().default("ready"),
+    statusReason: text("statusReason"),
+    draftRevisionId: text("draftRevisionId"),
+    publishedRevisionId: text("publishedRevisionId"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check("mailbox_action_status_check", sql`${table.status} in ('ready', 'needs_attention')`),
+    index("mailbox_action_mailbox_id_idx").on(table.mailboxId),
+    index("mailbox_action_organization_id_idx").on(table.organizationId),
+    index("mailbox_action_published_enabled_idx").on(
+      table.mailboxId,
+      table.enabled,
+      table.publishedRevisionId,
+    ),
+  ],
+);
+
+export const mailboxActionRevision = pgTable(
+  "mailboxActionRevision",
+  {
+    id: text("id").primaryKey(),
+    actionId: text("actionId")
+      .notNull()
+      .references(() => mailboxAction.id, { onDelete: "cascade" }),
+    revisionNumber: integer("revisionNumber").notNull(),
+    graph: jsonb("graph").$type<MailboxActionGraph>().notNull(),
+    validationStatus: text("validationStatus")
+      .$type<MailboxActionRevisionValidationStatus>()
+      .notNull()
+      .default("invalid"),
+    validationErrors: jsonb("validationErrors").$type<string[]>().notNull().default([]),
+    createdByUserId: text("createdByUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => [
+    check(
+      "mailbox_action_revision_validation_status_check",
+      sql`${table.validationStatus} in ('valid', 'invalid')`,
+    ),
+    index("mailbox_action_revision_action_id_idx").on(table.actionId),
+    unique("mailbox_action_revision_action_number_unique").on(table.actionId, table.revisionNumber),
+  ],
+);
+
+export const mailboxActionRun = pgTable(
+  "mailboxActionRun",
+  {
+    id: text("id").primaryKey(),
+    actionId: text("actionId")
+      .notNull()
+      .references(() => mailboxAction.id, { onDelete: "cascade" }),
+    revisionId: text("revisionId")
+      .notNull()
+      .references(() => mailboxActionRevision.id, { onDelete: "cascade" }),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    triggerNodeId: text("triggerNodeId").notNull(),
+    sourceMessageId: text("sourceMessageId").notNull(),
+    sourceThreadId: text("sourceThreadId"),
+    dedupeKey: text("dedupeKey").notNull(),
+    status: text("status").$type<MailboxActionRunStatus>().notNull().default("queued"),
+    attempts: integer("attempts").notNull().default(0),
+    leasedUntil: timestamp("leasedUntil"),
+    startedAt: timestamp("startedAt"),
+    completedAt: timestamp("completedAt"),
+    lastError: text("lastError"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "mailbox_action_run_status_check",
+      sql`${table.status} in ('queued', 'running', 'succeeded', 'skipped', 'failed', 'needs_attention', 'needs_review')`,
+    ),
+    index("mailbox_action_run_action_created_idx").on(table.actionId, table.createdAt),
+    index("mailbox_action_run_mailbox_created_idx").on(table.mailboxId, table.createdAt),
+    index("mailbox_action_run_status_lease_idx").on(table.status, table.leasedUntil),
+    unique("mailbox_action_run_dedupe_key_unique").on(table.dedupeKey),
+  ],
+);
+
+export const mailboxActionRunFrame = pgTable(
+  "mailboxActionRunFrame",
+  {
+    id: text("id").primaryKey(),
+    runId: text("runId")
+      .notNull()
+      .references(() => mailboxActionRun.id, { onDelete: "cascade" }),
+    parentFrameId: text("parentFrameId"),
+    status: text("status").$type<MailboxActionRunStatus>().notNull().default("running"),
+    path: jsonb("path").$type<string[]>().notNull().default([]),
+    variables: jsonb("variables").$type<MailboxActionJsonObject>().notNull().default({}),
+    mergeState: jsonb("mergeState").$type<MailboxActionJsonObject>(),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "mailbox_action_run_frame_status_check",
+      sql`${table.status} in ('queued', 'running', 'succeeded', 'skipped', 'failed', 'needs_attention', 'needs_review')`,
+    ),
+    index("mailbox_action_run_frame_run_id_idx").on(table.runId),
+  ],
+);
+
+export const mailboxActionStepRun = pgTable(
+  "mailboxActionStepRun",
+  {
+    id: text("id").primaryKey(),
+    runId: text("runId")
+      .notNull()
+      .references(() => mailboxActionRun.id, { onDelete: "cascade" }),
+    frameId: text("frameId").references(() => mailboxActionRunFrame.id, { onDelete: "set null" }),
+    nodeId: text("nodeId").notNull(),
+    nodeType: text("nodeType").notNull(),
+    status: text("status").$type<MailboxActionStepStatus>().notNull().default("queued"),
+    input: jsonb("input").$type<MailboxActionJsonObject>().notNull().default({}),
+    output: jsonb("output").$type<MailboxActionJsonObject>(),
+    model: text("model"),
+    toolCalls: jsonb("toolCalls").$type<Array<MailboxActionJsonObject>>(),
+    error: text("error"),
+    startedAt: timestamp("startedAt"),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "mailbox_action_step_run_status_check",
+      sql`${table.status} in ('queued', 'running', 'succeeded', 'skipped', 'failed', 'needs_review')`,
+    ),
+    index("mailbox_action_step_run_run_id_idx").on(table.runId),
+    index("mailbox_action_step_run_frame_id_idx").on(table.frameId),
+  ],
+);
+
+export const mailboxActionExternalEffect = pgTable(
+  "mailboxActionExternalEffect",
+  {
+    id: text("id").primaryKey(),
+    runId: text("runId")
+      .notNull()
+      .references(() => mailboxActionRun.id, { onDelete: "cascade" }),
+    stepRunId: text("stepRunId").references(() => mailboxActionStepRun.id, {
+      onDelete: "set null",
+    }),
+    actionId: text("actionId")
+      .notNull()
+      .references(() => mailboxAction.id, { onDelete: "cascade" }),
+    revisionId: text("revisionId")
+      .notNull()
+      .references(() => mailboxActionRevision.id, { onDelete: "cascade" }),
+    provider: text("provider").$type<MailboxActionExternalProvider>().notNull(),
+    connectorCredentialId: text("connectorCredentialId").references(() => connectorCredential.id, {
+      onDelete: "set null",
+    }),
+    idempotencyKey: text("idempotencyKey").notNull(),
+    externalId: text("externalId").notNull(),
+    externalUrl: text("externalUrl"),
+    metadata: jsonb("metadata").$type<MailboxActionJsonObject>(),
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => [
+    check("mailbox_action_external_effect_provider_check", sql`${table.provider} in ('linear')`),
+    index("mailbox_action_external_effect_action_created_idx").on(table.actionId, table.createdAt),
+    index("mailbox_action_external_effect_run_id_idx").on(table.runId),
+    unique("mailbox_action_external_effect_idempotency_unique").on(table.idempotencyKey),
+  ],
+);
+
 export const mailAutomationMemoryProfile = pgTable(
   "mailAutomationMemoryProfile",
   {
@@ -816,7 +1056,10 @@ export const connectorOAuthState = pgTable(
     createdAt: timestamp("createdAt").notNull(),
   },
   (table) => [
-    check("connector_oauth_state_provider_check", sql`${table.provider} in ('google_calendar')`),
+    check(
+      "connector_oauth_state_provider_check",
+      sql`${table.provider} in ('google_calendar', 'linear')`,
+    ),
     index("connector_oauth_state_user_id_idx").on(table.userId),
     index("connector_oauth_state_expires_at_idx").on(table.expiresAt),
   ],
@@ -1613,6 +1856,12 @@ export const tables = {
   chatRun,
   connectorCredential,
   connectorOAuthState,
+  mailboxAction,
+  mailboxActionExternalEffect,
+  mailboxActionRevision,
+  mailboxActionRun,
+  mailboxActionRunFrame,
+  mailboxActionStepRun,
   user,
   userAiContext,
   userAiContextEvent,
@@ -1687,6 +1936,14 @@ export const authRelations = defineRelations(tables, (r) => ({
     connectorOAuthStates: r.many.connectorOAuthState({
       from: r.user.id,
       to: r.connectorOAuthState.userId,
+    }),
+    createdMailboxActions: r.many.mailboxAction({
+      from: r.user.id,
+      to: r.mailboxAction.createdByUserId,
+    }),
+    createdMailboxActionRevisions: r.many.mailboxActionRevision({
+      from: r.user.id,
+      to: r.mailboxActionRevision.createdByUserId,
     }),
     invitations: r.many.invitation({ from: r.user.id, to: r.invitation.inviterId }),
     gmailOAuthStates: r.many.gmailOAuthState({
@@ -1764,6 +2021,14 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.organization.id,
       to: r.gmailOAuthState.organizationId,
     }),
+    mailboxActions: r.many.mailboxAction({
+      from: r.organization.id,
+      to: r.mailboxAction.organizationId,
+    }),
+    mailboxActionRuns: r.many.mailboxActionRun({
+      from: r.organization.id,
+      to: r.mailboxActionRun.organizationId,
+    }),
     invitations: r.many.invitation({
       from: r.organization.id,
       to: r.invitation.organizationId,
@@ -1821,6 +2086,10 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
   },
   connectorCredential: {
+    actionExternalEffects: r.many.mailboxActionExternalEffect({
+      from: r.connectorCredential.id,
+      to: r.mailboxActionExternalEffect.connectorCredentialId,
+    }),
     user: r.one.user({
       from: r.connectorCredential.userId,
       to: r.user.id,
@@ -1937,6 +2206,14 @@ export const authRelations = defineRelations(tables, (r) => ({
       to: r.mailboxAutomationSettings.mailboxId,
       optional: true,
     }),
+    actions: r.many.mailboxAction({
+      from: r.mailbox.id,
+      to: r.mailboxAction.mailboxId,
+    }),
+    actionRuns: r.many.mailboxActionRun({
+      from: r.mailbox.id,
+      to: r.mailboxActionRun.mailboxId,
+    }),
     automationMemoryProfiles: r.many.mailAutomationMemoryProfile({
       from: r.mailbox.id,
       to: r.mailAutomationMemoryProfile.mailboxId,
@@ -2051,6 +2328,135 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.mailboxAutomationSettings.mailboxId,
       to: r.mailbox.id,
       optional: false,
+    }),
+  },
+  mailboxAction: {
+    creator: r.one.user({
+      from: r.mailboxAction.createdByUserId,
+      to: r.user.id,
+      optional: true,
+    }),
+    mailbox: r.one.mailbox({
+      from: r.mailboxAction.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+    organization: r.one.organization({
+      from: r.mailboxAction.organizationId,
+      to: r.organization.id,
+      optional: false,
+    }),
+    revisions: r.many.mailboxActionRevision({
+      from: r.mailboxAction.id,
+      to: r.mailboxActionRevision.actionId,
+    }),
+    runs: r.many.mailboxActionRun({
+      from: r.mailboxAction.id,
+      to: r.mailboxActionRun.actionId,
+    }),
+    externalEffects: r.many.mailboxActionExternalEffect({
+      from: r.mailboxAction.id,
+      to: r.mailboxActionExternalEffect.actionId,
+    }),
+  },
+  mailboxActionRevision: {
+    action: r.one.mailboxAction({
+      from: r.mailboxActionRevision.actionId,
+      to: r.mailboxAction.id,
+      optional: false,
+    }),
+    creator: r.one.user({
+      from: r.mailboxActionRevision.createdByUserId,
+      to: r.user.id,
+      optional: true,
+    }),
+    runs: r.many.mailboxActionRun({
+      from: r.mailboxActionRevision.id,
+      to: r.mailboxActionRun.revisionId,
+    }),
+  },
+  mailboxActionRun: {
+    action: r.one.mailboxAction({
+      from: r.mailboxActionRun.actionId,
+      to: r.mailboxAction.id,
+      optional: false,
+    }),
+    frames: r.many.mailboxActionRunFrame({
+      from: r.mailboxActionRun.id,
+      to: r.mailboxActionRunFrame.runId,
+    }),
+    mailbox: r.one.mailbox({
+      from: r.mailboxActionRun.mailboxId,
+      to: r.mailbox.id,
+      optional: false,
+    }),
+    organization: r.one.organization({
+      from: r.mailboxActionRun.organizationId,
+      to: r.organization.id,
+      optional: false,
+    }),
+    revision: r.one.mailboxActionRevision({
+      from: r.mailboxActionRun.revisionId,
+      to: r.mailboxActionRevision.id,
+      optional: false,
+    }),
+    steps: r.many.mailboxActionStepRun({
+      from: r.mailboxActionRun.id,
+      to: r.mailboxActionStepRun.runId,
+    }),
+  },
+  mailboxActionRunFrame: {
+    run: r.one.mailboxActionRun({
+      from: r.mailboxActionRunFrame.runId,
+      to: r.mailboxActionRun.id,
+      optional: false,
+    }),
+    steps: r.many.mailboxActionStepRun({
+      from: r.mailboxActionRunFrame.id,
+      to: r.mailboxActionStepRun.frameId,
+    }),
+  },
+  mailboxActionStepRun: {
+    externalEffects: r.many.mailboxActionExternalEffect({
+      from: r.mailboxActionStepRun.id,
+      to: r.mailboxActionExternalEffect.stepRunId,
+    }),
+    frame: r.one.mailboxActionRunFrame({
+      from: r.mailboxActionStepRun.frameId,
+      to: r.mailboxActionRunFrame.id,
+      optional: true,
+    }),
+    run: r.one.mailboxActionRun({
+      from: r.mailboxActionStepRun.runId,
+      to: r.mailboxActionRun.id,
+      optional: false,
+    }),
+  },
+  mailboxActionExternalEffect: {
+    action: r.one.mailboxAction({
+      from: r.mailboxActionExternalEffect.actionId,
+      to: r.mailboxAction.id,
+      optional: false,
+    }),
+    connectorCredential: r.one.connectorCredential({
+      from: r.mailboxActionExternalEffect.connectorCredentialId,
+      to: r.connectorCredential.id,
+      optional: true,
+    }),
+    revision: r.one.mailboxActionRevision({
+      from: r.mailboxActionExternalEffect.revisionId,
+      to: r.mailboxActionRevision.id,
+      optional: false,
+    }),
+    run: r.one.mailboxActionRun({
+      from: r.mailboxActionExternalEffect.runId,
+      to: r.mailboxActionRun.id,
+      optional: false,
+    }),
+    step: r.one.mailboxActionStepRun({
+      from: r.mailboxActionExternalEffect.stepRunId,
+      to: r.mailboxActionStepRun.id,
+      optional: true,
     }),
   },
   mailAutomationMemoryProfile: {

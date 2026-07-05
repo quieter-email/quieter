@@ -23,6 +23,8 @@ export const summarizeToolCalls = (
     calendar: 0,
     compose: 0,
     labels: 0,
+    linearCreate: 0,
+    linearMetadata: 0,
     message: 0,
     modify: 0,
     overview: 0,
@@ -73,6 +75,16 @@ export const summarizeToolCalls = (
 
     if (call.name === "modify_mail") {
       counts.modify += 1;
+      continue;
+    }
+
+    if (call.name === "list_linear_issue_metadata") {
+      counts.linearMetadata += 1;
+      continue;
+    }
+
+    if (call.name === "create_linear_issue") {
+      counts.linearCreate += 1;
     }
   }
 
@@ -99,6 +111,14 @@ export const summarizeToolCalls = (
 
     if (active?.call.name === "create_google_calendar_event") {
       return "Adding calendar event";
+    }
+
+    if (active?.call.name === "list_linear_issue_metadata") {
+      return "Reading Linear workspace";
+    }
+
+    if (active?.call.name === "create_linear_issue") {
+      return "Creating Linear issue";
     }
 
     return "Working";
@@ -137,6 +157,18 @@ export const summarizeToolCalls = (
   if (counts.calendar > 0) {
     parts.push(
       counts.calendar === 1 ? "added calendar event" : `added ${counts.calendar} calendar events`,
+    );
+  }
+
+  if (counts.linearMetadata > 0) {
+    parts.push("checked Linear");
+  }
+
+  if (counts.linearCreate > 0) {
+    parts.push(
+      counts.linearCreate === 1
+        ? "created Linear issue"
+        : `created ${counts.linearCreate} Linear issues`,
     );
   }
 
@@ -187,6 +219,24 @@ export const getActiveToolDetail = (call: ToolCall, result?: ToolResult): string
     }
 
     return typeof args.summary === "string" ? truncateToolDetail(args.summary) : undefined;
+  }
+
+  if (call.name === "list_linear_issue_metadata") {
+    if (parsed.kind === "linear-issue-metadata" && parsed.data.status === "success") {
+      return countLabel(parsed.data.teams.length, "team");
+    }
+  }
+
+  if (call.name === "create_linear_issue") {
+    if (
+      parsed.kind === "linear-issue-create" &&
+      parsed.data.status === "success" &&
+      parsed.data.title
+    ) {
+      return truncateToolDetail(parsed.data.title);
+    }
+
+    return typeof args.title === "string" ? truncateToolDetail(args.title) : undefined;
   }
 
   return undefined;

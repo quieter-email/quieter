@@ -25,8 +25,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
+import { setDemoModeEnabled } from "~/features/settings/domain/demo-mode-setting";
+import { setManagedDemoModeEnabled } from "~/features/settings/domain/managed-demo-mode-setting";
 import { authClient } from "~/lib/auth";
 import { orpc } from "~/lib/orpc";
+import { clearPreviewPersonaCookie, setPreviewPersona } from "~/lib/preview-personas";
 import { queryPersister } from "~/lib/query-persister";
 import { SettingsCard, SettingsFieldRow, SettingsSection } from "./settings-layout";
 
@@ -701,6 +704,14 @@ export const AccountSettingsPanel = ({ initialUser }: AccountSettingsPanelProps)
     },
     mutationKey: ["auth", "sign-out"],
     onSuccess: async () => {
+      setPreviewPersona(null);
+      setDemoModeEnabled(false);
+      setManagedDemoModeEnabled(false);
+      try {
+        await clearPreviewPersonaCookie();
+      } catch {
+        // Best-effort cleanup; sign-out teardown must continue.
+      }
       queryClient.clear();
       await queryPersister.removeQueries();
       await navigate({

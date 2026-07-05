@@ -7,6 +7,7 @@ import { SETTINGS_DETAIL_TITLES } from "~/features/settings/domain/settings-navi
 import { type SettingsTab } from "~/features/settings/domain/settings-tab";
 import { settingsRouteApi } from "~/lib/route-apis";
 import { AccountSettingsPanel } from "./account-settings-panel";
+import { ActionsSettingsPanel } from "./actions-settings-panel";
 import { BillingCheckoutResult } from "./billing-checkout-result";
 import { ConnectorConnectionResult } from "./connector-connection-result";
 import { ConnectorsSettingsPanel } from "./connectors-settings-panel";
@@ -75,7 +76,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
             <SettingsOverviewPanel initialUser={initialUser} onSelectTab={setTab} />
           ) : (
             <div className="space-y-8">
-              {detail && (
+              {detail && tab !== "actions" && (
                 <header>
                   <h1 className="text-xl font-normal tracking-tight text-foreground">
                     {detail.title}
@@ -95,6 +96,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
                 ))}
               {tab === "account" && <AccountSettingsPanel initialUser={initialUser} />}
               {tab === "mailboxes" && <MailboxesSettingsPanel />}
+              {tab === "actions" && <ActionsSettingsPanel />}
               {tab === "connectors" && <ConnectorsSettingsPanel />}
               {tab === "organization" && <OrganizationSettingsPanel />}
             </div>

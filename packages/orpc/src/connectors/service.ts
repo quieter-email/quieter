@@ -16,9 +16,29 @@ import {
 } from "../gmail-credential-crypto";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { parseIcsToGoogleCalendarEvent, type GoogleCalendarEventDraft } from "./ical";
+import {
+  getLinearIdentityFromAccessToken,
+  LINEAR_AUTHORIZATION_URL,
+  LINEAR_CONNECTOR_PROVIDER,
+  LINEAR_SCOPES,
+  LINEAR_TOKEN_URL,
+} from "./runtime";
+
+export {
+  createLinearIssueForCredential,
+  getLinearMcpEndpoint,
+  LINEAR_CONNECTOR_PROVIDER,
+  LINEAR_SCOPES,
+  listLinearIssueMetadataForCredential as listLinearIssueMetadata,
+  type LinearIssueCreateDraft,
+  type LinearIssueMetadata,
+} from "./runtime";
 
 export const GOOGLE_CALENDAR_CONNECTOR_PROVIDER = "google_calendar" as const;
-export const CONNECTOR_PROVIDERS = [GOOGLE_CALENDAR_CONNECTOR_PROVIDER] as const;
+export const CONNECTOR_PROVIDERS = [
+  GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
+  LINEAR_CONNECTOR_PROVIDER,
+] as const;
 export const connectorProviderSchema = z.enum(CONNECTOR_PROVIDERS);
 
 export type ConnectorConnectionStatus = "connected" | "needs_reconnect" | "not_connected";
@@ -39,6 +59,15 @@ export type GoogleCalendarEventInput = {
 };
 export type ConnectorListItem = {
   accountEmail?: string | null;
+  accounts: Array<{
+    accountEmail?: string | null;
+    displayName?: string | null;
+    id: string;
+    providerAccountId: string;
+    providerWorkspaceId?: string | null;
+    providerWorkspaceName?: string | null;
+    status: ConnectorConnectionStatus;
+  }>;
   connectedAt?: Date;
   description: string;
   displayName: string;
@@ -55,6 +84,7 @@ const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_TOKEN_INFO_URL = "https://oauth2.googleapis.com/tokeninfo";
 const GOOGLE_CALENDAR_API_URL = "https://www.googleapis.com/calendar/v3";
 const permanentGoogleTokenErrors = new Set(["invalid_grant", "invalid_token"]);
+const permanentLinearTokenErrors = new Set(["invalid_grant", "invalid_token"]);
 
 export const GOOGLE_CALENDAR_SCOPES = [
   "openid",
@@ -76,6 +106,22 @@ const googleRefreshResponseSchema = z.object({
   access_token: z.string().min(1),
   expires_in: z.number().int().positive(),
   scope: z.string().min(1).optional(),
+  token_type: z.string().min(1),
+});
+
+const linearTokenResponseSchema = z.object({
+  access_token: z.string().min(1),
+  expires_in: z.number().int().positive(),
+  refresh_token: z.string().min(1).optional(),
+  scope: z.union([z.string(), z.array(z.string())]),
+  token_type: z.string().min(1),
+});
+
+const linearRefreshResponseSchema = z.object({
+  access_token: z.string().min(1),
+  expires_in: z.number().int().positive(),
+  refresh_token: z.string().min(1),
+  scope: z.union([z.string(), z.array(z.string())]).optional(),
   token_type: z.string().min(1),
 });
 
@@ -110,6 +156,12 @@ const connectorDefinitions = {
     scopes: GOOGLE_CALENDAR_SCOPES,
     supportsChatTools: true,
   },
+  [LINEAR_CONNECTOR_PROVIDER]: {
+    description: "Create product issues from mailbox action workflows.",
+    displayName: "Linear",
+    scopes: LINEAR_SCOPES,
+    supportsChatTools: true,
+  },
 } as const satisfies Record<
   ConnectorProvider,
   {
@@ -134,6 +186,11 @@ const getGoogleCalendarOAuthClient = () => ({
   clientSecret: requireServerEnv("GOOGLE_CALENDAR_CLIENT_SECRET"),
 });
 
+const getLinearOAuthClient = () => ({
+  clientId: requireServerEnv("LINEAR_CLIENT_ID"),
+  clientSecret: requireServerEnv("LINEAR_CLIENT_SECRET"),
+});
+
 const isGoogleCalendarClientConfigured = () =>
   !!(
     serverEnv.GOOGLE_CALENDAR_CLIENT_ID &&
@@ -144,8 +201,20 @@ const isGoogleCalendarClientConfigured = () =>
 const isGoogleCalendarOAuthConfigured = () =>
   !!serverEnv.BETTER_AUTH_URL && isGoogleCalendarClientConfigured();
 
+const isLinearClientConfigured = () =>
+  !!(
+    serverEnv.LINEAR_CLIENT_ID &&
+    serverEnv.LINEAR_CLIENT_SECRET &&
+    serverEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY
+  );
+
+const isLinearOAuthConfigured = () => !!serverEnv.BETTER_AUTH_URL && isLinearClientConfigured();
+
 const assertConnectorConfigured = (provider: ConnectorProvider) => {
   if (provider === GOOGLE_CALENDAR_CONNECTOR_PROVIDER && isGoogleCalendarOAuthConfigured()) {
+    return;
+  }
+  if (provider === LINEAR_CONNECTOR_PROVIDER && isLinearOAuthConfigured()) {
     return;
   }
 
@@ -157,6 +226,9 @@ const assertConnectorConfigured = (provider: ConnectorProvider) => {
 const getConnectorOAuthClient = (provider: ConnectorProvider) => {
   if (provider === GOOGLE_CALENDAR_CONNECTOR_PROVIDER) {
     return getGoogleCalendarOAuthClient();
+  }
+  if (provider === LINEAR_CONNECTOR_PROVIDER) {
+    return getLinearOAuthClient();
   }
 
   throw new ORPCError("BAD_REQUEST", { message: "Connector is not supported." });
@@ -172,6 +244,13 @@ const getConnectorOAuthConfig = (provider: ConnectorProvider) => {
       redirectUri: `${baseUrl}/api/connectors/callback`,
     };
   }
+  if (provider === LINEAR_CONNECTOR_PROVIDER) {
+    const baseUrl = requireServerEnv("BETTER_AUTH_URL").replace(/\/+$/, "");
+    return {
+      ...getLinearOAuthClient(),
+      redirectUri: `${baseUrl}/api/connectors/callback`,
+    };
+  }
 
   throw new ORPCError("BAD_REQUEST", { message: "Connector is not supported." });
 };
@@ -184,6 +263,16 @@ const encryptConnectorSecret = (value: string) =>
 
 const decryptConnectorSecret = (value: string) =>
   decryptGmailCredentialSecret(value, { legacyKey: getConnectorCredentialEncryptionKey() });
+
+const normalizeOAuthScope = (scope: string | string[]) =>
+  Array.isArray(scope) ? scope.join(" ") : scope;
+
+const splitGrantedScopes = (scope: string | string[]) =>
+  new Set(
+    normalizeOAuthScope(scope)
+      .split(/[\s,]+/)
+      .filter(Boolean),
+  );
 
 const createGoogleApiError = async (response: Response) => {
   const body = await response.text().catch(() => "");
@@ -250,6 +339,31 @@ const validateGoogleIdToken = async (provider: ConnectorProvider, idToken: strin
   return tokenInfo;
 };
 
+const exchangeLinearAuthorizationCode = async (code: string, codeVerifier: string) => {
+  const config = getConnectorOAuthConfig(LINEAR_CONNECTOR_PROVIDER);
+  const response = await fetch(LINEAR_TOKEN_URL, {
+    body: new URLSearchParams({
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      code,
+      code_verifier: codeVerifier,
+      grant_type: "authorization_code",
+      redirect_uri: config.redirectUri,
+    }),
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error("Linear rejected the connector authorization code.");
+  }
+  return linearTokenResponseSchema.parse(await response.json());
+};
+
+const getLinearIdentity = async (accessToken: string) => {
+  return await getLinearIdentityFromAccessToken(accessToken);
+};
+
 export const listConnectors = async (
   userId: string,
 ): Promise<{ connectors: ConnectorListItem[] }> => {
@@ -257,7 +371,12 @@ export const listConnectors = async (
     .select({
       accountEmail: connectorCredential.accountEmail,
       createdAt: connectorCredential.createdAt,
+      displayName: connectorCredential.displayName,
+      id: connectorCredential.id,
       provider: connectorCredential.provider,
+      providerAccountId: connectorCredential.providerAccountId,
+      providerWorkspaceId: connectorCredential.providerWorkspaceId,
+      providerWorkspaceName: connectorCredential.providerWorkspaceName,
       status: connectorCredential.status,
     })
     .from(connectorCredential)
@@ -265,18 +384,30 @@ export const listConnectors = async (
 
   return {
     connectors: CONNECTOR_PROVIDERS.map((provider) => {
-      const credential = credentials.find((row) => row.provider === provider);
+      const providerCredentials = credentials.filter((row) => row.provider === provider);
+      const credential = providerCredentials[0];
       const definition = connectorDefinitions[provider];
 
       return {
         accountEmail: credential?.accountEmail,
+        accounts: providerCredentials.map((row) => ({
+          accountEmail: row.accountEmail,
+          displayName: row.displayName,
+          id: row.id,
+          providerAccountId: row.providerAccountId,
+          providerWorkspaceId: row.providerWorkspaceId,
+          providerWorkspaceName: row.providerWorkspaceName,
+          status: row.status,
+        })),
         connectedAt: credential?.createdAt,
         description: definition.description,
         displayName: definition.displayName,
         isConfigured:
           provider === GOOGLE_CALENDAR_CONNECTOR_PROVIDER
             ? isGoogleCalendarOAuthConfigured()
-            : false,
+            : provider === LINEAR_CONNECTOR_PROVIDER
+              ? isLinearOAuthConfigured()
+              : false,
         provider,
         status: credential?.status ?? "not_connected",
         supportsChatTools: definition.supportsChatTools,
@@ -308,17 +439,31 @@ export const startConnectorOAuth = async (input: {
 
   const config = getConnectorOAuthConfig(input.provider);
   const definition = connectorDefinitions[input.provider];
-  const authorizationUrl = new URL(GOOGLE_AUTHORIZATION_URL);
-  authorizationUrl.searchParams.set("access_type", "offline");
+  const authorizationUrl = new URL(
+    input.provider === LINEAR_CONNECTOR_PROVIDER
+      ? LINEAR_AUTHORIZATION_URL
+      : GOOGLE_AUTHORIZATION_URL,
+  );
   authorizationUrl.searchParams.set("client_id", config.clientId);
   authorizationUrl.searchParams.set("code_challenge", createCodeChallenge(codeVerifier));
   authorizationUrl.searchParams.set("code_challenge_method", "S256");
-  authorizationUrl.searchParams.set("include_granted_scopes", "true");
-  authorizationUrl.searchParams.set("prompt", "consent select_account");
   authorizationUrl.searchParams.set("redirect_uri", config.redirectUri);
   authorizationUrl.searchParams.set("response_type", "code");
-  authorizationUrl.searchParams.set("scope", definition.scopes.join(" "));
+  authorizationUrl.searchParams.set(
+    "scope",
+    input.provider === LINEAR_CONNECTOR_PROVIDER
+      ? definition.scopes.join(",")
+      : definition.scopes.join(" "),
+  );
   authorizationUrl.searchParams.set("state", state);
+  if (input.provider === GOOGLE_CALENDAR_CONNECTOR_PROVIDER) {
+    authorizationUrl.searchParams.set("access_type", "offline");
+    authorizationUrl.searchParams.set("include_granted_scopes", "true");
+    authorizationUrl.searchParams.set("prompt", "consent select_account");
+  } else {
+    authorizationUrl.searchParams.set("actor", "user");
+    authorizationUrl.searchParams.set("prompt", "consent");
+  }
 
   return { authorizationUrl: authorizationUrl.toString() };
 };
@@ -349,77 +494,143 @@ export const completeConnectorOAuth = async (input: {
     });
   }
 
-  const tokenResponse = await exchangeGoogleAuthorizationCode(
-    oauthState.provider,
-    input.code,
-    oauthState.codeVerifier,
-  );
-  const tokenInfo = await validateGoogleIdToken(oauthState.provider, tokenResponse.id_token);
   const definition = connectorDefinitions[oauthState.provider];
-  const grantedScopes = new Set(tokenResponse.scope.split(/\s+/).filter(Boolean));
-  if (!definition.scopes.every((scope) => grantedScopes.has(scope))) {
-    throw new Error("Google did not grant all required connector permissions.");
-  }
-
-  const [existingCredential] = await db
-    .select({
-      encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
-      id: connectorCredential.id,
-      providerAccountId: connectorCredential.providerAccountId,
-    })
-    .from(connectorCredential)
-    .where(
-      and(
-        eq(connectorCredential.userId, session.user.id),
-        eq(connectorCredential.provider, oauthState.provider),
-      ),
-    )
-    .limit(1);
-  if (existingCredential && existingCredential.providerAccountId !== tokenInfo.sub) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: `Reconnect ${connectorDefinitions[oauthState.provider].displayName} with the same Google account, or disconnect it first.`,
-    });
-  }
-
-  const encryptedRefreshToken = tokenResponse.refresh_token
-    ? encryptConnectorSecret(tokenResponse.refresh_token)
-    : existingCredential?.encryptedRefreshToken;
-  if (!encryptedRefreshToken) {
-    throw new Error("Google did not return an offline refresh token. Reconnect and grant access.");
-  }
-
   const now = new Date();
-  await db
-    .insert(connectorCredential)
-    .values({
-      accessTokenExpiresAt: new Date(now.getTime() + tokenResponse.expires_in * 1000),
-      accountEmail: tokenInfo.email,
-      createdAt: now,
-      displayName: tokenInfo.name ?? tokenInfo.email,
-      encryptedAccessToken: encryptConnectorSecret(tokenResponse.access_token),
-      encryptedRefreshToken,
-      id: existingCredential?.id ?? randomUUID(),
-      provider: oauthState.provider,
-      providerAccountId: tokenInfo.sub,
-      scopes: tokenResponse.scope,
-      status: "connected",
-      updatedAt: now,
-      userId: session.user.id,
-    })
-    .onConflictDoUpdate({
-      set: {
+
+  if (oauthState.provider === GOOGLE_CALENDAR_CONNECTOR_PROVIDER) {
+    const tokenResponse = await exchangeGoogleAuthorizationCode(
+      oauthState.provider,
+      input.code,
+      oauthState.codeVerifier,
+    );
+    const tokenInfo = await validateGoogleIdToken(oauthState.provider, tokenResponse.id_token);
+    const grantedScopes = splitGrantedScopes(tokenResponse.scope);
+    if (!definition.scopes.every((scope) => grantedScopes.has(scope))) {
+      throw new Error("Google did not grant all required connector permissions.");
+    }
+
+    const [existingCredential] = await db
+      .select({
+        encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
+        id: connectorCredential.id,
+        providerAccountId: connectorCredential.providerAccountId,
+      })
+      .from(connectorCredential)
+      .where(
+        and(
+          eq(connectorCredential.userId, session.user.id),
+          eq(connectorCredential.provider, oauthState.provider),
+        ),
+      )
+      .limit(1);
+    if (existingCredential && existingCredential.providerAccountId !== tokenInfo.sub) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: `Reconnect ${connectorDefinitions[oauthState.provider].displayName} with the same Google account, or disconnect it first.`,
+      });
+    }
+
+    const encryptedRefreshToken = tokenResponse.refresh_token
+      ? encryptConnectorSecret(tokenResponse.refresh_token)
+      : existingCredential?.encryptedRefreshToken;
+    if (!encryptedRefreshToken) {
+      throw new Error(
+        "Google did not return an offline refresh token. Reconnect and grant access.",
+      );
+    }
+
+    await db
+      .insert(connectorCredential)
+      .values({
         accessTokenExpiresAt: new Date(now.getTime() + tokenResponse.expires_in * 1000),
         accountEmail: tokenInfo.email,
+        createdAt: now,
         displayName: tokenInfo.name ?? tokenInfo.email,
         encryptedAccessToken: encryptConnectorSecret(tokenResponse.access_token),
         encryptedRefreshToken,
+        id: existingCredential?.id ?? randomUUID(),
+        provider: oauthState.provider,
         providerAccountId: tokenInfo.sub,
         scopes: tokenResponse.scope,
         status: "connected",
         updatedAt: now,
-      },
-      target: [connectorCredential.userId, connectorCredential.provider],
-    });
+        userId: session.user.id,
+      })
+      .onConflictDoUpdate({
+        set: {
+          accessTokenExpiresAt: new Date(now.getTime() + tokenResponse.expires_in * 1000),
+          accountEmail: tokenInfo.email,
+          displayName: tokenInfo.name ?? tokenInfo.email,
+          encryptedAccessToken: encryptConnectorSecret(tokenResponse.access_token),
+          encryptedRefreshToken,
+          providerAccountId: tokenInfo.sub,
+          scopes: tokenResponse.scope,
+          status: "connected",
+          updatedAt: now,
+        },
+        target: [
+          connectorCredential.userId,
+          connectorCredential.provider,
+          connectorCredential.providerAccountId,
+        ],
+      });
+  } else {
+    const tokenResponse = await exchangeLinearAuthorizationCode(
+      input.code,
+      oauthState.codeVerifier,
+    );
+    const grantedScopes = splitGrantedScopes(tokenResponse.scope);
+    if (!definition.scopes.every((scope) => grantedScopes.has(scope))) {
+      throw new Error("Linear did not grant all required connector permissions.");
+    }
+    if (!tokenResponse.refresh_token) {
+      throw new Error(
+        "Linear did not return an offline refresh token. Reconnect and grant access.",
+      );
+    }
+
+    const identity = await getLinearIdentity(tokenResponse.access_token);
+    const providerAccountId = `${identity.providerWorkspaceId}:${identity.providerAccountId}`;
+    await db
+      .insert(connectorCredential)
+      .values({
+        accessTokenExpiresAt: new Date(now.getTime() + tokenResponse.expires_in * 1000),
+        accountEmail: identity.accountEmail,
+        createdAt: now,
+        displayName: identity.displayName,
+        encryptedAccessToken: encryptConnectorSecret(tokenResponse.access_token),
+        encryptedRefreshToken: encryptConnectorSecret(tokenResponse.refresh_token),
+        id: randomUUID(),
+        metadata: {},
+        provider: oauthState.provider,
+        providerAccountId,
+        providerWorkspaceId: identity.providerWorkspaceId,
+        providerWorkspaceName: identity.providerWorkspaceName,
+        scopes: normalizeOAuthScope(tokenResponse.scope),
+        status: "connected",
+        updatedAt: now,
+        userId: session.user.id,
+      })
+      .onConflictDoUpdate({
+        set: {
+          accessTokenExpiresAt: new Date(now.getTime() + tokenResponse.expires_in * 1000),
+          accountEmail: identity.accountEmail,
+          displayName: identity.displayName,
+          encryptedAccessToken: encryptConnectorSecret(tokenResponse.access_token),
+          encryptedRefreshToken: encryptConnectorSecret(tokenResponse.refresh_token),
+          metadata: {},
+          providerWorkspaceId: identity.providerWorkspaceId,
+          providerWorkspaceName: identity.providerWorkspaceName,
+          scopes: normalizeOAuthScope(tokenResponse.scope),
+          status: "connected",
+          updatedAt: now,
+        },
+        target: [
+          connectorCredential.userId,
+          connectorCredential.provider,
+          connectorCredential.providerAccountId,
+        ],
+      });
+  }
 
   return {
     provider: oauthState.provider,
@@ -482,16 +693,19 @@ const refreshConnectorAccessToken = async (record: {
   }
 
   const config = getConnectorOAuthClient(record.provider);
-  const response = await fetch(GOOGLE_TOKEN_URL, {
-    body: new URLSearchParams({
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      grant_type: "refresh_token",
-      refresh_token: decryptConnectorSecret(record.encryptedRefreshToken),
-    }),
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    method: "POST",
-  });
+  const response = await fetch(
+    record.provider === LINEAR_CONNECTOR_PROVIDER ? LINEAR_TOKEN_URL : GOOGLE_TOKEN_URL,
+    {
+      body: new URLSearchParams({
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        grant_type: "refresh_token",
+        refresh_token: decryptConnectorSecret(record.encryptedRefreshToken),
+      }),
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      method: "POST",
+    },
+  );
 
   if (!response.ok) {
     const body = await response
@@ -499,10 +713,14 @@ const refreshConnectorAccessToken = async (record: {
       .then((value: unknown) => z.object({ error: z.string().optional() }).safeParse(value))
       .catch(() => null);
     const errorCode = body?.success ? body.data.error : undefined;
+    const permanentErrors =
+      record.provider === LINEAR_CONNECTOR_PROVIDER
+        ? permanentLinearTokenErrors
+        : permanentGoogleTokenErrors;
     if (
       response.status === 400 ||
       response.status === 401 ||
-      (errorCode && permanentGoogleTokenErrors.has(errorCode))
+      (errorCode && permanentErrors.has(errorCode))
     ) {
       await db
         .update(connectorCredential)
@@ -511,17 +729,28 @@ const refreshConnectorAccessToken = async (record: {
       throw getConnectorRepairRequiredError(record.provider);
     }
 
-    throw new Error(`Google token refresh failed with status ${response.status}.`);
+    throw new Error(
+      `${connectorDefinitions[record.provider].displayName} token refresh failed with status ${response.status}.`,
+    );
   }
 
-  const refreshed = googleRefreshResponseSchema.parse(await response.json());
+  const refreshed =
+    record.provider === LINEAR_CONNECTOR_PROVIDER
+      ? linearRefreshResponseSchema.parse(await response.json())
+      : googleRefreshResponseSchema.parse(await response.json());
   const now = new Date();
   await db
     .update(connectorCredential)
     .set({
       accessTokenExpiresAt: new Date(now.getTime() + refreshed.expires_in * 1000),
       encryptedAccessToken: encryptConnectorSecret(refreshed.access_token),
-      scopes: refreshed.scope ?? connectorDefinitions[record.provider].scopes.join(" "),
+      encryptedRefreshToken:
+        "refresh_token" in refreshed && refreshed.refresh_token
+          ? encryptConnectorSecret(refreshed.refresh_token)
+          : record.encryptedRefreshToken,
+      scopes: refreshed.scope
+        ? normalizeOAuthScope(refreshed.scope)
+        : connectorDefinitions[record.provider].scopes.join(" "),
       status: "connected",
       updatedAt: now,
     })
@@ -601,6 +830,85 @@ const refreshAuthorizedConnectorAccessToken = async (input: {
   return await refreshConnectorAccessToken(record);
 };
 
+const getAuthorizedConnectorCredentialAccessToken = async (input: {
+  credentialId: string;
+  provider: ConnectorProvider;
+  userId?: string;
+}) => {
+  const conditions = [
+    eq(connectorCredential.id, input.credentialId),
+    eq(connectorCredential.provider, input.provider),
+  ];
+  if (input.userId) {
+    conditions.push(eq(connectorCredential.userId, input.userId));
+  }
+
+  const [record] = await db
+    .select({
+      accessTokenExpiresAt: connectorCredential.accessTokenExpiresAt,
+      encryptedAccessToken: connectorCredential.encryptedAccessToken,
+      encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
+      id: connectorCredential.id,
+      provider: connectorCredential.provider,
+      status: connectorCredential.status,
+      userId: connectorCredential.userId,
+    })
+    .from(connectorCredential)
+    .where(and(...conditions))
+    .limit(1);
+
+  if (!record) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: `Connect ${connectorDefinitions[input.provider].displayName} before using this action.`,
+    });
+  }
+
+  if (record.status === "needs_reconnect") {
+    throw getConnectorRepairRequiredError(record.provider);
+  }
+
+  const accessToken =
+    record.encryptedAccessToken &&
+    record.accessTokenExpiresAt &&
+    record.accessTokenExpiresAt.getTime() > Date.now() + CONNECTOR_ACCESS_TOKEN_EXPIRY_BUFFER_MS
+      ? decryptConnectorSecret(record.encryptedAccessToken)
+      : await refreshConnectorAccessToken(record);
+
+  return { accessToken, userId: record.userId };
+};
+
+const refreshAuthorizedConnectorCredentialAccessToken = async (input: {
+  credentialId: string;
+  provider: ConnectorProvider;
+  userId?: string;
+}) => {
+  const conditions = [
+    eq(connectorCredential.id, input.credentialId),
+    eq(connectorCredential.provider, input.provider),
+  ];
+  if (input.userId) {
+    conditions.push(eq(connectorCredential.userId, input.userId));
+  }
+
+  const [record] = await db
+    .select({
+      encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
+      id: connectorCredential.id,
+      provider: connectorCredential.provider,
+    })
+    .from(connectorCredential)
+    .where(and(...conditions))
+    .limit(1);
+
+  if (!record) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: `Connect ${connectorDefinitions[input.provider].displayName} before using this action.`,
+    });
+  }
+
+  return await refreshConnectorAccessToken(record);
+};
+
 export const runAuthorizedConnector = async <TValue>(
   input: { provider: ConnectorProvider; signal?: AbortSignal; userId: string },
   runner: (accessToken: string, signal?: AbortSignal) => Promise<TValue>,
@@ -622,6 +930,38 @@ export const runAuthorizedConnector = async <TValue>(
 
   const refreshedAccessToken = await refreshAuthorizedConnectorAccessToken(input);
   return await runner(refreshedAccessToken, input.signal);
+};
+
+export const runAuthorizedConnectorCredential = async <TValue>(
+  input: {
+    credentialId: string;
+    provider: ConnectorProvider;
+    signal?: AbortSignal;
+    userId?: string;
+  },
+  runner: (
+    accessToken: string,
+    credential: { userId: string },
+    signal?: AbortSignal,
+  ) => Promise<TValue>,
+) => {
+  const credential = await getAuthorizedConnectorCredentialAccessToken(input);
+
+  try {
+    return await runner(credential.accessToken, { userId: credential.userId }, input.signal);
+  } catch (error) {
+    if (
+      typeof error !== "object" ||
+      error === null ||
+      !("status" in error) ||
+      (error as { status?: unknown }).status !== 401
+    ) {
+      throw error;
+    }
+  }
+
+  const refreshedAccessToken = await refreshAuthorizedConnectorCredentialAccessToken(input);
+  return await runner(refreshedAccessToken, { userId: credential.userId }, input.signal);
 };
 
 const postGoogleCalendarEvent = async (input: {
