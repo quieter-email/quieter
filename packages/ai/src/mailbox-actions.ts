@@ -87,7 +87,6 @@ const linearIssuePlanSchema = z.object({
   priority: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   projectId: z.string().min(1).optional(),
   stateId: z.string().min(1).optional(),
-  summary: z.string().min(1).max(500),
   teamId: z.string().min(1),
   title: z.string().min(1).max(255),
 });

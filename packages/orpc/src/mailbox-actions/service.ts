@@ -6,7 +6,7 @@ import {
   mailboxAction,
   mailboxActionRevision,
 } from "@quieter/database/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { getAuthorizedManagedMailbox, MAILBOX_PROVIDER_GMAIL } from "../mailbox/access";
 import { assertAccessibleMailbox } from "../mailbox/service";
@@ -15,8 +15,11 @@ import {
   createDefaultMailboxActionGraph,
   type MailboxActionGraph,
   type MailboxActionNode,
+  type MailboxActionValidationIssue,
   validateMailboxActionGraph,
 } from "./graph";
+
+const RECENT_REVISION_LIMIT = 50;
 
 const assertMailboxActionConfigurator = async (input: { mailboxId: string; userId: string }) => {
   const [record] = await db
@@ -98,10 +101,11 @@ const linearNodes = (graph: MailboxActionGraph) =>
       node.type === "linear_agent_issue" || node.type === "linear_create_issue",
   );
 
-const validateLinearCredentialOwnership = async (input: {
+const validateLinearCredentialOwnershipIssues = async (input: {
   graph: MailboxActionGraph;
   userId: string;
-}) => {
+}): Promise<MailboxActionValidationIssue[]> => {
+  const issues: MailboxActionValidationIssue[] = [];
   for (const node of linearNodes(input.graph)) {
     if (!node.config.credentialId) continue;
     const [credential] = await db
@@ -117,10 +121,13 @@ const validateLinearCredentialOwnership = async (input: {
       )
       .limit(1);
     if (!credential) {
-      return [`Linear node ${node.id} uses a Linear account that is not connected.`];
+      issues.push({
+        message: `Linear node ${node.id} uses a Linear account that is not connected.`,
+        nodeId: node.id,
+      });
     }
   }
-  return [];
+  return issues;
 };
 
 export const listMailboxActions = async (input: { mailboxId: string; userId: string }) => {
@@ -156,9 +163,16 @@ export const getMailboxAction = async (input: { actionId: string; userId: string
     })
     .from(mailboxActionRevision)
     .where(eq(mailboxActionRevision.actionId, action.id))
-    .orderBy(desc(mailboxActionRevision.revisionNumber));
+    .orderBy(desc(mailboxActionRevision.revisionNumber))
+    .limit(RECENT_REVISION_LIMIT);
 
-  return { action, revisions };
+  return {
+    action,
+    revisions: revisions.map((revision) => ({
+      ...revision,
+      validationIssues: validateMailboxActionGraph(revision.graph).issues,
+    })),
+  };
 };
 
 export const createMailboxAction = async (input: {
@@ -218,17 +232,19 @@ export const saveMailboxActionDraft = async (input: {
     });
   }
 
-  const [latestRevision] = await db
-    .select({ revisionNumber: mailboxActionRevision.revisionNumber })
-    .from(mailboxActionRevision)
-    .where(eq(mailboxActionRevision.actionId, action.id))
-    .orderBy(desc(mailboxActionRevision.revisionNumber))
-    .limit(1);
-
   const now = new Date();
   const revisionId = randomUUID();
-  const revisionNumber = (latestRevision?.revisionNumber ?? 0) + 1;
+  let revisionNumber = 1;
   await db.transaction(async (tx) => {
+    await tx.execute(sql`select 1 from "mailboxAction" where "id" = ${action.id} for update`);
+    const [latestRevision] = await tx
+      .select({ revisionNumber: mailboxActionRevision.revisionNumber })
+      .from(mailboxActionRevision)
+      .where(eq(mailboxActionRevision.actionId, action.id))
+      .orderBy(desc(mailboxActionRevision.revisionNumber))
+      .limit(1);
+
+    revisionNumber = (latestRevision?.revisionNumber ?? 0) + 1;
     await tx.insert(mailboxActionRevision).values({
       actionId: action.id,
       createdAt: now,
@@ -278,13 +294,15 @@ export const publishMailboxAction = async (input: { actionId: string; userId: st
   }
 
   const validation = validateMailboxActionGraph(draft.graph);
-  const credentialErrors = validation.graph
-    ? await validateLinearCredentialOwnership({
+  const credentialIssues = validation.graph
+    ? await validateLinearCredentialOwnershipIssues({
         graph: validation.graph,
         userId: input.userId,
       })
     : [];
-  const validationErrors = [...validation.errors, ...credentialErrors];
+  const validationErrors = [...validation.issues, ...credentialIssues].map(
+    (issue) => issue.message,
+  );
   if (validationErrors.length > 0) {
     await db
       .update(mailboxActionRevision)
@@ -330,4 +348,10 @@ export const setMailboxActionEnabled = async (input: {
     .where(eq(mailboxAction.id, action.id));
 
   return { enabled: input.enabled };
+};
+
+export const deleteMailboxAction = async (input: { actionId: string; userId: string }) => {
+  const action = await getConfigurableActionForUser(input);
+  await db.delete(mailboxAction).where(eq(mailboxAction.id, action.id));
+  return { deleted: true as const };
 };

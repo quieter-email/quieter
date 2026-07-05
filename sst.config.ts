@@ -199,8 +199,24 @@ export default $config({
       timeout: "30 seconds",
       url: true,
     });
+    const mailboxActionDeadLetterQueue = new sst.aws.Queue("MailboxActionDeadLetterQueue", {
+      transform: {
+        queue: {
+          messageRetentionSeconds: 60 * 60 * 24 * 14,
+        },
+      },
+    });
     const mailboxActionQueue = new sst.aws.Queue("MailboxActionQueue", {
-      visibilityTimeout: "15 minutes",
+      dlq: {
+        queue: mailboxActionDeadLetterQueue.arn,
+        retry: 5,
+      },
+      transform: {
+        queue: {
+          messageRetentionSeconds: 60 * 60 * 24 * 14,
+        },
+      },
+      visibilityTimeout: "20 minutes",
     });
     mailboxActionQueue.subscribe(
       {

@@ -74,5 +74,20 @@ export const setPreviewPersona = (persona: PreviewPersona | null) => {
   window.dispatchEvent(new Event(PREVIEW_PERSONA_CHANGE_EVENT));
 };
 
+export const clearPreviewPersonaCookie = async () => {
+  if (!isPreviewPersonasAvailable()) return;
+
+  const response = await fetch("/api/preview-persona", {
+    credentials: "same-origin",
+    method: "DELETE",
+  });
+
+  if (!response.ok && response.status !== 404) {
+    throw new Error("Could not clear preview persona.");
+  }
+
+  setPreviewPersona(null);
+};
+
 export const usePreviewPersona = () =>
   useSyncExternalStore(subscribeToPreviewPersona, readPreviewPersona, () => null);

@@ -524,7 +524,7 @@ export const linearIssueCreateInputSchema = z.object({
     description: "Linear label ids from list_linear_issue_metadata.",
   }),
   priority: linearIssuePrioritySchema.optional().meta({
-    description: "Linear priority from 0 no priority to 4 urgent.",
+    description: "Linear priority: 0 = No priority, 1 = Urgent, 2 = High, 3 = Medium, 4 = Low.",
   }),
   projectId: z.string().trim().min(1).optional().meta({
     description: "Optional Linear project id from list_linear_issue_metadata.",

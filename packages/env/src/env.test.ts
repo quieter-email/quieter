@@ -179,6 +179,18 @@ describe("SST environment", () => {
     );
   });
 
+  test("requires Linear connector configuration in production", () => {
+    const {
+      LINEAR_CLIENT_ID: _id,
+      LINEAR_CLIENT_SECRET: _secret,
+      ...environment
+    } = completeProductionSstEnvironment;
+
+    expect(() => createSstEnv({ production: true }, environment)).toThrow(
+      "Linear connector configuration is required in production",
+    );
+  });
+
   test("requires Polar product configuration in production", () => {
     const {
       POLAR_PRODUCT_MANAGED_ID: _managed,

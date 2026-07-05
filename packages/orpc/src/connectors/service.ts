@@ -1,4 +1,3 @@
-import { LinearClient } from "@linear/sdk";
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
@@ -17,9 +16,25 @@ import {
 } from "../gmail-credential-crypto";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { parseIcsToGoogleCalendarEvent, type GoogleCalendarEventDraft } from "./ical";
+import {
+  getLinearIdentityFromAccessToken,
+  LINEAR_AUTHORIZATION_URL,
+  LINEAR_CONNECTOR_PROVIDER,
+  LINEAR_SCOPES,
+  LINEAR_TOKEN_URL,
+} from "./runtime";
+
+export {
+  createLinearIssueForCredential,
+  getLinearMcpEndpoint,
+  LINEAR_CONNECTOR_PROVIDER,
+  LINEAR_SCOPES,
+  listLinearIssueMetadataForCredential as listLinearIssueMetadata,
+  type LinearIssueCreateDraft,
+  type LinearIssueMetadata,
+} from "./runtime";
 
 export const GOOGLE_CALENDAR_CONNECTOR_PROVIDER = "google_calendar" as const;
-export const LINEAR_CONNECTOR_PROVIDER = "linear" as const;
 export const CONNECTOR_PROVIDERS = [
   GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
   LINEAR_CONNECTOR_PROVIDER,
@@ -68,9 +83,6 @@ const GOOGLE_AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_TOKEN_INFO_URL = "https://oauth2.googleapis.com/tokeninfo";
 const GOOGLE_CALENDAR_API_URL = "https://www.googleapis.com/calendar/v3";
-const LINEAR_AUTHORIZATION_URL = "https://linear.app/oauth/authorize";
-const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
-const LINEAR_MCP_URL = "https://mcp.linear.app/mcp";
 const permanentGoogleTokenErrors = new Set(["invalid_grant", "invalid_token"]);
 const permanentLinearTokenErrors = new Set(["invalid_grant", "invalid_token"]);
 
@@ -80,7 +92,6 @@ export const GOOGLE_CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.profile",
   "https://www.googleapis.com/auth/calendar.events",
 ] as const;
-export const LINEAR_SCOPES = ["read", "issues:create"] as const;
 
 const googleTokenResponseSchema = z.object({
   access_token: z.string().min(1),
@@ -350,15 +361,7 @@ const exchangeLinearAuthorizationCode = async (code: string, codeVerifier: strin
 };
 
 const getLinearIdentity = async (accessToken: string) => {
-  const client = new LinearClient({ accessToken });
-  const [viewer, organization] = await Promise.all([client.viewer, client.organization]);
-  return {
-    accountEmail: viewer.email,
-    displayName: viewer.displayName ?? viewer.name ?? viewer.email,
-    providerAccountId: viewer.id,
-    providerWorkspaceId: organization.id,
-    providerWorkspaceName: organization.name,
-  };
+  return await getLinearIdentityFromAccessToken(accessToken);
 };
 
 export const listConnectors = async (
@@ -1040,163 +1043,6 @@ export const createGoogleCalendarEventForUser = async (input: {
         id: event.id,
         status: "success" as const,
         summary: event.summary ?? eventDraft.summary,
-      };
-    },
-  );
-
-export type LinearIssueCreateDraft = {
-  assigneeId?: string;
-  description?: string;
-  labelIds?: string[];
-  priority?: 0 | 1 | 2 | 3 | 4;
-  projectId?: string;
-  stateId?: string;
-  teamId: string;
-  title: string;
-};
-
-export type LinearIssueMetadata = {
-  labels: Array<{
-    color: string;
-    description?: string | null;
-    id: string;
-    isGroup: boolean;
-    name: string;
-    parentId?: string | null;
-    teamId?: string | null;
-  }>;
-  projects: Array<{
-    description?: string | null;
-    id: string;
-    name: string;
-  }>;
-  states: Array<{
-    color: string;
-    id: string;
-    name: string;
-    teamId?: string | null;
-    type: string;
-  }>;
-  teams: Array<{
-    description?: string | null;
-    displayName: string;
-    id: string;
-    key: string;
-    name: string;
-  }>;
-  users: Array<{
-    active: boolean;
-    displayName: string;
-    email: string;
-    id: string;
-    isAssignable: boolean;
-    name: string;
-  }>;
-};
-
-const createLinearClient = (accessToken: string) => new LinearClient({ accessToken });
-
-export const getLinearMcpEndpoint = () => LINEAR_MCP_URL;
-
-export const listLinearIssueMetadata = async (input: {
-  credentialId: string;
-  signal?: AbortSignal;
-  userId?: string;
-}): Promise<LinearIssueMetadata> =>
-  await runAuthorizedConnectorCredential(
-    {
-      credentialId: input.credentialId,
-      provider: LINEAR_CONNECTOR_PROVIDER,
-      signal: input.signal,
-      userId: input.userId,
-    },
-    async (accessToken) => {
-      const client = createLinearClient(accessToken);
-      const [teams, labels, states, projects, users] = await Promise.all([
-        client.teams({ first: 100 }),
-        client.issueLabels({ first: 200 }),
-        client.workflowStates({ first: 200 }),
-        client.projects({ first: 100 }),
-        client.users({ first: 100 }),
-      ]);
-
-      return {
-        labels: labels.nodes.map((label) => ({
-          color: label.color,
-          description: label.description,
-          id: label.id,
-          isGroup: label.isGroup,
-          name: label.name,
-          parentId: label.parentId,
-          teamId: label.teamId,
-        })),
-        projects: projects.nodes.map((project) => ({
-          description: project.description,
-          id: project.id,
-          name: project.name,
-        })),
-        states: states.nodes.map((state) => ({
-          color: state.color,
-          id: state.id,
-          name: state.name,
-          teamId: state.teamId,
-          type: state.type,
-        })),
-        teams: teams.nodes.map((team) => ({
-          description: team.description,
-          displayName: team.displayName,
-          id: team.id,
-          key: team.key,
-          name: team.name,
-        })),
-        users: users.nodes.map((user) => ({
-          active: user.active,
-          displayName: user.displayName,
-          email: user.email,
-          id: user.id,
-          isAssignable: user.isAssignable,
-          name: user.name,
-        })),
-      };
-    },
-  );
-
-export const createLinearIssueForCredential = async (input: {
-  credentialId: string;
-  issue: LinearIssueCreateDraft;
-  signal?: AbortSignal;
-  userId?: string;
-}) =>
-  await runAuthorizedConnectorCredential(
-    {
-      credentialId: input.credentialId,
-      provider: LINEAR_CONNECTOR_PROVIDER,
-      signal: input.signal,
-      userId: input.userId,
-    },
-    async (accessToken) => {
-      const client = createLinearClient(accessToken);
-      const issueInput: Parameters<LinearClient["createIssue"]>[0] = {
-        ...(input.issue.assigneeId ? { assigneeId: input.issue.assigneeId } : {}),
-        ...(input.issue.description ? { description: input.issue.description } : {}),
-        ...(input.issue.labelIds?.length ? { labelIds: input.issue.labelIds } : {}),
-        ...(input.issue.priority ? { priority: input.issue.priority } : {}),
-        ...(input.issue.projectId ? { projectId: input.issue.projectId } : {}),
-        ...(input.issue.stateId ? { stateId: input.issue.stateId } : {}),
-        teamId: input.issue.teamId,
-        title: input.issue.title,
-      };
-      const payload = await client.createIssue(issueInput);
-      const issue = await payload.issue;
-      if (!payload.success || !issue) {
-        throw new Error("Linear did not create the issue.");
-      }
-
-      return {
-        id: issue.id,
-        identifier: issue.identifier,
-        title: issue.title,
-        url: issue.url,
       };
     },
   );

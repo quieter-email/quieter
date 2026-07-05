@@ -1,15 +1,20 @@
+import type { ChatMiddleware } from "@tanstack/ai";
 import { ORPCError } from "@orpc/server";
 import {
   evaluateMailboxActionCondition,
+  MAILBOX_ACTION_CONDITION_MODEL,
+  MAILBOX_ACTION_LINEAR_AGENT_MODEL,
   planLinearMcpResearchCalls,
   planLinearIssue,
   routeMailboxAction,
   type ActionEmailInput,
   type ActionExecutionContext,
 } from "@quieter/ai/mailbox-actions";
+import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
 import {
   mailbox,
+  mailboxAction,
   mailboxActionExternalEffect,
   mailboxActionRevision,
   mailboxActionRun,
@@ -18,7 +23,7 @@ import {
   managedMailMessage,
 } from "@quieter/database/schema";
 import { getMessageWithDetails } from "@quieter/gmail";
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
   createLinearIssueForCredential,
@@ -47,6 +52,12 @@ type NodeResult = {
   outputPorts: string[];
   variables?: Record<string, unknown>;
 };
+
+type MailboxActionUsageMiddlewareFactory = (input: {
+  model: typeof MAILBOX_ACTION_CONDITION_MODEL | typeof MAILBOX_ACTION_LINEAR_AGENT_MODEL;
+  nodeId: string;
+  stepRunId: string;
+}) => ChatMiddleware[];
 
 const MAX_NODE_EXECUTIONS = 500;
 const RUN_LEASE_MS = 10 * 60 * 1000;
@@ -247,6 +258,7 @@ const executeNode = async (input: {
   revisionId: string;
   runId: string;
   stepRunId: string;
+  usageMiddleware: MailboxActionUsageMiddlewareFactory;
 }): Promise<NodeResult> => {
   const context: ActionExecutionContext = {
     branchPath: input.frame.branchPath,
@@ -262,6 +274,11 @@ const executeNode = async (input: {
         context,
         criteria: input.node.config.criteria,
         email: input.email,
+        middleware: input.usageMiddleware({
+          model: MAILBOX_ACTION_CONDITION_MODEL,
+          nodeId: input.node.id,
+          stepRunId: input.stepRunId,
+        }),
       });
       return {
         output: result,
@@ -274,6 +291,11 @@ const executeNode = async (input: {
         context,
         email: input.email,
         fallbackPort: input.node.config.fallbackPort,
+        middleware: input.usageMiddleware({
+          model: MAILBOX_ACTION_CONDITION_MODEL,
+          nodeId: input.node.id,
+          stepRunId: input.stepRunId,
+        }),
         ports,
         routingInstructions: input.node.config.instructions,
       });
@@ -334,6 +356,11 @@ const executeNode = async (input: {
               context,
               email: input.email,
               instructions: input.node.config.instructions,
+              middleware: input.usageMiddleware({
+                model: MAILBOX_ACTION_LINEAR_AGENT_MODEL,
+                nodeId: input.node.id,
+                stepRunId: input.stepRunId,
+              }),
               teamId: input.node.config.teamId,
               tools: mcpTools,
             })
@@ -354,6 +381,11 @@ const executeNode = async (input: {
         instructions: input.node.config.instructions,
         linear: metadata,
         linearMcpResearch: mcpResearch,
+        middleware: input.usageMiddleware({
+          model: MAILBOX_ACTION_LINEAR_AGENT_MODEL,
+          nodeId: input.node.id,
+          stepRunId: input.stepRunId,
+        }),
         teamId: input.node.config.teamId,
       });
       const issue: LinearIssueCreateDraft = {
@@ -398,7 +430,13 @@ const claimRun = async (runId: string) => {
     .where(
       and(
         eq(mailboxActionRun.id, runId),
-        or(eq(mailboxActionRun.status, "queued"), eq(mailboxActionRun.status, "running")),
+        or(
+          eq(mailboxActionRun.status, "queued"),
+          and(
+            eq(mailboxActionRun.status, "running"),
+            or(isNull(mailboxActionRun.leasedUntil), lt(mailboxActionRun.leasedUntil, now)),
+          ),
+        ),
       ),
     )
     .returning({
@@ -430,6 +468,47 @@ export const executeMailboxActionRun = async (runId: string) => {
       throw new Error("Action revision graph is invalid.");
     }
     const graph = validation.graph;
+    const [actionOwner] = await db
+      .select({ userId: mailboxAction.createdByUserId })
+      .from(mailboxAction)
+      .where(eq(mailboxAction.id, run.actionId))
+      .limit(1);
+    const usageIndexesByStepRunId = new Map<string, number>();
+    const createUsageMiddleware: MailboxActionUsageMiddlewareFactory = ({
+      model,
+      nodeId,
+      stepRunId,
+    }) => {
+      const billingUserId = actionOwner?.userId;
+      if (!billingUserId) return [];
+      return [
+        {
+          name: "mailbox-action-ai-usage",
+          onUsage: (usageContext, usage) => {
+            const usageIndex = usageIndexesByStepRunId.get(stepRunId) ?? 0;
+            usageIndexesByStepRunId.set(stepRunId, usageIndex + 1);
+            const externalId = `mailbox-action:${run.id}:${stepRunId}:${usageIndex}`;
+            usageContext.defer(
+              reportAiUsage({
+                completionTokens: usage.completionTokens,
+                externalId,
+                mailboxId: run.mailboxId,
+                model,
+                promptTokens: usage.promptTokens,
+                usageKind: "aiChat",
+                userId: billingUserId,
+              }).catch((error) => {
+                console.error("Could not report mailbox action AI usage.", {
+                  error: error instanceof Error ? error.message : "Unknown error.",
+                  nodeId,
+                  runId: run.id,
+                });
+              }),
+            );
+          },
+        },
+      ];
+    };
     const email = await loadActionEmailInput({
       mailboxId: run.mailboxId,
       sourceMessageId: run.sourceMessageId,
@@ -500,6 +579,7 @@ export const executeMailboxActionRun = async (runId: string) => {
         revisionId: run.revisionId,
         runId: run.id,
         stepRunId,
+        usageMiddleware: createUsageMiddleware,
       });
       const mergedVariables = { ...item.frame.variables, ...result.variables };
       const previousOutputs = { ...item.frame.previousOutputs, [item.node.id]: result.output };

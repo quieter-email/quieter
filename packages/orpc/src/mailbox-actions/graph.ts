@@ -112,8 +112,13 @@ export const mailboxActionGraphSchema = z.object({
 export type MailboxActionGraph = z.infer<typeof mailboxActionGraphSchema>;
 export type MailboxActionNode = z.infer<typeof mailboxActionNodeSchema>;
 export type MailboxActionEdge = z.infer<typeof mailboxActionEdgeSchema>;
+export type MailboxActionValidationIssue = {
+  edgeId?: string;
+  message: string;
+  nodeId?: string;
+};
 
-const outputPortsForNode = (node: MailboxActionNode): string[] => {
+export const getMailboxActionOutputPorts = (node: MailboxActionNode): string[] => {
   switch (node.type) {
     case "email_received":
     case "merge":
@@ -131,7 +136,7 @@ const outputPortsForNode = (node: MailboxActionNode): string[] => {
   }
 };
 
-const inputPortsForNode = (node: MailboxActionNode): string[] =>
+export const getMailboxActionInputPorts = (node: MailboxActionNode): string[] =>
   node.type === "email_received" ? [] : ["in"];
 
 const detectCycle = (graph: MailboxActionGraph) => {
@@ -185,69 +190,97 @@ const getReachableNodeIds = (graph: MailboxActionGraph) => {
 export const validateMailboxActionGraph = (graphInput: unknown) => {
   const parsed = mailboxActionGraphSchema.safeParse(graphInput);
   if (!parsed.success) {
+    const issues = parsed.error.issues.map((issue) => ({
+      message: issue.message,
+    }));
     return {
-      errors: parsed.error.issues.map((issue) => issue.message),
+      errors: issues.map((issue) => issue.message),
       graph: null,
+      issues,
       valid: false,
     } as const;
   }
 
   const graph = parsed.data;
-  const errors: string[] = [];
+  const issues: MailboxActionValidationIssue[] = [];
+  const addIssue = (issue: MailboxActionValidationIssue) => issues.push(issue);
   const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
 
   if (nodesById.size !== graph.nodes.length) {
-    errors.push("Node ids must be unique.");
+    addIssue({ message: "Node ids must be unique." });
   }
   if (!graph.nodes.some((node) => node.type === "email_received")) {
-    errors.push("Workflow needs at least one email received trigger.");
+    addIssue({ message: "Workflow needs at least one email received trigger." });
   }
 
   for (const edge of graph.edges) {
     const source = nodesById.get(edge.source);
     const target = nodesById.get(edge.target);
     if (!source) {
-      errors.push(`Edge ${edge.id} references a missing source node.`);
+      addIssue({
+        edgeId: edge.id,
+        message: `Edge ${edge.id} references a missing source node.`,
+        nodeId: edge.source,
+      });
       continue;
     }
     if (!target) {
-      errors.push(`Edge ${edge.id} references a missing target node.`);
+      addIssue({
+        edgeId: edge.id,
+        message: `Edge ${edge.id} references a missing target node.`,
+        nodeId: edge.target,
+      });
       continue;
     }
-    if (!outputPortsForNode(source).includes(edge.sourcePort)) {
-      errors.push(`Edge ${edge.id} uses an invalid source port.`);
+    if (!getMailboxActionOutputPorts(source).includes(edge.sourcePort)) {
+      addIssue({
+        edgeId: edge.id,
+        message: `Edge ${edge.id} uses an invalid source port.`,
+        nodeId: source.id,
+      });
     }
-    if (!inputPortsForNode(target).includes(edge.targetPort)) {
-      errors.push(`Edge ${edge.id} uses an invalid target port.`);
+    if (!getMailboxActionInputPorts(target).includes(edge.targetPort)) {
+      addIssue({
+        edgeId: edge.id,
+        message: `Edge ${edge.id} uses an invalid target port.`,
+        nodeId: target.id,
+      });
     }
   }
 
   if (detectCycle(graph)) {
-    errors.push("Workflow loops are not supported yet.");
+    addIssue({ message: "Workflow loops are not supported yet." });
   }
   const reachableNodeIds = getReachableNodeIds(graph);
   for (const node of graph.nodes) {
     if (!reachableNodeIds.has(node.id)) {
-      errors.push(`Node ${node.id} is unreachable.`);
+      addIssue({ message: `Node ${node.id} is unreachable.`, nodeId: node.id });
     }
   }
   for (const node of graph.nodes) {
     if (node.type !== "linear_agent_issue" && node.type !== "linear_create_issue") continue;
     if (!node.config.credentialId) {
-      errors.push(`Linear node ${node.id} needs a connected Linear account.`);
+      addIssue({
+        message: `Linear node ${node.id} needs a connected Linear account.`,
+        nodeId: node.id,
+      });
     }
     if (!node.config.teamId) {
-      errors.push(`Linear node ${node.id} needs a target Linear team.`);
+      addIssue({
+        message: `Linear node ${node.id} needs a target Linear team.`,
+        nodeId: node.id,
+      });
     }
     if (node.type === "linear_create_issue" && !node.config.title) {
-      errors.push(`Linear issue node ${node.id} needs a title.`);
+      addIssue({ message: `Linear issue node ${node.id} needs a title.`, nodeId: node.id });
     }
   }
 
   return {
-    errors,
+    errors: issues.map((issue) => issue.message),
     graph,
-    valid: errors.length === 0,
+    issues,
+    valid: issues.length === 0,
   } as const;
 };
 

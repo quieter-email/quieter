@@ -1,6 +1,5 @@
 "use client";
 
-import { cn } from "@quieter/ui/cn";
 import { useNavigate } from "@tanstack/react-router";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
 import { isDemoModeAvailable } from "~/features/settings/domain/demo-mode-setting";
@@ -72,17 +71,12 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
         <SettingsBackButton onClick={() => setTab("overview")}>Settings</SettingsBackButton>
       )}
       <div className="relative z-10 min-h-0 flex-1 overflow-y-auto">
-        <div
-          className={cn("mx-auto w-full px-5 py-8 md:px-8 md:py-14", {
-            "max-w-375": tab === "actions",
-            "max-w-205": tab !== "actions",
-          })}
-        >
+        <div className="mx-auto w-full max-w-205 px-5 py-8 md:px-8 md:py-14">
           {tab === "overview" ? (
             <SettingsOverviewPanel initialUser={initialUser} onSelectTab={setTab} />
           ) : (
             <div className="space-y-8">
-              {detail && (
+              {detail && tab !== "actions" && (
                 <header>
                   <h1 className="text-xl font-normal tracking-tight text-foreground">
                     {detail.title}
@@ -101,8 +95,8 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
                   <DevelopmentSettingsUnavailable />
                 ))}
               {tab === "account" && <AccountSettingsPanel initialUser={initialUser} />}
-              {tab === "actions" && <ActionsSettingsPanel />}
               {tab === "mailboxes" && <MailboxesSettingsPanel />}
+              {tab === "actions" && <ActionsSettingsPanel />}
               {tab === "connectors" && <ConnectorsSettingsPanel />}
               {tab === "organization" && <OrganizationSettingsPanel />}
             </div>

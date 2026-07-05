@@ -1,38 +1,45 @@
 "use client";
 
-import "@xyflow/react/dist/style.css";
-import type { TextareaHTMLAttributes } from "react";
+import type { RouterOutputs } from "@quieter/orpc";
+import type { ReactNode } from "react";
 import {
   Add01Icon,
-  CheckmarkCircle01Icon,
-  CodeIcon,
-  ConnectIcon,
+  ArrowRight01Icon,
+  Delete02Icon,
   Loading03Icon,
-  Mail01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  MAILBOX_ACTION_GRAPH_VERSION,
+  type MailboxActionGraph,
+} from "@quieter/orpc/mailbox-actions/graph";
+import {
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogCloseButton,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@quieter/ui/select";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
+import { useDemoModeEnabled } from "~/features/settings/domain/demo-mode-setting";
+import { useManagedDemoModeEnabled } from "~/features/settings/domain/managed-demo-mode-setting";
 import {
-  Background,
-  BackgroundVariant,
-  Controls,
-  Handle,
-  MiniMap,
-  Position,
-  ReactFlow,
-  type Connection,
-  type Edge,
-  type Node,
-  type NodeProps,
-} from "@xyflow/react";
-import { useEffect, useMemo, useState } from "react";
-import { connectorsQueryOptions, openConnectorLink } from "~/lib/connectors-query";
+  CONNECTORS_QUERY_KEY,
+  connectorsQueryOptions,
+  openConnectorLink,
+} from "~/lib/connectors-query";
 import {
   linearMetadataQueryOptions,
   mailboxActionQueryKey,
@@ -42,126 +49,17 @@ import {
 } from "~/lib/mailbox-actions-query";
 import { mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
-
-type NodePosition = {
-  x: number;
-  y: number;
-};
-
-type EmailReceivedNode = {
-  config: Record<string, never>;
-  id: string;
-  position: NodePosition;
-  type: "email_received";
-};
-
-type AiConditionNode = {
-  config: {
-    criteria: string;
-  };
-  id: string;
-  position: NodePosition;
-  type: "ai_condition";
-};
-
-type AiRouterNode = {
-  config: {
-    fallbackPort: string;
-    instructions: string;
-    ports: string[];
-  };
-  id: string;
-  position: NodePosition;
-  type: "ai_router";
-};
-
-type SetVariableNode = {
-  config: {
-    name: string;
-    value: string;
-  };
-  id: string;
-  position: NodePosition;
-  type: "set_variable";
-};
-
-type MergeNode = {
-  config: {
-    mode: "pass_through" | "wait_all";
-  };
-  id: string;
-  position: NodePosition;
-  type: "merge";
-};
-
-type StopNode = {
-  config: Record<string, never>;
-  id: string;
-  position: NodePosition;
-  type: "stop";
-};
-
-type LinearCreateIssueNode = {
-  config: {
-    assigneeId?: string;
-    credentialId?: string;
-    description?: string;
-    labelIds?: string[];
-    priority?: 0 | 1 | 2 | 3 | 4;
-    projectId?: string;
-    stateId?: string;
-    teamId?: string;
-    title?: string;
-  };
-  id: string;
-  position: NodePosition;
-  type: "linear_create_issue";
-};
-
-type LinearAgentIssueNode = {
-  config: {
-    credentialId?: string;
-    instructions: string;
-    teamId?: string;
-  };
-  id: string;
-  position: NodePosition;
-  type: "linear_agent_issue";
-};
-
-type MailboxActionNode =
-  | EmailReceivedNode
-  | AiConditionNode
-  | AiRouterNode
-  | SetVariableNode
-  | MergeNode
-  | StopNode
-  | LinearCreateIssueNode
-  | LinearAgentIssueNode;
-
-type MailboxActionEdge = {
-  id: string;
-  label?: string;
-  source: string;
-  sourcePort: string;
-  target: string;
-  targetPort: string;
-};
-
-type MailboxActionGraph = {
-  edges: MailboxActionEdge[];
-  nodes: MailboxActionNode[];
-  version: 1;
-};
-
-type ActionFlowNodeData = {
-  actionNode: MailboxActionNode;
-  invalid: boolean;
-  subtitle: string;
-  title: string;
-};
-
-type ActionFlowNode = Node<ActionFlowNodeData, "action">;
+import { usePreviewPersona } from "~/lib/preview-personas";
+import {
+  SettingsCard,
+  SettingsPageHeader,
+  SettingsRow,
+  SettingsRowText,
+  SettingsRows,
+  SettingsSection,
+  settingsRowTitleClass,
+  settingsRowValueClass,
+} from "./settings-layout";
 
 type MailboxOption = {
   emailAddress: string;
@@ -171,332 +69,182 @@ type MailboxOption = {
   provider: string;
 };
 
-const NODE_TITLES = {
-  ai_condition: "Condition",
-  ai_router: "Router",
-  email_received: "Email received",
-  linear_agent_issue: "Linear agent",
-  linear_create_issue: "Linear issue",
-  merge: "Merge",
-  set_variable: "Variable",
-  stop: "Stop",
-} as const satisfies Record<MailboxActionNode["type"], string>;
+type MailboxActionListItem = RouterOutputs["mailboxActions"]["list"]["actions"][number];
+type MailboxActionDetail = RouterOutputs["mailboxActions"]["get"]["action"];
+type MailboxActionRevision = RouterOutputs["mailboxActions"]["get"]["revisions"][number];
+type ConnectorsData = RouterOutputs["connectors"]["list"];
 
-const NODE_SUBTITLES = {
-  ai_condition: "AI decides yes or no",
-  ai_router: "AI chooses one output",
-  email_received: "Incoming mailbox message",
-  linear_agent_issue: "Research and create",
-  linear_create_issue: "Exact mapped inputs",
-  merge: "Combine branches",
-  set_variable: "Store path data",
-  stop: "End this path",
-} as const satisfies Record<MailboxActionNode["type"], string>;
+const DEFAULT_ACTION_INSTRUCTIONS =
+  "When it's a bug or feature request, use @Linear to search for duplicate issues. If none are found, create a clear new issue with the right team, title, description, labels, priority, and useful context from the email.";
 
-const PALETTE: Array<{
-  icon: typeof CodeIcon;
-  label: string;
-  type: Exclude<MailboxActionNode["type"], "email_received">;
-}> = [
-  { icon: CodeIcon, label: "Condition", type: "ai_condition" },
-  { icon: ConnectIcon, label: "Router", type: "ai_router" },
-  { icon: CodeIcon, label: "Variable", type: "set_variable" },
-  { icon: ConnectIcon, label: "Merge", type: "merge" },
-  { icon: ConnectIcon, label: "Linear agent", type: "linear_agent_issue" },
-  { icon: ConnectIcon, label: "Linear exact", type: "linear_create_issue" },
-  { icon: CodeIcon, label: "Stop", type: "stop" },
-];
+const TRIGGER_OPTIONS = [{ label: "On Email Received", value: "email_received" }] as const;
 
-const createClientId = (prefix: string) => {
-  const id =
-    "crypto" in globalThis && "randomUUID" in globalThis.crypto
-      ? globalThis.crypto.randomUUID()
-      : Math.random().toString(36).slice(2);
-  return `${prefix}_${id}`;
-};
-
-const createEmptyGraph = (): MailboxActionGraph => ({
-  edges: [
-    {
-      id: createClientId("edge"),
-      label: "out",
-      source: "trigger",
-      sourcePort: "out",
-      target: "linear_agent",
-      targetPort: "in",
-    },
-  ],
-  nodes: [
-    {
-      config: {},
-      id: "trigger",
-      position: { x: 40, y: 180 },
-      type: "email_received",
-    },
-    {
-      config: {
-        instructions:
-          "Create a concise Linear issue when this email is a bug report or feature request. Research related issues, use matching labels, and include evidence from the message.",
-      },
-      id: "linear_agent",
-      position: { x: 430, y: 160 },
-      type: "linear_agent_issue",
-    },
-  ],
-  version: 1,
-});
-
-const toEditorGraph = (value: unknown): MailboxActionGraph => {
-  if (!value || typeof value !== "object") {
-    return createEmptyGraph();
+export const ActionsSettingsPanel = () => {
+  const navigate = useNavigate({ from: "/settings" });
+  const [selectedMailboxId, setSelectedMailboxId] = useState<string>();
+  const [selectedActionId, setSelectedActionId] = useState<string>();
+  const isDemoMode = useDemoModeEnabled();
+  const isManagedDemoMode = useManagedDemoModeEnabled();
+  const previewPersona = usePreviewPersona();
+  const { data: mailboxesData, isLoading: mailboxesLoading } = useQuery(mailboxesQueryOptions());
+  const { data: connectorsData } = useQuery(connectorsQueryOptions());
+  const mailboxOptions: MailboxOption[] = [];
+  for (const group of mailboxesData?.groups ?? []) {
+    for (const mailbox of group.mailboxes) {
+      if (mailbox.provider !== "gmail" && mailbox.provider !== "managed") continue;
+      mailboxOptions.push({
+        emailAddress: mailbox.emailAddress,
+        groupName: group.name,
+        id: mailbox.id,
+        label: mailbox.displayName || mailbox.emailAddress,
+        provider: mailbox.provider,
+      });
+    }
   }
+  const activeMailboxId = selectedMailboxId ?? mailboxOptions[0]?.id;
+  const activeMailbox = mailboxOptions.find((mailbox) => mailbox.id === activeMailboxId);
+  const { data: actionsData, isLoading: actionsLoading } = useQuery(
+    mailboxActionsListQueryOptions(activeMailboxId),
+  );
+  const actions = actionsData?.actions ?? [];
+  const activeActionId = actions.some((action) => action.id === selectedActionId)
+    ? selectedActionId
+    : actions[0]?.id;
+  const { data: actionData } = useQuery(mailboxActionQueryOptions(activeActionId));
+  const action = actionData?.action;
+  const draftRevision =
+    actionData?.revisions.find((revision) => revision.id === action?.draftRevisionId) ??
+    actionData?.revisions[0];
+  const hasActionableMailbox = mailboxOptions.length > 0;
+  const showDemoMailboxHint =
+    previewPersona === "empty" || isDemoMode || isManagedDemoMode || previewPersona !== null;
 
-  const graph = value as Partial<MailboxActionGraph>;
-  return {
-    edges: Array.isArray(graph.edges) ? graph.edges : [],
-    nodes: Array.isArray(graph.nodes) ? graph.nodes : createEmptyGraph().nodes,
-    version: 1,
+  const openMailboxesSettings = () => {
+    void navigate({
+      replace: true,
+      search: (previous) => ({
+        ...previous,
+        organizationId: "",
+        organizationView: "overview",
+        tab: "mailboxes",
+      }),
+      to: ".",
+    });
   };
-};
-
-const getOutputPorts = (node: MailboxActionNode) => {
-  switch (node.type) {
-    case "email_received":
-    case "set_variable":
-    case "merge":
-      return ["out"];
-    case "ai_condition":
-      return ["yes", "no"];
-    case "ai_router":
-      return [...new Set([...node.config.ports, node.config.fallbackPort])];
-    case "linear_agent_issue":
-    case "linear_create_issue":
-      return ["success"];
-    case "stop":
-      return [];
-  }
-};
-
-const createNode = (
-  type: Exclude<MailboxActionNode["type"], "email_received">,
-  position: NodePosition,
-): MailboxActionNode => {
-  const id = createClientId(type);
-  switch (type) {
-    case "ai_condition":
-      return {
-        config: { criteria: "The email is a bug report or feature request." },
-        id,
-        position,
-        type,
-      };
-    case "ai_router":
-      return {
-        config: {
-          fallbackPort: "other",
-          instructions: "Route support mail into bug, feature, or other.",
-          ports: ["bug", "feature", "other"],
-        },
-        id,
-        position,
-        type,
-      };
-    case "linear_agent_issue":
-      return {
-        config: {
-          instructions:
-            "Research similar Linear issues, infer the right labels and status, then create one clear issue.",
-        },
-        id,
-        position,
-        type,
-      };
-    case "linear_create_issue":
-      return {
-        config: {
-          description: "{{email.bodyText}}",
-          title: "{{email.subject}}",
-        },
-        id,
-        position,
-        type,
-      };
-    case "merge":
-      return { config: { mode: "pass_through" }, id, position, type };
-    case "set_variable":
-      return { config: { name: "mail_category", value: "support" }, id, position, type };
-    case "stop":
-      return { config: {}, id, position, type };
-  }
-};
-
-const getNodeIssueCount = (nodeId: string, errors: string[]) =>
-  errors.filter((error) => error.includes(nodeId)).length;
-
-const ActionNodeCard = ({ data, selected }: NodeProps<ActionFlowNode>) => {
-  const outputPorts = getOutputPorts(data.actionNode);
-  const targetVisible = data.actionNode.type !== "email_received";
 
   return (
-    <div
-      className={cn(
-        "relative min-w-55 rounded-lg border bg-[#141414]/95 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.25)] backdrop-blur-sm",
-        {
-          "border-destructive/70": data.invalid,
-          "border-primary/70 ring-2 ring-primary/20": selected,
-          "border-white/10": !selected && !data.invalid,
-        },
+    <div className="space-y-8">
+      <SettingsPageHeader title="Actions">
+        Run one plain-language instruction when new mail arrives in a Gmail or managed mailbox.
+      </SettingsPageHeader>
+
+      {mailboxesLoading ? (
+        <SettingsCard className="p-6">
+          <SettingsRowText title="Loading mailboxes">
+            Checking which mailboxes you can use for actions.
+          </SettingsRowText>
+        </SettingsCard>
+      ) : !hasActionableMailbox ? (
+        <SettingsCard className="p-6">
+          <div className="space-y-4">
+            <SettingsRowText title="Connect a mailbox first">
+              Actions run when new mail arrives in Gmail or a team mailbox. You do not have one
+              connected yet, so there is nothing to attach an action to.
+              {showDemoMailboxHint && (
+                <>
+                  <br />
+                  <br />
+                  <span className="text-muted-foreground">
+                    Local demo mail is for previewing the inbox only. Connect a real mailbox to
+                    create actions.
+                  </span>
+                </>
+              )}
+            </SettingsRowText>
+            <Button onClick={openMailboxesSettings} size="sm" type="button">
+              Go to Mailboxes
+              <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
+            </Button>
+          </div>
+        </SettingsCard>
+      ) : (
+        <ActionSimpleEditor
+          action={action}
+          actions={actions}
+          actionsLoading={actionsLoading}
+          activeActionId={activeActionId}
+          activeMailbox={activeMailbox}
+          activeMailboxId={activeMailboxId}
+          connectorsData={connectorsData}
+          draftRevision={draftRevision}
+          key={`${activeActionId ?? "new"}:${draftRevision?.id ?? "empty"}`}
+          mailboxesLoading={mailboxesLoading}
+          mailboxOptions={mailboxOptions}
+          setSelectedActionId={setSelectedActionId}
+          setSelectedMailboxId={setSelectedMailboxId}
+        />
       )}
-    >
-      {targetVisible ? (
-        <Handle
-          className="size-3! border! border-white/20! bg-[#1f1f1f]!"
-          id="in"
-          position={Position.Left}
-          type="target"
-        />
-      ) : null}
-      <div className="flex items-start gap-2">
-        <span
-          className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded-md border text-foreground",
-            {
-              "border-[#5e6ad2]/50 bg-[#5e6ad2]/20":
-                data.actionNode.type === "linear_agent_issue" ||
-                data.actionNode.type === "linear_create_issue",
-              "border-white/10 bg-white/5":
-                data.actionNode.type !== "linear_agent_issue" &&
-                data.actionNode.type !== "linear_create_issue",
-            },
-          )}
-        >
-          <HugeiconsIcon
-            aria-hidden
-            className="size-4"
-            icon={data.actionNode.type === "email_received" ? Mail01Icon : ConnectIcon}
-          />
-        </span>
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium text-foreground">{data.title}</div>
-          <div className="truncate text-xs text-muted-foreground">{data.subtitle}</div>
-        </div>
-      </div>
-      {outputPorts.map((port, index) => (
-        <Handle
-          className="size-3! border! border-[#5e6ad2]/50! bg-[#5e6ad2]!"
-          id={port}
-          key={port}
-          position={Position.Right}
-          style={{ top: `${((index + 1) / (outputPorts.length + 1)) * 100}%` }}
-          type="source"
-        />
-      ))}
-      {outputPorts.length > 1 ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {outputPorts.map((port) => (
-            <span
-              className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-muted-foreground"
-              key={port}
-            >
-              {port}
-            </span>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 };
 
-const nodeTypes = {
-  action: ActionNodeCard,
-};
-
-const FieldLabel = ({ children }: { children: string }) => (
-  <label className="text-xs font-medium text-muted-foreground">{children}</label>
-);
-
-const MentionChip = () => (
-  <span className="rounded-full border border-[#5e6ad2]/40 bg-[#5e6ad2]/15 px-2 py-0.5 text-[11px] font-medium text-[#b8bef8]">
-    @Linear
-  </span>
-);
-
-const PanelTextarea = ({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) => (
-  <textarea
-    className={cn(
-      "min-h-24 w-full resize-none rounded-md border border-input bg-background-light px-3 py-2 text-sm text-foreground outline-none squircle placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-50",
-      className,
-    )}
-    {...props}
-  />
-);
-
-export const ActionsSettingsPanel = () => {
+const ActionSimpleEditor = ({
+  action,
+  actions,
+  actionsLoading,
+  activeActionId,
+  activeMailbox,
+  activeMailboxId,
+  connectorsData,
+  draftRevision,
+  mailboxesLoading,
+  mailboxOptions,
+  setSelectedActionId,
+  setSelectedMailboxId,
+}: {
+  action: MailboxActionDetail | undefined;
+  actions: MailboxActionListItem[];
+  actionsLoading: boolean;
+  activeActionId: string | undefined;
+  activeMailbox: MailboxOption | undefined;
+  activeMailboxId: string | undefined;
+  connectorsData: ConnectorsData | undefined;
+  draftRevision: MailboxActionRevision | undefined;
+  mailboxesLoading: boolean;
+  mailboxOptions: MailboxOption[];
+  setSelectedActionId: (actionId: string | undefined) => void;
+  setSelectedMailboxId: (mailboxId: string | undefined) => void;
+}) => {
   const queryClient = useQueryClient();
-  const [selectedMailboxId, setSelectedMailboxId] = useState<string>();
-  const [selectedActionId, setSelectedActionId] = useState<string>();
-  const [selectedNodeId, setSelectedNodeId] = useState("linear_agent");
-  const [graph, setGraph] = useState<MailboxActionGraph>(() => createEmptyGraph());
-  const [workflowName, setWorkflowName] = useState("New action");
+  const initialConfig = getSimpleActionConfig(draftRevision?.graph);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [startingLinear, setStartingLinear] = useState(false);
-
-  const { data: mailboxesData, isLoading: mailboxesLoading } = useQuery(mailboxesQueryOptions());
-  const { data: connectorsData } = useQuery(connectorsQueryOptions());
-  const mailboxOptions = useMemo<MailboxOption[]>(
-    () =>
-      (mailboxesData?.groups ?? []).flatMap((group) =>
-        group.mailboxes
-          .filter((mailbox) => mailbox.provider === "gmail" || mailbox.provider === "managed")
-          .map((mailbox) => ({
-            emailAddress: mailbox.emailAddress,
-            groupName: group.name,
-            id: mailbox.id,
-            label: mailbox.displayName || mailbox.emailAddress,
-            provider: mailbox.provider,
-          })),
-      ),
-    [mailboxesData],
-  );
-  const activeMailboxId = selectedMailboxId ?? mailboxOptions[0]?.id;
-  const activeMailbox = mailboxOptions.find((mailbox) => mailbox.id === activeMailboxId);
-  const actionsQuery = useQuery(mailboxActionsListQueryOptions(activeMailboxId));
-  const actions = actionsQuery.data?.actions ?? [];
-  const activeActionId = actions.some((action) => action.id === selectedActionId)
-    ? selectedActionId
-    : actions[0]?.id;
-  const actionQuery = useQuery(mailboxActionQueryOptions(activeActionId));
-  const action = actionQuery.data?.action;
-  const draftRevision =
-    actionQuery.data?.revisions.find((revision) => revision.id === action?.draftRevisionId) ??
-    actionQuery.data?.revisions[0];
-  const validationErrors = draftRevision?.validationErrors ?? [];
-  const selectedNode =
-    graph.nodes.find((node) => node.id === selectedNodeId) ?? graph.nodes[0] ?? null;
+  const [name, setName] = useState(action?.name ?? "New action");
+  const [trigger] = useState<(typeof TRIGGER_OPTIONS)[number]["value"]>("email_received");
+  const [credentialId, setCredentialId] = useState(initialConfig.credentialId);
+  const [teamId, setTeamId] = useState(initialConfig.teamId);
+  const [instructions, setInstructions] = useState(initialConfig.instructions);
+  const isDirty =
+    name !== (action?.name ?? "New action") ||
+    credentialId !== initialConfig.credentialId ||
+    teamId !== initialConfig.teamId ||
+    instructions !== initialConfig.instructions;
   const linearConnector = connectorsData?.connectors.find(
     (connector) => connector.provider === "linear",
   );
   const linearAccounts =
     linearConnector?.accounts.filter((account) => account.status === "connected") ?? [];
-  const selectedCredentialId =
-    selectedNode?.type === "linear_agent_issue" || selectedNode?.type === "linear_create_issue"
-      ? selectedNode.config.credentialId
-      : undefined;
-  const linearMetadataQuery = useQuery(linearMetadataQueryOptions(selectedCredentialId));
-
-  useEffect(() => {
-    if (!draftRevision || !action) {
-      return;
-    }
-    setGraph(toEditorGraph(draftRevision.graph));
-    setWorkflowName(action.name);
-    const firstNodeId = toEditorGraph(draftRevision.graph).nodes[0]?.id;
-    if (firstNodeId) setSelectedNodeId(firstNodeId);
-  }, [action?.id, draftRevision?.id]);
+  const { data: linearMetadata, isLoading: linearMetadataLoading } = useQuery(
+    linearMetadataQueryOptions(credentialId || undefined),
+  );
+  const teams = linearMetadata?.teams ?? [];
+  const validationErrors = draftRevision?.validationErrors ?? [];
 
   const invalidateActionQueries = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: mailboxActionsListQueryKey(activeMailboxId) }),
       queryClient.invalidateQueries({ queryKey: mailboxActionQueryKey(activeActionId) }),
+      queryClient.invalidateQueries({ queryKey: CONNECTORS_QUERY_KEY }),
     ]);
   };
 
@@ -516,8 +264,11 @@ export const ActionsSettingsPanel = () => {
       if (result.validationStatus === "valid") {
         toast.success("Action saved.");
       } else {
-        toast.warning("Action saved with validation issues.");
+        toast.warning("Action saved with missing fields.");
       }
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Could not save action.");
     },
   });
   const publishMutation = useMutation({
@@ -532,122 +283,36 @@ export const ActionsSettingsPanel = () => {
   });
   const setEnabledMutation = useMutation({
     ...orpc.mailboxActions.setEnabled.mutationOptions(),
-    onSuccess: async () => {
-      await invalidateActionQueries();
-    },
+    onSuccess: invalidateActionQueries,
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "Could not update action.");
     },
   });
+  const deleteActionMutation = useMutation({
+    ...orpc.mailboxActions.delete.mutationOptions(),
+    onSuccess: async () => {
+      setSelectedActionId(undefined);
+      await queryClient.invalidateQueries({
+        queryKey: mailboxActionsListQueryKey(activeMailboxId),
+      });
+      toast.success("Action deleted.");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Could not delete action.");
+    },
+  });
 
-  const updateNode = (nodeId: string, updater: (node: MailboxActionNode) => MailboxActionNode) => {
-    setGraph((current) => ({
-      ...current,
-      nodes: current.nodes.map((node) => (node.id === nodeId ? updater(node) : node)),
-    }));
+  const createAction = () => {
+    if (!activeMailboxId) return;
+    createActionMutation.mutate({ mailboxId: activeMailboxId, name: "New action" });
   };
-
-  const addNode = (type: Exclude<MailboxActionNode["type"], "email_received">) => {
-    const selected = selectedNode;
-    const nextPosition = selected
-      ? { x: selected.position.x + 360, y: selected.position.y + 40 }
-      : { x: 120, y: 120 };
-    const node = createNode(type, nextPosition);
-    setGraph((current) => {
-      const source =
-        selected && current.nodes.some((item) => item.id === selected.id) ? selected : null;
-      const sourcePort = source ? getOutputPorts(source)[0] : null;
-      return {
-        ...current,
-        edges:
-          source && sourcePort
-            ? [
-                ...current.edges,
-                {
-                  id: createClientId("edge"),
-                  label: sourcePort,
-                  source: source.id,
-                  sourcePort,
-                  target: node.id,
-                  targetPort: "in",
-                },
-              ]
-            : current.edges,
-        nodes: [...current.nodes, node],
-      };
-    });
-    setSelectedNodeId(node.id);
-  };
-
-  const connectNodes = (connection: Connection) => {
-    if (!connection.source || !connection.target) {
-      return;
-    }
-    const sourcePort = connection.sourceHandle ?? "out";
-    setGraph((current) => ({
-      ...current,
-      edges: [
-        ...current.edges.filter(
-          (edge) =>
-            !(
-              edge.source === connection.source &&
-              edge.sourcePort === sourcePort &&
-              edge.target === connection.target
-            ),
-        ),
-        {
-          id: createClientId("edge"),
-          label: sourcePort,
-          source: connection.source,
-          sourcePort,
-          target: connection.target,
-          targetPort: connection.targetHandle ?? "in",
-        },
-      ],
-    }));
-  };
-
-  const flowNodes = useMemo<ActionFlowNode[]>(
-    () =>
-      graph.nodes.map((node) => ({
-        data: {
-          actionNode: node,
-          invalid: getNodeIssueCount(node.id, validationErrors) > 0,
-          subtitle: NODE_SUBTITLES[node.type],
-          title: NODE_TITLES[node.type],
-        },
-        id: node.id,
-        position: node.position,
-        selected: node.id === selectedNode?.id,
-        type: "action",
-      })),
-    [graph.nodes, selectedNode?.id, validationErrors],
-  );
-  const flowEdges = useMemo<Edge[]>(
-    () =>
-      graph.edges.map((edge) => ({
-        animated: edge.sourcePort === "success",
-        id: edge.id,
-        label: edge.label ?? edge.sourcePort,
-        labelBgBorderRadius: 8,
-        labelBgPadding: [6, 3],
-        labelStyle: { fill: "#d6d6d6", fontSize: 11 },
-        source: edge.source,
-        sourceHandle: edge.sourcePort,
-        style: { stroke: "#5e6ad2", strokeWidth: 1.5 },
-        target: edge.target,
-        targetHandle: edge.targetPort,
-        type: "smoothstep",
-      })),
-    [graph.edges],
-  );
 
   const saveDraft = () => {
     if (!activeActionId) return;
     saveDraftMutation.mutate({
       actionId: activeActionId,
-      graph,
-      name: workflowName,
+      graph: createSimpleActionGraph({ credentialId, instructions, teamId }),
+      name,
     });
   };
 
@@ -661,566 +326,499 @@ export const ActionsSettingsPanel = () => {
     }
   };
 
-  return (
-    <div className="min-h-[calc(100dvh-9rem)] overflow-hidden rounded-lg border border-white/10 bg-[#0f0f0f]/92 shadow-2xl">
-      <div className="flex min-h-0 flex-col">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5">
-              <HugeiconsIcon aria-hidden className="size-4" icon={ConnectIcon} />
-            </div>
-            <div className="min-w-0">
-              <Input
-                aria-label="Workflow name"
-                chrome="ghost"
-                className="h-7 px-0 text-base font-medium"
-                onChange={(event) => setWorkflowName(event.target.value)}
-                value={workflowName}
-              />
-              <p className="truncate text-xs text-muted-foreground">
-                {activeMailbox ? `${activeMailbox.label} / ${activeMailbox.groupName}` : "Actions"}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              disabled={!activeActionId || saveDraftMutation.isPending}
-              onClick={saveDraft}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              {saveDraftMutation.isPending ? (
-                <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-              ) : null}
-              Save
-            </Button>
-            <Button
-              disabled={!activeActionId || publishMutation.isPending}
-              onClick={() => activeActionId && publishMutation.mutate({ actionId: activeActionId })}
-              size="sm"
-              type="button"
-            >
-              {publishMutation.isPending ? (
-                <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-              ) : (
-                <HugeiconsIcon aria-hidden className="size-4" icon={CheckmarkCircle01Icon} />
-              )}
-              Publish
-            </Button>
-            <Switch
-              aria-label="Enable action"
-              checked={action?.enabled ?? false}
-              className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-white/15 bg-white/10 p-0.5 data-checked:border-primary data-checked:bg-primary"
-              disabled={
-                !activeActionId || !action?.publishedRevisionId || setEnabledMutation.isPending
-              }
-              onCheckedChange={(enabled) =>
-                activeActionId && setEnabledMutation.mutate({ actionId: activeActionId, enabled })
-              }
-            >
-              <SwitchThumb className="size-4 bg-background-light data-checked:translate-x-4 data-checked:bg-primary-foreground" />
-            </Switch>
-          </div>
-        </header>
+  const hasPublished = !!action?.publishedRevisionId;
+  const hasRequiredFields = !!credentialId && !!teamId && !!instructions.trim();
+  const publishDisabled =
+    !action ||
+    isDirty ||
+    !hasRequiredFields ||
+    publishMutation.isPending ||
+    validationErrors.length > 0 ||
+    saveDraftMutation.isPending;
 
-        <div className="grid min-h-[calc(100dvh-14rem)] grid-cols-[260px_minmax(0,1fr)_320px] overflow-hidden">
-          <aside className="min-h-0 overflow-y-auto border-r border-white/10 bg-black/15 p-3">
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <FieldLabel>Mailbox</FieldLabel>
-                <Select
-                  items={mailboxOptions.map((mailbox) => ({
-                    label: mailbox.label,
-                    value: mailbox.id,
-                  }))}
-                  onValueChange={(value) => {
-                    if (!value) return;
-                    setSelectedMailboxId(value);
-                    setSelectedActionId(undefined);
-                  }}
-                  value={activeMailboxId ?? ""}
+  return (
+    <div className="space-y-8">
+      <SettingsSection title="Mailbox">
+        <SettingsRows>
+          <SettingsRow
+            action={
+              <Select
+                items={mailboxOptions.map((mailbox) => ({
+                  label: mailbox.label,
+                  value: mailbox.id,
+                }))}
+                onValueChange={(value) => {
+                  if (!value) return;
+                  setSelectedMailboxId(value);
+                  setSelectedActionId(undefined);
+                }}
+                value={activeMailboxId ?? ""}
+              >
+                <SelectTrigger
+                  aria-label="Mailbox"
+                  className="w-64"
+                  disabled={mailboxesLoading || mailboxOptions.length === 0}
+                  size="sm"
                 >
-                  <SelectTrigger
-                    disabled={mailboxesLoading || mailboxOptions.length === 0}
-                    size="sm"
-                  >
-                    <SelectValue placeholder="Select mailbox" />
+                  <SelectValue placeholder="Select mailbox" />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  {mailboxOptions.map((mailbox) => (
+                    <SelectItem key={mailbox.id} value={mailbox.id}>
+                      {mailbox.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            }
+            title="Mailbox"
+          >
+            {activeMailbox
+              ? `Actions run only for new mail in ${activeMailbox.label}.`
+              : "Choose a Gmail or managed mailbox."}
+          </SettingsRow>
+        </SettingsRows>
+      </SettingsSection>
+
+      <SettingsSection
+        description="Each action is one plain-language instruction that runs after the selected trigger."
+        title="Action"
+      >
+        <SettingsRows>
+          <SettingsRow
+            action={
+              <div className="flex items-center gap-2">
+                <Button
+                  disabled={!activeMailboxId || createActionMutation.isPending}
+                  onClick={createAction}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  {createActionMutation.isPending ? (
+                    <HugeiconsIcon
+                      aria-hidden
+                      className="size-4 animate-spin"
+                      icon={Loading03Icon}
+                    />
+                  ) : (
+                    <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
+                  )}
+                  New action
+                </Button>
+                <AlertDialog onOpenChange={setDeleteOpen} open={deleteOpen}>
+                  <IconButtonTooltip label="Delete action">
+                    <Button
+                      aria-label="Delete action"
+                      disabled={!activeActionId || deleteActionMutation.isPending}
+                      onClick={() => setDeleteOpen(true)}
+                      size="icon-sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <HugeiconsIcon
+                        aria-hidden
+                        className="size-4 text-destructive"
+                        icon={Delete02Icon}
+                      />
+                    </Button>
+                  </IconButtonTooltip>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete this action?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This removes the action and its saved versions for this mailbox.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogBody>
+                      <p className="text-sm text-muted-foreground">This cannot be undone.</p>
+                    </AlertDialogBody>
+                    <AlertDialogFooter>
+                      <AlertDialogCloseButton disabled={deleteActionMutation.isPending}>
+                        Cancel
+                      </AlertDialogCloseButton>
+                      <Button
+                        disabled={deleteActionMutation.isPending}
+                        onClick={() => {
+                          if (activeActionId) {
+                            deleteActionMutation.mutate({ actionId: activeActionId });
+                          }
+                          setDeleteOpen(false);
+                        }}
+                        type="button"
+                        variant="destructive"
+                      >
+                        Delete
+                      </Button>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            }
+            title="Saved actions"
+          >
+            {actions.length > 0
+              ? "Choose an action to edit, or create another one."
+              : actionsLoading
+                ? "Loading saved actions."
+                : "No actions yet."}
+          </SettingsRow>
+          {actions.length > 0 ? (
+            <SettingsRow
+              action={
+                <Select
+                  items={actions.map((item) => ({ label: item.name, value: item.id }))}
+                  onValueChange={(value) => value && setSelectedActionId(value)}
+                  value={activeActionId ?? ""}
+                >
+                  <SelectTrigger aria-label="Action" className="w-64" size="sm">
+                    <SelectValue placeholder="Select action" />
                   </SelectTrigger>
-                  <SelectContent>
-                    {mailboxOptions.map((mailbox) => (
-                      <SelectItem key={mailbox.id} value={mailbox.id}>
-                        {mailbox.label}
+                  <SelectContent align="end">
+                    {actions.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <FieldLabel>Workflows</FieldLabel>
-                  <Button
-                    aria-label="Create action"
-                    disabled={!activeMailboxId || createActionMutation.isPending}
-                    onClick={() =>
-                      activeMailboxId &&
-                      createActionMutation.mutate({
-                        mailboxId: activeMailboxId,
-                        name: "Linear triage",
-                      })
-                    }
-                    size="icon-sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
-                  </Button>
-                </div>
-                <div className="space-y-1">
-                  {actions.map((item) => (
-                    <button
-                      className={cn(
-                        "flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors squircle",
-                        {
-                          "border-primary/60 bg-primary/10 text-foreground":
-                            item.id === activeActionId,
-                          "border-white/10 bg-white/3 text-muted-foreground hover:bg-white/6":
-                            item.id !== activeActionId,
-                        },
-                      )}
-                      key={item.id}
-                      onClick={() => setSelectedActionId(item.id)}
-                      type="button"
-                    >
-                      <span className="min-w-0 truncate">{item.name}</span>
-                      <span
-                        className={cn("size-2 shrink-0 rounded-full", {
-                          "bg-primary": item.enabled,
-                          "bg-muted-foreground/40": !item.enabled,
-                        })}
-                      />
-                    </button>
-                  ))}
-                  {!actionsQuery.isLoading && actions.length === 0 ? (
-                    <p className="rounded-md border border-white/10 bg-white/3 p-3 text-sm text-muted-foreground">
-                      No actions yet.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="space-y-2 border-t border-white/10 pt-3">
-                <FieldLabel>Nodes</FieldLabel>
-                <div className="grid grid-cols-2 gap-2">
-                  {PALETTE.map((item) => (
-                    <button
-                      className="flex items-center gap-2 rounded-md border border-white/10 bg-white/4 p-2 text-left text-xs text-foreground transition-colors squircle hover:bg-white/8"
-                      key={item.type}
-                      onClick={() => addNode(item.type)}
-                      type="button"
-                    >
-                      <HugeiconsIcon aria-hidden className="size-3.5 shrink-0" icon={item.icon} />
-                      <span className="min-w-0 truncate">{item.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </aside>
-
-          <section className="relative min-h-0 bg-[#0b0b0b]">
-            <ReactFlow
-              colorMode="dark"
-              deleteKeyCode={["Backspace", "Delete"]}
-              edges={flowEdges}
-              fitView
-              maxZoom={1.4}
-              minZoom={0.25}
-              nodeTypes={nodeTypes}
-              nodes={flowNodes}
-              onConnect={connectNodes}
-              onEdgesDelete={(deleted) =>
-                setGraph((current) => ({
-                  ...current,
-                  edges: current.edges.filter(
-                    (edge) => !deleted.some((deletedEdge) => deletedEdge.id === edge.id),
-                  ),
-                }))
               }
-              onNodeClick={(_event, node) => setSelectedNodeId(node.id)}
-              onNodeDragStop={(_event, node) =>
-                setGraph((current) => ({
-                  ...current,
-                  nodes: current.nodes.map((item) =>
-                    item.id === node.id ? { ...item, position: node.position } : item,
-                  ),
-                }))
-              }
-              onNodesDelete={(deleted) =>
-                setGraph((current) => ({
-                  ...current,
-                  edges: current.edges.filter(
-                    (edge) =>
-                      !deleted.some(
-                        (deletedNode) =>
-                          deletedNode.id === edge.source || deletedNode.id === edge.target,
-                      ),
-                  ),
-                  nodes: current.nodes.filter(
-                    (node) =>
-                      node.type === "email_received" ||
-                      !deleted.some((deletedNode) => deletedNode.id === node.id),
-                  ),
-                }))
-              }
-              proOptions={{ hideAttribution: true }}
+              title="Current action"
             >
-              <Background
-                color="rgba(255,255,255,0.12)"
-                gap={22}
-                size={1}
-                variant={BackgroundVariant.Dots}
-              />
-              <MiniMap
-                className="border! border-white/10! bg-[#121212]!"
-                maskColor="rgba(0,0,0,0.45)"
-                nodeColor="#5e6ad2"
-                pannable
-                zoomable
-              />
-              <Controls className="border! border-white/10! bg-[#151515]! [&_button]:border-white/10! [&_button]:bg-[#151515]! [&_button]:text-foreground!" />
-            </ReactFlow>
-          </section>
+              {action?.enabled ? "Published and enabled." : "Draft or disabled."}
+            </SettingsRow>
+          ) : null}
+        </SettingsRows>
+      </SettingsSection>
 
-          <aside className="min-h-0 overflow-y-auto border-l border-white/10 bg-black/20 p-4">
-            {selectedNode ? (
-              <div className="space-y-4">
-                <div>
-                  <div className="text-sm font-medium text-foreground">
-                    {NODE_TITLES[selectedNode.type]}
-                  </div>
-                  <div className="text-xs text-muted-foreground">{selectedNode.id}</div>
-                </div>
+      {action ? (
+        <SettingsSection title="Rule">
+          <SettingsCard>
+            <div className="divide-y divide-border/70">
+              <SimpleField label="Name">
+                <Input
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Action name"
+                  value={name}
+                />
+              </SimpleField>
 
-                {selectedNode.type === "ai_condition" ? (
-                  <div className="space-y-2">
-                    <FieldLabel>Criteria</FieldLabel>
-                    <PanelTextarea
-                      onChange={(event) =>
-                        updateNode(selectedNode.id, (node) =>
-                          node.type === "ai_condition"
-                            ? { ...node, config: { criteria: event.target.value } }
-                            : node,
-                        )
-                      }
-                      value={selectedNode.config.criteria}
-                    />
-                  </div>
-                ) : null}
+              <SimpleField description="The first event that starts this action." label="Trigger">
+                <Select
+                  items={TRIGGER_OPTIONS.map((option) => ({
+                    label: option.label,
+                    value: option.value,
+                  }))}
+                  onValueChange={() => undefined}
+                  value={trigger}
+                >
+                  <SelectTrigger aria-label="Trigger">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="email_received">On Email Received</SelectItem>
+                  </SelectContent>
+                </Select>
+              </SimpleField>
 
-                {selectedNode.type === "ai_router" ? (
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <FieldLabel>Instructions</FieldLabel>
-                      <PanelTextarea
-                        onChange={(event) =>
-                          updateNode(selectedNode.id, (node) =>
-                            node.type === "ai_router"
-                              ? {
-                                  ...node,
-                                  config: { ...node.config, instructions: event.target.value },
-                                }
-                              : node,
-                          )
-                        }
-                        value={selectedNode.config.instructions}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <FieldLabel>Ports</FieldLabel>
-                      <Input
-                        onChange={(event) =>
-                          updateNode(selectedNode.id, (node) => {
-                            if (node.type !== "ai_router") return node;
-                            const ports = event.target.value
-                              .split(",")
-                              .map((value) => value.trim())
-                              .filter(Boolean);
-                            return {
-                              ...node,
-                              config: {
-                                ...node.config,
-                                fallbackPort: ports.includes(node.config.fallbackPort)
-                                  ? node.config.fallbackPort
-                                  : (ports[0] ?? "other"),
-                                ports: ports.length > 0 ? ports : ["other"],
-                              },
-                            };
-                          })
-                        }
-                        value={selectedNode.config.ports.join(", ")}
-                      />
-                    </div>
-                  </div>
-                ) : null}
-
-                {selectedNode.type === "set_variable" ? (
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <FieldLabel>Name</FieldLabel>
-                      <Input
-                        onChange={(event) =>
-                          updateNode(selectedNode.id, (node) =>
-                            node.type === "set_variable"
-                              ? { ...node, config: { ...node.config, name: event.target.value } }
-                              : node,
-                          )
-                        }
-                        value={selectedNode.config.name}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <FieldLabel>Value</FieldLabel>
-                      <Input
-                        onChange={(event) =>
-                          updateNode(selectedNode.id, (node) =>
-                            node.type === "set_variable"
-                              ? { ...node, config: { ...node.config, value: event.target.value } }
-                              : node,
-                          )
-                        }
-                        value={selectedNode.config.value}
-                      />
-                    </div>
-                  </div>
-                ) : null}
-
-                {selectedNode.type === "merge" ? (
-                  <div className="space-y-2">
-                    <FieldLabel>Mode</FieldLabel>
+              <SimpleField
+                description="The connector the instruction can use. Type @Linear in the instruction when you want the agent to use Linear."
+                label="Connector"
+              >
+                <div className="space-y-3">
+                  {linearAccounts.length > 0 ? (
                     <Select
-                      items={[
-                        { label: "Pass through", value: "pass_through" },
-                        { label: "Wait for all", value: "wait_all" },
-                      ]}
-                      onValueChange={(value) =>
-                        updateNode(selectedNode.id, (node) =>
-                          node.type === "merge" &&
-                          (value === "pass_through" || value === "wait_all")
-                            ? { ...node, config: { mode: value } }
-                            : node,
-                        )
-                      }
-                      value={selectedNode.config.mode}
+                      items={linearAccounts.map((account) => ({
+                        label: getLinearAccountLabel(account),
+                        value: account.id,
+                      }))}
+                      onValueChange={(value) => {
+                        if (!value) return;
+                        setCredentialId(value);
+                        setTeamId("");
+                      }}
+                      value={credentialId}
                     >
-                      <SelectTrigger>
-                        <SelectValue />
+                      <SelectTrigger aria-label="Linear account">
+                        <SelectValue placeholder="Select Linear workspace" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="pass_through">Pass through</SelectItem>
-                        <SelectItem value="wait_all">Wait for all</SelectItem>
+                        {linearAccounts.map((account) => (
+                          <SelectItem key={account.id} value={account.id}>
+                            {getLinearAccountLabel(account)}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                ) : null}
-
-                {selectedNode.type === "linear_agent_issue" ||
-                selectedNode.type === "linear_create_issue" ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <FieldLabel>Connector</FieldLabel>
-                      <MentionChip />
-                    </div>
-                    {linearAccounts.length > 0 ? (
-                      <Select
-                        items={linearAccounts.map((account) => ({
-                          label:
-                            account.providerWorkspaceName ??
-                            account.accountEmail ??
-                            account.displayName ??
-                            "Linear",
-                          value: account.id,
-                        }))}
-                        onValueChange={(value) => {
-                          if (!value) return;
-                          updateNode(selectedNode.id, (node) => {
-                            if (node.type === "linear_agent_issue") {
-                              return { ...node, config: { ...node.config, credentialId: value } };
-                            }
-                            if (node.type === "linear_create_issue") {
-                              return { ...node, config: { ...node.config, credentialId: value } };
-                            }
-                            return node;
-                          });
-                        }}
-                        value={selectedNode.config.credentialId ?? ""}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select Linear workspace" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {linearAccounts.map((account) => (
-                            <SelectItem key={account.id} value={account.id}>
-                              {account.providerWorkspaceName ??
-                                account.accountEmail ??
-                                account.displayName ??
-                                "Linear"}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Button
-                        disabled={startingLinear || linearConnector?.isConfigured === false}
-                        onClick={() => void startLinearConnection()}
-                        size="sm"
-                        type="button"
-                        variant="outline"
-                      >
-                        {startingLinear ? (
-                          <HugeiconsIcon
-                            aria-hidden
-                            className="size-4 animate-spin"
-                            icon={Loading03Icon}
-                          />
-                        ) : null}
-                        Connect Linear
-                      </Button>
-                    )}
-
-                    <div className="space-y-2">
-                      <FieldLabel>Team</FieldLabel>
-                      <Select
-                        disabled={!selectedCredentialId || linearMetadataQuery.isLoading}
-                        items={(linearMetadataQuery.data?.teams ?? []).map((team) => ({
-                          label: `${team.name} (${team.key})`,
-                          value: team.id,
-                        }))}
-                        onValueChange={(value) => {
-                          if (!value) return;
-                          updateNode(selectedNode.id, (node) => {
-                            if (node.type === "linear_agent_issue") {
-                              return { ...node, config: { ...node.config, teamId: value } };
-                            }
-                            if (node.type === "linear_create_issue") {
-                              return { ...node, config: { ...node.config, teamId: value } };
-                            }
-                            return node;
-                          });
-                        }}
-                        value={selectedNode.config.teamId ?? ""}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select team" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(linearMetadataQuery.data?.teams ?? []).map((team) => (
-                            <SelectItem key={team.id} value={team.id}>
-                              {team.name} ({team.key})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {selectedNode.type === "linear_agent_issue" ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <FieldLabel>Instructions</FieldLabel>
-                          <MentionChip />
-                        </div>
-                        <PanelTextarea
-                          className="min-h-36"
-                          onChange={(event) =>
-                            updateNode(selectedNode.id, (node) =>
-                              node.type === "linear_agent_issue"
-                                ? {
-                                    ...node,
-                                    config: { ...node.config, instructions: event.target.value },
-                                  }
-                                : node,
-                            )
-                          }
-                          value={selectedNode.config.instructions}
+                  ) : (
+                    <Button
+                      disabled={startingLinear || linearConnector?.isConfigured === false}
+                      onClick={() => void startLinearConnection()}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      {startingLinear ? (
+                        <HugeiconsIcon
+                          aria-hidden
+                          className="size-4 animate-spin"
+                          icon={Loading03Icon}
                         />
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <FieldLabel>Title</FieldLabel>
-                            <MentionChip />
-                          </div>
-                          <Input
-                            onChange={(event) =>
-                              updateNode(selectedNode.id, (node) =>
-                                node.type === "linear_create_issue"
-                                  ? {
-                                      ...node,
-                                      config: { ...node.config, title: event.target.value },
-                                    }
-                                  : node,
-                              )
-                            }
-                            value={selectedNode.config.title ?? ""}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <FieldLabel>Description</FieldLabel>
-                          <PanelTextarea
-                            className="min-h-36"
-                            onChange={(event) =>
-                              updateNode(selectedNode.id, (node) =>
-                                node.type === "linear_create_issue"
-                                  ? {
-                                      ...node,
-                                      config: { ...node.config, description: event.target.value },
-                                    }
-                                  : node,
-                              )
-                            }
-                            value={selectedNode.config.description ?? ""}
-                          />
-                        </div>
-                      </div>
+                      ) : (
+                        <LinearBadge />
+                      )}
+                      Connect Linear
+                    </Button>
+                  )}
+                  <Select
+                    disabled={!credentialId || linearMetadataLoading}
+                    items={teams.map((team) => ({
+                      label: `${team.name} (${team.key})`,
+                      value: team.id,
+                    }))}
+                    onValueChange={(value) => value && setTeamId(value)}
+                    value={teamId}
+                  >
+                    <SelectTrigger aria-label="Linear team">
+                      <SelectValue placeholder="Select Linear team" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams.map((team) => (
+                        <SelectItem key={team.id} value={team.id}>
+                          {team.name} ({team.key})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </SimpleField>
+
+              <SimpleField
+                description="Write the whole behavior in one prompt. The email content is provided automatically when the action runs."
+                label="Instruction"
+              >
+                <div className="space-y-2">
+                  <textarea
+                    aria-label="Action instruction"
+                    className={cn(
+                      "min-h-36 w-full resize-y rounded-md border border-input bg-background-light px-3 py-2 text-sm text-foreground outline-none squircle placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/30",
                     )}
-                  </div>
-                ) : null}
+                    onChange={(event) => setInstructions(event.target.value)}
+                    placeholder={DEFAULT_ACTION_INSTRUCTIONS}
+                    value={instructions}
+                  />
+                  <p className={settingsRowValueClass}>
+                    Example: When it's a bug or feature request, use{" "}
+                    <span className="rounded-full border border-[#5e6ad2]/40 bg-[#5e6ad2]/15 px-1.5 py-0.5 text-[#b8bef8]">
+                      @Linear
+                    </span>{" "}
+                    to search for duplicate issues, then create one if needed.
+                  </p>
+                </div>
+              </SimpleField>
+            </div>
+          </SettingsCard>
 
-                {selectedNode.type === "email_received" ? (
-                  <div className="rounded-md border border-white/10 bg-white/3 p-3 text-sm text-muted-foreground">
-                    This trigger runs when Quieter persists a new inbound message for the selected
-                    mailbox.
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="text-sm text-muted-foreground">Select a node.</div>
-            )}
-          </aside>
-        </div>
+          {validationErrors.length > 0 ? (
+            <SettingsCard className="border-destructive/35 bg-destructive/5 p-4">
+              <p className={settingsRowTitleClass}>Missing before publish</p>
+              <ul className="mt-2 space-y-1 text-sm text-destructive">
+                {validationErrors.map((message) => (
+                  <li key={message}>{message}</li>
+                ))}
+              </ul>
+            </SettingsCard>
+          ) : null}
 
-        <footer className="flex min-h-18 items-center justify-between gap-3 border-t border-white/10 bg-black/20 px-4 py-3">
-          <div className="min-w-0">
-            <div className="text-xs font-medium text-muted-foreground">Validation</div>
-            {validationErrors.length > 0 ? (
-              <div className="truncate text-sm text-destructive">{validationErrors[0]}</div>
-            ) : (
-              <div className="text-sm text-muted-foreground">
-                {draftRevision?.validationStatus === "valid"
-                  ? "Draft is valid."
-                  : "Save or publish to refresh validation."}
-              </div>
-            )}
+          <SettingsRows>
+            <SettingsRow
+              action={
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    disabled={saveDraftMutation.isPending}
+                    onClick={saveDraft}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {saveDraftMutation.isPending ? (
+                      <HugeiconsIcon
+                        aria-hidden
+                        className="size-4 animate-spin"
+                        icon={Loading03Icon}
+                      />
+                    ) : null}
+                    Save
+                  </Button>
+                  <Button
+                    disabled={publishDisabled}
+                    onClick={() =>
+                      activeActionId && publishMutation.mutate({ actionId: activeActionId })
+                    }
+                    size="sm"
+                    type="button"
+                  >
+                    {publishMutation.isPending ? (
+                      <HugeiconsIcon
+                        aria-hidden
+                        className="size-4 animate-spin"
+                        icon={Loading03Icon}
+                      />
+                    ) : null}
+                    Publish
+                  </Button>
+                  <Switch
+                    aria-label="Enable action"
+                    checked={action.enabled}
+                    disabled={!hasPublished || setEnabledMutation.isPending}
+                    onCheckedChange={(enabled) =>
+                      activeActionId &&
+                      setEnabledMutation.mutate({ actionId: activeActionId, enabled })
+                    }
+                  >
+                    <SwitchThumb />
+                  </Switch>
+                </div>
+              }
+              title="Status"
+            >
+              {hasPublished
+                ? isDirty
+                  ? "Save changes before publishing or enabling the latest version."
+                  : "Published actions can be enabled or disabled."
+                : "Save and publish before enabling this action."}
+            </SettingsRow>
+          </SettingsRows>
+        </SettingsSection>
+      ) : (
+        <SettingsCard className="p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <SettingsRowText title="No action selected">
+              Create an action to define what should happen when new mail arrives.
+            </SettingsRowText>
+            <Button
+              disabled={!activeMailboxId || createActionMutation.isPending}
+              onClick={createAction}
+              size="sm"
+              type="button"
+            >
+              {createActionMutation.isPending ? (
+                <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+              ) : (
+                <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
+              )}
+              New action
+            </Button>
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{graph.nodes.length} nodes</span>
-            <span className="text-white/20">/</span>
-            <span>{graph.edges.length} edges</span>
-          </div>
-        </footer>
-      </div>
+        </SettingsCard>
+      )}
     </div>
   );
 };
+
+const SimpleField = ({
+  children,
+  description,
+  label,
+}: {
+  children: ReactNode;
+  description?: string;
+  label: string;
+}) => (
+  <div className="grid gap-3 p-4 md:grid-cols-[12rem_minmax(0,1fr)] md:px-6">
+    <div>
+      <p className={settingsRowTitleClass}>{label}</p>
+      {description ? <p className={cn("mt-1", settingsRowValueClass)}>{description}</p> : null}
+    </div>
+    <div className="min-w-0">{children}</div>
+  </div>
+);
+
+const LinearBadge = () => (
+  <span
+    aria-hidden
+    className="flex size-4 shrink-0 items-center justify-center rounded-[5px] bg-[#5e6ad2] text-[10px] font-medium text-white"
+  >
+    L
+  </span>
+);
+
+const getLinearAccountLabel = (
+  account: NonNullable<ConnectorsData>["connectors"][number]["accounts"][number],
+) => account.providerWorkspaceName ?? account.accountEmail ?? account.displayName ?? "Linear";
+
+const getSimpleActionConfig = (graph: unknown) => {
+  if (!graph || typeof graph !== "object") {
+    return {
+      credentialId: "",
+      instructions: DEFAULT_ACTION_INSTRUCTIONS,
+      teamId: "",
+    };
+  }
+
+  const nodes = (graph as { nodes?: unknown }).nodes;
+  const linearNode = Array.isArray(nodes)
+    ? nodes.find(
+        (node): node is { config?: Record<string, unknown>; type: "linear_agent_issue" } =>
+          !!node &&
+          typeof node === "object" &&
+          "type" in node &&
+          node.type === "linear_agent_issue",
+      )
+    : undefined;
+  const config =
+    linearNode &&
+    "config" in linearNode &&
+    linearNode.config &&
+    typeof linearNode.config === "object"
+      ? linearNode.config
+      : {};
+
+  return {
+    credentialId: typeof config.credentialId === "string" ? config.credentialId : "",
+    instructions:
+      typeof config.instructions === "string" && config.instructions.trim()
+        ? config.instructions
+        : DEFAULT_ACTION_INSTRUCTIONS,
+    teamId: typeof config.teamId === "string" ? config.teamId : "",
+  };
+};
+
+const createSimpleActionGraph = ({
+  credentialId,
+  instructions,
+  teamId,
+}: {
+  credentialId: string;
+  instructions: string;
+  teamId: string;
+}): MailboxActionGraph => ({
+  edges: [
+    {
+      id: "edge-trigger-linear",
+      source: "trigger",
+      sourcePort: "out",
+      target: "linear",
+      targetPort: "in",
+    },
+  ],
+  nodes: [
+    {
+      config: {},
+      id: "trigger",
+      position: { x: 0, y: 0 },
+      type: "email_received",
+    },
+    {
+      config: {
+        credentialId: credentialId || undefined,
+        instructions,
+        teamId: teamId || undefined,
+      },
+      id: "linear",
+      position: { x: 320, y: 0 },
+      type: "linear_agent_issue",
+    },
+  ],
+  version: MAILBOX_ACTION_GRAPH_VERSION,
+});

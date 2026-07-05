@@ -24,6 +24,7 @@
     "./gmail-live-sync-token": "./src/gmail-live-sync-token.ts",
     "./gmail-credential-rotation": "./src/gmail-credential-rotation.ts",
     "./gmail-pubsub": "./src/gmail-sync/service.ts",
+    "./mailbox-actions/graph": "./src/mailbox-actions/graph.ts",
     "./stream-chat-run": "./src/stream-chat-run.ts",
     "./waitlist": "./src/waitlist.ts"
   },

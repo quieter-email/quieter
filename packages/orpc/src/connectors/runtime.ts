@@ -20,9 +20,10 @@ export const LINEAR_CONNECTOR_PROVIDER = "linear" as const;
 const CONNECTOR_ACCESS_TOKEN_EXPIRY_BUFFER_MS = 60 * 1000;
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_API_URL = "https://www.googleapis.com/calendar/v3";
-const LINEAR_MCP_URL = "https://mcp.linear.app/mcp";
+export const LINEAR_AUTHORIZATION_URL = "https://linear.app/oauth/authorize";
+export const LINEAR_MCP_URL = "https://mcp.linear.app/mcp";
 const LINEAR_MCP_PROTOCOL_VERSION = "2025-06-18";
-const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
+export const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
 const permanentGoogleTokenErrors = new Set(["invalid_grant", "invalid_token"]);
 const permanentLinearTokenErrors = new Set(["invalid_grant", "invalid_token"]);
 
@@ -573,6 +574,20 @@ const normalizeGoogleCalendarEvent = (
 });
 
 const createLinearClient = (accessToken: string) => new LinearClient({ accessToken });
+
+export const getLinearMcpEndpoint = () => LINEAR_MCP_URL;
+
+export const getLinearIdentityFromAccessToken = async (accessToken: string) => {
+  const client = createLinearClient(accessToken);
+  const [viewer, organization] = await Promise.all([client.viewer, client.organization]);
+  return {
+    accountEmail: viewer.email,
+    displayName: viewer.displayName ?? viewer.name ?? viewer.email,
+    providerAccountId: viewer.id,
+    providerWorkspaceId: organization.id,
+    providerWorkspaceName: organization.name,
+  };
+};
 
 const allowedLinearMcpReadTools = new Set([
   "get_cycle",

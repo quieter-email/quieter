@@ -149,6 +149,11 @@ describe("validateMailboxActionGraph", () => {
 
     expect(result.valid).toBe(false);
     expect(result.errors).toContain("Edge bad-port uses an invalid source port.");
+    expect(result.issues).toContainEqual({
+      edgeId: "bad-port",
+      message: "Edge bad-port uses an invalid source port.",
+      nodeId: "trigger",
+    });
   });
 
   test("rejects unreachable nodes", () => {

@@ -11,15 +11,10 @@ const gmailPubSubVariableNames = [
 
 const polarProductVariableNames = ["POLAR_PRODUCT_MANAGED_ID", "POLAR_PRODUCT_PRO_ID"] as const;
 const connectorVariableNames = [
-  "CONNECTOR_TOKEN_ENCRYPTION_KEY",
   "GOOGLE_CALENDAR_CLIENT_ID",
   "GOOGLE_CALENDAR_CLIENT_SECRET",
 ] as const;
-const linearConnectorVariableNames = [
-  "CONNECTOR_TOKEN_ENCRYPTION_KEY",
-  "LINEAR_CLIENT_ID",
-  "LINEAR_CLIENT_SECRET",
-] as const;
+const linearConnectorVariableNames = ["LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET"] as const;
 const r2VariableNames = [
   "R2_ACCESS_KEY_ID",
   "R2_ACCOUNT_ID",
@@ -111,6 +106,8 @@ export const createSstEnv = (
 
   const missingConnectorVariables = connectorVariableNames.filter((name) => !env[name]);
   const missingLinearConnectorVariables = linearConnectorVariableNames.filter((name) => !env[name]);
+  const hasCompleteConnectorProvider =
+    missingConnectorVariables.length === 0 || missingLinearConnectorVariables.length === 0;
 
   if (
     missingConnectorVariables.length > 0 &&
@@ -137,6 +134,9 @@ export const createSstEnv = (
     throw new Error(
       `Linear connector configuration is required in production: ${missingLinearConnectorVariables.join(", ")}`,
     );
+  }
+  if ((options.production || hasCompleteConnectorProvider) && !env.CONNECTOR_TOKEN_ENCRYPTION_KEY) {
+    throw new Error("CONNECTOR_TOKEN_ENCRYPTION_KEY is required when connectors are configured.");
   }
 
   const missingPolarProductVariables = polarProductVariableNames.filter((name) => !env[name]);

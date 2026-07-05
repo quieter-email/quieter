@@ -59,7 +59,6 @@
     "@tiptap/react": "^3.27.1",
     "@tiptap/starter-kit": "^3.27.1",
     "@vercel/speed-insights": "^2.0.0",
-    "@xyflow/react": "^12.11.1",
     "better-auth": "catalog:",
     "color": "^5.0.3",
     "dompurify": "^3.4.11",
