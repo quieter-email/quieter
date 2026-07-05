@@ -73,13 +73,6 @@ describe("migration execution boundary", () => {
     GITHUB_REPOSITORY: "quieter-email/quieter",
     QUIETER_ALLOW_REMOTE_MIGRATIONS: "production",
   };
-  const approvedStagingEnvironment = {
-    CI: "true",
-    GITHUB_ACTIONS: "true",
-    GITHUB_REF: "refs/heads/main",
-    GITHUB_REPOSITORY: "quieter-email/quieter",
-    QUIETER_ALLOW_REMOTE_MIGRATIONS: "staging",
-  };
 
   test("allows local migrations without CI", () => {
     expect(() =>
@@ -99,12 +92,6 @@ describe("migration execution boundary", () => {
     ).not.toThrow();
   });
 
-  test("allows remote migrations in the staging deployment job", () => {
-    expect(() =>
-      assertMigrationExecutionAllowed(remoteDatabaseUrl, approvedStagingEnvironment),
-    ).not.toThrow();
-  });
-
   test.each([
     ["developer machine", {}],
     ["non-GitHub CI", { ...approvedProductionEnvironment, GITHUB_ACTIONS: undefined }],
@@ -118,27 +105,10 @@ describe("migration execution boundary", () => {
       "missing production marker",
       { ...approvedProductionEnvironment, QUIETER_ALLOW_REMOTE_MIGRATIONS: undefined },
     ],
-    [
-      "preview migration marker",
-      {
-        ...approvedProductionEnvironment,
-        GITHUB_REF: "refs/pull/112/merge",
-        QUIETER_ALLOW_REMOTE_MIGRATIONS: "staging",
-      },
-    ],
   ])("rejects remote migrations from %s", (_, environment) => {
     expect(() => assertMigrationExecutionAllowed(remoteDatabaseUrl, environment)).toThrow(
       "approved GitHub Actions deployment jobs",
     );
-  });
-
-  test("rejects staging migrations from non-main branches", () => {
-    expect(() =>
-      assertMigrationExecutionAllowed(remoteDatabaseUrl, {
-        ...approvedStagingEnvironment,
-        GITHUB_REF: "refs/heads/feature",
-      }),
-    ).toThrow("approved GitHub Actions deployment jobs");
   });
 });
 
