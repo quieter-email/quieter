@@ -263,6 +263,13 @@ export const useMessageListSearchController = ({
     });
   };
 
+  const blurSearchField = () => {
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && fieldRef.current?.contains(activeElement)) {
+      activeElement.blur();
+    }
+  };
+
   const focusSegment = (
     index: number,
     { selectAll = false, toEnd = false }: { selectAll?: boolean; toEnd?: boolean } = {},
@@ -368,6 +375,7 @@ export const useMessageListSearchController = ({
       },
       true,
     );
+    blurSearchField();
   };
 
   const suppressNextBlurCommit = () => {
@@ -681,7 +689,7 @@ export const useMessageListSearchController = ({
 
   const clearSearch = () => {
     commitState({ filters: [], text: "" }, true);
-    focusTextInput({ toEnd: true });
+    blurSearchField();
   };
 
   const runSearch = () => {

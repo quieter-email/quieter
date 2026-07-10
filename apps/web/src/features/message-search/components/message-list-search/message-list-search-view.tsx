@@ -35,12 +35,6 @@ const getFilterLabel = (type: string) => {
       return "File";
     case "from":
       return "From";
-    case "has":
-      return "Has";
-    case "is":
-      return "Status";
-    case "label":
-      return "Label";
     case "to":
       return "To";
     case "newer_than":
@@ -51,6 +45,9 @@ const getFilterLabel = (type: string) => {
       return type.charAt(0).toLocaleUpperCase() + type.slice(1);
   }
 };
+
+const searchToolbarControlClassName =
+  "size-10 rounded-xl bg-secondary/55 text-muted-foreground shadow-none hover:bg-secondary hover:text-foreground [&_svg]:size-3.5";
 
 export const MessageListSearchView = ({
   controller,
@@ -97,17 +94,17 @@ export const MessageListSearchView = ({
     userLabels,
   } = controller;
   return (
-    <search className="block bg-transparent p-4">
+    <search className="block bg-transparent px-4 pt-4 pb-3 sm:px-5">
       <div className="relative">
         <div className="flex min-w-0 items-center gap-2 lg:-ml-2">
           {onOpenSidebar && (
             <IconButtonTooltip label="Open sidebar">
               <Button
                 aria-label="Open sidebar"
-                className="lg:hidden"
+                className={cn(searchToolbarControlClassName, "lg:hidden")}
                 onClick={onOpenSidebar}
-                size="icon-sm"
-                variant="outline"
+                size="icon-lg"
+                variant="ghost"
               >
                 <HugeiconsIcon icon={SidebarLeftIcon} />
               </Button>
@@ -117,10 +114,11 @@ export const MessageListSearchView = ({
           <IconButtonTooltip label="Refresh list">
             <Button
               aria-label="Refresh list"
+              className={searchToolbarControlClassName}
               disabled={isRefreshing}
               onClick={() => void onRefresh()}
-              size="icon-sm"
-              variant="outline"
+              size="icon-lg"
+              variant="ghost"
             >
               <SpinWhileActive active={isRefreshing}>
                 <HugeiconsIcon icon={Refresh01Icon} />
@@ -129,13 +127,13 @@ export const MessageListSearchView = ({
           </IconButtonTooltip>
 
           <div ref={fieldRef} className="relative min-w-0 flex-1" onBlur={handleSearchFieldBlur}>
-            <div className="keyboard-focus-within flex h-8 min-w-0 items-center gap-1 rounded-md border border-input bg-background-light pr-1 shadow-sm transition-colors duration-150 ease-out squircle">
+            <div className="keyboard-focus-within flex h-10 min-w-0 items-center gap-1 rounded-xl bg-secondary/55 p-1 transition-colors duration-150 ease-out squircle">
               <div
                 className={cn(
-                  "flex h-8 min-w-0 flex-1 scrollbar-none items-center gap-1 overflow-x-auto pr-2 [&::-webkit-scrollbar]:hidden",
+                  "flex min-h-8 min-w-0 flex-1 scrollbar-none items-center gap-1 overflow-x-auto pr-1 [&::-webkit-scrollbar]:hidden",
                   {
-                    "pl-0.75": currentState.filters.length > 0,
-                    "pl-2": currentState.filters.length === 0,
+                    "pl-1": currentState.filters.length > 0,
+                    "pl-2.5": currentState.filters.length === 0,
                   },
                 )}
                 onMouseDown={(event) => {
@@ -157,7 +155,7 @@ export const MessageListSearchView = ({
                       <button
                         className={cn(
                           filterChipClassName,
-                          "gap-1 rounded-xs px-2 outline-none squircle hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20",
+                          "gap-1 px-2 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30",
                         )}
                         key={`label:${normalizeLabelSelectionKey(filter.value)}`}
                         onClick={(event) => {
@@ -179,7 +177,6 @@ export const MessageListSearchView = ({
                         type="button"
                       >
                         {filter.negated ? <span className="text-muted-foreground">Not</span> : null}
-                        <span className="text-muted-foreground">Label</span>
                         <span>{filter.value}</span>
                       </button>
                     );
@@ -190,7 +187,7 @@ export const MessageListSearchView = ({
                       <button
                         className={cn(
                           filterChipClassName,
-                          "gap-1 rounded-xs px-2 outline-none squircle hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20",
+                          "gap-1 px-2 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30",
                         )}
                         key={`${filter.type}:${filter.value}`}
                         onClick={(event) => {
@@ -210,8 +207,10 @@ export const MessageListSearchView = ({
                         type="button"
                       >
                         {filter.negated ? <span className="text-muted-foreground">Not</span> : null}
-                        <span className="text-muted-foreground">{getFilterLabel(filter.type)}</span>
-                        <span>{filter.value}</span>
+                        <span>
+                          {filter.value.charAt(0).toLocaleUpperCase() +
+                            filter.value.slice(1).replaceAll("_", " ")}
+                        </span>
                       </button>
                     );
                   }
@@ -219,14 +218,10 @@ export const MessageListSearchView = ({
                   const isCurrentFilterDate = isDateFilter(filter);
                   return (
                     <div
-                      className={cn(
-                        filterChipClassName,
-                        "gap-1 rounded-xs px-1.5 transition-colors squircle",
-                        {
-                          "border-ring ring-2 ring-ring/20": activeDateFilterIndex === index,
-                        },
-                      )}
-                      key={`${filter.type}:${filter.value}:${index}`}
+                      className={cn(filterChipClassName, "gap-1 px-1.5 transition-colors", {
+                        "bg-accent ring-2 ring-ring/30": activeDateFilterIndex === index,
+                      })}
+                      key={`${filter.negated ? "not:" : ""}${filter.type}:${filter.value}`}
                       ref={(node) => setDateTokenRef(index, node)}
                     >
                       {filter.negated ? (
@@ -261,7 +256,7 @@ export const MessageListSearchView = ({
                       />
                       <button
                         aria-label={`Remove ${getFilterLabel(filter.type)} filter`}
-                        className="flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/20"
+                        className="flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
                         onClick={(event) => {
                           event.stopPropagation();
                           removeFilterFromPointer(index);
@@ -285,7 +280,7 @@ export const MessageListSearchView = ({
                   aria-label="Search"
                   autoCapitalize="off"
                   autoCorrect="off"
-                  className="h-6 min-w-[8ch] flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:shadow-none"
+                  className="h-7 min-w-[8ch] flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:shadow-none"
                   onChange={(event) => updateSearchText(event.currentTarget.value)}
                   onFocus={openSearchDropdown}
                   onKeyDown={handleTextInputKeyDown}
@@ -303,7 +298,7 @@ export const MessageListSearchView = ({
                     <IconButtonTooltip key="clear-search" label="Clear search">
                       <Button
                         aria-label="Clear search"
-                        className="-mr-1 size-6 shrink-0 text-muted-foreground hover:text-foreground"
+                        className="shrink-0 rounded-lg text-muted-foreground hover:bg-background-light hover:text-foreground"
                         onClick={(event) => {
                           event.stopPropagation();
                           clearSearch();
@@ -324,7 +319,7 @@ export const MessageListSearchView = ({
                           />
                         )}
                       >
-                        <HugeiconsIcon className="size-4" icon={Cancel01Icon} />
+                        <HugeiconsIcon icon={Cancel01Icon} />
                       </Button>
                     </IconButtonTooltip>
                   )}
@@ -333,7 +328,7 @@ export const MessageListSearchView = ({
               <IconButtonTooltip label="Run search">
                 <Button
                   aria-label="Run search"
-                  className="size-6 shrink-0 text-muted-foreground hover:text-foreground"
+                  className="shrink-0 rounded-lg text-muted-foreground hover:bg-background-light hover:text-foreground"
                   onClick={(event) => {
                     event.stopPropagation();
                     runSearch();
@@ -354,7 +349,7 @@ export const MessageListSearchView = ({
               activeDateFilterIndex !== null &&
               (activeDateFilter.type === "after" || activeDateFilter.type === "before") && (
                 <div
-                  className="absolute top-full z-40 mt-2 rounded-lg border bg-popover p-2 shadow-lg"
+                  className="absolute top-full z-40 mt-2 rounded-lg bg-popover p-2 shadow-lg"
                   style={{ left: datePopoverLeft }}
                 >
                   <div className="mb-2 grid grid-cols-2 gap-1 border-b pb-2">
@@ -425,13 +420,14 @@ export const MessageListSearchView = ({
           <IconButtonTooltip label="Scroll to top">
             <ArrowInteractionButton
               aria-label="Scroll to top"
+              className={searchToolbarControlClassName}
               onClick={async () => {
                 const didScroll = await onScrollToTop();
                 return typeof didScroll === "boolean" ? didScroll : true;
               }}
-              size="icon-sm"
+              size="icon-lg"
               type="button"
-              variant="outline"
+              variant="ghost"
             />
           </IconButtonTooltip>
         </div>

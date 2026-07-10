@@ -1,9 +1,14 @@
 import type { GmailLabelListItem } from "@quieter/gmail";
 import { db } from "@quieter/database/client";
 import { gmailLabel } from "@quieter/database/schema";
+import {
+  mailboxLabelColorSchema,
+  type MailboxLabelColor,
+} from "@quieter/mail/mailbox-organization";
 import { and, eq, notInArray, sql } from "drizzle-orm";
 
 export type GmailLabelWithDetails = GmailLabelListItem & {
+  color: MailboxLabelColor;
   description: string | null;
   inclusionCriteria: string | null;
 };
@@ -21,6 +26,7 @@ export const syncGmailLabels = async (
       .values(
         userLabels.map((label) => ({
           createdAt: now,
+          color: "gray",
           labelId: label.id,
           mailboxId,
           name: label.name,
@@ -50,6 +56,7 @@ export const syncGmailLabels = async (
 
   const details = await db
     .select({
+      color: gmailLabel.color,
       description: gmailLabel.description,
       inclusionCriteria: gmailLabel.inclusionCriteria,
       labelId: gmailLabel.labelId,
@@ -60,6 +67,7 @@ export const syncGmailLabels = async (
 
   return labels.map((label) => ({
     ...label,
+    color: mailboxLabelColorSchema.parse(detailsByLabelId.get(label.id)?.color ?? "gray"),
     description: detailsByLabelId.get(label.id)?.description ?? null,
     inclusionCriteria: detailsByLabelId.get(label.id)?.inclusionCriteria ?? null,
   }));
@@ -91,12 +99,14 @@ export const saveGmailLabelDetails = async (input: {
 export const upsertSyncedGmailLabel = async (
   mailboxId: string,
   label: GmailLabelListItem,
+  color?: MailboxLabelColor,
 ): Promise<GmailLabelWithDetails> => {
   const now = new Date();
   const [record] = await db
     .insert(gmailLabel)
     .values({
       createdAt: now,
+      color: color ?? "gray",
       labelId: label.id,
       mailboxId,
       name: label.name,
@@ -104,15 +114,21 @@ export const upsertSyncedGmailLabel = async (
     })
     .onConflictDoUpdate({
       target: [gmailLabel.mailboxId, gmailLabel.labelId],
-      set: { name: label.name, updatedAt: now },
+      set: {
+        ...(color ? { color } : {}),
+        name: label.name,
+        updatedAt: now,
+      },
     })
     .returning({
+      color: gmailLabel.color,
       description: gmailLabel.description,
       inclusionCriteria: gmailLabel.inclusionCriteria,
     });
 
   return {
     ...label,
+    color: mailboxLabelColorSchema.parse(record?.color ?? "gray"),
     description: record?.description ?? null,
     inclusionCriteria: record?.inclusionCriteria ?? null,
   };

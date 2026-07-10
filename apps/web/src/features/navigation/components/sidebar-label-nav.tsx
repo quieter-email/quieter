@@ -25,6 +25,16 @@ import {
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@quieter/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -47,6 +57,8 @@ import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LayoutGroup, m } from "motion/react";
 import { useEffect, useReducer, useState } from "react";
+import { MailboxColorPicker } from "~/features/message-labels/components/mailbox-color-picker";
+import { mailboxLabelDotClassNameByColor } from "~/features/message-labels/domain/mailbox-label-presentation";
 import { serializeStructuredSearchState } from "~/features/message-search/components/message-list-search/message-list-search-utils";
 import {
   getUserLabels,
@@ -71,10 +83,7 @@ type SidebarLabelNavProps = {
   searchQuery: string;
 };
 
-type EditingLabel =
-  | { color: MailboxLabelColor; mode: "create"; name: string }
-  | { color: MailboxLabelColor; label: MailboxLabel; mode: "rename"; name: string }
-  | null;
+type EditingLabel = { color: MailboxLabelColor; label: MailboxLabel; name: string } | null;
 
 type HiddenLabelState = {
   mailboxId: string | null;
@@ -94,29 +103,6 @@ type EditingLabelDetails = {
 
 const MAX_VISIBLE_SIDEBAR_LABELS = 10;
 const SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY = "quieter:sidebar-label-visibility";
-const MANAGED_LABEL_COLORS: MailboxLabelColor[] = [
-  "gray",
-  "blue",
-  "cyan",
-  "green",
-  "yellow",
-  "orange",
-  "red",
-  "pink",
-  "purple",
-];
-const managedLabelColorClassNames: Record<MailboxLabelColor, string> = {
-  blue: "bg-blue-500",
-  cyan: "bg-cyan-500",
-  gray: "bg-gray-500",
-  green: "bg-green-500",
-  orange: "bg-orange-500",
-  pink: "bg-pink-500",
-  purple: "bg-purple-500",
-  red: "bg-red-500",
-  yellow: "bg-yellow-500",
-};
-
 const ManagedLabelColorDot = ({
   className,
   color,
@@ -127,8 +113,8 @@ const ManagedLabelColorDot = ({
   <span
     aria-hidden
     className={cn(
-      "inline-flex size-3 shrink-0 rounded-full ring-1 ring-black/10 ring-inset dark:ring-white/15",
-      managedLabelColorClassNames[color ?? "gray"],
+      "inline-flex size-3 shrink-0 rounded-full",
+      mailboxLabelDotClassNameByColor[color ?? "gray"],
       className,
     )}
   />
@@ -232,6 +218,8 @@ export const SidebarLabelNav = ({
 }: SidebarLabelNavProps) => {
   const shouldAnimateEntrance = animateEntrance;
   const queryClient = useQueryClient();
+  const [newLabelColor, setNewLabelColor] = useState<MailboxLabelColor>("gray");
+  const [newLabelName, setNewLabelName] = useState("");
   const [editingLabel, setEditingLabel] = useState<EditingLabel>(null);
   const [editingLabelDetails, setEditingLabelDetails] = useState<EditingLabelDetails | null>(null);
   const [deletingLabel, setDeletingLabel] = useState<MailboxLabel | null>(null);
@@ -334,34 +322,44 @@ export const SidebarLabelNav = ({
   const deleteLabelMutation = useMutation(orpc.mail.deleteLabel.mutationOptions());
   const updateLabelDetailsMutation = useMutation(orpc.mail.updateLabelDetails.mutationOptions());
   const reorderLabelsMutation = useMutation(orpc.mail.reorderManagedLabels.mutationOptions());
-  const isSavingLabel =
-    createLabelMutation.isPending || updateLabelMutation.isPending || deleteLabelMutation.isPending;
 
-  const resetEditForm = () => setEditingLabel({ color: "gray", mode: "create", name: "" });
+  const resetLabelForms = () => {
+    setEditingLabel(null);
+    setNewLabelColor("gray");
+    setNewLabelName("");
+  };
 
-  const submitLabelEdit = async () => {
+  const createLabel = async () => {
+    if (!mailboxId) return;
+    const name = newLabelName.trim();
+    if (!name) return;
+
+    try {
+      const label = await createLabelMutation.mutateAsync({
+        color: newLabelColor,
+        mailboxId,
+        name,
+      });
+      if (visibleUserLabels.length >= MAX_VISIBLE_SIDEBAR_LABELS) {
+        setMailboxHiddenLabelIds((current) => {
+          current.add(label.id);
+          return current;
+        });
+      }
+      setNewLabelColor("gray");
+      setNewLabelName("");
+      await invalidateLabels();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `Could not create ${labelNoun}.`);
+    }
+  };
+
+  const saveLabelEdit = async () => {
     if (!mailboxId || !editingLabel) return;
     const name = editingLabel.name.trim();
     if (!name) return;
 
     try {
-      if (editingLabel.mode === "create") {
-        const label = await createLabelMutation.mutateAsync({
-          color: editingLabel.color,
-          mailboxId,
-          name,
-        });
-        if (visibleUserLabels.length >= MAX_VISIBLE_SIDEBAR_LABELS) {
-          setMailboxHiddenLabelIds((current) => {
-            current.add(label.id);
-            return current;
-          });
-        }
-        resetEditForm();
-        await invalidateLabels();
-        return;
-      }
-
       const previousName = editingLabel.label.name;
       const label = await updateLabelMutation.mutateAsync({
         labelId: editingLabel.label.id,
@@ -369,7 +367,7 @@ export const SidebarLabelNav = ({
         name,
         color: editingLabel.color,
       });
-      resetEditForm();
+      setEditingLabel(null);
       await invalidateLabels();
       if (selectedLabelKeys.has(normalizeLabelSelectionKey(previousName))) {
         onSearch(
@@ -377,7 +375,7 @@ export const SidebarLabelNav = ({
         );
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : `Could not save ${labelNoun}.`);
+      toast.error(error instanceof Error ? error.message : `Could not update ${labelNoun}.`);
     }
   };
 
@@ -473,7 +471,7 @@ export const SidebarLabelNav = ({
               aria-label={`Edit ${labelNounPlural}`}
               className="size-6 text-muted-foreground hover:text-foreground"
               onClick={() => {
-                resetEditForm();
+                resetLabelForms();
                 setIsEditDialogOpen(true);
               }}
               size="icon-sm"
@@ -563,20 +561,7 @@ export const SidebarLabelNav = ({
                     type="button"
                     variant="ghost"
                   >
-                    {mailboxProvider === "managed" ? (
-                      <ManagedLabelColorDot color={label.color} />
-                    ) : (
-                      <HugeiconsIcon
-                        aria-hidden
-                        className={cn("shrink-0", {
-                          "text-primary": isActive,
-                          "text-foreground": !isActive && labelHovered,
-                          "text-muted-foreground": !isActive && !labelHovered,
-                        })}
-                        icon={Tag01Icon}
-                        strokeWidth={1.5}
-                      />
-                    )}
+                    <ManagedLabelColorDot color={label.color} />
                     <span className="min-w-0 truncate">{label.name}</span>
                     {mailboxProvider === "managed" ? (
                       <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
@@ -594,7 +579,7 @@ export const SidebarLabelNav = ({
       <FullPageDialog
         onOpenChange={(open) => {
           setIsEditDialogOpen(open);
-          if (!open) resetEditForm();
+          if (!open) resetLabelForms();
         }}
         open={isEditDialogOpen}
       >
@@ -618,61 +603,32 @@ export const SidebarLabelNav = ({
               </div>
               <form
                 action={() => {
-                  void submitLabelEdit();
+                  void createLabel();
                 }}
-                className="mb-8 flex flex-wrap items-center gap-2 border-b pb-8"
+                className="mb-8 flex flex-wrap items-center gap-3 rounded-xl bg-secondary/40 p-3 squircle"
               >
                 <Input
-                  aria-label={
-                    editingLabel?.mode === "rename"
-                      ? `Rename ${labelNoun}`
-                      : `New ${labelNoun} name`
-                  }
+                  aria-label={`New ${labelNoun} name`}
                   autoFocus
-                  disabled={isSavingLabel}
-                  onChange={(event) => {
-                    const nextName =
-                      event.target instanceof HTMLInputElement ? event.target.value : "";
-                    if (editingLabel) {
-                      setEditingLabel({ ...editingLabel, name: nextName });
-                    } else {
-                      setEditingLabel({ color: "gray", mode: "create", name: nextName });
-                    }
-                  }}
-                  placeholder={
-                    editingLabel?.mode === "rename" ? `Rename ${labelNoun}` : `New ${labelNoun}`
-                  }
-                  value={editingLabel?.name ?? ""}
+                  className="min-w-48 flex-1 border-0 bg-background/70 shadow-none"
+                  disabled={createLabelMutation.isPending}
+                  onChange={(event) => setNewLabelName(event.currentTarget.value)}
+                  placeholder={`New ${labelNoun}`}
                   size="sm"
+                  value={newLabelName}
                 />
-                {mailboxProvider === "managed" && editingLabel ? (
-                  <fieldset
-                    className="flex shrink-0 items-center gap-1"
-                    aria-label={`${labelTitleSingular} color`}
-                  >
-                    {MANAGED_LABEL_COLORS.map((color) => (
-                      <button
-                        aria-label={color}
-                        aria-pressed={editingLabel.color === color}
-                        className={cn(
-                          "size-5 rounded-full border-2 border-transparent ring-1 ring-black/10 outline-none ring-inset focus-visible:ring-2 focus-visible:ring-ring/30 dark:ring-white/15",
-                          managedLabelColorClassNames[color],
-                          { "border-foreground/70": editingLabel.color === color },
-                        )}
-                        key={color}
-                        onClick={() => setEditingLabel({ ...editingLabel, color })}
-                        type="button"
-                      />
-                    ))}
-                  </fieldset>
-                ) : null}
+                <MailboxColorPicker
+                  className="shrink-0"
+                  label={`${labelTitleSingular} color`}
+                  onChange={setNewLabelColor}
+                  value={newLabelColor}
+                />
                 <Button
-                  disabled={isSavingLabel || !editingLabel?.name.trim()}
+                  disabled={createLabelMutation.isPending || !newLabelName.trim()}
                   size="sm"
-                  variant="outline"
                   type="submit"
                 >
-                  {editingLabel?.mode === "rename" ? "Save" : "Create"}
+                  Create
                 </Button>
               </form>
 
@@ -684,23 +640,15 @@ export const SidebarLabelNav = ({
                 ) : userLabels.length === 0 ? (
                   <p className="py-3 text-sm text-muted-foreground">No {labelNounPlural} yet.</p>
                 ) : (
-                  <div className="flex flex-col">
+                  <div className="flex flex-col gap-1">
                     {userLabels.map((label, index) => {
                       const isShown = !effectiveHiddenLabelIds.has(label.id);
                       const labelDetails =
                         editingLabelDetails?.labelId === label.id ? editingLabelDetails : null;
                       return (
-                        <div className="border-b last:border-b-0" key={label.id}>
+                        <div className="rounded-lg" key={label.id}>
                           <div className="flex min-h-12 items-center gap-3 px-2 squircle hover:bg-background/50">
-                            {mailboxProvider === "managed" ? (
-                              <ManagedLabelColorDot className="size-4" color={label.color} />
-                            ) : (
-                              <HugeiconsIcon
-                                aria-hidden
-                                className="size-4 shrink-0 text-muted-foreground"
-                                icon={Tag01Icon}
-                              />
-                            )}
+                            <ManagedLabelColorDot className="size-4" color={label.color} />
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm">{label.name}</p>
                               {(label.description || label.inclusionCriteria) && (
@@ -813,13 +761,12 @@ export const SidebarLabelNav = ({
                                     setEditingLabel({
                                       color: label.color ?? "gray",
                                       label,
-                                      mode: "rename",
                                       name: label.name,
                                     })
                                   }
                                 >
                                   <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
-                                  Rename
+                                  Edit
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="text-destructive"
@@ -915,6 +862,60 @@ export const SidebarLabelNav = ({
           </FullPageDialogBody>
         </FullPageDialogContent>
       </FullPageDialog>
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) setEditingLabel(null);
+        }}
+        open={!!editingLabel}
+      >
+        <DialogContent className="w-[min(92vw,24rem)] border-0 bg-popover shadow-lg">
+          <form
+            action={() => {
+              void saveLabelEdit();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Edit {labelNoun}</DialogTitle>
+              <DialogDescription>Change its name and color together.</DialogDescription>
+            </DialogHeader>
+            <DialogBody className="space-y-5 bg-secondary/25">
+              <Field>
+                <FieldLabel>Name</FieldLabel>
+                <Input
+                  autoFocus
+                  className="border-0 bg-background/70 shadow-none"
+                  disabled={updateLabelMutation.isPending}
+                  onChange={(event) => {
+                    const name = event.currentTarget.value;
+                    setEditingLabel((current) => (current ? { ...current, name } : current));
+                  }}
+                  value={editingLabel?.name ?? ""}
+                />
+              </Field>
+              <Field>
+                <FieldLabel>Color</FieldLabel>
+                <MailboxColorPicker
+                  label={`${labelTitleSingular} color`}
+                  onChange={(color) =>
+                    setEditingLabel((current) => (current ? { ...current, color } : current))
+                  }
+                  value={editingLabel?.color ?? "gray"}
+                />
+              </Field>
+            </DialogBody>
+            <DialogFooter>
+              <DialogCloseButton variant="ghost">Cancel</DialogCloseButton>
+              <Button
+                disabled={updateLabelMutation.isPending || !editingLabel?.name.trim()}
+                size="sm"
+                type="submit"
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
       <AlertDialog
         onOpenChange={(open) => {
           if (!open) setDeletingLabel(null);

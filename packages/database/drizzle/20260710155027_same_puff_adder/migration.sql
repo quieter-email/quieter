@@ -1,0 +1,1 @@
+ALTER TABLE "gmailLabel" ADD COLUMN "color" text DEFAULT 'gray' NOT NULL;

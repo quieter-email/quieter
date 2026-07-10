@@ -29,6 +29,7 @@
     "./input": "./src/components/ui/input.tsx",
     "./number-field": "./src/components/ui/number-field.tsx",
     "./popover": "./src/components/ui/popover.tsx",
+    "./pill": "./src/components/ui/pill.tsx",
     "./progress": "./src/components/ui/progress.tsx",
     "./radio-group": "./src/components/ui/radio-group.tsx",
     "./scroll-area": "./src/components/ui/scroll-area.tsx",

@@ -418,7 +418,7 @@ export const mailRouter = {
         );
         return labels.map((label, position) => ({
           ...label,
-          color: null,
+          color: label.color,
           position,
           provider: "gmail" as const,
           visible: true,
@@ -453,10 +453,11 @@ export const mailRouter = {
         const label = await upsertSyncedGmailLabel(
           input.mailboxId,
           await createLabel(accessToken, input.name, signal),
+          input.color,
         );
         return {
           ...label,
-          color: null,
+          color: label.color,
           position: 0,
           provider: "gmail" as const,
           visible: true,
@@ -497,10 +498,11 @@ export const mailRouter = {
         const label = await upsertSyncedGmailLabel(
           input.mailboxId,
           await updateLabel(accessToken, input.labelId, input.name, signal),
+          input.color,
         );
         return {
           ...label,
-          color: null,
+          color: label.color,
           position: 0,
           provider: "gmail" as const,
           visible: true,

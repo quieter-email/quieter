@@ -16,6 +16,7 @@ import { TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { MailboxAccessPill } from "~/features/mailbox/components/mailbox-access-pill";
 import { fullOrganizationQueryOptions } from "~/features/settings/components/organization-settings/domain";
 import { organizationMailDomainsQueryOptions } from "~/features/settings/components/organization-settings/mail-domains";
 import {
@@ -984,14 +985,22 @@ export const MailboxesSettingsPanel = () => {
                             }}
                             value={grant?.role ?? "none"}
                           >
-                            <SelectTrigger aria-label={`${division.name} mailbox role`} size="sm">
-                              <SelectValue />
+                            <SelectTrigger
+                              aria-label={`${division.name} mailbox role`}
+                              size="sm"
+                              variant="ghost"
+                            >
+                              {grant ? (
+                                <MailboxAccessPill role={grant.role} />
+                              ) : (
+                                <span className="text-muted-foreground">No access</span>
+                              )}
                             </SelectTrigger>
                             <SelectContent align="end">
                               <SelectItem value="none">No access</SelectItem>
                               {mailboxGrantRoleOptions.map((role) => (
                                 <SelectItem key={role.value} value={role.value}>
-                                  {role.label}
+                                  <MailboxAccessPill role={role.value} />
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -1056,14 +1065,19 @@ export const MailboxesSettingsPanel = () => {
                             <SelectTrigger
                               aria-label={`${member.user.email} mailbox role`}
                               size="sm"
+                              variant="ghost"
                             >
-                              <SelectValue />
+                              {grant ? (
+                                <MailboxAccessPill role={grant.role} />
+                              ) : (
+                                <span className="text-muted-foreground">No access</span>
+                              )}
                             </SelectTrigger>
                             <SelectContent align="end">
                               <SelectItem value="none">No access</SelectItem>
                               {mailboxGrantRoleOptions.map((role) => (
                                 <SelectItem key={role.value} value={role.value}>
-                                  {role.label}
+                                  <MailboxAccessPill role={role.value} />
                                 </SelectItem>
                               ))}
                             </SelectContent>

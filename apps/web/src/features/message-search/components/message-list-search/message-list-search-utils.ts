@@ -10,7 +10,7 @@ const initialCalendarFallbackMonth = new Date(0);
 const clientCalendarFallbackMonth = new Date();
 
 export const filterChipClassName =
-  "squircle inline-flex h-6 shrink-0 items-center border border-border/80 bg-muted/80 text-[13px] text-foreground";
+  "squircle inline-flex h-7 shrink-0 items-center rounded-lg bg-background-light text-[13px] text-foreground";
 
 export const subscribeToCalendarFallbackMonth = () => () => {};
 export const getCalendarFallbackMonth = () => clientCalendarFallbackMonth;

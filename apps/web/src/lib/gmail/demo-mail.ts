@@ -1,6 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { ComposeDraftState } from "~/features/compose";
-import { clientEnv } from "~/env";
 import { parseStructuredSearchQuery } from "~/features/message-search/state/message-list-search-state";
 import { getMailboxesQueryKey } from "~/lib/mailboxes-query";
 import type { ThreadListEntry } from "./thread-list";
@@ -25,10 +24,10 @@ export const LANDING_DEMO_MAILBOX_ID = "landing:mailbox";
 
 export { isSandboxMailboxId } from "~/lib/sandbox-mailbox";
 
-const DEMO_EMAIL_ADDRESS = "demo@quieter.email";
+const DEMO_EMAIL_ADDRESS = "inbox@quiet-labs.test";
 
 const DEMO_MAIL_STORAGE_KEY = "quieter:demo-mail-state";
-const DEMO_MAIL_STATE_VERSION = 3;
+const DEMO_MAIL_STATE_VERSION = 4;
 
 type DemoMailState = {
   version: number;
@@ -44,28 +43,6 @@ export const resetLandingDemoMail = () => {
 const now = Date.now();
 
 const daysAgo = (days: number) => new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
-
-const logo = (domain: string) => {
-  const token = clientEnv.VITE_LOGO_DEV_PUBLISHABLE_KEY;
-  const createUrl = (theme: "dark" | "light") => {
-    const url = new URL(`https://img.logo.dev/${domain}`);
-    url.searchParams.set("size", "64");
-    url.searchParams.set("theme", theme);
-    url.searchParams.set("format", "webp");
-    url.searchParams.set("fallback", "404");
-
-    if (token) {
-      url.searchParams.set("token", token);
-    }
-
-    return url.toString();
-  };
-
-  return {
-    dark: createUrl("dark"),
-    light: createUrl("light"),
-  };
-};
 
 const attachment = (fileName: string, mimeType: string, size: number, id = fileName) => ({
   attachmentId: `demo-attachment-${id}`,
@@ -97,10 +74,9 @@ const createInitialDemoState = (): DemoMailState => ({
       bodyText:
         "Your April payout reconciliation is ready.\n\nThere are two failed transfers that need review before the end of the week. The CSV includes the payout IDs, transfer amounts, and current retry status.",
       date: daysAgo(0.08),
-      from: "Stripe <support@stripe.com>",
+      from: "Moonbase Finance <billing@moonbase.test>",
       isUnread: true,
       labelIds: [MAILBOX_LABELS.inbox, "UNREAD", "Label_Finance"],
-      senderAvatarUrls: logo("stripe.com"),
       snippet:
         "Your April payout reconciliation is ready. There are two failed transfers that need review before the end of the week.",
       subject: "April payout reconciliation",
@@ -115,10 +91,9 @@ const createInitialDemoState = (): DemoMailState => ({
       bodyText:
         "The workflow web / typecheck failed on pull request #184.\n\nThe failing package is @quieter/web. The attached log includes the full compiler output.",
       date: daysAgo(0.2),
-      from: "GitHub <notifications@github.com>",
+      from: "Forgekeeper <builds@forgekeeper.test>",
       isUnread: true,
       labelIds: [MAILBOX_LABELS.inbox, "UNREAD", "Label_Product"],
-      senderAvatarUrls: logo("github.com"),
       snippet:
         "The workflow web / typecheck failed on pull request #184. The failing package is @quieter/web.",
       subject: "[quieter] web / typecheck failed",
@@ -132,10 +107,9 @@ const createInitialDemoState = (): DemoMailState => ({
       bodyText:
         "Alex mentioned you in QTR-312 Demo mode fixture coverage.\n\nCan we include at least one threaded conversation, a couple of attachments, and a sent reply so the walkthrough feels realistic?",
       date: daysAgo(0.34),
-      from: "Linear <notifications@linear.app>",
+      from: "Orbit Board <mentions@orbit-board.test>",
       isUnread: true,
       labelIds: [MAILBOX_LABELS.inbox, "UNREAD", "Label_Product"],
-      senderAvatarUrls: logo("linear.app"),
       snippet:
         "Alex mentioned you in QTR-312 Demo mode fixture coverage. Can we include at least one threaded conversation?",
       subject: "Mentioned in QTR-312 Demo mode fixture coverage",
@@ -143,25 +117,24 @@ const createInitialDemoState = (): DemoMailState => ({
     }),
     createMessage("demo-thread-notion-1", {
       bodyHtml:
-        "<p>Hi everyone,</p><p>I drafted the customer onboarding checklist in Notion. The sections that still need owner names are highlighted in yellow.</p>",
+        "<p>Hi everyone,</p><p>I drafted the customer onboarding checklist in Draftwood. The sections that still need owner names are highlighted in yellow.</p>",
       bodyText:
-        "Hi everyone,\n\nI drafted the customer onboarding checklist in Notion. The sections that still need owner names are highlighted in yellow.",
+        "Hi everyone,\n\nI drafted the customer onboarding checklist in Draftwood. The sections that still need owner names are highlighted in yellow.",
       date: daysAgo(0.92),
-      from: "Maya Patel <maya@notion.so>",
+      from: "Mara Quill <mara@draftwood.test>",
       labelIds: [MAILBOX_LABELS.inbox],
-      senderAvatarUrls: logo("notion.so"),
       snippet:
-        "I drafted the customer onboarding checklist in Notion. The sections that still need owner names are highlighted.",
+        "I drafted the customer onboarding checklist in Draftwood. The sections that still need owner names are highlighted.",
       subject: "Onboarding checklist draft",
       threadId: "demo-thread-onboarding",
       threadMessageCount: 3,
-      to: "Demo <demo@quieter.email>, Jordan Lee <jordan@figma.com>",
+      to: "Quiet Labs <inbox@quiet-labs.test>, Theo Byte <theo@canvas-cove.test>",
     }),
     createMessage("demo-thread-notion-2", {
       bodyHtml:
-        "<p>Looks good. I added the lifecycle emails and moved the workspace invite step earlier.</p><p>Jordan, can you check the screenshots before we share it?</p>",
+        "<p>Looks good. I added the lifecycle emails and moved the workspace invite step earlier.</p><p>Theo, can you check the screenshots before we share it?</p>",
       bodyText:
-        "Looks good. I added the lifecycle emails and moved the workspace invite step earlier.\n\nJordan, can you check the screenshots before we share it?",
+        "Looks good. I added the lifecycle emails and moved the workspace invite step earlier.\n\nTheo, can you check the screenshots before we share it?",
       date: daysAgo(0.75),
       from: DEMO_EMAIL_ADDRESS,
       labelIds: [MAILBOX_LABELS.sent],
@@ -170,7 +143,7 @@ const createInitialDemoState = (): DemoMailState => ({
       subject: "Re: Onboarding checklist draft",
       threadId: "demo-thread-onboarding",
       threadMessageCount: 3,
-      to: "Maya Patel <maya@notion.so>, Jordan Lee <jordan@figma.com>",
+      to: "Mara Quill <mara@draftwood.test>, Theo Byte <theo@canvas-cove.test>",
     }),
     createMessage("demo-thread-notion-3", {
       attachments: [attachment("onboarding-screenshots.zip", "application/zip", 3_900_000)],
@@ -179,10 +152,9 @@ const createInitialDemoState = (): DemoMailState => ({
       bodyText:
         "I checked the screenshots and replaced the two stale workspace shots. The archive has desktop and mobile exports.",
       date: daysAgo(0.58),
-      from: "Jordan Lee <jordan@figma.com>",
+      from: "Theo Byte <theo@canvas-cove.test>",
       isUnread: true,
       labelIds: [MAILBOX_LABELS.inbox, "UNREAD", "Label_Product"],
-      senderAvatarUrls: logo("figma.com"),
       snippet:
         "I checked the screenshots and replaced the two stale workspace shots. The archive has desktop and mobile exports.",
       subject: "Re: Onboarding checklist draft",
@@ -197,9 +169,8 @@ const createInitialDemoState = (): DemoMailState => ({
       bodyText:
         "Your preview deployment is ready.\n\nquieter-web-git-demo-mode built successfully and is available for review.",
       date: daysAgo(1.16),
-      from: "Vercel <notifications@vercel.com>",
+      from: "Launch Bay <deploys@launch-bay.test>",
       labelIds: [MAILBOX_LABELS.inbox, "Label_Product"],
-      senderAvatarUrls: logo("vercel.com"),
       snippet:
         "Your preview deployment is ready. quieter-web-git-demo-mode built successfully and is available for review.",
       subject: "Preview deployment ready",
@@ -211,14 +182,13 @@ const createInitialDemoState = (): DemoMailState => ({
       bodyText:
         "You have 4 unread mentions in #product.\n\nThe most recent thread is about the new mailbox switcher behavior.",
       date: daysAgo(1.8),
-      from: "Slack <feedback@slack.com>",
+      from: "Sidechannel <pings@sidechannel.test>",
       labelIds: [MAILBOX_LABELS.inbox],
-      senderAvatarUrls: logo("slack.com"),
       snippet:
         "You have 4 unread mentions in #product. The most recent thread is about the new mailbox switcher behavior.",
       subject: "New mentions in #product",
       to: DEMO_EMAIL_ADDRESS,
-      unsubscribeMailto: "mailto:unsubscribe@slack.com?subject=unsubscribe",
+      unsubscribeMailto: "mailto:unsubscribe@sidechannel.test?subject=unsubscribe",
     }),
     createMessage("demo-openai-1", {
       attachments: [attachment("usage-summary.pdf", "application/pdf", 612_400)],
@@ -227,9 +197,8 @@ const createInitialDemoState = (): DemoMailState => ({
       bodyText:
         "Your weekly usage summary is attached.\n\nToken volume increased 18% week over week, mostly from background classification jobs.",
       date: daysAgo(2.25),
-      from: "OpenAI <noreply@openai.com>",
+      from: "Token Garden <usage@token-garden.test>",
       labelIds: [MAILBOX_LABELS.inbox, "Label_Finance"],
-      senderAvatarUrls: logo("openai.com"),
       snippet: "Your weekly usage summary is attached. Token volume increased 18% week over week.",
       subject: "Weekly usage summary",
       threadAttachmentCount: 1,
@@ -241,9 +210,8 @@ const createInitialDemoState = (): DemoMailState => ({
       bodyText:
         "The Quieter swag test order shipped today.\n\nTracking usually appears within 24 hours after the carrier scan.",
       date: daysAgo(2.9),
-      from: "Shopify <no-reply@shopify.com>",
+      from: "Parcel & Pine <orders@parcel-pine.test>",
       labelIds: [MAILBOX_LABELS.inbox],
-      senderAvatarUrls: logo("shopify.com"),
       snippet:
         "The Quieter swag test order shipped today. Tracking usually appears within 24 hours.",
       subject: "Your test order shipped",
@@ -258,46 +226,43 @@ const createInitialDemoState = (): DemoMailState => ({
         ),
       ],
       bodyHtml:
-        "<p>Here is the latest research export from Airtable. I filtered it down to accounts with active pilot conversations.</p>",
+        "<p>Here is the latest research export from Grid Garden. I filtered it down to accounts with active pilot conversations.</p>",
       bodyText:
-        "Here is the latest research export from Airtable. I filtered it down to accounts with active pilot conversations.",
+        "Here is the latest research export from Grid Garden. I filtered it down to accounts with active pilot conversations.",
       date: daysAgo(3.3),
-      from: "Rachel Kim <rachel@airtable.com>",
+      from: "Nova Reed <nova@grid-garden.test>",
       labelIds: [MAILBOX_LABELS.inbox, "Label_Clients"],
-      senderAvatarUrls: logo("airtable.com"),
       snippet:
-        "Here is the latest research export from Airtable. I filtered it down to active pilot conversations.",
+        "Here is the latest research export from Grid Garden. I filtered it down to active pilot conversations.",
       subject: "Pilot account research export",
       threadAttachmentCount: 1,
       to: DEMO_EMAIL_ADDRESS,
     }),
     createMessage("demo-dropbox-1", {
       bodyHtml:
-        "<p>Sam shared the Q2 launch folder with you. It contains the press screenshots, brand exports, and customer quote approvals.</p>",
+        "<p>Milo shared the Q2 launch folder with you. It contains the press screenshots, brand exports, and customer quote approvals.</p>",
       bodyText:
-        "Sam shared the Q2 launch folder with you. It contains the press screenshots, brand exports, and customer quote approvals.",
+        "Milo shared the Q2 launch folder with you. It contains the press screenshots, brand exports, and customer quote approvals.",
       date: daysAgo(4.1),
-      from: "Dropbox <no-reply@dropbox.com>",
+      from: "Cloud Crate <shares@cloud-crate.test>",
       labelIds: [MAILBOX_LABELS.inbox],
-      senderAvatarUrls: logo("dropbox.com"),
       snippet:
-        "Sam shared the Q2 launch folder with you. It contains the press screenshots, brand exports, and approvals.",
+        "Milo shared the Q2 launch folder with you. It contains the press screenshots, brand exports, and approvals.",
       subject: "Q2 launch folder shared with you",
       to: DEMO_EMAIL_ADDRESS,
     }),
     createMessage("demo-zoom-1", {
       attachments: [attachment("customer-call-transcript.vtt", "text/vtt", 98_500)],
       bodyHtml:
-        "<p>Your cloud recording is ready.</p><p>The transcript includes action items from the customer call with Northstar Analytics.</p>",
+        "<p>Your call recording is ready.</p><p>The transcript includes action items from the customer call with Rabbit Hole Labs.</p>",
       bodyText:
-        "Your cloud recording is ready.\n\nThe transcript includes action items from the customer call with Northstar Analytics.",
+        "Your call recording is ready.\n\nThe transcript includes action items from the customer call with Rabbit Hole Labs.",
       date: daysAgo(4.7),
-      from: "Zoom <no-reply@zoom.us>",
+      from: "Huddle Room <recordings@huddle-room.test>",
       labelIds: [MAILBOX_LABELS.inbox, "Label_Clients"],
-      senderAvatarUrls: logo("zoom.us"),
       snippet:
         "Your cloud recording is ready. The transcript includes action items from the customer call.",
-      subject: "Cloud recording: Northstar Analytics sync",
+      subject: "Call recording: Rabbit Hole Labs sync",
       threadAttachmentCount: 1,
       to: DEMO_EMAIL_ADDRESS,
     }),
@@ -307,9 +272,8 @@ const createInitialDemoState = (): DemoMailState => ({
       bodyText:
         "Your workspace security report is ready. No high severity issues were detected in the last 7 days.",
       date: daysAgo(5.2),
-      from: "Anthropic <support@anthropic.com>",
+      from: "Lantern Security <reports@lantern-security.test>",
       labelIds: [MAILBOX_LABELS.inbox],
-      senderAvatarUrls: logo("anthropic.com"),
       snippet:
         "Your workspace security report is ready. No high severity issues were detected in the last 7 days.",
       subject: "Workspace security report",
@@ -327,7 +291,7 @@ const createInitialDemoState = (): DemoMailState => ({
       snippet:
         "Here is the rough plan for the onboarding cleanup. I still need to verify the settings copy before sending.",
       subject: "Onboarding cleanup plan",
-      to: "Priya Shah <priya@figma.com>",
+      to: "Pippa Placeholder <pippa@placeholder.test>",
     }),
     createMessage("demo-draft-2", {
       bodyHtml:
@@ -341,7 +305,7 @@ const createInitialDemoState = (): DemoMailState => ({
       snippet:
         "Thanks for sending the export. I am checking the account notes now and will follow up with the three records.",
       subject: "Re: Pilot account research export",
-      to: "Rachel Kim <rachel@airtable.com>",
+      to: "Nova Reed <nova@grid-garden.test>",
     }),
     createMessage("demo-sent-1", {
       bodyHtml:
@@ -354,7 +318,7 @@ const createInitialDemoState = (): DemoMailState => ({
       snippet:
         "Thanks, I pushed the final assets into the shared folder and noted the two places that still need legal copy.",
       subject: "Re: Launch checklist",
-      to: "Sam Rivera <sam@vercel.com>",
+      to: "Milo Stack <milo@ship-it.test>",
     }),
     createMessage("demo-sent-2", {
       attachments: [attachment("demo-mode-notes.md", "text/markdown", 18_200)],
@@ -369,15 +333,14 @@ const createInitialDemoState = (): DemoMailState => ({
         "I attached notes from the demo-mode walkthrough. The main gap is richer fixture data.",
       subject: "Demo-mode walkthrough notes",
       threadAttachmentCount: 1,
-      to: "Alex Morgan <alex@linear.app>",
+      to: "Alex Byte <alex@event-loop.test>",
     }),
     createMessage("demo-spam-1", {
       bodyHtml: "<p>Congratulations, your account has been selected for a limited reward.</p>",
       bodyText: "Congratulations, your account has been selected for a limited reward.",
       date: daysAgo(5.6),
-      from: "Rewards <promo@temu.com>",
+      from: "Prize Goblin <promo@definitely-not-a-prize.test>",
       labelIds: [MAILBOX_LABELS.spam],
-      senderAvatarUrls: logo("temu.com"),
       snippet: "Congratulations, your account has been selected for a limited reward.",
       subject: "Limited reward available",
       to: DEMO_EMAIL_ADDRESS,
@@ -387,9 +350,8 @@ const createInitialDemoState = (): DemoMailState => ({
         "<p>Your file transfer is waiting. Open the secure portal to prevent expiration.</p>",
       bodyText: "Your file transfer is waiting. Open the secure portal to prevent expiration.",
       date: daysAgo(6.8),
-      from: "File Transfer <notice@wetransfer.com>",
+      from: "File Portal <notice@totally-safe-file.test>",
       labelIds: [MAILBOX_LABELS.spam],
-      senderAvatarUrls: logo("wetransfer.com"),
       snippet: "Your file transfer is waiting. Open the secure portal to prevent expiration.",
       subject: "Action required: file transfer expires soon",
       to: DEMO_EMAIL_ADDRESS,
@@ -398,9 +360,8 @@ const createInitialDemoState = (): DemoMailState => ({
       bodyHtml: "<p>Can we move the old staging notes out of the main workspace?</p>",
       bodyText: "Can we move the old staging notes out of the main workspace?",
       date: daysAgo(7.3),
-      from: "Old Notes <notes@evernote.com>",
+      from: "Old Notes <notes@null-pointer.test>",
       labelIds: [MAILBOX_LABELS.trash],
-      senderAvatarUrls: logo("evernote.com"),
       snippet: "Can we move the old staging notes out of the main workspace?",
       subject: "Old staging notes",
       to: DEMO_EMAIL_ADDRESS,
@@ -412,9 +373,8 @@ const createInitialDemoState = (): DemoMailState => ({
       bodyText:
         "The legacy import sample is attached. We can delete this once the parser tests are updated.",
       date: daysAgo(8.9),
-      from: "Datadog <notifications@datadoghq.com>",
+      from: "Build Monitor <alerts@works-on-my-machine.test>",
       labelIds: [MAILBOX_LABELS.trash],
-      senderAvatarUrls: logo("datadoghq.com"),
       snippet:
         "The legacy import sample is attached. We can delete this once the parser tests are updated.",
       subject: "Legacy import sample",

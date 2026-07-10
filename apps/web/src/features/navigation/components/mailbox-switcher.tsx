@@ -24,9 +24,11 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { Pill } from "@quieter/ui/pill";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
 import { type ReactNode, useRef, useState } from "react";
 import { VerticalSlot } from "~/components/vertical-slot";
+import { MailboxAccessPill } from "~/features/mailbox/components/mailbox-access-pill";
 import { SidebarSimpleHoverSurface } from "~/features/navigation/components/sidebar-surfaces";
 
 type MailboxSwitcherMailbox = {
@@ -146,37 +148,69 @@ const getMailboxSwitcherOrder = (groups: MailboxSwitcherGroup[]): MailboxSwitche
 
 const formatUnreadCount = (count: number) => (count > 99 ? "99+" : String(Math.max(0, count)));
 
-const MailboxUnreadBadge = ({ count }: { count: number }) =>
-  count > 0 ? (
-    <span
-      aria-label={`${count} unread non-spam messages`}
-      className="flex h-4 min-w-5 shrink-0 items-center justify-center rounded-[5px] bg-foreground/10 px-1 text-[10px]/4 font-medium text-muted-foreground tabular-nums ring-1 ring-border/70 squircle"
-    >
-      {formatUnreadCount(count)}
-    </span>
-  ) : null;
+const MailboxInboxStatusPill = ({ mailbox }: { mailbox: MailboxSwitcherMailbox }) => {
+  if (mailbox.connectionStatus === "needs_reconnect") {
+    return <Pill tone="mailbox-reconnect">Reconnect</Pill>;
+  }
 
-const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => (
-  <div className={cn("flex min-w-0 items-center justify-between gap-3 rounded-md", className)}>
-    <div className="min-w-0 flex-1">
-      <p className="truncate text-sm text-foreground">
-        {mailbox.displayName?.trim() || mailbox.emailAddress}
-      </p>
-      {mailbox.displayName?.trim() && (
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">{mailbox.emailAddress}</p>
-      )}
+  if (mailbox.provider === "api") {
+    return <Pill tone="mailbox-api">Sending</Pill>;
+  }
+
+  if (mailbox.unreadNonSpamCount === 0) {
+    return <Pill tone="mailbox-ready">Inbox zero</Pill>;
+  }
+
+  return (
+    <Pill tone="mailbox-attention">{formatUnreadCount(mailbox.unreadNonSpamCount)} unread</Pill>
+  );
+};
+
+const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => {
+  const displayName = mailbox.displayName?.trim() || null;
+  const showSecondRow = Boolean(displayName || mailbox.grantRole);
+  const showPin = Boolean(action);
+
+  return (
+    <div className={cn("flex min-w-0 flex-col gap-1.5 rounded-md", className)}>
+      <div
+        className={cn(
+          "grid min-w-0 items-center gap-x-3 gap-y-1.5",
+          showPin ? "grid-cols-[minmax(0,1fr)_auto_auto]" : "grid-cols-[minmax(0,1fr)_auto]",
+        )}
+      >
+        <p className="truncate text-sm/5  text-foreground">
+          {displayName || mailbox.emailAddress}
+        </p>
+        {showPin ? (
+          <div className={cn("flex items-center", { "row-span-2": showSecondRow })}>{action}</div>
+        ) : null}
+        <div className="flex h-5 items-center justify-end">
+          <MailboxInboxStatusPill mailbox={mailbox} />
+        </div>
+        {showSecondRow ? (
+          <>
+            {displayName ? (
+              <p className="truncate text-xs/5  text-muted-foreground">
+                {mailbox.emailAddress}
+              </p>
+            ) : (
+              <span />
+            )}
+            <div className="flex h-5 items-center justify-end">
+              {mailbox.grantRole ? <MailboxAccessPill role={mailbox.grantRole} /> : null}
+            </div>
+          </>
+        ) : null}
+      </div>
       {mailbox.connectionStatus === "needs_reconnect" && (
-        <p className="mt-0.5 truncate text-xs text-destructive">
+        <p className="truncate text-xs text-destructive">
           This account needs to reconnect through Google.
         </p>
       )}
     </div>
-    <div className="ml-auto flex shrink-0 items-center gap-1">
-      {action}
-      <MailboxUnreadBadge count={mailbox.unreadNonSpamCount} />
-    </div>
-  </div>
-);
+  );
+};
 
 const MailboxDefaultButton = ({
   defaultMailboxLabel,
@@ -188,7 +222,7 @@ const MailboxDefaultButton = ({
     <button
       aria-label={defaultMailboxLabel}
       className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
+        "flex size-5 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
         {
           "text-foreground": isDefault,
           "text-muted-foreground/50 opacity-0 group-focus-within/item:opacity-100 group-hover/item:opacity-100 hover:text-foreground focus-visible:opacity-100":
@@ -281,10 +315,12 @@ const SortableGroup = ({
         <AnimatePresence initial={false}>
           {!collapsed && (
             <m.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden will-change-[height,opacity]"
+              animate={{ opacity: 1 }}
+              className="overflow-hidden will-change-[opacity,transform]"
+              exit={{ opacity: 0 }}
+              initial={{ opacity: 0 }}
+              layout
+              transition={{ duration: 0.16, ease: "easeOut" }}
             >
               <div className="space-y-1 pt-1">{children}</div>
             </m.div>
@@ -383,7 +419,6 @@ export const MailboxSwitcherDropdown = ({
     ? [
         selectedMailbox.displayName?.trim() ? selectedMailbox.emailAddress : null,
         selectedMailbox.groupName,
-        selectedMailbox.grantRole,
       ]
         .filter(Boolean)
         .join(" / ")
@@ -456,11 +491,9 @@ export const MailboxSwitcherDropdown = ({
         >
           <VerticalSlot className="min-w-0">
             <div>
-              <div className="flex min-w-0 items-center gap-2">
-                <p className="min-w-0 flex-1 truncate text-[13px]/5 font-medium tracking-tight text-foreground">
-                  {primaryLabel}
-                </p>
-              </div>
+              <p className="truncate text-[13px]/5 font-medium tracking-tight text-foreground">
+                {primaryLabel}
+              </p>
               <p className="mt-1 truncate text-xs text-muted-foreground">{secondaryLabel}</p>
             </div>
           </VerticalSlot>
@@ -526,7 +559,7 @@ export const MailboxSwitcherDropdown = ({
                                 mailbox={mailbox}
                               >
                                 <DropdownMenuItem
-                                  className={cn("group/item rounded-xs px-2 py-1 squircle", {
+                                  className={cn("group/item rounded-xs px-2.5 py-2 squircle", {
                                     "bg-background": isActive,
                                   })}
                                   onSelect={() => onSelectMailboxId(mailbox.id)}
@@ -564,7 +597,7 @@ export const MailboxSwitcherDropdown = ({
                                           onSetDefaultMailbox={onSetDefaultMailbox}
                                         />
                                       )}
-                                      <MailboxUnreadBadge count={mailbox.unreadNonSpamCount} />
+                                      <MailboxInboxStatusPill mailbox={mailbox} />
                                     </div>
                                   ) : (
                                     <MailboxSummary

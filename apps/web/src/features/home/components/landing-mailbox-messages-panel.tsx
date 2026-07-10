@@ -106,7 +106,7 @@ export const LandingMailboxMessagesPanel = ({
     <>
       <section
         className={cn(
-          "m-2 ml-0 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 squircle lg:flex",
+          "m-2 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 squircle lg:ml-0 lg:flex",
           {
             "flex flex-1": !isMessageRouteOpen,
             hidden: isMessageRouteOpen,
@@ -141,7 +141,7 @@ export const LandingMailboxMessagesPanel = ({
 
       <div
         className={cn(
-          "m-2 ml-0 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 squircle lg:flex",
+          "m-2 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 squircle lg:ml-0 lg:flex",
           {
             "flex flex-1": isMessageRouteOpen,
             hidden: !isMessageRouteOpen,
@@ -150,7 +150,7 @@ export const LandingMailboxMessagesPanel = ({
       >
         <MessageDetail
           activeMailbox={activeMailbox}
-          currentUserEmail="demo@quieter.email"
+          currentUserEmail="inbox@quiet-labs.test"
           mailboxActions={mailboxActions}
           mailboxId={LANDING_DEMO_MAILBOX_ID}
           mailboxProvider="gmail"
