@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun --env-file=../../.env.local vp build",
+    "build": "bun --env-file=../../.env.local vp run @quieter/env#build && bun --env-file=../../.env.local vp build",
     "dev": "bun --env-file=../../.env.local vp dev --port 3000",
     "start": "bun --env-file=../../.env.local node .output/server/index.mjs"
   },
