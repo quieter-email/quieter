@@ -100,7 +100,7 @@ const ComposeDeclinedView = ({
         <div className="py-2 text-sm/relaxed text-muted-foreground">
           {bodyHtml ? (
             <div
-              className="prose prose-sm max-w-none text-sm dark:prose-invert"
+              className="typeset typeset-docs max-w-[37em]"
               dangerouslySetInnerHTML={{ __html: bodyHtml }}
             />
           ) : (

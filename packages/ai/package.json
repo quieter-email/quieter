@@ -16,14 +16,6 @@
     "./transcription-format": "./src/transcription-format.ts",
     "./user-ai-context": "./src/user-ai-context.ts"
   },
-  "scripts": {
-    "fmt": "oxfmt --config ../../oxfmt.json .",
-    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
-    "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/ai",
-    "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/ai",
-    "test": "bun test",
-    "typecheck": "tsgo --noEmit"
-  },
   "dependencies": {
     "@quieter/env": "workspace:*",
     "@quieter/gmail": "workspace:*",
@@ -34,9 +26,7 @@
   "devDependencies": {
     "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
-    "@typescript/native-preview": "catalog:",
-    "oxfmt": "catalog:",
-    "oxlint": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
   }
 }

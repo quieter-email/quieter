@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test, vi } from "vite-plus/test";
 import { createWebClientEnv } from "./client";
 import { createDeploymentEnv } from "./deployment";
 import { createServerEnv } from "./server";
@@ -206,7 +206,7 @@ describe("SST environment", () => {
 
 describe("deployment environment", () => {
   test("requires all Vercel deployment inputs", () => {
-    const consoleError = spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     try {
       expect(() => createDeploymentEnv({})).toThrow();

@@ -1,4 +1,9 @@
-const ignoredSegments = new Set([".git", ".turbo", "build", "dist", "node_modules"]);
+import { readdir, readFile } from "node:fs/promises";
+import { extname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = join(fileURLToPath(new URL(".", import.meta.url)), "..");
+const ignoredSegments = new Set([".git", "build", "dist", "node_modules"]);
 const textExtensions = new Set([
   ".cjs",
   ".css",
@@ -26,24 +31,33 @@ const forbiddenValues = [
 ];
 const violations: string[] = [];
 
-for await (const path of new Bun.Glob("**/*").scan({
-  cwd: import.meta.dir + "/..",
-  onlyFiles: true,
-})) {
-  if (
-    path.split(/[\\/]/).some((segment) => ignoredSegments.has(segment)) ||
-    !textExtensions.has(path.slice(path.lastIndexOf(".")))
-  ) {
-    continue;
-  }
+const walk = async (directory: string): Promise<void> => {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (ignoredSegments.has(entry.name)) {
+      continue;
+    }
 
-  const text = await Bun.file(new URL(`../${path}`, import.meta.url)).text();
-  if (
-    forbiddenValues.some((value) => text.toLocaleLowerCase().includes(value.toLocaleLowerCase()))
-  ) {
-    violations.push(path);
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await walk(path);
+      continue;
+    }
+
+    if (!textExtensions.has(extname(entry.name))) {
+      continue;
+    }
+
+    const relativePath = path.slice(repoRoot.length + 1).replaceAll("\\", "/");
+    const text = await readFile(path, "utf8");
+    if (
+      forbiddenValues.some((value) => text.toLocaleLowerCase().includes(value.toLocaleLowerCase()))
+    ) {
+      violations.push(relativePath);
+    }
   }
-}
+};
+
+await walk(repoRoot);
 
 if (violations.length > 0) {
   console.error(`Middle-dot separators are not allowed:\n${violations.join("\n")}`);

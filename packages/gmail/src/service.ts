@@ -525,7 +525,7 @@ const getRetryDelayMs = (attempt: number, retryAfterMs?: number) => {
 
 type GmailRequestQuery = Record<
   string,
-  string | number | boolean | undefined | string[] | readonly string[] | undefined
+  string | number | boolean | undefined | string[] | readonly string[]
 >;
 
 const appendQueryParameters = (searchParams: URLSearchParams, query: GmailRequestQuery = {}) => {

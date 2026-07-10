@@ -3,15 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun --env-file=../../.env.local vite build",
-    "dev": "bun --env-file=../../.env.local vite dev --port 3000",
-    "fmt": "oxfmt --config ../../oxfmt.json .",
-    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
-    "lint": "bun --cwd ../.. oxlint --config oxlint.json apps/web",
-    "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json apps/web",
-    "start": "bun --env-file=../../.env.local node .output/server/index.mjs",
-    "test": "bun test",
-    "typecheck": "tsgo --noEmit"
+    "build": "bun --env-file=../../.env.local vp build",
+    "dev": "bun --env-file=../../.env.local vp dev --port 3000",
+    "start": "bun --env-file=../../.env.local node .output/server/index.mjs"
   },
   "dependencies": {
     "@barkleapp/css-sanitizer": "1.0.0",
@@ -80,14 +74,12 @@
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@typescript/native-preview": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "babel-plugin-react-compiler": "^1.0.0",
     "nitro": "catalog:",
-    "oxfmt": "catalog:",
-    "oxlint": "catalog:",
     "react-scan": "^0.5.7",
     "typescript": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
   }
 }

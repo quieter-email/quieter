@@ -35,13 +35,13 @@ Read [SECURITY.md](SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md) before co
 
 | Area                  | Stack                                               |
 | --------------------- | --------------------------------------------------- |
-| Runtime and workspace | Bun, Turborepo                                      |
+| Runtime and workspace | Bun, Vite+                                          |
 | Web                   | TanStack Start, TanStack Router, React, Vite, Nitro |
 | API and data          | oRPC, TanStack Query, Drizzle, PostgreSQL           |
 | Authentication        | Better Auth                                         |
 | UI                    | Tailwind CSS 4, `@quieter/ui`, Base UI, Tiptap      |
 | Infrastructure        | SST, AWS, Vercel                                    |
-| Quality               | Oxlint, Oxfmt, `tsgo`, Bun Test                     |
+| Quality               | Vite+ (Oxfmt, Oxlint, type-aware checks, Vitest)    |
 
 ## Start Here
 
@@ -59,22 +59,22 @@ Read [SECURITY.md](SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md) before co
 
 Prerequisites:
 
-- Bun 1.3.9 or newer
+- [Vite+](https://viteplus.dev/) (`vp`; it provisions the pinned Node runtime and Bun package manager)
 - PostgreSQL 16 or newer running locally
 - Provider credentials only for the integrations you intend to exercise
 - Non-production AWS credentials in `.env.sst.local` only when running the SST development stack
 
 ```bash
-bun install --frozen-lockfile
+vp install --frozen-lockfile
 cp .env.example .env.local
 createdb quieter
-bun run db:migrate
-bun run dev
+vp run db:migrate
+vp run dev
 ```
 
 On PowerShell, use `Copy-Item .env.example .env.local`.
 
-`bun run dev` starts the web app only and deliberately refuses remote database URLs. Developers use
+`vp run dev` starts the web app only and deliberately refuses remote database URLs. Developers use
 local PostgreSQL, CI uses a temporary PostgreSQL service, and production credentials remain in
 protected deployment secrets. See [Development](docs/development.md) for provider setup, the
 optional mail-infrastructure session, and alternative commands.
@@ -82,25 +82,25 @@ optional mail-infrastructure session, and alternative commands.
 ## Common Commands
 
 ```bash
-bun run dev              # web app only
-bun run dev:mail         # optional SST mail/background stack
-bun run dev:all          # web app plus optional SST stack
-bun run env:doctor       # verify .env.local is isolated from production-shaped keys
-bun run test             # all tests
-bun run typecheck        # workspace type checking
-bun run lint:fix         # lint and apply safe fixes
-bun run fmt              # format the workspace
-bun run db:generate      # generate a migration after changing schema.ts
-bun run db:check         # validate migration history and schema drift
+vp run dev               # web app only
+vp run dev:mail          # optional SST mail/background stack
+vp run dev:all           # web app plus optional SST stack
+vp run env:doctor        # verify .env.local is isolated from production-shaped keys
+vp check                 # format, lint, and type-check
+vp run check:copy        # enforce the copy policy
+vp test                  # all tests
+vp run -r build          # build every workspace package in dependency order
+vp run db:generate       # generate a migration after changing schema.ts
+vp run db:check          # validate migration history and schema drift
 ```
 
 Before finishing a change, run:
 
 ```bash
-bun run fmt
-bun run lint:fix
-bun run typecheck
-bun run test
+vp check --fix
+vp run check:copy
+vp test
+vp run -r build
 ```
 
 ## Status

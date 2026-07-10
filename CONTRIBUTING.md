@@ -27,10 +27,10 @@ Security research and fixes are welcome when coordinated privately.
 Security changes must follow existing package boundaries, include focused tests, and pass:
 
 ```bash
-bun run fmt
-bun run lint:fix
-bun run typecheck
-bun run test
+vp check --fix
+vp run check:copy
+vp test
+vp run -r build
 ```
 
 Submitting a report or patch does not guarantee acceptance, response time, compensation, or public

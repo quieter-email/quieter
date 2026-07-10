@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test";
 import { messagesQueryOptions } from "./gmail/inbox-query/sync";
 import { labelsQueryOptions } from "./gmail/labels-query";
 import { getThreadWithDetailsOptions } from "./gmail/thread-query";

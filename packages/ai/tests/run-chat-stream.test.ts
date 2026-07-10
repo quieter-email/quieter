@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test";
 import { CHAT_AGENT_MAX_ITERATIONS, CHAT_AGENT_MAX_TOKENS } from "../src/run-chat-stream";
 
 describe("chat generation budget", () => {

@@ -12,13 +12,7 @@
     "db:generate": "bun scripts/generate-migration.ts",
     "db:migrate": "bun --env-file=../../.env.local scripts/run-migrations.ts",
     "db:push": "bun --env-file=../../.env.local scripts/push-schema.ts",
-    "db:test-migrations": "bun scripts/test-migrations.ts",
-    "fmt": "oxfmt --config ../../oxfmt.json .",
-    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
-    "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/database",
-    "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/database",
-    "test": "bun test ./scripts",
-    "typecheck": "tsgo --noEmit"
+    "db:test-migrations": "bun scripts/test-migrations.ts"
   },
   "dependencies": {
     "@quieter/env": "workspace:*",
@@ -29,10 +23,8 @@
     "@quieter/config": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "@typescript/native-preview": "catalog:",
     "drizzle-kit": "catalog:",
-    "oxfmt": "catalog:",
-    "oxlint": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
   }
 }

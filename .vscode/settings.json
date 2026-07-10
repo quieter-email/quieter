@@ -1,10 +1,11 @@
 {
-  "oxc.fmt.configPath": "oxfmt.json",
+  "oxc.fmt.configPath": "./vite.config.ts",
   "editor.defaultFormatter": "oxc.oxc-vscode",
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
-    "source.fixAll.oxc": "always"
+    "source.fixAll.oxc": "explicit"
   },
+  "npm.scriptRunner": "vp",
   "oxc.typeAware": true,
   "[typescriptreact]": {
     "editor.defaultFormatter": "oxc.oxc-vscode",

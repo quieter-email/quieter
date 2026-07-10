@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test";
 import {
   MAIL_AUTOMATION_AI_PAUSED_MESSAGE,
   resolveMailAutomationAiBudgetStatus,

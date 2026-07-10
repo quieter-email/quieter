@@ -62,10 +62,12 @@ export type QuieterSendResult = {
   sent: true;
 };
 
+export type QuieterFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
 export type QuieterOptions = {
   apiKey: string;
   baseUrl?: string;
-  fetch?: typeof fetch;
+  fetch?: QuieterFetch;
 };
 
 type SendRequest = Omit<QuieterSendInput, "attachments" | "react"> & {
@@ -92,7 +94,7 @@ export class QuieterApiError extends Error {
 export class Quieter {
   readonly apiKey: string;
   readonly baseUrl: string;
-  readonly fetch: typeof fetch;
+  readonly fetch: QuieterFetch;
 
   constructor(options: QuieterOptions) {
     if (!options.apiKey?.trim()) {

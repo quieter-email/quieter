@@ -5,17 +5,8 @@
   "exports": {
     "./tsconfig/base.json": "./tsconfig/base.json"
   },
-  "scripts": {
-    "fmt": "oxfmt --config ../../oxfmt.json .",
-    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
-    "lint": "bun --cwd ../.. oxlint --config oxlint.json --no-error-on-unmatched-pattern packages/config",
-    "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json --no-error-on-unmatched-pattern packages/config",
-    "typecheck": "tsgo --project ./tsconfig.json --noEmit"
-  },
   "devDependencies": {
-    "@typescript/native-preview": "catalog:",
-    "oxfmt": "catalog:",
-    "oxlint": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
   }
 }

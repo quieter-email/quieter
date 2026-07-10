@@ -1,4 +1,8 @@
 @import "tailwindcss";
+@import "./typeset.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/merriweather";
+@import "@fontsource-variable/geist-mono";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
 @source "./**/*.{ts,tsx}";
@@ -7,7 +11,19 @@
 
 /* The styles are darkmode-first, meaning in lightmode, background-dark is actually the lightest color and background-light is actually the darkest color. */
 
+.typeset-docs {
+  --typeset-font-body: var(--font-geist);
+  --typeset-font-heading: var(--font-merriweather);
+  --typeset-font-mono: var(--font-geist-mono);
+  --typeset-size: 15px;
+  --typeset-leading: 1.75;
+  --typeset-flow: 1.25em;
+}
+
 :root {
+  --font-geist: "Geist Variable", sans-serif;
+  --font-merriweather: "Merriweather Variable", serif;
+  --font-geist-mono: "Geist Mono Variable", monospace;
   --background: oklch(0.975 0.002 264);
   --foreground: oklch(0.15 0.002 264);
   --background-light: oklch(1 0.002 264);

@@ -1,6 +1,6 @@
 import type { GmailUsefulDetailCandidate } from "@quieter/ai/extract-gmail-useful-detail";
 import type { MessageListItem } from "@quieter/gmail";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test";
 import {
   buildGmailUsefulDetailPreferenceProfile,
   materializeGmailUsefulDetail,

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test";
 import { createGmailLiveSyncToken, verifyGmailLiveSyncToken } from "../src/gmail-live-sync-token";
 
 const SECRET = "test-secret-that-is-long-enough-for-hmac";

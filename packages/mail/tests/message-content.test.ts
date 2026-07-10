@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test";
 import { decodePartBody } from "../src/message-content";
 
 const base64UrlEncode = (value: string, encoding: BufferEncoding = "utf8") =>

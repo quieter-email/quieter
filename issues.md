@@ -501,7 +501,7 @@ Resolved on June 20, 2026 by the P0 reliability and security remediation change 
 
 ## Build, dependency, and CI/CD risks
 
-234. **Core dependencies include beta, canary, and native-preview releases.** Drizzle beta, Nitro beta, Turbo canary, and the native TypeScript preview increase upgrade and regression risk. See [package.json](/E:/Coding/quieter/package.json).
+234. **Core dependencies include beta releases.** Drizzle beta and Nitro beta increase upgrade and regression risk. See [package.json](/E:/Coding/quieter/package.json).
 
 235. **Many core dependencies use caret ranges.** Lockfiles help, but deliberate upgrade control is still important with an unstable stack.
 
@@ -509,15 +509,15 @@ Resolved on June 20, 2026 by the P0 reliability and security remediation change 
 
 237. **Several packages use duplicate or potentially misplaced dependencies.** This makes ownership and upgrade scope less clear.
 
-238. **Turbo caching is disabled for lint, typecheck, formatting, and tests.** Remote cache infrastructure therefore delivers little value. See [turbo.json](/E:/Coding/quieter/turbo.json).
+238. **Resolved:** Vite+ now owns workspace task execution, caching, and static checks.
 
-239. **Those tasks depend recursively on the same task in dependencies.** Without cache-aware outputs, this adds serial work and lengthens feedback loops.
+239. **Resolved:** Vite Task derives workspace ordering from package dependencies instead of a separate task graph.
 
 240. **CI does not appear to use affected-package execution.** Small changes run broad monorepo checks.
 
-241. **`.env*` is a global Turbo dependency.** Any environment-file change invalidates the entire task graph.
+241. **Resolved:** Vite Task tracks inputs per task instead of applying a global environment-file dependency.
 
-242. **Environment allowlists are duplicated between Turbo and environment schemas.** There is no automated drift check.
+242. **Resolved:** Task-specific environment configuration lives with the Vite+ task that consumes it.
 
 243. **The base TypeScript configuration uses `skipLibCheck`.** Dependency type incompatibilities can remain hidden.
 

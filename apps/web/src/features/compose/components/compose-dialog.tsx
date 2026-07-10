@@ -722,7 +722,7 @@ export const ComposeDialog = ({
                   className={cn({ "mr-auto": !state.draft.errorMessage })}
                   disabled={state.draft.saveStatus === "sending"}
                   onClick={() => {
-                    void discardActiveDraft();
+                    discardActiveDraft();
                   }}
                   size="sm"
                   type="button"

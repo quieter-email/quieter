@@ -1,5 +1,5 @@
 import { managedMailMessage } from "@quieter/database/schema";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test";
 import { matchesManagedMailRule } from "../src/managed-mail/search/evaluator";
 
 type ManagedMessageRecord = typeof managedMailMessage.$inferSelect;

@@ -54,7 +54,7 @@ jobs:
             packages/database/package.json \
             packages/database/scripts \
             packages/database/src/schema.ts \
-            turbo.json; then
+            vite.config.ts; then
             echo "database=false" >> "$GITHUB_OUTPUT"
           else
             echo "database=true" >> "$GITHUB_OUTPUT"
@@ -68,31 +68,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
         with:
-          bun-version-file: package.json
+          cache: true
+          node-version: "24.18.0"
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: vp install --frozen-lockfile
 
-      - name: Format check
-        run: bun run fmt:check
+      - name: Check
+        run: vp check
 
-      - name: Lint
-        run: bun run lint
-
-      - name: Typecheck
-        run: bun run typecheck
+      - name: Check copy policy
+        run: vp run check:copy
 
       - name: Check backend import boundaries
-        run: bun run check:boundaries
+        run: vp run @quieter/aws#check:boundaries
 
       - name: Bundle AWS handlers
-        run: bun run check:bundles
+        run: vp run @quieter/aws#check:bundles
 
       - name: Test
-        run: bun run test
+        run: vp test
 
   migration-integration:
     name: Migration integration tests
@@ -121,20 +119,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
         with:
-          bun-version-file: package.json
+          cache: true
+          node-version: "24.18.0"
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: vp install --frozen-lockfile
 
       - name: Check committed migrations match the schema
         if: ${{ needs.changes.outputs.database == 'true' }}
-        run: bun run db:check
+        run: vp run @quieter/database#db:check
 
       - name: Test committed database migrations
-        run: bun run db:test-migrations
+        run: vp run @quieter/database#db:test-migrations
 
   deploy:
     name: Deploy ${{ inputs.stage || 'production' }}
@@ -157,10 +156,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
         with:
-          bun-version-file: package.json
+          cache: true
+          node-version: "24.18.0"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -169,14 +169,14 @@ jobs:
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: vp install --frozen-lockfile
 
       - name: Apply production database migrations
         if: ${{ env.SST_STAGE == 'production' }}
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
-        run: bun run db:deploy
+        run: vp run @quieter/database#db:deploy
 
       - name: Deploy SST
         env:

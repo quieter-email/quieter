@@ -1,16 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test";
 import { createPolarCreditUsageEvent } from "../src/credits";
 
 describe("billing credits", () => {
   test("reports total consumed credits to Polar while keeping overage metadata separate", () => {
     const event = createPolarCreditUsageEvent({
       account: {
-        creditAmountCents: 1_000,
-        currentPeriodEnd: new Date("2026-07-01T00:00:00.000Z"),
-        currentPeriodStart: new Date("2026-06-01T00:00:00.000Z"),
         externalCustomerId: "organization:team-1",
-        organizationId: "team-1",
-        product: "managed",
       },
       billableCostMicroCents: 0,
       category: "mail",

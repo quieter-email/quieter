@@ -24,8 +24,8 @@ drizzle-kit push needs hint resolutions when the schema diff is ambiguous
 
 Try one of these:
   • Run db:push from an interactive terminal (Windows Terminal or PowerShell)
-  • Apply committed migrations: bun run db:migrate
-  • Generate a migration for schema changes: bun run db:generate
+  • Apply committed migrations: vp run db:migrate
+  • Generate a migration for schema changes: vp run db:generate
 `);
   globalThis.process.exit(1);
 }

@@ -45,15 +45,11 @@
     "./toolbar": "./src/components/ui/toolbar.tsx",
     "./tooltip": "./src/components/ui/tooltip.tsx"
   },
-  "scripts": {
-    "fmt": "oxfmt --config ../../oxfmt.json .",
-    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
-    "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/ui",
-    "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/ui",
-    "typecheck": "tsgo --noEmit"
-  },
   "dependencies": {
     "@base-ui/react": "catalog:",
+    "@fontsource-variable/geist": "^5.2.9",
+    "@fontsource-variable/geist-mono": "^5.2.8",
+    "@fontsource-variable/merriweather": "^5.2.6",
     "class-variance-authority": "^0.7.1",
     "date-fns": "^4.4.0",
     "next-themes": "catalog:",
@@ -69,10 +65,8 @@
     "@tanstack/react-router": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@typescript/native-preview": "catalog:",
-    "oxfmt": "catalog:",
-    "oxlint": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
   },
   "peerDependencies": {
     "@tanstack/react-router": "catalog:",
