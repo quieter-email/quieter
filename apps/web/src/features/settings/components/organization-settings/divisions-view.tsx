@@ -200,11 +200,13 @@ export const DivisionsView = ({
           <div className="space-y-4">
             <form
               action={(formData) => {
+                const description = formData.get("description");
+                const name = formData.get("name");
                 updateDivisionMutation.mutate(
                   {
-                    description: String(formData.get("description") ?? ""),
+                    description: typeof description === "string" ? description : "",
                     divisionId: selectedDivision.id,
-                    name: String(formData.get("name") ?? ""),
+                    name: typeof name === "string" ? name : "",
                   },
                   {
                     onError: (error) =>

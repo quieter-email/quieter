@@ -60,10 +60,7 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
             transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
           >
             <div className="py-1">
-              <MarkdownContent
-                className="prose-headings:text-muted-foreground prose-p:text-xs/5 prose-p:text-muted-foreground prose-p:italic prose-code:text-muted-foreground"
-                markdown={content}
-              />
+              <MarkdownContent markdown={content} />
             </div>
           </m.div>
         ) : null}

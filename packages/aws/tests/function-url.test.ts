@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test";
 import { bearerTokenMatches, getBearerToken, parseEventJson } from "../src/function-url";
 
 describe("function URL helpers", () => {

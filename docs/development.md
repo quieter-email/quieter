@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Bun 1.3.9 or newer
+- Vite+ (`vp`), which manages the pinned Node runtime and Bun package manager
 - Git
 - PostgreSQL 16 or newer installed locally
 - Non-production AWS credentials only when running the SST mail and background-processing stack
@@ -16,7 +16,7 @@ and no developer receives production database credentials.
 ```bash
 git clone https://github.com/quieter-email/quieter.git
 cd quieter
-bun install --frozen-lockfile
+vp install --frozen-lockfile
 cp .env.example .env.local
 ```
 
@@ -27,7 +27,7 @@ Copy-Item .env.example .env.local
 ```
 
 Do not copy production secrets into `.env.local`.
-Run `bun run env:doctor` after editing `.env.local`; it fails if remote database URLs or
+Run `vp run env:doctor` after editing `.env.local`; it fails if remote database URLs or
 production-shaped provider keys are present.
 
 ## Local Database
@@ -50,7 +50,7 @@ loopback-only.
 Apply the committed application migrations:
 
 ```bash
-bun run db:migrate
+vp run db:migrate
 ```
 
 `db:push` is reserved for disposable local databases. Normal schema changes require a committed
@@ -86,19 +86,19 @@ Keep `DATABASE_MIGRATION_URL` unset locally. Local migration commands fall back 
 Run the normal local web session:
 
 ```bash
-bun run dev
+vp run dev
 ```
 
-Turbo starts `apps/web` on `http://localhost:3000`. This path does not start SST and should not
+Vite Task starts `apps/web` on `http://localhost:3000`. This path does not start SST and should not
 need AWS, R2, live-sync, or managed-mail provider credentials.
 
 Run the optional mail and background-processing stack only when you need it:
 
 ```bash
-bun run dev:mail
+vp run dev:mail
 ```
 
-Run both sessions together with `bun run dev:all`. The SST wrapper defaults to the `mail-dev`
+Run both sessions together with `vp run dev:all`. The SST wrapper defaults to the `mail-dev`
 stage and loads `.env.local` plus optional `.env.sst.local`. Keep AWS credentials out of
 `.env.local`; put non-production SST credentials in `.env.sst.local` when the mail stack is needed.
 
@@ -127,14 +127,14 @@ Application UI must consume reusable components through `@quieter/ui`.
 2. Generate a migration:
 
    ```bash
-   bun run db:generate
+   vp run db:generate
    ```
 
 3. Review the SQL in `packages/database/drizzle`.
 4. Test it:
 
    ```bash
-   bun run db:check
+   vp run db:check
    ```
 
 CI runs destructive migration integration tests only against a dedicated temporary PostgreSQL
@@ -148,19 +148,19 @@ Read [Database safety](database-safety.md) before changing migration tooling.
 Run the full verification suite:
 
 ```bash
-bun run fmt
-bun run lint:fix
-bun run typecheck
-bun run test
+vp check --fix
+vp run check:copy
+vp test
+vp run -r build
 ```
 
 Useful focused commands:
 
 ```bash
-bun test packages/orpc/tests/mailbox-service.test.ts
-bun run typecheck --filter=@quieter/web
-bun run lint --filter=@quieter/database
-bun run db:check
+vp test packages/orpc/tests/mailbox-service.test.ts
+vp check apps/web
+vp lint packages/database
+vp run db:check
 ```
 
 The pre-commit hook runs formatting and linting on staged files. Pull requests to `main` must pass

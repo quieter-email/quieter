@@ -10,14 +10,6 @@
     "./terms-acceptance": "./src/terms-acceptance.ts",
     "./user-status": "./src/user-status.ts"
   },
-  "scripts": {
-    "fmt": "oxfmt --config ../../oxfmt.json .",
-    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
-    "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/auth",
-    "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/auth",
-    "test": "bun test",
-    "typecheck": "tsgo --noEmit"
-  },
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",
     "@polar-sh/better-auth": "^1.8.4",
@@ -35,12 +27,10 @@
     "@quieter/config": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "@typescript/native-preview": "catalog:",
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:",
-    "oxfmt": "catalog:",
-    "oxlint": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
   },
   "peerDependencies": {
     "@better-auth/api-key": "1.5.0",

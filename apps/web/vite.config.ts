@@ -6,7 +6,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
-import { defineConfig, Environment } from "vite";
+import { defineConfig, Environment, lazyPlugins } from "vite-plus";
 
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
@@ -33,7 +33,7 @@ export default defineConfig(({ command }) => {
       chunkSizeWarningLimit: 1200,
       sourcemap: isSentryEnabled,
     },
-    plugins: [
+    plugins: lazyPlugins(() => [
       tanstackStart(),
       viteReact(),
       ...(isDev ? [reactScan()] : []),
@@ -43,7 +43,7 @@ export default defineConfig(({ command }) => {
       tailwindcss(),
       nitro({ preset: "vercel", traceDeps: ["react"] }),
       ...sentryPlugins,
-    ],
+    ]),
     optimizeDeps: {
       include: ["motion", "motion/react"],
     },

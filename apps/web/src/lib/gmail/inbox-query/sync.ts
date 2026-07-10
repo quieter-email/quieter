@@ -5,7 +5,7 @@ import { rpc } from "~/lib/orpc";
 import { shouldRetryOrpcError } from "~/lib/orpc-errors";
 import { persistQueryByKey, queryPersister } from "~/lib/query-persister";
 import { isManagedSandboxMailboxId, isSandboxMailboxId } from "~/lib/sandbox-mailbox";
-import { listDemoMessages } from "../demo-mail";
+import { LANDING_DEMO_MAILBOX_ID, listDemoMessages } from "../demo-mail";
 import {
   GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
   GMAIL_QUERY_STALE_TIME_MS,
@@ -311,6 +311,21 @@ export const messagesQueryOptions = (
       );
     },
     initialPageParam: undefined as string | undefined,
+    ...(mailboxId === LANDING_DEMO_MAILBOX_ID
+      ? {
+          initialData: {
+            pageParams: [undefined],
+            pages: [
+              listDemoMessages({
+                mailboxId,
+                category: mailbox,
+                maxResults: 50,
+                query: normalizeSearchQuery(searchQuery),
+              }),
+            ],
+          },
+        }
+      : {}),
     getNextPageParam: (lastPage: ListMessagesPageResult) => lastPage.nextPageToken ?? undefined,
     staleTime: GMAIL_QUERY_STALE_TIME_MS,
     enabled,

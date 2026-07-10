@@ -11,6 +11,16 @@ import { orpc } from "~/lib/orpc";
 
 type MailboxesQueryData = RouterOutputs["mail"]["listMailboxes"];
 
+const emptyPreviewMailboxes = {
+  defaultMailboxId: null,
+  groups: [],
+} as const;
+
+type SandboxMailboxesData =
+  | ReturnType<typeof getDemoMailboxes>
+  | ReturnType<typeof getManagedDemoMailboxes>
+  | typeof emptyPreviewMailboxes;
+
 const reorderMailboxQueryData = (
   data: MailboxesQueryData,
   order: MailboxSwitcherOrder,
@@ -73,13 +83,27 @@ export const useMailboxSelection = ({
   const { data: queriedMailboxesData, isPending: isMailboxesPending } = useQuery(
     mailboxesQueryOptions(!isSandboxMode),
   );
-  const mailboxesData = isEmptyPreviewPersona
-    ? { defaultMailboxId: null, groups: [] }
+  const sandboxMode = isEmptyPreviewPersona ? "empty" : isManagedDemoMode ? "managed" : "gmail";
+  const initialSandboxMailboxesData: SandboxMailboxesData = isEmptyPreviewPersona
+    ? emptyPreviewMailboxes
     : isManagedDemoMode
       ? getManagedDemoMailboxes()
-      : isDemoMode
-        ? getDemoMailboxes()
-        : queriedMailboxesData;
+      : getDemoMailboxes();
+  const { data: sandboxMailboxesData, isPending: areSandboxMailboxesPending } =
+    useQuery<SandboxMailboxesData>({
+      enabled: isSandboxMode,
+      initialData: initialSandboxMailboxesData,
+      queryFn: () =>
+        isEmptyPreviewPersona
+          ? emptyPreviewMailboxes
+          : isManagedDemoMode
+            ? getManagedDemoMailboxes()
+            : getDemoMailboxes(),
+      queryKey: [...getMailboxesQueryKey(), "sandbox", sandboxMode],
+      refetchOnMount: "always",
+      staleTime: Number.POSITIVE_INFINITY,
+    });
+  const mailboxesData = isSandboxMode ? sandboxMailboxesData : queriedMailboxesData;
   const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
   const mailboxGroups = (mailboxesData?.groups ?? []).map((group) => ({
     id: group.id,
@@ -147,7 +171,9 @@ export const useMailboxSelection = ({
     defaultMailboxId,
     mailboxGroups,
     mailboxes,
-    mailboxesQuery: { isPending: isMailboxesPending },
+    mailboxesQuery: {
+      isPending: isSandboxMode ? areSandboxMailboxesPending : isMailboxesPending,
+    },
     selectedMailboxId,
     selectedMailboxProvider,
     selectedMailboxNeedsReconnect,

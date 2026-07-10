@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test";
 import { getSafeAuthReturnTo } from "./return-to";
 
 describe("getSafeAuthReturnTo", () => {

@@ -1,5 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test, vi } from "vite-plus/test";
 import type { MessageListItem, ThreadMessagesResult } from "../gmail";
 import type { MessagesQueryData } from "./data";
 import { queryPersister } from "../../query-persister";
@@ -120,9 +120,9 @@ describe("persistQueryKeys", () => {
     const inboxQueryKey = getMessagesQueryKey("mailbox-a", "inbox");
     const searchQueryKey = getMessagesQueryKey("mailbox-a", "inbox", "from:alex");
     const threadQueryKey = getThreadQueryKey("mailbox-a", "thread-a");
-    const persistSpy = spyOn(queryPersister, "persistQueryByKey").mockImplementation(
-      async () => {},
-    );
+    const persistSpy = vi
+      .spyOn(queryPersister, "persistQueryByKey")
+      .mockImplementation(async () => {});
 
     try {
       await persistQueryKeys(queryClient, [inboxQueryKey, searchQueryKey, threadQueryKey]);

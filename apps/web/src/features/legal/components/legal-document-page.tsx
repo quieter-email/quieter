@@ -23,9 +23,7 @@ export const LegalDocumentPage = ({
         <p className="text-xs text-muted-foreground">Last updated June 29, 2026.</p>
       </header>
 
-      <article className="prose mt-10 max-w-none space-y-6 text-sm/7 text-foreground prose-neutral dark:prose-invert [&_h2]:mt-10 [&_h2]:text-base [&_h2]:font-medium [&_li]:text-muted-foreground [&_p]:text-muted-foreground [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:ps-5">
-        {children}
-      </article>
+      <article className="typeset typeset-docs mt-10 max-w-[37em]">{children}</article>
     </div>
   </div>
 );

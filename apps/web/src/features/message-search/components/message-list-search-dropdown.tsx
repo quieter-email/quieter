@@ -73,7 +73,7 @@ const SearchDropdownRow = ({
       "flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground outline-none hover:bg-muted focus-visible:bg-muted",
       {
         "bg-muted": highlighted,
-        "bg-muted/80 ring-1 ring-border ring-inset": active,
+        "bg-accent": active,
       },
     )}
     onClick={onClick}
@@ -233,7 +233,7 @@ export const MessageListSearchDropdown = ({
         <div aria-hidden className="absolute top-0 left-0 h-full w-2" />
         <div
           aria-label="Labels"
-          className="absolute top-0 left-2 w-72 rounded-lg border bg-popover p-1 shadow-lg"
+          className="absolute top-0 left-2 w-72 rounded-lg bg-popover p-1 shadow-lg"
           ref={labelsSubmenuRef}
         >
           {labelsContent}
@@ -257,7 +257,7 @@ export const MessageListSearchDropdown = ({
             initial={{ scale: 0.95, transformOrigin: "top", opacity: 0, y: -10 }}
             transition={{ duration: 0.1, ease: "easeOut" }}
             aria-label="Search filters"
-            className="absolute inset-x-0 top-full z-30 mt-2 rounded-lg border bg-popover p-2 shadow-lg will-change-transform"
+            className="absolute inset-x-0 top-full z-30 mt-2 rounded-lg bg-popover p-2 shadow-lg will-change-transform"
             data-search-dropdown-content
             onMouseDown={(event) => {
               event.preventDefault();
@@ -302,7 +302,7 @@ export const MessageListSearchDropdown = ({
                       "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground outline-none hover:bg-muted focus-visible:bg-muted",
                       {
                         "bg-muted": isLabelHighlighted,
-                        "bg-muted/80 ring-1 ring-border ring-inset": selectedUserLabelKeys.size > 0,
+                        "bg-accent": selectedUserLabelKeys.size > 0,
                       },
                     )}
                     onClick={() => {

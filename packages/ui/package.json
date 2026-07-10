@@ -29,6 +29,7 @@
     "./input": "./src/components/ui/input.tsx",
     "./number-field": "./src/components/ui/number-field.tsx",
     "./popover": "./src/components/ui/popover.tsx",
+    "./pill": "./src/components/ui/pill.tsx",
     "./progress": "./src/components/ui/progress.tsx",
     "./radio-group": "./src/components/ui/radio-group.tsx",
     "./scroll-area": "./src/components/ui/scroll-area.tsx",
@@ -44,15 +45,11 @@
     "./toolbar": "./src/components/ui/toolbar.tsx",
     "./tooltip": "./src/components/ui/tooltip.tsx"
   },
-  "scripts": {
-    "fmt": "oxfmt --config ../../oxfmt.json .",
-    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
-    "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/ui",
-    "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/ui",
-    "typecheck": "tsgo --noEmit"
-  },
   "dependencies": {
     "@base-ui/react": "catalog:",
+    "@fontsource-variable/geist": "catalog:",
+    "@fontsource-variable/geist-mono": "catalog:",
+    "@fontsource-variable/merriweather": "catalog:",
     "class-variance-authority": "^0.7.1",
     "date-fns": "^4.4.0",
     "next-themes": "catalog:",
@@ -68,10 +65,8 @@
     "@tanstack/react-router": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@typescript/native-preview": "catalog:",
-    "oxfmt": "catalog:",
-    "oxlint": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
   },
   "peerDependencies": {
     "@tanstack/react-router": "catalog:",

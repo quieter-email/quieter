@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test";
 import {
   extractListUnsubscribeTargets,
   getGmailMessageCount,
@@ -28,11 +28,23 @@ const createBatchResponse = (boundary: string, bodies: readonly unknown[]) => {
   ].join("\r\n");
 };
 
+const getRequestBody = (body: BodyInit | null | undefined) =>
+  typeof body === "string" ? body : "";
+
+const getRequestUrl = (input: RequestInfo | URL) =>
+  typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+
 const getBatchRequestCount = (
   body: BodyInit | null | undefined,
   resource: "messages" | "threads",
 ) => {
-  return String(body).match(new RegExp(`/gmail/v1/users/me/${resource}/`, "g"))?.length ?? 0;
+  return (
+    getRequestBody(body).match(new RegExp(`/gmail/v1/users/me/${resource}/`, "g"))?.length ?? 0
+  );
+};
+
+const setFetch = (fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) => {
+  Reflect.set(globalThis, "fetch", fetch);
 };
 
 describe("extractListUnsubscribeTargets", () => {
@@ -75,9 +87,9 @@ describe("refreshMailboxMessages", () => {
     const originalFetch = globalThis.fetch;
     const calls: RequestInit[] = [];
 
-    globalThis.fetch = async (_input, init) => {
+    setFetch(async (_input, init) => {
       calls.push(init ?? {});
-      const body = String(init?.body);
+      const body = getRequestBody(init?.body);
 
       if (body.includes("/gmail/v1/users/me/messages/")) {
         const messageCount = getBatchRequestCount(init?.body, "messages");
@@ -122,7 +134,7 @@ describe("refreshMailboxMessages", () => {
           },
         },
       );
-    };
+    });
 
     try {
       const result = await refreshMailboxMessages("token", {
@@ -150,8 +162,8 @@ describe("getGmailMessageCount", () => {
     const originalFetch = globalThis.fetch;
     let requestedUrl = "";
 
-    globalThis.fetch = async (input) => {
-      requestedUrl = String(input);
+    setFetch(async (input) => {
+      requestedUrl = getRequestUrl(input);
       return Response.json({
         messages: [
           { id: "message-1", threadId: "thread-1" },
@@ -160,7 +172,7 @@ describe("getGmailMessageCount", () => {
         ],
         resultSizeEstimate: 201,
       });
-    };
+    });
 
     try {
       expect(
@@ -183,7 +195,7 @@ describe("getGmailMessageCount", () => {
   test("deduplicates Gmail threads for thread-based unread counts", async () => {
     const originalFetch = globalThis.fetch;
 
-    globalThis.fetch = async () =>
+    setFetch(async () =>
       Response.json({
         messages: [
           { id: "message-1", threadId: "thread-1" },
@@ -191,7 +203,8 @@ describe("getGmailMessageCount", () => {
           { id: "message-3", threadId: "thread-2" },
         ],
         resultSizeEstimate: 3,
-      });
+      }),
+    );
 
     try {
       expect(
@@ -213,12 +226,12 @@ describe("listGmailMessageIds", () => {
     const originalFetch = globalThis.fetch;
     let requestedUrl = "";
 
-    globalThis.fetch = async (input) => {
-      requestedUrl = String(input);
+    setFetch(async (input) => {
+      requestedUrl = getRequestUrl(input);
       return Response.json({
         messages: [],
       });
-    };
+    });
 
     try {
       await listGmailMessageIds("token", { mailbox: "unread" });
@@ -236,8 +249,8 @@ describe("listMessagesWithDetails", () => {
   test("filters spam and trash out of unread mailbox details", async () => {
     const originalFetch = globalThis.fetch;
 
-    globalThis.fetch = async (input, init) => {
-      const url = String(input);
+    setFetch(async (input, init) => {
+      const url = getRequestUrl(input);
       if (url.includes("/gmail/v1/users/me/messages") && !url.includes("/batch/")) {
         return Response.json({
           messages: [
@@ -249,7 +262,7 @@ describe("listMessagesWithDetails", () => {
         });
       }
 
-      if (String(init?.body).includes("/gmail/v1/users/me/messages/")) {
+      if (getRequestBody(init?.body).includes("/gmail/v1/users/me/messages/")) {
         return new Response(
           createBatchResponse("message_boundary", [
             {
@@ -295,7 +308,7 @@ describe("listMessagesWithDetails", () => {
           },
         },
       );
-    };
+    });
 
     try {
       const result = await listMessagesWithDetails("token", { mailbox: "unread" });
@@ -312,11 +325,11 @@ describe("Gmail watch and history", () => {
     const originalFetch = globalThis.fetch;
     const calls: Array<{ body?: BodyInit | null; method?: string; url: string }> = [];
 
-    globalThis.fetch = async (input, init) => {
+    setFetch(async (input, init) => {
       calls.push({
         body: init?.body,
         method: init?.method,
-        url: String(input),
+        url: getRequestUrl(input),
       });
       return calls.length === 1
         ? Response.json({
@@ -324,7 +337,7 @@ describe("Gmail watch and history", () => {
             historyId: "123",
           })
         : new Response(null, { status: 204 });
-    };
+    });
 
     try {
       const watch = await watchGmailMailbox("token", "projects/project/topics/gmail");
@@ -338,7 +351,7 @@ describe("Gmail watch and history", () => {
         method: "POST",
         url: "https://gmail.googleapis.com/gmail/v1/users/me/watch",
       });
-      expect(JSON.parse(String(calls[0]?.body))).toEqual({
+      expect(JSON.parse(getRequestBody(calls[0]?.body))).toEqual({
         topicName: "projects/project/topics/gmail",
       });
       expect(calls[1]).toMatchObject({
@@ -354,8 +367,8 @@ describe("Gmail watch and history", () => {
     const originalFetch = globalThis.fetch;
     let requestedUrl = "";
 
-    globalThis.fetch = async (input) => {
-      requestedUrl = String(input);
+    setFetch(async (input) => {
+      requestedUrl = getRequestUrl(input);
       return Response.json({
         history: [
           {
@@ -373,7 +386,7 @@ describe("Gmail watch and history", () => {
         historyId: "110",
         nextPageToken: "next",
       });
-    };
+    });
 
     try {
       expect(
@@ -398,7 +411,7 @@ describe("Gmail watch and history", () => {
   test("marks an expired Gmail history cursor for recovery", async () => {
     const originalFetch = globalThis.fetch;
 
-    globalThis.fetch = async () =>
+    setFetch(async () =>
       Response.json(
         {
           error: {
@@ -408,7 +421,8 @@ describe("Gmail watch and history", () => {
           },
         },
         { status: 404 },
-      );
+      ),
+    );
 
     try {
       expect(

@@ -1,18 +1,18 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { jsx } from "react/jsx-runtime";
+import { describe, expect, test, vi } from "vite-plus/test";
 import { Quieter, QuieterApiError } from "../src";
 
+vi.mock("@react-email/render", () => ({
+  render: async () => "<strong>Rendered html</strong>",
+}));
+
+const getRequestBody = (body: BodyInit | null | undefined) =>
+  typeof body === "string" ? body : "";
+
+const getRequestUrl = (input: RequestInfo | URL) =>
+  typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+
 describe("Quieter", () => {
-  beforeEach(() => {
-    mock.module("@react-email/render", () => ({
-      render: async () => "<strong>Rendered html</strong>",
-    }));
-  });
-
-  afterEach(() => {
-    mock.restore();
-  });
-
   test("sends provider-style payloads to /api/v1/send", async () => {
     const calls: Array<{ init?: RequestInit; input: RequestInfo | URL }> = [];
     const client = new Quieter({
@@ -33,9 +33,9 @@ describe("Quieter", () => {
     });
 
     expect(result).toEqual({ messageId: "message-1", sent: true });
-    expect(String(calls[0]?.input)).toBe("https://example.com/api/v1/send");
+    expect(getRequestUrl(calls[0]!.input)).toBe("https://example.com/api/v1/send");
     expect(new Headers(calls[0]?.init?.headers).get("authorization")).toBe("Bearer quieter_test");
-    expect(JSON.parse(String(calls[0]?.init?.body))).toMatchObject({
+    expect(JSON.parse(getRequestBody(calls[0]?.init?.body))).toMatchObject({
       from: "Demo <demo@example.com>",
       html: "<strong>It works</strong>",
     });
@@ -46,7 +46,7 @@ describe("Quieter", () => {
     const client = new Quieter({
       apiKey: "quieter_test",
       fetch: async (_input, init) => {
-        body = JSON.parse(String(init?.body));
+        body = JSON.parse(getRequestBody(init?.body));
         return Response.json({ messageId: "message-1", sent: true }, { status: 201 });
       },
     });

@@ -55,9 +55,7 @@ export const ingestPolarEvents = async (
     organizationId?: string;
   }>,
 ) => {
-  await (
-    await getPolarClient()
-  ).events.ingest({
+  await getPolarClient().events.ingest({
     events,
   });
 };

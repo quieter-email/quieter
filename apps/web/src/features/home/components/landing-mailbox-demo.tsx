@@ -1,36 +1,21 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
 import { domAnimation, LazyMotion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
 import { LandingMailboxMessagesPanel } from "~/features/home/components/landing-mailbox-messages-panel";
 import { MailSidebar } from "~/features/navigation/components/mail-sidebar";
-import {
-  getLandingDemoMailboxes,
-  LANDING_DEMO_MAILBOX_ID,
-  resetLandingDemoMail,
-} from "~/lib/gmail/demo-mail";
+import { getLandingDemoMailboxes, LANDING_DEMO_MAILBOX_ID } from "~/lib/gmail/demo-mail";
 import { type MailboxCategory } from "~/lib/gmail/gmail";
-import { getMailboxThreadQueriesKey } from "~/lib/gmail/thread-query";
 
 const landingMailboxData = getLandingDemoMailboxes();
 
 export const LandingMailboxDemo = () => {
-  const queryClient = useQueryClient();
   const [activeMailbox, setActiveMailbox] = useState<MailboxCategory>("inbox");
   const [messageId, setMessageId] = useState<string | null>(null);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-
-  useEffect(() => {
-    resetLandingDemoMail();
-    void queryClient.removeQueries({ queryKey: ["messages", LANDING_DEMO_MAILBOX_ID] });
-    void queryClient.removeQueries({
-      queryKey: getMailboxThreadQueriesKey(LANDING_DEMO_MAILBOX_ID),
-    });
-  }, [queryClient]);
 
   const selectMailbox = (mailbox: MailboxCategory) => {
     if (mailbox === activeMailbox) return;

@@ -1,7 +1,7 @@
 "use client";
 
 import type { RouterOutputs } from "@quieter/orpc";
-import { Cancel01Icon, ThumbsDownIcon, ThumbsUpIcon } from "@hugeicons/core-free-icons";
+import { Cancel01Icon, Copy01Icon, ThumbsDownIcon, ThumbsUpIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -103,10 +103,25 @@ export const GmailUsefulDetailCard = ({
     detail.kind === "verification_code" ? detail.code : (detail.trackingNumber ?? detail.reference);
   const metadata = getDetailMetadata(detail);
   const detailText = getDetailText(detail, metadata);
+  const isVerificationCode = detail.kind === "verification_code" && !!detail.code;
   const feedback = feedbackMutation.isError
     ? detail.feedback
     : (feedbackMutation.variables?.feedback ?? detail.feedback);
-  const content = (
+  const content = isVerificationCode ? (
+    <span className="block min-w-0">
+      <span className="block text-xs/4 font-medium text-muted-foreground">
+        {detailText.headline}
+      </span>
+      <span className="mt-2 block font-mono text-xl font-medium tracking-widest text-foreground">
+        {detail.code}
+      </span>
+      {detailText.kicker && (
+        <span className="mt-2 block text-xs/4 wrap-break-word text-muted-foreground">
+          {detailText.kicker}
+        </span>
+      )}
+    </span>
+  ) : (
     <span className="block min-w-0">
       <span className="block text-sm/5 font-semibold wrap-break-word text-foreground">
         {detailText.headline}
@@ -132,10 +147,9 @@ export const GmailUsefulDetailCard = ({
     <div className="relative">
       <article
         className={cn(
-          "relative z-10 grid min-w-0 grid-cols-1 items-start gap-x-3 gap-y-2 rounded-xl border px-4 py-3.5 shadow-xs sm:grid-cols-[minmax(0,1fr)_auto]",
+          "relative z-10 grid min-w-0 grid-cols-1 items-start gap-x-3 gap-y-2 rounded-xl bg-card px-4 py-3.5 shadow-xs sm:grid-cols-[minmax(0,1fr)_auto]",
           {
-            "border-border/70 bg-card": detail.kind !== "security_alert",
-            "border-destructive/30 bg-card": detail.kind === "security_alert",
+            "bg-label-red": detail.kind === "security_alert",
           },
         )}
       >
@@ -154,13 +168,14 @@ export const GmailUsefulDetailCard = ({
         <div className="flex shrink-0 items-center gap-0.5 justify-self-end">
           {copyValue && (
             <Button
-              className="mr-1 h-8 px-2.5 text-xs"
+              className="mr-1 h-8 gap-1.5 rounded-lg bg-secondary/65 px-2.5 text-xs hover:bg-secondary"
               onClick={() => void copyText(copyValue)}
               size="sm"
               type="button"
-              variant="outline"
+              variant="ghost"
             >
-              Copy
+              <HugeiconsIcon aria-hidden className="size-3.5" icon={Copy01Icon} />
+              {isVerificationCode ? "Copy code" : "Copy"}
             </Button>
           )}
 

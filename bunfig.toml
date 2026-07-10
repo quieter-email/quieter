@@ -1,2 +1,2 @@
 [install]
-publicHoistPattern = ["@types/*", "bun-types", "nitro*", "oxlint*", "oxfmt*"]
+publicHoistPattern = ["@types/*", "bun-types", "nitro*"]

@@ -8,11 +8,13 @@ import {
   ArrowUp01Icon,
   Delete01Icon,
   Edit01Icon,
-  Search01Icon,
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
+import {
+  mailboxLabelColorSchema,
+  type MailboxLabelColor,
+} from "@quieter/mail/mailbox-organization";
 import {
   areStructuredMailSearchesEqual,
   parseStructuredSearchQuery,
@@ -22,6 +24,17 @@ import {
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@quieter/ui/dialog";
+import { Field, FieldLabel } from "@quieter/ui/field";
 import {
   FullPageDialog,
   FullPageDialogBody,
@@ -37,6 +50,8 @@ import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { MailboxColorPicker } from "~/features/message-labels/components/mailbox-color-picker";
+import { mailboxLabelDotClassNameByColor } from "~/features/message-labels/domain/mailbox-label-presentation";
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
 import {
   getManagedRulesQueryKey,
@@ -55,6 +70,11 @@ type ManagedMailboxOrganizerProps = {
 };
 
 type ManagedSavedView = RouterOutputs["mail"]["listManagedSavedViews"][number];
+type EditingView = {
+  color: MailboxLabelColor;
+  name: string;
+  view: ManagedSavedView;
+};
 type SavedViewsSectionProps = {
   currentSearch: ReturnType<typeof parseStructuredSearchQuery>;
   emptyMessage: string;
@@ -64,6 +84,8 @@ type SavedViewsSectionProps = {
 };
 
 const getSearchFromStoredValue = (value: unknown) => structuredMailSearchSchema.parse(value);
+const getSavedViewColor = (color: string | null) =>
+  color ? mailboxLabelColorSchema.parse(color) : "gray";
 
 const SavedViewsSection = ({
   currentSearch,
@@ -98,7 +120,13 @@ const SavedViewsSection = ({
               type="button"
               variant="ghost"
             >
-              <HugeiconsIcon aria-hidden className="size-3.5 shrink-0" icon={Search01Icon} />
+              <span
+                aria-hidden
+                className={cn(
+                  "size-2.5 shrink-0 rounded-full",
+                  mailboxLabelDotClassNameByColor[getSavedViewColor(view.color)],
+                )}
+              />
               <span className="truncate">{view.name}</span>
             </SidebarNavItem>
           );
@@ -116,13 +144,16 @@ export const ManagedMailboxOrganizer = ({
 }: ManagedMailboxOrganizerProps) => {
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
+  const [newViewColor, setNewViewColor] = useState<MailboxLabelColor>("gray");
   const [viewName, setViewName] = useState("");
+  const [editingView, setEditingView] = useState<EditingView | null>(null);
   const [ruleName, setRuleName] = useState("");
   const [ruleQueryDraft, setRuleQueryDraft] = useState<string | null>(null);
   const ruleQuery = ruleQueryDraft ?? searchQuery;
   const [ruleMatchMode, setRuleMatchMode] = useState<"all" | "any">("all");
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [selectedRuleLabelIds, setSelectedRuleLabelIds] = useState<string[]>([]);
+  const selectedRuleLabelIdSet = new Set(selectedRuleLabelIds);
   const [activeBackfillId, setActiveBackfillId] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ count: number; samples: Array<{ id: string }> } | null>(
     null,
@@ -165,7 +196,7 @@ export const ManagedMailboxOrganizer = ({
     try {
       await createViewMutation.mutateAsync({
         definition: {
-          color: null,
+          color: newViewColor,
           icon: null,
           name,
           search: currentSearch,
@@ -174,10 +205,33 @@ export const ManagedMailboxOrganizer = ({
         mailboxId,
         shared,
       });
+      setNewViewColor("gray");
       setViewName("");
       await invalidateViews();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save view.");
+    }
+  };
+
+  const saveViewEdit = async () => {
+    if (!editingView?.name.trim()) return;
+
+    try {
+      await updateViewMutation.mutateAsync({
+        definition: {
+          color: editingView.color,
+          icon: editingView.view.icon,
+          name: editingView.name.trim(),
+          search: getSearchFromStoredValue(editingView.view.search),
+          sort: editingView.view.sort,
+        },
+        mailboxId,
+        viewId: editingView.view.id,
+      });
+      setEditingView(null);
+      await invalidateViews();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update view.");
     }
   };
 
@@ -281,60 +335,93 @@ export const ManagedMailboxOrganizer = ({
                 <FullPageDialogDescription className="mt-1">
                   Save the current search for quick access from the sidebar.
                 </FullPageDialogDescription>
-                <div className="mt-5 flex gap-2">
-                  <Input
-                    aria-label="Saved view name"
-                    onChange={(event) => setViewName(event.target.value)}
-                    placeholder="View name"
-                    size="sm"
-                    value={viewName}
-                  />
-                  <Button
-                    disabled={!viewName.trim() || createViewMutation.isPending}
-                    onClick={() => void saveView(false)}
-                    size="sm"
-                    type="button"
-                  >
-                    Save mine
-                  </Button>
-                  {canManage ? (
+                <div className="mt-5 rounded-xl bg-secondary/40 p-3 squircle">
+                  <div className="flex gap-2">
+                    <Input
+                      aria-label="Saved view name"
+                      className="border-0 bg-background/70 shadow-none"
+                      onChange={(event) => setViewName(event.target.value)}
+                      placeholder="View name"
+                      size="sm"
+                      value={viewName}
+                    />
                     <Button
                       disabled={!viewName.trim() || createViewMutation.isPending}
-                      onClick={() => void saveView(true)}
+                      onClick={() => void saveView(false)}
                       size="sm"
                       type="button"
-                      variant="outline"
                     >
-                      Save shared
+                      Save mine
                     </Button>
-                  ) : null}
+                    {canManage ? (
+                      <Button
+                        disabled={!viewName.trim() || createViewMutation.isPending}
+                        onClick={() => void saveView(true)}
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        Save shared
+                      </Button>
+                    ) : null}
+                  </div>
+                  <MailboxColorPicker
+                    className="mt-3"
+                    label="Saved view color"
+                    onChange={setNewViewColor}
+                    value={newViewColor}
+                  />
                 </div>
-                <div className="mt-5 divide-y">
+                <div className="mt-5 space-y-1">
                   {views.map((view, index) => (
-                    <div className="flex items-center gap-3 py-2" key={view.id}>
-                      <HugeiconsIcon
+                    <div
+                      className="flex items-center gap-3 rounded-lg p-2 squircle hover:bg-secondary/25"
+                      key={view.id}
+                    >
+                      <span
                         aria-hidden
-                        className="size-4 text-muted-foreground"
-                        icon={Search01Icon}
+                        className={cn(
+                          "size-3 shrink-0 rounded-full",
+                          mailboxLabelDotClassNameByColor[getSavedViewColor(view.color)],
+                        )}
                       />
                       <span className="min-w-0 flex-1 truncate text-sm">{view.name}</span>
                       <span className="text-xs text-muted-foreground">
                         {view.ownerUserId === null ? "Shared" : "Personal"}
                       </span>
-                      {areStructuredMailSearchesEqual(
-                        currentSearch,
-                        getSearchFromStoredValue(view.search),
-                      ) &&
-                      (view.ownerUserId !== null || canManage) ? (
+                      {(view.ownerUserId !== null || canManage) && (
+                        <IconButtonTooltip label={`Edit ${view.name}`}>
+                          <Button
+                            aria-label={`Edit ${view.name}`}
+                            onClick={() =>
+                              setEditingView({
+                                color: getSavedViewColor(view.color),
+                                name: view.name,
+                                view,
+                              })
+                            }
+                            size="icon-sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <HugeiconsIcon aria-hidden icon={Edit01Icon} />
+                          </Button>
+                        </IconButtonTooltip>
+                      )}
+                      {view.ownerUserId !== null || canManage ? (
                         <Button
-                          disabled={updateViewMutation.isPending}
+                          disabled={
+                            updateViewMutation.isPending ||
+                            areStructuredMailSearchesEqual(
+                              currentSearch,
+                              getSearchFromStoredValue(view.search),
+                            )
+                          }
                           onClick={() => {
                             void updateViewMutation
                               .mutateAsync({
                                 definition: {
-                                  color: view.color
-                                    ? mailboxLabelColorSchema.parse(view.color)
-                                    : null,
+                                  color: getSavedViewColor(view.color),
                                   icon: view.icon,
                                   name: view.name,
                                   search: currentSearch,
@@ -349,7 +436,7 @@ export const ManagedMailboxOrganizer = ({
                           type="button"
                           variant="ghost"
                         >
-                          Update
+                          Use current search
                         </Button>
                       ) : null}
                       {view.ownerUserId === null ? (
@@ -359,9 +446,7 @@ export const ManagedMailboxOrganizer = ({
                             void createViewMutation
                               .mutateAsync({
                                 definition: {
-                                  color: view.color
-                                    ? mailboxLabelColorSchema.parse(view.color)
-                                    : null,
+                                  color: getSavedViewColor(view.color),
                                   icon: view.icon,
                                   name: `${view.name} copy`,
                                   search: getSearchFromStoredValue(view.search),
@@ -499,14 +584,14 @@ export const ManagedMailboxOrganizer = ({
                           </Button>
                         ))}
                       </div>
-                      <div className="space-y-2 rounded-lg border p-3">
+                      <div className="space-y-2 rounded-lg bg-secondary/40 p-3 squircle">
                         <p className="text-xs font-medium text-muted-foreground">Apply labels</p>
                         {(labelsData ?? []).flatMap((label) =>
                           label.type === "user"
                             ? [
                                 <label className="flex items-center gap-2 text-sm" key={label.id}>
                                   <Checkbox
-                                    checked={selectedRuleLabelIds.includes(label.id)}
+                                    checked={selectedRuleLabelIdSet.has(label.id)}
                                     onCheckedChange={(checked) =>
                                       setSelectedRuleLabelIds((current) =>
                                         checked
@@ -748,6 +833,60 @@ export const ManagedMailboxOrganizer = ({
           </FullPageDialogBody>
         </FullPageDialogContent>
       </FullPageDialog>
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) setEditingView(null);
+        }}
+        open={!!editingView}
+      >
+        <DialogContent className="w-[min(92vw,24rem)] border-0 bg-popover shadow-lg">
+          <form
+            action={() => {
+              void saveViewEdit();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Edit saved view</DialogTitle>
+              <DialogDescription>Change its name and sidebar color.</DialogDescription>
+            </DialogHeader>
+            <DialogBody className="space-y-5 bg-secondary/25">
+              <Field>
+                <FieldLabel>Name</FieldLabel>
+                <Input
+                  autoFocus
+                  className="border-0 bg-background/70 shadow-none"
+                  disabled={updateViewMutation.isPending}
+                  onChange={(event) => {
+                    const name = event.currentTarget.value;
+                    setEditingView((current) => (current ? { ...current, name } : current));
+                  }}
+                  value={editingView?.name ?? ""}
+                />
+              </Field>
+              <Field>
+                <FieldLabel>Color</FieldLabel>
+                <MailboxColorPicker
+                  label="Saved view color"
+                  onChange={(color) =>
+                    setEditingView((current) => (current ? { ...current, color } : current))
+                  }
+                  value={editingView?.color ?? "gray"}
+                />
+              </Field>
+            </DialogBody>
+            <DialogFooter>
+              <DialogCloseButton variant="ghost">Cancel</DialogCloseButton>
+              <Button
+                disabled={updateViewMutation.isPending || !editingView?.name.trim()}
+                size="sm"
+                type="submit"
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test";
 import { buildSendMimeMessage, sendMessageInputSchema } from "../src/send";
 
 describe("sendMessageInputSchema", () => {
@@ -73,6 +73,7 @@ describe("buildSendMimeMessage", () => {
           {
             content: Buffer.from("hello").toString("base64"),
             contentType: "text/plain",
+            disposition: "attachment",
             filename: "hello.txt",
           },
         ],
@@ -81,6 +82,7 @@ describe("buildSendMimeMessage", () => {
         headers: [{ name: "X-Customer", value: "acme" }],
         html: "<strong>Hello</strong>",
         subject: "Hello",
+        tags: [],
         text: "Hello",
         to: ["to@example.com"],
       },
@@ -107,6 +109,7 @@ describe("buildSendMimeMessage", () => {
         from: "demo@example.com",
         headers: [{ name: "X-Long", value: "x".repeat(160) }],
         subject: "Hello ".repeat(40),
+        tags: [],
         text: "a".repeat(180),
         to: ["to@example.com"],
       },

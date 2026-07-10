@@ -216,9 +216,7 @@ export const createBillingCheckout = async (input: {
 
   if (activeSubscription) {
     if (activeSubscription.plan !== input.product) {
-      const updatedSubscription = await (
-        await getPolarClient()
-      ).subscriptions.update({
+      const updatedSubscription = await getPolarClient().subscriptions.update({
         id: activeSubscription.providerSubscriptionId,
         subscriptionUpdate: {
           productId: providerProductId,
@@ -236,7 +234,7 @@ export const createBillingCheckout = async (input: {
     product: input.product,
     userId: input.userId,
   });
-  const polar = await getPolarClient();
+  const polar = getPolarClient();
   const externalCustomerId = `organization:${input.organizationId}`;
   let teamCustomerId: string | undefined;
 
@@ -286,9 +284,7 @@ export const createBillingPortal = async (input: {
     return { portalUrl: returnUrl };
   }
 
-  const session = await (
-    await getPolarClient()
-  ).customerSessions.create(
+  const session = await getPolarClient().customerSessions.create(
     createBillingPortalSession({
       organizationId: input.organizationId,
       returnUrl,
@@ -470,7 +466,7 @@ export const syncBillingCheckout = async (input: { checkoutId: string; userId: s
     return { synced: false };
   }
 
-  const polar = await getPolarClient();
+  const polar = getPolarClient();
   const checkout = await polar.checkouts.get({ id: input.checkoutId });
   const checkoutUserId = checkout.metadata[BILLING_METADATA_USER_ID];
 

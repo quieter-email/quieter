@@ -19,15 +19,7 @@
   },
   "scripts": {
     "backfill:managed-mail-r2": "bun --env-file=../../.env.local scripts/backfill-managed-mail-r2.ts",
-    "check:boundaries": "bun scripts/check-import-boundaries.ts",
-    "check:bundles": "bun scripts/check-handler-bundles.ts",
-    "dev": "bun ../../scripts/sst.ts dev",
-    "fmt": "oxfmt --config ../../oxfmt.json .",
-    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
-    "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/aws",
-    "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/aws",
-    "test": "bun test",
-    "typecheck": "tsgo --noEmit"
+    "dev": "bun ../../scripts/sst.ts dev"
   },
   "dependencies": {
     "@aws-sdk/client-apigatewaymanagementapi": "catalog:",
@@ -47,9 +39,7 @@
   "devDependencies": {
     "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
-    "@typescript/native-preview": "catalog:",
-    "oxfmt": "catalog:",
-    "oxlint": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
   }
 }

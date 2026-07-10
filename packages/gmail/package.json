@@ -6,14 +6,6 @@
     ".": "./src/service.ts",
     "./compose": "./src/compose/draft-parser.ts"
   },
-  "scripts": {
-    "fmt": "oxfmt --config ../../oxfmt.json .",
-    "fmt:check": "oxfmt --check --config ../../oxfmt.json .",
-    "lint": "bun --cwd ../.. oxlint --config oxlint.json packages/gmail",
-    "lint:fix": "bun --cwd ../.. oxlint --fix --config oxlint.json packages/gmail",
-    "test": "bun test",
-    "typecheck": "tsgo --noEmit"
-  },
   "dependencies": {
     "@quieter/mail": "workspace:*",
     "zod": "catalog:"
@@ -22,9 +14,7 @@
     "@quieter/config": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "@typescript/native-preview": "catalog:",
-    "oxfmt": "catalog:",
-    "oxlint": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
   }
 }

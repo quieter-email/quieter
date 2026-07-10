@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test";
 import { AI_USAGE_MARKUP_BASIS_POINTS, applyAiUsageMarkup } from "../src";
 import { BILLING_USAGE_KINDS } from "../src/credits";
 

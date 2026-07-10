@@ -63,12 +63,10 @@ const useChatSidebarActions = ({
   const deleteChatMutation = useMutation({
     ...orpc.chat.delete.mutationOptions(),
     onSuccess: async (_result, variables) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: getChatsQueryKey(variables.mailboxId) }),
-        queryClient.removeQueries({
-          queryKey: getChatQueryKey(variables.mailboxId, variables.chatId),
-        }),
-      ]);
+      queryClient.removeQueries({
+        queryKey: getChatQueryKey(variables.mailboxId, variables.chatId),
+      });
+      await queryClient.invalidateQueries({ queryKey: getChatsQueryKey(variables.mailboxId) });
     },
   });
 

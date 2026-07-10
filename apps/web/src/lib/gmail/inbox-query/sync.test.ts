@@ -1,5 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test";
 import type { MessageListItem, ThreadMessagesResult } from "../gmail";
 import type { MessagesQueryData } from "./data";
 import { getThreadQueryKey } from "../thread-query";

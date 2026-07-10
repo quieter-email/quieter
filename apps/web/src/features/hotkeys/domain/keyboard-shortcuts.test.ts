@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test";
 import { KEYBOARD_SHORTCUT_CATEGORIES, KEYBOARD_SHORTCUTS } from "./keyboard-shortcuts";
 
 const bindingKey = (key: unknown) => (typeof key === "string" ? key : JSON.stringify(key));

@@ -527,6 +527,7 @@ export const gmailLabel = pgTable(
       .references(() => mailbox.id, { onDelete: "cascade" }),
     labelId: text("labelId").notNull(),
     name: text("name").notNull(),
+    color: text("color").notNull().default("gray"),
     description: text("description"),
     inclusionCriteria: text("inclusionCriteria"),
     createdAt: timestamp("createdAt").notNull(),

@@ -19,17 +19,31 @@ type SlotItem = {
 const primitive = (value: unknown) =>
   value == null || ["bigint", "boolean", "number", "string"].includes(typeof value);
 
+const primitiveSignature = (value: unknown) => {
+  switch (typeof value) {
+    case "bigint":
+    case "boolean":
+    case "number":
+    case "string":
+      return `${value}`;
+    case "undefined":
+      return "undefined";
+    default:
+      return value === null ? "null" : typeof value;
+  }
+};
+
 const signature = (node: ReactNode): string =>
   Children.toArray(node)
     .map((child, index) => {
       if (!isValidElement<{ children?: ReactNode }>(child)) {
-        return `${typeof child}:${String(child)}`;
+        return `${typeof child}:${primitiveSignature(child)}`;
       }
 
       const props = Object.entries(child.props)
         .flatMap(([name, value]) =>
           name !== "children" && name !== "className" && primitive(value)
-            ? [`${name}:${String(value)}`]
+            ? [`${name}:${primitiveSignature(value)}`]
             : [],
         )
         .join(",");

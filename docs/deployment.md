@@ -67,9 +67,9 @@ Mail bearer tokens and workflow authentication values are SST linked secrets. Us
 wrapper so the correct config, stage, and local AWS environment are applied:
 
 ```bash
-bun run sst secret set MailIngestToken <value>
-bun run sst secret set ChatGenerationStartToken <value>
-bun run sst secret set GmailLiveSyncTokenSecret <value>
+vp run sst -- secret set MailIngestToken <value>
+vp run sst -- secret set ChatGenerationStartToken <value>
+vp run sst -- secret set GmailLiveSyncTokenSecret <value>
 ```
 
 The wrapper defaults to the `mail-dev` stage. Specify `--stage production` deliberately when

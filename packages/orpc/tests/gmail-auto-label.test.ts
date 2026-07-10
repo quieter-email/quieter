@@ -3,7 +3,7 @@ import {
   resolveAutoLabelDecisions,
   sanitizeAutoLabelSelection,
 } from "@quieter/ai/classify-gmail-message";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test";
 
 describe("Gmail auto-label selection", () => {
   test("drops the result when every available label was selected", () => {
