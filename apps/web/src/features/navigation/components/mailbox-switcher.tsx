@@ -179,9 +179,7 @@ const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => 
           showPin ? "grid-cols-[minmax(0,1fr)_auto_auto]" : "grid-cols-[minmax(0,1fr)_auto]",
         )}
       >
-        <p className="truncate text-sm/5  text-foreground">
-          {displayName || mailbox.emailAddress}
-        </p>
+        <p className="truncate text-sm/5 text-foreground">{displayName || mailbox.emailAddress}</p>
         {showPin ? (
           <div className={cn("flex items-center", { "row-span-2": showSecondRow })}>{action}</div>
         ) : null}
@@ -191,9 +189,7 @@ const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => 
         {showSecondRow ? (
           <>
             {displayName ? (
-              <p className="truncate text-xs/5  text-muted-foreground">
-                {mailbox.emailAddress}
-              </p>
+              <p className="truncate text-xs/5 text-muted-foreground">{mailbox.emailAddress}</p>
             ) : (
               <span />
             )}

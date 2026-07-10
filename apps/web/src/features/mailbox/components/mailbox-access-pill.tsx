@@ -1,6 +1,6 @@
 import { Pill } from "@quieter/ui/pill";
 
-type MailboxGrantRole = "manager" | "reader" | "responder";
+export type MailboxGrantRole = "manager" | "reader" | "responder";
 
 const mailboxAccessPresentation = {
   manager: { label: "Manager", tone: "access-manager" },

@@ -16,7 +16,10 @@ import { TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { MailboxAccessPill } from "~/features/mailbox/components/mailbox-access-pill";
+import {
+  MailboxAccessPill,
+  type MailboxGrantRole,
+} from "~/features/mailbox/components/mailbox-access-pill";
 import { fullOrganizationQueryOptions } from "~/features/settings/components/organization-settings/domain";
 import { organizationMailDomainsQueryOptions } from "~/features/settings/components/organization-settings/mail-domains";
 import {
@@ -973,7 +976,7 @@ export const MailboxesSettingsPanel = () => {
                                 {
                                   divisionId: division.id,
                                   mailboxId: selectedManagedMailboxDetails.mailbox.id,
-                                  role: value as "manager" | "reader" | "responder",
+                                  role: value as MailboxGrantRole,
                                 },
                                 {
                                   onError: (error) =>
@@ -1049,7 +1052,7 @@ export const MailboxesSettingsPanel = () => {
                               setManagedMailboxGrantMutation.mutate(
                                 {
                                   mailboxId: selectedManagedMailboxDetails.mailbox.id,
-                                  role: value as "manager" | "reader" | "responder",
+                                  role: value as MailboxGrantRole,
                                   userId: member.userId,
                                 },
                                 {

@@ -375,6 +375,7 @@ export const useMessageListSearchController = ({
       },
       true,
     );
+    suppressNextBlurCommit();
     blurSearchField();
   };
 
@@ -689,6 +690,7 @@ export const useMessageListSearchController = ({
 
   const clearSearch = () => {
     commitState({ filters: [], text: "" }, true);
+    suppressNextBlurCommit();
     blurSearchField();
   };
 
