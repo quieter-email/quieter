@@ -57,6 +57,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@v1
@@ -108,6 +110,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@v1

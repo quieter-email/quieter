@@ -5,7 +5,7 @@ import { cn } from "@quieter/ui/cn";
 import { Remark } from "react-remark";
 
 const markdownLink = ({ children, href, ...props }: ComponentPropsWithoutRef<"a">) => (
-  <a href={href} rel="noopener noreferrer" target="_blank" {...props}>
+  <a href={href} {...props} rel="noopener noreferrer" target="_blank">
     {children}
   </a>
 );

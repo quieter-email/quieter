@@ -1,6 +1,7 @@
 import { defineConfig } from "vite-plus";
 
 const dependencyBuild = [{ task: "build", from: "dependencies" as const }];
+const migrationRunCommand = "bun --env-file=../../.env.local scripts/run-migrations.ts";
 
 export default defineConfig({
   run: {
@@ -12,7 +13,7 @@ export default defineConfig({
         cache: false,
       },
       "db:deploy": {
-        command: "bun --env-file=../../.env.local scripts/run-migrations.ts",
+        command: migrationRunCommand,
         dependsOn: dependencyBuild,
         cache: false,
       },
@@ -22,7 +23,7 @@ export default defineConfig({
         cache: false,
       },
       "db:migrate": {
-        command: "bun --env-file=../../.env.local scripts/run-migrations.ts",
+        command: migrationRunCommand,
         dependsOn: dependencyBuild,
         cache: false,
       },
