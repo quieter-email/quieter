@@ -19,8 +19,6 @@
   },
   "scripts": {
     "backfill:managed-mail-r2": "bun --env-file=../../.env.local scripts/backfill-managed-mail-r2.ts",
-    "check:boundaries": "bun scripts/check-import-boundaries.ts",
-    "check:bundles": "bun scripts/check-handler-bundles.ts",
     "dev": "bun ../../scripts/sst.ts dev"
   },
   "dependencies": {

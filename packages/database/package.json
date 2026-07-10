@@ -6,14 +6,6 @@
     "./client": "./src/client.ts",
     "./schema": "./src/schema.ts"
   },
-  "scripts": {
-    "db:check": "bun scripts/check-migrations.ts && bun scripts/check-schema-drift.ts && bun scripts/migration-safety.ts",
-    "db:deploy": "bun --env-file=../../.env.local scripts/run-migrations.ts",
-    "db:generate": "bun scripts/generate-migration.ts",
-    "db:migrate": "bun --env-file=../../.env.local scripts/run-migrations.ts",
-    "db:push": "bun --env-file=../../.env.local scripts/push-schema.ts",
-    "db:test-migrations": "bun scripts/test-migrations.ts"
-  },
   "dependencies": {
     "@quieter/env": "workspace:*",
     "drizzle-orm": "catalog:",
