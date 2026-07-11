@@ -59,6 +59,7 @@ const createReadOnlyMailboxActions = () =>
     untrashThread: async () => {},
     updateMessageLabels: async () => {},
     updateThreadLabels: async () => {},
+    updateThreadsLabels: async () => {},
   }) satisfies MailboxActions;
 
 export const MailboxMessagesPanel = ({

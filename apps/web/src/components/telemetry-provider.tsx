@@ -2,7 +2,6 @@
 
 import { useConsentManager } from "@c15t/react";
 import { useLocation } from "@tanstack/react-router";
-import { SpeedInsights } from "@vercel/speed-insights/react";
 import { type PropsWithChildren, useEffect, useRef } from "react";
 import { authClient } from "~/lib/auth";
 
@@ -88,10 +87,5 @@ export const TelemetryProvider = ({ children }: PropsWithChildren) => {
     }
   }, [measurementConsented, sessionState.isPending, userEmail, userId, userName]);
 
-  return (
-    <>
-      {children}
-      {measurementConsented ? <SpeedInsights /> : null}
-    </>
-  );
+  return children;
 };

@@ -13,7 +13,7 @@ const selectTriggerVariants = cva(
       variant: {
         default: "w-full border border-input bg-background-light text-foreground shadow-sm",
         ghost:
-          "w-auto bg-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground active:bg-muted/80 active:text-foreground",
+          "w-auto bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground active:bg-muted/80 active:text-foreground",
       },
       size: {
         sm: "h-8 px-3 text-[13px] [&_svg]:size-3.5",
@@ -163,7 +163,7 @@ export const SelectItem = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.Item>) => (
   <SelectPrimitive.Item
     className={cn(
-      "relative flex min-h-9 cursor-default scroll-my-1 items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm text-foreground transition-transform duration-100 ease-out outline-none select-none squircle active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted/60 motion-reduce:transition-none motion-reduce:active:scale-100",
+      "relative flex min-h-9 cursor-default scroll-my-1 items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm text-foreground transition-transform duration-100 ease-out outline-none select-none squircle active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
       className,
     )}
     {...props}

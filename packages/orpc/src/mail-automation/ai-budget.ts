@@ -8,7 +8,8 @@ export const MAIL_AUTOMATION_AI_PAUSED_MESSAGE =
   "AI automation is paused until team credits are available.";
 
 const mailAutomationAiRuntimeEnabled = () =>
-  serverEnv.QUIETER_GMAIL_AI_AUTOMATION_ENABLED ?? serverEnv.VERCEL_ENV === "production";
+  serverEnv.QUIETER_GMAIL_AI_AUTOMATION_ENABLED ??
+  serverEnv.QUIETER_DEPLOYMENT_ENV === "production";
 
 export const resolveMailAutomationAiBudgetStatus = (input: {
   hasAccess: boolean;

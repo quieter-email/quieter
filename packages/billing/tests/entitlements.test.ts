@@ -42,35 +42,35 @@ describe("local development billing entitlement", () => {
       isLocalDevelopmentBillingEntitlementEnabled({
         NODE_ENV: "development",
         QUIETER_LOCAL_BILLING_BYPASS: true,
-        VERCEL_ENV: undefined,
+        QUIETER_DEPLOYMENT_ENV: "local",
       }),
     ).toBe(true);
     expect(
       isLocalDevelopmentBillingEntitlementEnabled({
         NODE_ENV: "development",
         QUIETER_LOCAL_BILLING_BYPASS: undefined,
-        VERCEL_ENV: undefined,
+        QUIETER_DEPLOYMENT_ENV: "local",
       }),
     ).toBe(false);
     expect(
       isLocalDevelopmentBillingEntitlementEnabled({
         NODE_ENV: "development",
         QUIETER_LOCAL_BILLING_BYPASS: true,
-        VERCEL_ENV: "preview",
+        QUIETER_DEPLOYMENT_ENV: "preview",
       }),
     ).toBe(false);
     expect(
       isLocalDevelopmentBillingEntitlementEnabled({
         NODE_ENV: "production",
         QUIETER_LOCAL_BILLING_BYPASS: true,
-        VERCEL_ENV: "preview",
+        QUIETER_DEPLOYMENT_ENV: "preview",
       }),
     ).toBe(false);
     expect(
       isLocalDevelopmentBillingEntitlementEnabled({
         NODE_ENV: "test",
         QUIETER_LOCAL_BILLING_BYPASS: true,
-        VERCEL_ENV: undefined,
+        QUIETER_DEPLOYMENT_ENV: "local",
       }),
     ).toBe(false);
   });

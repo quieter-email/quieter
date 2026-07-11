@@ -708,6 +708,19 @@ export const createManagedDemoMailboxActions = (queryClient: QueryClient) => ({
   ) => {
     await updateManagedDemoThreadLabels(queryClient, threadId, changes);
   },
+  updateThreadsLabels: async (
+    updates: readonly {
+      threadId: string;
+      addLabelIds?: string[];
+      removeLabelIds?: string[];
+    }[],
+  ) => {
+    await Promise.all(
+      updates.map(({ threadId, ...changes }) =>
+        updateManagedDemoThreadLabels(queryClient, threadId, changes),
+      ),
+    );
+  },
 });
 
 const markManagedDemoThreadReadState = async (

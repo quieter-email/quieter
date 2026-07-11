@@ -38,7 +38,8 @@ ALTER DEFAULT PRIVILEGES FOR ROLE <migration-role> IN SCHEMA public
   GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO quieter_app;
 ```
 
-Use the `quieter_app` connection string for Vercel `DATABASE_URL` and application runtime secrets.
+Use the `quieter_app` connection string for the deployed Worker `DATABASE_URL` and application
+runtime secrets.
 Keep the schema-owner connection string only in GitHub's protected production
 `DATABASE_MIGRATION_URL` secret. After switching, rotate the previous owner password and remove every
 remote database URL from developer machines.

@@ -3,22 +3,22 @@ import { createBillingCheckoutMetadata, createBillingPortalSession } from "../sr
 import { resolvePolarServer } from "../src/polar";
 
 describe("Polar server selection", () => {
-  test("forces production for Vercel production deployments", () => {
+  test("forces production for production deployments", () => {
     expect(
       resolvePolarServer({
+        deploymentEnvironment: "production",
         nodeEnvironment: "production",
         polarSandbox: true,
-        vercelEnvironment: "production",
       }),
     ).toBe("production");
   });
 
-  test("allows explicit sandbox mode outside Vercel production", () => {
+  test("allows explicit sandbox mode outside production", () => {
     expect(
       resolvePolarServer({
+        deploymentEnvironment: "preview",
         nodeEnvironment: "production",
         polarSandbox: true,
-        vercelEnvironment: "preview",
       }),
     ).toBe("sandbox");
   });

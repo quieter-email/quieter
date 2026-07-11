@@ -215,7 +215,7 @@ const MessageRowContent = ({
   return (
     <div
       className={cn(
-        "relative flex h-17 items-stretch overflow-hidden rounded-lg transition-transform duration-100 ease-out motion-safe:has-[button:active]:scale-[0.98]",
+        "relative flex h-17 items-stretch overflow-hidden rounded-lg transition-[background-color,transform] duration-100 ease-out has-[button:active]:bg-muted/80 motion-safe:has-[button:active]:scale-[0.98] motion-reduce:transition-none motion-reduce:has-[button:active]:scale-100",
         {
           "bg-background-light/80": isSelected,
           "border border-border/80": isSelected,

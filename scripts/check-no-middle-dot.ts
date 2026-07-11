@@ -3,7 +3,15 @@ import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = join(fileURLToPath(new URL(".", import.meta.url)), "..");
-const ignoredSegments = new Set([".git", "build", "dist", "node_modules"]);
+const ignoredSegments = new Set([
+  ".agents",
+  ".git",
+  ".scratch",
+  ".sst",
+  "build",
+  "dist",
+  "node_modules",
+]);
 const textExtensions = new Set([
   ".cjs",
   ".css",

@@ -50,12 +50,10 @@ const memberRole = organizationAccessControl.newRole({
   apiKey: ["read"],
 });
 
-const baseURL =
-  serverEnv.BETTER_AUTH_URL ||
-  (serverEnv.VERCEL_URL && `https://${serverEnv.VERCEL_URL}`) ||
-  "http://localhost:3000";
+const baseURL = serverEnv.BETTER_AUTH_URL || "http://localhost:3000";
 const previewTrustedOrigins =
-  serverEnv.VERCEL_ENV === "preview" || serverEnv.QUIETER_PREVIEW_PERSONAS_ENABLED === true
+  serverEnv.QUIETER_DEPLOYMENT_ENV === "preview" ||
+  serverEnv.QUIETER_PREVIEW_PERSONAS_ENABLED === true
     ? ["https://*.preview.quieter.email"]
     : [];
 const trustedOrigins = [
@@ -100,6 +98,11 @@ const polarPlugin =
         ],
       })
     : null;
+const organizationApiKeyPlugin = apiKey({
+  configId: ORGANIZATION_API_KEY_CONFIG_ID,
+  defaultPrefix: "quieter_",
+  references: "organization",
+});
 
 export const getSessionWithOrganization = async (headers: Headers) => {
   const session = await auth.api.getSession({ headers });
@@ -244,7 +247,6 @@ export const auth = betterAuth({
     },
   },
   plugins: [
-    ...(polarPlugin ? [polarPlugin] : []),
     passkey(),
     organization({
       ac: organizationAccessControl,
@@ -265,11 +267,7 @@ export const auth = betterAuth({
         owner: ownerRole,
       },
     }),
-    apiKey({
-      configId: ORGANIZATION_API_KEY_CONFIG_ID,
-      defaultPrefix: "quieter_",
-      references: "organization",
-    }),
+    organizationApiKeyPlugin,
     magicLink({
       sendMagicLink: async ({ email, url }) => {
         await sendMagicLinkEmail({
@@ -280,8 +278,11 @@ export const auth = betterAuth({
     }),
     lastLoginMethod(),
     tanstackStartCookies(),
-  ],
+    ...(polarPlugin ? [polarPlugin] : []),
+  ] as const,
 });
+export const organizationApiKeyApi = auth.api as typeof auth.api &
+  Pick<typeof organizationApiKeyPlugin.endpoints, "verifyApiKey">;
 
 export { GOOGLE_AUTH_SCOPES };
 

@@ -62,6 +62,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_AUTH_MAIL_MODE: runtimeEnv.QUIETER_AUTH_MAIL_MODE,
       QUIETER_MAIL_API_KEY: runtimeEnv.QUIETER_MAIL_API_KEY,
       QUIETER_MAIL_API_URL: runtimeEnv.QUIETER_MAIL_API_URL,
+      QUIETER_DEPLOYMENT_ENV: runtimeEnv.QUIETER_DEPLOYMENT_ENV,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: runtimeEnv.QUIETER_GMAIL_AI_AUTOMATION_ENABLED,
       QUIETER_LOCAL_BILLING_BYPASS: runtimeEnv.QUIETER_LOCAL_BILLING_BYPASS,
       QUIETER_PREVIEW_PERSONAS_ENABLED: runtimeEnv.QUIETER_PREVIEW_PERSONAS_ENABLED,
@@ -75,8 +76,6 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       SENTRY_ENVIRONMENT: runtimeEnv.SENTRY_ENVIRONMENT,
       SENTRY_ORG: runtimeEnv.SENTRY_ORG,
       SENTRY_PROJECT: runtimeEnv.SENTRY_PROJECT,
-      VERCEL_ENV: runtimeEnv.VERCEL_ENV,
-      VERCEL_URL: runtimeEnv.VERCEL_URL,
       VITE_LOGO_DEV_PUBLISHABLE_KEY: runtimeEnv.VITE_LOGO_DEV_PUBLISHABLE_KEY,
     },
     server: {
@@ -130,6 +129,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_LOCAL_BILLING_BYPASS: optionalBooleanString,
       QUIETER_MAIL_API_KEY: optionalString,
       QUIETER_MAIL_API_URL: optionalHttpUrl,
+      QUIETER_DEPLOYMENT_ENV: z.enum(["local", "preview", "production"]).default("local"),
       QUIETER_PREVIEW_PERSONAS_ENABLED: optionalBooleanString,
       R2_ACCESS_KEY_ID: optionalString,
       R2_ACCOUNT_ID: optionalString,
@@ -141,8 +141,6 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       SENTRY_ENVIRONMENT: optionalString,
       SENTRY_ORG: optionalString,
       SENTRY_PROJECT: optionalString,
-      VERCEL_ENV: optionalString,
-      VERCEL_URL: optionalString,
       VITE_LOGO_DEV_PUBLISHABLE_KEY: optionalString,
     },
   });

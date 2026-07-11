@@ -3,28 +3,110 @@
 
 export default $config({
   app(input) {
-    const hasCloudflareCredentials =
-      !!process.env.CLOUDFLARE_API_TOKEN ||
-      (!!process.env.CLOUDFLARE_API_KEY && !!process.env.CLOUDFLARE_EMAIL);
-    const providers =
-      input.stage === "production"
-        ? { cloudflare: "6.15.0", vercel: "4.6.0" }
-        : hasCloudflareCredentials
-          ? { cloudflare: "6.15.0" }
-          : undefined;
+    const isPreview = input.stage.startsWith("pr-");
 
     return {
-      home: "aws",
+      home: isPreview ? "cloudflare" : "aws",
       name: "quieter",
-      providers,
+      providers: { cloudflare: "6.15.0" },
       protect: input.stage === "production",
       removal: input.stage === "production" ? "retain" : "remove",
     };
   },
   async run() {
+    const { githubSstSecrets } = await import("@quieter/env/github");
     const { createSstEnv } = await import("@quieter/env/sst");
-    const env = createSstEnv({ production: $app.stage === "production" });
+    const production = $app.stage === "production";
+    const preview = $app.stage.startsWith("pr-");
+    const secretResources = Object.fromEntries(
+      Object.entries(githubSstSecrets).map(([environmentName, secretName]) => [
+        environmentName,
+        new sst.Secret(secretName),
+      ]),
+    ) as Record<keyof typeof githubSstSecrets, sst.Secret>;
+    const webSecretBindings = Object.entries(secretResources)
+      .filter(
+        ([environmentName]) =>
+          environmentName !== "GMAIL_PUBSUB_PROCESS_TOKEN" &&
+          environmentName !== "MAIL_INGEST_TOKEN" &&
+          (!preview ||
+            ["APP_SITE_PASSWORD", "BETTER_AUTH_SECRET", "DATABASE_URL", "SENTRY_DSN"].includes(
+              environmentName,
+            )),
+      )
+      .map(
+        ([environmentName, secret]) =>
+          new sst.Linkable(environmentName, {
+            include: [
+              sst.cloudflare.binding({
+                properties: { text: secret.value },
+                type: "secretTextBindings",
+              }),
+            ],
+            properties: {},
+          }),
+      );
+    const appOrigin = production
+      ? "https://quieter.email"
+      : preview
+        ? `https://${$app.stage}.preview.quieter.email`
+        : process.env.BETTER_AUTH_URL || "http://localhost:3000";
+    const createWeb = (
+      runtimeEnvironment: Record<string, $util.Input<string>> = {},
+      links: $util.Input<any>[] = [],
+    ) =>
+      new sst.cloudflare.TanStackStart("Web", {
+        domain: production
+          ? { name: "quieter.email", redirects: ["www.quieter.email"] }
+          : preview
+            ? `${$app.stage}.preview.quieter.email`
+            : undefined,
+        environment: {
+          AWS_DEFAULT_REGION: process.env.AWS_REGION || "eu-central-1",
+          AWS_REGION: process.env.AWS_REGION || "eu-central-1",
+          BETTER_AUTH_APP_NAME: process.env.BETTER_AUTH_APP_NAME || "quieter",
+          BETTER_AUTH_TRUSTED_ORIGINS: process.env.BETTER_AUTH_TRUSTED_ORIGINS || "",
+          BETTER_AUTH_URL: appOrigin,
+          NODE_ENV: "production",
+          QUIETER_AUTH_MAIL_MODE: process.env.QUIETER_AUTH_MAIL_MODE || "api",
+          QUIETER_AUTH_MAIL_SENDER: process.env.QUIETER_AUTH_MAIL_SENDER || "auth@quieter.email",
+          QUIETER_DEPLOYMENT_ENV: production ? "production" : preview ? "preview" : "local",
+          QUIETER_GMAIL_AI_AUTOMATION_ENABLED: String(production),
+          QUIETER_MAIL_API_URL: `${appOrigin}/api/v1/send`,
+          QUIETER_PREVIEW_PERSONAS_ENABLED:
+            process.env.QUIETER_PREVIEW_PERSONAS_ENABLED || (preview ? "true" : "false"),
+          SENTRY_ENVIRONMENT: process.env.SENTRY_ENVIRONMENT || $app.stage,
+          VITE_LOGO_DEV_PUBLISHABLE_KEY: process.env.VITE_LOGO_DEV_PUBLISHABLE_KEY || "",
+          VITE_PUBLIC_POSTHOG_HOST:
+            process.env.VITE_PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com",
+          VITE_PUBLIC_POSTHOG_PROJECT_TOKEN: process.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN || "",
+          VITE_QUIETER_PREVIEW_PERSONAS_ENABLED:
+            process.env.VITE_QUIETER_PREVIEW_PERSONAS_ENABLED || (preview ? "true" : "false"),
+          VITE_SENTRY_DSN: process.env.VITE_SENTRY_DSN || "",
+          ...runtimeEnvironment,
+        },
+        link: [...webSecretBindings, ...links],
+        path: "apps/web",
+        transform: {
+          server: {
+            compatibility: {
+              date: "2026-07-11",
+              flags: ["nodejs_compat"],
+            },
+          },
+        },
+      });
+
+    if (preview) {
+      const web = createWeb();
+
+      return { stage: $app.stage, webUrl: web.url };
+    }
+    const env = createSstEnv({ production });
     const polarSandbox = env.POLAR_SANDBOX === undefined ? "" : String(env.POLAR_SANDBOX);
+    const mailAutomationAiEnabled = String(
+      env.QUIETER_GMAIL_AI_AUTOMATION_ENABLED ?? $app.stage === "production",
+    );
     const callerIdentity = await aws.getCallerIdentity({});
     const region = await aws.getRegion({});
     const mailObjectKeyPrefix = "mail/inbound/";
@@ -72,7 +154,7 @@ export default $config({
       ],
     });
     const mailReceiptTopic = new sst.aws.SnsTopic("MailReceiptTopic");
-    const mailIngestToken = new sst.Secret("MailIngestToken");
+    const mailIngestToken = secretResources.MAIL_INGEST_TOKEN;
 
     const mailReceiptRole = new aws.iam.Role("MailReceiptRole", {
       assumeRolePolicy: $jsonStringify({
@@ -132,6 +214,7 @@ export default $config({
         POLAR_ACCESS_TOKEN: polarAccessToken,
         POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
         POLAR_SANDBOX: polarSandbox,
+        QUIETER_GMAIL_AI_AUTOMATION_ENABLED: mailAutomationAiEnabled,
         ...r2Environment,
       },
       handler: "packages/aws/src/receipt.handler",
@@ -157,8 +240,8 @@ export default $config({
     };
     const gmailPubSubEnabled = env.GMAIL_PUBSUB_ENABLED;
 
-    const chatGenerationStartToken = new sst.Secret("ChatGenerationStartToken");
-    const gmailLiveSyncTokenSecret = new sst.Secret("GmailLiveSyncTokenSecret");
+    const chatGenerationStartToken = secretResources.CHAT_GENERATION_START_TOKEN;
+    const gmailLiveSyncTokenSecret = secretResources.GMAIL_LIVE_SYNC_TOKEN_SECRET;
     const chatGenerationQueue = new sst.aws.Queue("ChatGenerationQueue");
     const chatGenerationWorkflow = new sst.aws.Workflow("ChatGenerationWorkflow", {
       environment: {
@@ -277,7 +360,7 @@ export default $config({
     let gmailPubSubProcessUrl: $util.Output<string> | null = null;
     let gmailPubSubProcessTokenSecretName: $util.Output<string> | null = null;
     if (gmailPubSubEnabled) {
-      const gmailPubSubProcessToken = new sst.Secret("GmailPubSubProcessToken");
+      const gmailPubSubProcessToken = secretResources.GMAIL_PUBSUB_PROCESS_TOKEN;
       gmailPubSubProcessTokenSecretName = gmailPubSubProcessToken.name;
       const gmailPubSubDeadLetterQueue = new sst.aws.Queue("GmailPubSubDeadLetterQueue", {
         fifo: true,
@@ -313,6 +396,7 @@ export default $config({
             POLAR_ACCESS_TOKEN: polarAccessToken,
             POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
             POLAR_SANDBOX: polarSandbox,
+            QUIETER_GMAIL_AI_AUTOMATION_ENABLED: mailAutomationAiEnabled,
           },
           handler: "packages/aws/src/gmail-pubsub-consumer.handler",
           link: [gmailLiveSyncApi, gmailLiveSyncConnections],
@@ -330,7 +414,7 @@ export default $config({
         domain:
           $app.stage === "production"
             ? {
-                dns: sst.vercel.dns({ domain: "quieter.email" }),
+                dns: sst.cloudflare.dns(),
                 name: "gmail-events.quieter.email",
               }
             : undefined,
@@ -372,6 +456,7 @@ export default $config({
           POLAR_ACCESS_TOKEN: polarAccessToken,
           POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
           POLAR_SANDBOX: polarSandbox,
+          QUIETER_GMAIL_AI_AUTOMATION_ENABLED: mailAutomationAiEnabled,
         },
         handler: "packages/aws/src/gmail-pubsub-process.handler",
         link: [gmailLiveSyncApi, gmailLiveSyncConnections, gmailPubSubProcessToken],
@@ -442,6 +527,7 @@ export default $config({
     const mailIngress = new sst.aws.Function("MailIngress", {
       environment: {
         DATABASE_URL: databaseUrl,
+        QUIETER_GMAIL_AI_AUTOMATION_ENABLED: mailAutomationAiEnabled,
         ...r2Environment,
       },
       handler: "packages/aws/src/inbound.handler",
@@ -449,6 +535,39 @@ export default $config({
       timeout: "30 seconds",
       url: true,
     });
+    const webAwsPermissions = new sst.Linkable("WebAwsPermissions", {
+      include: [
+        {
+          actions: ["ses:SendEmail", "ses:SendRawEmail"],
+          resources: ["*"],
+          type: "aws.permission",
+        },
+      ],
+      properties: {},
+    });
+    const web = createWeb(
+      {
+        CHAT_GENERATION_START_URL: chatGenerationEnqueue.url,
+        GMAIL_LIVE_SYNC_URL: gmailLiveSyncUrl,
+        MAILBOX_ACTION_QUEUE_URL: mailboxActionQueue.url,
+        MAIL_BUCKET: mailBucket.name,
+        MAIL_RECEIPT_ROLE_ARN: mailReceiptRole.arn,
+        MAIL_RECEIPT_RULE_SET_NAME: mailReceiptRuleSetName,
+        MAIL_RECEIPT_TOPIC_ARN: mailReceiptTopic.arn,
+        POLAR_METER_CREDIT_USAGE_ID: env.POLAR_METER_CREDIT_USAGE_ID ?? "",
+        POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
+        POLAR_PRODUCT_MANAGED_ID: env.POLAR_PRODUCT_MANAGED_ID ?? "",
+        POLAR_PRODUCT_PRO_ID: env.POLAR_PRODUCT_PRO_ID ?? "",
+        POLAR_SANDBOX: env.POLAR_SANDBOX === undefined ? "" : String(env.POLAR_SANDBOX),
+        QUIETER_GMAIL_AI_AUTOMATION_ENABLED: String(
+          env.QUIETER_GMAIL_AI_AUTOMATION_ENABLED ?? production,
+        ),
+        R2_ACCOUNT_ID: env.R2_ACCOUNT_ID ?? "",
+        R2_BUCKET: env.R2_BUCKET ?? "",
+        R2_ENDPOINT: env.R2_ENDPOINT ?? "",
+      },
+      [mailBucket, webAwsPermissions],
+    );
 
     return {
       chatGenerationEnqueueUrl: chatGenerationEnqueue.url,
@@ -467,6 +586,7 @@ export default $config({
       mailReceiptRuleSetName,
       mailReceiptTopicArn: mailReceiptTopic.arn,
       stage: $app.stage,
+      webUrl: web.url,
     };
   },
 });

@@ -17,9 +17,9 @@ const buttonVariants = cva(
         default:
           "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/85",
         outline:
-          "border border-input bg-background-light text-foreground shadow-sm hover:bg-muted/60 active:bg-muted/80",
+          "border border-input bg-background-light text-foreground shadow-sm hover:bg-muted active:bg-muted/80",
         ghost:
-          "bg-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground active:bg-muted/80 active:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground",
+          "bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground active:bg-muted/80 active:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground",
         destructive:
           "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
       },

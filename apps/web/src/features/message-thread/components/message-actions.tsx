@@ -7,14 +7,12 @@ import {
   Delete02Icon,
   Edit01Icon,
   InboxIcon,
-  Loading03Icon,
   Mail01Icon,
   MailOpen02Icon,
   MoreVerticalIcon,
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
-import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
   ContextMenu,
@@ -24,15 +22,6 @@ import {
   ContextMenuTrigger,
 } from "@quieter/ui/context-menu";
 import {
-  Dialog,
-  DialogBody,
-  DialogCloseButton,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@quieter/ui/dialog";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -40,11 +29,9 @@ import {
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import { useQuery } from "@tanstack/react-query";
-import { useReducer, useState } from "react";
-import { getUserLabels } from "~/features/message-search/state/message-list-search-state";
+import { useState } from "react";
+import { MessageLabelsDialog } from "~/features/message-labels/components/message-labels-dialog";
 import { isMessageUnread, type MailboxCategory, type MessageListItem } from "~/lib/gmail/gmail";
-import { labelsQueryOptions } from "~/lib/gmail/labels-query";
 import type { LabelChanges, ThreadActionHandlers } from "./message-action-handlers";
 import { getMessageUnsubscribeTarget, openUnsubscribeUrl } from "./message-unsubscribe";
 
@@ -84,17 +71,6 @@ type MenuSeparator = {
 
 type MenuEntry = MenuAction | MenuSeparator;
 
-const areStringArraysEqual = (left: readonly string[], right: readonly string[]) => {
-  if (left.length !== right.length) return false;
-
-  const rightSet = new Set(right);
-  for (const value of left) {
-    if (!rightSet.has(value)) return false;
-  }
-
-  return true;
-};
-
 const renderDropdownEntry = (entry: MenuEntry) => {
   if (entry.type === "separator") {
     return <DropdownMenuSeparator key={entry.id} />;
@@ -131,74 +107,6 @@ const renderContextEntry = (entry: MenuEntry) => {
   );
 };
 
-type MessageActionsDialogsState = {
-  draftLabelIds: string[] | null;
-  isApplyingLabels: boolean;
-  labelError: string | null;
-};
-
-type MessageActionsDialogsAction =
-  | {
-      checked: boolean;
-      currentUserLabelIds: readonly string[];
-      labelId: string;
-      type: "labels/toggle";
-    }
-  | {
-      type: "labels/error";
-      value: string | null;
-    }
-  | {
-      type: "labels/pending";
-      value: boolean;
-    }
-  | {
-      type: "labels/reset";
-    };
-
-const initialMessageActionsDialogsState: MessageActionsDialogsState = {
-  draftLabelIds: null,
-  isApplyingLabels: false,
-  labelError: null,
-};
-
-const messageActionsDialogsReducer = (
-  state: MessageActionsDialogsState,
-  action: MessageActionsDialogsAction,
-): MessageActionsDialogsState => {
-  switch (action.type) {
-    case "labels/toggle": {
-      const nextCurrent = state.draftLabelIds ?? [...action.currentUserLabelIds];
-
-      return {
-        ...state,
-        draftLabelIds: action.checked
-          ? nextCurrent.includes(action.labelId)
-            ? nextCurrent
-            : [...nextCurrent, action.labelId]
-          : nextCurrent.filter((value) => value !== action.labelId),
-      };
-    }
-    case "labels/error":
-      return {
-        ...state,
-        labelError: action.value,
-      };
-    case "labels/pending":
-      return {
-        ...state,
-        isApplyingLabels: action.value,
-      };
-    case "labels/reset":
-      return {
-        ...state,
-        draftLabelIds: null,
-        isApplyingLabels: false,
-        labelError: null,
-      };
-  }
-};
-
 const MessageActionsDialogs = ({
   isPending,
   mailboxId,
@@ -206,146 +114,26 @@ const MessageActionsDialogs = ({
   onOpenLabelsDialog,
   onUpdateLabels,
   openLabelsDialog,
-  labelNounPlural = "labels",
 }: {
   mailboxId: string;
   message: MessageListItem;
   isPending: boolean;
-  labelNounPlural?: "labels";
   openLabelsDialog: boolean;
   onOpenLabelsDialog: (open: boolean) => void;
   onUpdateLabels?: (threadId: string, changes: LabelChanges) => void | Promise<void>;
 }) => {
-  const {
-    data: labels,
-    error: labelsError,
-    isError: isLabelsError,
-    isPending: areLabelsPending,
-  } = useQuery(labelsQueryOptions(mailboxId, openLabelsDialog));
-  const userLabels = getUserLabels(labels ?? []);
-  const labelsUnavailable = isLabelsError && !labels;
-  const currentUserLabelIds = (message.labelIds ?? []).filter((labelId) =>
-    userLabels.some((label) => label.id === labelId),
-  );
-  const [state, dispatch] = useReducer(
-    messageActionsDialogsReducer,
-    initialMessageActionsDialogsState,
-  );
-  const selectedLabelIds = state.draftLabelIds ?? currentUserLabelIds;
-  const labelsChanged = !areStringArraysEqual(currentUserLabelIds, selectedLabelIds);
-  const isLabelsBusy = isPending || state.isApplyingLabels;
-
-  const toggleDraftLabel = (labelId: string, checked: boolean) => {
-    dispatch({
-      checked,
-      currentUserLabelIds,
-      labelId,
-      type: "labels/toggle",
-    });
-  };
-
-  const applyLabels = async () => {
-    if (!onUpdateLabels || isLabelsBusy) return;
-
-    const nextLabelIdSet = new Set(selectedLabelIds);
-    const addLabelIds = selectedLabelIds.filter(
-      (labelId) => !currentUserLabelIds.includes(labelId),
-    );
-    const removeLabelIds = currentUserLabelIds.filter((labelId) => !nextLabelIdSet.has(labelId));
-
-    if (addLabelIds.length === 0 && removeLabelIds.length === 0) {
-      onOpenLabelsDialog(false);
-      return;
-    }
-
-    dispatch({
-      type: "labels/pending",
-      value: true,
-    });
-    dispatch({
-      type: "labels/error",
-      value: null,
-    });
-
-    try {
-      await onUpdateLabels(message.threadId, {
-        addLabelIds,
-        removeLabelIds,
-      });
-      onOpenLabelsDialog(false);
-      dispatch({
-        type: "labels/pending",
-        value: false,
-      });
-    } catch (error) {
-      dispatch({
-        type: "labels/error",
-        value: error instanceof Error && error.message ? error.message : "Could not update labels.",
-      });
-      dispatch({
-        type: "labels/pending",
-        value: false,
-      });
-    }
-  };
-
   return (
-    <Dialog
-      onOpenChange={(open) => {
-        onOpenLabelsDialog(open);
-        dispatch({ type: "labels/reset" });
+    <MessageLabelsDialog
+      isPending={isPending}
+      mailboxId={mailboxId}
+      onApply={async ([update]) => {
+        if (!update || !onUpdateLabels) return;
+        await onUpdateLabels(update.id, update);
       }}
+      onOpenChange={onOpenLabelsDialog}
       open={openLabelsDialog}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Modify {labelNounPlural}</DialogTitle>
-        </DialogHeader>
-
-        <DialogBody className="max-h-[50vh] space-y-3 overflow-y-auto">
-          {areLabelsPending ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <HugeiconsIcon aria-hidden className="animate-spin" icon={Loading03Icon} />
-              <span>Loading {labelNounPlural}…</span>
-            </div>
-          ) : labelsUnavailable ? (
-            <p className="text-sm text-destructive">
-              {labelsError?.message ?? `Could not load ${labelNounPlural}.`}
-            </p>
-          ) : userLabels.length > 0 ? (
-            <div className="space-y-2">
-              {userLabels.map((label) => (
-                <label className="flex items-center gap-2 text-sm text-foreground" key={label.id}>
-                  <input
-                    aria-label={label.name}
-                    checked={selectedLabelIds.includes(label.id)}
-                    className="size-4 rounded-md accent-foreground"
-                    disabled={isLabelsBusy}
-                    onChange={(event) => toggleDraftLabel(label.id, event.currentTarget.checked)}
-                    type="checkbox"
-                  />
-                  <span>{label.name}</span>
-                </label>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No custom {labelNounPlural}.</p>
-          )}
-
-          {state.labelError && <p className="text-sm text-destructive">{state.labelError}</p>}
-        </DialogBody>
-
-        <DialogFooter>
-          <DialogCloseButton>Cancel</DialogCloseButton>
-          <Button
-            disabled={!labelsChanged || areLabelsPending || labelsUnavailable || isLabelsBusy}
-            onClick={() => void applyLabels()}
-          >
-            Apply
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      targets={[{ id: message.threadId, labelIds: message.labelIds ?? [] }]}
+    />
   );
 };
 
@@ -525,7 +313,6 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
   const dialogs = actions.onUpdateLabels ? (
     <MessageActionsDialogs
       isPending={isBusy}
-      labelNounPlural={props.labelNounPlural}
       mailboxId={props.mailboxId}
       message={props.message}
       onOpenLabelsDialog={setOpenLabelsDialog}

@@ -5,7 +5,7 @@
   "scripts": {
     "build": "bun --env-file=../../.env.local vp run @quieter/env#build && bun --env-file=../../.env.local vp build",
     "dev": "bun --env-file=../../.env.local vp dev --port 3000",
-    "start": "bun --env-file=../../.env.local node .output/server/index.mjs"
+    "preview": "bun --env-file=../../.env.local vp preview"
   },
   "dependencies": {
     "@barkleapp/css-sanitizer": "1.0.0",
@@ -52,7 +52,6 @@
     "@tiptap/pm": "^3.27.1",
     "@tiptap/react": "^3.27.1",
     "@tiptap/starter-kit": "^3.27.1",
-    "@vercel/speed-insights": "^2.0.0",
     "better-auth": "catalog:",
     "color": "^5.0.3",
     "dompurify": "^3.4.11",
@@ -66,6 +65,8 @@
   },
   "devDependencies": {
     "@babel/core": "^8.0.1",
+    "@cloudflare/vite-plugin": "^1.44.0",
+    "@cloudflare/workers-types": "^5.20260711.1",
     "@quieter/config": "workspace:*",
     "@react-scan/vite-plugin-react-scan": "^0.2.7",
     "@rolldown/plugin-babel": "^0.2.3",
@@ -76,10 +77,10 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "babel-plugin-react-compiler": "^1.0.0",
-    "nitro": "catalog:",
     "react-scan": "^0.5.7",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vite-plus": "catalog:"
+    "vite-plus": "catalog:",
+    "wrangler": "^4.110.0"
   }
 }

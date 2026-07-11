@@ -7,18 +7,6 @@ import {
   MailOpen02Icon,
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Button } from "@quieter/ui/button";
-import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
-import {
-  Dialog,
-  DialogBody,
-  DialogCloseButton,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@quieter/ui/dialog";
 import { toast } from "@quieter/ui/toast";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { useQuery } from "@tanstack/react-query";
@@ -26,6 +14,7 @@ import { m } from "motion/react";
 import { useLayoutEffect, useRef, useState } from "react";
 import type { MessageListItem } from "~/lib/gmail/gmail";
 import { shouldIgnoreAppShortcut } from "~/features/hotkeys/domain/hotkey-guards";
+import { MessageLabelsDialog } from "~/features/message-labels/components/message-labels-dialog";
 import { MessageListSearch } from "~/features/message-search/components/message-list-search";
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
 import { buildThreadListEntries, type ThreadListEntry } from "~/lib/gmail/thread-list";
@@ -60,7 +49,6 @@ const formatConversationCount = (count: number) =>
 
 export const MessageList = (props: MessageListProps) => {
   const [isBulkLabelsOpen, setIsBulkLabelsOpen] = useState(false);
-  const [bulkLabelIds, setBulkLabelIds] = useState<string[]>([]);
   const { data: gmailLabels = [] } = useQuery(
     labelsQueryOptions(props.mailboxId, props.mailboxProvider !== "api"),
   );
@@ -431,79 +419,21 @@ export const MessageList = (props: MessageListProps) => {
         />
       </m.div>
 
-      <Dialog
-        onOpenChange={(open) => {
-          setIsBulkLabelsOpen(open);
-          if (!open) setBulkLabelIds([]);
-        }}
+      <MessageLabelsDialog
+        isPending={isBulkActionPending}
+        mailboxId={props.mailboxId}
+        onApply={(updates) =>
+          props.mailboxActions.updateThreadsLabels(
+            updates.map(({ id, ...changes }) => ({ ...changes, threadId: id })),
+          )
+        }
+        onOpenChange={setIsBulkLabelsOpen}
         open={isBulkLabelsOpen}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Modify {labelNounPlural}</DialogTitle>
-          </DialogHeader>
-          <DialogBody className="max-h-[50vh] space-y-2 overflow-y-auto">
-            {userLabels.map((label) => (
-              <label className="flex items-center gap-2 text-sm" key={label.id}>
-                <Checkbox
-                  checked={bulkLabelIds.includes(label.id)}
-                  onCheckedChange={(checked) =>
-                    setBulkLabelIds((current) =>
-                      checked
-                        ? [...current, label.id]
-                        : current.filter((labelId) => labelId !== label.id),
-                    )
-                  }
-                >
-                  <CheckboxIndicator />
-                </Checkbox>
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-3.5 text-muted-foreground"
-                  icon={Tag01Icon}
-                />
-                {label.name}
-              </label>
-            ))}
-          </DialogBody>
-          <DialogFooter>
-            <DialogCloseButton>Cancel</DialogCloseButton>
-            <Button
-              disabled={bulkLabelIds.length === 0 || isBulkActionPending}
-              onClick={() => {
-                void runBulkAction(async (threads) => {
-                  await Promise.all(
-                    threads.map((thread) =>
-                      props.mailboxActions.updateThreadLabels(thread.threadId, {
-                        removeLabelIds: bulkLabelIds,
-                      }),
-                    ),
-                  );
-                }).then(() => setIsBulkLabelsOpen(false));
-              }}
-              variant="outline"
-            >
-              Remove
-            </Button>
-            <Button
-              disabled={bulkLabelIds.length === 0 || isBulkActionPending}
-              onClick={() => {
-                void runBulkAction(async (threads) => {
-                  await Promise.all(
-                    threads.map((thread) =>
-                      props.mailboxActions.updateThreadLabels(thread.threadId, {
-                        addLabelIds: bulkLabelIds,
-                      }),
-                    ),
-                  );
-                }).then(() => setIsBulkLabelsOpen(false));
-              }}
-            >
-              Apply
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        targets={selection.selectedThreads.map((thread) => ({
+          id: thread.threadId,
+          labelIds: thread.anchorMessage.labelIds ?? [],
+        }))}
+      />
     </div>
   );
 };

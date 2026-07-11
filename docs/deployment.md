@@ -1,122 +1,65 @@
-# Deployment and Operations
+# Deployment
 
-## Release Model
+## Production
 
-Production is not deployed from Vercel git pushes.
+Production deploys run through `.github/workflows/sst-deploy.yml` on pushes to `main` or a manual
+workflow dispatch. The protected GitHub `production` environment is the only manually configured
+source of deployment variables and secrets.
 
-1. Changes reach protected `main` through a reviewed pull request.
-2. Required CI checks verify formatting, linting, types, tests, schema drift, and migrations.
-3. Merging to `main` triggers `.github/workflows/sst-deploy.yml`. Maintainers can also dispatch it manually.
-4. Forward database migrations run with the deployment-only migration role.
-5. SST updates infrastructure.
-6. SST outputs are synchronized to Vercel.
-7. The Vercel production deploy hook is triggered and monitored.
-8. The Gmail credential rotation endpoint runs.
+The release workflow:
 
-`vercel.json` disables commit-triggered deployments.
+1. runs type, lint, copy, boundary, bundle, and test checks;
+2. validates database migrations when database inputs changed;
+3. applies committed forward-only production migrations;
+4. synchronizes GitHub secrets into SST's encrypted secret store;
+5. runs `sst deploy`, which deploys the AWS mail/background stack and the Cloudflare web Worker;
+6. wires SST resource outputs directly into the Worker and attaches `quieter.email`;
+7. invokes the authenticated Gmail credential rotation endpoint.
 
-## Pull Request Previews
+There is no separate hosting-provider build, deploy hook, or dashboard environment configuration.
+Cloudflare receives runtime variables and encrypted bindings from SST for each release. Generated
+resource URLs and names remain deployment outputs and are never copied into a second configuration
+store.
 
-`.github/workflows/vercel-pr-preview.yml` creates Vercel Preview deployments for trusted pull
-requests whose source branch is in this repository. The workflow pulls Vercel Preview variables for
-the PR branch, builds the app, and aliases each deployment to
-`https://pr-<number>.preview.quieter.email`. Fork pull requests run normal checks but do not receive
-Vercel tokens or preview environment secrets, because arbitrary contributor code can exfiltrate any
-secret available during a build or runtime preview.
+## Pull request previews
 
-The GitHub `Preview` environment needs `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, and `VERCEL_TEAM_ID`
-or `VERCEL_ORG_ID`. Configure Vercel Preview environment variables with non-production values only.
-Do not put production databases, production OAuth clients, production mail credentials, production
-provider keys, or production billing tokens in the generic Preview environment. Branch-specific
-preview variables may be used for trusted PR branches.
+`.github/workflows/cloudflare-pr-preview.yml` deploys same-repository pull requests as isolated SST
+stages named `pr-<number>`. Each stage publishes a Worker at
+`https://pr-<number>.preview.quieter.email`. Closing the pull request removes the stage.
 
-Gmail AI automation is disabled outside Vercel production unless
-`QUIETER_GMAIL_AI_AUTOMATION_ENABLED=true` is set. Keep it unset or false for preview deployments;
-enable it only for controlled tests with isolated provider keys and low provider-side spend caps.
+Fork pull requests do not receive Cloudflare credentials or Preview environment secrets. Do not use
+`pull_request_target` to execute pull-request code. Preview deployments never run remote database
+migrations. Keep preview credentials isolated and enable fake preview personas only in the GitHub
+`Preview` environment.
 
-## Database Credentials
+## GitHub environment contract
 
-Production uses separate roles:
+The production environment must provide:
 
-- `DATABASE_URL`: least-privilege runtime role used by Vercel and SST functions
-- `DATABASE_MIGRATION_URL`: schema-owner role stored only in the protected GitHub environment
+- deployment access: `AWS_ROLE_TO_ASSUME`, `AWS_REGION`, `CLOUDFLARE_API_TOKEN`, and
+  `CLOUDFLARE_DEFAULT_ACCOUNT_ID`;
+- database roles: `DATABASE_URL` and `DATABASE_MIGRATION_URL`;
+- every runtime secret listed in `packages/env/src/github.ts`;
+- Gmail notification, Polar catalog, R2, Sentry, PostHog, auth-mail, and public browser variables
+  referenced by `.github/workflows/sst-deploy.yml`.
 
-Remote production migrations are rejected unless they run in the protected `main` GitHub Actions
-context with the workflow-only production marker. Runtime requests do not execute schema migrations.
+The Preview environment uses the same runtime contract with isolated non-production values. The
+workflow calls `scripts/sync-sst-secrets.ts` immediately before deployment, so changing GitHub is
+enough to update the next Worker release.
 
-See [Database safety](database-safety.md) for role SQL and recovery controls.
+## Database safety
 
-## GitHub Production Environment
+`DATABASE_URL` is the least-privilege runtime role. `DATABASE_MIGRATION_URL` is available only to the
+protected production migration step. Local development must use local Postgres and must not store a
+remote migration credential in `.env.local`.
 
-The production environment contains:
+Production migration history is never adopted or rewritten automatically. Automated production
+migrations reject destructive SQL; contract migrations require a separately reviewed manual
+procedure.
 
-- AWS deployment role and region
-- database runtime and migration URLs
-- Gmail OAuth and notification configuration
-- Gmail credential encryption keys and rotation token
-- OpenRouter and Polar credentials
-- Vercel token, project/team IDs, and deploy hook URL
+## Failure behavior
 
-The exact authoritative list is the `deploy` job in `.github/workflows/sst-deploy.yml`.
-
-Never copy production environment secrets to a developer machine.
-
-## SST Secrets
-
-Mail bearer tokens and workflow authentication values are SST linked secrets. Use the repository
-wrapper so the correct config, stage, and local AWS environment are applied:
-
-```bash
-vp run sst -- secret set MailIngestToken <value>
-vp run sst -- secret set ChatGenerationStartToken <value>
-vp run sst -- secret set GmailLiveSyncTokenSecret <value>
-```
-
-The wrapper defaults to the `mail-dev` stage. Specify `--stage production` deliberately when
-managing production secrets.
-
-## Gmail Notifications
-
-Production requires a Gmail topic, authenticated push subscription, push service account, and exact
-audience configuration. SST owns the stable ingress domain and queue handoff.
-
-Gmail notifications can be delayed or dropped, so scheduled reconciliation and browser polling must
-remain enabled even when push is configured.
-
-## Managed Mail
-
-The deploy creates and exports:
-
-- inbound S3 bucket
-- SES receipt topic and role
-- receipt rule-set name
-- inbound and outbound function URLs
-
-SES receipt rules and domain DNS remain external operational configuration. Do not expose provider
-or infrastructure names in user-facing product copy.
-
-## Failure Behavior
-
-- Production concurrency does not cancel an in-progress deployment.
-- Database migrations run before infrastructure and web changes.
-- Committed migrations are forward-only; production history is never automatically adopted or
-  rewritten.
-- SST resources are protected and retained in production.
-- A failed Vercel deployment fails the workflow.
-
-## Recovery
-
-- Keep the Neon production branch protected.
-- Configure the longest affordable restore window.
-- Test point-in-time recovery periodically.
-- Rotate credentials after suspected exposure.
-- Preserve application logs and GitHub run URLs during incidents.
-- Restore into a separate branch or recovery target before replacing production.
-
-## Pre-Release Checklist
-
-- Pull request is approved and required checks pass.
-- Migration SQL is reviewed and expand-safe.
-- Runtime and migration credentials remain separate.
-- Provider quotas and billing configuration are understood.
-- A recovery point exists before risky schema or infrastructure work.
+- Verification or migration failure prevents deployment.
+- Secret synchronization failure prevents deployment.
+- SST failure leaves the previous Worker release serving traffic.
+- Gmail credential rotation runs only after SST reports a successful production deployment.

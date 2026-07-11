@@ -1,4 +1,4 @@
-import { auth } from "@quieter/auth";
+import { organizationApiKeyApi } from "@quieter/auth";
 import { MAX_SEND_PAYLOAD_BYTES } from "@quieter/mail/send";
 import {
   sendOrganizationMailMessage,
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/api/v1/send")({
           return Response.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const verifiedApiKey = await auth.api.verifyApiKey({
+        const verifiedApiKey = await organizationApiKeyApi.verifyApiKey({
           body: {
             configId: ORGANIZATION_API_KEY_CONFIG_ID,
             key: apiKey,

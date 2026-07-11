@@ -43,15 +43,14 @@ type BillingEntitlement = {
 
 type BillingRuntimeEnvironment = Pick<
   typeof serverEnv,
-  "NODE_ENV" | "QUIETER_LOCAL_BILLING_BYPASS" | "VERCEL_ENV"
+  "NODE_ENV" | "QUIETER_DEPLOYMENT_ENV" | "QUIETER_LOCAL_BILLING_BYPASS"
 >;
 
 export const isLocalDevelopmentBillingEntitlementEnabled = (
   env: BillingRuntimeEnvironment = serverEnv,
 ) =>
   env.NODE_ENV === "development" &&
-  env.VERCEL_ENV !== "preview" &&
-  env.VERCEL_ENV !== "production" &&
+  env.QUIETER_DEPLOYMENT_ENV === "local" &&
   env.QUIETER_LOCAL_BILLING_BYPASS === true;
 
 const localDevelopmentBillingEntitlement = (): BillingEntitlement => ({

@@ -40,7 +40,7 @@ Read [SECURITY.md](SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md) before co
 | API and data          | oRPC, TanStack Query, Drizzle, PostgreSQL           |
 | Authentication        | Better Auth                                         |
 | UI                    | Tailwind CSS 4, `@quieter/ui`, Base UI, Tiptap      |
-| Infrastructure        | SST, AWS, Vercel                                    |
+| Infrastructure        | SST, Cloudflare Workers, AWS mail/background jobs   |
 | Quality               | Vite+ (Oxfmt, Oxlint, type-aware checks, Vitest)    |
 
 ## Start Here
