@@ -18,21 +18,25 @@ export default $config({
     const { createSstEnv } = await import("@quieter/env/sst");
     const production = $app.stage === "production";
     const preview = $app.stage.startsWith("pr-");
+    const previewSecretNames = new Set<keyof typeof githubSstSecrets>([
+      "APP_SITE_PASSWORD",
+      "BETTER_AUTH_SECRET",
+      "DATABASE_URL",
+      "SENTRY_DSN",
+    ]);
     const secretResources = Object.fromEntries(
-      Object.entries(githubSstSecrets).map(([environmentName, secretName]) => [
-        environmentName,
-        new sst.Secret(secretName),
-      ]),
+      Object.entries(githubSstSecrets)
+        .filter(
+          ([environmentName]) =>
+            !preview || previewSecretNames.has(environmentName as keyof typeof githubSstSecrets),
+        )
+        .map(([environmentName, secretName]) => [environmentName, new sst.Secret(secretName)]),
     ) as Record<keyof typeof githubSstSecrets, sst.Secret>;
     const webSecretBindings = Object.entries(secretResources)
       .filter(
         ([environmentName]) =>
           environmentName !== "GMAIL_PUBSUB_PROCESS_TOKEN" &&
-          environmentName !== "MAIL_INGEST_TOKEN" &&
-          (!preview ||
-            ["APP_SITE_PASSWORD", "BETTER_AUTH_SECRET", "DATABASE_URL", "SENTRY_DSN"].includes(
-              environmentName,
-            )),
+          environmentName !== "MAIL_INGEST_TOKEN",
       )
       .map(
         ([environmentName, secret]) =>
