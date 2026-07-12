@@ -1,3 +1,4 @@
+import { withRequestDatabaseClient } from "@quieter/database/client";
 import { consumeRateLimit } from "@quieter/orpc/abuse-protection";
 import {
   sentryGlobalFunctionMiddleware,
@@ -29,6 +30,10 @@ const fallbackRateLimitBuckets = new Map<string, { count: number; expiresAt: num
 const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === "serverFn",
 });
+
+const databaseMiddleware = createMiddleware().server(async ({ next }) =>
+  withRequestDatabaseClient(next),
+);
 
 const getRateLimitPolicy = (pathname: string) => {
   if (pathname.startsWith("/api/auth")) return { group: "auth", limit: 20, windowMs: 60_000 };
@@ -117,7 +122,8 @@ const sitePasswordMiddleware = createMiddleware().server(async ({ next, request 
 
   const requestUrl = new URL(request.url);
   const cookies = parseCookieHeader(request.headers.get("cookie"));
-  const hasValidSitePassword = isValidSitePasswordToken(cookies[sitePasswordCookieName]);
+  const sitePasswordCookie = cookies[sitePasswordCookieName];
+  const hasValidSitePassword = isValidSitePasswordToken(sitePasswordCookie);
 
   if (requestUrl.pathname === sitePasswordPagePath && hasValidSitePassword) {
     return Response.redirect(getSafeReturnToUrl(requestUrl), 302);
@@ -129,6 +135,10 @@ const sitePasswordMiddleware = createMiddleware().server(async ({ next, request 
 
   if (hasValidSitePassword) {
     return next();
+  }
+
+  if (sitePasswordCookie) {
+    return redirectWithExpiredSitePasswordCookie(request);
   }
 
   if (shouldRedirectToHomePage(request)) {
@@ -143,6 +153,7 @@ export const startInstance = createStart(() => ({
   requestMiddleware: [
     ...(isSentryEnabled ? [sentryGlobalRequestMiddleware] : []),
     securityHeadersMiddleware,
+    databaseMiddleware,
     abuseProtectionMiddleware,
     csrfMiddleware,
     sitePasswordMiddleware,
@@ -196,10 +207,33 @@ const parseCookieHeader = (cookieHeader: string | null) => {
       continue;
     }
 
-    cookies[name] = decodeURIComponent(rawValue.join("=").trim());
+    const value = rawValue.join("=").trim();
+
+    try {
+      cookies[name] = decodeURIComponent(value);
+    } catch {
+      cookies[name] = value;
+    }
   }
 
   return cookies;
+};
+
+const redirectWithExpiredSitePasswordCookie = (request: Request) => {
+  const requestUrl = new URL(request.url);
+  const headers = new Headers({
+    "set-cookie": `${sitePasswordCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure`,
+  });
+
+  if (shouldRedirectToHomePage(request)) {
+    const passwordUrl = new URL(sitePasswordPagePath, requestUrl);
+    passwordUrl.searchParams.set("returnTo", `${requestUrl.pathname}${requestUrl.search}`);
+    headers.set("location", passwordUrl.toString());
+
+    return new Response(null, { headers, status: 302 });
+  }
+
+  return new Response("Password required", { headers, status: 401 });
 };
 
 const shouldRedirectToHomePage = (request: Request) =>

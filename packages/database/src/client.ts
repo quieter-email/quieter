@@ -1,5 +1,6 @@
 import { serverEnv } from "@quieter/env/server";
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
+import { AsyncLocalStorage } from "node:async_hooks";
 import postgres from "postgres";
 import { Resource } from "sst";
 import { authRelations } from "./schema";
@@ -39,13 +40,13 @@ export const assertDatabaseConfigured = () => {
   getDatabaseUrl();
 };
 
-const createDatabaseClient = (): DatabaseClient => {
-  const databaseUrl = getDatabaseUrl();
+const createDatabaseClient = (databaseUrl = getDatabaseUrl()): DatabaseClient => {
+  const hyperdrive = databaseUrl === getLinkedHyperdriveConnectionString();
   const sql = postgres(databaseUrl, {
     connect_timeout: 10,
     fetch_types: false,
     max: 5,
-    prepare: false,
+    prepare: hyperdrive,
   });
   return drizzlePostgres({
     client: sql,
@@ -53,11 +54,28 @@ const createDatabaseClient = (): DatabaseClient => {
   });
 };
 
-let databaseClient: DatabaseClient | undefined;
+const requestDatabaseClient = new AsyncLocalStorage<DatabaseClient>();
+let directDatabaseClient: DatabaseClient | undefined;
 
 const getDatabaseClient = () => {
-  databaseClient ??= createDatabaseClient();
-  return databaseClient;
+  const linkedConnectionString = getLinkedHyperdriveConnectionString();
+
+  if (linkedConnectionString) {
+    return requestDatabaseClient.getStore() ?? createDatabaseClient(linkedConnectionString);
+  }
+
+  directDatabaseClient ??= createDatabaseClient();
+  return directDatabaseClient;
+};
+
+export const withRequestDatabaseClient = <Result>(callback: () => Result) => {
+  const linkedConnectionString = getLinkedHyperdriveConnectionString();
+
+  if (!linkedConnectionString || requestDatabaseClient.getStore()) {
+    return callback();
+  }
+
+  return requestDatabaseClient.run(createDatabaseClient(linkedConnectionString), callback);
 };
 
 export const db = new Proxy({} as DatabaseClient, {
