@@ -30,6 +30,11 @@ export default defineConfig(({ command }) => {
   return {
     build: {
       chunkSizeWarningLimit: 1200,
+      rolldownOptions: {
+        output: {
+          keepNames: false,
+        },
+      },
       sourcemap: isSentryEnabled,
     },
     plugins: lazyPlugins(() => [
