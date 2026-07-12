@@ -79,7 +79,7 @@ const excludedLabels = new Set<string>([
 ]);
 
 const automatedEngineeringSenderPattern =
-  /(?:^|[.@<\s-])(github|gitlab|bitbucket|jira|linear|sentry|coderabbit|vercel|datadog|buildkite|circleci)(?:[.@>\s-]|$)/i;
+  /(?:^|[.@<\s-])(github|gitlab|bitbucket|jira|linear|sentry|coderabbit|datadog|buildkite|circleci)(?:[.@>\s-]|$)/i;
 const SUPPRESSED_AUTOMATION_KINDS = new Set<GmailUsefulDetailKind>([
   "application",
   "security_alert",

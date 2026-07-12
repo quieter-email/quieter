@@ -1,10 +1,10 @@
+import { cloudflare } from "@cloudflare/vite-plugin";
 import reactScan from "@react-scan/vite-plugin-react-scan";
 import babel from "@rolldown/plugin-babel";
 import { sentryTanstackStart } from "@sentry/tanstackstart-react/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
-import { nitro } from "nitro/vite";
 import { defineConfig, Environment, lazyPlugins } from "vite-plus";
 
 export default defineConfig(({ command }) => {
@@ -17,8 +17,8 @@ export default defineConfig(({ command }) => {
         org: process.env.SENTRY_ORG,
         project: process.env.SENTRY_PROJECT,
         sourcemaps: {
-          assets: ["./.vercel/output/static/**/*.js"],
-          filesToDeleteAfterUpload: ["./.vercel/output/static/**/*.map"],
+          assets: ["./dist/client/**/*.js"],
+          filesToDeleteAfterUpload: ["./dist/client/**/*.map"],
         },
         telemetry: false,
       }).map((plugin) => ({
@@ -33,6 +33,10 @@ export default defineConfig(({ command }) => {
       sourcemap: isSentryEnabled,
     },
     plugins: lazyPlugins(() => [
+      cloudflare({
+        viteEnvironment: { name: "ssr" },
+        configPath: process.env.SST_WRANGLER_PATH,
+      }),
       tanstackStart(),
       viteReact(),
       ...(isDev ? [reactScan()] : []),
@@ -40,7 +44,6 @@ export default defineConfig(({ command }) => {
         presets: [reactCompilerPreset()],
       }),
       tailwindcss(),
-      nitro({ preset: "vercel", traceDeps: ["react"] }),
       ...sentryPlugins,
     ]),
     optimizeDeps: {

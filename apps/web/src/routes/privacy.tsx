@@ -72,7 +72,6 @@ function PrivacyPage() {
         <li>OpenRouter and selected model providers for optional AI features.</li>
         <li>PostHog for product analytics only after measurement consent.</li>
         <li>Sentry for error and reliability monitoring in production.</li>
-        <li>Vercel Speed Insights for performance measurement only after measurement consent.</li>
         <li>Hosting, database, mail delivery, and object storage providers used to run Quieter.</li>
         <li>logo.dev for sender logo images where a sender domain logo is requested.</li>
       </ul>

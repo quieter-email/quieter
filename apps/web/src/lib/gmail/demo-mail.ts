@@ -163,7 +163,7 @@ const createInitialDemoState = (): DemoMailState => ({
       threadMessageCount: 3,
       to: DEMO_EMAIL_ADDRESS,
     }),
-    createMessage("demo-vercel-1", {
+    createMessage("demo-deploy-1", {
       bodyHtml:
         "<p>Your preview deployment is ready.</p><p><strong>quieter-web-git-demo-mode</strong> built successfully and is available for review.</p>",
       bodyText:
@@ -881,6 +881,19 @@ export const createDemoMailboxActions = (
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
   ) => {
     await updateDemoThreadLabels(queryClient, mailboxId, threadId, changes);
+  },
+  updateThreadsLabels: async (
+    updates: readonly {
+      threadId: string;
+      addLabelIds?: string[];
+      removeLabelIds?: string[];
+    }[],
+  ) => {
+    await Promise.all(
+      updates.map(({ threadId, ...changes }) =>
+        updateDemoThreadLabels(queryClient, mailboxId, threadId, changes),
+      ),
+    );
   },
 });
 

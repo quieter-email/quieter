@@ -59,7 +59,7 @@ Resolved on June 20, 2026 by the P0 reliability and security remediation change 
 
 22. **`db.batch` is being used as a transaction substitute.** Chat message/run creation and managed-mailbox/grant creation depend on all-or-nothing behavior that is not uniformly guaranteed.
 
-23. **Most timestamps are `timestamp` without timezone.** Distributed workloads running across AWS, Vercel, local machines, and user time zones should generally store absolute time using timezone-aware columns. See [schema.ts](/E:/Coding/quieter/packages/database/src/schema.ts).
+23. **Most timestamps are `timestamp` without timezone.** Distributed workloads running across cloud runtimes, local machines, and user time zones should generally store absolute time using timezone-aware columns. See [schema.ts](/E:/Coding/quieter/packages/database/src/schema.ts).
 
 24. **Many foreign keys do not define deletion behavior.** Auth sessions, accounts, passkeys, organization members, invitations, subscriptions, usage events, and chat data can block account or organization deletion.
 
@@ -535,7 +535,7 @@ Resolved on June 20, 2026 by the P0 reliability and security remediation change 
 
 250. **Resolved:** The SDK publish workflow installs a pinned npm version.
 
-251. **The production workflow combines migrations, AWS deployment, Vercel environment mutation, Vercel deployment, and credential rotation.** Partial failure can leave a mixed production state.
+251. **The production workflow combines migrations, infrastructure deployment, application deployment, and credential rotation.** Partial failure can leave a mixed production state.
 
 252. **There is no automatic rollback across those systems.**
 
@@ -543,7 +543,7 @@ Resolved on June 20, 2026 by the P0 reliability and security remediation change 
 
 254. **Resolved:** Credential rotation uses the configured canonical production URL.
 
-255. **Commit-triggered Vercel deployment is disabled.** This intentionally centralizes deployment, but makes the custom workflow a single release-path dependency.
+255. **The custom production workflow is the sole release path.** This intentionally centralizes deployment, but makes the workflow a single release-path dependency.
 
 256. **There is no alternate documented recovery deployment path if GitHub Actions or a provider integration is unavailable.**
 

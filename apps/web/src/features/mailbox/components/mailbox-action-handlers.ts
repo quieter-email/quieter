@@ -28,6 +28,10 @@ type LabelChangeSet = {
   removeLabelIds?: string[];
 };
 
+type ThreadLabelUpdate = LabelChangeSet & { threadId: string };
+
+const BULK_ACTION_CONCURRENCY = 6;
+
 type MailboxActionHandlerArgs = {
   activeMailbox: MailboxCategory;
   activeSearchQuery: string;
@@ -123,14 +127,25 @@ export const createMailboxActionHandlers = ({
     let shouldRefreshSearchResults = false;
 
     try {
-      const results = await Promise.allSettled(actionableIds.map((id) => action(id)));
-      for (const result of results) {
-        if (result.status === "fulfilled") {
-          shouldRefreshSearchResults = true;
-        } else {
-          actionError ??= result.reason;
-        }
-      }
+      let nextIndex = 0;
+      await Promise.all(
+        Array.from(
+          { length: Math.min(BULK_ACTION_CONCURRENCY, actionableIds.length) },
+          async () => {
+            while (nextIndex < actionableIds.length) {
+              const id = actionableIds[nextIndex++];
+              if (!id) continue;
+
+              try {
+                await action(id);
+                shouldRefreshSearchResults = true;
+              } catch (error) {
+                actionError ??= error;
+              }
+            }
+          },
+        ),
+      );
     } catch (error) {
       actionError = error;
     } finally {
@@ -293,6 +308,26 @@ export const createMailboxActionHandlers = ({
           changes,
         ),
       ),
+    updateThreadsLabels: (updates: readonly ThreadLabelUpdate[]) => {
+      const changesByThreadId = new Map(
+        updates.map(({ threadId, ...changes }) => [threadId, changes]),
+      );
+      return runBulkThreadAction(
+        updates.map((update) => update.threadId),
+        (threadId) => {
+          const changes = changesByThreadId.get(threadId);
+          if (!changes) return Promise.resolve();
+          return updateThreadLabelsInMailbox(
+            queryClient,
+            mailboxId,
+            activeMailbox,
+            activeSearchQuery,
+            threadId,
+            changes,
+          );
+        },
+      );
+    },
   };
 };
 

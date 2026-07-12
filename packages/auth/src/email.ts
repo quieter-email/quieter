@@ -34,11 +34,7 @@ const getAuthMailBaseUrl = () => {
     return getBaseUrlFromConfiguredMailUrl(configuredUrl);
   }
 
-  return (
-    serverEnv.BETTER_AUTH_URL ||
-    (serverEnv.VERCEL_URL && `https://${serverEnv.VERCEL_URL}`) ||
-    "http://localhost:3000"
-  );
+  return serverEnv.BETTER_AUTH_URL || "http://localhost:3000";
 };
 
 const getBaseUrlFromConfiguredMailUrl = (value: string) => {

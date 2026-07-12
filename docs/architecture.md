@@ -157,5 +157,5 @@ Organization mail usage is measured separately and billed according to plan-spec
 SST provisions the mail bucket, receipt topic and role, queues, workflows, function URLs, Gmail
 notification ingress, live-sync WebSocket, and maintenance schedules.
 
-Vercel hosts the web application. Production Git deployments are disabled; the manually approved
-SST workflow synchronizes outputs and triggers the Vercel deploy hook.
+Cloudflare Workers hosts the web application. SST builds and publishes the Worker, binds deployment
+outputs directly, and attaches the production and preview custom domains.

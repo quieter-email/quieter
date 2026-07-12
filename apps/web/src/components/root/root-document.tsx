@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
+import { ColorModeScript } from "@quieter/ui/color-mode";
 import { HeadContent, Scripts } from "@tanstack/react-router";
+
 export const RootDocument = ({ children }: Readonly<{ children: ReactNode }>) => (
   <html lang="en" suppressHydrationWarning>
     <head>
+      <ColorModeScript />
       <HeadContent />
     </head>
     <body>

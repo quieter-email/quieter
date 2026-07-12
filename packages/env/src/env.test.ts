@@ -1,6 +1,5 @@
-import { describe, expect, test, vi } from "vite-plus/test";
+import { describe, expect, test } from "vite-plus/test";
 import { createWebClientEnv } from "./client";
-import { createDeploymentEnv } from "./deployment";
 import { createServerEnv } from "./server";
 import { createSstEnv } from "./sst";
 
@@ -46,6 +45,7 @@ describe("server environment", () => {
     expect(env.POLAR_SANDBOX).toBe(true);
     expect(env.QUIETER_PREVIEW_PERSONAS_ENABLED).toBe(true);
     expect(env.QUIETER_GMAIL_AI_AUTOMATION_ENABLED).toBeUndefined();
+    expect(env.QUIETER_DEPLOYMENT_ENV).toBe("local");
     expect(env.QUIETER_AUTH_MAIL_MODE).toBe("api");
     expect(env.QUIETER_AUTH_MAIL_SENDER).toBe("auth@quieter.email");
   });
@@ -57,6 +57,15 @@ describe("server environment", () => {
     });
 
     expect(env.QUIETER_GMAIL_AI_AUTOMATION_ENABLED).toBe(true);
+  });
+
+  test("accepts an explicit deployment environment", () => {
+    const env = createServerEnv({
+      NODE_ENV: "production",
+      QUIETER_DEPLOYMENT_ENV: "production",
+    });
+
+    expect(env.QUIETER_DEPLOYMENT_ENV).toBe("production");
   });
 
   test("rejects non-HTTP service URLs", () => {
@@ -98,6 +107,15 @@ describe("web client environment", () => {
 });
 
 describe("SST environment", () => {
+  test("normalizes the Gmail AI automation runtime switch", () => {
+    const env = createSstEnv(
+      { production: false },
+      { ...requiredSstEnvironment, QUIETER_GMAIL_AI_AUTOMATION_ENABLED: "on" },
+    );
+
+    expect(env.QUIETER_GMAIL_AI_AUTOMATION_ENABLED).toBe(true);
+  });
+
   test("allows Pub/Sub to be disabled outside production", () => {
     const env = createSstEnv({ production: false }, requiredSstEnvironment);
 
@@ -201,42 +219,5 @@ describe("SST environment", () => {
     expect(() => createSstEnv({ production: true }, environment)).toThrow(
       "Polar product configuration is required in production",
     );
-  });
-});
-
-describe("deployment environment", () => {
-  test("requires all Vercel deployment inputs", () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
-
-    try {
-      expect(() => createDeploymentEnv({})).toThrow();
-    } finally {
-      consoleError.mockRestore();
-    }
-  });
-
-  test("requires an HTTPS deploy hook", () => {
-    expect(() =>
-      createDeploymentEnv({
-        VERCEL_DEPLOY_HOOK_URL: "http://example.com/deploy",
-        VERCEL_PROJECT_ID: "project",
-        VERCEL_TEAM_ID: "team",
-        VERCEL_TOKEN: "token",
-      }),
-    ).toThrow();
-  });
-
-  test("accepts preview deployment waits", () => {
-    const env = createDeploymentEnv({
-      VERCEL_DEPLOY_HOOK_URL: "https://example.com/deploy",
-      VERCEL_DEPLOYMENT_GIT_REF: "main",
-      VERCEL_DEPLOYMENT_TARGET: "preview",
-      VERCEL_PROJECT_ID: "project",
-      VERCEL_TEAM_ID: "team",
-      VERCEL_TOKEN: "token",
-    });
-
-    expect(env.VERCEL_DEPLOYMENT_TARGET).toBe("preview");
-    expect(env.VERCEL_DEPLOYMENT_GIT_REF).toBe("main");
   });
 });

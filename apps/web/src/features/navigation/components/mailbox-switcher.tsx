@@ -28,7 +28,6 @@ import { Pill } from "@quieter/ui/pill";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
 import { type ReactNode, useRef, useState } from "react";
 import { VerticalSlot } from "~/components/vertical-slot";
-import { MailboxAccessPill } from "~/features/mailbox/components/mailbox-access-pill";
 import { SidebarSimpleHoverSurface } from "~/features/navigation/components/sidebar-surfaces";
 
 type MailboxSwitcherMailbox = {
@@ -158,7 +157,7 @@ const MailboxInboxStatusPill = ({ mailbox }: { mailbox: MailboxSwitcherMailbox }
   }
 
   if (mailbox.unreadNonSpamCount === 0) {
-    return <Pill tone="mailbox-ready">Inbox zero</Pill>;
+    return <Pill tone="mailbox-ready">Inbox Zero</Pill>;
   }
 
   return (
@@ -168,7 +167,7 @@ const MailboxInboxStatusPill = ({ mailbox }: { mailbox: MailboxSwitcherMailbox }
 
 const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => {
   const displayName = mailbox.displayName?.trim() || null;
-  const showSecondRow = Boolean(displayName || mailbox.grantRole);
+  const showSecondRow = Boolean(displayName);
   const showPin = Boolean(action);
 
   return (
@@ -188,14 +187,8 @@ const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => 
         </div>
         {showSecondRow ? (
           <>
-            {displayName ? (
-              <p className="truncate text-xs/5 text-muted-foreground">{mailbox.emailAddress}</p>
-            ) : (
-              <span />
-            )}
-            <div className="flex h-5 items-center justify-end">
-              {mailbox.grantRole ? <MailboxAccessPill role={mailbox.grantRole} /> : null}
-            </div>
+            <p className="truncate text-xs/5 text-muted-foreground">{mailbox.emailAddress}</p>
+            <span />
           </>
         ) : null}
       </div>

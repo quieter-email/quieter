@@ -9,10 +9,10 @@
       "bun": "./src/client.ts",
       "default": "./dist/client.js"
     },
-    "./deployment": {
-      "types": "./src/deployment.ts",
-      "bun": "./src/deployment.ts",
-      "default": "./dist/deployment.js"
+    "./github": {
+      "types": "./src/github.ts",
+      "bun": "./src/github.ts",
+      "default": "./dist/github.js"
     },
     "./public": {
       "types": "./src/public.ts",

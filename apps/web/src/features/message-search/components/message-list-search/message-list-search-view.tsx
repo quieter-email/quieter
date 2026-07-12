@@ -47,7 +47,7 @@ const getFilterLabel = (type: string) => {
 };
 
 const searchToolbarControlClassName =
-  "size-10 rounded-xl bg-secondary/55 text-muted-foreground shadow-none hover:bg-secondary hover:text-foreground [&_svg]:size-3.5";
+  "size-10 rounded-xl bg-secondary/55 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground [&_svg]:size-3.5";
 
 export const MessageListSearchView = ({
   controller,
@@ -155,7 +155,7 @@ export const MessageListSearchView = ({
                       <button
                         className={cn(
                           filterChipClassName,
-                          "gap-1 px-2 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30",
+                          "gap-1 px-2 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30",
                         )}
                         key={`label:${normalizeLabelSelectionKey(filter.value)}`}
                         onClick={(event) => {
@@ -187,7 +187,7 @@ export const MessageListSearchView = ({
                       <button
                         className={cn(
                           filterChipClassName,
-                          "gap-1 px-2 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30",
+                          "gap-1 px-2 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30",
                         )}
                         key={`${filter.type}:${filter.value}`}
                         onClick={(event) => {
@@ -298,7 +298,7 @@ export const MessageListSearchView = ({
                     <IconButtonTooltip key="clear-search" label="Clear search">
                       <Button
                         aria-label="Clear search"
-                        className="shrink-0 rounded-lg text-muted-foreground hover:bg-background-light hover:text-foreground"
+                        className="shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
                         onClick={(event) => {
                           event.stopPropagation();
                           clearSearch();
@@ -328,7 +328,7 @@ export const MessageListSearchView = ({
               <IconButtonTooltip label="Run search">
                 <Button
                   aria-label="Run search"
-                  className="shrink-0 rounded-lg text-muted-foreground hover:bg-background-light hover:text-foreground"
+                  className="shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
                   onClick={(event) => {
                     event.stopPropagation();
                     runSearch();

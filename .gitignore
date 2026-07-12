@@ -18,9 +18,8 @@ coverage
 
 # SST
 .sst
+.wrangler
 
-# Vercel
-.vercel
 
 # Build Outputs
 .next/
@@ -46,4 +45,3 @@ yarn-error.log*
 
 # Cursor
 .cursor/
-.vercel
