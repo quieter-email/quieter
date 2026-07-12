@@ -10,7 +10,7 @@ import {
 import { serverEnv } from "@quieter/env/server";
 import { APIError } from "better-auth/api";
 import { and, eq, notInArray, or, sql } from "drizzle-orm";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 
 type AuthUser = typeof user.$inferSelect;
 
@@ -65,32 +65,45 @@ export const ensureUserOrganizationState = async (
   }
 
   return await db.transaction(async (transaction) => {
-    await transaction.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${`default-organization:${currentUser.id}`}, 0))`,
-    );
-
     let organizationIds = await getUserOrganizationIds(transaction, currentUser.id);
     if (organizationIds.length === 0) {
       const now = new Date();
-      const organizationId = randomUUID();
       const name = createDefaultOrganizationName(currentUser);
+      const stableId = createHash("sha256").update(currentUser.id).digest("hex");
+      const organizationId = `default-organization-${stableId}`;
 
-      await transaction.insert(organization).values({
-        billingOwnerUserId: currentUser.id,
-        createdAt: now,
-        id: organizationId,
-        name,
-        slug: name,
-        updatedAt: now,
-      });
-      await transaction.insert(member).values({
-        createdAt: now,
-        id: randomUUID(),
-        organizationId,
-        role: "owner",
-        userId: currentUser.id,
-      });
-      organizationIds = [organizationId];
+      await transaction
+        .insert(organization)
+        .values({
+          billingOwnerUserId: currentUser.id,
+          createdAt: now,
+          id: organizationId,
+          name,
+          slug: name,
+          updatedAt: now,
+        })
+        .onConflictDoNothing();
+      const [defaultOrganization] = await transaction
+        .select({ id: organization.id })
+        .from(organization)
+        .where(eq(organization.slug, name))
+        .limit(1);
+
+      if (!defaultOrganization) {
+        throw new Error("Default team provisioning failed.");
+      }
+
+      await transaction
+        .insert(member)
+        .values({
+          createdAt: now,
+          id: `default-member-${stableId}`,
+          organizationId: defaultOrganization.id,
+          role: "owner",
+          userId: currentUser.id,
+        })
+        .onConflictDoNothing();
+      organizationIds = [defaultOrganization.id];
     }
 
     await transaction
