@@ -185,6 +185,14 @@ jobs:
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
         run: vp run @quieter/database#db:deploy
 
+      - name: Remove obsolete DNS resources from SST state
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_DEFAULT_ACCOUNT_ID: ${{ vars.CLOUDFLARE_DEFAULT_ACCOUNT_ID }}
+        run: |
+          printf 'y\n' | bunx sst state remove GmailPubSubIngressCNAMERecordGmaileventsquieteremail --config sst.config.ts --stage "$SST_STAGE"
+          printf 'y\n' | bunx sst state remove GmailPubSubIngressSslCNAMERecord48408b67df5438e95f844527ffe9337fgmaileventsquieteremail --config sst.config.ts --stage "$SST_STAGE"
+
       - name: Sync GitHub configuration and deploy with SST
         env:
           APP_SITE_PASSWORD: ${{ secrets.APP_SITE_PASSWORD }}
