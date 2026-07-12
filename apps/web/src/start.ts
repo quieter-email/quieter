@@ -24,6 +24,7 @@ const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
 const publicPathPrefixes = ["/_build/", "/assets/"];
 const isSentryEnabled = process.env.NODE_ENV !== "development" && !!process.env.SENTRY_DSN;
+const fallbackRateLimitBuckets = new Map<string, { count: number; expiresAt: number }>();
 
 const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === "serverFn",
@@ -52,10 +53,15 @@ const abuseProtectionMiddleware = createMiddleware().server(async ({ next, reque
     request.headers.get("x-real-ip")?.trim() ||
     "unknown";
   const policy = getRateLimitPolicy(requestUrl.pathname);
+  const key = `${policy.group}:${clientAddress}`;
   const result = await consumeRateLimit({
-    key: `${policy.group}:${clientAddress}`,
+    key,
     limit: policy.limit,
     windowMs: policy.windowMs,
+  }).catch((error: unknown) => {
+    console.error("Persistent rate limiting unavailable; using the local fallback", error);
+
+    return consumeFallbackRateLimit({ key, limit: policy.limit, windowMs: policy.windowMs });
   });
 
   if (!result.allowed) {
@@ -71,6 +77,29 @@ const abuseProtectionMiddleware = createMiddleware().server(async ({ next, reque
 
   return next();
 });
+
+const consumeFallbackRateLimit = (input: { key: string; limit: number; windowMs: number }) => {
+  const now = Date.now();
+  const existing = fallbackRateLimitBuckets.get(input.key);
+  const bucket =
+    !existing || existing.expiresAt <= now
+      ? { count: 1, expiresAt: now + input.windowMs }
+      : { count: existing.count + 1, expiresAt: existing.expiresAt };
+
+  fallbackRateLimitBuckets.set(input.key, bucket);
+
+  if (fallbackRateLimitBuckets.size > 1_000) {
+    for (const [key, candidate] of fallbackRateLimitBuckets) {
+      if (candidate.expiresAt <= now) fallbackRateLimitBuckets.delete(key);
+    }
+  }
+
+  return {
+    allowed: bucket.count <= input.limit,
+    remaining: Math.max(0, input.limit - bucket.count),
+    resetAt: new Date(bucket.expiresAt),
+  };
+};
 
 const securityHeadersMiddleware = createMiddleware().server(async ({ next }) => {
   const result = await next();
