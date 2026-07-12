@@ -43,6 +43,10 @@ The production environment must provide:
 - Gmail notification, Polar catalog, R2, Sentry, PostHog, auth-mail, and public browser variables
   referenced by `.github/workflows/sst-deploy.yml`.
 
+The Cloudflare web Worker reaches Postgres through Hyperdrive (`sst.cloudflare.Hyperdrive`
+`AppDatabase`), not a raw `DATABASE_URL` TCP pool. AWS mail/background functions still use
+`DATABASE_URL` directly.
+
 The Preview environment uses the same runtime contract with isolated non-production values. The
 workflow calls `scripts/sync-sst-secrets.ts` immediately before deployment, so changing GitHub is
 enough to update the next Worker release.

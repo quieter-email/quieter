@@ -50,6 +50,36 @@ export default $config({
             properties: {},
           }),
       );
+    const parsePostgresOrigin = (connectionString: string) => {
+      const url = new URL(connectionString);
+      const database = decodeURIComponent(
+        url.pathname.replace(/^\//, "").split("/")[0]?.split("?")[0] || "",
+      );
+
+      if (!url.hostname || !url.username || !database) {
+        throw new Error("DATABASE_URL must include host, user, and database for Hyperdrive");
+      }
+
+      return {
+        database,
+        host: url.hostname,
+        password: decodeURIComponent(url.password),
+        port: url.port ? Number(url.port) : 5432,
+        user: decodeURIComponent(url.username),
+      };
+    };
+    const appDatabaseOrigin = secretResources.DATABASE_URL.value.apply(parsePostgresOrigin);
+    const appDatabase = new sst.cloudflare.Hyperdrive("AppDatabase", {
+      caching: false,
+      origin: {
+        database: appDatabaseOrigin.database,
+        host: appDatabaseOrigin.host,
+        password: appDatabaseOrigin.password,
+        port: appDatabaseOrigin.port,
+        scheme: "postgres",
+        user: appDatabaseOrigin.user,
+      },
+    });
     const appOrigin = production
       ? "https://quieter.email"
       : preview
@@ -89,7 +119,7 @@ export default $config({
           VITE_SENTRY_DSN: process.env.VITE_SENTRY_DSN || "",
           ...runtimeEnvironment,
         },
-        link: [...webSecretBindings, ...links],
+        link: [...webSecretBindings, appDatabase, ...links],
         path: "apps/web",
         transform: {
           server: {

@@ -1,7 +1,9 @@
 export const SitePasswordRouteComponent = ({
   hasSitePasswordError,
+  returnTo,
 }: {
   hasSitePasswordError: boolean;
+  returnTo: string;
 }) => (
   <main className="grid min-h-dvh place-items-center bg-background px-6 py-10">
     <div className="w-full max-w-sm">
@@ -11,6 +13,7 @@ export const SitePasswordRouteComponent = ({
       </p>
 
       <form action="/api/site-password" className="mt-6 grid gap-3" method="post">
+        <input name="returnTo" type="hidden" value={returnTo} />
         <input
           aria-label="Site password"
           autoComplete="current-password"
