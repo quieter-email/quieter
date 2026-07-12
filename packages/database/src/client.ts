@@ -9,7 +9,7 @@ export type DatabaseClient = ReturnType<typeof drizzlePostgres>;
 
 const getLinkedHyperdriveConnectionString = () => {
   try {
-    const appDatabase = Reflect.get(Resource, "AppDatabase") as
+    const appDatabase = Reflect.get(Resource, "AppDatabaseV2") as
       | { connectionString?: string }
       | undefined;
     const connectionString = appDatabase?.connectionString;

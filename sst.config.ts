@@ -69,7 +69,7 @@ export default $config({
       };
     };
     const appDatabaseOrigin = secretResources.DATABASE_URL.value.apply(parsePostgresOrigin);
-    const appDatabase = new sst.cloudflare.Hyperdrive("AppDatabase", {
+    const appDatabase = new sst.cloudflare.Hyperdrive("AppDatabaseV2", {
       caching: false,
       origin: {
         database: appDatabaseOrigin.database,
