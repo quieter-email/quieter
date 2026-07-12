@@ -47,6 +47,23 @@ export const createDefaultOrganizationName = (currentUser: UserIdentity) => {
 export const ensureUserOrganizationState = async (
   currentUser: UserIdentity,
 ): Promise<EnsureUserOrganizationStateResult> => {
+  const existingOrganizationIds = await getUserOrganizationIds(db, currentUser.id);
+
+  if (existingOrganizationIds.length > 0) {
+    await db
+      .update(mailbox)
+      .set({ organizationId: existingOrganizationIds[0], updatedAt: new Date() })
+      .where(
+        and(
+          eq(mailbox.ownerUserId, currentUser.id),
+          eq(mailbox.provider, "gmail"),
+          sql`${mailbox.organizationId} is null`,
+        ),
+      );
+
+    return { organizationIds: existingOrganizationIds };
+  }
+
   return await db.transaction(async (transaction) => {
     await transaction.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${`default-organization:${currentUser.id}`}, 0))`,
