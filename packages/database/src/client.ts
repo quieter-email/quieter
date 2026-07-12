@@ -1,11 +1,33 @@
 import { serverEnv } from "@quieter/env/server";
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { Resource } from "sst";
 import { authRelations } from "./schema";
 
 export type DatabaseClient = ReturnType<typeof drizzlePostgres>;
 
+const getLinkedHyperdriveConnectionString = () => {
+  try {
+    const appDatabase = Reflect.get(Resource, "AppDatabase") as
+      | { connectionString?: string }
+      | undefined;
+    const connectionString = appDatabase?.connectionString;
+
+    return typeof connectionString === "string" && connectionString.length > 0
+      ? connectionString
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const getDatabaseUrl = () => {
+  const linkedConnectionString = getLinkedHyperdriveConnectionString();
+
+  if (linkedConnectionString) {
+    return linkedConnectionString;
+  }
+
   const databaseUrl = serverEnv.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error("DATABASE_URL environment variable is missing");
@@ -20,7 +42,9 @@ export const assertDatabaseConfigured = () => {
 const createDatabaseClient = (): DatabaseClient => {
   const databaseUrl = getDatabaseUrl();
   const sql = postgres(databaseUrl, {
-    max: 10,
+    connect_timeout: 10,
+    fetch_types: false,
+    max: 5,
     prepare: false,
   });
   return drizzlePostgres({

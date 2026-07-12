@@ -5,7 +5,7 @@
 - Forms: TanStack Form
 - Client state: TanStack Query, TanStack Store, TanStack Hotkeys
 - API: oRPC + `@orpc/tanstack-query`
-- DB: Drizzle + Postgres (postgres-js against local Postgres or Neon)
+- DB: Drizzle + Postgres (postgres-js against local Postgres or Neon; Cloudflare Workers use Hyperdrive)
 - UI: Tailwind CSS 4, `@quieter/ui`, Base UI, Vaul, Sonner, Hugeicons, Tiptap
 - Tooling: Vite+ (`vp`), including Vite, Oxfmt, Oxlint, type-aware checks, Vitest, tsdown, and Vite Task
 

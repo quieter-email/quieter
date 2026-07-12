@@ -9,7 +9,8 @@
   "dependencies": {
     "@quieter/env": "workspace:*",
     "drizzle-orm": "catalog:",
-    "postgres": "^3.4.9"
+    "postgres": "^3.4.9",
+    "sst": "^4.17.0"
   },
   "devDependencies": {
     "@quieter/config": "workspace:*",

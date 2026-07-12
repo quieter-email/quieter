@@ -4,7 +4,9 @@ import { SitePasswordRouteComponent } from "~/components/site-password-route-com
 const sitePasswordRouteApi = getRouteApi("/site-password");
 
 export const SitePasswordRoute = () => {
-  const { sitePasswordError } = sitePasswordRouteApi.useSearch();
+  const { returnTo, sitePasswordError } = sitePasswordRouteApi.useSearch();
 
-  return <SitePasswordRouteComponent hasSitePasswordError={sitePasswordError} />;
+  return (
+    <SitePasswordRouteComponent hasSitePasswordError={sitePasswordError} returnTo={returnTo} />
+  );
 };
