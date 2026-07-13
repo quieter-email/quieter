@@ -114,6 +114,9 @@ jobs:
       - name: Install dependencies
         run: vp install --frozen-lockfile
 
+      - name: Build environment package
+        run: vp run @quieter/env#build
+
       - name: Check migration conflicts
         uses: drizzle-team/drizzle-orm/actions/check@6adfcd1031726aaf59106ceb36707d85db5e6617
         with:
