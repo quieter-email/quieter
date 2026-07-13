@@ -48,6 +48,7 @@ export default $config({
     const webSecretBindings = Object.entries(secretResources)
       .filter(
         ([environmentName]) =>
+          environmentName !== "DATABASE_URL" &&
           environmentName !== "GMAIL_PUBSUB_PROCESS_TOKEN" &&
           environmentName !== "MAIL_INGEST_TOKEN",
       )

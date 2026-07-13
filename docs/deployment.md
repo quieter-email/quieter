@@ -25,13 +25,21 @@ store.
 
 Pull request review is opt-in. `.github/workflows/review-deploy.yml` accepts a same-repository pull
 request number, resolves its current head to an exact commit SHA, verifies that revision without
-secrets, and promotes it to the single SST `review` stage at
+secrets, builds a credential-free Worker artifact, and promotes it to the single review Worker at
 `https://review.quieter.email`. A later promotion replaces the previous revision.
 
 The workflow runs only by manual dispatch from the default branch. It is not triggered by pull
 request events, is not a required check, and does not change branch protection, so merging never
 waits for a review deployment. Fork pull requests cannot be promoted. Do not use
-`pull_request_target` to execute pull-request code and do not recreate dynamic `pr-*` stages.
+`pull_request_target` to execute pull-request code and do not recreate dynamic `pr-*` stages or
+provider-generated preview URLs.
+
+The credential boundary is structural: all pull-request commands run in the verification job with
+no deployment or runtime secrets. That job uploads only a pre-bundled Worker and static assets. The
+protected promotion job checks out the workflow's trusted default-branch revision, validates the
+artifact shape and size, and uploads it with the pinned Wrangler version and the repository-owned
+`.github/review-worker.wrangler.jsonc`. The Cloudflare token exists only in that final upload step;
+pull-request package scripts, build tools, and configuration never receive it.
 
 The stable origin makes provider configuration conventional and auditable. Its Google redirect URLs
 are exact, fixed values:
@@ -40,12 +48,16 @@ are exact, fixed values:
 - Gmail authorization: `https://review.quieter.email/api/gmail/callback`;
 - Google Calendar authorization: `https://review.quieter.email/api/connectors/callback`.
 
-The Review environment has a dedicated Cloudflare deployment token, OAuth clients, encryption
-keys, and synthetic non-production database role. It has no production mail, billing, AI, storage,
-or migration credentials. The Google OAuth project remains in testing mode and lists the permitted
-reviewers explicitly. Shared Review deployments disable preview personas, while Better Auth permits
-first-time Google signup only in Review so an approved test user can enter through the fixed
-callback. Review deployments never run remote database migrations.
+The Review environment has a dedicated least-privilege Cloudflare deployment token. The Worker has
+dedicated OAuth clients, encryption keys, and a Hyperdrive binding to a synthetic non-production
+database; the raw database credential is not a Worker environment variable. It has no production
+mail, billing, AI, storage, or migration credentials. Approved pull-request code necessarily runs
+with the isolated Review runtime bindings, so reviewers must use only dedicated test mailboxes and
+must never connect a personal or production Gmail mailbox. The Google OAuth project remains in
+testing mode and lists the permitted reviewers explicitly. Shared Review deployments disable
+preview personas, while Better Auth permits first-time Google signup only in Review so an approved
+test user can enter through the fixed callback. Review deployments never run remote database
+migrations.
 
 ## GitHub environment contract
 
@@ -62,11 +74,12 @@ The Cloudflare web Worker reaches Postgres through Hyperdrive (`sst.cloudflare.H
 `AppDatabase`), not a raw `DATABASE_URL` TCP pool. AWS mail/background functions still use
 `DATABASE_URL` directly.
 
-The Review environment provides only `BETTER_AUTH_SECRET`, `CLOUDFLARE_API_TOKEN`,
-`CONNECTOR_TOKEN_ENCRYPTION_KEY`, `DATABASE_URL`, both Gmail token-encryption keys, and the three
-Google OAuth client pairs, plus the non-secret Cloudflare account id and app display variables. The
-workflow calls `scripts/sync-sst-secrets.ts` immediately before deployment, so changing GitHub is
-enough to update the next promoted release.
+The GitHub Review environment provides only `CLOUDFLARE_API_TOKEN` and the non-secret
+`CLOUDFLARE_DEFAULT_ACCOUNT_ID`. Runtime OAuth client secrets and encryption keys live only as
+encrypted bindings on the isolated Review Worker. Non-secret Worker configuration, OAuth client
+ids, the fixed domain, and the Review Hyperdrive id are source-controlled in
+`.github/review-worker.wrangler.jsonc`. Rotate runtime secrets directly on the Review Worker; do not
+copy them into pull-request jobs or source control.
 
 ## Database safety
 
@@ -81,6 +94,6 @@ procedure.
 ## Failure behavior
 
 - Verification or migration failure prevents deployment.
-- Secret synchronization failure prevents deployment.
-- SST failure leaves the previous Worker release serving traffic.
+- Artifact validation or protected promotion failure leaves the previous Review Worker release
+  serving traffic.
 - Gmail credential rotation runs only after SST reports a successful production deployment.
