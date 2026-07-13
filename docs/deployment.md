@@ -23,23 +23,26 @@ store.
 
 ## Review environment
 
-Pull request review is opt-in. `.github/workflows/review-deploy.yml` accepts a same-repository pull
-request number, resolves its current head to an exact commit SHA, verifies that revision without
-secrets, builds a credential-free Worker artifact, and promotes it to the single review Worker at
-`https://review.quieter.email`. A later promotion replaces the previous revision.
+Pull request review is opt-in. When `leanderriefel` posts the exact comment `quieter review` on an
+open same-repository pull request, `.github/workflows/review-deploy.yml` resolves its current head to
+an exact commit SHA, verifies that revision without secrets, builds a credential-free Worker
+artifact, and promotes it to the single review Worker at `https://review.quieter.email`. The command
+receives a rocket reaction when accepted. A later promotion replaces the previous revision. An
+owner-only manual dispatch remains available as an operational fallback.
 
-The workflow runs only by manual dispatch from the default branch. It is not triggered by pull
-request events, is not a required check, and does not change branch protection, so merging never
-waits for a review deployment. Fork pull requests cannot be promoted. Do not use
-`pull_request_target` to execute pull-request code and do not recreate dynamic `pr-*` stages or
-provider-generated preview URLs.
+The comment author is checked by both the exact GitHub login and immutable GitHub user id. Other
+comments do nothing, including the same command from another account. The command is the deployment
+authorization signal, so promotion does not require a second environment approval. The workflow is
+not a required check and does not change branch protection, so merging never waits for a review
+deployment. Fork pull requests cannot be promoted. Do not use `pull_request_target` to execute
+pull-request code and do not recreate dynamic `pr-*` stages or provider-generated preview URLs.
 
 The credential boundary is structural: all pull-request commands run in the verification job with
 no deployment or runtime secrets. That job uploads only a pre-bundled Worker and static assets. The
-protected promotion job checks out the workflow's trusted default-branch revision, validates the
-artifact shape and size, and uploads it with the pinned Wrangler version and the repository-owned
-`.github/review-worker.wrangler.jsonc`. The Cloudflare token exists only in that final upload step;
-pull-request package scripts, build tools, and configuration never receive it.
+environment-scoped promotion job checks out the workflow's trusted default-branch revision,
+validates the artifact shape and size, and uploads it with the pinned Wrangler version and the
+repository-owned `.github/review-worker.wrangler.jsonc`. The Cloudflare token exists only in that
+final upload step; pull-request package scripts, build tools, and configuration never receive it.
 
 The stable origin makes provider configuration conventional and auditable. Its Google redirect URLs
 are exact, fixed values:

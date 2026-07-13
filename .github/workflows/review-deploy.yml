@@ -1,6 +1,8 @@
 name: Deploy review environment
 
 on:
+  issue_comment:
+    types: [created]
   workflow_dispatch:
     inputs:
       pull_request:
@@ -12,7 +14,18 @@ permissions:
   contents: read
 
 concurrency:
-  group: quieter-review
+  group: >-
+    ${{
+      ((github.event_name == 'workflow_dispatch' &&
+        github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+        github.actor == 'leanderriefel') ||
+      (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        github.event.comment.user.login == 'leanderriefel' &&
+        github.event.comment.user.id == 71840441 &&
+        github.event.comment.body == 'quieter review')) &&
+      'quieter-review' || format('quieter-review-ignored-{0}', github.run_id)
+    }}
   cancel-in-progress: true
 
 env:
@@ -21,9 +34,18 @@ env:
 jobs:
   resolve:
     name: Resolve eligible pull request
-    if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    if: >-
+      (github.event_name == 'workflow_dispatch' &&
+        github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+        github.actor == 'leanderriefel') ||
+      (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        github.event.comment.user.login == 'leanderriefel' &&
+        github.event.comment.user.id == 71840441 &&
+        github.event.comment.body == 'quieter review')
     permissions:
       contents: read
+      issues: write
       pull-requests: read
     runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
@@ -35,7 +57,33 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const pullRequestNumber = Number(context.payload.inputs.pull_request);
+            const ownerUserId = 71840441;
+            const { data: actor } = await github.rest.users.getByUsername({
+              username: context.actor,
+            });
+            if (actor.id !== ownerUserId) {
+              core.setFailed('Only the repository owner can request a Review deployment.');
+              return;
+            }
+
+            const isCommentCommand = context.eventName === 'issue_comment';
+            if (isCommentCommand) {
+              const comment = context.payload.comment;
+              if (
+                comment.user?.id !== ownerUserId ||
+                comment.user?.login !== 'leanderriefel' ||
+                comment.body !== 'quieter review'
+              ) {
+                core.setFailed('The Review comment command is not authorized.');
+                return;
+              }
+            }
+
+            const pullRequestNumber = Number(
+              isCommentCommand
+                ? context.payload.issue.number
+                : context.payload.inputs.pull_request,
+            );
             if (!Number.isSafeInteger(pullRequestNumber) || pullRequestNumber <= 0) {
               core.setFailed('Pull request number must be a positive integer.');
               return;
@@ -55,6 +103,15 @@ jobs:
             if (pullRequest.head.repo?.full_name !== `${owner}/${repo}`) {
               core.setFailed('Fork pull requests cannot be deployed to the credentialed review environment.');
               return;
+            }
+
+            if (isCommentCommand) {
+              await github.rest.reactions.createForIssueComment({
+                owner,
+                repo,
+                comment_id: context.payload.comment.id,
+                content: 'rocket',
+              });
             }
 
             core.setOutput('number', String(pullRequestNumber));
