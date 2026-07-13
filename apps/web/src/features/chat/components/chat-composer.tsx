@@ -1,12 +1,12 @@
+import type { ChatModel } from "@quieter/ai/chat-models";
 import type { FormEvent, KeyboardEvent } from "react";
 import { AiMicIcon, SentIcon, StopIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { chatModels, type ChatModel } from "@quieter/ai/chat-models";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@quieter/ui/select";
 import { domMax, LazyMotion, m } from "motion/react";
+import { AiModelSelect } from "~/features/ai/components/ai-model-select";
 
 type ChatComposerProps = {
   busy: boolean;
@@ -103,24 +103,13 @@ export const ChatComposer = ({
           />
         )}
         <div className="flex items-center justify-between gap-1 px-2 pb-2">
-          <Select
-            items={chatModels.map(({ label, value }) => ({ label, value }))}
-            onValueChange={(value) => {
-              if (value) onModelChange(value);
-            }}
+          <AiModelSelect
+            ariaLabel="Model"
+            disabled={disabled || busy}
+            onValueChange={onModelChange}
             value={model}
-          >
-            <SelectTrigger aria-label="Model" disabled={disabled || busy} variant="ghost">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {chatModels.map((model) => (
-                <SelectItem key={model.value} value={model.value}>
-                  {model.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            variant="ghost"
+          />
           {streaming ? (
             <IconButtonTooltip label="Stop">
               <Button

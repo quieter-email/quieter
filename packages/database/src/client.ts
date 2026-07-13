@@ -58,10 +58,16 @@ const requestDatabaseClient = new AsyncLocalStorage<DatabaseClient>();
 let directDatabaseClient: DatabaseClient | undefined;
 
 const getDatabaseClient = () => {
+  const scopedClient = requestDatabaseClient.getStore();
+
+  if (scopedClient) {
+    return scopedClient;
+  }
+
   const linkedConnectionString = getLinkedHyperdriveConnectionString();
 
   if (linkedConnectionString) {
-    return requestDatabaseClient.getStore() ?? createDatabaseClient(linkedConnectionString);
+    return createDatabaseClient(linkedConnectionString);
   }
 
   directDatabaseClient ??= createDatabaseClient();
@@ -69,13 +75,11 @@ const getDatabaseClient = () => {
 };
 
 export const withRequestDatabaseClient = <Result>(callback: () => Result) => {
-  const linkedConnectionString = getLinkedHyperdriveConnectionString();
-
-  if (!linkedConnectionString || requestDatabaseClient.getStore()) {
+  if (requestDatabaseClient.getStore()) {
     return callback();
   }
 
-  return requestDatabaseClient.run(createDatabaseClient(linkedConnectionString), callback);
+  return requestDatabaseClient.run(createDatabaseClient(), callback);
 };
 
 export const db = new Proxy({} as DatabaseClient, {

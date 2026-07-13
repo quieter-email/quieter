@@ -8,6 +8,7 @@ import { type SettingsTab } from "~/features/settings/domain/settings-tab";
 import { settingsRouteApi } from "~/lib/route-apis";
 import { AccountSettingsPanel } from "./account-settings-panel";
 import { ActionsSettingsPanel } from "./actions-settings-panel";
+import { AiSettingsPanel } from "./ai-settings-panel";
 import { BillingCheckoutResult } from "./billing-checkout-result";
 import { ConnectorConnectionResult } from "./connector-connection-result";
 import { ConnectorsSettingsPanel } from "./connectors-settings-panel";
@@ -85,6 +86,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
               )}
 
               {tab === "appearance" && <AppearanceSettingsPanel />}
+              {tab === "ai" && <AiSettingsPanel />}
               {tab === "reading" && <ReadingSettingsPanel />}
               {tab === "shortcuts" && <ShortcutsSettingsPanel />}
               {tab === "privacy" && <PrivacySettingsPanel />}

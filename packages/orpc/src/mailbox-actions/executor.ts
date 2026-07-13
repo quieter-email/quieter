@@ -490,11 +490,13 @@ export const executeMailboxActionRun = async (runId: string) => {
             const externalId = `mailbox-action:${run.id}:${stepRunId}:${usageIndex}`;
             usageContext.defer(
               reportAiUsage({
+                costUsd: usage.cost,
                 completionTokens: usage.completionTokens,
                 externalId,
                 mailboxId: run.mailboxId,
                 model,
                 promptTokens: usage.promptTokens,
+                promptTokensDetails: usage.promptTokensDetails,
                 usageKind: "aiChat",
                 userId: billingUserId,
               }).catch((error) => {

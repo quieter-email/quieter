@@ -1,9 +1,9 @@
 "use client";
 
+import type { ChatModel } from "@quieter/ai/chat-models";
 import type { ChatMessagePart } from "@quieter/database/schema";
 import type { RouterOutputs } from "@quieter/orpc";
 import type { UIMessage } from "@tanstack/ai";
-import { defaultChatModel, type ChatModel } from "@quieter/ai/chat-models";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { Button } from "@quieter/ui/button";
 import { toast } from "@quieter/ui/toast";
@@ -12,6 +12,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { LayoutGroup } from "motion/react";
 import { type FormEvent, type KeyboardEvent, useRef, useState } from "react";
+import {
+  setDefaultChatModel,
+  useDefaultChatModel,
+} from "~/features/ai/domain/default-chat-model-setting";
 import {
   hasOrganizationAiAccess,
   USER_BILLING_QUERY_KEY,
@@ -71,7 +75,11 @@ export const ChatView = ({
   const queryClient = useQueryClient();
   const { data: billing, isPending: isBillingPending } = useQuery(userBillingQueryOptions());
   const [input, setInput] = useState("");
-  const [model, setModel] = useState<ChatModel>(defaultChatModel);
+  const defaultModel = useDefaultChatModel();
+  const [modelSelection, setModelSelection] = useState<{
+    chatKey: string;
+    model: ChatModel;
+  } | null>(null);
   const [streamRunId, setStreamRunId] = useState<string | null>(null);
   const [streamingAssistant, setStreamingAssistant] = useState<{
     messageId: string;
@@ -81,6 +89,17 @@ export const ChatView = ({
     ...chatQueryOptions(mailboxId, chatId),
     refetchOnWindowFocus: true,
   });
+  const chatKey = chatId ?? draftChatKey;
+  const model =
+    modelSelection?.chatKey === chatKey
+      ? modelSelection.model
+      : (chatData?.messages.length ?? 0) > 0 && chatData?.lastModel
+        ? chatData.lastModel
+        : defaultModel;
+  const handleModelChange = (nextModel: ChatModel) => {
+    setDefaultChatModel(nextModel);
+    setModelSelection({ chatKey, model: nextModel });
+  };
   const audioRecorder = useAudioRecorder({
     mimeType: "audio/webm;codecs=opus",
     onError: () => {
@@ -473,10 +492,8 @@ export const ChatView = ({
                 errorMessage={errorMessage}
                 isStreaming={isStreaming}
                 onCopy={(text) => void copyToClipboard(text)}
-                onEditSubmit={(userMessageId, message) =>
-                  void handleEditSubmit(userMessageId, message)
-                }
-                onRegenerate={(assistantMessageId) => void handleRegenerate(assistantMessageId)}
+                onEditSubmit={handleEditSubmit}
+                onRegenerate={handleRegenerate}
                 onResolveCompose={handleResolveCompose}
                 turns={turns}
               />
@@ -496,7 +513,7 @@ export const ChatView = ({
                     model={model}
                     onInputChange={setInput}
                     onInputKeyDown={handleInputKeyDown}
-                    onModelChange={setModel}
+                    onModelChange={handleModelChange}
                     onRecordingStart={handleRecordingStart}
                     onRecordingStop={handleRecordingStop}
                     onStop={handleStop}
@@ -525,7 +542,7 @@ export const ChatView = ({
                   model={model}
                   onInputChange={setInput}
                   onInputKeyDown={handleInputKeyDown}
-                  onModelChange={setModel}
+                  onModelChange={handleModelChange}
                   onRecordingStart={handleRecordingStart}
                   onRecordingStop={handleRecordingStop}
                   onStop={handleStop}

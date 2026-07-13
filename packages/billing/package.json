@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./ai-pricing": "./src/ai-pricing.ts",
     "./credits": "./src/credits.ts",
     "./entitlements": "./src/entitlements.ts",
     "./polar": "./src/polar.ts",
@@ -18,6 +19,7 @@
   "dependencies": {
     "@orpc/server": "catalog:",
     "@polar-sh/sdk": "^0.48.1",
+    "@quieter/ai": "workspace:*",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
     "drizzle-orm": "catalog:",

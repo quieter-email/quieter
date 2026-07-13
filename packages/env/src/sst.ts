@@ -29,6 +29,7 @@ export const createSstEnv = (
   const env = createEnv({
     emptyStringAsUndefined: true,
     runtimeEnvStrict: {
+      AI_USD_TO_EUR_RATE: runtimeEnv.AI_USD_TO_EUR_RATE,
       DATABASE_URL: runtimeEnv.DATABASE_URL,
       CONNECTOR_TOKEN_ENCRYPTION_KEY: runtimeEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY,
       GMAIL_PUBSUB_PUSH_AUDIENCE: runtimeEnv.GMAIL_PUBSUB_PUSH_AUDIENCE,
@@ -58,6 +59,7 @@ export const createSstEnv = (
       R2_SECRET_ACCESS_KEY: runtimeEnv.R2_SECRET_ACCESS_KEY,
     },
     server: {
+      AI_USD_TO_EUR_RATE: z.coerce.number().positive(),
       DATABASE_URL: z.string().trim().url(),
       CONNECTOR_TOKEN_ENCRYPTION_KEY: optionalString,
       GMAIL_PUBSUB_PUSH_AUDIENCE: optionalString,

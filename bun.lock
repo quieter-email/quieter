@@ -169,6 +169,7 @@
       "dependencies": {
         "@orpc/server": "catalog:",
         "@polar-sh/sdk": "^0.48.1",
+        "@quieter/ai": "workspace:*",
         "@quieter/database": "workspace:*",
         "@quieter/env": "workspace:*",
         "drizzle-orm": "catalog:",

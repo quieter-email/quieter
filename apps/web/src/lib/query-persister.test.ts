@@ -34,6 +34,10 @@ describe("query persistence allowlist", () => {
     );
   });
 
+  test("revalidates persisted mailbox connection status on mount", () => {
+    expect(mailboxesQueryOptions().refetchOnMount).toBe("always");
+  });
+
   test("does not persist opened threads or managed rules", () => {
     expect(getPersister(getThreadWithDetailsOptions("mailbox-a", "thread-a"))).toBeUndefined();
     expect(getPersister(managedRulesQueryOptions("mailbox-a"))).toBeUndefined();
