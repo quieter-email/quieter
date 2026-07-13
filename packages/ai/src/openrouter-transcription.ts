@@ -10,6 +10,22 @@ type OpenRouterTranscriptionOptions = {
 
 const OPENROUTER_TRANSCRIPTION_TIMEOUT_MS = 60_000;
 
+const getTranscriptionRequestError = (status: number) => {
+  if (status === 400 || status === 422) {
+    return "We could not transcribe that recording. Try speaking more clearly or recording again.";
+  }
+
+  if (status === 413) {
+    return "Transcription recordings must be 60 seconds or shorter.";
+  }
+
+  if (status === 429) {
+    return "Transcription is busy right now. Try again in a moment.";
+  }
+
+  return "Transcription is temporarily unavailable. Try again in a moment.";
+};
+
 const openRouterTranscriptionResponseSchema = z.object({
   text: z.string(),
   usage: z
@@ -77,7 +93,12 @@ export const createOpenRouterTranscriptionAdapter = (
         });
 
         if (!response.ok) {
-          throw new Error("Audio transcription is temporarily unavailable.");
+          const responseBody = await response.text().catch(() => "");
+          options.logger.errors("transcription request rejected", {
+            responseBody: responseBody.slice(0, 1_000),
+            status: response.status,
+          });
+          throw new Error(getTranscriptionRequestError(response.status));
         }
 
         const result = openRouterTranscriptionResponseSchema.parse(await response.json());
@@ -104,6 +125,14 @@ export const createOpenRouterTranscriptionAdapter = (
           error,
           source: "openrouter",
         });
+        if (
+          (error instanceof DOMException &&
+            (error.name === "AbortError" || error.name === "TimeoutError")) ||
+          (error instanceof Error && /timed?\s*out|timeout/i.test(error.message))
+        ) {
+          throw new Error("Transcription took too long. Try a shorter recording.");
+        }
+
         throw error;
       }
     },

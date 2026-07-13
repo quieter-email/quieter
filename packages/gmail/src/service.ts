@@ -510,8 +510,26 @@ export const isGmailRateLimitedError = (error: unknown): error is GmailServiceEr
     status: error.status,
   });
 
-const sleep = async (durationMs: number) => {
-  await new Promise((resolve) => setTimeout(resolve, durationMs));
+const sleep = async (durationMs: number, signal?: AbortSignal) => {
+  await new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+
+    let timeout: ReturnType<typeof setTimeout>;
+    const finish = () => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    };
+    const abort = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+      reject(signal?.reason);
+    };
+    timeout = setTimeout(finish, durationMs);
+    signal?.addEventListener("abort", abort, { once: true });
+  });
 };
 
 const getRetryDelayMs = (attempt: number, retryAfterMs?: number) => {
@@ -999,7 +1017,7 @@ export const getGmailMessageMetadata = async (
         throw error;
       }
 
-      await sleep(getRetryDelayMs(attempt, error.retryAfterMs));
+      await sleep(getRetryDelayMs(attempt, error.retryAfterMs), signal);
     }
   }
 };
@@ -1368,6 +1386,52 @@ export const listMessagesWithDetails = async (
     nextPageToken: list.nextPageToken,
     resultSizeEstimate: list.resultSizeEstimate,
     historyId,
+  };
+};
+
+/** Live, compact mailbox search for agent tools. Skips thread summaries and avatar lookups. */
+export const listMessagesForAgent = async (
+  accessToken: string,
+  options?: {
+    pageToken?: string;
+    maxResults?: number;
+    mailbox?: MailboxCategory;
+    query?: string;
+    signal?: AbortSignal;
+  },
+): Promise<ListMessagesPageResult> => {
+  const list = await listMessages(accessToken, options);
+  const details = await getGmailMessagesMetadata(
+    accessToken,
+    list.messages.map((message) => message.id),
+    options?.signal,
+  );
+  const messages = details.flatMap((message) => {
+    if (!message) return [];
+
+    const labelIds = normalizeLabelIds(message.labelIds);
+    if (options?.mailbox && !isMessageInMailbox(options.mailbox, labelIds)) return [];
+
+    return [
+      {
+        date: getHeader(message, "Date"),
+        from: getHeader(message, "From"),
+        id: message.id,
+        internalDate: message.internalDate,
+        isUnread: hasUnreadLabel(labelIds),
+        labelIds,
+        snippet: decodeMimeHeaderValue(message.snippet),
+        subject: getHeader(message, "Subject"),
+        threadId: message.threadId,
+        to: getHeader(message, "To"),
+      },
+    ];
+  });
+
+  return {
+    messages,
+    nextPageToken: list.nextPageToken,
+    resultSizeEstimate: list.resultSizeEstimate,
   };
 };
 

@@ -5,8 +5,10 @@ export type {
   ComposeEmailInput,
   ComposeEmailResult,
   GoogleCalendarCreateEventResult as GoogleCalendarEventToolResult,
+  GmailAttachmentResult as GmailAttachmentToolResult,
   GmailLabelListResult as GmailLabelListToolResult,
   GmailMessageResult as GmailMessageToolResult,
+  GmailMessagesResult as GmailMessagesToolResult,
   GmailSearchResult as GmailSearchToolResult,
   GmailThreadResult as GmailThreadToolResult,
   LinearIssueCreateResult as LinearIssueCreateToolResult,
@@ -19,6 +21,11 @@ export type ChatViewProps = {
   activeMailbox: MailboxCategory;
   chatId: string | null;
   draftChatKey: string;
+  mailContext?: {
+    messageId?: string;
+    query?: string;
+    threadId?: string;
+  };
   mailboxId: string;
   mailboxOrganizationId: string;
   onChatIdChange: (chatId: string) => void;

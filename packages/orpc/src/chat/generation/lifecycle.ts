@@ -1,5 +1,5 @@
 import { serverEnv } from "@quieter/env/server";
-import { terminalizeFailedChatRun } from "./failure";
+import { getChatRunFailureMessage, terminalizeFailedChatRun } from "./failure";
 import { runChatGeneration } from "./runner";
 
 const ENQUEUE_CHAT_RUN_TIMEOUT_MS = 10_000;
@@ -11,13 +11,12 @@ export const ensureChatRunGeneration = (runId: string) => {
 
   const generation = runChatGeneration(runId)
     .catch(async (error) => {
-      console.error("Chat generation failed.", error);
-      await terminalizeFailedChatRun(
-        runId,
-        error instanceof Error ? error.message : "Chat generation failed.",
-      ).catch((updateError) => {
-        console.error("Could not terminalize the failed chat generation.", updateError);
-      });
+      console.error(`Chat generation ${runId} failed.`, error);
+      await terminalizeFailedChatRun(runId, getChatRunFailureMessage(error)).catch(
+        (updateError) => {
+          console.error("Could not terminalize the failed chat generation.", updateError);
+        },
+      );
     })
     .finally(() => {
       inFlightGenerations.delete(runId);
@@ -27,19 +26,9 @@ export const ensureChatRunGeneration = (runId: string) => {
   return generation;
 };
 
-export const handoffChatRunToBackground = (runId: string) => {
-  void enqueueChatRun(runId).catch((error) => {
-    console.error("Could not hand off chat generation to the background worker.", error);
-    return ensureChatRunGeneration(runId);
-  });
-};
-
-export const enqueueChatRun = async (runId: string) => {
+const enqueueChatRun = async (runId: string) => {
   const startUrl = serverEnv.CHAT_GENERATION_START_URL;
-  if (!startUrl) {
-    await ensureChatRunGeneration(runId);
-    return;
-  }
+  if (!startUrl) return;
 
   const token = serverEnv.CHAT_GENERATION_START_TOKEN;
   if (!token) {
@@ -74,4 +63,13 @@ export const enqueueChatRun = async (runId: string) => {
   } finally {
     clearTimeout(timeoutId);
   }
+};
+
+export const startChatRun = async (runId: string) => {
+  if (!serverEnv.CHAT_GENERATION_START_URL) {
+    void ensureChatRunGeneration(runId);
+    return;
+  }
+
+  await enqueueChatRun(runId);
 };

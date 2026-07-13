@@ -127,13 +127,16 @@ Outbound:
 Chats are mailbox-scoped.
 
 1. `chat.sendMessage` persists the user message, a run record, and a draft assistant row.
-2. The browser opens the run SSE endpoint.
-3. Server-side generation streams draft events and periodically persists the draft.
-4. Disconnects can continue in-process or hand off to the SST queue/workflow.
-5. Cancellation is cooperative through a persisted flag.
+2. The server starts generation in-process or through the SST queue/workflow.
+3. The browser opens the observation-only run SSE endpoint, which combines same-process events with
+   database-backed rejoin polling.
+4. Server-side generation streams draft events and atomically persists debounced drafts, independent
+   of browser connection lifetime.
+5. Cancellation immediately terminalizes the persisted run and draft, aborts a local controller when
+   present, and remains visible to remote workers through the persisted cancel state.
 
 Historical chat state is loaded once through `chat.get`; the browser does not poll for generated
-tokens.
+tokens or own generation lifetime.
 
 ## Consent and Observability
 

@@ -1,48 +1,46 @@
-import { db } from "@quieter/database/client";
-import { chatMessage, chatRun, type ChatMessagePart } from "@quieter/database/schema";
-import { eq } from "drizzle-orm";
-import { updateAssistantMessage, updateRunStatus } from "../../chat-run-store";
+import type { ChatMessagePart } from "@quieter/database/schema";
+import { terminalizeChatRun } from "../../chat-run-store";
 import { publishChatRunEvent } from "../../chat-run-stream";
+
+export const getChatRunFailureMessage = (error: unknown) => {
+  const message = error instanceof Error ? error.message : "";
+
+  if (/mail lookup/i.test(message)) {
+    return "The mail lookup stopped responding. Retry with a narrower request.";
+  }
+
+  if (
+    (error instanceof DOMException && error.name === "TimeoutError") ||
+    /timed?\s*out|timeout/i.test(message)
+  ) {
+    return "The response took too long and was stopped. Retry it to continue.";
+  }
+
+  if (error instanceof TypeError || /connection|fetch|network|stream/i.test(message)) {
+    return "The response connection was interrupted. Retry it to continue.";
+  }
+
+  return "The response could not finish. Retry it to continue.";
+};
 
 export const terminalizeFailedChatRun = async (
   runId: string,
   error: string,
   assistant?: { id: string; parts: ChatMessagePart[] },
 ) => {
-  let terminalAssistant = assistant;
-  if (!terminalAssistant) {
-    const [run] = await db
-      .select({ assistantMessageId: chatRun.assistantMessageId })
-      .from(chatRun)
-      .where(eq(chatRun.id, runId))
-      .limit(1);
-    if (!run) return;
+  const terminal = await terminalizeChatRun({
+    error,
+    parts: assistant?.parts,
+    runId,
+    status: "failed",
+  });
 
-    const [message] = await db
-      .select({ parts: chatMessage.parts })
-      .from(chatMessage)
-      .where(eq(chatMessage.id, run.assistantMessageId))
-      .limit(1);
-    terminalAssistant = {
-      id: run.assistantMessageId,
-      parts: message?.parts ?? [{ content: "", type: "text" }],
-    };
+  if (!terminal) {
+    return;
   }
 
-  await Promise.all([
-    updateAssistantMessage({
-      assistantMessageId: terminalAssistant.id,
-      error,
-      parts: terminalAssistant.parts,
-      status: "failed",
-    }),
-    updateRunStatus(runId, "failed", { error }),
-  ]);
   publishChatRunEvent(runId, {
-    assistantMessageId: terminalAssistant.id,
-    error,
-    parts: terminalAssistant.parts,
-    status: "failed",
+    ...terminal,
     type: "done",
   });
 };

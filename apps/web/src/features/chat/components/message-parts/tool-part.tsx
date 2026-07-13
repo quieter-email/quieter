@@ -7,8 +7,10 @@ import { m } from "motion/react";
 import type { GmailSearchToolResult, ModifyMailToolResult, ResolveComposeTool } from "../../types";
 import { parseToolArguments, parseToolResult } from "../../domain/chat-tools";
 import { InlineComposeTool } from "./inline-compose-tool";
+import { AttachmentTool } from "./tools/attachment-tool";
 import { LabelsTool } from "./tools/labels-tool";
 import { MessageTool } from "./tools/message-tool";
+import { MessagesTool } from "./tools/messages-tool";
 import { ModifyTool } from "./tools/modify-tool";
 import { OverviewTool } from "./tools/overview-tool";
 import { SearchTool } from "./tools/search-tool";
@@ -149,6 +151,30 @@ export const ToolPart = ({
         data={parsed.kind === "gmail-message" ? parsed.data : undefined}
         error={error}
         onOpenMessage={openMessage}
+        pending={pending}
+      />
+    );
+  }
+
+  if (name === "read_gmail_messages") {
+    return (
+      <MessagesTool
+        nested={nested}
+        data={parsed.kind === "gmail-messages" ? parsed.data : undefined}
+        error={error}
+        onOpenMessage={openMessage}
+        pending={pending}
+        requestedCount={Array.isArray(args.messageIds) ? args.messageIds.length : undefined}
+      />
+    );
+  }
+
+  if (name === "read_gmail_attachment") {
+    return (
+      <AttachmentTool
+        data={parsed.kind === "gmail-attachment" ? parsed.data : undefined}
+        error={error}
+        nested={nested}
         pending={pending}
       />
     );

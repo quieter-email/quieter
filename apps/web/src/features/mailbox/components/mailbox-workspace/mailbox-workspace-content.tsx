@@ -25,6 +25,11 @@ type MailboxWorkspaceLayoutState = {
 
 type MailboxWorkspaceContentProps = {
   activeMailbox: MailboxCategory;
+  chatContext?: {
+    messageId?: string;
+    query?: string;
+    threadId?: string;
+  };
   chatId: string | null;
   chats: MailboxSidebarChats;
   currentUserEmail: string | null;
@@ -182,6 +187,7 @@ const NoMailboxWorkspace = ({
 
 export const MailboxWorkspaceContent = ({
   activeMailbox,
+  chatContext,
   chatId,
   chats,
   currentUserEmail,
@@ -268,6 +274,7 @@ export const MailboxWorkspaceContent = ({
             >
               <ChatView
                 activeMailbox={activeMailbox}
+                mailContext={chatContext}
                 chatId={chatId}
                 draftChatKey={draftChatKey}
                 mailboxId={selectedMailboxId}

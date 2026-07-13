@@ -10,7 +10,7 @@ import {
 import type { ChatModel } from "./chat-models";
 import { createOpenRouterAdapter } from "./openrouter";
 
-export const CHAT_AGENT_MAX_ITERATIONS = 6;
+export const CHAT_AGENT_MAX_ITERATIONS = 12;
 export const CHAT_AGENT_MAX_TOKENS = 4_096;
 
 export const runChatStream = async ({
