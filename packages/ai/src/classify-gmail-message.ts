@@ -1,8 +1,7 @@
 import { chat, type ChatMiddleware } from "@tanstack/ai";
 import { z } from "zod";
+import { defaultAutoLabelModel, type ChatModel } from "./chat-models";
 import { createOpenRouterAdapter } from "./openrouter";
-
-export const GMAIL_AUTO_LABEL_MODEL = "deepseek/deepseek-v4-flash" as const;
 
 export type AutomationMailMessage = {
   attachments?: Array<{ fileName: string; mimeType: string }>;
@@ -115,6 +114,7 @@ export const classifyMailMessage = async ({
   memoryProfile,
   message,
   middleware,
+  model = defaultAutoLabelModel,
   userAiContext,
   userCorrectionContext,
 }: {
@@ -122,6 +122,7 @@ export const classifyMailMessage = async ({
   memoryProfile?: string | null;
   message: AutomationMailMessage;
   middleware?: ChatMiddleware[];
+  model?: ChatModel;
   userAiContext?: string | null;
   userCorrectionContext?: string | null;
 }) => {
@@ -132,7 +133,7 @@ export const classifyMailMessage = async ({
   }
 
   const result = await chat({
-    adapter: createOpenRouterAdapter(GMAIL_AUTO_LABEL_MODEL),
+    adapter: createOpenRouterAdapter(model),
     messages: [
       {
         content: JSON.stringify(

@@ -20,6 +20,12 @@ export const SETTINGS_NAV_ITEMS = [
     section: "preferences",
   },
   {
+    tab: "ai",
+    title: "AI",
+    description: "Choose models and review what Quieter remembers.",
+    section: "preferences",
+  },
+  {
     tab: "reading",
     title: "Reading",
     description: "Choose how messages are displayed.",

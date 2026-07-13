@@ -1,9 +1,9 @@
 import type { AutomationMailMessage } from "@quieter/ai/classify-gmail-message";
 import type { ChatMiddleware } from "@tanstack/ai";
 import { ORPCError } from "@orpc/server";
+import { chatModelSchema, type ChatModel } from "@quieter/ai/chat-models";
 import {
   extractMailUsefulDetail,
-  GMAIL_USEFUL_DETAIL_MODEL,
   type GmailUsefulDetailCandidate,
   type GmailUsefulDetailPreferenceProfile,
 } from "@quieter/ai/extract-gmail-useful-detail";
@@ -30,7 +30,7 @@ import {
   loadAutomationMemoryPrompt,
   refreshUsefulDetailMemoryProfile,
 } from "../mail-automation/memory";
-import { loadUserAiContextPrompt, recordAndRefreshUserAiContext } from "../user-ai-context";
+import { loadUserAiConfiguration, recordAndRefreshUserAiContext } from "../user-ai-context";
 
 const RETRY_BASE_MS = 1000 * 60 * 5;
 const RETRY_MAX_MS = 1000 * 60 * 60 * 24;
@@ -597,7 +597,10 @@ const deferEventAutomation = async (eventId: string, message: string) => {
 };
 
 const reportUsage = async (event: {
+  cachedTokens: number | null;
+  cacheWriteTokens: number | null;
   completionTokens: number | null;
+  costUsd: number | null;
   id: string;
   mailboxId: string;
   model: string | null;
@@ -605,22 +608,29 @@ const reportUsage = async (event: {
   usageReportedAt: Date | null;
   userId: string;
 }) => {
+  const model = chatModelSchema.safeParse(event.model);
   if (
     event.usageReportedAt ||
-    event.model !== GMAIL_USEFUL_DETAIL_MODEL ||
+    !model.success ||
     event.promptTokens == null ||
-    event.completionTokens == null
+    event.completionTokens == null ||
+    event.costUsd == null
   ) {
     return;
   }
 
   try {
     await reportAiUsage({
+      costUsd: event.costUsd,
       completionTokens: event.completionTokens,
       externalId: event.id,
       mailboxId: event.mailboxId,
-      model: GMAIL_USEFUL_DETAIL_MODEL,
+      model: model.data,
       promptTokens: event.promptTokens,
+      promptTokensDetails: {
+        cachedTokens: event.cachedTokens ?? 0,
+        cacheWriteTokens: event.cacheWriteTokens ?? 0,
+      },
       usageKind: "usefulDetails",
       userId: event.userId,
     });
@@ -658,7 +668,13 @@ const upsertGmailUsefulDetail = async ({
   message: AutomationMailMessage;
   model: string | null;
   source: string | null;
-  usage: { completionTokens: number | null; promptTokens: number | null };
+  usage: {
+    cachedTokens: number | null;
+    cacheWriteTokens: number | null;
+    completionTokens: number | null;
+    costUsd: number | null;
+    promptTokens: number | null;
+  };
 }) => {
   const now = new Date();
   const encryptedCode = detail.code ? encryptSecret(detail.code) : null;
@@ -716,7 +732,10 @@ const upsertGmailUsefulDetail = async ({
     await tx
       .update(gmailUsefulDetailEvent)
       .set({
+        cachedTokens: usage.cachedTokens,
+        cacheWriteTokens: usage.cacheWriteTokens,
         completionTokens: usage.completionTokens,
+        costUsd: usage.costUsd,
         lastError: null,
         model,
         nextAttemptAt: null,
@@ -729,7 +748,10 @@ const upsertGmailUsefulDetail = async ({
   });
   return {
     ...event,
+    cachedTokens: usage.cachedTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
     completionTokens: usage.completionTokens,
+    costUsd: usage.costUsd,
     model,
     processedAt: now,
     promptTokens: usage.promptTokens,
@@ -809,7 +831,7 @@ const getGmailUsefulDetailPreferenceProfile = async (
   mailboxId: string,
   source: string | null,
   userId: string,
-): Promise<GmailUsefulDetailPreferenceProfile> => {
+): Promise<{ model: ChatModel; preferences: GmailUsefulDetailPreferenceProfile }> => {
   const rows = await db
     .select({
       count: count(),
@@ -827,15 +849,18 @@ const getGmailUsefulDetailPreferenceProfile = async (
     const sourceCount = Number(row.sourceCount);
     return sourceCount > 0 ? [{ ...row, count: sourceCount }] : [];
   });
-  const [memoryProfile, userAiContext] = await Promise.all([
+  const [memoryProfile, aiConfiguration] = await Promise.all([
     loadAutomationMemoryPrompt({ agent: "useful_detail", mailboxId }),
-    loadUserAiContextPrompt({ userId }),
+    loadUserAiConfiguration({ userId }),
   ]);
 
   return {
-    ...buildGmailUsefulDetailPreferenceProfile({ global, source: sourceSpecific }),
-    memoryProfile,
-    userAiContext,
+    model: aiConfiguration.usefulDetailModel,
+    preferences: {
+      ...buildGmailUsefulDetailPreferenceProfile({ global, source: sourceSpecific }),
+      memoryProfile,
+      userAiContext: aiConfiguration.markdown,
+    },
   };
 };
 
@@ -867,15 +892,22 @@ export const processGmailUsefulDetailMessage = async ({
 
     let promptTokens = 0;
     let completionTokens = 0;
+    let costUsd: number | undefined = 0;
+    let cachedTokens = 0;
+    let cacheWriteTokens = 0;
     const usageMiddleware: ChatMiddleware = {
       name: "gmail-useful-details-usage",
       onUsage: (_context, usage) => {
         promptTokens += usage.promptTokens;
         completionTokens += usage.completionTokens;
+        costUsd =
+          costUsd === undefined || usage.cost === undefined ? undefined : costUsd + usage.cost;
+        cachedTokens += usage.promptTokensDetails?.cachedTokens ?? 0;
+        cacheWriteTokens += usage.promptTokensDetails?.cacheWriteTokens ?? 0;
       },
     };
     const source = getSenderSource(message.from);
-    const [[currentSettings], preferences] = await Promise.all([
+    const [[currentSettings], preferenceSettings] = await Promise.all([
       db
         .select({ enabled: mailboxAutomationSettings.usefulDetailsEnabled })
         .from(mailboxAutomationSettings)
@@ -883,6 +915,7 @@ export const processGmailUsefulDetailMessage = async ({
         .limit(1),
       getGmailUsefulDetailPreferenceProfile(mailboxId, source, userId),
     ]);
+    const { model, preferences } = preferenceSettings;
     if (!currentSettings?.enabled) {
       await markEventProcessedWithoutUsage(event.id);
       return;
@@ -903,7 +936,13 @@ export const processGmailUsefulDetailMessage = async ({
         message,
         model: null,
         source,
-        usage: { completionTokens: null, promptTokens: null },
+        usage: {
+          cachedTokens: null,
+          cacheWriteTokens: null,
+          completionTokens: null,
+          costUsd: null,
+          promptTokens: null,
+        },
       });
       return;
     }
@@ -920,6 +959,7 @@ export const processGmailUsefulDetailMessage = async ({
     const candidate = await extractMailUsefulDetail({
       message,
       middleware: [usageMiddleware],
+      model,
       preferences,
     });
     const detail = materializeGmailUsefulDetail({ candidate, message, preferences });
@@ -927,9 +967,12 @@ export const processGmailUsefulDetailMessage = async ({
     const eventUpdate = db
       .update(gmailUsefulDetailEvent)
       .set({
+        cachedTokens,
+        cacheWriteTokens,
         completionTokens,
+        costUsd,
         lastError: null,
-        model: GMAIL_USEFUL_DETAIL_MODEL,
+        model,
         nextAttemptAt: null,
         processedAt: now,
         promptTokens,
@@ -946,9 +989,15 @@ export const processGmailUsefulDetailMessage = async ({
         event,
         gmailMessageId,
         message,
-        model: GMAIL_USEFUL_DETAIL_MODEL,
+        model,
         source,
-        usage: { completionTokens, promptTokens },
+        usage: {
+          cachedTokens,
+          cacheWriteTokens,
+          completionTokens,
+          costUsd: costUsd ?? null,
+          promptTokens,
+        },
       });
       const [latestSettings] = await db
         .select({ enabled: mailboxAutomationSettings.usefulDetailsEnabled })
@@ -1005,7 +1054,10 @@ export const listPendingGmailUsefulDetailMessageIds = async (mailboxId: string) 
 export const reportPendingGmailUsefulDetailUsage = async (mailboxId: string, userId: string) => {
   const events = await db
     .select({
+      cachedTokens: gmailUsefulDetailEvent.cachedTokens,
+      cacheWriteTokens: gmailUsefulDetailEvent.cacheWriteTokens,
       completionTokens: gmailUsefulDetailEvent.completionTokens,
+      costUsd: gmailUsefulDetailEvent.costUsd,
       id: gmailUsefulDetailEvent.id,
       model: gmailUsefulDetailEvent.model,
       promptTokens: gmailUsefulDetailEvent.promptTokens,
@@ -1015,7 +1067,6 @@ export const reportPendingGmailUsefulDetailUsage = async (mailboxId: string, use
     .where(
       and(
         eq(gmailUsefulDetailEvent.mailboxId, mailboxId),
-        eq(gmailUsefulDetailEvent.model, GMAIL_USEFUL_DETAIL_MODEL),
         isNull(gmailUsefulDetailEvent.usageReportedAt),
       ),
     )

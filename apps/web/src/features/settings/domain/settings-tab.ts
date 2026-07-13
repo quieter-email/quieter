@@ -1,6 +1,7 @@
 export const SETTINGS_TABS = [
   "overview",
   "appearance",
+  "ai",
   "reading",
   "shortcuts",
   "privacy",

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AiBrain01Icon,
   CodeIcon,
   ConnectIcon,
   Image01Icon,
@@ -42,6 +43,7 @@ type SettingsOverviewPanelProps = {
 };
 
 const SETTINGS_NAV_ICONS = {
+  ai: AiBrain01Icon,
   appearance: Moon01Icon,
   reading: Image01Icon,
   shortcuts: KeyboardIcon,

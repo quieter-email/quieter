@@ -1,9 +1,8 @@
 import { chat, type ChatMiddleware } from "@tanstack/ai";
 import { z } from "zod";
 import type { AutomationMailMessage } from "./classify-gmail-message";
+import { defaultUsefulDetailModel, type ChatModel } from "./chat-models";
 import { createOpenRouterAdapter } from "./openrouter";
-
-export const GMAIL_USEFUL_DETAIL_MODEL = "deepseek/deepseek-v4-flash" as const;
 
 const deliveryStatusSchema = z.enum([
   "delayed",
@@ -71,16 +70,18 @@ const getReceivedAt = (message: AutomationMailMessage) => {
 export const extractMailUsefulDetail = async ({
   message,
   middleware,
+  model = defaultUsefulDetailModel,
   now = new Date(),
   preferences,
 }: {
   message: AutomationMailMessage;
   middleware?: ChatMiddleware[];
+  model?: ChatModel;
   now?: Date;
   preferences?: GmailUsefulDetailPreferenceProfile;
 }) => {
   const result = await chat({
-    adapter: createOpenRouterAdapter(GMAIL_USEFUL_DETAIL_MODEL),
+    adapter: createOpenRouterAdapter(model),
     messages: [
       {
         content: JSON.stringify({

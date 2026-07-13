@@ -1,3 +1,4 @@
+import { aiRouter } from "./ai";
 import { authRouter } from "./auth";
 import { billingRouter } from "./billing";
 import { chatRouter } from "./chat";
@@ -9,6 +10,7 @@ import { organizationRouter } from "./organization";
 import { organizationMailUsageRouter } from "./organization-mail-usage";
 
 export const appRouter = {
+  ai: aiRouter,
   auth: authRouter,
   billing: billingRouter,
   chat: chatRouter,

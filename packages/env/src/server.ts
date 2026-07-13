@@ -14,6 +14,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
   createEnv({
     emptyStringAsUndefined: true,
     runtimeEnvStrict: {
+      AI_USD_TO_EUR_RATE: runtimeEnv.AI_USD_TO_EUR_RATE,
       APP_SITE_PASSWORD: runtimeEnv.APP_SITE_PASSWORD,
       AWS_DEFAULT_REGION: runtimeEnv.AWS_DEFAULT_REGION,
       AWS_REGION: runtimeEnv.AWS_REGION,
@@ -79,6 +80,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       VITE_LOGO_DEV_PUBLISHABLE_KEY: runtimeEnv.VITE_LOGO_DEV_PUBLISHABLE_KEY,
     },
     server: {
+      AI_USD_TO_EUR_RATE: z.coerce.number().positive().default(1),
       APP_SITE_PASSWORD: optionalString,
       AWS_DEFAULT_REGION: optionalString,
       AWS_REGION: optionalString,

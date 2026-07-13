@@ -1,7 +1,7 @@
 import type { ChatMiddleware } from "@tanstack/ai";
+import { chatModelSchema, type ChatModel } from "@quieter/ai/chat-models";
 import {
   classifyMailMessage,
-  GMAIL_AUTO_LABEL_MODEL,
   type AutomationMailMessage,
   type MailAutoLabelCandidate,
 } from "@quieter/ai/classify-gmail-message";
@@ -31,7 +31,7 @@ import {
   loadAutoLabelUserCorrectionPrompt,
   loadAutomationMemoryPrompt,
 } from "../mail-automation/memory";
-import { loadUserAiContextPrompt } from "../user-ai-context";
+import { loadUserAiConfiguration } from "../user-ai-context";
 import { updateManagedMessageLabelAssignments } from "./labels/repository";
 
 const AUTO_LABEL_RETRY_BASE_MS = 1000 * 60 * 5;
@@ -41,6 +41,7 @@ type ManagedAutoLabelContext = {
   availableLabelIds: Set<string>;
   labels: MailAutoLabelCandidate[];
   memoryProfile: string | null;
+  model: ChatModel;
   userAiContext: string | null;
   userCorrectionContext: string | null;
 };
@@ -105,16 +106,22 @@ const getManagedAutoLabelCandidates = async (input: {
     inclusionCriteria: null,
     name: label.name,
   }));
+  const [memoryProfile, aiConfiguration, userCorrectionContext] = await Promise.all([
+    loadAutomationMemoryPrompt({
+      agent: "auto_label",
+      mailboxId: input.mailboxId,
+    }),
+    loadUserAiConfiguration({ userId: input.userId }),
+    loadAutoLabelUserCorrectionPrompt(input.mailboxId),
+  ]);
 
   return {
     availableLabelIds: new Set(candidates.map((label) => label.id)),
     labels: candidates,
-    memoryProfile: await loadAutomationMemoryPrompt({
-      agent: "auto_label",
-      mailboxId: input.mailboxId,
-    }),
-    userAiContext: await loadUserAiContextPrompt({ userId: input.userId }),
-    userCorrectionContext: await loadAutoLabelUserCorrectionPrompt(input.mailboxId),
+    memoryProfile,
+    model: aiConfiguration.autoLabelModel,
+    userAiContext: aiConfiguration.markdown,
+    userCorrectionContext,
   };
 };
 
@@ -184,7 +191,10 @@ const markManagedAutoLabelEventAppliedWithoutUsage = async (eventId: string) => 
 };
 
 const reportManagedAutoLabelUsage = async (event: {
+  cachedTokens: number | null;
+  cacheWriteTokens: number | null;
   completionTokens: number | null;
+  costUsd: number | null;
   id: string;
   mailboxId: string;
   model: string | null;
@@ -192,22 +202,29 @@ const reportManagedAutoLabelUsage = async (event: {
   usageReportedAt: Date | null;
   userId: string;
 }) => {
+  const model = chatModelSchema.safeParse(event.model);
   if (
     event.usageReportedAt ||
-    event.model !== GMAIL_AUTO_LABEL_MODEL ||
+    !model.success ||
     event.promptTokens == null ||
-    event.completionTokens == null
+    event.completionTokens == null ||
+    event.costUsd == null
   ) {
     return;
   }
 
   try {
     await reportAiUsage({
+      costUsd: event.costUsd,
       completionTokens: event.completionTokens,
       externalId: event.id,
       mailboxId: event.mailboxId,
-      model: GMAIL_AUTO_LABEL_MODEL,
+      model: model.data,
       promptTokens: event.promptTokens,
+      promptTokensDetails: {
+        cachedTokens: event.cachedTokens ?? 0,
+        cacheWriteTokens: event.cacheWriteTokens ?? 0,
+      },
       usageKind: "autoLabel",
       userId: event.userId,
     });
@@ -258,11 +275,18 @@ const processManagedAutoLabelMessage = async (input: {
 
       let promptTokens = 0;
       let completionTokens = 0;
+      let costUsd: number | undefined = 0;
+      let cachedTokens = 0;
+      let cacheWriteTokens = 0;
       const usageMiddleware: ChatMiddleware = {
         name: "managed-auto-label-usage",
         onUsage: (_context, usage) => {
           promptTokens += usage.promptTokens;
           completionTokens += usage.completionTokens;
+          costUsd =
+            costUsd === undefined || usage.cost === undefined ? undefined : costUsd + usage.cost;
+          cachedTokens += usage.promptTokensDetails?.cachedTokens ?? 0;
+          cacheWriteTokens += usage.promptTokensDetails?.cacheWriteTokens ?? 0;
         },
       };
       const budgetStatus = await getMailAutomationAiBudgetStatus({
@@ -279,16 +303,20 @@ const processManagedAutoLabelMessage = async (input: {
         memoryProfile: input.autoLabelContext.memoryProfile,
         message,
         middleware: [usageMiddleware],
+        model: input.autoLabelContext.model,
         userAiContext: input.autoLabelContext.userAiContext,
         userCorrectionContext: input.autoLabelContext.userCorrectionContext,
       });
       const [classified] = await db
         .update(gmailAutoLabelEvent)
         .set({
+          cachedTokens,
+          cacheWriteTokens,
           completionTokens,
+          costUsd,
           labelIds,
           lastError: null,
-          model: GMAIL_AUTO_LABEL_MODEL,
+          model: input.autoLabelContext.model,
           promptTokens,
           updatedAt: new Date(),
         })
@@ -368,7 +396,10 @@ const listPendingManagedAutoLabelMessageIds = async (mailboxId: string) => {
 const reportPendingManagedAutoLabelUsage = async (mailboxId: string, userId: string) => {
   const events = await db
     .select({
+      cachedTokens: gmailAutoLabelEvent.cachedTokens,
+      cacheWriteTokens: gmailAutoLabelEvent.cacheWriteTokens,
       completionTokens: gmailAutoLabelEvent.completionTokens,
+      costUsd: gmailAutoLabelEvent.costUsd,
       id: gmailAutoLabelEvent.id,
       model: gmailAutoLabelEvent.model,
       promptTokens: gmailAutoLabelEvent.promptTokens,
@@ -378,7 +409,6 @@ const reportPendingManagedAutoLabelUsage = async (mailboxId: string, userId: str
     .where(
       and(
         eq(gmailAutoLabelEvent.mailboxId, mailboxId),
-        eq(gmailAutoLabelEvent.model, GMAIL_AUTO_LABEL_MODEL),
         isNull(gmailAutoLabelEvent.usageReportedAt),
       ),
     )

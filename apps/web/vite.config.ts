@@ -35,7 +35,7 @@ export default defineConfig(({ command }) => {
     plugins: lazyPlugins(() => [
       cloudflare({
         viteEnvironment: { name: "ssr" },
-        configPath: process.env.SST_WRANGLER_PATH,
+        configPath: process.env.SST_WRANGLER_PATH ?? (isDev ? "local-worker.jsonc" : undefined),
       }),
       tanstackStart(),
       viteReact(),

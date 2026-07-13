@@ -9,6 +9,7 @@ import { db } from "@quieter/database/client";
 import { billingSubscription, mailbox, member, organization } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { and, desc, eq, inArray } from "drizzle-orm";
+import { convertProviderCostToCreditMicroCents } from "./ai-pricing";
 import { getBillingCreditUsage, recordBillingCreditUsage, type BillingUsageKind } from "./credits";
 import {
   getOrganizationBillingEntitlement,
@@ -24,6 +25,12 @@ import {
   type BillingProductId,
 } from "./plans";
 import { getPolarApiOrganizationId, getPolarClient } from "./polar";
+
+export {
+  AI_COST_RECOVERY_BASIS_POINTS,
+  applyAiCostRecoveryFee,
+  convertProviderCostToCreditMicroCents,
+} from "./ai-pricing";
 
 const BILLING_PROVIDER = "polar" as const;
 const BILLING_METADATA_PRODUCT = "quieterProduct";
@@ -58,22 +65,6 @@ export const createBillingPortalSession = (input: {
   externalMemberId: input.userId,
   returnUrl: input.returnUrl,
 });
-
-const aiUsageRates = {
-  "anthropic/claude-haiku-4.5": { completion: 500, prompt: 100 },
-  "deepseek/deepseek-v4-flash": { completion: 18, prompt: 9 },
-  "google/gemini-3.1-flash-lite": { completion: 150, prompt: 25 },
-  "google/gemini-3.5-flash": { completion: 900, prompt: 150 },
-  "openai/gpt-5-nano": { completion: 40, prompt: 5 },
-  "openai/gpt-5.4-mini": { completion: 450, prompt: 75 },
-  "openai/gpt-5.4-nano": { completion: 125, prompt: 20 },
-  "openai/gpt-5.5": { completion: 3_000, prompt: 500 },
-} as const;
-
-export const AI_USAGE_MARKUP_BASIS_POINTS = 5_000;
-
-export const applyAiUsageMarkup = (costMicroCents: number) =>
-  Math.ceil(costMicroCents * (1 + AI_USAGE_MARKUP_BASIS_POINTS / 10_000));
 
 const getBillingProductId = (productId: BillingProductId): string => {
   const polarProductId = {
@@ -511,20 +502,27 @@ export const syncBillingCheckout = async (input: { checkoutId: string; userId: s
 
 export const reportAiUsage = async (input: {
   chatId?: string | null;
+  costUsd: number | undefined;
   completionTokens: number;
   externalId: string;
   mailboxId?: string;
-  model: keyof typeof aiUsageRates;
+  model: string;
   promptTokens: number;
+  promptTokensDetails?: {
+    cachedTokens?: number;
+    cacheWriteTokens?: number;
+  };
   usageKind: Extract<BillingUsageKind, "aiChat" | "aiMemory" | "autoLabel" | "usefulDetails">;
   userId: string;
 }) => {
-  const rates = aiUsageRates[input.model];
-  const promptCostCents = (input.promptTokens / 1_000_000) * rates.prompt;
-  const completionCostCents = (input.completionTokens / 1_000_000) * rates.completion;
-  const costMicroCents = applyAiUsageMarkup(
-    Math.round((promptCostCents + completionCostCents) * 1_000_000),
-  );
+  if (input.costUsd === undefined) {
+    throw new Error("The AI provider did not report a generation cost.");
+  }
+
+  const costMicroCents = convertProviderCostToCreditMicroCents({
+    costUsd: input.costUsd,
+    usdToEurRate: serverEnv.AI_USD_TO_EUR_RATE,
+  });
   if (costMicroCents <= 0) return;
 
   await recordAiCreditUsage({
@@ -534,6 +532,9 @@ export const reportAiUsage = async (input: {
     mailboxId: input.mailboxId,
     metadata: {
       completionTokens: input.completionTokens,
+      cachedTokens: input.promptTokensDetails?.cachedTokens ?? 0,
+      cacheWriteTokens: input.promptTokensDetails?.cacheWriteTokens ?? 0,
+      costUsd: input.costUsd,
       model: input.model,
       promptTokens: input.promptTokens,
       usageKind: input.usageKind,
@@ -574,34 +575,5 @@ const recordAiCreditUsage = async (input: {
       chatId: input.chatId ?? "",
       ...input.metadata,
     },
-  });
-};
-
-export const reportAiUsageCost = async (input: {
-  chatId?: string | null;
-  costMicroCents: number;
-  durationSeconds?: number;
-  externalId: string;
-  mailboxId?: string;
-  model: string;
-  totalTokens?: number;
-  usageKind: Extract<BillingUsageKind, "aiChat" | "aiMemory" | "autoLabel" | "usefulDetails">;
-  userId: string;
-}) => {
-  const costMicroCents = applyAiUsageMarkup(input.costMicroCents);
-  if (costMicroCents <= 0 || !input.mailboxId) return;
-
-  await recordAiCreditUsage({
-    chatId: input.chatId,
-    costMicroCents,
-    externalId: input.externalId,
-    mailboxId: input.mailboxId,
-    metadata: {
-      durationSeconds: input.durationSeconds ?? 0,
-      model: input.model,
-      totalTokens: input.totalTokens ?? 0,
-      usageKind: input.usageKind,
-    },
-    userId: input.userId,
   });
 };

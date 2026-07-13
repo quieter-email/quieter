@@ -1,0 +1,28 @@
+{
+  "name": "quieter-local-web",
+  "main": "@tanstack/react-start/server-entry",
+  "compatibility_date": "2026-07-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "secrets": {
+    "required": [
+      "APP_SITE_PASSWORD",
+      "AWS_DEFAULT_REGION",
+      "AWS_EC2_METADATA_DISABLED",
+      "AWS_REGION",
+      "BETTER_AUTH_APP_NAME",
+      "BETTER_AUTH_SECRET",
+      "BETTER_AUTH_URL",
+      "CONNECTOR_TOKEN_ENCRYPTION_KEY",
+      "DATABASE_URL",
+      "GMAIL_TOKEN_ENCRYPTION_KEY",
+      "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
+      "GOOGLE_AUTH_CLIENT_ID",
+      "GOOGLE_AUTH_CLIENT_SECRET",
+      "LINEAR_CLIENT_ID",
+      "LINEAR_CLIENT_SECRET",
+      "POLAR_SANDBOX",
+      "QUIETER_AUTH_MAIL_MODE",
+      "QUIETER_AUTH_MAIL_SENDER",
+    ],
+  },
+}

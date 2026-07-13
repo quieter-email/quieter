@@ -272,11 +272,13 @@ export const runChatGeneration = async (runId: string) => {
       usageReports.push(
         reportAiUsage({
           chatId: run.chatId,
+          costUsd: usage.cost,
           completionTokens: usage.completionTokens,
           externalId: `${run.id}:${usageReports.length}`,
           mailboxId: run.mailboxId,
           model,
           promptTokens: usage.promptTokens,
+          promptTokensDetails: usage.promptTokensDetails,
           usageKind: "aiChat",
           userId: run.userId,
         }),

@@ -1,6 +1,12 @@
 import type { ChatMiddleware } from "@tanstack/ai";
 import {
+  chatModelSchema,
+  defaultAutoLabelModel,
+  defaultUsefulDetailModel,
+} from "@quieter/ai/chat-models";
+import {
   editUserAiContext,
+  sanitizeUserAiContextMarkdown,
   USER_AI_CONTEXT_MARKDOWN_MAX_LENGTH,
   USER_AI_CONTEXT_MODEL,
   type UserAiContextEditorEvent,
@@ -54,18 +60,35 @@ const getMailboxOrganizationId = async (mailboxId: string) => {
   return record?.organizationId ?? null;
 };
 
-export const loadUserAiContextPrompt = async ({ userId }: { userId: string }) => {
+export const loadUserAiConfiguration = async ({ userId }: { userId: string }) => {
   const [record] = await db
-    .select({ markdown: userAiContext.markdown })
+    .select({
+      autoLabelModel: userAiContext.autoLabelModel,
+      markdown: userAiContext.markdown,
+      usefulDetailModel: userAiContext.usefulDetailModel,
+    })
     .from(userAiContext)
     .where(eq(userAiContext.userId, userId))
     .limit(1);
 
+  const autoLabelModel = chatModelSchema.safeParse(record?.autoLabelModel);
+  const usefulDetailModel = chatModelSchema.safeParse(record?.usefulDetailModel);
   const markdown = record?.markdown.trim();
-  if (!markdown || markdown.length > USER_AI_CONTEXT_MARKDOWN_MAX_LENGTH) return null;
 
-  return markdown;
+  return {
+    autoLabelModel: autoLabelModel.success ? autoLabelModel.data : defaultAutoLabelModel,
+    markdown:
+      markdown && markdown.length <= USER_AI_CONTEXT_MARKDOWN_MAX_LENGTH
+        ? sanitizeUserAiContextMarkdown(markdown)
+        : null,
+    usefulDetailModel: usefulDetailModel.success
+      ? usefulDetailModel.data
+      : defaultUsefulDetailModel,
+  };
 };
+
+export const loadUserAiContextPrompt = async ({ userId }: { userId: string }) =>
+  (await loadUserAiConfiguration({ userId })).markdown;
 
 export const recordUserAiContextEvent = async (input: {
   kind: UserAiContextEventKind;
@@ -202,11 +225,18 @@ const refreshUserAiContextAttempt = async (
   const nextRevision = (currentRevision ?? 0) + 1;
   let promptTokens = 0;
   let completionTokens = 0;
+  let costUsd: number | undefined = 0;
+  let cachedTokens = 0;
+  let cacheWriteTokens = 0;
   const usageMiddleware: ChatMiddleware = {
     name: "user-ai-context-memory-usage",
     onUsage: (_context, usage) => {
       promptTokens += usage.promptTokens;
       completionTokens += usage.completionTokens;
+      costUsd =
+        costUsd === undefined || usage.cost === undefined ? undefined : costUsd + usage.cost;
+      cachedTokens += usage.promptTokensDetails?.cachedTokens ?? 0;
+      cacheWriteTokens += usage.promptTokensDetails?.cacheWriteTokens ?? 0;
     },
   };
 
@@ -225,11 +255,13 @@ const refreshUserAiContextAttempt = async (
     const now = new Date();
 
     await reportAiUsage({
+      costUsd,
       completionTokens,
       externalId: `ai-memory:${input.triggerEventId ?? eventIds.at(-1)}:${nextRevision}`,
       mailboxId: input.mailboxId,
       model: USER_AI_CONTEXT_MODEL,
       promptTokens,
+      promptTokensDetails: { cachedTokens, cacheWriteTokens },
       usageKind: "aiMemory",
       userId: input.userId,
     });

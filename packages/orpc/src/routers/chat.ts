@@ -10,7 +10,7 @@ import {
   OPENROUTER_TRANSCRIPTION_MODEL,
   openRouterAudioFormatSchema,
 } from "@quieter/ai/transcription-format";
-import { reportAiUsage, reportAiUsageCost } from "@quieter/billing";
+import { reportAiUsage } from "@quieter/billing";
 import { getBillingCreditUsage } from "@quieter/billing/credits";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
@@ -210,8 +210,6 @@ const startAssistantRunOrThrow = (input: Parameters<typeof startAssistantRun>[0]
 const continueAssistantRunOrThrow = (input: Parameters<typeof continueAssistantRun>[0]) =>
   continueAssistantRun(input).catch(rethrowChatRunConflict);
 
-const dollarsToMicroCents = (dollars: number) => Math.round(dollars * 100 * 1_000_000);
-
 const assertCanUseAiCredits = async (
   entitlement: Awaited<ReturnType<typeof hasUserBillingFeature>>,
 ) => {
@@ -381,11 +379,13 @@ export const chatRouter = {
                       usageContext.defer(
                         reportAiUsage({
                           chatId: input.chatId ?? null,
+                          costUsd: usage.cost,
                           completionTokens: usage.completionTokens,
                           externalId: `chat-transcription-format:${result.id}`,
                           mailboxId: input.mailboxId,
                           model: TRANSCRIBED_EMAIL_FORMAT_MODEL,
                           promptTokens: usage.promptTokens,
+                          promptTokensDetails: usage.promptTokensDetails,
                           usageKind: "aiChat",
                           userId: context.userId,
                         }).catch((error) => {
@@ -405,14 +405,14 @@ export const chatRouter = {
 
       const cost = result.usage?.cost;
       if (typeof cost === "number" && Number.isFinite(cost) && cost > 0) {
-        await reportAiUsageCost({
+        await reportAiUsage({
           chatId: input.chatId ?? null,
-          costMicroCents: dollarsToMicroCents(cost),
-          durationSeconds: result.duration ?? input.durationMs / 1_000,
+          costUsd: cost,
+          completionTokens: result.usage?.completionTokens ?? 0,
           externalId: `chat-transcription:${result.id}`,
           mailboxId: input.mailboxId,
           model: OPENROUTER_TRANSCRIPTION_MODEL,
-          totalTokens: result.usage?.totalTokens,
+          promptTokens: result.usage?.promptTokens ?? 0,
           usageKind: "aiChat",
           userId: context.userId,
         });
@@ -455,11 +455,13 @@ export const chatRouter = {
           usageContext.defer(
             reportAiUsage({
               chatId: authorizedChat.id,
+              costUsd: usage.cost,
               completionTokens: usage.completionTokens,
               externalId: `chat-title:${authorizedChat.id}`,
               mailboxId: input.mailboxId,
               model: "openai/gpt-5-nano",
               promptTokens: usage.promptTokens,
+              promptTokensDetails: usage.promptTokensDetails,
               usageKind: "aiChat",
               userId: context.userId,
             }).catch((error) => {
@@ -524,11 +526,19 @@ export const chatRouter = {
         .where(eq(chatMessage.chatId, authorizedChat.id))
         .orderBy(chatMessage.position);
       const activeRun = await getActiveChatRunSummary(authorizedChat.id);
+      const [lastRun] = await db
+        .select({ model: chatRun.model })
+        .from(chatRun)
+        .where(eq(chatRun.chatId, authorizedChat.id))
+        .orderBy(desc(chatRun.createdAt))
+        .limit(1);
+      const lastModel = chatModelSchema.safeParse(lastRun?.model);
 
       return {
         activeRun,
         createdAt: authorizedChat.createdAt,
         id: authorizedChat.id,
+        lastModel: lastModel.success ? lastModel.data : null,
         messages: messages.map((message) => ({
           createdAt: message.createdAt,
           error: message.error,
