@@ -1,0 +1,206 @@
+name: Deploy review environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Same-repository pull request number to deploy
+        required: true
+        type: number
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quieter-review
+  cancel-in-progress: true
+
+env:
+  REVIEW_URL: https://review.quieter.email
+  SST_STAGE: review
+
+jobs:
+  resolve:
+    name: Resolve eligible pull request
+    if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    outputs:
+      number: ${{ steps.pull-request.outputs.number }}
+      sha: ${{ steps.pull-request.outputs.sha }}
+    steps:
+      - name: Resolve exact pull request revision
+        id: pull-request
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pullRequestNumber = Number(context.payload.inputs.pull_request);
+            if (!Number.isSafeInteger(pullRequestNumber) || pullRequestNumber <= 0) {
+              core.setFailed('Pull request number must be a positive integer.');
+              return;
+            }
+
+            const { owner, repo } = context.repo;
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: pullRequestNumber,
+            });
+
+            if (pullRequest.state !== 'open') {
+              core.setFailed(`Pull request #${pullRequestNumber} is not open.`);
+              return;
+            }
+            if (pullRequest.head.repo?.full_name !== `${owner}/${repo}`) {
+              core.setFailed('Fork pull requests cannot be deployed to the credentialed review environment.');
+              return;
+            }
+
+            core.setOutput('number', String(pullRequestNumber));
+            core.setOutput('sha', pullRequest.head.sha);
+            await core.summary
+              .addHeading('Review deployment candidate')
+              .addLink(`#${pullRequestNumber}: ${pullRequest.title}`, pullRequest.html_url)
+              .addCodeBlock(pullRequest.head.sha)
+              .addRaw('This workflow is opt-in and is not a required pull request check.')
+              .write();
+
+  verify:
+    name: Verify exact revision without secrets
+    needs: resolve
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact pull request revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ needs.resolve.outputs.sha }}
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          cache: true
+          node-version: "24.18.0"
+
+      - name: Install dependencies
+        run: vp install --frozen-lockfile
+
+      - name: Check
+        run: vp check
+
+      - name: Check copy policy
+        run: vp run check:copy
+
+      - name: Test
+        run: vp test
+
+  deploy:
+    name: Promote exact revision to review
+    needs:
+      - resolve
+      - verify
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    environment:
+      name: Review
+      url: https://review.quieter.email
+    timeout-minutes: 25
+    steps:
+      - name: Checkout verified pull request revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ needs.resolve.outputs.sha }}
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          cache: true
+          node-version: "24.18.0"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: vp install --frozen-lockfile
+
+      - name: Build deployment configuration
+        run: vp run @quieter/env#build
+
+      - name: Sync isolated review configuration and deploy
+        env:
+          BETTER_AUTH_APP_NAME: ${{ vars.BETTER_AUTH_APP_NAME }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_DEFAULT_ACCOUNT_ID: ${{ vars.CLOUDFLARE_DEFAULT_ACCOUNT_ID }}
+          CONNECTOR_TOKEN_ENCRYPTION_KEY: ${{ secrets.CONNECTOR_TOKEN_ENCRYPTION_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GMAIL_TOKEN_ENCRYPTION_KEY: ${{ secrets.GMAIL_TOKEN_ENCRYPTION_KEY }}
+          GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: ${{ secrets.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT }}
+          GOOGLE_AUTH_CLIENT_ID: ${{ secrets.GOOGLE_AUTH_CLIENT_ID }}
+          GOOGLE_AUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_AUTH_CLIENT_SECRET }}
+          GOOGLE_CALENDAR_CLIENT_ID: ${{ secrets.GOOGLE_CALENDAR_CLIENT_ID }}
+          GOOGLE_CALENDAR_CLIENT_SECRET: ${{ secrets.GOOGLE_CALENDAR_CLIENT_SECRET }}
+          GOOGLE_GMAIL_CLIENT_ID: ${{ secrets.GOOGLE_GMAIL_CLIENT_ID }}
+          GOOGLE_GMAIL_CLIENT_SECRET: ${{ secrets.GOOGLE_GMAIL_CLIENT_SECRET }}
+          QUIETER_AUTH_MAIL_MODE: console
+          QUIETER_PREVIEW_PERSONAS_ENABLED: "false"
+          VITE_LOGO_DEV_PUBLISHABLE_KEY: ${{ vars.VITE_LOGO_DEV_PUBLISHABLE_KEY }}
+          VITE_QUIETER_PREVIEW_PERSONAS_ENABLED: "false"
+        run: |
+          bun scripts/sync-sst-secrets.ts --stage "$SST_STAGE"
+          bunx sst deploy --config sst.config.ts --stage "$SST_STAGE"
+
+  comment:
+    name: Record review deployment
+    needs:
+      - deploy
+      - resolve
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - name: Record promoted revision on pull request
+        uses: actions/github-script@v7
+        env:
+          PULL_REQUEST_NUMBER: ${{ needs.resolve.outputs.number }}
+          REVIEW_SHA: ${{ needs.resolve.outputs.sha }}
+        with:
+          script: |
+            const marker = '<!-- quieter-review-environment -->';
+            const shortSha = process.env.REVIEW_SHA.slice(0, 12);
+            const body = [
+              marker,
+              `Review environment: ${process.env.REVIEW_URL}`,
+              `Promoted revision: \`${shortSha}\``,
+              '',
+              'This opt-in deployment is independent of merge checks.',
+            ].join('\n');
+            const { owner, repo } = context.repo;
+            const issue_number = Number(process.env.PULL_REQUEST_NUMBER);
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const previous = comments.find(
+              (comment) => comment.user.type === 'Bot' && comment.body.includes(marker),
+            );
+
+            if (previous) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: previous.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

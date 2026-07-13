@@ -51,14 +51,8 @@ const memberRole = organizationAccessControl.newRole({
 });
 
 const baseURL = serverEnv.BETTER_AUTH_URL || "http://localhost:3000";
-const previewTrustedOrigins =
-  serverEnv.QUIETER_DEPLOYMENT_ENV === "preview" ||
-  serverEnv.QUIETER_PREVIEW_PERSONAS_ENABLED === true
-    ? ["https://*.preview.quieter.email"]
-    : [];
 const trustedOrigins = [
   baseURL,
-  ...previewTrustedOrigins,
   ...(serverEnv.BETTER_AUTH_TRUSTED_ORIGINS?.split(",")
     .map((origin) => origin.trim())
     .filter(Boolean) ?? []),
@@ -242,7 +236,7 @@ export const auth = betterAuth({
     google: {
       clientId: serverEnv.GOOGLE_AUTH_CLIENT_ID ?? "",
       clientSecret: serverEnv.GOOGLE_AUTH_CLIENT_SECRET ?? "",
-      disableImplicitSignUp: true,
+      disableImplicitSignUp: serverEnv.QUIETER_DEPLOYMENT_ENV !== "preview",
       scope: [...GOOGLE_AUTH_SCOPES],
     },
   },
