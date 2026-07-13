@@ -94,7 +94,7 @@ export const useChatRunStream = ({
             return;
           }
 
-          if (error instanceof ChatRunStreamError && error.retryable) {
+          if (!(error instanceof ChatRunStreamError) || error.retryable) {
             await waitForRetry(attempt++, controller.signal);
             continue;
           }

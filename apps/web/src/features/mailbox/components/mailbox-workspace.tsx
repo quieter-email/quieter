@@ -110,8 +110,18 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const [startingReconnectMailboxId, setStartingReconnectMailboxId] = useState<string | null>(null);
   const chatViewLeftAtRef = useRef<number | null>(null);
   const launchedMailtoRef = useRef<string | null>(null);
-  const { activeMailbox, chatId, compose, mailboxId, mailto, query, setMailboxSearch, view } =
-    useMailboxRouteSearch();
+  const {
+    activeMailbox,
+    chatId,
+    compose,
+    mailboxId,
+    mailto,
+    messageId,
+    query,
+    setMailboxSearch,
+    threadId,
+    view,
+  } = useMailboxRouteSearch();
   const { isMobileSidebarOpen, setIsMobileSidebarOpen } = useWorkspaceUiState();
   const isDemoMode = useDemoModeEnabled();
   const isManagedDemoMode = useManagedDemoModeEnabled();
@@ -417,6 +427,15 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     <>
       <MailboxWorkspaceContent
         activeMailbox={activeMailbox}
+        chatContext={
+          messageId || threadId || query.trim()
+            ? {
+                messageId,
+                query: query.trim() || undefined,
+                threadId,
+              }
+            : undefined
+        }
         currentUserEmail={currentUserEmail}
         defaultMailboxId={defaultMailboxId}
         layoutState={{
@@ -458,9 +477,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         onRenameChat={(renamedChatId, title) => {
           void chatSidebarActions.renameChat(renamedChatId, title);
         }}
-        onReconnectMailbox={(reconnectedMailbox) => {
-          void reconnectMailbox(reconnectedMailbox);
-        }}
+        onReconnectMailbox={reconnectMailbox}
         onSelectChat={(nextChatId) => {
           void setMailboxSearch({
             chatId: nextChatId,

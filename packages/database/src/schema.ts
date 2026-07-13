@@ -155,7 +155,7 @@ export type MailboxActionGraph = {
 export type MailboxActionJsonObject = Record<string, unknown>;
 
 export type ChatMessageRole = "system" | "user" | "assistant";
-export type ChatMessageStatus = "draft" | "streaming" | "complete" | "failed";
+export type ChatMessageStatus = "draft" | "streaming" | "complete" | "failed" | "cancelled";
 export type ChatRunStatus =
   | "queued"
   | "running"
@@ -163,6 +163,11 @@ export type ChatRunStatus =
   | "complete"
   | "failed"
   | "cancelled";
+export type ChatRunContext = {
+  messageId?: string;
+  query?: string;
+  threadId?: string;
+};
 export type ChatMessagePart = {
   type: string;
   content?: string;
@@ -1794,6 +1799,7 @@ export const chatRun = pgTable(
     mailboxId: text("mailboxId").notNull(),
     mailboxCategory: text("mailboxCategory").notNull(),
     model: text("model").notNull().default("openai/gpt-5.6-luna"),
+    context: jsonb("context").$type<ChatRunContext>(),
     cancelRequestedAt: timestamp("cancelRequestedAt"),
     lastHeartbeatAt: timestamp("lastHeartbeatAt"),
     error: text("error"),

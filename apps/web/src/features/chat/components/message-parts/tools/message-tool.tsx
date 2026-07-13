@@ -61,6 +61,11 @@ export const MessageTool = ({
               </span>
             ) : null}
           </p>
+          {success.attachments.length ? (
+            <p className="mt-1 truncate text-[11px] text-muted-foreground/80">
+              {success.attachments.map((attachment) => attachment.fileName).join(", ")}
+            </p>
+          ) : null}
           <p className="mt-1 text-xs/relaxed whitespace-pre-wrap text-muted-foreground">
             {success.body || success.snippet || "(No content)"}
             {success.bodyTruncated ? "…" : ""}

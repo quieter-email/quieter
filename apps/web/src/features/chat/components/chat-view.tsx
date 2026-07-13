@@ -21,7 +21,11 @@ import {
   USER_BILLING_QUERY_KEY,
   userBillingQueryOptions,
 } from "~/features/settings/domain/billing";
-import { type BrowserAudioRecording, getTranscriptionAudioFormat } from "~/lib/audio-transcription";
+import {
+  type BrowserAudioRecording,
+  getTranscriptionAudioFormat,
+  normalizeTranscriptionRecording,
+} from "~/lib/audio-transcription";
 import { chatQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-query";
 import { orpc } from "~/lib/orpc";
 import { persistQueryByKey } from "~/lib/query-persister";
@@ -67,6 +71,7 @@ export const ChatView = ({
   activeMailbox,
   chatId,
   draftChatKey,
+  mailContext,
   mailboxId,
   mailboxOrganizationId,
   onChatIdChange,
@@ -85,6 +90,7 @@ export const ChatView = ({
     messageId: string;
     parts: ChatMessagePart[];
   } | null>(null);
+  const [isPreparingTranscription, setIsPreparingTranscription] = useState(false);
   const { data: chatData } = useQuery({
     ...chatQueryOptions(mailboxId, chatId),
     refetchOnWindowFocus: true,
@@ -188,16 +194,22 @@ export const ChatView = ({
   const activeRun = chatData?.activeRun ?? null;
   const liveRunId = streamRunId ?? (isActiveRun(activeRun) ? (activeRun?.id ?? null) : null);
 
-  const commitStreamResult = (result: ChatRunStreamDone) => {
-    const resolvedChatId = streamChatIdRef.current ?? chatId;
+  const commitStreamResult = (result: ChatRunStreamDone, resolvedChatId?: string | null) => {
+    let targetChatId = resolvedChatId;
+    if (!targetChatId) targetChatId = streamChatIdRef.current;
+    if (!targetChatId) targetChatId = chatId;
 
-    if (!resolvedChatId || !result.assistantMessageId) {
+    if (!targetChatId || !result.assistantMessageId) {
       return;
     }
 
-    const queryKey = getChatQueryKey(mailboxId, resolvedChatId);
+    const queryKey = getChatQueryKey(mailboxId, targetChatId);
     const messageStatus =
-      result.status === "failed" || result.status === "cancelled" ? "failed" : "complete";
+      result.status === "failed"
+        ? "failed"
+        : result.status === "cancelled"
+          ? "cancelled"
+          : "complete";
 
     queryClient.setQueryData<ChatQueryData>(queryKey, (current) => {
       if (!current) {
@@ -267,9 +279,8 @@ export const ChatView = ({
   const turns = createChatTurns(visibleMessages);
   const isStreaming = !!liveRunId;
   const hasMessages = visibleMessages.length > 0 || !!chatId;
-  const isTranscribingAudio = transcribeAudioMutation.isPending;
-  const isComposerLoading =
-    isStreaming ||
+  const isTranscribingAudio = isPreparingTranscription || transcribeAudioMutation.isPending;
+  const isActionPending =
     createChatMutation.isPending ||
     sendMessageMutation.isPending ||
     cancelGenerationMutation.isPending ||
@@ -283,7 +294,16 @@ export const ChatView = ({
 
   const submitPrompt = async () => {
     const prompt = input.trim();
-    if (!prompt || isComposerLoading || composerDisabled || audioRecorder.isRecording) return;
+    if (
+      !prompt ||
+      isStreaming ||
+      isActionPending ||
+      isTranscribingAudio ||
+      composerDisabled ||
+      audioRecorder.isRecording
+    ) {
+      return;
+    }
 
     try {
       let nextChatId = chatId;
@@ -296,6 +316,7 @@ export const ChatView = ({
       const result = await sendMessageMutation.mutateAsync({
         category: activeMailbox,
         chatId: nextChatId,
+        context: mailContext,
         mailboxId,
         message: prompt,
         model,
@@ -324,6 +345,7 @@ export const ChatView = ({
     if (event.key !== "Enter" || event.shiftKey) return;
 
     event.preventDefault();
+    if (isStreaming || isActionPending || isTranscribingAudio) return;
     void submitPrompt();
   };
 
@@ -334,11 +356,57 @@ export const ChatView = ({
       return;
     }
 
-    void cancelGenerationMutation.mutateAsync({ chatId: activeChatId, mailboxId });
+    const queryKey = getChatQueryKey(mailboxId, activeChatId);
+    const assistantMessageId = streamingAssistant?.messageId ?? activeRun?.assistantMessageId;
+    const assistantParts = streamingAssistant?.parts;
+
+    queryClient.setQueryData<ChatQueryData>(queryKey, (current) =>
+      current
+        ? {
+            ...current,
+            activeRun: null,
+            messages: current.messages.map((message) =>
+              message.id === assistantMessageId
+                ? {
+                    ...message,
+                    error: null,
+                    parts: assistantParts ?? message.parts,
+                    status: "cancelled" as const,
+                  }
+                : message,
+            ),
+          }
+        : current,
+    );
+    void persistQueryByKey(queryKey, queryClient);
+    setStreamRunId(null);
+    setStreamingAssistant(null);
+    streamChatIdRef.current = null;
+
+    void cancelGenerationMutation
+      .mutateAsync({ chatId: activeChatId, mailboxId })
+      .then((result) => {
+        if (result.cancelled) {
+          commitStreamResult(
+            {
+              assistantMessageId: result.assistantMessageId,
+              error: result.error,
+              parts: result.parts,
+              status: result.status,
+            },
+            activeChatId,
+          );
+        }
+        void queryClient.invalidateQueries({ queryKey: getChatsQueryKey(mailboxId) });
+      })
+      .catch(() => {
+        toast.error("The response could not be stopped. Its status is being refreshed.");
+        void queryClient.invalidateQueries({ queryKey });
+      });
   };
 
   const handleRecordingStart = () => {
-    if (composerDisabled || isComposerLoading || isTranscribingAudio) return;
+    if (composerDisabled || isTranscribingAudio) return;
 
     if (!audioRecorder.isSupported) {
       toast.error("Audio recording is not supported in this browser.");
@@ -351,49 +419,59 @@ export const ChatView = ({
   };
 
   const handleRecordingStop = () => {
-    void (async () => {
-      try {
-        const recording = await audioRecorder.stop();
+    setIsPreparingTranscription(true);
+    void audioRecorder
+      .stop()
+      .then(async (nativeRecording) => {
+        if (nativeRecording.durationMs > MAX_TRANSCRIPTION_AUDIO_DURATION_MS) {
+          toast.error("Recordings must be 60 seconds or shorter.");
+          return null;
+        }
+
+        const recording = await normalizeTranscriptionRecording(nativeRecording);
         const format = getTranscriptionAudioFormat(recording.mimeType);
 
         if (!format) {
-          toast.error("This audio format is not supported.");
-          return;
-        }
-
-        if (recording.durationMs > MAX_TRANSCRIPTION_AUDIO_DURATION_MS) {
-          toast.error("Recordings must be 60 seconds or shorter.");
-          return;
+          toast.error("This recording could not be prepared for transcription.");
+          return null;
         }
 
         if (recording.base64.length > MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH) {
           toast.error("This recording is too large to transcribe.");
-          return;
+          return null;
         }
 
-        const result = await transcribeAudioMutation.mutateAsync({
+        return await transcribeAudioMutation.mutateAsync({
           audioBase64: recording.base64,
           chatId: chatId ?? undefined,
           durationMs: recording.durationMs,
           format,
           mailboxId,
         });
-
+      })
+      .then((result) => {
+        if (!result) return;
         setInput((current) =>
           current.trim() ? `${current.trimEnd()}\n${result.text}` : result.text,
         );
-      } catch (error) {
+      })
+      .catch((error: unknown) => {
         toast.error(
-          error instanceof Error && error.message
+          error instanceof Error &&
+            (error.message.startsWith("Transcription ") ||
+              error.message.startsWith("We could not transcribe ") ||
+              error.message === "No speech was detected.")
             ? error.message
-            : "Could not transcribe recording.",
+            : "We could not transcribe that recording. Try recording it again.",
         );
-      }
-    })();
+      })
+      .finally(() => {
+        setIsPreparingTranscription(false);
+      });
   };
 
   const handleEditSubmit = async (userMessageId: string, message: string) => {
-    if (!chatId || isComposerLoading || composerDisabled) {
+    if (!chatId || isStreaming || isActionPending || composerDisabled) {
       return;
     }
 
@@ -401,6 +479,7 @@ export const ChatView = ({
       const result = await editUserMessageMutation.mutateAsync({
         category: activeMailbox,
         chatId,
+        context: mailContext,
         mailboxId,
         message,
         model,
@@ -417,7 +496,7 @@ export const ChatView = ({
   };
 
   const handleRegenerate = async (assistantMessageId: string) => {
-    if (!chatId || isComposerLoading || composerDisabled) {
+    if (!chatId || isStreaming || isActionPending || composerDisabled) {
       return;
     }
 
@@ -426,6 +505,7 @@ export const ChatView = ({
         assistantMessageId,
         category: activeMailbox,
         chatId,
+        context: mailContext,
         mailboxId,
         model,
       });
@@ -440,7 +520,7 @@ export const ChatView = ({
   };
 
   const handleResolveCompose = async (input: ResolveComposeToolInput) => {
-    if (!chatId || isComposerLoading || composerDisabled) {
+    if (!chatId || isStreaming || isActionPending || composerDisabled) {
       return;
     }
 
@@ -452,6 +532,7 @@ export const ChatView = ({
               assistantMessageId: input.assistantMessageId,
               category: activeMailbox,
               chatId,
+              context: mailContext,
               mailboxId,
               model,
               toolCallId: input.toolCallId,
@@ -461,6 +542,7 @@ export const ChatView = ({
               assistantMessageId: input.assistantMessageId,
               category: activeMailbox,
               chatId,
+              context: mailContext,
               mailboxId,
               message: input.message,
               model,
@@ -488,7 +570,7 @@ export const ChatView = ({
           {hasMessages ? (
             <>
               <ChatTranscript
-                actionsDisabled={isComposerLoading || composerDisabled}
+                actionsDisabled={isStreaming || isActionPending || composerDisabled}
                 errorMessage={errorMessage}
                 isStreaming={isStreaming}
                 onCopy={(text) => void copyToClipboard(text)}
@@ -507,7 +589,6 @@ export const ChatView = ({
                     />
                   )}
                   <ChatComposer
-                    busy={isComposerLoading || isTranscribingAudio}
                     disabled={composerDisabled}
                     input={input}
                     model={model}
@@ -521,6 +602,7 @@ export const ChatView = ({
                     recording={audioRecorder.isRecording}
                     recordingSupported={audioRecorder.isSupported}
                     streaming={isStreaming}
+                    submitting={isActionPending}
                     transcribing={isTranscribingAudio}
                   />
                 </div>
@@ -536,7 +618,6 @@ export const ChatView = ({
                   />
                 )}
                 <ChatComposer
-                  busy={isComposerLoading || isTranscribingAudio}
                   disabled={composerDisabled}
                   input={input}
                   model={model}
@@ -550,6 +631,7 @@ export const ChatView = ({
                   recording={audioRecorder.isRecording}
                   recordingSupported={audioRecorder.isSupported}
                   streaming={isStreaming}
+                  submitting={isActionPending}
                   transcribing={isTranscribingAudio}
                 />
               </div>

@@ -1,8 +1,10 @@
 import {
   composeEmailResultSchema,
   googleCalendarCreateEventResultSchema,
+  gmailAttachmentResultSchema,
   gmailLabelListResultSchema,
   gmailMessageResultSchema,
+  gmailMessagesResultSchema,
   gmailSearchResultSchema,
   gmailThreadResultSchema,
   linearIssueCreateResultSchema,
@@ -13,8 +15,10 @@ import {
 import type {
   ComposeEmailResult,
   GoogleCalendarEventToolResult,
+  GmailAttachmentToolResult,
   GmailLabelListToolResult,
   GmailMessageToolResult,
+  GmailMessagesToolResult,
   GmailSearchToolResult,
   GmailThreadToolResult,
   LinearIssueCreateToolResult,
@@ -54,29 +58,13 @@ const parseToolJson = (value: unknown): unknown => {
   }
 };
 
-const parseLegacyGmailSearchResult = (value: unknown): GmailSearchToolResult | null => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  const result = value as Record<string, unknown>;
-  if (typeof result.category !== "string" || typeof result.query !== "string") {
-    return null;
-  }
-
-  const parsed = gmailSearchResultSchema.safeParse({
-    ...result,
-    status: typeof result.error === "string" ? "error" : "success",
-  });
-
-  return parsed.success ? parsed.data : null;
-};
-
 export type ParsedToolResult =
   | { data: ComposeEmailResult; kind: "compose-email" }
   | { data: GoogleCalendarEventToolResult; kind: "google-calendar-event" }
+  | { data: GmailAttachmentToolResult; kind: "gmail-attachment" }
   | { data: GmailLabelListToolResult; kind: "gmail-labels" }
   | { data: GmailMessageToolResult; kind: "gmail-message" }
+  | { data: GmailMessagesToolResult; kind: "gmail-messages" }
   | { data: GmailSearchToolResult; kind: "gmail-search" }
   | { data: GmailThreadToolResult; kind: "gmail-thread" }
   | { data: LinearIssueCreateToolResult; kind: "linear-issue-create" }
@@ -104,8 +92,9 @@ export const parseToolResult = (toolName: string, value: unknown): ParsedToolRes
 
   if (toolName === "search_gmail") {
     const result = gmailSearchResultSchema.safeParse(parsed);
-    const data = result.success ? result.data : parseLegacyGmailSearchResult(parsed);
-    return data ? { data, kind: "gmail-search" } : { kind: "unknown", value: parsed };
+    return result.success
+      ? { data: result.data, kind: "gmail-search" }
+      : { kind: "unknown", value: parsed };
   }
 
   if (toolName === "read_gmail_thread") {
@@ -126,6 +115,20 @@ export const parseToolResult = (toolName: string, value: unknown): ParsedToolRes
     const result = gmailMessageResultSchema.safeParse(parsed);
     return result.success
       ? { data: result.data, kind: "gmail-message" }
+      : { kind: "unknown", value: parsed };
+  }
+
+  if (toolName === "read_gmail_messages") {
+    const result = gmailMessagesResultSchema.safeParse(parsed);
+    return result.success
+      ? { data: result.data, kind: "gmail-messages" }
+      : { kind: "unknown", value: parsed };
+  }
+
+  if (toolName === "read_gmail_attachment") {
+    const result = gmailAttachmentResultSchema.safeParse(parsed);
+    return result.success
+      ? { data: result.data, kind: "gmail-attachment" }
       : { kind: "unknown", value: parsed };
   }
 

@@ -6,14 +6,14 @@ import {
   chatRun,
   type ChatMessagePart,
   type ChatMessageStatus,
+  type ChatRunContext,
   type ChatRunStatus,
 } from "@quieter/database/schema";
 import { and, desc, eq, gt, inArray } from "drizzle-orm";
 import { ACTIVE_CHAT_RUN_STATUSES } from "./chat-run-stream";
 
 const ACTIVE_RUN_CONFLICT_INDEX = "chat_run_one_active_per_chat";
-const STALE_RUN_MS = 3 * 60 * 1_000;
-const STALE_RUN_ERROR = "Generation stopped unexpectedly. Send your message again.";
+const STALE_RUN_MS = 60_000;
 const EMPTY_ASSISTANT_PARTS: ChatMessagePart[] = [{ content: "", type: "text" }];
 
 export class ActiveChatRunConflictError extends Error {
@@ -68,21 +68,150 @@ export const updateRunStatus = async (
   return !!updated;
 };
 
-export const updateAssistantMessage = async (input: {
-  assistantMessageId: string;
-  error?: string | null;
-  parts: ChatMessagePart[];
-  status: ChatMessageStatus;
-}) => {
-  await db
-    .update(chatMessage)
-    .set({
-      error: input.error,
-      parts: input.parts,
-      status: input.status,
-    })
-    .where(eq(chatMessage.id, input.assistantMessageId));
+export const touchChatRunHeartbeat = async (runId: string) => {
+  const now = new Date();
+  const [updated] = await db
+    .update(chatRun)
+    .set({ lastHeartbeatAt: now, updatedAt: now })
+    .where(and(eq(chatRun.id, runId), inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])))
+    .returning({ id: chatRun.id });
+  return !!updated;
 };
+
+export const persistChatRunDraft = async (input: {
+  assistantMessageId: string;
+  parts: ChatMessagePart[];
+  runId: string;
+  runStatus?: Extract<ChatRunStatus, "running" | "waiting_on_tool">;
+  status?: Extract<ChatMessageStatus, "draft" | "streaming">;
+}) => {
+  return await db.transaction(async (tx) => {
+    const now = new Date();
+    const [activeRun] = await tx
+      .update(chatRun)
+      .set({
+        lastHeartbeatAt: now,
+        status: input.runStatus ?? "running",
+        updatedAt: now,
+      })
+      .where(
+        and(eq(chatRun.id, input.runId), inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])),
+      )
+      .returning({ id: chatRun.id });
+
+    if (!activeRun) {
+      return false;
+    }
+
+    await tx
+      .update(chatMessage)
+      .set({
+        error: null,
+        parts: input.parts,
+        status: input.status ?? "streaming",
+      })
+      .where(eq(chatMessage.id, input.assistantMessageId));
+    return true;
+  });
+};
+
+export const terminalizeChatRun = async (input: {
+  error?: string | null;
+  parts?: ChatMessagePart[];
+  runId: string;
+  status: Extract<ChatRunStatus, "cancelled" | "complete" | "failed">;
+}) =>
+  await db.transaction(async (tx) => {
+    const now = new Date();
+    const [terminalRun] = await tx
+      .update(chatRun)
+      .set({
+        error: input.error ?? null,
+        lastHeartbeatAt: now,
+        status: input.status,
+        updatedAt: now,
+      })
+      .where(
+        and(eq(chatRun.id, input.runId), inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])),
+      )
+      .returning({ assistantMessageId: chatRun.assistantMessageId });
+
+    if (!terminalRun) {
+      return null;
+    }
+
+    const [message] = await tx
+      .select({ parts: chatMessage.parts })
+      .from(chatMessage)
+      .where(eq(chatMessage.id, terminalRun.assistantMessageId))
+      .limit(1);
+    const parts = input.parts ?? message?.parts ?? EMPTY_ASSISTANT_PARTS;
+
+    await tx
+      .update(chatMessage)
+      .set({
+        error: input.error ?? null,
+        parts,
+        status: input.status,
+      })
+      .where(eq(chatMessage.id, terminalRun.assistantMessageId));
+
+    return {
+      assistantMessageId: terminalRun.assistantMessageId,
+      error: input.error ?? null,
+      parts,
+      status: input.status,
+    };
+  });
+
+export const cancelActiveChatRun = async (input: { chatId: string; userId: string }) =>
+  await db.transaction(async (tx) => {
+    const now = new Date();
+    const [cancelledRun] = await tx
+      .update(chatRun)
+      .set({
+        cancelRequestedAt: now,
+        error: null,
+        lastHeartbeatAt: now,
+        status: "cancelled",
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(chatRun.chatId, input.chatId),
+          eq(chatRun.userId, input.userId),
+          inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES]),
+        ),
+      )
+      .returning({
+        assistantMessageId: chatRun.assistantMessageId,
+        id: chatRun.id,
+      });
+
+    if (!cancelledRun) {
+      return null;
+    }
+
+    const [message] = await tx
+      .select({ parts: chatMessage.parts })
+      .from(chatMessage)
+      .where(eq(chatMessage.id, cancelledRun.assistantMessageId))
+      .limit(1);
+    const parts = message?.parts ?? EMPTY_ASSISTANT_PARTS;
+
+    await tx
+      .update(chatMessage)
+      .set({ error: null, parts, status: "cancelled" })
+      .where(eq(chatMessage.id, cancelledRun.assistantMessageId));
+
+    return {
+      assistantMessageId: cancelledRun.assistantMessageId,
+      error: null,
+      parts,
+      runId: cancelledRun.id,
+      status: "cancelled" as const,
+    };
+  });
 
 export const isCancelRequested = async (runId: string) => {
   const [row] = await db
@@ -115,23 +244,15 @@ const hasVisibleAssistantContent = (parts: ChatMessagePart[]) =>
     );
   });
 
-const failStaleChatRun = async (run: { assistantMessageId: string; id: string }) => {
-  const [assistantMessage] = await db
-    .select({ parts: chatMessage.parts })
-    .from(chatMessage)
-    .where(eq(chatMessage.id, run.assistantMessageId))
-    .limit(1);
-
-  await Promise.all([
-    updateAssistantMessage({
-      assistantMessageId: run.assistantMessageId,
-      error: STALE_RUN_ERROR,
-      parts: assistantMessage?.parts ?? EMPTY_ASSISTANT_PARTS,
-      status: "failed",
-    }),
-    updateRunStatus(run.id, "failed", { error: STALE_RUN_ERROR }),
-  ]);
-};
+const failStaleChatRun = (run: { id: string; status: ChatRunStatus }) =>
+  terminalizeChatRun({
+    error:
+      run.status === "waiting_on_tool"
+        ? "The mail lookup stopped responding. Retry the response to continue."
+        : "The response stopped before it finished. Retry it to continue.",
+    runId: run.id,
+    status: "failed",
+  });
 
 export const getActiveChatRunSummary = async (chatId: string) => {
   const [activeRun] = await db
@@ -184,6 +305,7 @@ export const hasActiveChatRun = async (chatId: string) => !!(await getActiveChat
 export const createChatRunRecords = async (input: {
   assistantMessageId: string;
   chatId: string;
+  context?: ChatRunContext;
   mailboxCategory: string;
   mailboxId: string;
   model: ChatModel;
@@ -222,6 +344,7 @@ export const createChatRunRecords = async (input: {
       await tx.insert(chatRun).values({
         assistantMessageId: input.assistantMessageId,
         chatId: input.chatId,
+        context: input.context,
         createdAt: now,
         id: input.runId,
         lastHeartbeatAt: now,
@@ -241,6 +364,7 @@ export const createChatRunRecords = async (input: {
 
 export const startAssistantRun = async (input: {
   chatId: string;
+  context?: ChatRunContext;
   mailboxCategory: string;
   mailboxId: string;
   model: ChatModel;
@@ -290,6 +414,7 @@ export const startAssistantRun = async (input: {
       await tx.insert(chatRun).values({
         assistantMessageId,
         chatId: input.chatId,
+        context: input.context,
         createdAt: now,
         id: runId,
         lastHeartbeatAt: now,
@@ -311,6 +436,7 @@ export const startAssistantRun = async (input: {
 
 export const continueAssistantRun = async (input: {
   chatId: string;
+  context?: ChatRunContext;
   mailboxCategory: string;
   mailboxId: string;
   model: ChatModel;
@@ -355,6 +481,7 @@ export const continueAssistantRun = async (input: {
       await tx.insert(chatRun).values({
         assistantMessageId,
         chatId: input.chatId,
+        context: input.context,
         createdAt: now,
         id: runId,
         lastHeartbeatAt: now,

@@ -1,0 +1,1 @@
+ALTER TABLE "chatRun" ADD COLUMN "context" jsonb;

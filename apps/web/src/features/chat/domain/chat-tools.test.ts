@@ -7,6 +7,7 @@ describe("parseToolResult", () => {
       "search_gmail",
       JSON.stringify({
         category: "inbox",
+        fetchedAt: "2026-07-13T12:00:00.000Z",
         messages: [],
         query: "is:unread",
         status: "success",
@@ -16,29 +17,9 @@ describe("parseToolResult", () => {
     expect(result).toEqual({
       data: {
         category: "inbox",
+        fetchedAt: "2026-07-13T12:00:00.000Z",
         messages: [],
         query: "is:unread",
-        status: "success",
-      },
-      kind: "gmail-search",
-    });
-  });
-
-  test("normalizes persisted search results from before structured statuses", () => {
-    const result = parseToolResult(
-      "search_gmail",
-      JSON.stringify({
-        category: "sent",
-        messages: [],
-        query: "from:me",
-      }),
-    );
-
-    expect(result).toEqual({
-      data: {
-        category: "sent",
-        messages: [],
-        query: "from:me",
         status: "success",
       },
       kind: "gmail-search",
@@ -141,9 +122,11 @@ describe("parseToolResult", () => {
         "read_gmail_message",
         JSON.stringify({
           attachmentCount: 0,
+          attachments: [],
           body: "Hello",
           bodyTruncated: false,
           category: "inbox",
+          fetchedAt: "2026-07-13T12:00:00.000Z",
           id: "message-1",
           status: "success",
           subject: "Hello",
@@ -157,11 +140,54 @@ describe("parseToolResult", () => {
         "list_gmail_labels",
         JSON.stringify({
           category: "inbox",
+          fetchedAt: "2026-07-13T12:00:00.000Z",
           labels: [{ id: "INBOX", name: "INBOX", type: "system" }],
           status: "success",
         }),
       ),
     ).toMatchObject({ kind: "gmail-labels" });
+  });
+
+  test("parses batch Gmail message results", () => {
+    expect(
+      parseToolResult(
+        "read_gmail_messages",
+        JSON.stringify({
+          failed: [],
+          fetchedAt: "2026-07-13T12:00:00.000Z",
+          messages: [
+            {
+              attachmentCount: 0,
+              attachments: [],
+              body: "Hello",
+              bodyTruncated: false,
+              category: "inbox",
+              fetchedAt: "2026-07-13T12:00:00.000Z",
+              id: "message-1",
+              status: "success",
+              threadId: "thread-1",
+            },
+          ],
+          status: "success",
+        }),
+      ),
+    ).toMatchObject({ kind: "gmail-messages" });
+  });
+
+  test("parses Gmail attachment results", () => {
+    expect(
+      parseToolResult("read_gmail_attachment", {
+        attachmentId: "attachment-1",
+        content: "status,owner\nready,Ada",
+        contentTruncated: false,
+        fetchedAt: "2026-07-13T12:00:00.000Z",
+        fileName: "status.csv",
+        messageId: "message-1",
+        mimeType: "text/csv",
+        size: 22,
+        status: "success",
+      }),
+    ).toMatchObject({ kind: "gmail-attachment" });
   });
 
   test("falls back to an unknown result for malformed output", () => {

@@ -3,8 +3,10 @@ import type { ChatMiddleware, UIMessage } from "@tanstack/ai";
 import {
   composeEmailToolDef,
   createGoogleCalendarEventServerTool,
+  createGmailAttachmentServerTool,
   createGmailLabelListServerTool,
   createGmailMessageServerTool,
+  createGmailMessagesServerTool,
   createGmailSearchServerTool,
   createGmailThreadServerTool,
   createLinearIssueMetadataServerTool,
@@ -24,14 +26,15 @@ import { chatModelSchema } from "@quieter/ai/chat-models";
 import { runChatStream } from "@quieter/ai/run-chat-stream";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
-import {
-  chatMessage,
-  chatRun,
-  type ChatMessagePart,
-  type ChatMessageStatus,
-} from "@quieter/database/schema";
+import { chatMessage, chatRun, type ChatMessagePart } from "@quieter/database/schema";
 import { and, eq, inArray, isNull, lt, or } from "drizzle-orm";
-import { isCancelRequested, updateAssistantMessage, updateRunStatus } from "../../chat-run-store";
+import {
+  isCancelRequested,
+  persistChatRunDraft,
+  terminalizeChatRun,
+  touchChatRunHeartbeat,
+  updateRunStatus,
+} from "../../chat-run-store";
 import { isActiveChatRunStatus, publishChatRunEvent } from "../../chat-run-stream";
 import {
   createGoogleCalendarEventForUser,
@@ -45,7 +48,9 @@ import {
   getMailboxOverviewForUser,
   listGmailLabelsForUser,
   modifyMailForUser,
+  readGmailAttachmentForUser,
   readGmailMessageForUser,
+  readGmailMessagesForUser,
   readGmailThreadForUser,
   searchGmailForUser,
 } from "../../gmail-chat-search";
@@ -54,12 +59,35 @@ import {
   recordUserAiContextEvent,
   refreshUserAiContext,
 } from "../../user-ai-context";
-import { terminalizeFailedChatRun } from "./failure";
+import { getChatRunFailureMessage, terminalizeFailedChatRun } from "./failure";
+import { registerChatRunController } from "./runtime";
 
 const DRAFT_PERSIST_INTERVAL_MS = 750;
-const CANCEL_POLL_INTERVAL_MS = 1_000;
-const HEARTBEAT_TOUCH_INTERVAL_MS = 5_000;
+const CANCEL_POLL_INTERVAL_MS = 250;
+const HEARTBEAT_INTERVAL_MS = 5_000;
 const STALE_RUN_CLAIM_MS = 30_000;
+const MAIL_TOOL_TIMEOUT_MS = 25_000;
+
+const runMailTool = async <T>(
+  runSignal: AbortSignal,
+  operation: (signal: AbortSignal) => Promise<T>,
+) => {
+  const timeoutController = new AbortController();
+  const timeout = setTimeout(() => timeoutController.abort(), MAIL_TOOL_TIMEOUT_MS);
+  const signal = AbortSignal.any([runSignal, timeoutController.signal]);
+
+  try {
+    return await operation(signal);
+  } catch (error) {
+    if (!runSignal.aborted && timeoutController.signal.aborted) {
+      throw new Error("The mail lookup timed out. Retry with a narrower search.");
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
 
 /** StreamProcessor may append multiple assistant messages across tool continuations. */
 const getStreamingAssistantParts = (
@@ -147,17 +175,20 @@ export const runChatGeneration = async (runId: string) => {
   const assistantDraft = visibleMessages.find((message) => message.id === run.assistantMessageId);
 
   if (!assistantDraft) {
-    await updateRunStatus(runId, "failed", { error: "Assistant draft message was not found." });
+    await terminalizeFailedChatRun(
+      runId,
+      "This response could not be resumed. Retry it to continue.",
+    );
     return;
   }
 
   const abortController = new AbortController();
+  const unregisterController = registerChatRunController(runId, abortController);
   let persistTimeout: ReturnType<typeof setTimeout> | undefined;
   let pendingParts: ChatMessagePart[] = assistantDraft.parts;
   let pendingPersist = Promise.resolve();
   let cancelled = false;
   let hasPersistedStreamingDraft = false;
-  let lastHeartbeatTouchAt = 0;
   const usageReports: Promise<void>[] = [];
 
   const cancelPoll = setInterval(() => {
@@ -174,6 +205,11 @@ export const runChatGeneration = async (runId: string) => {
         console.error("Could not check chat generation cancellation.", error);
       });
   }, CANCEL_POLL_INTERVAL_MS);
+  const heartbeat = setInterval(() => {
+    void touchChatRunHeartbeat(runId).catch((error) => {
+      console.error("Could not update the chat generation heartbeat.", error);
+    });
+  }, HEARTBEAT_INTERVAL_MS);
 
   const drainAssistantDraftPersist = async () => {
     if (persistTimeout) {
@@ -184,45 +220,21 @@ export const runChatGeneration = async (runId: string) => {
     await pendingPersist.catch(() => undefined);
   };
 
-  const flushAssistantDraft = async (status: ChatMessageStatus, error?: string | null) => {
-    await drainAssistantDraftPersist();
-    await updateAssistantMessage({
-      assistantMessageId: run.assistantMessageId,
-      error,
-      parts: pendingParts,
-      status,
-    });
-  };
-
   const persistStreamingDraft = () => {
     const parts = pendingParts;
     pendingPersist = pendingPersist
       .catch(() => undefined)
       .then(async () => {
-        await Promise.all([
-          updateAssistantMessage({
-            assistantMessageId: run.assistantMessageId,
-            parts,
-            status: "streaming",
-          }),
-          updateRunStatus(runId, "running"),
-        ]);
+        await persistChatRunDraft({
+          assistantMessageId: run.assistantMessageId,
+          parts,
+          runId,
+        });
       });
 
     void pendingPersist.catch((error) => {
       console.error("Could not persist the chat generation draft.", error);
     });
-  };
-
-  const touchRunHeartbeat = () => {
-    const now = Date.now();
-
-    if (now - lastHeartbeatTouchAt < HEARTBEAT_TOUCH_INTERVAL_MS) {
-      return;
-    }
-
-    lastHeartbeatTouchAt = now;
-    void updateRunStatus(runId, "running");
   };
 
   const emitDraft = (parts: ChatMessagePart[]) => {
@@ -232,7 +244,6 @@ export const runChatGeneration = async (runId: string) => {
       parts,
       type: "draft",
     });
-    touchRunHeartbeat();
     scheduleAssistantDraftPersist(parts);
   };
 
@@ -296,11 +307,15 @@ export const runChatGeneration = async (runId: string) => {
   };
 
   try {
-    await updateAssistantMessage({
-      assistantMessageId: run.assistantMessageId,
-      parts: pendingParts,
-      status: "streaming",
-    });
+    if (
+      !(await persistChatRunDraft({
+        assistantMessageId: run.assistantMessageId,
+        parts: pendingParts,
+        runId,
+      }))
+    ) {
+      return;
+    }
 
     const streamInitialMessages = toUiMessages(
       visibleMessages.filter((message) => message.id !== run.assistantMessageId),
@@ -321,8 +336,27 @@ export const runChatGeneration = async (runId: string) => {
       return false;
     });
     const userAiContext = await loadUserAiContextPrompt({ userId: run.userId });
+    const mailboxContext = run.context
+      ? [
+          run.context.messageId ? `Selected message id: ${run.context.messageId}` : null,
+          run.context.threadId ? `Selected thread id: ${run.context.threadId}` : null,
+          run.context.query ? `Open mailbox search: ${run.context.query}` : null,
+        ].filter((value): value is string => !!value)
+      : [];
     const systemPrompts = [
       gmailToolsPrompt,
+      ...(mailboxContext.length
+        ? [
+            `## Current mailbox context
+
+The user opened this chat from the following mailbox context:
+${mailboxContext.map((value) => `- ${value}`).join("\n")}
+
+These identifiers are navigation hints, not message content. When the user refers to "this email",
+"this thread", or the current results, retrieve the relevant live data with a mailbox tool before
+answering.`,
+          ]
+        : []),
       ...(userAiContext
         ? [
             `## User Context
@@ -362,59 +396,95 @@ ${userAiContext}`,
         const context: GmailToolsContext = {
           category,
           getMailboxOverview: () =>
-            getMailboxOverviewForUser({
-              category,
-              mailboxId: run.mailboxId,
-              signal: abortController.signal,
-              userId: run.userId,
-            }),
+            runMailTool(abortController.signal, (signal) =>
+              getMailboxOverviewForUser({
+                category,
+                mailboxId: run.mailboxId,
+                signal,
+                userId: run.userId,
+              }),
+            ),
           listGmailLabels: () =>
-            listGmailLabelsForUser({
-              category,
-              mailboxId: run.mailboxId,
-              signal: abortController.signal,
-              userId: run.userId,
-            }),
+            runMailTool(abortController.signal, (signal) =>
+              listGmailLabelsForUser({
+                category,
+                mailboxId: run.mailboxId,
+                signal,
+                userId: run.userId,
+              }),
+            ),
           modifyMail: ({ action, id, target }) =>
-            modifyMailForUser({
-              action,
-              category,
-              id,
-              mailboxId: run.mailboxId,
-              signal: abortController.signal,
-              target,
-              userId: run.userId,
-            }),
+            runMailTool(abortController.signal, (signal) =>
+              modifyMailForUser({
+                action,
+                category,
+                id,
+                mailboxId: run.mailboxId,
+                signal,
+                target,
+                userId: run.userId,
+              }),
+            ),
+          readGmailAttachment: ({ attachmentId, messageId }) =>
+            runMailTool(abortController.signal, (signal) =>
+              readGmailAttachmentForUser({
+                attachmentId,
+                category,
+                mailboxId: run.mailboxId,
+                messageId,
+                signal,
+                userId: run.userId,
+              }),
+            ),
           readGmailMessage: ({ messageId }) =>
-            readGmailMessageForUser({
-              category,
-              mailboxId: run.mailboxId,
-              messageId,
-              signal: abortController.signal,
-              userId: run.userId,
-            }),
+            runMailTool(abortController.signal, (signal) =>
+              readGmailMessageForUser({
+                category,
+                mailboxId: run.mailboxId,
+                messageId,
+                signal,
+                userId: run.userId,
+              }),
+            ),
+          readGmailMessages: ({ messageIds }) =>
+            runMailTool(abortController.signal, (signal) =>
+              readGmailMessagesForUser({
+                category,
+                mailboxId: run.mailboxId,
+                messageIds,
+                signal,
+                userId: run.userId,
+              }),
+            ),
           readGmailThread: ({ threadId }: { threadId: string }) =>
-            readGmailThreadForUser({
-              category,
-              mailboxId: run.mailboxId,
-              signal: abortController.signal,
-              threadId,
-              userId: run.userId,
-            }),
-          searchGmail: ({ maxResults, query }) =>
-            searchGmailForUser({
-              category,
-              mailboxId: run.mailboxId,
-              maxResults,
-              query,
-              signal: abortController.signal,
-              userId: run.userId,
-            }),
+            runMailTool(abortController.signal, (signal) =>
+              readGmailThreadForUser({
+                category,
+                mailboxId: run.mailboxId,
+                signal,
+                threadId,
+                userId: run.userId,
+              }),
+            ),
+          searchGmail: ({ maxResults, pageToken, query }) =>
+            runMailTool(abortController.signal, (signal) =>
+              searchGmailForUser({
+                category,
+                mailboxId: run.mailboxId,
+                maxResults,
+                pageToken,
+                query,
+                signal,
+                userId: run.userId,
+              }),
+            ),
         };
         const tools = [
           composeEmailToolDef,
+          createGmailAttachmentServerTool(context),
           createGmailLabelListServerTool(context),
           createGmailMessageServerTool(context),
+          createGmailMessagesServerTool(context),
           createGmailSearchServerTool(context),
           createGmailThreadServerTool(context),
           createMailboxOverviewServerTool(context),
@@ -486,46 +556,45 @@ ${userAiContext}`,
 
     const finalParts = (getStreamingAssistantParts(finalMessages, streamStartMessageCount) ??
       pendingParts) as ChatMessagePart[];
-    const terminalStatus = cancelled ? "cancelled" : "complete";
-
     pendingParts = finalParts;
     await settleUsageReports();
-    await flushAssistantDraft(
-      cancelled ? "failed" : "complete",
-      cancelled ? "Generation cancelled." : null,
-    );
-    await updateRunStatus(runId, terminalStatus);
-    publishChatRunEvent(runId, {
-      assistantMessageId: run.assistantMessageId,
-      error: cancelled ? "Generation cancelled." : null,
+    await drainAssistantDraftPersist();
+    const terminal = await terminalizeChatRun({
       parts: finalParts,
-      status: terminalStatus,
-      type: "done",
+      runId,
+      status: cancelled || abortController.signal.aborted ? "cancelled" : "complete",
     });
+
+    if (terminal) {
+      publishChatRunEvent(runId, { ...terminal, type: "done" });
+    }
   } catch (error) {
     await settleUsageReports();
-    const message = error instanceof Error ? error.message : "Chat generation failed.";
 
     if (cancelled || abortController.signal.aborted) {
-      await flushAssistantDraft("failed", "Generation cancelled.");
-      await updateRunStatus(runId, "cancelled", { error: "Generation cancelled." });
-      publishChatRunEvent(runId, {
-        assistantMessageId: run.assistantMessageId,
-        error: "Generation cancelled.",
+      await drainAssistantDraftPersist();
+      const terminal = await terminalizeChatRun({
         parts: pendingParts,
+        runId,
         status: "cancelled",
-        type: "done",
       });
+
+      if (terminal) {
+        publishChatRunEvent(runId, { ...terminal, type: "done" });
+      }
       return;
     }
 
+    console.error(`Chat generation ${runId} failed.`, error);
     await drainAssistantDraftPersist();
-    await terminalizeFailedChatRun(runId, message, {
+    await terminalizeFailedChatRun(runId, getChatRunFailureMessage(error), {
       id: run.assistantMessageId,
       parts: pendingParts,
     });
   } finally {
     clearInterval(cancelPoll);
+    clearInterval(heartbeat);
+    unregisterController();
 
     if (persistTimeout) {
       clearTimeout(persistTimeout);

@@ -20,6 +20,7 @@ export const summarizeToolCalls = (
   items: Array<{ call: ToolCall; pending: boolean; result?: ToolResult }>,
 ) => {
   const counts = {
+    attachment: 0,
     calendar: 0,
     compose: 0,
     labels: 0,
@@ -63,6 +64,17 @@ export const summarizeToolCalls = (
       continue;
     }
 
+    if (call.name === "read_gmail_messages") {
+      const messageIds = parseToolArguments(call.arguments).messageIds;
+      counts.message += Array.isArray(messageIds) ? messageIds.length : 1;
+      continue;
+    }
+
+    if (call.name === "read_gmail_attachment") {
+      counts.attachment += 1;
+      continue;
+    }
+
     if (call.name === "get_mailbox_overview") {
       counts.overview += 1;
       continue;
@@ -101,8 +113,12 @@ export const summarizeToolCalls = (
       return "Reading thread";
     }
 
-    if (active?.call.name === "read_gmail_message") {
-      return "Reading message";
+    if (active?.call.name === "read_gmail_message" || active?.call.name === "read_gmail_messages") {
+      return active.call.name === "read_gmail_messages" ? "Reading messages" : "Reading message";
+    }
+
+    if (active?.call.name === "read_gmail_attachment") {
+      return "Reading attachment";
     }
 
     if (active?.call.name === "compose_email") {
@@ -136,6 +152,10 @@ export const summarizeToolCalls = (
 
   if (counts.message > 0) {
     parts.push(`read ${countLabel(counts.message, "message")}`);
+  }
+
+  if (counts.attachment > 0) {
+    parts.push(`read ${countLabel(counts.attachment, "attachment")}`);
   }
 
   if (counts.overview > 0) {
@@ -203,6 +223,23 @@ export const getActiveToolDetail = (call: ToolCall, result?: ToolResult): string
     ) {
       return truncateToolDetail(parsed.data.subject);
     }
+  }
+
+  if (call.name === "read_gmail_messages") {
+    const messageIds = args.messageIds;
+    return Array.isArray(messageIds) ? countLabel(messageIds.length, "message") : undefined;
+  }
+
+  if (call.name === "read_gmail_attachment") {
+    if (
+      parsed.kind === "gmail-attachment" &&
+      parsed.data.status === "success" &&
+      parsed.data.fileName
+    ) {
+      return truncateToolDetail(parsed.data.fileName);
+    }
+
+    return undefined;
   }
 
   if (call.name === "compose_email" && typeof args.subject === "string" && args.subject.trim()) {

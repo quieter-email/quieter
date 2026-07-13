@@ -11,7 +11,7 @@ import {
   ScrollAreaViewport,
 } from "@quieter/ui/scroll-area";
 import { AnimatePresence, m } from "motion/react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ChatTurn, ResolveComposeTool } from "../types";
 import { ChatError } from "./chat-error";
 import { ConversationTurn } from "./conversation-turn";
@@ -29,6 +29,19 @@ type ChatTranscriptProps = {
 
 const SCROLL_THRESHOLD = 96;
 
+const scrollTranscriptToBottom = (
+  viewport: HTMLDivElement | null,
+  behavior: ScrollBehavior,
+  isNearBottomRef: { current: boolean },
+  setShowScrollButton: (show: boolean) => void,
+) => {
+  if (!viewport) return;
+
+  viewport.scrollTo({ behavior, top: viewport.scrollHeight });
+  isNearBottomRef.current = true;
+  setShowScrollButton(false);
+};
+
 export const ChatTranscript = ({
   actionsDisabled,
   errorMessage,
@@ -43,15 +56,7 @@ export const ChatTranscript = ({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = useRef(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
-
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-
-    viewport.scrollTo({ behavior, top: viewport.scrollHeight });
-    isNearBottomRef.current = true;
-    setShowScrollButton(false);
-  }, []);
+  const retryAssistantId = turns.at(-1)?.assistant?.id;
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -60,21 +65,21 @@ export const ChatTranscript = ({
 
     const resizeObserver = new ResizeObserver(() => {
       if (isNearBottomRef.current) {
-        scrollToBottom("auto");
+        scrollTranscriptToBottom(viewportRef.current, "auto", isNearBottomRef, setShowScrollButton);
       }
     });
 
     resizeObserver.observe(content);
     return () => resizeObserver.disconnect();
-  }, [scrollToBottom]);
+  }, []);
 
   useLayoutEffect(() => {
     if (isNearBottomRef.current) {
-      scrollToBottom("auto");
+      scrollTranscriptToBottom(viewportRef.current, "auto", isNearBottomRef, setShowScrollButton);
     }
-  }, [isStreaming, scrollToBottom, turns]);
+  }, [isStreaming, turns]);
 
-  const handleScroll = useCallback(() => {
+  const handleScroll = () => {
     const viewport = viewportRef.current;
     if (!viewport) return;
 
@@ -82,7 +87,7 @@ export const ChatTranscript = ({
     const nearBottom = scrollHeight - scrollTop - clientHeight < SCROLL_THRESHOLD;
     isNearBottomRef.current = nearBottom;
     setShowScrollButton(!nearBottom);
-  }, []);
+  };
 
   return (
     <div className="relative min-h-0 flex-1">
@@ -106,7 +111,13 @@ export const ChatTranscript = ({
                   turn={turn}
                 />
               ))}
-              {errorMessage ? <ChatError message={errorMessage} /> : null}
+              {errorMessage ? (
+                <ChatError
+                  disabled={actionsDisabled}
+                  message={errorMessage}
+                  onRetry={retryAssistantId ? () => onRegenerate(retryAssistantId) : undefined}
+                />
+              ) : null}
             </div>
           </ScrollAreaContent>
         </ScrollAreaViewport>
@@ -127,7 +138,14 @@ export const ChatTranscript = ({
             )}
             exit={{ opacity: 0, y: 4 }}
             initial={{ opacity: 0, y: 4 }}
-            onClick={() => scrollToBottom("smooth")}
+            onClick={() =>
+              scrollTranscriptToBottom(
+                viewportRef.current,
+                "smooth",
+                isNearBottomRef,
+                setShowScrollButton,
+              )
+            }
             transition={{ duration: 0.15 }}
             type="button"
           >

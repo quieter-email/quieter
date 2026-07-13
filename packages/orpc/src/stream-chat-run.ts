@@ -5,12 +5,15 @@ import { getAuthorizedChatRun } from "./chat-run-store";
 import {
   formatChatRunSse,
   isActiveChatRunStatus,
+  subscribeChatRunEvents,
   type ChatRunStreamEvent,
 } from "./chat-run-stream";
-import { enqueueChatRun, handoffChatRunToBackground } from "./chat/generation/lifecycle";
+import { getChatRunFailureMessage, terminalizeFailedChatRun } from "./chat/generation/failure";
+import { startChatRun } from "./chat/generation/lifecycle";
 
-const CHAT_RUN_POLL_INTERVAL_MS = 1_000;
+const CHAT_RUN_POLL_INTERVAL_MS = 750;
 const CHAT_RUN_STALE_HEARTBEAT_MS = 30_000;
+const CHAT_RUN_KEEPALIVE_INTERVAL_MS = 15_000;
 
 const getAssistantMessage = async (assistantMessageId: string) => {
   const [message] = await db
@@ -30,136 +33,176 @@ export const createChatRunStreamResponse = async (input: {
   runId: string;
   userId: string;
 }) => {
-  const run = await getAuthorizedChatRun(input.runId, input.userId);
+  const authorizedRun = await getAuthorizedChatRun(input.runId, input.userId);
 
-  if (!run) {
+  if (!authorizedRun) {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  let stopStream = () => {};
   const stream = new ReadableStream<Uint8Array>({
-    start: async (controller) => {
+    cancel: () => stopStream(),
+    start: (controller) => {
       const encoder = new TextEncoder();
-      let finished = false;
+      let closed = false;
       let polling = false;
       let previousParts = "";
-      let resolveFinished = () => {};
-      const finishedPromise = new Promise<void>((resolve) => {
-        resolveFinished = resolve;
-      });
+      let previousStatus = authorizedRun.status;
+      let lastRestartAt = 0;
+      let pollInterval: ReturnType<typeof setInterval> | undefined;
+      let keepaliveInterval: ReturnType<typeof setInterval> | undefined;
+      let unsubscribe = () => {};
 
+      const cleanup = () => {
+        if (pollInterval) clearInterval(pollInterval);
+        if (keepaliveInterval) clearInterval(keepaliveInterval);
+        input.requestSignal.removeEventListener("abort", close);
+        unsubscribe();
+      };
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        cleanup();
+
+        try {
+          controller.close();
+        } catch {
+          // The browser may have already closed its side of the stream.
+        }
+      };
       const send = (event: ChatRunStreamEvent) => {
-        controller.enqueue(encoder.encode(formatChatRunSse(event)));
+        if (closed) return;
 
-        if (event.type === "done") {
-          finished = true;
-          resolveFinished();
+        try {
+          controller.enqueue(encoder.encode(formatChatRunSse(event)));
+        } catch {
+          close();
+          return;
+        }
+
+        if (event.type === "done") close();
+      };
+      const startGeneration = () => {
+        void startChatRun(input.runId).catch(async (error) => {
+          console.error(`Could not start chat generation ${input.runId}.`, error);
+          await terminalizeFailedChatRun(input.runId, getChatRunFailureMessage(error)).catch(
+            (terminalError) => {
+              console.error("Could not close the chat run after startup failed.", terminalError);
+            },
+          );
+        });
+      };
+      const poll = async () => {
+        if (polling || closed || input.requestSignal.aborted) return;
+        polling = true;
+
+        try {
+          const currentRun = await getAuthorizedChatRun(input.runId, input.userId);
+          if (!currentRun) {
+            close();
+            return;
+          }
+
+          const currentAssistant = await getAssistantMessage(currentRun.assistantMessageId);
+          const currentParts = currentAssistant?.parts ?? [{ content: "", type: "text" }];
+          const serializedParts = JSON.stringify(currentParts);
+
+          if (!isActiveChatRunStatus(currentRun.status)) {
+            send({
+              assistantMessageId: currentRun.assistantMessageId,
+              error: currentRun.error ?? currentAssistant?.error,
+              parts: currentParts,
+              status: currentRun.status,
+              type: "done",
+            });
+            return;
+          }
+
+          if (currentRun.status !== previousStatus) {
+            previousStatus = currentRun.status;
+            send({ status: currentRun.status, type: "status" });
+          }
+
+          if (serializedParts !== previousParts) {
+            previousParts = serializedParts;
+            send({
+              assistantMessageId: currentRun.assistantMessageId,
+              parts: currentParts,
+              type: "draft",
+            });
+          }
+
+          const lastActivity = currentRun.lastHeartbeatAt ?? currentRun.updatedAt;
+          if (
+            Date.now() - lastActivity.getTime() > CHAT_RUN_STALE_HEARTBEAT_MS &&
+            Date.now() - lastRestartAt > CHAT_RUN_STALE_HEARTBEAT_MS
+          ) {
+            lastRestartAt = Date.now();
+            startGeneration();
+          }
+        } catch (error) {
+          console.error("Could not refresh the chat generation stream.", error);
+        } finally {
+          polling = false;
         }
       };
 
-      const onAbort = () => resolveFinished();
-      input.requestSignal.addEventListener("abort", onAbort, { once: true });
-      let pollInterval: ReturnType<typeof setInterval> | undefined;
+      stopStream = () => {
+        if (closed) return;
+        closed = true;
+        cleanup();
+      };
+      input.requestSignal.addEventListener("abort", close, { once: true });
+      unsubscribe = subscribeChatRunEvents(input.runId, send);
+      keepaliveInterval = setInterval(() => {
+        if (closed) return;
 
-      try {
-        if (input.requestSignal.aborted) {
-          resolveFinished();
-          handoffChatRunToBackground(input.runId);
-          return;
+        try {
+          controller.enqueue(encoder.encode(": keepalive\n\n"));
+        } catch {
+          close();
         }
+      }, CHAT_RUN_KEEPALIVE_INTERVAL_MS);
 
-        const latestRun = (await getAuthorizedChatRun(input.runId, input.userId)) ?? run;
+      if (input.requestSignal.aborted) {
+        close();
+        return;
+      }
 
-        if (input.requestSignal.aborted) {
-          handoffChatRunToBackground(input.runId);
-          return;
-        }
+      void (async () => {
+        try {
+          const latestRun =
+            (await getAuthorizedChatRun(input.runId, input.userId)) ?? authorizedRun;
+          const assistantMessage = await getAssistantMessage(latestRun.assistantMessageId);
+          const assistantParts = assistantMessage?.parts ?? [{ content: "", type: "text" }];
 
-        const assistantMessage = await getAssistantMessage(latestRun.assistantMessageId);
-        const assistantParts = assistantMessage?.parts ?? [{ content: "", type: "text" }];
+          if (!isActiveChatRunStatus(latestRun.status)) {
+            send({
+              assistantMessageId: latestRun.assistantMessageId,
+              error: latestRun.error ?? assistantMessage?.error,
+              parts: assistantParts,
+              status: latestRun.status,
+              type: "done",
+            });
+            return;
+          }
 
-        if (input.requestSignal.aborted) {
-          handoffChatRunToBackground(input.runId);
-          return;
-        }
-
-        if (!isActiveChatRunStatus(latestRun.status)) {
+          previousParts = JSON.stringify(assistantParts);
+          previousStatus = latestRun.status;
           send({
             assistantMessageId: latestRun.assistantMessageId,
-            error: latestRun.error ?? assistantMessage?.error,
             parts: assistantParts,
-            status: latestRun.status,
-            type: "done",
+            type: "draft",
           });
-          return;
-        }
-
-        send({
-          assistantMessageId: latestRun.assistantMessageId,
-          parts: assistantParts,
-          type: "draft",
-        });
-        previousParts = JSON.stringify(assistantParts);
-
-        const poll = async () => {
-          if (polling || finished || input.requestSignal.aborted) return;
-          polling = true;
-
-          try {
-            const currentRun = await getAuthorizedChatRun(input.runId, input.userId);
-            if (!currentRun) {
-              resolveFinished();
-              return;
-            }
-
-            const currentAssistant = await getAssistantMessage(currentRun.assistantMessageId);
-            const currentParts = currentAssistant?.parts ?? [{ content: "", type: "text" }];
-            const serializedParts = JSON.stringify(currentParts);
-
-            if (!isActiveChatRunStatus(currentRun.status)) {
-              send({
-                assistantMessageId: currentRun.assistantMessageId,
-                error: currentRun.error ?? currentAssistant?.error,
-                parts: currentParts,
-                status: currentRun.status,
-                type: "done",
-              });
-            } else {
-              const lastActivity = currentRun.lastHeartbeatAt ?? currentRun.updatedAt;
-              if (Date.now() - lastActivity.getTime() > CHAT_RUN_STALE_HEARTBEAT_MS) {
-                await enqueueChatRun(input.runId);
-              }
-
-              if (serializedParts !== previousParts) {
-                previousParts = serializedParts;
-                send({
-                  assistantMessageId: currentRun.assistantMessageId,
-                  parts: currentParts,
-                  type: "draft",
-                });
-              }
-            }
-          } catch (error) {
-            console.error("Could not refresh the chat generation stream.", error);
-          } finally {
-            polling = false;
-          }
-        };
-
-        if (!finished) {
-          await enqueueChatRun(input.runId);
+          send({ status: latestRun.status, type: "status" });
+          startGeneration();
           pollInterval = setInterval(() => void poll(), CHAT_RUN_POLL_INTERVAL_MS);
           void poll();
-          await finishedPromise;
+        } catch (error) {
+          console.error("Could not initialize the chat generation stream.", error);
+          close();
         }
-
-        if (input.requestSignal.aborted) {
-          handoffChatRunToBackground(input.runId);
-        }
-      } finally {
-        if (pollInterval) clearInterval(pollInterval);
-        input.requestSignal.removeEventListener("abort", onAbort);
-        controller.close();
-      }
+      })();
     },
   });
 
@@ -168,6 +211,7 @@ export const createChatRunStreamResponse = async (input: {
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
       "Content-Type": "text/event-stream",
+      "X-Accel-Buffering": "no",
     },
   });
 };

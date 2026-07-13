@@ -26,13 +26,17 @@ import { and, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   ActiveChatRunConflictError,
+  cancelActiveChatRun,
   continueAssistantRun,
   createChatRunRecords,
   getActiveChatRunSummary,
   hasActiveChatRun,
   startAssistantRun,
 } from "../chat-run-store";
-import { ACTIVE_CHAT_RUN_STATUSES } from "../chat-run-stream";
+import { ACTIVE_CHAT_RUN_STATUSES, publishChatRunEvent } from "../chat-run-stream";
+import { terminalizeFailedChatRun } from "../chat/generation/failure";
+import { startChatRun } from "../chat/generation/lifecycle";
+import { abortChatRun } from "../chat/generation/runtime";
 import { saveGmailDraft, sendGmailMessage } from "../gmail-compose";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { callGmail, mailboxCategorySchema, mailboxIdSchema, protectedProcedure } from "./base";
@@ -40,6 +44,11 @@ import { callGmail, mailboxCategorySchema, mailboxIdSchema, protectedProcedure }
 const chatIdSchema = z.string().trim().min(1);
 const chatTitleSchema = z.string().trim().min(1).max(120);
 const chatPromptSchema = z.string().trim().min(1).max(10_000);
+const chatRunContextSchema = z.object({
+  messageId: z.string().trim().min(1).max(256).optional(),
+  query: z.string().trim().min(1).max(500).optional(),
+  threadId: z.string().trim().min(1).max(256).optional(),
+});
 const chatAudioBase64Schema = z.string().trim().min(1).max(14_000_000);
 const chatAudioTranscriptionSchema = z.object({
   audioBase64: chatAudioBase64Schema,
@@ -55,6 +64,7 @@ const resolveComposeToolInputSchema = z.discriminatedUnion("action", [
     assistantMessageId: z.string().trim().min(1),
     category: mailboxCategorySchema,
     chatId: chatIdSchema,
+    context: chatRunContextSchema.optional(),
     mailboxId: mailboxIdSchema,
     model: chatModelSchema,
     toolCallId: z.string().trim().min(1),
@@ -64,6 +74,7 @@ const resolveComposeToolInputSchema = z.discriminatedUnion("action", [
     assistantMessageId: z.string().trim().min(1),
     category: mailboxCategorySchema,
     chatId: chatIdSchema,
+    context: chatRunContextSchema.optional(),
     mailboxId: mailboxIdSchema,
     message: composeDraftFormValuesSchema,
     model: chatModelSchema,
@@ -74,6 +85,7 @@ const resolveComposeToolInputSchema = z.discriminatedUnion("action", [
     assistantMessageId: z.string().trim().min(1),
     category: mailboxCategorySchema,
     chatId: chatIdSchema,
+    context: chatRunContextSchema.optional(),
     mailboxId: mailboxIdSchema,
     message: composeSendFormValuesSchema,
     model: chatModelSchema,
@@ -209,6 +221,15 @@ const startAssistantRunOrThrow = (input: Parameters<typeof startAssistantRun>[0]
 
 const continueAssistantRunOrThrow = (input: Parameters<typeof continueAssistantRun>[0]) =>
   continueAssistantRun(input).catch(rethrowChatRunConflict);
+
+const startCreatedChatRun = async (runId: string) => {
+  try {
+    await startChatRun(runId);
+  } catch (error) {
+    console.error(`Could not start chat run ${runId}.`, error);
+    await terminalizeFailedChatRun(runId, "The response could not start. Retry it to continue.");
+  }
+};
 
 const assertCanUseAiCredits = async (
   entitlement: Awaited<ReturnType<typeof hasUserBillingFeature>>,
@@ -357,6 +378,18 @@ export const chatRouter = {
       const result = await generateOpenRouterTranscription({
         audioBase64: input.audioBase64,
         format: input.format,
+      }).catch((error) => {
+        console.error("Could not transcribe chat audio.", error);
+        const message =
+          error instanceof Error &&
+          (error.message.startsWith("Transcription ") ||
+            error.message.startsWith("We could not transcribe "))
+            ? error.message
+            : "We could not transcribe that recording. Try recording it again.";
+
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message,
+        });
       });
       const text = result.text.trim();
 
@@ -557,6 +590,7 @@ export const chatRouter = {
       z.object({
         category: mailboxCategorySchema,
         chatId: chatIdSchema,
+        context: chatRunContextSchema.optional(),
         mailboxId: mailboxIdSchema,
         message: chatPromptSchema,
         model: chatModelSchema,
@@ -585,6 +619,7 @@ export const chatRouter = {
         await createChatRunRecords({
           assistantMessageId,
           chatId: authorizedChat.id,
+          context: input.context,
           mailboxCategory: input.category,
           mailboxId: input.mailboxId,
           model: input.model,
@@ -600,6 +635,8 @@ export const chatRouter = {
         rethrowChatRunConflict(error);
       }
 
+      await startCreatedChatRun(runId);
+
       return buildRunResponse({
         assistantMessageId,
         chatId: authorizedChat.id,
@@ -613,6 +650,7 @@ export const chatRouter = {
       z.object({
         category: mailboxCategorySchema,
         chatId: chatIdSchema,
+        context: chatRunContextSchema.optional(),
         mailboxId: mailboxIdSchema,
         message: chatPromptSchema,
         model: chatModelSchema,
@@ -651,6 +689,7 @@ export const chatRouter = {
 
       const { assistantMessageId, runId } = await startAssistantRunOrThrow({
         chatId: authorizedChat.id,
+        context: input.context,
         mailboxCategory: input.category,
         mailboxId: input.mailboxId,
         model: input.model,
@@ -661,6 +700,8 @@ export const chatRouter = {
         },
         userMessagePosition: userMessage.position,
       });
+
+      await startCreatedChatRun(runId);
 
       return buildRunResponse({
         assistantMessageId,
@@ -676,6 +717,7 @@ export const chatRouter = {
         assistantMessageId: z.string().trim().min(1),
         category: mailboxCategorySchema,
         chatId: chatIdSchema,
+        context: chatRunContextSchema.optional(),
         mailboxId: mailboxIdSchema,
         model: chatModelSchema,
       }),
@@ -735,12 +777,15 @@ export const chatRouter = {
 
       const { assistantMessageId, runId } = await startAssistantRunOrThrow({
         chatId: authorizedChat.id,
+        context: input.context,
         mailboxCategory: input.category,
         mailboxId: input.mailboxId,
         model: input.model,
         userId: context.userId,
         userMessagePosition: userMessage.position,
       });
+
+      await startCreatedChatRun(runId);
 
       return buildRunResponse({
         assistantMessageId,
@@ -952,6 +997,7 @@ export const chatRouter = {
 
       const { assistantMessageId, runId } = await continueAssistantRunOrThrow({
         chatId: authorizedChat.id,
+        context: input.context,
         mailboxCategory: input.category,
         mailboxId: input.mailboxId,
         model: input.model,
@@ -962,6 +1008,8 @@ export const chatRouter = {
         },
         userId: context.userId,
       });
+
+      await startCreatedChatRun(runId);
 
       return buildRunResponse({
         assistantMessageId,
@@ -975,20 +1023,24 @@ export const chatRouter = {
     .input(z.object({ chatId: chatIdSchema, mailboxId: mailboxIdSchema }))
     .handler(async ({ context, input }) => {
       const authorizedChat = await getAuthorizedChat(input.chatId, input.mailboxId, context.userId);
-      const activeRun = await getActiveChatRunSummary(authorizedChat.id);
+      const cancelledRun = await cancelActiveChatRun({
+        chatId: authorizedChat.id,
+        userId: context.userId,
+      });
 
-      if (!activeRun) {
-        return { cancelled: false };
+      if (!cancelledRun) {
+        return { cancelled: false as const };
       }
 
-      await db
-        .update(chatRun)
-        .set({
-          cancelRequestedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(chatRun.id, activeRun.id));
+      abortChatRun(cancelledRun.runId);
+      publishChatRunEvent(cancelledRun.runId, {
+        assistantMessageId: cancelledRun.assistantMessageId,
+        error: cancelledRun.error,
+        parts: cancelledRun.parts,
+        status: cancelledRun.status,
+        type: "done",
+      });
 
-      return { cancelled: true, runId: activeRun.id };
+      return { cancelled: true as const, ...cancelledRun };
     }),
 };

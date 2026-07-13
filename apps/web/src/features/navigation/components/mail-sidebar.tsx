@@ -11,6 +11,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, LinkButton } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -162,12 +163,19 @@ const SidebarChatRow = ({
           />
         </form>
       ) : (
-        <div className="group flex w-full items-center rounded-md">
+        <div
+          className={cn(
+            "group flex h-8 w-full items-center overflow-hidden rounded-md transition-colors",
+            {
+              "bg-secondary/55": isActive,
+              "hover:bg-secondary/35": !isActive,
+            },
+          )}
+        >
           <Button
             aria-current={isActive ? "page" : undefined}
-            className="min-w-0 flex-1 justify-start gap-3 px-3 text-left text-foreground"
+            className="h-full min-w-0 flex-1 justify-start gap-3 rounded-none bg-transparent px-3 text-left text-foreground hover:bg-transparent"
             onClick={() => onSelect(chat.id)}
-            size="sm"
             type="button"
             variant="ghost"
           >
@@ -184,7 +192,7 @@ const SidebarChatRow = ({
             <IconButtonTooltip label={`Options for "${title}"`}>
               <DropdownMenuTrigger
                 aria-label={`Options for "${title}"`}
-                className="pointer-events-none mr-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity outline-none group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-background/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/20 data-popup-open:pointer-events-auto data-popup-open:opacity-100"
+                className="pointer-events-none mr-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-sm border-l border-border/40 bg-background/15 text-muted-foreground opacity-0 transition-[opacity,background-color,color] outline-none group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-background/55 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/20 data-popup-open:pointer-events-auto data-popup-open:opacity-100"
               >
                 <HugeiconsIcon aria-hidden className="size-3.5" icon={MoreVerticalIcon} />
               </DropdownMenuTrigger>
