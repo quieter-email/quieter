@@ -115,17 +115,17 @@ jobs:
             --compatibility-flag nodejs_compat \
             --dry-run \
             --outdir .review-bundle
-          mkdir -p .review-artifact/client
-          cp .review-bundle/server.js .review-artifact/server.js
-          cp -R apps/web/dist/client/. .review-artifact/client/
-          rm -f .review-artifact/client/.dev.vars .review-artifact/client/wrangler.json
+          mkdir -p review-artifact/client
+          cp .review-bundle/server.js review-artifact/server.js
+          cp -R apps/web/dist/client/. review-artifact/client/
+          rm -f review-artifact/client/.dev.vars review-artifact/client/wrangler.json
 
       - name: Upload credential-free artifact
         id: upload
         uses: actions/upload-artifact@v4
         with:
           name: review-worker-${{ needs.resolve.outputs.sha }}
-          path: .review-artifact
+          path: review-artifact
           if-no-files-found: error
           retention-days: 1
 
