@@ -216,12 +216,11 @@ const MessageRowContent = ({
   return (
     <m.div
       className={cn(
-        "relative flex h-17 items-stretch overflow-hidden rounded-lg transition-[background-color,transform] duration-100 ease-out motion-reduce:transition-none",
+        "relative flex h-17 items-stretch overflow-hidden rounded-lg transition-[background-color,transform] duration-100 ease-out data-pressed:bg-muted/80 motion-reduce:transition-none",
         {
           "bg-background-light/80": isSelected,
           "border border-border/80": isSelected,
-          "bg-background-light": isActive && !isSelected,
-          "bg-background-light/55": unread && !isActive && !isSelected,
+          "bg-muted/80": isActive && !isSelected,
           "group-hover:bg-background-light/45": !isActive && !isSelected,
         },
       )}
@@ -229,6 +228,11 @@ const MessageRowContent = ({
       onBlurCapture={handleRowBlurCapture}
       onFocusCapture={handleRowFocusCapture}
       onPointerDown={(event) => {
+        if (event.button === 0) {
+          event.currentTarget.dataset.pressed = "";
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }
+
         if (event.pointerType !== "mouse") {
           return;
         }
@@ -244,12 +248,17 @@ const MessageRowContent = ({
           active.blur();
         }
       }}
-      transition={{ duration: 0.1, ease: "easeOut" }}
-      whileTap={{
-        backgroundColor: "color-mix(in oklab, var(--muted) 80%, transparent)",
-        color: "var(--foreground)",
-        scale: shouldReduceMotion ? 1 : 0.97,
+      onLostPointerCapture={(event) => {
+        delete event.currentTarget.dataset.pressed;
       }}
+      onPointerCancel={(event) => {
+        delete event.currentTarget.dataset.pressed;
+      }}
+      onPointerUp={(event) => {
+        delete event.currentTarget.dataset.pressed;
+      }}
+      transition={{ duration: 0.1, ease: "easeOut" }}
+      whileTap={{ scale: shouldReduceMotion ? 1 : 0.97 }}
     >
       {unread && (
         <span
