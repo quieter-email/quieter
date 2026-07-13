@@ -37,6 +37,7 @@ jobs:
           fi
 
           if git diff --quiet "origin/$BASE_REF...HEAD" -- \
+            .github/workflows/ci-main.yml \
             bun.lock \
             package.json \
             packages/database/drizzle \
@@ -83,6 +84,36 @@ jobs:
 
       - name: Test
         run: vp test
+
+  migration-conflict:
+    name: Migration conflict check
+    needs: changes
+    if: ${{ needs.changes.outputs.database == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          cache: true
+          node-version: "24.18.0"
+
+      - name: Install dependencies
+        run: vp install --frozen-lockfile
+
+      - name: Check migration conflicts
+        uses: drizzle-team/drizzle-orm/actions/check@6adfcd1031726aaf59106ceb36707d85db5e6617
+        with:
+          working-directory: packages/database
+          config: drizzle.config.ts
 
   migration-integration:
     name: Migration integration tests
