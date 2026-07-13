@@ -94,6 +94,9 @@ jobs:
       - name: Check copy policy
         run: vp run check:copy
 
+      - name: Build environment package
+        run: vp run @quieter/env#build
+
       - name: Test
         run: vp test
 
