@@ -64,7 +64,7 @@ const AuthLastUsedHint = () => (
   <LazyMotion features={domAnimation}>
     <span
       aria-hidden
-      className="pointer-events-none absolute -inset-e-2.5 -top-2.5 isolate overflow-hidden rounded-md p-px shadow-sm squircle"
+      className="pointer-events-none absolute -inset-e-2.5 -top-2.5 isolate overflow-hidden rounded-md p-px shadow-sm squircle *:pointer-events-none"
     >
       <m.span
         animate={{ rotate: 360 }}
@@ -151,6 +151,12 @@ const AuthCredentials = ({
       if (response.error) {
         throw new Error(response.error.message ?? "Could not start Google sign-in.");
       }
+
+      const redirectUrl = response.data?.url;
+      if (typeof redirectUrl === "string" && redirectUrl.length > 0) {
+        globalThis.window.location.assign(redirectUrl);
+      }
+
       return response;
     },
     mutationKey: ["auth", "sign-in", "google"],
@@ -162,9 +168,6 @@ const AuthCredentials = ({
     },
     onMutate: () => {
       setErrors((prev) => ({ ...prev, google: undefined }));
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries();
     },
   });
 
@@ -405,8 +408,14 @@ const AuthCredentials = ({
         variant="outline"
       >
         {authClient.isLastUsedLoginMethod("google") && <AuthLastUsedHint />}
-        <GoogleLogo className="size-4 shrink-0" />
-        Continue with Google
+        {googleMutation.isPending ? (
+          "Continuing…"
+        ) : (
+          <>
+            <GoogleLogo className="size-4 shrink-0" />
+            Continue with Google
+          </>
+        )}
       </Button>
 
       <Button

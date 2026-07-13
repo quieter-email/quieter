@@ -177,6 +177,11 @@ const shouldGatePath = (pathname: string) => {
     return false;
   }
 
+  // OAuth return URLs must not depend on the unlock cookie (SameSite / expiry edge cases).
+  if (normalizedPath.startsWith("/api/auth/callback")) {
+    return false;
+  }
+
   if (normalizedPath === sitePasswordPagePath) {
     return false;
   }
