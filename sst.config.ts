@@ -3,10 +3,16 @@
 
 export default $config({
   app(input) {
-    const isPreview = input.stage.startsWith("pr-");
+    if (input.stage.startsWith("pr-")) {
+      throw new Error(
+        "Per-pull-request stages are retired. Deploy the fixed review stage instead.",
+      );
+    }
+
+    const isReview = input.stage === "review";
 
     return {
-      home: isPreview ? "cloudflare" : "aws",
+      home: isReview ? "cloudflare" : "aws",
       name: "quieter",
       providers: { cloudflare: "6.15.0" },
       protect: input.stage === "production",
@@ -17,18 +23,25 @@ export default $config({
     const { githubSstSecrets } = await import("@quieter/env/github");
     const { createSstEnv } = await import("@quieter/env/sst");
     const production = $app.stage === "production";
-    const preview = $app.stage.startsWith("pr-");
-    const previewSecretNames = new Set<keyof typeof githubSstSecrets>([
-      "APP_SITE_PASSWORD",
+    const review = $app.stage === "review";
+    const reviewSecretNames = new Set<keyof typeof githubSstSecrets>([
       "BETTER_AUTH_SECRET",
+      "CONNECTOR_TOKEN_ENCRYPTION_KEY",
       "DATABASE_URL",
-      "SENTRY_DSN",
+      "GMAIL_TOKEN_ENCRYPTION_KEY",
+      "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
+      "GOOGLE_AUTH_CLIENT_ID",
+      "GOOGLE_AUTH_CLIENT_SECRET",
+      "GOOGLE_CALENDAR_CLIENT_ID",
+      "GOOGLE_CALENDAR_CLIENT_SECRET",
+      "GOOGLE_GMAIL_CLIENT_ID",
+      "GOOGLE_GMAIL_CLIENT_SECRET",
     ]);
     const secretResources = Object.fromEntries(
       Object.entries(githubSstSecrets)
         .filter(
           ([environmentName]) =>
-            !preview || previewSecretNames.has(environmentName as keyof typeof githubSstSecrets),
+            !review || reviewSecretNames.has(environmentName as keyof typeof githubSstSecrets),
         )
         .map(([environmentName, secretName]) => [environmentName, new sst.Secret(secretName)]),
     ) as Record<keyof typeof githubSstSecrets, sst.Secret>;
@@ -82,8 +95,8 @@ export default $config({
     });
     const appOrigin = production
       ? "https://quieter.email"
-      : preview
-        ? `https://${$app.stage}.preview.quieter.email`
+      : review
+        ? "https://review.quieter.email"
         : process.env.BETTER_AUTH_URL || "http://localhost:3000";
     const createWeb = (
       runtimeEnvironment: Record<string, $util.Input<string>> = {},
@@ -92,8 +105,8 @@ export default $config({
       new sst.cloudflare.TanStackStart("Web", {
         domain: production
           ? { name: "quieter.email", redirects: ["www.quieter.email"] }
-          : preview
-            ? `${$app.stage}.preview.quieter.email`
+          : review
+            ? "review.quieter.email"
             : undefined,
         environment: {
           AI_USD_TO_EUR_RATE: process.env.AI_USD_TO_EUR_RATE || "1",
@@ -105,18 +118,17 @@ export default $config({
           NODE_ENV: "production",
           QUIETER_AUTH_MAIL_MODE: process.env.QUIETER_AUTH_MAIL_MODE || "api",
           QUIETER_AUTH_MAIL_SENDER: process.env.QUIETER_AUTH_MAIL_SENDER || "auth@quieter.email",
-          QUIETER_DEPLOYMENT_ENV: production ? "production" : preview ? "preview" : "local",
+          QUIETER_DEPLOYMENT_ENV: production ? "production" : review ? "preview" : "local",
           QUIETER_GMAIL_AI_AUTOMATION_ENABLED: String(production),
           QUIETER_MAIL_API_URL: `${appOrigin}/api/v1/send`,
-          QUIETER_PREVIEW_PERSONAS_ENABLED:
-            process.env.QUIETER_PREVIEW_PERSONAS_ENABLED || (preview ? "true" : "false"),
+          QUIETER_PREVIEW_PERSONAS_ENABLED: process.env.QUIETER_PREVIEW_PERSONAS_ENABLED || "false",
           SENTRY_ENVIRONMENT: process.env.SENTRY_ENVIRONMENT || $app.stage,
           VITE_LOGO_DEV_PUBLISHABLE_KEY: process.env.VITE_LOGO_DEV_PUBLISHABLE_KEY || "",
           VITE_PUBLIC_POSTHOG_HOST:
             process.env.VITE_PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com",
           VITE_PUBLIC_POSTHOG_PROJECT_TOKEN: process.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN || "",
           VITE_QUIETER_PREVIEW_PERSONAS_ENABLED:
-            process.env.VITE_QUIETER_PREVIEW_PERSONAS_ENABLED || (preview ? "true" : "false"),
+            process.env.VITE_QUIETER_PREVIEW_PERSONAS_ENABLED || "false",
           VITE_SENTRY_DSN: process.env.VITE_SENTRY_DSN || "",
           ...runtimeEnvironment,
         },
@@ -132,7 +144,7 @@ export default $config({
         },
       });
 
-    if (preview) {
+    if (review) {
       const web = createWeb();
 
       return { stage: $app.stage, webUrl: web.url };

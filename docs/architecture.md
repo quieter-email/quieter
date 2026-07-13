@@ -158,4 +158,4 @@ SST provisions the mail bucket, receipt topic and role, queues, workflows, funct
 notification ingress, live-sync WebSocket, and maintenance schedules.
 
 Cloudflare Workers hosts the web application. SST builds and publishes the Worker, binds deployment
-outputs directly, and attaches the production and preview custom domains.
+outputs directly, and attaches the production domain plus the fixed, identity-gated review domain.
