@@ -215,18 +215,9 @@ const MessageRowContent = ({
 
   return (
     <m.div
-      className={cn(
-        "relative flex h-17 items-stretch overflow-hidden rounded-lg motion-reduce:transition-none",
-        {
-          "border border-border/80": isSelected,
-        },
-      )}
+      className="relative flex h-17 items-stretch overflow-hidden rounded-lg motion-reduce:transition-none"
       animate={{
-        backgroundColor: isActive
-          ? "var(--muted)"
-          : isSelected
-            ? "var(--background-light)"
-            : "var(--background)",
+        backgroundColor: isActive || isSelected ? "var(--muted)" : "transparent",
       }}
       data-message-row
       onBlurCapture={handleRowBlurCapture}
@@ -248,7 +239,10 @@ const MessageRowContent = ({
         }
       }}
       transition={{ duration: 0.1, ease: "easeOut" }}
-      whileHover={{ backgroundColor: "var(--accent)", color: "var(--foreground)" }}
+      whileHover={{
+        backgroundColor: isActive || isSelected ? "var(--muted)" : "var(--secondary)",
+        color: "var(--foreground)",
+      }}
       whileTap={{
         backgroundColor: "var(--muted)",
         color: "var(--foreground)",
