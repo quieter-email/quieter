@@ -277,8 +277,9 @@ export const auth = betterAuth({
       },
     }),
     lastLoginMethod(),
-    tanstackStartCookies(),
     ...(polarPlugin ? [polarPlugin] : []),
+    // Must be last so Set-Cookie from other plugins is forwarded on TanStack Start.
+    tanstackStartCookies(),
   ] as const,
 });
 export const organizationApiKeyApi = auth.api as typeof auth.api &

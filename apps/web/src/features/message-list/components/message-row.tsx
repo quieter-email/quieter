@@ -100,6 +100,7 @@ const MessageRowContent = ({
   state,
   thread,
 }: MessageRowContentProps) => {
+  const shouldReduceMotion = useReducedMotion();
   const isActive = !!state?.active;
   const isSelected = !!state?.selected;
   const showSelectionControl = !!state?.selectionMode;
@@ -213,9 +214,9 @@ const MessageRowContent = ({
   };
 
   return (
-    <div
+    <m.div
       className={cn(
-        "relative flex h-17 items-stretch overflow-hidden rounded-lg transition-[background-color,transform] duration-100 ease-out has-[button:active]:bg-muted/80 motion-safe:has-[button:active]:scale-[0.98] motion-reduce:transition-none motion-reduce:has-[button:active]:scale-100",
+        "relative flex h-17 items-stretch overflow-hidden rounded-lg transition-[background-color,transform] duration-100 ease-out motion-reduce:transition-none",
         {
           "bg-background-light/80": isSelected,
           "border border-border/80": isSelected,
@@ -242,6 +243,12 @@ const MessageRowContent = ({
         ) {
           active.blur();
         }
+      }}
+      transition={{ duration: 0.1, ease: "easeOut" }}
+      whileTap={{
+        backgroundColor: "color-mix(in oklab, var(--muted) 80%, transparent)",
+        color: "var(--foreground)",
+        scale: shouldReduceMotion ? 1 : 0.97,
       }}
     >
       {unread && (
@@ -411,7 +418,7 @@ const MessageRowContent = ({
           </div>
         </button>
       </MessageActionsContextMenu>
-    </div>
+    </m.div>
   );
 };
 
