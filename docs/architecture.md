@@ -157,5 +157,7 @@ Organization mail usage is measured separately and billed according to plan-spec
 SST provisions the mail bucket, receipt topic and role, queues, workflows, function URLs, Gmail
 notification ingress, live-sync WebSocket, and maintenance schedules.
 
-Cloudflare Workers hosts the web application. SST builds and publishes the Worker, binds deployment
-outputs directly, and attaches the production domain plus the fixed, identity-gated review domain.
+Cloudflare Workers hosts the web application. SST builds and publishes production, binds deployment
+outputs directly, and provisions the fixed review infrastructure. Review promotions upload a
+credential-free pull-request artifact with trusted default-branch Wrangler configuration; the
+pull-request build never receives deployment credentials.
