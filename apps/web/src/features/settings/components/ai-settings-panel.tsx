@@ -20,6 +20,7 @@ import {
   useDefaultChatModel,
 } from "~/features/ai/domain/default-chat-model-setting";
 import { orpc } from "~/lib/orpc";
+import { persistQueryByKey } from "~/lib/query-persister";
 import { SettingsCard, SettingsRow, SettingsRows, SettingsSection } from "./settings-layout";
 
 type AiSettings = RouterOutputs["ai"]["settings"];
@@ -81,6 +82,7 @@ export const AiSettingsPanel = () => {
         queryClient.setQueryData<AiSettings>(settingsQuery.queryKey, (current) =>
           current ? { ...current, models } : current,
         );
+        void persistQueryByKey(settingsQuery.queryKey, queryClient);
         setCloudModelDraft(null);
       },
     });
@@ -104,6 +106,7 @@ export const AiSettingsPanel = () => {
           queryClient.setQueryData<AiSettings>(settingsQuery.queryKey, (current) =>
             current ? { ...current, memory } : current,
           );
+          void persistQueryByKey(settingsQuery.queryKey, queryClient);
           setMemoryDraft(null);
           toast.success("AI memory saved.");
         },

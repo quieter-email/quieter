@@ -970,7 +970,7 @@ export const processGmailUsefulDetailMessage = async ({
         cachedTokens,
         cacheWriteTokens,
         completionTokens,
-        costUsd,
+        costUsd: costUsd ?? null,
         lastError: null,
         model,
         nextAttemptAt: null,

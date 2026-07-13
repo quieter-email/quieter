@@ -22,4 +22,17 @@ describe("AI usage pricing", () => {
       105_800_000,
     );
   });
+
+  test.each([
+    { costUsd: Number.NaN, usdToEurRate: 0.92 },
+    { costUsd: Number.POSITIVE_INFINITY, usdToEurRate: 0.92 },
+    { costUsd: 0, usdToEurRate: 0.92 },
+    { costUsd: -1, usdToEurRate: 0.92 },
+    { costUsd: 1, usdToEurRate: Number.NaN },
+    { costUsd: 1, usdToEurRate: Number.POSITIVE_INFINITY },
+    { costUsd: 1, usdToEurRate: 0 },
+    { costUsd: 1, usdToEurRate: -0.92 },
+  ])("rejects invalid provider cost conversion input %#", (input) => {
+    expect(() => convertProviderCostToCreditMicroCents(input)).toThrow();
+  });
 });

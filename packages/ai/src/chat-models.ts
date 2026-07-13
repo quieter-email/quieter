@@ -53,7 +53,10 @@ export const chatModels = [
   },
 ] as const;
 
-export const chatModelGroups = ["openai", "anthropic", "google", "deepseek"] as const;
+export type ChatModelGroup = (typeof chatModels)[number]["group"];
+export const chatModelGroups: readonly ChatModelGroup[] = [
+  ...new Set(chatModels.map(({ group }) => group)),
+];
 
 export const chatModelSchema = z.enum(chatModels.map(({ value }) => value));
 export type ChatModel = z.infer<typeof chatModelSchema>;

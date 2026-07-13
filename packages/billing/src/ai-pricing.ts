@@ -7,8 +7,8 @@ export const convertProviderCostToCreditMicroCents = (input: {
   costUsd: number;
   usdToEurRate: number;
 }) => {
-  if (!Number.isFinite(input.costUsd) || input.costUsd < 0) {
-    throw new Error("AI provider cost must be a finite non-negative number.");
+  if (!Number.isFinite(input.costUsd) || input.costUsd <= 0) {
+    throw new Error("AI provider cost must be a finite positive number.");
   }
   if (!Number.isFinite(input.usdToEurRate) || input.usdToEurRate <= 0) {
     throw new Error("The USD to EUR billing rate must be a finite positive number.");

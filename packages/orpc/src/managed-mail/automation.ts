@@ -313,7 +313,7 @@ const processManagedAutoLabelMessage = async (input: {
           cachedTokens,
           cacheWriteTokens,
           completionTokens,
-          costUsd,
+          costUsd: costUsd ?? null,
           labelIds,
           lastError: null,
           model: input.autoLabelContext.model,

@@ -254,18 +254,6 @@ const refreshUserAiContextAttempt = async (
     });
     const now = new Date();
 
-    await reportAiUsage({
-      costUsd,
-      completionTokens,
-      externalId: `ai-memory:${input.triggerEventId ?? eventIds.at(-1)}:${nextRevision}`,
-      mailboxId: input.mailboxId,
-      model: USER_AI_CONTEXT_MODEL,
-      promptTokens,
-      promptTokensDetails: { cachedTokens, cacheWriteTokens },
-      usageKind: "aiMemory",
-      userId: input.userId,
-    });
-
     const applied = await applyUserAiContextUpdate({
       currentRevision,
       markdown: result.markdown,
@@ -284,6 +272,20 @@ const refreshUserAiContextAttempt = async (
       .update(userAiContextEvent)
       .set({ lastError: null, mergedAt: now, updatedAt: now })
       .where(inArray(userAiContextEvent.id, eventIds));
+
+    await reportAiUsage({
+      costUsd,
+      completionTokens,
+      externalId: `ai-memory:${input.triggerEventId ?? eventIds.at(-1)}:${nextRevision}`,
+      mailboxId: input.mailboxId,
+      model: USER_AI_CONTEXT_MODEL,
+      promptTokens,
+      promptTokensDetails: { cachedTokens, cacheWriteTokens },
+      usageKind: "aiMemory",
+      userId: input.userId,
+    }).catch((error) => {
+      console.error("Could not report user AI context usage.", error);
+    });
 
     return { status: "refreshed" as const };
   } catch (error) {
