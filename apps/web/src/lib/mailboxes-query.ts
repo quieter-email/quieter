@@ -14,7 +14,7 @@ export const mailboxesQueryOptions = (enabled = true) =>
     enabled,
     persister: queryPersister.persisterFn,
     staleTime: MAILBOX_METADATA_STALE_MS,
-    refetchOnMount: true,
+    refetchOnMount: "always",
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     refetchInterval: MAILBOX_ACCOUNT_HEALTH_CHECK_INTERVAL_MS,
