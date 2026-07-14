@@ -171,6 +171,9 @@ jobs:
             --compatibility-flag nodejs_compat \
             --dry-run \
             --outdir .review-bundle
+          test "$(grep -Foc 'createRequire(import.meta.url)' .review-bundle/server.js)" -eq 1
+          sed -i 's#createRequire(import\.meta\.url)#createRequire("/worker/server.js")#' .review-bundle/server.js
+          test "$(grep -Foc 'createRequire(import.meta.url)' .review-bundle/server.js)" -eq 0
           mkdir -p review-artifact/client
           cp .review-bundle/server.js review-artifact/server.js
           cp -R apps/web/dist/client/. review-artifact/client/
