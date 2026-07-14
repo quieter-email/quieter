@@ -273,6 +273,19 @@ jobs:
         env:
           REVIEW_SHA: ${{ needs.resolve.outputs.sha }}
         run: |
+          tail_log=$(mktemp)
+          node apps/web/node_modules/wrangler/bin/wrangler.js tail \
+            quieter-review-webworkerscript \
+            --format json \
+            --status error \
+            > "$tail_log" 2>&1 &
+          tail_pid=$!
+          cleanup_tail() {
+            kill "$tail_pid" 2>/dev/null || true
+            wait "$tail_pid" 2>/dev/null || true
+          }
+          trap cleanup_tail EXIT
+          sleep 3
           for attempt in $(seq 1 12); do
             deployed_revision=$(curl --fail --silent --show-error \
               --header 'cache-control: no-cache' \
@@ -285,6 +298,9 @@ jobs:
             fi
             sleep 5
           done
+          cleanup_tail
+          trap - EXIT
+          cat "$tail_log"
           echo "Review environment did not promote a healthy revision ${REVIEW_SHA}." >&2
           exit 1
 
