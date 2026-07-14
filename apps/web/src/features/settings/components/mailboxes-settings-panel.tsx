@@ -240,6 +240,7 @@ export const MailboxesSettingsPanel = () => {
           input?.organizationId === undefined
             ? gmailOrganizationId || organizations[0]?.id
             : input.organizationId,
+        queryClient,
         returnTo: getSettingsReturnTo(),
       });
     } catch (error) {

@@ -9,6 +9,7 @@ const redirectWithStatus = (
 ) => {
   const redirectUrl = new URL(returnTo, requestUrl);
   if (status === "connected" && mailboxId && redirectUrl.pathname === "/") {
+    redirectUrl.searchParams.set("gmailLink", "complete");
     redirectUrl.searchParams.set("mailboxId", mailboxId);
   } else {
     redirectUrl.searchParams.set("gmail", status);

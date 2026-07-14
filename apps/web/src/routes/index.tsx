@@ -15,6 +15,7 @@ export const Route = createFileRoute("/")({
         .default("inbox"),
       mailboxId: z.string().trim().min(1).optional().catch(undefined),
       chatId: z.string().trim().min(1).optional().catch(undefined),
+      gmailLink: z.literal("complete").optional().catch(undefined),
       compose: z.literal("mailto").optional().catch(undefined),
       mailto: z.string().trim().min(1).optional().catch(undefined),
       messageId: z.string().trim().min(1).optional().catch(undefined),
