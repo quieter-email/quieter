@@ -230,7 +230,7 @@ jobs:
           test "$file_count" -le 5000
           test "$byte_count" -le 157286400
           test "$(bun -e "console.log(require('./apps/web/node_modules/wrangler/package.json').version)")" = "4.110.0"
-          bun apps/web/node_modules/wrangler/bin/wrangler.js deploy \
+          node apps/web/node_modules/wrangler/bin/wrangler.js deploy \
             --config .github/review-worker.wrangler.jsonc \
             --dry-run \
             --no-bundle
@@ -241,7 +241,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_DEFAULT_ACCOUNT_ID }}
           WRANGLER_SEND_METRICS: "false"
         run: |
-          bun apps/web/node_modules/wrangler/bin/wrangler.js deploy \
+          node apps/web/node_modules/wrangler/bin/wrangler.js deploy \
             --config .github/review-worker.wrangler.jsonc \
             --message "PR #${{ needs.resolve.outputs.number }} at ${{ needs.resolve.outputs.sha }}" \
             --keep-vars \
