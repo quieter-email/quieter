@@ -157,27 +157,33 @@ jobs:
       - name: Test
         run: vp test
 
+      - name: Create credential-free Worker build configuration
+        run: |
+          printf '%s\n' \
+            '{' \
+            '  "name": "quieter-review-artifact",' \
+            '  "main": "./apps/web/src/server.ts",' \
+            '  "compatibility_date": "2026-07-11",' \
+            '  "compatibility_flags": ["nodejs_compat"]' \
+            '}' \
+            > review-build-worker.wrangler.jsonc
+
       - name: Build without credentials
+        env:
+          SST_WRANGLER_PATH: ${{ github.workspace }}/review-build-worker.wrangler.jsonc
         run: vp run -r build
 
       - name: Bundle Worker without credentials
         env:
           WRANGLER_SEND_METRICS: "false"
         run: |
-          mapfile -t react_require_files < <(
-            grep -rlF '__require("react")' apps/web/dist/server --include='*.js'
-          )
-          test "${#react_require_files[@]}" -eq 1
-          react_require_file="${react_require_files[0]}"
-          test "$(grep -Fo '__require("react")' "$react_require_file" | wc -l)" -eq 2
-          sed -i '1i import * as __reviewReact from "react";' "$react_require_file"
-          sed -i 's#__require("react")#__reviewReact#g' "$react_require_file"
-          test "$(grep -Foc '__require("react")' "$react_require_file")" -eq 0
+          test "$(node -p "require('./apps/web/dist/server/wrangler.json').main")" = "index.js"
           printf '%s\n' \
-            'import handler from "./apps/web/dist/server/server.js";' \
+            'import handler from "./apps/web/dist/server/index.js";' \
             'export default handler;' \
             > review-worker-entry.mjs
           node apps/web/node_modules/wrangler/bin/wrangler.js deploy review-worker-entry.mjs \
+            --config review-build-worker.wrangler.jsonc \
             --name quieter-review-artifact \
             --assets apps/web/dist/client \
             --autoconfig=false \
