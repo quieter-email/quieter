@@ -175,6 +175,7 @@ jobs:
           cp .review-bundle/server.js review-artifact/server.js
           cp -R apps/web/dist/client/. review-artifact/client/
           rm -f review-artifact/client/.dev.vars review-artifact/client/wrangler.json
+          printf '%s\n' '${{ needs.resolve.outputs.sha }}' > review-artifact/client/review-revision.txt
 
       - name: Upload credential-free artifact
         id: upload
@@ -243,8 +244,25 @@ jobs:
           bun apps/web/node_modules/wrangler/bin/wrangler.js deploy \
             --config .github/review-worker.wrangler.jsonc \
             --message "PR #${{ needs.resolve.outputs.number }} at ${{ needs.resolve.outputs.sha }}" \
+            --keep-vars \
             --no-bundle \
             --tag "pr-${{ needs.resolve.outputs.number }}-${{ needs.resolve.outputs.sha }}"
+
+      - name: Verify promoted revision
+        env:
+          REVIEW_SHA: ${{ needs.resolve.outputs.sha }}
+        run: |
+          for attempt in $(seq 1 12); do
+            deployed_revision=$(curl --fail --silent --show-error \
+              --header 'cache-control: no-cache' \
+              "${REVIEW_URL}/review-revision.txt?revision=${REVIEW_SHA}" || true)
+            if [ "$deployed_revision" = "$REVIEW_SHA" ]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Review environment did not promote revision ${REVIEW_SHA}." >&2
+          exit 1
 
   comment:
     name: Record review deployment
