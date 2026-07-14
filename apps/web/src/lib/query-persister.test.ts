@@ -23,8 +23,12 @@ describe("query persistence allowlist", () => {
     expect(getPersister(messagesQueryOptions("mailbox-a", "inbox", "from:alex"))).toBeUndefined();
   });
 
-  test("persists mailbox and label navigation metadata", () => {
-    expect(getPersister(mailboxesQueryOptions())).toBe(queryPersister.persisterFn);
+  test("does not persist account-scoped mailbox navigation metadata", () => {
+    expect(getPersister(mailboxesQueryOptions())).toBeUndefined();
+    expect(shouldPersistQueryKey(["mailboxes"])).toBe(false);
+  });
+
+  test("persists mailbox-scoped label navigation metadata", () => {
     expect(getPersister(labelsQueryOptions("mailbox-a"))).toBe(queryPersister.persisterFn);
     expect(getPersister(managedSavedViewsQueryOptions("mailbox-a"))).toBe(
       queryPersister.persisterFn,
@@ -47,7 +51,7 @@ describe("query persistence allowlist", () => {
     expect(shouldPersistQueryKey(["messages", "mailbox-a", "inbox", ""])).toBe(true);
     expect(shouldPersistQueryKey(["messages", "mailbox-a", "inbox", "from:alex"])).toBe(false);
     expect(shouldPersistQueryKey(["message-thread", 3, "mailbox-a", "thread-a"])).toBe(false);
-    expect(shouldPersistQueryKey(["mailboxes"])).toBe(true);
+    expect(shouldPersistQueryKey(["mailboxes"])).toBe(false);
     expect(shouldPersistQueryKey(["gmail-labels", "mailbox-a"])).toBe(true);
     expect(shouldPersistQueryKey(["managed-saved-views", "mailbox-a"])).toBe(true);
     expect(shouldPersistQueryKey(["managed-label-counts", "mailbox-a"])).toBe(true);

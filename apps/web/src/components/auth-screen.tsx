@@ -21,6 +21,7 @@ import {
   setPreviewPersona,
   type PreviewPersona,
 } from "~/lib/preview-personas";
+import { queryPersister } from "~/lib/query-persister";
 import { setTermsAcceptanceCookie } from "~/lib/terms-acceptance";
 
 const authRouteApi = getRouteApi("/auth");
@@ -102,6 +103,10 @@ const AuthCredentials = ({
 
   const isSignup = mode === "signup";
   const callbackUrl = normalizeAuthReturnTo(returnTo);
+  const clearCachedAccountData = async () => {
+    queryClient.clear();
+    await queryPersister.removeQueries();
+  };
 
   const ensureTermsAccepted = () => {
     if (!isSignup || termsAccepted) {
@@ -152,6 +157,8 @@ const AuthCredentials = ({
         throw new Error(response.error.message ?? "Could not start Google sign-in.");
       }
 
+      await clearCachedAccountData();
+
       const redirectUrl = response.data?.url;
       if (typeof redirectUrl === "string" && redirectUrl.length > 0) {
         globalThis.window.location.assign(redirectUrl);
@@ -196,8 +203,9 @@ const AuthCredentials = ({
       setErrors((prev) => ({ ...prev, passkey: undefined }));
     },
     onSuccess: async () => {
+      await clearCachedAccountData();
+
       if (callbackUrl === "/") {
-        await queryClient.invalidateQueries();
         await navigate({
           to: "/",
         });
@@ -240,6 +248,8 @@ const AuthCredentials = ({
               form: AUTHENTICATION_ERROR_MESSAGE,
             };
           }
+
+          await clearCachedAccountData();
         } catch {
           return {
             form: AUTHENTICATION_ERROR_MESSAGE,

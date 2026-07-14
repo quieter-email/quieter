@@ -3,7 +3,7 @@
 import type { RouterOutputs } from "@quieter/orpc";
 import { useHotkey, useHotkeySequence } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 import { LoadingPage } from "~/components/loading-page";
 import { parseMailtoComposeDraft, type ComposeDraftState } from "~/features/compose";
@@ -13,6 +13,7 @@ import { useDemoModeEnabled } from "~/features/settings/domain/demo-mode-setting
 import { useManagedDemoModeEnabled } from "~/features/settings/domain/managed-demo-mode-setting";
 import { chatsQueryOptions, getChatQueryKey, getChatsQueryKey } from "~/lib/chat-query";
 import { openGoogleAccountLink } from "~/lib/google-account-link";
+import { getMailboxesQueryKey } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 import { usePreviewPersona } from "~/lib/preview-personas";
 import type { MailboxWorkspaceView } from "../domain/mailbox-workspace-view";
@@ -114,6 +115,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     activeMailbox,
     chatId,
     compose,
+    gmailLink,
     mailboxId,
     mailto,
     messageId,
@@ -151,10 +153,33 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     ),
   );
   const reconnectingMailboxId = startingReconnectMailboxId;
-  const isWorkspaceReady = isSandboxMode || !mailboxesQuery.isPending;
+  const isCompletingGmailConnection = gmailLink === "complete" && !isSandboxMode;
+  const isWorkspaceReady =
+    isSandboxMode || (!mailboxesQuery.isPending && !isCompletingGmailConnection);
+
+  useEffect(() => {
+    if (!isCompletingGmailConnection) return;
+
+    let cancelled = false;
+    void queryClient
+      .refetchQueries({
+        exact: true,
+        queryKey: getMailboxesQueryKey(),
+        type: "active",
+      })
+      .then(() => {
+        if (!cancelled) {
+          void setMailboxSearch({ mailboxId });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isCompletingGmailConnection, mailboxId, queryClient, setMailboxSearch]);
 
   useLayoutEffect(() => {
-    if (!isSandboxMode && mailboxesQuery.isPending) {
+    if (isCompletingGmailConnection || (!isSandboxMode && mailboxesQuery.isPending)) {
       return;
     }
 
@@ -174,6 +199,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     });
   }, [
     chatId,
+    isCompletingGmailConnection,
     isDemoMode,
     isManagedDemoMode,
     isSandboxMode,
@@ -302,6 +328,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     try {
       await openGoogleAccountLink({
         mailboxId: mailbox.id,
+        queryClient,
         returnTo:
           `${window.location.pathname}${window.location.search}${window.location.hash}` || "/",
       });
@@ -318,6 +345,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
 
     try {
       await openGoogleAccountLink({
+        queryClient,
         returnTo:
           `${window.location.pathname}${window.location.search}${window.location.hash}` || "/",
       });

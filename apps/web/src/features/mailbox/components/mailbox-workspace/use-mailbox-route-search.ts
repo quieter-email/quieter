@@ -194,6 +194,9 @@ export const useMailboxRouteSearch = () => {
   const chatId = inboxRouteApi.useSearch({
     select: (search) => search.chatId,
   });
+  const gmailLink = inboxRouteApi.useSearch({
+    select: (search) => search.gmailLink,
+  });
   const mailboxId = inboxRouteApi.useSearch({
     select: (search) => search.mailboxId,
   });
@@ -221,6 +224,7 @@ export const useMailboxRouteSearch = () => {
     activeMailbox,
     chatId,
     compose,
+    gmailLink,
     mailto,
     mailboxId,
     messageId,

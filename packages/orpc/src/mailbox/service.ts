@@ -327,22 +327,9 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         )
         .groupBy(organizationApiMailMessage.organizationId),
     ]);
-  const [gmailUnreadCountsByMailboxId, managedUnreadCountsByMailboxId] = await Promise.all([
-    Promise.all(
-      gmailMailboxes.map(
-        async (record) =>
-          [
-            record.id,
-            record.status === "connected" && record.gmailCredentialMailboxId
-              ? await getGmailUnreadNonSpamCount({ mailboxId: record.id, userId: input.userId })
-              : 0,
-          ] as const,
-      ),
-    ).then((entries) => new Map(entries)),
-    listManagedUnreadNonSpamCounts([
-      ...directManagedMailboxes.map((record) => record.id),
-      ...divisionManagedMailboxes.map((record) => record.id),
-    ]),
+  const managedUnreadCountsByMailboxId = await listManagedUnreadNonSpamCounts([
+    ...directManagedMailboxes.map((record) => record.id),
+    ...divisionManagedMailboxes.map((record) => record.id),
   ]);
   const apiMessageCountsByOrganizationId = new Map(
     apiMessageCounts.map((record) => [record.organizationId, Number(record.count)]),
@@ -430,7 +417,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
             ...record,
             directGrantRole: null,
             grantRole: null,
-            unreadNonSpamCount: gmailUnreadCountsByMailboxId.get(record.id) ?? 0,
+            unreadNonSpamCount: 0,
           },
           {
             groupId: organizationRecord.id,
@@ -545,6 +532,30 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
   });
 
   return { groups };
+};
+
+export const listAccessibleGmailUnreadCounts = async (input: { userId: string }) => {
+  const gmailMailboxes = await db
+    .select({
+      gmailCredentialMailboxId: gmailCredential.mailboxId,
+      id: mailbox.id,
+      status: mailbox.status,
+    })
+    .from(mailbox)
+    .leftJoin(gmailCredential, eq(gmailCredential.mailboxId, mailbox.id))
+    .where(
+      and(eq(mailbox.ownerUserId, input.userId), eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)),
+    );
+
+  return await Promise.all(
+    gmailMailboxes.map(async (record) => ({
+      mailboxId: record.id,
+      unreadNonSpamCount:
+        record.status === "connected" && record.gmailCredentialMailboxId
+          ? await getGmailUnreadNonSpamCount({ mailboxId: record.id, userId: input.userId })
+          : 0,
+    })),
+  );
 };
 
 export const assertAccessibleMailbox = async (input: { mailboxId: string; userId: string }) => {

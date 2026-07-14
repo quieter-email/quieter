@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
-import { getMailboxesQueryKey } from "../../mailboxes-query";
+import { getGmailUnreadCountsQueryKey } from "../../mailboxes-query";
 import {
   MAILBOX_LABELS,
   type MailboxCategory,
@@ -110,7 +110,7 @@ const restoreSnapshots = async (
 };
 
 const invalidateMailboxCounts = async (queryClient: QueryClient) => {
-  await queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() });
+  await queryClient.invalidateQueries({ queryKey: getGmailUnreadCountsQueryKey() });
 };
 
 const applyMessageToCaches = (
