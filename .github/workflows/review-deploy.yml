@@ -286,7 +286,6 @@ jobs:
           node apps/web/node_modules/wrangler/bin/wrangler.js tail \
             quieter-review-webworkerscript \
             --format json \
-            --status error \
             > "$tail_log" 2>&1 &
           tail_pid=$!
           cleanup_tail() {
