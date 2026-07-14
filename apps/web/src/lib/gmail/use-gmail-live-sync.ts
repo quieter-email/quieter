@@ -3,7 +3,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { MailboxCategory } from "./gmail";
-import { getMailboxesQueryKey } from "../mailboxes-query";
+import { getGmailUnreadCountsQueryKey } from "../mailboxes-query";
 import { rpc } from "../orpc";
 import { getLiveSyncQueryKey } from "./inbox-query/keys";
 import { getGmailUsefulDetailsQueryKey } from "./useful-details-query";
@@ -36,6 +36,7 @@ export const useGmailLiveSync = (input: {
 }) => {
   const { enabled, mailbox, mailboxId, queryClient, searchQuery } = input;
 
+  // react-doctor-disable-next-line react-doctor/effect-needs-cleanup -- Cleanup closes the socket and clears both timers below.
   useEffect(() => {
     if (!enabled) {
       return;
@@ -65,7 +66,7 @@ export const useGmailLiveSync = (input: {
       void queryClient.invalidateQueries(
         {
           exact: true,
-          queryKey: getMailboxesQueryKey(),
+          queryKey: getGmailUnreadCountsQueryKey(),
         },
         { cancelRefetch: false },
       );

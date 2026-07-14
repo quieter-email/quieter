@@ -5,9 +5,14 @@ const redirectWithStatus = (
   requestUrl: string,
   returnTo: string,
   status: "connected" | "error",
+  mailboxId?: string,
 ) => {
   const redirectUrl = new URL(returnTo, requestUrl);
-  redirectUrl.searchParams.set("gmail", status);
+  if (status === "connected" && mailboxId && redirectUrl.pathname === "/") {
+    redirectUrl.searchParams.set("mailboxId", mailboxId);
+  } else {
+    redirectUrl.searchParams.set("gmail", status);
+  }
   return Response.redirect(redirectUrl, 302);
 };
 
@@ -29,7 +34,7 @@ export const Route = createFileRoute("/api/gmail/callback")({
             headers: request.headers,
             state,
           });
-          return redirectWithStatus(request.url, result.returnTo, "connected");
+          return redirectWithStatus(request.url, result.returnTo, "connected", result.mailboxId);
         } catch (error) {
           console.error(error);
           return redirectWithStatus(request.url, "/settings?tab=mailboxes", "error");

@@ -5,7 +5,11 @@ import type { QueryClient } from "@tanstack/react-query";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { MailboxSwitcherOrder } from "~/features/navigation/components/mailbox-switcher";
 import { getDemoMailboxes } from "~/lib/gmail/demo-mail";
-import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
+import {
+  getMailboxesQueryKey,
+  gmailUnreadCountsQueryOptions,
+  mailboxesQueryOptions,
+} from "~/lib/mailboxes-query";
 import { getManagedDemoMailboxes } from "~/lib/managed-mail/demo-managed-mail";
 import { orpc } from "~/lib/orpc";
 
@@ -104,6 +108,16 @@ export const useMailboxSelection = ({
       staleTime: Number.POSITIVE_INFINITY,
     });
   const mailboxesData = isSandboxMode ? sandboxMailboxesData : queriedMailboxesData;
+  const hasGmailMailbox =
+    mailboxesData?.groups.some((group) =>
+      group.mailboxes.some((mailbox) => mailbox.provider === "gmail"),
+    ) ?? false;
+  const { data: gmailUnreadCounts = [] } = useQuery(
+    gmailUnreadCountsQueryOptions(!isSandboxMode && hasGmailMailbox),
+  );
+  const gmailUnreadCountsByMailboxId = new Map(
+    gmailUnreadCounts.map((record) => [record.mailboxId, record.unreadNonSpamCount]),
+  );
   const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
   const mailboxGroups = (mailboxesData?.groups ?? []).map((group) => ({
     id: group.id,
@@ -117,7 +131,10 @@ export const useMailboxSelection = ({
       groupName: mailbox.groupName,
       id: mailbox.id,
       provider: mailbox.provider,
-      unreadNonSpamCount: mailbox.unreadNonSpamCount,
+      unreadNonSpamCount:
+        mailbox.provider === "gmail"
+          ? (gmailUnreadCountsByMailboxId.get(mailbox.id) ?? mailbox.unreadNonSpamCount)
+          : mailbox.unreadNonSpamCount,
     })),
   }));
   const mailboxes = mailboxGroups.flatMap((group) => group.mailboxes);

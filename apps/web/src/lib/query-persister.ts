@@ -13,17 +13,13 @@ const queryStorage =
       };
 
 export const queryPersister = experimental_createQueryPersister({
-  buster: "v5",
+  buster: "v6",
   maxAge: PERSISTED_QUERY_MAX_AGE_MS,
   prefix: "quieter-cache",
   storage: queryStorage,
 });
 
 export const shouldPersistQueryKey = (queryKey: readonly unknown[]) => {
-  if (queryKey.length === 1) {
-    return queryKey[0] === "mailboxes";
-  }
-
   if (queryKey.length === 2) {
     return (
       (queryKey[0] === "gmail-labels" ||

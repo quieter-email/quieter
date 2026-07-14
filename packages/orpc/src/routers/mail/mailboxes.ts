@@ -31,6 +31,7 @@ import {
 } from "../../mailbox/preferences";
 import {
   disconnectGmailMailbox,
+  listAccessibleGmailUnreadCounts,
   listAccessibleMailboxState,
   moveGmailMailbox,
   startGmailOAuth,
@@ -57,6 +58,9 @@ export const mailboxProcedures = {
       groups: orderedGroups,
     };
   }),
+  listGmailUnreadCounts: protectedProcedure
+    .route({ method: "GET" })
+    .handler(({ context }) => listAccessibleGmailUnreadCounts({ userId: context.userId })),
   startGmailConnection: protectedProcedure
     .input(
       z.object({
