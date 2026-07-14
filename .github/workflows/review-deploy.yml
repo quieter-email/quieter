@@ -271,7 +271,10 @@ jobs:
 
       - name: Verify promoted revision and application health
         env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_DEFAULT_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           REVIEW_SHA: ${{ needs.resolve.outputs.sha }}
+          WRANGLER_SEND_METRICS: "false"
         run: |
           tail_log=$(mktemp)
           node apps/web/node_modules/wrangler/bin/wrangler.js tail \
