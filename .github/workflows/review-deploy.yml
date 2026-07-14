@@ -179,8 +179,15 @@ jobs:
         run: |
           test "$(node -p "require('./apps/web/dist/server/wrangler.json').main")" = "index.js"
           printf '%s\n' \
-            'import handler from "./apps/web/dist/server/index.js";' \
-            'export default handler;' \
+            'let handlerPromise;' \
+            'export default {' \
+            '  async fetch(request, env, context) {' \
+            '    globalThis.$SST_LINKS ??= {};' \
+            '    globalThis.$SST_LINKS.AppDatabaseV2 = env.AppDatabaseV2;' \
+            '    handlerPromise ??= import("./apps/web/dist/server/index.js").then((module) => module.default);' \
+            '    return (await handlerPromise).fetch(request, env, context);' \
+            '  },' \
+            '};' \
             > review-worker-entry.mjs
           node apps/web/node_modules/wrangler/bin/wrangler.js deploy review-worker-entry.mjs \
             --config review-build-worker.wrangler.jsonc \
