@@ -169,8 +169,9 @@ export const gmailSearchToolDef = toolDefinition({
     maxResults: z.number().int().min(1).max(50).default(10).meta({
       description: "Maximum summaries to return. Match the user's requested count, up to 50.",
     }),
-    pageToken: z.string().trim().min(1).max(2_000).optional().meta({
-      description: "Continuation token returned by a previous search_gmail call.",
+    pageToken: z.string().trim().max(2_000).optional().meta({
+      description:
+        "Continuation token returned by a previous search_gmail call. Omit it for the first page.",
     }),
   }),
   outputSchema: gmailSearchResultSchema,
@@ -754,7 +755,11 @@ const getMailboxToolErrorMessage = (operation: string, error: unknown, fallback:
 export const createGmailSearchServerTool = (context: GmailToolsContext): ServerTool =>
   gmailSearchToolDef.server(async ({ query, maxResults, pageToken }) => {
     try {
-      return await context.searchGmail({ maxResults: maxResults ?? 10, pageToken, query });
+      return await context.searchGmail({
+        maxResults: maxResults ?? 10,
+        pageToken: pageToken || undefined,
+        query,
+      });
     } catch (error) {
       return {
         category: context.category,

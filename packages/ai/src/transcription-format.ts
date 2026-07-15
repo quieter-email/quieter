@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const OPENROUTER_TRANSCRIPTION_MODEL = "openai/gpt-4o-mini-transcribe" as const;
+export const OPENROUTER_TRANSCRIPTION_MODEL = "microsoft/mai-transcribe-1.5" as const;
 
 export const openRouterAudioFormatSchema = z.enum([
   "wav",

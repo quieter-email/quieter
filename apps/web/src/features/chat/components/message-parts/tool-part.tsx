@@ -24,6 +24,7 @@ type ToolPartProps = {
   actionsDisabled?: boolean;
   assistantMessageId?: string;
   call?: ToolCall;
+  isStreaming?: boolean;
   nested?: boolean;
   onResolveCompose?: ResolveComposeTool;
   result?: ToolResult;
@@ -45,6 +46,7 @@ export const ToolPart = ({
   actionsDisabled,
   assistantMessageId,
   call,
+  isStreaming = false,
   nested = false,
   onResolveCompose,
   result,
@@ -52,8 +54,10 @@ export const ToolPart = ({
   const navigate = useNavigate({ from: "/" });
   const name = call?.name ?? "unknown";
   const parsed = parseToolResult(name, result?.content ?? "");
-  const pending = !result;
-  const error = getResultError(parsed, result);
+  const pending = !result && isStreaming;
+  const error =
+    getResultError(parsed, result) ??
+    (!result && !isStreaming && name !== "compose_email" ? "This step did not finish." : null);
   const args = call ? parseToolArguments(call.arguments) : {};
 
   const openMessage = (category: GmailSearchToolResult["category"], messageId: string) => {
