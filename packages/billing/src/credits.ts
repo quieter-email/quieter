@@ -176,16 +176,21 @@ export const recordBillingCreditUsage = async (input: {
   if (result.eventId && result.costMicroCents > 0 && !result.polarEventReportedAt) {
     const polarEventReportedAt = new Date();
 
-    await ingestPolarEvents([
-      createPolarCreditUsageEvent({
-        account: input.account,
-        billableCostMicroCents: result.billableCostMicroCents,
-        category: result.category,
-        costMicroCents: result.costMicroCents,
-        eventId: result.eventId,
-        metadata: result.metadata,
-      }),
-    ]);
+    try {
+      await ingestPolarEvents([
+        createPolarCreditUsageEvent({
+          account: input.account,
+          billableCostMicroCents: result.billableCostMicroCents,
+          category: result.category,
+          costMicroCents: result.costMicroCents,
+          eventId: result.eventId,
+          metadata: result.metadata,
+        }),
+      ]);
+    } catch (error) {
+      console.error("Polar usage sync failed; the event remains queued for retry.", error);
+      return result;
+    }
 
     await db
       .update(billingCreditUsageEvent)

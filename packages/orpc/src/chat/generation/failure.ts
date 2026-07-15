@@ -9,6 +9,10 @@ export const getChatRunFailureMessage = (error: unknown) => {
     return "The mail lookup stopped responding. Retry with a narrower request.";
   }
 
+  if (/\b(?:401|403)\b|invalid[_\s-]?token|unauthori[sz]ed|forbidden/i.test(message)) {
+    return "Quieter could not authenticate with a required service. Please contact support.";
+  }
+
   if (
     (error instanceof DOMException && error.name === "TimeoutError") ||
     /timed?\s*out|timeout/i.test(message)

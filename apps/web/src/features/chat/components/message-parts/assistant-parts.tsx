@@ -131,7 +131,7 @@ export const AssistantParts = ({
   const showThinking = !hasVisible && isStreaming;
 
   return (
-    <div className={cn("flex min-h-5 flex-col gap-1.5", { "min-h-6": showThinking })}>
+    <div className={cn("flex min-h-5 flex-col gap-2", { "min-h-6": showThinking })}>
       {showThinking ? <ThinkingIndicator /> : null}
       {segments.map((segment) => {
         if (segment.type === "text") {
