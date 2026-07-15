@@ -28,7 +28,7 @@ export const ToolActivityGroup = ({
   items,
   onResolveCompose,
 }: ToolActivityGroupProps) => {
-  const hasPending = items.some((item) => !item.result);
+  const hasPending = isStreaming && items.some((item) => !item.result);
   const [expanded, setExpanded] = useState(hasPending);
   const [previousHasPending, setPreviousHasPending] = useState(hasPending);
   if (previousHasPending !== hasPending) {
@@ -37,7 +37,7 @@ export const ToolActivityGroup = ({
   }
   const summaryItems = items.map((item) => ({
     call: item.call,
-    pending: !item.result,
+    pending: isStreaming && !item.result,
     result: item.result,
   }));
   const summary = summarizeToolCalls(summaryItems);
@@ -55,6 +55,7 @@ export const ToolActivityGroup = ({
         actionsDisabled={actionsDisabled}
         assistantMessageId={assistantMessageId}
         call={item.call}
+        isStreaming={isStreaming}
         onResolveCompose={onResolveCompose}
         result={item.result}
       />
@@ -108,6 +109,7 @@ export const ToolActivityGroup = ({
                   actionsDisabled={actionsDisabled}
                   assistantMessageId={assistantMessageId}
                   call={item.call}
+                  isStreaming={isStreaming}
                   key={item.call.id}
                   nested
                   onResolveCompose={onResolveCompose}

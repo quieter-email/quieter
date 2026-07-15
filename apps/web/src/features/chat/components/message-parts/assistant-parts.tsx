@@ -182,6 +182,7 @@ export const AssistantParts = ({
               actionsDisabled={actionsDisabled}
               assistantMessageId={assistantMessageId}
               call={item.call}
+              isStreaming={isStreaming}
               key={item.call.id}
               onResolveCompose={onResolveCompose}
               result={item.result}

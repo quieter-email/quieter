@@ -38,8 +38,12 @@ import {
 import { ManagedMailboxOrganizer } from "~/features/navigation/components/managed-mailbox-organizer";
 import { SidebarLabelNav } from "~/features/navigation/components/sidebar-label-nav";
 import { SidebarMailboxNav } from "~/features/navigation/components/sidebar-mailbox-nav";
-import { SidebarSimpleHoverSurface } from "~/features/navigation/components/sidebar-surfaces";
+import {
+  SidebarActiveSurface,
+  SidebarSimpleHoverSurface,
+} from "~/features/navigation/components/sidebar-surfaces";
 import { SidebarWorkspaceViewSwitch } from "~/features/navigation/components/sidebar-workspace-view-switch";
+import { sidebarNavButtonClassName } from "~/features/navigation/domain/sidebar-surfaces";
 
 type MailSidebarProps = {
   activeChatId: string | null;
@@ -163,18 +167,26 @@ const SidebarChatRow = ({
           />
         </form>
       ) : (
-        <div
-          className={cn(
-            "group flex h-8 w-full items-center overflow-hidden rounded-md transition-colors",
-            {
-              "bg-secondary/55": isActive,
-              "hover:bg-secondary/35": !isActive,
-            },
+        <div className="group relative flex h-8 w-full items-center rounded-md py-px squircle">
+          {isActive ? (
+            <SidebarActiveSurface />
+          ) : (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-md bg-background/50 opacity-0 transition-[opacity,transform] duration-100 ease-out squircle group-focus-within:opacity-100 group-hover:opacity-100 group-active:scale-[0.98]"
+            />
           )}
-        >
           <Button
             aria-current={isActive ? "page" : undefined}
-            className="h-full min-w-0 flex-1 justify-start gap-3 rounded-none bg-transparent px-3 text-left text-foreground hover:bg-transparent"
+            className={cn(
+              sidebarNavButtonClassName,
+              "h-full min-w-0 flex-1 justify-start gap-3 rounded-md px-3 text-left transition-colors",
+              {
+                "text-foreground": isActive,
+                "text-muted-foreground group-focus-within:text-foreground group-hover:text-foreground":
+                  !isActive,
+              },
+            )}
             onClick={() => onSelect(chat.id)}
             type="button"
             variant="ghost"
@@ -192,7 +204,7 @@ const SidebarChatRow = ({
             <IconButtonTooltip label={`Options for "${title}"`}>
               <DropdownMenuTrigger
                 aria-label={`Options for "${title}"`}
-                className="pointer-events-none mr-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-sm border-l border-border/40 bg-background/15 text-muted-foreground opacity-0 transition-[opacity,background-color,color] outline-none group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-background/55 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/20 data-popup-open:pointer-events-auto data-popup-open:opacity-100"
+                className="pointer-events-none relative z-20 mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground opacity-0 transition-[opacity,background-color,color,transform] duration-100 outline-none squircle group-hover:pointer-events-auto group-hover:bg-background/45 group-hover:opacity-100 hover:bg-background/80 hover:text-foreground focus-visible:pointer-events-auto focus-visible:bg-background/60 focus-visible:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/20 active:scale-95 data-popup-open:pointer-events-auto data-popup-open:bg-background/70 data-popup-open:text-foreground data-popup-open:opacity-100"
               >
                 <HugeiconsIcon aria-hidden className="size-3.5" icon={MoreVerticalIcon} />
               </DropdownMenuTrigger>
