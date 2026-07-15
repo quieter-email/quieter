@@ -5,6 +5,7 @@ import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@quieter/ui/cn";
 import { AnimatePresence, m } from "motion/react";
+import { LoadingDots } from "../../thinking-indicator";
 
 type ToolStepProps = {
   children?: ReactNode;
@@ -46,7 +47,9 @@ export const ToolStep = ({
         onClick={canExpand ? onToggle : undefined}
         type="button"
       >
-        {nested ? (
+        {pending ? (
+          <LoadingDots />
+        ) : nested ? (
           canExpand ? (
             <HugeiconsIcon
               aria-hidden
@@ -96,11 +99,10 @@ export const ToolStep = ({
       <AnimatePresence initial={false}>
         {expanded && children ? (
           <m.div
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            initial={{ height: 0, opacity: 0 }}
-            style={{ overflow: "hidden" }}
-            transition={{ duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            initial={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
           >
             <div
               className={cn("mt-1.5 border-l border-border/70", {

@@ -62,7 +62,7 @@ import {
 import { getChatRunFailureMessage, terminalizeFailedChatRun } from "./failure";
 import { registerChatRunController } from "./runtime";
 
-const DRAFT_PERSIST_INTERVAL_MS = 750;
+const DRAFT_PERSIST_INTERVAL_MS = 250;
 const CANCEL_POLL_INTERVAL_MS = 250;
 const HEARTBEAT_INTERVAL_MS = 5_000;
 const STALE_RUN_CLAIM_MS = 30_000;
@@ -292,18 +292,15 @@ export const runChatGeneration = async (runId: string) => {
           promptTokensDetails: usage.promptTokensDetails,
           usageKind: "aiChat",
           userId: run.userId,
+        }).catch((error) => {
+          console.error("Could not report AI usage.", error);
         }),
       );
     },
   };
 
   const settleUsageReports = async () => {
-    const results = await Promise.allSettled(usageReports);
-    for (const result of results) {
-      if (result.status === "rejected") {
-        console.error("Could not report AI usage.", result.reason);
-      }
-    }
+    await Promise.all(usageReports);
   };
 
   try {

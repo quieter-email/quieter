@@ -8,6 +8,7 @@ import { AnimatePresence, m } from "motion/react";
 import { useState } from "react";
 import type { ResolveComposeTool } from "../../../types";
 import { getActiveToolDetail, summarizeToolCalls } from "../../../domain/tool-summaries";
+import { LoadingDots } from "../../thinking-indicator";
 import { ToolPart } from "../tool-part";
 
 type ToolCall = Extract<MessagePart, { type: "tool-call" }>;
@@ -71,11 +72,7 @@ export const ToolActivityGroup = ({
         type="button"
       >
         {hasPending && isStreaming ? (
-          <span className="inline-flex gap-0.5">
-            <span className="size-1 animate-pulse rounded-full bg-muted-foreground/55 [animation-delay:0ms]" />
-            <span className="size-1 animate-pulse rounded-full bg-muted-foreground/55 [animation-delay:150ms]" />
-            <span className="size-1 animate-pulse rounded-full bg-muted-foreground/55 [animation-delay:300ms]" />
-          </span>
+          <LoadingDots />
         ) : (
           <HugeiconsIcon
             aria-hidden
@@ -97,11 +94,10 @@ export const ToolActivityGroup = ({
       <AnimatePresence initial={false}>
         {expanded ? (
           <m.div
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            initial={{ height: 0, opacity: 0 }}
-            style={{ overflow: "hidden" }}
-            transition={{ duration: 0.16, ease: [0.25, 0.1, 0.25, 1] }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            initial={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
           >
             <div className="mt-1.5 space-y-0.5 border-l border-border/60 pl-3">
               {items.map((item) => (

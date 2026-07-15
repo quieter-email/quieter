@@ -48,19 +48,22 @@
   }
 }
 
-.loading-spinner-dot {
-  animation: loading-spinner-dot 1.8s ease-in-out infinite;
+.chat-loading-dot {
+  animation: chat-loading-dot 1.2s ease-in-out infinite;
+  transform-origin: center;
 }
 
-@keyframes loading-spinner-dot {
+@keyframes chat-loading-dot {
   0%,
-  55%,
+  60%,
   100% {
-    opacity: var(--_dim);
+    opacity: 0.3;
+    transform: translateY(0) scale(0.8);
   }
 
-  15% {
-    opacity: var(--_bright);
+  30% {
+    opacity: 0.9;
+    transform: translateY(-2px) scale(1);
   }
 }
 

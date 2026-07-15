@@ -6,6 +6,7 @@ import { cn } from "@quieter/ui/cn";
 import { AnimatePresence, m } from "motion/react";
 import { useState } from "react";
 import { MarkdownContent } from "../markdown-content";
+import { LoadingDots } from "../thinking-indicator";
 
 type ThinkingPartProps = {
   content: string;
@@ -30,12 +31,8 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
         onClick={() => setExpanded((prev) => !prev)}
         type="button"
       >
-        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-          <span className="inline-flex gap-0.5">
-            <span className="size-1 animate-pulse rounded-full bg-muted-foreground/60 [animation-delay:0ms]" />
-            <span className="size-1 animate-pulse rounded-full bg-muted-foreground/60 [animation-delay:150ms]" />
-            <span className="size-1 animate-pulse rounded-full bg-muted-foreground/60 [animation-delay:300ms]" />
-          </span>
+        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <LoadingDots />
           Thinking
         </span>
         {hasReasoning ? (
@@ -53,11 +50,10 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
       <AnimatePresence initial={false}>
         {expanded && hasReasoning ? (
           <m.div
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            initial={{ height: 0, opacity: 0 }}
-            style={{ overflow: "hidden" }}
-            transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            initial={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
           >
             <div className="py-1">
               <MarkdownContent markdown={content} />
