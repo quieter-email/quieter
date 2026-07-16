@@ -34,7 +34,6 @@ export const LandingMailboxMessagesPanel = ({
   const isMessageRouteOpen = activeMailbox !== "drafts" && !!messageId;
   const { pendingActions } = useMailboxPendingActions();
   const {
-    handleVisibleMessageIdsChange,
     hasMessagePages,
     isLoadingEmptyMessages,
     listState,
@@ -133,7 +132,6 @@ export const LandingMailboxMessagesPanel = ({
           onOpenSidebar={onOpenSidebar}
           onRefresh={refreshMessages}
           onSearch={applySearch}
-          onVisibleMessageIdsChange={handleVisibleMessageIdsChange}
           pendingActions={pendingActions}
           searchQuery={normalizedSearchQuery}
         />

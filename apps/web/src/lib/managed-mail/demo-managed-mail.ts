@@ -1,5 +1,6 @@
 import type { MailboxLabel, MailboxLabelColor } from "@quieter/mail/mailbox-organization";
 import type { QueryClient } from "@tanstack/react-query";
+import { getMailboxCapabilities } from "@quieter/mail/data-plane";
 import type { ComposeDraftState } from "~/features/compose";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import { parseStructuredSearchQuery } from "~/features/message-search/state/message-list-search-state";
@@ -419,12 +420,13 @@ export const getManagedDemoMailboxes = () => ({
       slug: "demo-managed-team",
       mailboxes: [
         {
+          capabilities: getMailboxCapabilities({ provider: "managed", role: "manager" }),
           connectionStatus: "connected" as const,
           displayName: "Managed demo",
           emailAddress: DEMO_MANAGED_EMAIL_ADDRESS,
           grantRole: "manager" as const,
-          gmailAutoLabelEnabled: false,
-          gmailUsefulDetailsEnabled: false,
+          autoLabelEnabled: false,
+          usefulDetailsEnabled: false,
           groupId: "demo-managed-team",
           groupKind: "organization" as const,
           groupName: "Demo",
@@ -695,6 +697,13 @@ export const createManagedDemoMailboxActions = (queryClient: QueryClient) => ({
   },
   untrashThread: async (threadId: string) => {
     await updateManagedDemoThreadLabels(queryClient, threadId, moveToInboxFromTrashChanges);
+  },
+  untrashThreads: async (threads: ThreadListEntry[]) => {
+    await Promise.all(
+      threads.map((thread) =>
+        updateManagedDemoThreadLabels(queryClient, thread.threadId, moveToInboxFromTrashChanges),
+      ),
+    );
   },
   updateMessageLabels: async (
     messageId: string,

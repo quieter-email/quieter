@@ -10,7 +10,7 @@ export const Route = createFileRoute("/")({
   validateSearch: zodValidator(
     z.object({
       mailbox: z
-        .enum(["inbox", "unread", "spam", "sent", "trash", "drafts"])
+        .enum(["inbox", "unread", "archive", "spam", "sent", "trash", "drafts"])
         .catch("inbox")
         .default("inbox"),
       mailboxId: z.string().trim().min(1).optional().catch(undefined),

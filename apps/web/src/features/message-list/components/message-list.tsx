@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  Archive02Icon,
   Delete01Icon,
   Delete02Icon,
+  InboxIcon,
   Mail01Icon,
   MailOpen02Icon,
   Tag01Icon,
@@ -137,6 +139,30 @@ export const MessageList = (props: MessageListProps) => {
             },
           ]
         : [
+            ...(props.activeMailbox === "inbox" || props.activeMailbox === "unread"
+              ? [
+                  {
+                    icon: Archive02Icon,
+                    id: "archive-threads",
+                    label: "Archive",
+                    onSelect: async () => {
+                      await runBulkAction(props.mailboxActions.archiveThreads);
+                    },
+                  } satisfies MessageListBulkAction,
+                ]
+              : []),
+            ...(props.activeMailbox === "archive"
+              ? [
+                  {
+                    icon: InboxIcon,
+                    id: "move-threads-inbox",
+                    label: "Move to Inbox",
+                    onSelect: async () => {
+                      await runBulkAction(props.mailboxActions.untrashThreads);
+                    },
+                  } satisfies MessageListBulkAction,
+                ]
+              : []),
             {
               icon: MailOpen02Icon,
               id: "mark-threads-read",
@@ -305,6 +331,21 @@ export const MessageList = (props: MessageListProps) => {
           selection.clearSelection();
         },
         options: { enabled: threadedMessages.length > 0 || !!props.activeMessageId },
+      },
+      {
+        hotkey: "E",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          void runActionThreads(
+            props.mailboxActions.archiveThreads,
+            (threads) => `${formatConversationCount(threads.length)} archived.`,
+          );
+        },
+        options: {
+          enabled:
+            actionHotkeysEnabled &&
+            (props.activeMailbox === "inbox" || props.activeMailbox === "unread"),
+        },
       },
       {
         hotkey: "Shift+3",

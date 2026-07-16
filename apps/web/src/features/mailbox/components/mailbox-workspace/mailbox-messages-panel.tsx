@@ -57,6 +57,7 @@ const createReadOnlyMailboxActions = () =>
     unsubscribeFromMessage: async () => {},
     untrashMessage: async () => {},
     untrashThread: async () => {},
+    untrashThreads: async () => {},
     updateMessageLabels: async () => {},
     updateThreadLabels: async () => {},
     updateThreadsLabels: async () => {},
@@ -92,7 +93,6 @@ export const MailboxMessagesPanel = ({
   );
   const {
     flattenedMessages,
-    handleVisibleMessageIdsChange,
     hasMessagePages,
     isLoadingEmptyMessages,
     listState,
@@ -235,7 +235,6 @@ export const MailboxMessagesPanel = ({
           onOpenSidebar={onOpenSidebar}
           onRefresh={refreshMessages}
           onSearch={applySearch}
-          onVisibleMessageIdsChange={handleVisibleMessageIdsChange}
           pendingActions={pendingActions}
           searchQuery={normalizedSearchQuery}
         />

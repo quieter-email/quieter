@@ -1,6 +1,7 @@
 import { ORPCError, os } from "@orpc/server";
 import { getSessionWithOrganization } from "@quieter/auth";
-import { isGmailRateLimitedError, type MailboxCategory } from "@quieter/gmail";
+import { isGmailRateLimitedError } from "@quieter/gmail";
+import { mailCategorySchema } from "@quieter/mail/data-plane";
 import { z } from "zod";
 import { getRequestHeaders, type OrpcContext } from "../context";
 import { orpcErrorMap } from "../errors";
@@ -39,18 +40,12 @@ export const protectedProcedure = base.use(async ({ context, errors, next }) => 
   });
 });
 
-export const mailboxCategorySchema = z.enum([
-  "inbox",
-  "unread",
-  "spam",
-  "sent",
-  "trash",
-  "drafts",
-] satisfies readonly MailboxCategory[]);
+export const mailboxCategorySchema = mailCategorySchema;
 
 export const historySyncMailboxCategorySchema = z.enum([
   "inbox",
   "unread",
+  "archive",
   "spam",
   "sent",
   "trash",

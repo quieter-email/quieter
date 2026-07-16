@@ -22,6 +22,7 @@ import {
   user,
 } from "@quieter/database/schema";
 import { getGmailMessageCount, getGmailProfile, isGmailServiceError } from "@quieter/gmail";
+import { getMailboxCapabilities } from "@quieter/mail/data-plane";
 import { and, asc, count, eq, inArray, lt } from "drizzle-orm";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -129,9 +130,9 @@ const toMailboxListItem = (
     divisionName?: string | null;
     emailAddress: string;
     grantRole: MailboxGrantRole | null;
-    gmailAutoLabelEnabled?: boolean | null;
+    autoLabelEnabled?: boolean | null;
     gmailCredentialMailboxId?: string | null;
-    gmailUsefulDetailsEnabled?: boolean | null;
+    usefulDetailsEnabled?: boolean | null;
     id: string;
     includeApiSentMessages?: boolean | null;
     organizationId: string;
@@ -142,6 +143,7 @@ const toMailboxListItem = (
   },
   group: MailboxGroupMetadata,
 ): MailboxListItem => ({
+  capabilities: getMailboxCapabilities({ provider: record.provider, role: record.grantRole }),
   connectionStatus:
     record.provider === MAILBOX_PROVIDER_GMAIL && !record.gmailCredentialMailboxId
       ? "needs_reconnect"
@@ -153,8 +155,8 @@ const toMailboxListItem = (
   divisionName: record.divisionName ?? null,
   emailAddress: record.emailAddress,
   grantRole: record.grantRole,
-  gmailAutoLabelEnabled: record.gmailAutoLabelEnabled ?? false,
-  gmailUsefulDetailsEnabled: record.gmailUsefulDetailsEnabled ?? false,
+  autoLabelEnabled: record.autoLabelEnabled ?? false,
+  usefulDetailsEnabled: record.usefulDetailsEnabled ?? false,
   groupId: group.groupId,
   groupKind: group.groupKind,
   groupName: group.groupName,
@@ -211,9 +213,9 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
           divisionName: organizationDivision.name,
           displayName: mailbox.displayName,
           emailAddress: mailbox.emailAddress,
-          gmailAutoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
+          autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
           gmailCredentialMailboxId: gmailCredential.mailboxId,
-          gmailUsefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
+          usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
           id: mailbox.id,
           includeApiSentMessages: mailbox.includeApiSentMessages,
           organizationId: mailbox.organizationId,
@@ -237,8 +239,8 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
           displayName: mailbox.displayName,
           emailAddress: mailbox.emailAddress,
           grantRole: mailboxGrant.role,
-          gmailAutoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
-          gmailUsefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
+          autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
+          usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
           id: mailbox.id,
           includeApiSentMessages: mailbox.includeApiSentMessages,
           organizationId: mailbox.organizationId,
@@ -272,8 +274,8 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
           displayName: mailbox.displayName,
           emailAddress: mailbox.emailAddress,
           grantRole: mailboxDivisionGrant.role,
-          gmailAutoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
-          gmailUsefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
+          autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
+          usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
           id: mailbox.id,
           includeApiSentMessages: mailbox.includeApiSentMessages,
           organizationId: mailbox.organizationId,
@@ -360,8 +362,8 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
     divisionName: string | null;
     emailAddress: string;
     grantRole: MailboxGrantRole | null;
-    gmailAutoLabelEnabled: boolean | null;
-    gmailUsefulDetailsEnabled: boolean | null;
+    autoLabelEnabled: boolean | null;
+    usefulDetailsEnabled: boolean | null;
     id: string;
     includeApiSentMessages: boolean | null;
     organizationId: string;
@@ -561,6 +563,7 @@ export const listAccessibleGmailUnreadCounts = async (input: { userId: string })
 export const assertAccessibleMailbox = async (input: { mailboxId: string; userId: string }) => {
   const [ownedGmailMailbox] = await db
     .select({
+      contentRevision: mailbox.contentRevision,
       id: mailbox.id,
       organizationId: mailbox.organizationId,
       provider: mailbox.provider,
@@ -583,6 +586,7 @@ export const assertAccessibleMailbox = async (input: { mailboxId: string; userId
     const grantedManagedMailbox = await getAuthorizedManagedMailbox(input);
     return {
       id: grantedManagedMailbox.id,
+      contentRevision: grantedManagedMailbox.contentRevision,
       organizationId: grantedManagedMailbox.organizationId,
       provider: grantedManagedMailbox.provider,
     };

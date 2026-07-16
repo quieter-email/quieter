@@ -65,6 +65,13 @@ export const KEYBOARD_SHORTCUTS: readonly KeyboardShortcut[] = [
   },
   {
     category: "Navigation",
+    id: "go-archive",
+    label: "Go to Archive",
+    scope: "mailbox",
+    sequence: ["G", "A"],
+  },
+  {
+    category: "Navigation",
     id: "go-sent",
     label: "Go to Sent",
     scope: "mailbox",

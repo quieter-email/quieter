@@ -16,6 +16,7 @@ import { openGoogleAccountLink } from "~/lib/google-account-link";
 import { getMailboxesQueryKey } from "~/lib/mailboxes-query";
 import { orpc } from "~/lib/orpc";
 import { usePreviewPersona } from "~/lib/preview-personas";
+import { setQueryPersistenceUser } from "~/lib/query-persister";
 import type { MailboxWorkspaceView } from "../domain/mailbox-workspace-view";
 import { MailboxWorkspaceContent } from "./mailbox-workspace/mailbox-workspace-content";
 import { useMailboxRouteSearch } from "./mailbox-workspace/use-mailbox-route-search";
@@ -103,6 +104,7 @@ const useChatSidebarActions = ({
 };
 
 export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
+  setQueryPersistenceUser(user.id);
   const queryClient = useQueryClient();
   const composeDialogRef = useRef<ComposeDialogHandle | null>(null);
   const [draftChatVersion, setDraftChatVersion] = useState(0);
@@ -388,6 +390,14 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     (event) => {
       if (shouldIgnoreAppShortcut(event)) return;
       selectMailboxFromHotkey("sent");
+    },
+    { enabled: isWorkspaceReady && !!selectedMailboxId, ignoreInputs: true },
+  );
+  useHotkeySequence(
+    ["G", "A"],
+    (event) => {
+      if (shouldIgnoreAppShortcut(event)) return;
+      selectMailboxFromHotkey("archive");
     },
     { enabled: isWorkspaceReady && !!selectedMailboxId, ignoreInputs: true },
   );

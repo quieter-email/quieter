@@ -120,8 +120,11 @@ const getGmailRepairRequiredError = (record: { emailAddress: string; id: string 
     status: 409,
   });
 
-const refreshGmailAccessToken = async (record: {
+const gmailTokenRefreshes = new Map<string, Promise<string>>();
+
+const performGmailAccessTokenRefresh = async (record: {
   emailAddress: string;
+  encryptedAccessToken: string | null;
   encryptedRefreshToken: string | null;
   id: string;
 }) => {
@@ -152,9 +155,7 @@ const refreshGmailAccessToken = async (record: {
       .catch(() => null);
     const errorCode = errorBody?.success ? errorBody.data.error : undefined;
     const isPermanentAuthFailure =
-      response.status === 400 ||
-      response.status === 401 ||
-      (errorCode != null && permanentGoogleTokenErrors.has(errorCode));
+      response.status === 401 || (errorCode != null && permanentGoogleTokenErrors.has(errorCode));
 
     if (isPermanentAuthFailure) {
       await db
@@ -169,7 +170,7 @@ const refreshGmailAccessToken = async (record: {
 
   const refreshed = googleRefreshResponseSchema.parse(await response.json());
   const now = new Date();
-  await db
+  const [updatedCredential] = await db
     .update(gmailCredential)
     .set({
       accessTokenExpiresAt: new Date(now.getTime() + refreshed.expires_in * 1000),
@@ -177,12 +178,47 @@ const refreshGmailAccessToken = async (record: {
       scopes: refreshed.scope ?? GMAIL_SCOPES.join(" "),
       updatedAt: now,
     })
-    .where(eq(gmailCredential.mailboxId, record.id));
-  await db
-    .update(mailbox)
-    .set({ status: "connected", updatedAt: now })
-    .where(eq(mailbox.id, record.id));
-  return refreshed.access_token;
+    .where(
+      and(
+        eq(gmailCredential.mailboxId, record.id),
+        record.encryptedAccessToken === null
+          ? isNull(gmailCredential.encryptedAccessToken)
+          : eq(gmailCredential.encryptedAccessToken, record.encryptedAccessToken),
+      ),
+    )
+    .returning({ mailboxId: gmailCredential.mailboxId });
+  if (updatedCredential) {
+    await db
+      .update(mailbox)
+      .set({ status: "connected", updatedAt: now })
+      .where(eq(mailbox.id, record.id));
+    return refreshed.access_token;
+  }
+
+  const [currentCredential] = await db
+    .select({
+      accessTokenExpiresAt: gmailCredential.accessTokenExpiresAt,
+      encryptedAccessToken: gmailCredential.encryptedAccessToken,
+    })
+    .from(gmailCredential)
+    .where(eq(gmailCredential.mailboxId, record.id))
+    .limit(1);
+  return currentCredential?.encryptedAccessToken &&
+    currentCredential.accessTokenExpiresAt &&
+    currentCredential.accessTokenExpiresAt.getTime() > Date.now()
+    ? decryptSecret(currentCredential.encryptedAccessToken)
+    : refreshed.access_token;
+};
+
+const refreshGmailAccessToken = (record: Parameters<typeof performGmailAccessTokenRefresh>[0]) => {
+  const existingRefresh = gmailTokenRefreshes.get(record.id);
+  if (existingRefresh) return existingRefresh;
+
+  const refresh = performGmailAccessTokenRefresh(record).finally(() => {
+    if (gmailTokenRefreshes.get(record.id) === refresh) gmailTokenRefreshes.delete(record.id);
+  });
+  gmailTokenRefreshes.set(record.id, refresh);
+  return refresh;
 };
 
 const getOwnedGmailCredential = async (mailboxId: string, userId: string) => {

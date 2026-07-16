@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import {
+  batchModifyMessages,
   createDraft,
   createLabel,
   deleteDraft,
@@ -20,7 +21,6 @@ import {
   markThreadAsUnread,
   moveMessageToTrash,
   moveThreadToTrash,
-  refreshMailboxMessages,
   sendDraft as sendGmailDraft,
   sendRawMessage,
   untrashMessage,
@@ -65,13 +65,13 @@ import {
   getManagedMessageInspector,
   getManagedThread,
   listManagedMessages,
-  refreshManagedMessages,
   saveManagedDraft,
   sendManagedMailboxMessage,
   setManagedMessageMailboxState,
   setManagedMessageReadState,
   setManagedThreadMailboxState,
   setManagedThreadReadState,
+  applyManagedMessageChanges,
 } from "../managed-mail/messages/service";
 import {
   getOrganizationApiMailInspector,
@@ -192,7 +192,98 @@ const recordGmailLabelFeedback = async (input: {
 export const mailRouter = {
   ...mailboxProcedures,
   ...managedOrganizationMailRouter,
-  listMessages: protectedProcedure
+  applyChanges: protectedProcedure
+    .input(
+      z.object({
+        mailboxId: mailboxIdSchema,
+        targets: z
+          .array(
+            z.object({
+              messageIds: z.array(z.string().trim().min(1)).min(1),
+              threadId: z.string().trim().min(1),
+            }),
+          )
+          .min(1)
+          .max(1000),
+        command: z.discriminatedUnion("kind", [
+          z.object({ kind: z.literal("set-read"), read: z.boolean() }),
+          z.object({
+            kind: z.literal("move"),
+            destination: z.enum(["archive", "inbox", "spam", "trash"]),
+          }),
+          z.object({ kind: z.literal("delete-permanently") }),
+          z.object({
+            kind: z.literal("set-labels"),
+            addIds: z.array(z.string()),
+            removeIds: z.array(z.string()),
+          }),
+        ]),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        const result = await applyManagedMessageChanges({ ...input, userId: context.userId });
+        return {
+          syncToken: result.revision === null ? undefined : String(result.revision),
+          targets: result.targets,
+        };
+      }
+
+      return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
+        const messageIds = Array.from(
+          new Set(input.targets.flatMap((target) => target.messageIds)),
+        );
+        if (input.command.kind === "delete-permanently") {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "Permanent bulk deletion is unavailable.",
+          });
+        }
+        if (input.command.kind === "set-read") {
+          await batchModifyMessages(
+            accessToken,
+            messageIds,
+            input.command.read ? { removeLabelIds: ["UNREAD"] } : { addLabelIds: ["UNREAD"] },
+            signal,
+          );
+        } else if (input.command.kind === "set-labels") {
+          await batchModifyMessages(
+            accessToken,
+            messageIds,
+            { addLabelIds: input.command.addIds, removeLabelIds: input.command.removeIds },
+            signal,
+          );
+        } else if (input.command.destination === "trash") {
+          for (const messageId of messageIds) {
+            await moveMessageToTrash(accessToken, messageId, signal);
+          }
+        } else if (input.command.destination === "inbox") {
+          for (const messageId of messageIds) {
+            await untrashMessage(accessToken, messageId, signal);
+          }
+          await batchModifyMessages(accessToken, messageIds, { addLabelIds: ["INBOX"] }, signal);
+        } else {
+          await batchModifyMessages(
+            accessToken,
+            messageIds,
+            input.command.destination === "archive"
+              ? { removeLabelIds: ["INBOX"] }
+              : { addLabelIds: ["SPAM"], removeLabelIds: ["INBOX"] },
+            signal,
+          );
+        }
+        return {
+          targets: input.targets.map((target) => ({
+            status: "applied" as const,
+            threadId: target.threadId,
+          })),
+        };
+      });
+    }),
+  listThreads: protectedProcedure
     .route({ method: "GET" })
     .input(
       z.object({
@@ -240,7 +331,7 @@ export const mailRouter = {
       });
     }),
 
-  getMailboxSyncDelta: protectedProcedure
+  syncMailbox: protectedProcedure
     .route({ method: "GET" })
     .input(
       z.object({
@@ -270,11 +361,14 @@ export const mailRouter = {
         userId: context.userId,
       });
       if (selectedMailbox.provider === "managed") {
+        const historyId = String(selectedMailbox.contentRevision);
+        const hasChanges = historyId !== input.startHistoryId;
         return {
-          hasChanges: true,
-          refreshFirstPage: true,
+          historyId,
+          hasChanges,
+          refreshFirstPage: hasChanges,
           removedMessageIds: [],
-          requiresFullRefresh: true,
+          requiresFullRefresh: hasChanges,
           updatedMessages: [],
         };
       }
@@ -284,46 +378,6 @@ export const mailRouter = {
           mailbox: input.category,
           signal,
           startHistoryId: input.startHistoryId,
-        });
-      });
-    }),
-
-  refreshMessages: protectedProcedure
-    .route({ method: "GET" })
-    .input(
-      z.object({
-        mailboxId: mailboxIdSchema,
-        category: historySyncMailboxCategorySchema,
-        messageIds: z.array(z.string().trim().min(1)).min(1).max(25),
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      if (isOrganizationApiMailboxId(input.mailboxId)) {
-        const organizationId = parseOrganizationApiMailboxId(input.mailboxId);
-        if (!organizationId) {
-          throw new ORPCError("NOT_FOUND", { message: "API mailbox not found." });
-        }
-        await assertUserOrganizationMember({ organizationId, userId: context.userId });
-        return { removedMessageIds: [], updatedMessages: [] };
-      }
-
-      const selectedMailbox = await assertAccessibleMailbox({
-        mailboxId: input.mailboxId,
-        userId: context.userId,
-      });
-      if (selectedMailbox.provider === "managed") {
-        return await refreshManagedMessages({
-          mailboxId: input.mailboxId,
-          messageIds: input.messageIds,
-          userId: context.userId,
-        });
-      }
-
-      return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
-        return await refreshMailboxMessages(accessToken, {
-          mailbox: input.category,
-          messageIds: input.messageIds,
-          signal,
         });
       });
     }),

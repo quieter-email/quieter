@@ -125,6 +125,11 @@ export default $config({
           QUIETER_PREVIEW_PERSONAS_ENABLED: process.env.QUIETER_PREVIEW_PERSONAS_ENABLED || "false",
           SENTRY_ENVIRONMENT: process.env.SENTRY_ENVIRONMENT || $app.stage,
           VITE_LOGO_DEV_PUBLISHABLE_KEY: process.env.VITE_LOGO_DEV_PUBLISHABLE_KEY || "",
+          VITE_QUIETER_DEPLOYMENT_ENV: production
+            ? "production"
+            : review
+              ? "preview"
+              : "production",
           VITE_PUBLIC_POSTHOG_HOST:
             process.env.VITE_PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com",
           VITE_PUBLIC_POSTHOG_PROJECT_TOKEN: process.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN || "",

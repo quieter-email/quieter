@@ -4,7 +4,14 @@ import { createRootRoute } from "@tanstack/react-router";
 import { RootComponent } from "~/components/root/root-component";
 import { RootErrorComponent } from "~/components/root/root-error-component";
 import { RootNotFoundComponent } from "~/components/root/root-not-found-component";
+import { clientEnv } from "~/env";
 import appCss from "~/styles.css?url";
+
+const faviconVariant = import.meta.env.DEV
+  ? "-dev"
+  : clientEnv.VITE_QUIETER_DEPLOYMENT_ENV === "preview"
+    ? "-review"
+    : "";
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -25,12 +32,12 @@ export const Route = createRootRoute({
         rel: "stylesheet",
       },
       {
-        href: "/favicon.ico",
+        href: `/favicon${faviconVariant}.ico`,
         rel: "icon",
         sizes: "48x48",
       },
       {
-        href: "/icon.svg",
+        href: `/icon${faviconVariant}.svg`,
         rel: "icon",
         sizes: "any",
         type: "image/svg+xml",

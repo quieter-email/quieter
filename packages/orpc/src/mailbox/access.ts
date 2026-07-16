@@ -60,6 +60,7 @@ export const getAuthorizedManagedMailbox = async (input: {
 }) => {
   const directRows = await db
     .select({
+      contentRevision: mailbox.contentRevision,
       displayName: mailbox.displayName,
       emailAddress: mailbox.emailAddress,
       id: mailbox.id,
@@ -83,6 +84,7 @@ export const getAuthorizedManagedMailbox = async (input: {
 
   const divisionRows = await db
     .select({
+      contentRevision: mailbox.contentRevision,
       displayName: mailbox.displayName,
       emailAddress: mailbox.emailAddress,
       id: mailbox.id,

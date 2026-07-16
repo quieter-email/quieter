@@ -454,7 +454,7 @@ export const MailboxesSettingsPanel = () => {
                         </span>
                         <Switch
                           aria-label={`Find time-sensitive updates in new mail for ${mailbox.emailAddress}`}
-                          checked={mailbox.gmailUsefulDetailsEnabled}
+                          checked={mailbox.usefulDetailsEnabled}
                           className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
                           disabled={
                             !hasGmailAutomationAccess ||
@@ -505,7 +505,7 @@ export const MailboxesSettingsPanel = () => {
                         </span>
                         <Switch
                           aria-label={`Automatically label new mail for ${mailbox.emailAddress}`}
-                          checked={mailbox.gmailAutoLabelEnabled}
+                          checked={mailbox.autoLabelEnabled}
                           className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
                           disabled={
                             !hasGmailAutomationAccess ||
@@ -833,7 +833,7 @@ export const MailboxesSettingsPanel = () => {
                       </span>
                       <Switch
                         aria-label={`Find time-sensitive updates in new mail for ${selectedManagedMailboxDetails.mailbox.emailAddress}`}
-                        checked={selectedManagedMailboxDetails.mailbox.gmailUsefulDetailsEnabled}
+                        checked={selectedManagedMailboxDetails.mailbox.usefulDetailsEnabled}
                         className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
                         disabled={
                           !hasSelectedManagedAutomationAccess ||
@@ -878,7 +878,7 @@ export const MailboxesSettingsPanel = () => {
                       </span>
                       <Switch
                         aria-label={`Automatically label new mail for ${selectedManagedMailboxDetails.mailbox.emailAddress}`}
-                        checked={selectedManagedMailboxDetails.mailbox.gmailAutoLabelEnabled}
+                        checked={selectedManagedMailboxDetails.mailbox.autoLabelEnabled}
                         className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
                         disabled={
                           !hasSelectedManagedAutomationAccess ||

@@ -2,10 +2,8 @@
 
 import type { QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import type { MailboxCategory } from "./gmail";
 import { getGmailUnreadCountsQueryKey } from "../mailboxes-query";
 import { rpc } from "../orpc";
-import { getLiveSyncQueryKey } from "./inbox-query/keys";
 import { getGmailUsefulDetailsQueryKey } from "./useful-details-query";
 
 const KEEPALIVE_INTERVAL_MS = 1000 * 60 * 5;
@@ -27,14 +25,12 @@ const parseMailboxEvent = (value: unknown, mailboxId: string) => {
   return value.type;
 };
 
-export const useGmailLiveSync = (input: {
+export const useMailboxLiveSync = (input: {
   enabled: boolean;
-  mailbox: MailboxCategory;
   mailboxId: string;
   queryClient: QueryClient;
-  searchQuery: string;
 }) => {
-  const { enabled, mailbox, mailboxId, queryClient, searchQuery } = input;
+  const { enabled, mailboxId, queryClient } = input;
 
   // react-doctor-disable-next-line react-doctor/effect-needs-cleanup -- Cleanup closes the socket and clears both timers below.
   useEffect(() => {
@@ -58,8 +54,10 @@ export const useGmailLiveSync = (input: {
     const requestSync = () => {
       void queryClient.invalidateQueries(
         {
-          exact: true,
-          queryKey: getLiveSyncQueryKey(mailboxId, mailbox, searchQuery),
+          predicate: (query) =>
+            query.queryKey[0] === "messages" &&
+            query.queryKey[1] === mailboxId &&
+            query.queryKey.at(-1) === "live-sync",
         },
         { cancelRefetch: false },
       );
@@ -95,16 +93,15 @@ export const useGmailLiveSync = (input: {
       connectionAttempts += 1;
 
       try {
-        const connection = await rpc.mail.createGmailLiveSyncConnection({ mailboxId });
+        const connection = await rpc.mail.createLiveSyncConnection({ mailboxId });
         if (disposed || !connection.url) {
           return;
         }
 
         socket = new WebSocket(connection.url);
         socket.addEventListener("open", () => {
+          connectionAttempts = 0;
           reconnectDelay = 1000;
-          requestSync();
-          requestUsefulDetails();
           clearKeepalive();
           keepaliveTimer = window.setInterval(() => {
             if (socket?.readyState === WebSocket.OPEN) {
@@ -141,5 +138,5 @@ export const useGmailLiveSync = (input: {
       }
       socket?.close();
     };
-  }, [enabled, mailbox, mailboxId, queryClient, searchQuery]);
+  }, [enabled, mailboxId, queryClient]);
 };

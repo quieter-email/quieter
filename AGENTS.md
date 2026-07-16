@@ -20,6 +20,7 @@
   graphs. `vp run @quieter/aws#check:boundaries` validates imports and `vp run @quieter/aws#check:bundles` bundles every
   SST handler to catch unsupported transitive dependencies.
 - `packages/mail` owns pure mail parsing, compose schemas, MIME building, message content extraction, and sender avatar derivation.
+- `packages/mail/data-plane` owns provider-neutral mail categories, thread/page/detail contracts, semantic commands, mutation results, errors, sync tokens, and role-derived mailbox capabilities. Gmail, managed, API, and demo implementations must adapt to this contract rather than expose provider labels to the UI.
 - `packages/gmail` owns Gmail REST service logic and Gmail-specific draft parsing; encrypted credentials and token refresh are owned by `packages/orpc`.
 - `packages/billing` owns Polar billing plans, direct SDK checkout and portal sessions, subscription sync, metering, and credit usage.
 - `packages/database` owns schema and migrations.
@@ -54,6 +55,9 @@
 - Validate search params with `validateSearch` + Zod (colocated on the route file; settings tab ids are shared via `apps/web/src/features/settings/domain/settings-tab.ts`).
 - Keep inbox `loaderDeps` limited to `mailboxId`.
 - Gmail REST calls run server-side through `packages/gmail`; tokens are decrypted and refreshed through `packages/orpc`.
+- Mail reads and writes use the provider-neutral `mail.listThreads`, `mail.getThread`, `mail.syncMailbox`, and `mail.applyChanges` RPCs. Known writes patch the scoped mail cache directly; do not add broad mail invalidations or provider-specific client mutation paths.
+- Archive is a first-class semantic category. Managed Archive uses `mailboxState = archived`; Gmail compiles Archive to the absence of Inbox, Sent, Draft, Spam, and Trash system membership. API mailboxes remain read-only Sent.
+- Managed mailbox content changes increment `mailbox.contentRevision`; sync compares the opaque client token to that revision and returns without listing when unchanged.
 - Mailbox-scoped query keys must include `mailboxId`.
 - Persist manual `queryClient.setQueryData` writes with `persistQueryByKey`.
 - Prefer TanStack Query for app-owned async/server state.

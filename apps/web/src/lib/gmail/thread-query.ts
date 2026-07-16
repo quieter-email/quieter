@@ -3,11 +3,7 @@ import { rpc } from "~/lib/orpc";
 import { isManagedSandboxMailboxId, isSandboxMailboxId } from "~/lib/sandbox-mailbox";
 import { getManagedDemoThread } from "../managed-mail/demo-managed-mail";
 import { getDemoThread } from "./demo-mail";
-import {
-  GMAIL_QUERY_STALE_TIME_MS,
-  hasRenderableMessageBody,
-  type ThreadMessagesResult,
-} from "./gmail";
+import { hasRenderableMessageBody, type ThreadMessagesResult } from "./gmail";
 
 const THREAD_QUERY_VERSION = 3;
 
@@ -34,8 +30,9 @@ export const getThreadWithDetailsOptions = (mailboxId: string, threadId: string,
         : rpc.mail.getThread({ mailboxId, threadId }, { signal });
     },
     enabled,
-    staleTime: GMAIL_QUERY_STALE_TIME_MS,
-    refetchOnMount: (query) => (shouldRefreshThreadContent(query.state.data) ? "always" : true),
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 30,
+    refetchOnMount: (query) => shouldRefreshThreadContent(query.state.data),
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });

@@ -74,6 +74,8 @@ const createFilterCondition = (
         condition = eq(managedMailMessage.isRead, value === "read");
       } else if (value === "inbound" || value === "outbound") {
         condition = eq(managedMailMessage.direction, value);
+      } else if (value === "archived") {
+        condition = eq(managedMailMessage.mailboxState, "archived");
       } else if (value === "spam" || value === "trash") {
         condition = eq(managedMailMessage.mailboxState, value);
       } else if (value === "inbox") {

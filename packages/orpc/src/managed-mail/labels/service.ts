@@ -2,6 +2,7 @@ import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
   managedMailLabel,
+  mailbox,
   managedMailMessage,
   managedMailMessageLabel,
   managedMailRule,
@@ -11,7 +12,7 @@ import {
 import { MAILBOX_LABELS } from "@quieter/gmail";
 import { mailboxLabelColorSchema, type MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { structuredMailSearchSchema } from "@quieter/mail/search";
-import { and, asc, countDistinct, eq } from "drizzle-orm";
+import { and, asc, countDistinct, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import { getManagedMessageLabelIds } from "../messages/service";
@@ -47,6 +48,7 @@ const getMailboxStateFromLabelChanges = (input: {
 
   if (addLabelIds.has(MAILBOX_LABELS.trash)) return "trash";
   if (addLabelIds.has(MAILBOX_LABELS.spam)) return "spam";
+  if (removeLabelIds.has(MAILBOX_LABELS.inbox)) return "archived";
   if (
     addLabelIds.has(MAILBOX_LABELS.inbox) ||
     addLabelIds.has(MAILBOX_LABELS.sent) ||
@@ -288,6 +290,10 @@ export const updateManagedThreadLabels = async (input: {
     removeLabelIds: getCustomLabelIds(input.removeLabelIds),
     source: "manual",
   });
+  await db
+    .update(mailbox)
+    .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
+    .where(eq(mailbox.id, input.mailboxId));
   const messagesById = new Map(messages.map((message) => [message.id, message]));
   return {
     messages: updated.map((message) => {
@@ -355,6 +361,10 @@ export const updateSingleManagedMessageLabels = async (input: {
     removeLabelIds: getCustomLabelIds(input.removeLabelIds),
     source: "manual",
   });
+  await db
+    .update(mailbox)
+    .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
+    .where(eq(mailbox.id, input.mailboxId));
   return {
     ...updated,
     isUnread: !message.isRead,

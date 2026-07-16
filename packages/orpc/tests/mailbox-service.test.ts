@@ -1,3 +1,4 @@
+import { getMailboxCapabilities } from "@quieter/mail/data-plane";
 import { describe, expect, test } from "vite-plus/test";
 import type { MailboxGroup, MailboxListItem } from "../src/mailbox/types";
 import {
@@ -7,6 +8,7 @@ import {
 } from "../src/mailbox/preferences";
 
 const gmailMailbox = (id: string, emailAddress: string): MailboxListItem => ({
+  capabilities: getMailboxCapabilities({ provider: "gmail", role: null }),
   connectionStatus: "connected",
   directGrantRole: null,
   displayName: null,
@@ -15,8 +17,8 @@ const gmailMailbox = (id: string, emailAddress: string): MailboxListItem => ({
   divisionName: null,
   emailAddress,
   grantRole: null,
-  gmailAutoLabelEnabled: false,
-  gmailUsefulDetailsEnabled: false,
+  autoLabelEnabled: false,
+  usefulDetailsEnabled: false,
   groupId: "org_default",
   groupKind: "organization",
   groupName: "Default Team",
@@ -34,6 +36,7 @@ const managedMailbox = (
   organizationId: string,
   organizationName: string,
 ): MailboxListItem => ({
+  capabilities: getMailboxCapabilities({ provider: "managed", role: "manager" }),
   connectionStatus: "connected",
   directGrantRole: "manager",
   displayName: null,
@@ -42,8 +45,8 @@ const managedMailbox = (
   divisionName: organizationName,
   emailAddress,
   grantRole: "manager",
-  gmailAutoLabelEnabled: false,
-  gmailUsefulDetailsEnabled: false,
+  autoLabelEnabled: false,
+  usefulDetailsEnabled: false,
   groupId: organizationId,
   groupKind: "division",
   groupName: organizationName,

@@ -1,9 +1,11 @@
 "use client";
 
+import type { MailCommand } from "@quieter/mail/data-plane";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import {
+  applyBulkChangesInMailbox,
   archiveMessageInMailbox,
   archiveThreadInMailbox,
   deleteDraftInMailbox,
@@ -30,7 +32,7 @@ type LabelChangeSet = {
 
 type ThreadLabelUpdate = LabelChangeSet & { threadId: string };
 
-const BULK_ACTION_CONCURRENCY = 6;
+const BULK_ACTION_CONCURRENCY = 3;
 
 type MailboxActionHandlerArgs = {
   activeMailbox: MailboxCategory;
@@ -199,11 +201,26 @@ export const createMailboxActionHandlers = ({
       action(queryClient, mailboxId, activeMailbox, activeSearchQuery, threadId),
     );
 
-  const runBulkMailboxThreadAction = (threads: ThreadListEntry[], action: MailboxItemAction) =>
-    runBulkThreadAction(
-      threads.map((thread) => thread.threadId),
-      (threadId) => action(queryClient, mailboxId, activeMailbox, activeSearchQuery, threadId),
-    );
+  const runBulkMailboxCommand = async (threads: ThreadListEntry[], command: MailCommand) => {
+    const actionableThreads = threads.filter((thread) => !isThreadActionPending(thread.threadId));
+    if (actionableThreads.length === 0) return;
+    const threadIds = actionableThreads.map((thread) => thread.threadId);
+    setThreadActionsPending(threadIds, true);
+    try {
+      await applyBulkChangesInMailbox(
+        queryClient,
+        mailboxId,
+        actionableThreads.map((thread) => ({
+          messageIds: thread.messages.map((message) => message.id),
+          threadId: thread.threadId,
+        })),
+        command,
+      );
+      await refreshSearchResultsIfNeeded();
+    } finally {
+      setThreadActionsPending(threadIds, false);
+    }
+  };
 
   const deleteDraft = async (message: MessageListItem) => {
     const draftId = message.draftId;
@@ -248,7 +265,7 @@ export const createMailboxActionHandlers = ({
       runMailboxMessageAction(messageId, archiveMessageInMailbox),
     archiveThread: (threadId: string) => runMailboxThreadAction(threadId, archiveThreadInMailbox),
     archiveThreads: (threads: ThreadListEntry[]) =>
-      runBulkMailboxThreadAction(threads, archiveThreadInMailbox),
+      runBulkMailboxCommand(threads, { kind: "move", destination: "archive" }),
     deleteDraft,
     deleteDrafts,
     markMessageAsRead: (messageId: string) =>
@@ -262,11 +279,11 @@ export const createMailboxActionHandlers = ({
     markThreadAsSpam: (threadId: string) =>
       runMailboxThreadAction(threadId, markThreadAsSpamInMailbox),
     markThreadsAsRead: (threads: ThreadListEntry[]) =>
-      runBulkMailboxThreadAction(threads, markThreadAsReadInMailbox),
+      runBulkMailboxCommand(threads, { kind: "set-read", read: true }),
     markThreadsAsSpam: (threads: ThreadListEntry[]) =>
-      runBulkMailboxThreadAction(threads, markThreadAsSpamInMailbox),
+      runBulkMailboxCommand(threads, { kind: "move", destination: "spam" }),
     markThreadsAsUnread: (threads: ThreadListEntry[]) =>
-      runBulkMailboxThreadAction(threads, markThreadAsUnreadInMailbox),
+      runBulkMailboxCommand(threads, { kind: "set-read", read: false }),
     markThreadAsUnread: (threadId: string) =>
       runMailboxThreadAction(threadId, markThreadAsUnreadInMailbox),
     moveMessageToTrash: (messageId: string) =>
@@ -274,18 +291,20 @@ export const createMailboxActionHandlers = ({
     moveThreadToTrash: (threadId: string) =>
       runMailboxThreadAction(threadId, moveThreadToTrashInMailbox),
     moveThreadsToTrash: (threads: ThreadListEntry[]) =>
-      runBulkMailboxThreadAction(threads, moveThreadToTrashInMailbox),
+      runBulkMailboxCommand(threads, { kind: "move", destination: "trash" }),
     unmarkMessageAsSpam: (messageId: string) =>
       runMailboxMessageAction(messageId, unmarkMessageAsSpamInMailbox),
     unmarkThreadAsSpam: (threadId: string) =>
       runMailboxThreadAction(threadId, unmarkThreadAsSpamInMailbox),
     unmarkThreadsAsSpam: (threads: ThreadListEntry[]) =>
-      runBulkMailboxThreadAction(threads, unmarkThreadAsSpamInMailbox),
+      runBulkMailboxCommand(threads, { kind: "move", destination: "inbox" }),
     unsubscribeFromMessage: (messageId: string) =>
       runMessageAction(messageId, () => unsubscribeFromMessageMutation(messageId)),
     untrashMessage: (messageId: string) =>
       runMailboxMessageAction(messageId, untrashMessageInMailbox),
     untrashThread: (threadId: string) => runMailboxThreadAction(threadId, untrashThreadInMailbox),
+    untrashThreads: (threads: ThreadListEntry[]) =>
+      runBulkMailboxCommand(threads, { kind: "move", destination: "inbox" }),
     updateMessageLabels: (messageId: string, changes: LabelChangeSet) =>
       runMessageAction(messageId, () =>
         updateMessageLabelsInMailbox(

@@ -171,6 +171,7 @@ jobs:
       - name: Build without credentials
         env:
           SST_WRANGLER_PATH: ${{ github.workspace }}/review-build-worker.wrangler.jsonc
+          VITE_QUIETER_DEPLOYMENT_ENV: preview
         run: vp run -r build
 
       - name: Bundle Worker without credentials

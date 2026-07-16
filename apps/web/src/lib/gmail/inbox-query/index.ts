@@ -5,11 +5,11 @@ export {
   messagesQueryOptions,
   refreshCachedMailboxQueries,
   refreshLoadedMessagesPages,
-  refreshVisibleMailboxMessages,
   syncMessages,
 } from "./sync";
 
 export {
+  applyBulkChangesInMailbox,
   archiveMessageInMailbox,
   archiveThreadInMailbox,
   deleteDraftInMailbox,
