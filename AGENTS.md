@@ -113,6 +113,7 @@
 - `vp run db:push -- --force` is only for disposable local databases. Never use `db:push` against production.
 - Production migrations run automatically in `.github/workflows/sst-deploy.yml`; do not apply production migrations locally.
 - Keep migrations compatible with the currently running release. Use expand/contract deployments for renames, required columns, destructive changes, type rewrites, and large backfills. Use reviewed custom SQL with concurrent index creation for large indexes.
+- Mark migrations containing `CREATE INDEX CONCURRENTLY` with `-- quieter:no-transaction`. Keep every statement in those migrations safely retryable; the forward migration runner executes them under an advisory lock outside Drizzle's transaction and records them in the normal Drizzle history.
 - Do not hand-edit Drizzle migration snapshots unless repairing generated output.
 - Do not hand-edit `apps/web/src/routeTree.gen.ts`.
 - Database scripts use the Drizzle Kit programmatic SDK (`check`, `generate`, `push` from `drizzle-kit/cli`) via `packages/database/scripts/drizzle-kit.ts`. `migrate` is still CLI-only (`runKitMigrate` in the same file). See [Drizzle Kit SDK](https://github.com/drizzle-team/drizzle-orm/blob/v1.0.0-rc.4/drizzle-kit/SDK.md).

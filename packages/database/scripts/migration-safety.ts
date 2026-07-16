@@ -18,6 +18,19 @@ export const assertMigrationSqlIsDeploySafe = (sql: string, migrationName: strin
       `Migration ${migrationName} contains destructive SQL. Production deploys only allow expand-safe migrations; run contract migrations through a separately reviewed manual procedure.`,
     );
   }
+
+  const isNonTransactional = sql.includes("-- quieter:no-transaction");
+  const createsConcurrentIndex = /\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\b/i.test(sql);
+  if (isNonTransactional && !createsConcurrentIndex) {
+    throw new Error(
+      `Migration ${migrationName} opts out of transactions without creating a concurrent index. Reserve non-transactional migrations for reviewed PostgreSQL operations that cannot run in a transaction.`,
+    );
+  }
+  if (createsConcurrentIndex && !isNonTransactional) {
+    throw new Error(
+      `Migration ${migrationName} creates a concurrent index without the -- quieter:no-transaction marker.`,
+    );
+  }
 };
 
 export const assertMigrationFilesAreDeploySafe = () => {

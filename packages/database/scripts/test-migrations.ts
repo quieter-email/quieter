@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 import { assertLocalDatabaseUrl } from "./database-url";
 import { runKitMigrate } from "./drizzle-kit";
+import { runForwardMigrations } from "./run-forward-migrations";
 
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
 const migrationsDirectory = join(packageDirectory, "drizzle");
@@ -52,10 +53,18 @@ const assertMigrationHistory = async () => {
 
 try {
   await resetDatabase();
-  await runKitMigrate();
+  await runForwardMigrations({
+    databaseUrl,
+    migrationsDirectory,
+    packageDirectory,
+  });
   await assertMigrationHistory();
 
-  await runKitMigrate();
+  await runForwardMigrations({
+    databaseUrl,
+    migrationsDirectory,
+    packageDirectory,
+  });
   await assertMigrationHistory();
 
   await resetDatabase();
@@ -80,7 +89,11 @@ export default defineConfig({
   );
 
   await runKitMigrate(temporaryConfigPath);
-  await runKitMigrate();
+  await runForwardMigrations({
+    databaseUrl,
+    migrationsDirectory,
+    packageDirectory,
+  });
   await assertMigrationHistory();
 } finally {
   await sql.end();
