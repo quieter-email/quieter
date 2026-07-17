@@ -43,7 +43,7 @@ export const isValidSitePasswordToken = (token: string | undefined) => {
   return timingSafeEqualString(token, expectedToken);
 };
 
-export const hasValidAuthSessionToken = (
+export const hasValidAuthSessionToken = async (
   cookies: Record<string, string>,
   secret = serverEnv.BETTER_AUTH_SECRET,
 ) => {
@@ -58,7 +58,30 @@ export const hasValidAuthSessionToken = (
   const signature = signedToken.slice(separatorIndex + 1);
   const expectedSignature = createHmac("sha256", secret).update(token).digest("base64");
 
-  return timingSafeEqualString(signature, expectedSignature);
+  // Reject tampered cookies first
+  if (!timingSafeEqualString(signature, expectedSignature)) {
+    return false;
+  }
+
+  // Validate that the session is actually live in the database
+  try {
+    const { getSessionWithOrganization } = await import("@quieter/auth/session");
+    const headers = new Headers();
+    headers.set("cookie", formatSessionCookie(cookies));
+    const session = await getSessionWithOrganization(headers);
+    return !!session?.user && !!session?.session;
+  } catch {
+    return false;
+  }
+};
+
+const formatSessionCookie = (cookies: Record<string, string>) => {
+  const sessionCookie =
+    cookies["__Secure-better-auth.session_token"] ?? cookies["better-auth.session_token"];
+  const cookieName = cookies["__Secure-better-auth.session_token"]
+    ? "__Secure-better-auth.session_token"
+    : "better-auth.session_token";
+  return `${cookieName}=${sessionCookie}`;
 };
 
 const timingSafeEqualString = (actual: string, expected: string) => {

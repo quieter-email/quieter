@@ -6,7 +6,7 @@ import {
   type BillingSubscriptionStatus,
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt, or, sql } from "drizzle-orm";
 import { BILLING_PRODUCTS, billingProductIdSchema, type BillingProductId } from "./plans";
 
 export const BILLING_METADATA_PRODUCT = "quieterProduct";
@@ -86,16 +86,8 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
   }
 
   const now = new Date();
-  const [existingSubscription] = await db
-    .select({ id: billingSubscription.id })
-    .from(billingSubscription)
-    .where(
-      and(
-        eq(billingSubscription.provider, BILLING_PROVIDER),
-        eq(billingSubscription.providerSubscriptionId, subscription.id),
-      ),
-    )
-    .limit(1);
+  const providerModifiedAt = subscription.modifiedAt ? new Date(subscription.modifiedAt) : now;
+
   const values = {
     currentPeriodEnd: subscription.currentPeriodEnd,
     currentPeriodStart: subscription.currentPeriodStart,
@@ -108,23 +100,27 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
     providerCustomerId: subscription.customerId,
     providerProductId: subscription.productId,
     providerSubscriptionId: subscription.id,
+    providerModifiedAt,
     status: normalizeSubscriptionStatus(subscription.status),
     updatedAt: now,
     userId,
   };
 
-  if (existingSubscription) {
-    await db
-      .update(billingSubscription)
-      .set(values)
-      .where(eq(billingSubscription.id, existingSubscription.id));
-  } else {
-    await db.insert(billingSubscription).values({
+  await db
+    .insert(billingSubscription)
+    .values({
       ...values,
       createdAt: now,
       id: crypto.randomUUID(),
+    })
+    .onConflictDoUpdate({
+      target: [billingSubscription.provider, billingSubscription.providerSubscriptionId],
+      set: values,
+      where: or(
+        sql`${billingSubscription.providerModifiedAt} IS NULL`,
+        gt(sql`excluded."providerModifiedAt"`, billingSubscription.providerModifiedAt),
+      ),
     });
-  }
 
   return { synced: true };
 };

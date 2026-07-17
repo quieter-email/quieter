@@ -128,7 +128,7 @@ const sitePasswordMiddleware = createMiddleware().server(async ({ next, request 
   const cookies = parseCookieHeader(request.headers.get("cookie"));
   const sitePasswordCookie = cookies[sitePasswordCookieName];
   const hasValidSitePassword = isValidSitePasswordToken(sitePasswordCookie);
-  const hasValidSession = hasValidAuthSessionToken(cookies);
+  const hasValidSession = await hasValidAuthSessionToken(cookies);
 
   if (requestUrl.pathname === sitePasswordPagePath && (hasValidSitePassword || hasValidSession)) {
     return Response.redirect(getSafeReturnToUrl(requestUrl), 302);
