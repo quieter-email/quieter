@@ -1,0 +1,1 @@
+ALTER TABLE "billingSubscription" ADD COLUMN "providerModifiedAt" timestamp;
