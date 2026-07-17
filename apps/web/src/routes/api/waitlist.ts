@@ -1,4 +1,3 @@
-import { recordWaitlistSignup } from "@quieter/orpc/waitlist";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
@@ -35,6 +34,7 @@ export const Route = createFileRoute("/api/waitlist")({
           });
         }
 
+        const { recordWaitlistSignup } = await import("@quieter/orpc/waitlist");
         const signup = await recordWaitlistSignup(email.data);
 
         if (wantsJson)

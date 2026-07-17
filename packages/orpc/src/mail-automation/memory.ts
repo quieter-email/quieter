@@ -14,7 +14,6 @@ import {
 import { MAILBOX_LABELS } from "@quieter/gmail";
 import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { recordAndRefreshUserAiContext } from "../user-ai-context";
 
 const AUTOMATION_MEMORY_PROMPT_BUDGET = 900;
 const AUTO_LABEL_CORRECTION_PROMPT_BUDGET = 1_200;
@@ -339,30 +338,36 @@ export const recordMailAutoLabelFeedback = async (input: {
       ],
     });
   await refreshAutoLabelMemoryProfile(input.mailboxId);
-  void recordAndRefreshUserAiContext({
-    kind: "auto_label_feedback",
-    mailboxId: input.mailboxId,
-    metadata: {
-      addedLabels: addLabelIds
-        .map((labelId) => labelNames.get(labelId) ?? labelId)
-        .join(", ")
-        .slice(0, 600),
-      messageCount: providerMessageIds.length,
-      removedLabels: removeLabelIds
-        .map((labelId) => labelNames.get(labelId) ?? labelId)
-        .join(", ")
-        .slice(0, 600),
-      sources: Array.from(
-        new Set(providerMessageIds.map((providerMessageId) => resolveSource(providerMessageId))),
-      )
-        .filter(Boolean)
-        .join(", ")
-        .slice(0, 600),
-    },
-    userId: input.userId,
-  }).catch((error) => {
-    console.error("Could not refresh user AI context from auto-label feedback.", error);
-  });
+  void import("../user-ai-context")
+    .then(({ recordAndRefreshUserAiContext }) =>
+      recordAndRefreshUserAiContext({
+        kind: "auto_label_feedback",
+        mailboxId: input.mailboxId,
+        metadata: {
+          addedLabels: addLabelIds
+            .map((labelId) => labelNames.get(labelId) ?? labelId)
+            .join(", ")
+            .slice(0, 600),
+          messageCount: providerMessageIds.length,
+          removedLabels: removeLabelIds
+            .map((labelId) => labelNames.get(labelId) ?? labelId)
+            .join(", ")
+            .slice(0, 600),
+          sources: Array.from(
+            new Set(
+              providerMessageIds.map((providerMessageId) => resolveSource(providerMessageId)),
+            ),
+          )
+            .filter(Boolean)
+            .join(", ")
+            .slice(0, 600),
+        },
+        userId: input.userId,
+      }),
+    )
+    .catch((error) => {
+      console.error("Could not refresh user AI context from auto-label feedback.", error);
+    });
 };
 
 export const buildAutoLabelMemoryProfile = (

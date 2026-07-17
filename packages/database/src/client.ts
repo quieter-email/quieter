@@ -45,7 +45,7 @@ const createDatabaseClient = (databaseUrl = getDatabaseUrl()): DatabaseClient =>
   const sql = postgres(databaseUrl, {
     connect_timeout: 10,
     fetch_types: false,
-    max: 5,
+    max: hyperdrive ? 1 : 5,
     prepare: hyperdrive,
   });
   return drizzlePostgres({

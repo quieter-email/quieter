@@ -8,6 +8,7 @@ import { createCsrfMiddleware, createMiddleware, createStart } from "@tanstack/r
 import { withSecurityHeaders } from "~/lib/security-headers.server";
 import {
   hasSitePasswordConfigured,
+  hasValidAuthSessionToken,
   isSitePasswordGateEnabled,
   isValidSitePasswordToken,
   sitePasswordCookieName,
@@ -54,8 +55,11 @@ const abuseProtectionMiddleware = createMiddleware().server(async ({ next, reque
 
   const requestUrl = new URL(request.url);
   const clientAddress =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("cf-connecting-ip")?.trim() ||
     request.headers.get("x-real-ip")?.trim() ||
+    (process.env.NODE_ENV === "development"
+      ? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      : undefined) ||
     "unknown";
   const policy = getRateLimitPolicy(requestUrl.pathname);
   const key = `${policy.group}:${clientAddress}`;
@@ -124,8 +128,9 @@ const sitePasswordMiddleware = createMiddleware().server(async ({ next, request 
   const cookies = parseCookieHeader(request.headers.get("cookie"));
   const sitePasswordCookie = cookies[sitePasswordCookieName];
   const hasValidSitePassword = isValidSitePasswordToken(sitePasswordCookie);
+  const hasValidSession = hasValidAuthSessionToken(cookies);
 
-  if (requestUrl.pathname === sitePasswordPagePath && hasValidSitePassword) {
+  if (requestUrl.pathname === sitePasswordPagePath && (hasValidSitePassword || hasValidSession)) {
     return Response.redirect(getSafeReturnToUrl(requestUrl), 302);
   }
 
@@ -133,7 +138,7 @@ const sitePasswordMiddleware = createMiddleware().server(async ({ next, request 
     return next();
   }
 
-  if (hasValidSitePassword) {
+  if (hasValidSitePassword || hasValidSession) {
     return next();
   }
 
@@ -153,10 +158,10 @@ export const startInstance = createStart(() => ({
   requestMiddleware: [
     ...(isSentryEnabled ? [sentryGlobalRequestMiddleware] : []),
     securityHeadersMiddleware,
+    sitePasswordMiddleware,
     databaseMiddleware,
     abuseProtectionMiddleware,
     csrfMiddleware,
-    sitePasswordMiddleware,
   ],
 }));
 

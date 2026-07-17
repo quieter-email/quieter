@@ -1,4 +1,3 @@
-import { completeConnectorOAuth } from "@quieter/orpc/connectors";
 import { createFileRoute } from "@tanstack/react-router";
 
 const redirectWithStatus = (
@@ -24,6 +23,7 @@ export const Route = createFileRoute("/api/connectors/callback")({
         }
 
         try {
+          const { completeConnectorOAuth } = await import("@quieter/orpc/connectors");
           const result = await completeConnectorOAuth({
             code,
             headers: request.headers,

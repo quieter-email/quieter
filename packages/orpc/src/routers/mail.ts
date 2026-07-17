@@ -44,13 +44,6 @@ import {
 import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import { z } from "zod";
 import { saveGmailDraft, sendGmailMessage } from "../gmail-compose";
-import {
-  deleteSyncedGmailLabel,
-  saveGmailLabelDetails,
-  syncGmailLabels,
-  upsertSyncedGmailLabel,
-} from "../gmail-labels";
-import { getSenderSource, recordMailAutoLabelFeedback } from "../mail-automation/memory";
 import { assertUserOrganizationMember } from "../mail-domain/service";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
@@ -138,6 +131,7 @@ const recordLabelFeedback = async (input: {
   userId: string;
 }) => {
   try {
+    const { recordMailAutoLabelFeedback } = await import("../mail-automation/memory");
     await recordMailAutoLabelFeedback(input);
   } catch (error) {
     console.error("Could not record mail auto-label feedback.", error);
@@ -147,6 +141,7 @@ const recordLabelFeedback = async (input: {
 const GMAIL_LABEL_FEEDBACK_SOURCE_CONCURRENCY = 4;
 
 const listGmailLabelFeedbackSources = async (accessToken: string, messageIds: string[]) => {
+  const { getSenderSource } = await import("../mail-automation/memory");
   const uniqueMessageIds = Array.from(new Set(messageIds));
   const entries: Array<readonly [string, string | null]> = [];
 
@@ -498,6 +493,7 @@ export const mailRouter = {
       }
 
       return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
+        const { syncGmailLabels } = await import("../gmail-labels");
         const labels = await syncGmailLabels(
           input.mailboxId,
           await listLabels(accessToken, signal),
@@ -536,6 +532,7 @@ export const mailRouter = {
         });
       }
       return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
+        const { upsertSyncedGmailLabel } = await import("../gmail-labels");
         const label = await upsertSyncedGmailLabel(
           input.mailboxId,
           await createLabel(accessToken, input.name, signal),
@@ -581,6 +578,7 @@ export const mailRouter = {
         });
       }
       return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
+        const { upsertSyncedGmailLabel } = await import("../gmail-labels");
         const label = await upsertSyncedGmailLabel(
           input.mailboxId,
           await updateLabel(accessToken, input.labelId, input.name, signal),
@@ -618,6 +616,7 @@ export const mailRouter = {
           userId: context.userId,
         });
       }
+      const { saveGmailLabelDetails } = await import("../gmail-labels");
       const updatedLabel = await saveGmailLabelDetails(input);
       if (!updatedLabel) {
         throw new ORPCError("NOT_FOUND", { message: "Label not found." });
@@ -646,6 +645,7 @@ export const mailRouter = {
       }
       return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
         const result = await deleteLabel(accessToken, input.labelId, signal);
+        const { deleteSyncedGmailLabel } = await import("../gmail-labels");
         await deleteSyncedGmailLabel(input.mailboxId, input.labelId);
         return result;
       });

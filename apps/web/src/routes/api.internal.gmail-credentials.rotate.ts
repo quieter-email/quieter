@@ -1,5 +1,4 @@
 import { serverEnv } from "@quieter/env/server";
-import { rotateLegacyGmailCredentials } from "@quieter/orpc/gmail-credential-rotation";
 import { createFileRoute } from "@tanstack/react-router";
 import { timingSafeEqual } from "node:crypto";
 
@@ -12,6 +11,8 @@ export const Route = createFileRoute("/api/internal/gmail-credentials/rotate")({
         }
 
         try {
+          const { rotateLegacyGmailCredentials } =
+            await import("@quieter/orpc/gmail-credential-rotation");
           return Response.json(await rotateLegacyGmailCredentials(), {
             headers: { "cache-control": "no-store" },
           });

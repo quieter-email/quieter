@@ -1,5 +1,5 @@
 import "@tanstack/react-start/server-only";
-import { getSessionWithOrganization } from "@quieter/auth";
+import { getSessionWithOrganization } from "@quieter/auth/session";
 
 type SessionUser = {
   email: string;

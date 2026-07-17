@@ -1,4 +1,3 @@
-import { completeGmailOAuth } from "@quieter/orpc/mailbox";
 import { createFileRoute } from "@tanstack/react-router";
 
 const redirectWithStatus = (
@@ -30,6 +29,7 @@ export const Route = createFileRoute("/api/gmail/callback")({
         }
 
         try {
+          const { completeGmailOAuth } = await import("@quieter/orpc/mailbox");
           const result = await completeGmailOAuth({
             code,
             headers: request.headers,

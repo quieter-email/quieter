@@ -6,7 +6,9 @@
     ".": "./src/index.ts",
     "./google-scopes": "./src/google-scopes.ts",
     "./organization-api-key": "./src/organization-api-key.ts",
+    "./polar-webhooks": "./src/polar-webhooks.ts",
     "./preview-personas": "./src/preview-personas.ts",
+    "./session": "./src/session.ts",
     "./terms-acceptance": "./src/terms-acceptance.ts",
     "./user-status": "./src/user-status.ts"
   },

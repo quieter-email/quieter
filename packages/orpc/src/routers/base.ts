@@ -1,5 +1,5 @@
 import { ORPCError, os } from "@orpc/server";
-import { getSessionWithOrganization } from "@quieter/auth";
+import { getSessionWithOrganization } from "@quieter/auth/session";
 import { isGmailRateLimitedError } from "@quieter/gmail";
 import { mailCategorySchema } from "@quieter/mail/data-plane";
 import { z } from "zod";

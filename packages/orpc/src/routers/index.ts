@@ -1,25 +1,32 @@
-import { aiRouter } from "./ai";
-import { authRouter } from "./auth";
-import { billingRouter } from "./billing";
-import { chatRouter } from "./chat";
-import { connectorsRouter } from "./connectors";
-import { mailRouter } from "./mail";
-import { mailDomainsRouter } from "./mail-domains";
-import { mailboxActionsRouter } from "./mailbox-actions";
-import { organizationRouter } from "./organization";
-import { organizationMailUsageRouter } from "./organization-mail-usage";
+import { lazy } from "@orpc/server";
 
 export const appRouter = {
-  ai: aiRouter,
-  auth: authRouter,
-  billing: billingRouter,
-  chat: chatRouter,
-  connectors: connectorsRouter,
-  mail: mailRouter,
-  mailDomains: mailDomainsRouter,
-  mailboxActions: mailboxActionsRouter,
-  organization: organizationRouter,
-  organizationMailUsage: organizationMailUsageRouter,
+  ai: lazy(() => import("./ai").then(({ aiRouter }) => ({ default: aiRouter }))),
+  auth: lazy(() => import("./auth").then(({ authRouter }) => ({ default: authRouter }))),
+  billing: lazy(() =>
+    import("./billing").then(({ billingRouter }) => ({ default: billingRouter })),
+  ),
+  chat: lazy(() => import("./chat").then(({ chatRouter }) => ({ default: chatRouter }))),
+  connectors: lazy(() =>
+    import("./connectors").then(({ connectorsRouter }) => ({ default: connectorsRouter })),
+  ),
+  mail: lazy(() => import("./mail").then(({ mailRouter }) => ({ default: mailRouter }))),
+  mailDomains: lazy(() =>
+    import("./mail-domains").then(({ mailDomainsRouter }) => ({ default: mailDomainsRouter })),
+  ),
+  mailboxActions: lazy(() =>
+    import("./mailbox-actions").then(({ mailboxActionsRouter }) => ({
+      default: mailboxActionsRouter,
+    })),
+  ),
+  organization: lazy(() =>
+    import("./organization").then(({ organizationRouter }) => ({ default: organizationRouter })),
+  ),
+  organizationMailUsage: lazy(() =>
+    import("./organization-mail-usage").then(({ organizationMailUsageRouter }) => ({
+      default: organizationMailUsageRouter,
+    })),
+  ),
 };
 
 export type AppRouter = typeof appRouter;
