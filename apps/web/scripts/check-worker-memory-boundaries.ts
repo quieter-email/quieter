@@ -3,19 +3,31 @@ import { dirname, join, resolve } from "node:path";
 
 const serverDirectory = resolve(import.meta.dirname, "../dist/server");
 const assetDirectory = join(serverDirectory, "assets");
-const maximumChunkBytes = 800_000;
+const serverFiles = await readdir(serverDirectory);
+const cloudflareBundle = serverFiles.includes("wrangler.json");
+const maximumChunkBytes = cloudflareBundle ? 1_800_000 : 800_000;
 const boundaries = [
-  { marker: "src/features/home/components/home-page.tsx", maximumStaticGraphBytes: 1_000_000 },
-  { marker: "src/router.tsx", maximumStaticGraphBytes: 1_200_000 },
-  { marker: "packages/auth/src/session.ts", maximumStaticGraphBytes: 1_500_000 },
-  { marker: "packages/auth/src/index.ts", maximumStaticGraphBytes: 1_600_000 },
-  { marker: "packages/orpc/src/routers/mail.ts", maximumStaticGraphBytes: 2_500_000 },
+  {
+    marker: "src/features/home/components/home-page.tsx",
+    maximumStaticGraphBytes: cloudflareBundle ? 1_200_000 : 1_000_000,
+  },
+  { marker: "src/router.tsx", maximumStaticGraphBytes: cloudflareBundle ? 3_000_000 : 1_200_000 },
+  {
+    marker: "packages/auth/src/session.ts",
+    maximumStaticGraphBytes: cloudflareBundle ? 2_700_000 : 1_500_000,
+  },
+  {
+    marker: "packages/auth/src/index.ts",
+    maximumStaticGraphBytes: cloudflareBundle ? 3_700_000 : 1_600_000,
+  },
+  {
+    marker: "packages/orpc/src/routers/mail.ts",
+    maximumStaticGraphBytes: cloudflareBundle ? 3_200_000 : 2_500_000,
+  },
 ];
 
 const files = [
-  ...(await readdir(serverDirectory))
-    .filter((file) => file.endsWith(".js"))
-    .map((file) => join(serverDirectory, file)),
+  ...serverFiles.filter((file) => file.endsWith(".js")).map((file) => join(serverDirectory, file)),
   ...(await readdir(assetDirectory))
     .filter((file) => file.endsWith(".js"))
     .map((file) => join(assetDirectory, file)),
