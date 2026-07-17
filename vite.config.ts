@@ -90,7 +90,18 @@ export default defineConfig({
         ? `vp fmt --write ${formatFiles.map((file) => JSON.stringify(file)).join(" ")}`
         : [];
     },
-    "**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}": "vp lint --fix",
+    "**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}": (files) => {
+      const lintFiles = files.filter(
+        (file) =>
+          !/(^|[\\/])sst\.config\.ts$/.test(file) &&
+          !/[\\/]sst-env\.d\.ts$/.test(file) &&
+          !/[\\/]routeTree\.gen\.ts$/.test(file) &&
+          !/[\\/](?:\.agents|\.scratch|\.sst|scripts)[\\/]/.test(file),
+      );
+      return lintFiles.length > 0
+        ? `vp lint --fix ${lintFiles.map((file) => JSON.stringify(file)).join(" ")}`
+        : [];
+    },
   },
   test: {
     exclude: [...configDefaults.exclude, ".scratch/**"],
