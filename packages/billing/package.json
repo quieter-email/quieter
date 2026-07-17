@@ -10,6 +10,7 @@
     "./polar": "./src/polar.ts",
     "./plans": "./src/plans.ts",
     "./ses-pricing": "./src/ses-pricing.ts",
+    "./subscription-sync": "./src/subscription-sync.ts",
     "./organization-mail-usage": "./src/organization-mail-usage.ts"
   },
   "scripts": {

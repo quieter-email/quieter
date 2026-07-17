@@ -1,11 +1,7 @@
 import { apiKey } from "@better-auth/api-key";
 import { passkey } from "@better-auth/passkey";
-import { polar, webhooks } from "@polar-sh/better-auth";
-import { Polar } from "@polar-sh/sdk";
-import { syncBillingSubscription } from "@quieter/billing";
 import { getOrganizationBillingEntitlement } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
-import { getPolarServer } from "@quieter/billing/polar";
 import { db } from "@quieter/database/client";
 import { tables } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
@@ -20,7 +16,6 @@ import {
   ownerAc,
 } from "better-auth/plugins/organization/access";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
-import { sendMagicLinkEmail, sendVerificationEmail } from "./email";
 import { GOOGLE_AUTH_SCOPES } from "./google-scopes";
 import {
   assertCanDeleteOrganization,
@@ -57,56 +52,18 @@ const trustedOrigins = [
     .map((origin) => origin.trim())
     .filter(Boolean) ?? []),
 ];
-const polarClient = serverEnv.POLAR_ACCESS_TOKEN
-  ? new Polar({
-      accessToken: serverEnv.POLAR_ACCESS_TOKEN,
-      server: getPolarServer(),
-    })
-  : null;
-const polarPlugin =
-  polarClient && serverEnv.POLAR_WEBHOOK_SECRET
-    ? polar({
-        client: polarClient,
-        use: [
-          webhooks({
-            onSubscriptionActive: async ({ data }) => {
-              await syncBillingSubscription(data);
-            },
-            onSubscriptionCanceled: async ({ data }) => {
-              await syncBillingSubscription(data);
-            },
-            onSubscriptionCreated: async ({ data }) => {
-              await syncBillingSubscription(data);
-            },
-            onSubscriptionRevoked: async ({ data }) => {
-              await syncBillingSubscription(data);
-            },
-            onSubscriptionUncanceled: async ({ data }) => {
-              await syncBillingSubscription(data);
-            },
-            onSubscriptionUpdated: async ({ data }) => {
-              await syncBillingSubscription(data);
-            },
-            secret: serverEnv.POLAR_WEBHOOK_SECRET,
-          }),
-        ],
-      })
-    : null;
 const organizationApiKeyPlugin = apiKey({
   configId: ORGANIZATION_API_KEY_CONFIG_ID,
   defaultPrefix: "quieter_",
   references: "organization",
 });
 
-export const getSessionWithOrganization = async (headers: Headers) => {
-  const session = await auth.api.getSession({ headers });
-  if (session?.user) {
-    await ensureUserOrganizationState(session.user);
-  }
-  return session;
-};
-
 export const auth = betterAuth({
+  advanced: {
+    ipAddress: {
+      ipAddressHeaders: ["cf-connecting-ip"],
+    },
+  },
   appName,
   baseURL,
   trustedOrigins,
@@ -226,6 +183,7 @@ export const auth = betterAuth({
   },
   emailVerification: {
     sendVerificationEmail: async ({ user, url }) => {
+      const { sendVerificationEmail } = await import("./email");
       await sendVerificationEmail({
         email: user.email,
         url,
@@ -264,6 +222,7 @@ export const auth = betterAuth({
     organizationApiKeyPlugin,
     magicLink({
       sendMagicLink: async ({ email, url }) => {
+        const { sendMagicLinkEmail } = await import("./email");
         await sendMagicLinkEmail({
           email,
           url,
@@ -271,7 +230,6 @@ export const auth = betterAuth({
       },
     }),
     lastLoginMethod(),
-    ...(polarPlugin ? [polarPlugin] : []),
     // Must be last so Set-Cookie from other plugins is forwarded on TanStack Start.
     tanstackStartCookies(),
   ] as const,

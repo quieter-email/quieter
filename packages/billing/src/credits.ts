@@ -6,7 +6,7 @@ import {
 } from "@quieter/database/schema";
 import { and, asc, eq, gt, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { BillingAccount } from "./entitlements";
-import { getPolarApiOrganizationId, ingestPolarEvents } from "./polar";
+import { getPolarApiOrganizationId } from "./polar-config";
 
 const BILLING_CREDIT_USAGE_EVENT_NAME = "credit-usage";
 const MICROCENTS_PER_CENT = 1_000_000;
@@ -177,6 +177,7 @@ export const recordBillingCreditUsage = async (input: {
     const polarEventReportedAt = new Date();
 
     try {
+      const { ingestPolarEvents } = await import("./polar");
       await ingestPolarEvents([
         createPolarCreditUsageEvent({
           account: input.account,
@@ -244,6 +245,7 @@ export const syncUnreportedBillingCreditUsage = async (input: { limit?: number }
   }
 
   const polarEventReportedAt = new Date();
+  const { ingestPolarEvents } = await import("./polar");
 
   await ingestPolarEvents(
     rows.map((row) =>

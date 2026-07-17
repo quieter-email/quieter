@@ -4,15 +4,7 @@ import { user } from "@quieter/database/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import type { MailboxListItem } from "../../mailbox/types";
-import { setGmailAutoLabeling } from "../../gmail-auto-label/settings";
 import { createGmailLiveSyncConnection } from "../../gmail-live-sync";
-import {
-  dismissGmailUsefulDetail,
-  listGmailThreadUsefulDetails,
-  listGmailUsefulDetails,
-  setGmailUsefulDetailFeedback,
-} from "../../gmail-useful-details/service";
-import { setGmailUsefulDetails } from "../../gmail-useful-details/settings";
 import {
   createManagedMailbox,
   getManagedMailboxDetails,
@@ -72,20 +64,23 @@ export const mailboxProcedures = {
     .handler(async ({ context, input }) => startGmailOAuth({ ...input, userId: context.userId })),
   setGmailAutoLabeling: protectedProcedure
     .input(z.object({ enabled: z.boolean(), mailboxId: mailboxIdSchema }))
-    .handler(async ({ context, input }) =>
-      setGmailAutoLabeling({ ...input, userId: context.userId }),
-    ),
+    .handler(async ({ context, input }) => {
+      const { setGmailAutoLabeling } = await import("../../gmail-auto-label/settings");
+      return setGmailAutoLabeling({ ...input, userId: context.userId });
+    }),
   setGmailUsefulDetails: protectedProcedure
     .input(z.object({ enabled: z.boolean(), mailboxId: mailboxIdSchema }))
-    .handler(async ({ context, input }) =>
-      setGmailUsefulDetails({ ...input, userId: context.userId }),
-    ),
+    .handler(async ({ context, input }) => {
+      const { setGmailUsefulDetails } = await import("../../gmail-useful-details/settings");
+      return setGmailUsefulDetails({ ...input, userId: context.userId });
+    }),
   listGmailUsefulDetails: protectedProcedure
     .route({ method: "GET" })
     .input(z.object({ mailboxId: mailboxIdSchema }))
-    .handler(async ({ context, input }) =>
-      listGmailUsefulDetails({ ...input, userId: context.userId }),
-    ),
+    .handler(async ({ context, input }) => {
+      const { listGmailUsefulDetails } = await import("../../gmail-useful-details/service");
+      return listGmailUsefulDetails({ ...input, userId: context.userId });
+    }),
   listGmailThreadUsefulDetails: protectedProcedure
     .route({ method: "GET" })
     .input(
@@ -94,14 +89,16 @@ export const mailboxProcedures = {
         mailboxId: mailboxIdSchema,
       }),
     )
-    .handler(async ({ context, input }) =>
-      listGmailThreadUsefulDetails({ ...input, userId: context.userId }),
-    ),
+    .handler(async ({ context, input }) => {
+      const { listGmailThreadUsefulDetails } = await import("../../gmail-useful-details/service");
+      return listGmailThreadUsefulDetails({ ...input, userId: context.userId });
+    }),
   dismissGmailUsefulDetail: protectedProcedure
     .input(z.object({ id: z.string().trim().min(1), mailboxId: mailboxIdSchema }))
-    .handler(async ({ context, input }) =>
-      dismissGmailUsefulDetail({ ...input, userId: context.userId }),
-    ),
+    .handler(async ({ context, input }) => {
+      const { dismissGmailUsefulDetail } = await import("../../gmail-useful-details/service");
+      return dismissGmailUsefulDetail({ ...input, userId: context.userId });
+    }),
   setGmailUsefulDetailFeedback: protectedProcedure
     .input(
       z.object({
@@ -110,9 +107,10 @@ export const mailboxProcedures = {
         mailboxId: mailboxIdSchema,
       }),
     )
-    .handler(async ({ context, input }) =>
-      setGmailUsefulDetailFeedback({ ...input, userId: context.userId }),
-    ),
+    .handler(async ({ context, input }) => {
+      const { setGmailUsefulDetailFeedback } = await import("../../gmail-useful-details/service");
+      return setGmailUsefulDetailFeedback({ ...input, userId: context.userId });
+    }),
   createLiveSyncConnection: protectedProcedure
     .input(z.object({ mailboxId: mailboxIdSchema }))
     .handler(async ({ context, input }) =>

@@ -1,9 +1,9 @@
+import type { LinearClient } from "@linear/sdk";
 import type {
   LinearIssueCreateInput,
   LinearIssueCreateResult,
   LinearIssueMetadataResult,
 } from "@quieter/ai/chat-agent";
-import { LinearClient } from "@linear/sdk";
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import { connectorCredential, type ConnectorProvider } from "@quieter/database/schema";
@@ -573,12 +573,15 @@ const normalizeGoogleCalendarEvent = (
   summary: event.summary,
 });
 
-const createLinearClient = (accessToken: string) => new LinearClient({ accessToken });
+const createLinearClient = async (accessToken: string) => {
+  const { LinearClient } = await import("@linear/sdk");
+  return new LinearClient({ accessToken });
+};
 
 export const getLinearMcpEndpoint = () => LINEAR_MCP_URL;
 
 export const getLinearIdentityFromAccessToken = async (accessToken: string) => {
-  const client = createLinearClient(accessToken);
+  const client = await createLinearClient(accessToken);
   const [viewer, organization] = await Promise.all([client.viewer, client.organization]);
   return {
     accountEmail: viewer.email,
@@ -838,7 +841,7 @@ const callLinearMcpTools = async (input: {
 const readLinearIssueMetadata = async (
   accessToken: string,
 ): Promise<LinearIssueMetadataSuccess> => {
-  const client = createLinearClient(accessToken);
+  const client = await createLinearClient(accessToken);
   const [teams, labels, states, projects, users] = await Promise.all([
     client.teams({ first: 100 }),
     client.issueLabels({ first: 200 }),
@@ -892,7 +895,7 @@ const createLinearIssue = async (
   accessToken: string,
   issue: LinearIssueCreateInput,
 ): Promise<LinearIssueCreateSuccess> => {
-  const client = createLinearClient(accessToken);
+  const client = await createLinearClient(accessToken);
   const issueInput: Parameters<LinearClient["createIssue"]>[0] = {
     ...(issue.assigneeId ? { assigneeId: issue.assigneeId } : {}),
     ...(issue.description ? { description: issue.description } : {}),

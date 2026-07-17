@@ -4,7 +4,7 @@ import type {
   MailboxProvider,
 } from "@quieter/database/schema";
 import { ORPCError } from "@orpc/server";
-import { auth } from "@quieter/auth";
+import { getSessionWithOrganization } from "@quieter/auth/session";
 import { db } from "@quieter/database/client";
 import {
   gmailCredential,
@@ -720,7 +720,7 @@ export const completeGmailOAuth = async (input: {
   headers: Headers;
   state: string;
 }) => {
-  const session = await auth.api.getSession({ headers: input.headers });
+  const session = await getSessionWithOrganization(input.headers);
   if (!session?.user || !session.session) {
     throw new ORPCError("UNAUTHORIZED", { message: "Sign in before connecting Gmail." });
   }

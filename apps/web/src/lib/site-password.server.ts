@@ -1,5 +1,5 @@
 import { serverEnv } from "@quieter/env/server";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 export const sitePasswordCookieName = "quieter_site_unlock";
 export const sitePasswordMaxAgeSeconds = 60 * 60 * 24 * 400;
@@ -41,6 +41,47 @@ export const isValidSitePasswordToken = (token: string | undefined) => {
   }
 
   return timingSafeEqualString(token, expectedToken);
+};
+
+export const hasValidAuthSessionToken = async (
+  cookies: Record<string, string>,
+  secret = serverEnv.BETTER_AUTH_SECRET,
+) => {
+  if (!secret) return false;
+
+  const signedToken =
+    cookies["__Secure-better-auth.session_token"] ?? cookies["better-auth.session_token"];
+  const separatorIndex = signedToken?.lastIndexOf(".") ?? -1;
+  if (!signedToken || separatorIndex <= 0) return false;
+
+  const token = signedToken.slice(0, separatorIndex);
+  const signature = signedToken.slice(separatorIndex + 1);
+  const expectedSignature = createHmac("sha256", secret).update(token).digest("base64");
+
+  // Reject tampered cookies first
+  if (!timingSafeEqualString(signature, expectedSignature)) {
+    return false;
+  }
+
+  // Validate that the session is actually live in the database
+  try {
+    const { getSessionWithOrganization } = await import("@quieter/auth/session");
+    const headers = new Headers();
+    headers.set("cookie", formatSessionCookie(cookies));
+    const session = await getSessionWithOrganization(headers);
+    return !!session?.user && !!session?.session;
+  } catch {
+    return false;
+  }
+};
+
+const formatSessionCookie = (cookies: Record<string, string>) => {
+  const sessionCookie =
+    cookies["__Secure-better-auth.session_token"] ?? cookies["better-auth.session_token"];
+  const cookieName = cookies["__Secure-better-auth.session_token"]
+    ? "__Secure-better-auth.session_token"
+    : "better-auth.session_token";
+  return `${cookieName}=${sessionCookie}`;
 };
 
 const timingSafeEqualString = (actual: string, expected: string) => {

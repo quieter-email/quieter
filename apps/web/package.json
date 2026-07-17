@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun --env-file=../../.env.local vp run @quieter/env#build && bun --env-file=../../.env.local vp build",
+    "build": "bun --env-file=../../.env.local vp run @quieter/env#build && bun --env-file=../../.env.local vp build && bun scripts/check-worker-memory-boundaries.ts",
     "dev": "bun --env-file=../../.env.local vp dev --port 3000",
     "preview": "bun --env-file=../../.env.local vp preview"
   },

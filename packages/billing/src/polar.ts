@@ -1,6 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { Polar } from "@polar-sh/sdk";
 import { serverEnv } from "@quieter/env/server";
+import { getPolarApiOrganizationId, getPolarServer, resolvePolarServer } from "./polar-config";
 
 let polarClient: Polar | null = null;
 
@@ -15,23 +16,6 @@ const getPolarAccessToken = () => {
 
   return accessToken;
 };
-
-export const resolvePolarServer = (input: {
-  deploymentEnvironment?: "local" | "preview" | "production";
-  nodeEnvironment: "development" | "production" | "test";
-  polarSandbox?: boolean;
-}) => {
-  if (input.deploymentEnvironment === "production") return "production";
-  if (input.polarSandbox !== undefined) return input.polarSandbox ? "sandbox" : "production";
-  return input.nodeEnvironment === "production" ? "production" : "sandbox";
-};
-
-export const getPolarServer = () =>
-  resolvePolarServer({
-    deploymentEnvironment: serverEnv.QUIETER_DEPLOYMENT_ENV,
-    nodeEnvironment: serverEnv.NODE_ENV,
-    polarSandbox: serverEnv.POLAR_SANDBOX,
-  });
 
 export const getPolarSandboxMode = () => getPolarServer() === "sandbox";
 
@@ -60,16 +44,4 @@ export const ingestPolarEvents = async (
   });
 };
 
-const POLAR_ORGANIZATION_ACCESS_TOKEN_PREFIX = "polar_oat_";
-
-const usesPolarOrganizationAccessToken = () =>
-  serverEnv.POLAR_ACCESS_TOKEN?.startsWith(POLAR_ORGANIZATION_ACCESS_TOKEN_PREFIX) ?? false;
-
-/** Polar API request scope; omit when the access token is already org-scoped. */
-export const getPolarApiOrganizationId = (): string | undefined => {
-  if (usesPolarOrganizationAccessToken()) {
-    return undefined;
-  }
-
-  return serverEnv.POLAR_ORGANIZATION_ID;
-};
+export { getPolarApiOrganizationId, getPolarServer, resolvePolarServer };

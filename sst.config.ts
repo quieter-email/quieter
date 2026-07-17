@@ -146,6 +146,24 @@ export default $config({
               date: "2026-07-11",
               flags: ["nodejs_compat"],
             },
+            transform: {
+              worker(args) {
+                args.observability = {
+                  enabled: true,
+                  logs: {
+                    enabled: true,
+                    headSamplingRate: 1,
+                    invocationLogs: true,
+                    persist: true,
+                  },
+                  traces: {
+                    enabled: true,
+                    headSamplingRate: 0.01,
+                    persist: true,
+                  },
+                };
+              },
+            },
           },
         },
       });

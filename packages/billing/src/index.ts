@@ -1,8 +1,4 @@
 import type { Subscription } from "@polar-sh/sdk/models/components/subscription.js";
-import type {
-  BillingPlan as StoredBillingPlan,
-  BillingSubscriptionStatus,
-} from "@quieter/database/schema";
 import { ORPCError } from "@orpc/server";
 import { ResourceNotFound } from "@polar-sh/sdk/models/errors/resourcenotfound.js";
 import { db } from "@quieter/database/client";
@@ -18,13 +14,14 @@ import {
   isActiveBillingStatus,
   subscriptionBelongsToOrganization,
 } from "./entitlements";
-import {
-  BILLING_PRODUCTS,
-  BILLING_PRODUCT_IDS,
-  billingProductIdSchema,
-  type BillingProductId,
-} from "./plans";
+import { BILLING_PRODUCT_IDS, type BillingProductId } from "./plans";
 import { getPolarApiOrganizationId, getPolarClient } from "./polar";
+import {
+  BILLING_METADATA_ORGANIZATION_ID,
+  BILLING_METADATA_PRODUCT,
+  BILLING_METADATA_USER_ID,
+  syncBillingSubscription,
+} from "./subscription-sync";
 
 export {
   AI_COST_RECOVERY_BASIS_POINTS,
@@ -32,11 +29,7 @@ export {
   convertProviderCostToCreditMicroCents,
 } from "./ai-pricing";
 
-const BILLING_PROVIDER = "polar" as const;
-const BILLING_METADATA_PRODUCT = "quieterProduct";
-const BILLING_METADATA_USER_ID = "quieterUserId";
-const BILLING_METADATA_ORGANIZATION_ID = "quieterOrganizationId";
-const BILLING_METADATA_LEGACY_PLAN = "quieterPlan";
+export { syncBillingSubscription };
 
 export const createBillingCheckoutMetadata = (input: {
   organizationId: string;
@@ -89,24 +82,6 @@ export const syncPolarCatalog = () => {
   }
 
   return products;
-};
-
-const getProductForProviderProductId = (providerProductId: string): BillingProductId | null => {
-  if (serverEnv.POLAR_PRODUCT_MANAGED_ID === providerProductId) return "managed";
-  if (serverEnv.POLAR_PRODUCT_PRO_ID === providerProductId) return "pro";
-  return null;
-};
-
-const getProductForPolarMetadataKey = (metadataKey: string | undefined) => {
-  if (!metadataKey) return null;
-
-  for (const [productId, product] of Object.entries(BILLING_PRODUCTS)) {
-    if (product.polarMetadataKey === metadataKey) {
-      return productId as BillingProductId;
-    }
-  }
-
-  return null;
 };
 
 const getBaseUrl = (headers: Headers) => {
@@ -286,25 +261,6 @@ export const createBillingPortal = async (input: {
   return { portalUrl: session.customerPortalUrl };
 };
 
-const normalizeSubscriptionStatus = (status: Subscription["status"]): BillingSubscriptionStatus => {
-  switch (status) {
-    case "active":
-      return "active";
-    case "canceled":
-      return "canceled";
-    case "past_due":
-      return "past_due";
-    case "trialing":
-      return "trialing";
-    case "incomplete":
-      return "pending";
-    case "incomplete_expired":
-      return "expired";
-    default:
-      return "past_due";
-  }
-};
-
 const serializeEntitlement = async (
   entitlement: Awaited<ReturnType<typeof getOrganizationBillingEntitlement>>,
 ) => {
@@ -361,95 +317,6 @@ export const getBillingOverview = async (input: { userId: string }) => {
   );
 
   return { teams };
-};
-
-const getSyncedBillingProduct = (subscription: Subscription) => {
-  const cachedProduct = getProductForProviderProductId(subscription.productId);
-  if (cachedProduct) return cachedProduct;
-
-  const providerProductMetadata = subscription.product.metadata[BILLING_METADATA_PRODUCT];
-  const providerProductMatch = getProductForPolarMetadataKey(
-    typeof providerProductMetadata === "string" ? providerProductMetadata : undefined,
-  );
-  if (providerProductMatch) return providerProductMatch;
-
-  const metadataProduct = billingProductIdSchema.safeParse(
-    subscription.metadata?.[BILLING_METADATA_PRODUCT],
-  );
-  if (metadataProduct.success) return metadataProduct.data;
-
-  const legacyPlan = subscription.metadata?.[BILLING_METADATA_LEGACY_PLAN];
-  if (legacyPlan === "managed" || legacyPlan === "pro") return legacyPlan;
-
-  return null;
-};
-
-export const syncBillingSubscription = async (subscription: Subscription) => {
-  const metadataUserId = subscription.metadata[BILLING_METADATA_USER_ID];
-  const userId = typeof metadataUserId === "string" ? metadataUserId.trim() : "";
-  const product = getSyncedBillingProduct(subscription);
-
-  if (!userId || !product) {
-    console.warn("Skipping billing subscription without Quieter metadata.", {
-      productId: subscription.productId,
-      subscriptionId: subscription.id,
-    });
-    return { synced: false };
-  }
-
-  const metadataOrganizationId = subscription.metadata[BILLING_METADATA_ORGANIZATION_ID];
-  const organizationId =
-    typeof metadataOrganizationId === "string" ? metadataOrganizationId.trim() || null : null;
-
-  if (!organizationId) {
-    console.warn("Skipping team subscription without a team.", {
-      subscriptionId: subscription.id,
-    });
-    return { synced: false };
-  }
-
-  const now = new Date();
-  const [existingSubscription] = await db
-    .select({ id: billingSubscription.id })
-    .from(billingSubscription)
-    .where(
-      and(
-        eq(billingSubscription.provider, BILLING_PROVIDER),
-        eq(billingSubscription.providerSubscriptionId, subscription.id),
-      ),
-    )
-    .limit(1);
-  const values = {
-    currentPeriodEnd: subscription.currentPeriodEnd,
-    currentPeriodStart: subscription.currentPeriodStart,
-    metadata: Object.fromEntries(
-      Object.entries(subscription.metadata).map(([key, value]) => [key, String(value)]),
-    ),
-    organizationId,
-    plan: product as StoredBillingPlan,
-    provider: BILLING_PROVIDER,
-    providerCustomerId: subscription.customerId,
-    providerProductId: subscription.productId,
-    providerSubscriptionId: subscription.id,
-    status: normalizeSubscriptionStatus(subscription.status),
-    updatedAt: now,
-    userId,
-  };
-
-  if (existingSubscription) {
-    await db
-      .update(billingSubscription)
-      .set(values)
-      .where(eq(billingSubscription.id, existingSubscription.id));
-  } else {
-    await db.insert(billingSubscription).values({
-      ...values,
-      createdAt: now,
-      id: crypto.randomUUID(),
-    });
-  }
-
-  return { synced: true };
 };
 
 export const syncBillingCheckout = async (input: { checkoutId: string; userId: string }) => {

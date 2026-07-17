@@ -1555,6 +1555,7 @@ export const billingSubscription = pgTable(
     currentPeriodStart: timestamp("currentPeriodStart").notNull(),
     currentPeriodEnd: timestamp("currentPeriodEnd").notNull(),
     metadata: jsonb("metadata").$type<Record<string, string>>(),
+    providerModifiedAt: timestamp("providerModifiedAt"),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
   },

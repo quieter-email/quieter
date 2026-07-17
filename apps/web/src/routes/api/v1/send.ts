@@ -1,11 +1,4 @@
-import { organizationApiKeyApi } from "@quieter/auth";
 import { MAX_SEND_PAYLOAD_BYTES } from "@quieter/mail/send";
-import {
-  sendOrganizationMailMessage,
-  ORGANIZATION_API_KEY_CONFIG_ID,
-  sendMessageInputSchema,
-  OrganizationMailSendError,
-} from "@quieter/orpc/organization-mail";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
@@ -19,9 +12,13 @@ export const Route = createFileRoute("/api/v1/send")({
           return Response.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        const [{ organizationApiKeyApi }, organizationMail] = await Promise.all([
+          import("@quieter/auth"),
+          import("@quieter/orpc/organization-mail"),
+        ]);
         const verifiedApiKey = await organizationApiKeyApi.verifyApiKey({
           body: {
-            configId: ORGANIZATION_API_KEY_CONFIG_ID,
+            configId: organizationMail.ORGANIZATION_API_KEY_CONFIG_ID,
             key: apiKey,
           },
         });
@@ -29,7 +26,7 @@ export const Route = createFileRoute("/api/v1/send")({
         if (
           !verifiedApiKey.valid ||
           !verifiedApiKey.key ||
-          verifiedApiKey.key.configId !== ORGANIZATION_API_KEY_CONFIG_ID
+          verifiedApiKey.key.configId !== organizationMail.ORGANIZATION_API_KEY_CONFIG_ID
         ) {
           return Response.json({ error: "Unauthorized" }, { status: 401 });
         }
@@ -49,7 +46,7 @@ export const Route = createFileRoute("/api/v1/send")({
           );
         }
 
-        const parsedMessage = sendMessageInputSchema.safeParse(
+        const parsedMessage = organizationMail.sendMessageInputSchema.safeParse(
           mergeIdempotencyHeader(json, request.headers),
         );
 
@@ -64,14 +61,14 @@ export const Route = createFileRoute("/api/v1/send")({
         }
 
         try {
-          const result = await sendOrganizationMailMessage({
+          const result = await organizationMail.sendOrganizationMailMessage({
             message: parsedMessage.data,
             organizationId: verifiedApiKey.key.referenceId,
           });
 
           return Response.json(result, { status: result.idempotent ? 200 : 201 });
         } catch (error) {
-          if (error instanceof OrganizationMailSendError) {
+          if (error instanceof organizationMail.OrganizationMailSendError) {
             return Response.json({ error: error.message }, { status: error.status });
           }
 

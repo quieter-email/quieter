@@ -11,7 +11,7 @@ import {
 import { getChatRunFailureMessage, terminalizeFailedChatRun } from "./chat/generation/failure";
 import { startChatRun } from "./chat/generation/lifecycle";
 
-const CHAT_RUN_POLL_INTERVAL_MS = 250;
+const CHAT_RUN_POLL_INTERVAL_MS = 1_000;
 const CHAT_RUN_STALE_HEARTBEAT_MS = 30_000;
 const CHAT_RUN_KEEPALIVE_INTERVAL_MS = 15_000;
 

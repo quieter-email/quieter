@@ -5,10 +5,37 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
-import { useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
-import { LandingMailboxDemo } from "./landing-mailbox-demo";
 import { WaitlistForm } from "./waitlist-form";
+
+const LandingMailboxDemo = lazy(() =>
+  import("./landing-mailbox-demo").then(({ LandingMailboxDemo }) => ({
+    default: LandingMailboxDemo,
+  })),
+);
+
+const LandingMailboxDemoClient = () => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) {
+    return (
+      <div className="h-[min(58dvh,520px)] w-full rounded-xl border border-white/10 bg-background-dark md:h-[min(82dvh,880px)] md:rounded-2xl" />
+    );
+  }
+
+  return (
+    <Suspense
+      fallback={
+        <div className="h-[min(58dvh,520px)] w-full rounded-xl border border-white/10 bg-background-dark md:h-[min(82dvh,880px)] md:rounded-2xl" />
+      }
+    >
+      <LandingMailboxDemo />
+    </Suspense>
+  );
+};
 
 const featureEnter = {
   initial: { opacity: 0, transform: "translateY(16px)", filter: "blur(6px)" },
@@ -666,7 +693,7 @@ export const HomePage = () => (
           initial={{ opacity: 0, transform: "translateY(20px)", filter: "blur(8px)" }}
           transition={{ delay: 0.8, duration: 0.8, ease: [0.23, 1, 0.32, 1] }}
         >
-          <LandingMailboxDemo />
+          <LandingMailboxDemoClient />
         </m.div>
       </div>
     </div>
