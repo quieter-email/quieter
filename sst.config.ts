@@ -17,6 +17,10 @@ export default $config({
       providers: { cloudflare: "6.15.0" },
       protect: input.stage === "production",
       removal: input.stage === "production" ? "retain" : "remove",
+      state: {
+        compress: true,
+        retention: 30,
+      },
     };
   },
   async run() {
