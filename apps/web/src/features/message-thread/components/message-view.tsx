@@ -864,6 +864,14 @@ export const MessageView = ({
       subject: message.subject,
       messages: [message],
     },
+    refetchInterval: (query) => {
+      const thread = query.state.data;
+      return thread &&
+        query.state.dataUpdateCount < 2 &&
+        getMessagesMissingLoadedBody(thread.messages).length > 0
+        ? 250
+        : false;
+    },
   });
   const { data: usefulDetails = [] } = useQuery(
     gmailThreadUsefulDetailsQueryOptions(mailboxId, message.threadId, mailboxProvider === "gmail"),

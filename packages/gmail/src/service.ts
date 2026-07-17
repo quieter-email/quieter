@@ -381,18 +381,19 @@ const hasUnreadLabel = (labelIds: string[] | undefined): boolean =>
 const hasDraftLabel = (labelIds: string[] | undefined): boolean =>
   !!labelIds?.includes(MAILBOX_LABELS.drafts);
 
+export const isGmailMessageArchived = (labelIds: readonly string[] | undefined): boolean =>
+  !!labelIds &&
+  ![
+    MAILBOX_LABELS.inbox,
+    MAILBOX_LABELS.sent,
+    MAILBOX_LABELS.drafts,
+    MAILBOX_LABELS.spam,
+    MAILBOX_LABELS.trash,
+  ].some((labelId) => labelIds.includes(labelId));
+
 const isMessageInMailbox = (mailbox: MailboxCategory, labelIds: string[] | undefined): boolean => {
   if (mailbox === "archive") {
-    return (
-      !!labelIds &&
-      ![
-        MAILBOX_LABELS.inbox,
-        MAILBOX_LABELS.sent,
-        MAILBOX_LABELS.drafts,
-        MAILBOX_LABELS.spam,
-        MAILBOX_LABELS.trash,
-      ].some((labelId) => labelIds.includes(labelId))
-    );
+    return isGmailMessageArchived(labelIds);
   }
   if (!labelIds?.includes(MAILBOX_LABELS[mailbox])) return false;
   if (mailbox === "trash") return true;
@@ -433,23 +434,29 @@ const compileGmailSearchQuery = (
     (filter) =>
       !filter.negated && filter.type === "is" && filter.value.toLowerCase() === "archived",
   );
+  const notArchived = parsed.filters.some(
+    (filter) => filter.negated && filter.type === "is" && filter.value.toLowerCase() === "archived",
+  );
   const providerQuery = serializeStructuredSearchState({
     ...parsed,
     filters: parsed.filters.filter(
       (filter) => !(filter.type === "is" && filter.value.toLowerCase() === "archived"),
     ),
   });
+  const archiveQuery = archived
+    ? appendGmailQueryTerms(providerQuery, [
+        "-in:inbox",
+        "-in:sent",
+        "-label:drafts",
+        "-in:spam",
+        "-in:trash",
+      ])
+    : providerQuery;
   return getListMessagesQuery(
     mailbox,
-    archived
-      ? appendGmailQueryTerms(providerQuery, [
-          "-in:inbox",
-          "-in:sent",
-          "-label:drafts",
-          "-in:spam",
-          "-in:trash",
-        ])
-      : providerQuery,
+    notArchived
+      ? appendGmailQueryTerms(archiveQuery, ["{in:inbox in:sent label:drafts in:spam in:trash}"])
+      : archiveQuery,
   );
 };
 
@@ -1299,6 +1306,15 @@ const getGmailMessagesMetadata = async (
 
   return messages;
 };
+
+export const getGmailMessageThreadAssociations = async (
+  accessToken: string,
+  messageIds: readonly string[],
+  signal?: AbortSignal,
+) =>
+  (await getGmailMessagesMetadata(accessToken, messageIds, signal)).flatMap((message) =>
+    message ? [{ id: message.id, threadId: message.threadId }] : [],
+  );
 
 const getGmailThreadsListMetadataBatch = async (
   accessToken: string,

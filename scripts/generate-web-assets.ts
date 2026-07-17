@@ -68,6 +68,7 @@ const environmentIcons = lightLogo
   ? [
       {
         file: "dev",
+        staticLogo: recolorLogo(logo, brand.devDark, brand.devLight),
         svg: buildSchemeIconSvg({
           dark: recolorLogo(logo, brand.devDark, brand.devLight),
           light: recolorLogo(lightLogo, brand.devDark, brand.devLight),
@@ -75,6 +76,7 @@ const environmentIcons = lightLogo
       },
       {
         file: "review",
+        staticLogo: recolorLogo(logo, brand.reviewDark, brand.reviewLight),
         svg: buildSchemeIconSvg({
           dark: recolorLogo(logo, brand.reviewDark, brand.reviewLight),
           light: recolorLogo(lightLogo, brand.reviewDark, brand.reviewLight),
@@ -109,7 +111,10 @@ for (const job of renderJobs) {
 
 for (const favicon of [
   { file: "favicon", svg: buildStaticIconSvg(logo, 1000) },
-  ...environmentIcons.map((icon) => ({ file: `favicon-${icon.file}`, svg: icon.svg })),
+  ...environmentIcons.map((icon) => ({
+    file: `favicon-${icon.file}`,
+    svg: buildStaticIconSvg(icon.staticLogo, 1000),
+  })),
 ]) {
   const favicon16 = resolve(tempDir, `${favicon.file}-16.png`);
   const favicon32 = resolve(tempDir, `${favicon.file}-32.png`);

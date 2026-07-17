@@ -119,7 +119,7 @@ export const getMailboxCapabilities = (input: {
   return {
     categories: ["inbox", "unread", "archive", "sent", "drafts", "trash", "spam"],
     canArchive: canRespond,
-    canDeletePermanently: canRespond,
+    canDeletePermanently: false,
     canManageLabels: input.provider === "gmail" || input.role === "manager",
     canMarkRead: canRespond,
     canMoveToInbox: canRespond,

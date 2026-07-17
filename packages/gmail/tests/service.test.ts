@@ -9,14 +9,18 @@ import {
   watchGmailMailbox,
 } from "../src/service";
 
-const createBatchResponse = (boundary: string, bodies: readonly unknown[]) => {
-  return [
-    ...bodies.map((body) =>
+const createIdentifiedBatchResponse = (
+  boundary: string,
+  parts: readonly { body: unknown; contentId: string; status?: number }[],
+) =>
+  [
+    ...parts.map(({ body, contentId, status = 200 }) =>
       [
         `--${boundary}`,
         "Content-Type: application/http",
+        `Content-ID: <response-${contentId}>`,
         "",
-        "HTTP/1.1 200 OK",
+        `HTTP/1.1 ${status} ${status === 200 ? "OK" : "Service Unavailable"}`,
         "Content-Type: application/json",
         "",
         JSON.stringify(body),
@@ -25,7 +29,6 @@ const createBatchResponse = (boundary: string, bodies: readonly unknown[]) => {
     `--${boundary}--`,
     "",
   ].join("\r\n");
-};
 
 const getRequestBody = (body: BodyInit | null | undefined) =>
   typeof body === "string" ? body : "";
@@ -192,9 +195,37 @@ describe("listMessagesWithDetails", () => {
     }
   });
 
+  test("compiles negated Archive to Gmail system-category membership", async () => {
+    const originalFetch = globalThis.fetch;
+    let requestedUrl = "";
+
+    setFetch(async (input) => {
+      const url = getRequestUrl(input);
+      if (url.includes("/profile")) {
+        return Response.json({ emailAddress: "user@example.com", historyId: "10" });
+      }
+      requestedUrl = url;
+      return Response.json({ threads: [], resultSizeEstimate: 0 });
+    });
+
+    try {
+      await listMessagesWithDetails("token", {
+        mailbox: "inbox",
+        query: "-is:archived from:alex@example.com",
+      });
+      const query = new URL(requestedUrl).searchParams.get("q");
+
+      expect(query).toContain("{in:inbox in:sent label:drafts in:spam in:trash}");
+      expect(query).not.toContain("is:archived");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test("filters spam and trash out of unread mailbox details", async () => {
     const originalFetch = globalThis.fetch;
     const calls: string[] = [];
+    let threadBatchCalls = 0;
 
     setFetch(async (input, init) => {
       const url = getRequestUrl(input);
@@ -213,43 +244,69 @@ describe("listMessagesWithDetails", () => {
       }
 
       if (body.includes("/gmail/v1/users/me/threads/")) {
+        threadBatchCalls += 1;
+        if (threadBatchCalls > 1) {
+          return new Response(
+            createIdentifiedBatchResponse("thread_retry_boundary", [
+              {
+                contentId: "thread-0",
+                body: {
+                  id: "thread-trash",
+                  messages: [
+                    {
+                      id: "message-trash",
+                      threadId: "thread-trash",
+                      historyId: "10",
+                      labelIds: ["UNREAD", "TRASH"],
+                      payload: { headers: [{ name: "Subject", value: "Trash" }] },
+                    },
+                  ],
+                },
+              },
+            ]),
+            {
+              headers: {
+                "content-type": "multipart/mixed; boundary=thread_retry_boundary",
+              },
+            },
+          );
+        }
         return new Response(
-          createBatchResponse("thread_boundary", [
+          createIdentifiedBatchResponse("thread_boundary", [
             {
-              id: "thread-spam",
-              messages: [
-                {
-                  id: "message-spam",
-                  threadId: "thread-spam",
-                  historyId: "10",
-                  labelIds: ["UNREAD", "SPAM"],
-                  payload: { headers: [{ name: "Subject", value: "Spam" }] },
-                },
-              ],
+              contentId: "thread-2",
+              body: {
+                id: "thread-active",
+                messages: [
+                  {
+                    id: "message-active",
+                    threadId: "thread-active",
+                    historyId: "10",
+                    labelIds: ["UNREAD"],
+                    payload: { headers: [{ name: "Subject", value: "Active" }] },
+                  },
+                ],
+              },
             },
             {
-              id: "thread-trash",
-              messages: [
-                {
-                  id: "message-trash",
-                  threadId: "thread-trash",
-                  historyId: "10",
-                  labelIds: ["UNREAD", "TRASH"],
-                  payload: { headers: [{ name: "Subject", value: "Trash" }] },
-                },
-              ],
+              contentId: "thread-0",
+              body: {
+                id: "thread-spam",
+                messages: [
+                  {
+                    id: "message-spam",
+                    threadId: "thread-spam",
+                    historyId: "10",
+                    labelIds: ["UNREAD", "SPAM"],
+                    payload: { headers: [{ name: "Subject", value: "Spam" }] },
+                  },
+                ],
+              },
             },
             {
-              id: "thread-active",
-              messages: [
-                {
-                  id: "message-active",
-                  threadId: "thread-active",
-                  historyId: "10",
-                  labelIds: ["UNREAD"],
-                  payload: { headers: [{ name: "Subject", value: "Active" }] },
-                },
-              ],
+              contentId: "thread-1",
+              body: { error: { message: "Temporary failure" } },
+              status: 503,
             },
           ]),
           {
@@ -267,7 +324,8 @@ describe("listMessagesWithDetails", () => {
       const result = await listMessagesWithDetails("token", { mailbox: "unread" });
 
       expect(result.messages.map((message) => message.id)).toEqual(["message-active"]);
-      expect(calls).toHaveLength(3);
+      expect(threadBatchCalls).toBe(2);
+      expect(calls).toHaveLength(4);
       expect(calls.some((call) => call.includes("/gmail/v1/users/me/messages/"))).toBe(false);
     } finally {
       globalThis.fetch = originalFetch;

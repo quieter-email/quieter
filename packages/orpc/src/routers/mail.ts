@@ -7,6 +7,7 @@ import {
   deleteLabel,
   extractListUnsubscribeTargets,
   getGmailMessageSender,
+  getGmailMessageThreadAssociations,
   getGmailMessageMetadata,
   getMailboxSyncDelta,
   getMessageAttachment,
@@ -199,12 +200,20 @@ export const mailRouter = {
         targets: z
           .array(
             z.object({
-              messageIds: z.array(z.string().trim().min(1)).min(1),
+              messageIds: z.array(z.string().trim().min(1)).min(1).max(1000),
               threadId: z.string().trim().min(1),
             }),
           )
           .min(1)
-          .max(1000),
+          .max(1000)
+          .superRefine((targets, context) => {
+            if (targets.reduce((count, target) => count + target.messageIds.length, 0) > 1000) {
+              context.addIssue({
+                code: "custom",
+                message: "A mail command can include at most 1,000 messages.",
+              });
+            }
+          }),
         command: z.discriminatedUnion("kind", [
           z.object({ kind: z.literal("set-read"), read: z.boolean() }),
           z.object({
@@ -234,9 +243,30 @@ export const mailRouter = {
       }
 
       return await callGmail(context, input.mailboxId, async (accessToken, signal) => {
-        const messageIds = Array.from(
+        const requestedMessageIds = Array.from(
           new Set(input.targets.flatMap((target) => target.messageIds)),
         );
+        const associations = await getGmailMessageThreadAssociations(
+          accessToken,
+          requestedMessageIds,
+          signal,
+        );
+        const threadIdByMessageId = new Map(
+          associations.map((association) => [association.id, association.threadId]),
+        );
+        const validTargets = input.targets.filter((target) =>
+          target.messageIds.every(
+            (messageId) => threadIdByMessageId.get(messageId) === target.threadId,
+          ),
+        );
+        const messageIds = Array.from(new Set(validTargets.flatMap((target) => target.messageIds)));
+        const targetResults = input.targets.map((target) => ({
+          status: (validTargets.includes(target) ? "applied" : "failed") as "applied" | "failed",
+          threadId: target.threadId,
+        }));
+        if (messageIds.length === 0) {
+          return { targets: targetResults };
+        }
         if (input.command.kind === "delete-permanently") {
           throw new ORPCError("BAD_REQUEST", {
             message: "Permanent bulk deletion is unavailable.",
@@ -264,7 +294,12 @@ export const mailRouter = {
           for (const messageId of messageIds) {
             await untrashMessage(accessToken, messageId, signal);
           }
-          await batchModifyMessages(accessToken, messageIds, { addLabelIds: ["INBOX"] }, signal);
+          await batchModifyMessages(
+            accessToken,
+            messageIds,
+            { addLabelIds: ["INBOX"], removeLabelIds: ["SPAM"] },
+            signal,
+          );
         } else {
           await batchModifyMessages(
             accessToken,
@@ -276,10 +311,7 @@ export const mailRouter = {
           );
         }
         return {
-          targets: input.targets.map((target) => ({
-            status: "applied" as const,
-            threadId: target.threadId,
-          })),
+          targets: targetResults,
         };
       });
     }),

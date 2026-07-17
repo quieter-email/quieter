@@ -1,4 +1,9 @@
-import { GMAIL_UNREAD_LABEL, MAILBOX_LABELS, type MailboxCategory } from "@quieter/gmail";
+import {
+  GMAIL_UNREAD_LABEL,
+  isGmailMessageArchived,
+  MAILBOX_LABELS,
+  type MailboxCategory,
+} from "@quieter/gmail";
 
 export {
   MAILBOX_LABELS,
@@ -68,16 +73,7 @@ export const hasRenderableMessageBody = (message: {
 export const isMessageInMailbox = (message: { labelIds?: string[] }, mailbox: MailboxCategory) => {
   const labelIds = message.labelIds;
   if (mailbox === "archive") {
-    return (
-      !!labelIds &&
-      ![
-        MAILBOX_LABELS.inbox,
-        MAILBOX_LABELS.sent,
-        MAILBOX_LABELS.drafts,
-        MAILBOX_LABELS.spam,
-        MAILBOX_LABELS.trash,
-      ].some((labelId) => labelIds.includes(labelId))
-    );
+    return isGmailMessageArchived(labelIds);
   }
   if (!labelIds?.includes(MAILBOX_LABELS[mailbox])) {
     return false;

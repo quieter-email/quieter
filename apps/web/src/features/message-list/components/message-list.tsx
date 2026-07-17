@@ -232,6 +232,23 @@ export const MessageList = (props: MessageListProps) => {
   const scrollPaneKey = `${props.mailboxId}:${props.activeMailbox}:${props.searchQuery}`;
   const actionHotkeysEnabled =
     props.mailboxProvider !== "api" && !props.activeMessageId && props.activeMailbox !== "drafts";
+  const openFocusedThread = () => {
+    const thread = selection.focusedThread;
+    const isPending =
+      !!thread &&
+      (props.pendingActions.isMessageActionPending(thread.anchorMessage.id) ||
+        props.pendingActions.isThreadActionPending(thread.threadId));
+    if (
+      thread &&
+      selection.selectedThreadIds.size === 0 &&
+      thread.unreadCount > 0 &&
+      props.mailboxProvider !== "api" &&
+      !isPending
+    ) {
+      void props.mailboxActions.markThreadAsRead(thread.threadId).catch(() => {});
+    }
+    selection.openFocusedThread();
+  };
   const previousActiveMessageIdRef = useRef(props.activeMessageId);
 
   useLayoutEffect(() => {
@@ -299,7 +316,7 @@ export const MessageList = (props: MessageListProps) => {
         hotkey: "O",
         callback: (event) => {
           if (shouldIgnoreAppShortcut(event)) return;
-          selection.openFocusedThread();
+          openFocusedThread();
         },
         options: { enabled: threadedMessages.length > 0 },
       },
@@ -307,7 +324,7 @@ export const MessageList = (props: MessageListProps) => {
         hotkey: "Enter",
         callback: (event) => {
           if (shouldIgnoreAppShortcut(event)) return;
-          selection.openFocusedThread();
+          openFocusedThread();
         },
         options: { enabled: threadedMessages.length > 0 },
       },

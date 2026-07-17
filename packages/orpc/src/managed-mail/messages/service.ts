@@ -12,6 +12,7 @@ import { db } from "@quieter/database/client";
 import {
   mailbox,
   managedMailAttachment,
+  managedMailLabel,
   managedMailMessage,
   managedMailMessageLabel,
   type ManagedMailHeader,
@@ -43,7 +44,6 @@ import {
   assertOrganizationOwnsVerifiedSenderDomain,
   OrganizationMailSendError,
 } from "../../organization-mail-policy";
-import { inheritManagedThreadLabels } from "../labels/repository";
 import { createManagedSearchCondition } from "../search/compiler";
 import {
   createManagedMessageSearchText,
@@ -650,19 +650,24 @@ export const deleteManagedDraft = async (input: {
     userId: input.userId,
   });
 
-  await db
-    .delete(managedMailMessage)
-    .where(
-      and(
-        eq(managedMailMessage.mailboxId, input.mailboxId),
-        eq(managedMailMessage.providerMessageId, input.draftId),
-        eq(managedMailMessage.mailboxState, "draft"),
-      ),
-    );
-  await db
-    .update(mailbox)
-    .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
-    .where(eq(mailbox.id, input.mailboxId));
+  await db.transaction(async (tx) => {
+    const deleted = await tx
+      .delete(managedMailMessage)
+      .where(
+        and(
+          eq(managedMailMessage.mailboxId, input.mailboxId),
+          eq(managedMailMessage.providerMessageId, input.draftId),
+          eq(managedMailMessage.mailboxState, "draft"),
+        ),
+      )
+      .returning({ id: managedMailMessage.id });
+    if (deleted.length > 0) {
+      await tx
+        .update(mailbox)
+        .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
+        .where(eq(mailbox.id, input.mailboxId));
+    }
+  });
 
   return { deleted: true };
 };
@@ -694,19 +699,21 @@ export const setManagedMessageReadState = async (input: {
     throw new ORPCError("NOT_FOUND", { message: "Message not found." });
   }
 
-  await db
-    .update(managedMailMessage)
-    .set({ isRead: input.read, updatedAt: new Date() })
-    .where(
-      and(
-        eq(managedMailMessage.mailboxId, input.mailboxId),
-        eq(managedMailMessage.id, input.messageId),
-      ),
-    );
-  await db
-    .update(mailbox)
-    .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
-    .where(eq(mailbox.id, input.mailboxId));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(managedMailMessage)
+      .set({ isRead: input.read, updatedAt: new Date() })
+      .where(
+        and(
+          eq(managedMailMessage.mailboxId, input.mailboxId),
+          eq(managedMailMessage.id, input.messageId),
+        ),
+      );
+    await tx
+      .update(mailbox)
+      .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
+      .where(eq(mailbox.id, input.mailboxId));
+  });
   const customLabels = await db
     .select({ labelId: managedMailMessageLabel.labelId })
     .from(managedMailMessageLabel)
@@ -746,9 +753,34 @@ export const applyManagedMessageChanges = async (input: {
   }
 
   return await db.transaction(async (tx) => {
+    const records = await tx
+      .select({ id: managedMailMessage.id, threadId: managedMailMessage.threadId })
+      .from(managedMailMessage)
+      .where(
+        and(
+          eq(managedMailMessage.mailboxId, input.mailboxId),
+          inArray(managedMailMessage.id, messageIds),
+        ),
+      );
+    const threadIdByMessageId = new Map(records.map((record) => [record.id, record.threadId]));
+    const validTargets = input.targets.filter((target) =>
+      target.messageIds.every(
+        (messageId) => threadIdByMessageId.get(messageId) === target.threadId,
+      ),
+    );
+    const appliedMessageIds = Array.from(
+      new Set(validTargets.flatMap((target) => target.messageIds)),
+    );
+    const targets = input.targets.map((target) => ({
+      status: (validTargets.includes(target) ? "applied" : "failed") as "applied" | "failed",
+      threadId: target.threadId,
+    }));
+    if (appliedMessageIds.length === 0) {
+      return { revision: null, targets };
+    }
     const baseCondition = and(
       eq(managedMailMessage.mailboxId, input.mailboxId),
-      inArray(managedMailMessage.id, messageIds),
+      inArray(managedMailMessage.id, appliedMessageIds),
     );
 
     if (input.command.kind === "set-read") {
@@ -774,6 +806,58 @@ export const applyManagedMessageChanges = async (input: {
               : undefined,
           ),
         );
+    } else if (input.command.kind === "set-labels") {
+      const labelIds = Array.from(new Set([...input.command.addIds, ...input.command.removeIds]));
+      if (labelIds.length > 0) {
+        const labels = await tx
+          .select({ id: managedMailLabel.id })
+          .from(managedMailLabel)
+          .where(
+            and(
+              eq(managedMailLabel.mailboxId, input.mailboxId),
+              inArray(managedMailLabel.id, labelIds),
+            ),
+          );
+        if (labels.length !== labelIds.length) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "One or more labels are unavailable.",
+          });
+        }
+      }
+      if (input.command.removeIds.length > 0) {
+        await tx
+          .delete(managedMailMessageLabel)
+          .where(
+            and(
+              eq(managedMailMessageLabel.mailboxId, input.mailboxId),
+              inArray(managedMailMessageLabel.messageId, appliedMessageIds),
+              inArray(managedMailMessageLabel.labelId, input.command.removeIds),
+            ),
+          );
+      }
+      if (input.command.addIds.length > 0) {
+        await tx
+          .insert(managedMailMessageLabel)
+          .values(
+            appliedMessageIds.flatMap((messageId) =>
+              input.command.kind === "set-labels"
+                ? input.command.addIds.map((labelId) => ({
+                    assignedByUserId: input.userId,
+                    createdAt: new Date(),
+                    id: randomUUID(),
+                    labelId,
+                    mailboxId: input.mailboxId,
+                    messageId,
+                    ruleId: null,
+                    source: "manual" as const,
+                  }))
+                : [],
+            ),
+          )
+          .onConflictDoNothing({
+            target: [managedMailMessageLabel.messageId, managedMailMessageLabel.labelId],
+          });
+      }
     } else {
       throw new ORPCError("BAD_REQUEST", {
         message: "This bulk action is not supported for managed mailboxes.",
@@ -787,10 +871,7 @@ export const applyManagedMessageChanges = async (input: {
       .returning({ contentRevision: mailbox.contentRevision });
     return {
       revision: updatedMailbox?.contentRevision ?? null,
-      targets: input.targets.map((target) => ({
-        status: "applied" as const,
-        threadId: target.threadId,
-      })),
+      targets,
     };
   });
 };
@@ -822,19 +903,21 @@ export const setManagedThreadReadState = async (input: {
     throw new ORPCError("NOT_FOUND", { message: "Message thread not found." });
   }
 
-  await db
-    .update(managedMailMessage)
-    .set({ isRead: input.read, updatedAt: new Date() })
-    .where(
-      and(
-        eq(managedMailMessage.mailboxId, input.mailboxId),
-        eq(managedMailMessage.threadId, input.threadId),
-      ),
-    );
-  await db
-    .update(mailbox)
-    .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
-    .where(eq(mailbox.id, input.mailboxId));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(managedMailMessage)
+      .set({ isRead: input.read, updatedAt: new Date() })
+      .where(
+        and(
+          eq(managedMailMessage.mailboxId, input.mailboxId),
+          eq(managedMailMessage.threadId, input.threadId),
+        ),
+      );
+    await tx
+      .update(mailbox)
+      .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
+      .where(eq(mailbox.id, input.mailboxId));
+  });
   const customLabels = await db
     .select({
       labelId: managedMailMessageLabel.labelId,
@@ -896,19 +979,21 @@ export const setManagedMessageMailboxState = async (input: {
     throw new ORPCError("NOT_FOUND", { message: "Message not found." });
   }
 
-  await db
-    .update(managedMailMessage)
-    .set({ mailboxState: input.state, updatedAt: new Date() })
-    .where(
-      and(
-        eq(managedMailMessage.mailboxId, input.mailboxId),
-        eq(managedMailMessage.id, input.messageId),
-      ),
-    );
-  await db
-    .update(mailbox)
-    .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
-    .where(eq(mailbox.id, input.mailboxId));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(managedMailMessage)
+      .set({ mailboxState: input.state, updatedAt: new Date() })
+      .where(
+        and(
+          eq(managedMailMessage.mailboxId, input.mailboxId),
+          eq(managedMailMessage.id, input.messageId),
+        ),
+      );
+    await tx
+      .update(mailbox)
+      .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
+      .where(eq(mailbox.id, input.mailboxId));
+  });
   const customLabels = await db
     .select({ labelId: managedMailMessageLabel.labelId })
     .from(managedMailMessageLabel)
@@ -955,20 +1040,22 @@ export const setManagedThreadMailboxState = async (input: {
     throw new ORPCError("NOT_FOUND", { message: "Message thread not found." });
   }
 
-  await db
-    .update(managedMailMessage)
-    .set({ mailboxState: input.state, updatedAt: new Date() })
-    .where(
-      and(
-        eq(managedMailMessage.mailboxId, input.mailboxId),
-        eq(managedMailMessage.threadId, input.threadId),
-        stateCondition,
-      ),
-    );
-  await db
-    .update(mailbox)
-    .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
-    .where(eq(mailbox.id, input.mailboxId));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(managedMailMessage)
+      .set({ mailboxState: input.state, updatedAt: new Date() })
+      .where(
+        and(
+          eq(managedMailMessage.mailboxId, input.mailboxId),
+          eq(managedMailMessage.threadId, input.threadId),
+          stateCondition,
+        ),
+      );
+    await tx
+      .update(mailbox)
+      .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
+      .where(eq(mailbox.id, input.mailboxId));
+  });
   const customLabels = await db
     .select({
       labelId: managedMailMessageLabel.labelId,
@@ -1046,77 +1133,104 @@ export const recordOutboundManagedMessageForSender = async (input: {
 
   const id = randomUUID();
   const sentAt = input.sentAt ?? new Date();
-  const [inserted] = await db
-    .insert(managedMailMessage)
-    .values({
-      bcc: input.bcc?.join(", ") || null,
-      bccNormalized: normalizeManagedSearchValue(input.bcc?.join(", ")),
-      bodyHtml: input.bodyHtml ?? null,
-      bodyText: input.bodyText ?? null,
-      cc: input.cc?.join(", ") || null,
-      ccNormalized: normalizeManagedSearchValue(input.cc?.join(", ")),
-      createdAt: sentAt,
-      direction: "outbound",
-      from: input.sender,
-      fromNormalized: normalizeManagedSearchValue(input.sender),
-      headers: input.headers ?? [],
-      id,
-      inReplyTo: null,
-      isRead: true,
-      mailboxId: senderMailbox.id,
-      messageHeaderId: input.messageHeaderId ?? null,
-      providerMessageId: input.providerMessageId,
-      rawSizeBytes: input.rawSizeBytes ?? null,
-      references: null,
-      replyTo: input.replyTo?.join(", ") || null,
-      s3Bucket: null,
-      s3Key: null,
-      searchText: createManagedMessageSearchText(input),
-      sentAt,
-      snippet:
-        (input.bodyText ?? input.bodyHtml?.replaceAll(/<[^>]+>/g, " "))
-          ?.replaceAll(/\s+/g, " ")
-          .trim()
-          .slice(0, 240) || null,
-      subject: input.subject || null,
-      threadId: input.threadId ?? id,
-      to: input.to.join(", "),
-      toNormalized: normalizeManagedSearchValue(input.to.join(", ")),
-      updatedAt: sentAt,
-    })
-    .onConflictDoNothing({
-      target: [managedMailMessage.mailboxId, managedMailMessage.providerMessageId],
-    })
-    .returning({ id: managedMailMessage.id, threadId: managedMailMessage.threadId });
-
-  if (!inserted) return null;
-
-  if (input.attachments?.length) {
-    await db.insert(managedMailAttachment).values(
-      input.attachments.map((attachment) => ({
-        contentId: attachment.contentId ?? null,
+  return await db.transaction(async (tx) => {
+    const [inserted] = await tx
+      .insert(managedMailMessage)
+      .values({
+        bcc: input.bcc?.join(", ") || null,
+        bccNormalized: normalizeManagedSearchValue(input.bcc?.join(", ")),
+        bodyHtml: input.bodyHtml ?? null,
+        bodyText: input.bodyText ?? null,
+        cc: input.cc?.join(", ") || null,
+        ccNormalized: normalizeManagedSearchValue(input.cc?.join(", ")),
         createdAt: sentAt,
-        fileName: attachment.fileName,
-        id: randomUUID(),
-        inline: attachment.inline,
+        direction: "outbound",
+        from: input.sender,
+        fromNormalized: normalizeManagedSearchValue(input.sender),
+        headers: input.headers ?? [],
+        id,
+        inReplyTo: null,
+        isRead: true,
         mailboxId: senderMailbox.id,
-        messageId: inserted.id,
-        mimeType: attachment.mimeType,
-        normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
-        size: attachment.size,
-      })),
-    );
-  }
-  await inheritManagedThreadLabels({
-    mailboxId: senderMailbox.id,
-    messageId: inserted.id,
-    threadId: inserted.threadId,
+        messageHeaderId: input.messageHeaderId ?? null,
+        providerMessageId: input.providerMessageId,
+        rawSizeBytes: input.rawSizeBytes ?? null,
+        references: null,
+        replyTo: input.replyTo?.join(", ") || null,
+        s3Bucket: null,
+        s3Key: null,
+        searchText: createManagedMessageSearchText(input),
+        sentAt,
+        snippet:
+          (input.bodyText ?? input.bodyHtml?.replaceAll(/<[^>]+>/g, " "))
+            ?.replaceAll(/\s+/g, " ")
+            .trim()
+            .slice(0, 240) || null,
+        subject: input.subject || null,
+        threadId: input.threadId ?? id,
+        to: input.to.join(", "),
+        toNormalized: normalizeManagedSearchValue(input.to.join(", ")),
+        updatedAt: sentAt,
+      })
+      .onConflictDoNothing({
+        target: [managedMailMessage.mailboxId, managedMailMessage.providerMessageId],
+      })
+      .returning({ id: managedMailMessage.id, threadId: managedMailMessage.threadId });
+
+    if (!inserted) return null;
+
+    if (input.attachments?.length) {
+      await tx.insert(managedMailAttachment).values(
+        input.attachments.map((attachment) => ({
+          contentId: attachment.contentId ?? null,
+          createdAt: sentAt,
+          fileName: attachment.fileName,
+          id: randomUUID(),
+          inline: attachment.inline,
+          mailboxId: senderMailbox.id,
+          messageId: inserted.id,
+          mimeType: attachment.mimeType,
+          normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
+          size: attachment.size,
+        })),
+      );
+    }
+    const inheritedLabels = await tx
+      .selectDistinct({ labelId: managedMailMessageLabel.labelId })
+      .from(managedMailMessageLabel)
+      .innerJoin(managedMailMessage, eq(managedMailMessage.id, managedMailMessageLabel.messageId))
+      .where(
+        and(
+          eq(managedMailMessage.mailboxId, senderMailbox.id),
+          eq(managedMailMessage.threadId, inserted.threadId),
+          ne(managedMailMessage.id, inserted.id),
+        ),
+      );
+    if (inheritedLabels.length > 0) {
+      await tx
+        .insert(managedMailMessageLabel)
+        .values(
+          inheritedLabels.map(({ labelId }) => ({
+            assignedByUserId: null,
+            createdAt: sentAt,
+            id: randomUUID(),
+            labelId,
+            mailboxId: senderMailbox.id,
+            messageId: inserted.id,
+            ruleId: null,
+            source: "inherited" as const,
+          })),
+        )
+        .onConflictDoNothing({
+          target: [managedMailMessageLabel.messageId, managedMailMessageLabel.labelId],
+        });
+    }
+    await tx
+      .update(mailbox)
+      .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
+      .where(eq(mailbox.id, senderMailbox.id));
+    return inserted;
   });
-  await db
-    .update(mailbox)
-    .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
-    .where(eq(mailbox.id, senderMailbox.id));
-  return inserted;
 };
 
 export const sendManagedMailboxMessage = async (input: {

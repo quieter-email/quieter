@@ -100,11 +100,13 @@ const deleteManagedMailRecords = async (
     if (object) objects.set(`${object.provider}\0${object.bucket}\0${object.key}`, object);
   }
 
-  await db.delete(managedMailMessage).where(condition);
-  await db
-    .update(mailbox)
-    .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
-    .where(eq(mailbox.id, mailboxId));
+  await db.transaction(async (tx) => {
+    await tx.delete(managedMailMessage).where(condition);
+    await tx
+      .update(mailbox)
+      .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
+      .where(eq(mailbox.id, mailboxId));
+  });
   for (const object of objects.values()) {
     const [otherReference] = await db
       .select({ id: managedMailMessage.id })

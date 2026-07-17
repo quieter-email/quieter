@@ -272,28 +272,32 @@ export const updateManagedThreadLabels = async (input: {
     throw new ORPCError("NOT_FOUND", { message: "Message thread not found." });
   }
   const mailboxState = getMailboxStateFromLabelChanges(input);
-  if (mailboxState) {
-    await db
-      .update(managedMailMessage)
-      .set({ mailboxState, updatedAt: new Date() })
-      .where(
-        and(
-          eq(managedMailMessage.mailboxId, input.mailboxId),
-          eq(managedMailMessage.threadId, input.threadId),
-        ),
-      );
-  }
-  const updated = await updateManagedMessageLabelAssignments({
-    ...input,
-    addLabelIds: getCustomLabelIds(input.addLabelIds),
-    messageIds: messages.map((message) => message.id),
-    removeLabelIds: getCustomLabelIds(input.removeLabelIds),
-    source: "manual",
+  const updated = await db.transaction(async (tx) => {
+    if (mailboxState) {
+      await tx
+        .update(managedMailMessage)
+        .set({ mailboxState, updatedAt: new Date() })
+        .where(
+          and(
+            eq(managedMailMessage.mailboxId, input.mailboxId),
+            eq(managedMailMessage.threadId, input.threadId),
+          ),
+        );
+    }
+    const assignments = await updateManagedMessageLabelAssignments({
+      ...input,
+      addLabelIds: getCustomLabelIds(input.addLabelIds),
+      database: tx,
+      messageIds: messages.map((message) => message.id),
+      removeLabelIds: getCustomLabelIds(input.removeLabelIds),
+      source: "manual",
+    });
+    await tx
+      .update(mailbox)
+      .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
+      .where(eq(mailbox.id, input.mailboxId));
+    return assignments;
   });
-  await db
-    .update(mailbox)
-    .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
-    .where(eq(mailbox.id, input.mailboxId));
   const messagesById = new Map(messages.map((message) => [message.id, message]));
   return {
     messages: updated.map((message) => {
@@ -343,28 +347,32 @@ export const updateSingleManagedMessageLabels = async (input: {
     .limit(1);
   if (!message) throw new ORPCError("NOT_FOUND", { message: "Message not found." });
   const mailboxState = getMailboxStateFromLabelChanges(input);
-  if (mailboxState) {
-    await db
-      .update(managedMailMessage)
-      .set({ mailboxState, updatedAt: new Date() })
-      .where(
-        and(
-          eq(managedMailMessage.mailboxId, input.mailboxId),
-          eq(managedMailMessage.id, input.messageId),
-        ),
-      );
-  }
-  const [updated] = await updateManagedMessageLabelAssignments({
-    ...input,
-    addLabelIds: getCustomLabelIds(input.addLabelIds),
-    messageIds: [message.id],
-    removeLabelIds: getCustomLabelIds(input.removeLabelIds),
-    source: "manual",
+  const updated = await db.transaction(async (tx) => {
+    if (mailboxState) {
+      await tx
+        .update(managedMailMessage)
+        .set({ mailboxState, updatedAt: new Date() })
+        .where(
+          and(
+            eq(managedMailMessage.mailboxId, input.mailboxId),
+            eq(managedMailMessage.id, input.messageId),
+          ),
+        );
+    }
+    const [assignment] = await updateManagedMessageLabelAssignments({
+      ...input,
+      addLabelIds: getCustomLabelIds(input.addLabelIds),
+      database: tx,
+      messageIds: [message.id],
+      removeLabelIds: getCustomLabelIds(input.removeLabelIds),
+      source: "manual",
+    });
+    await tx
+      .update(mailbox)
+      .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
+      .where(eq(mailbox.id, input.mailboxId));
+    return assignment;
   });
-  await db
-    .update(mailbox)
-    .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
-    .where(eq(mailbox.id, input.mailboxId));
   return {
     ...updated,
     isUnread: !message.isRead,

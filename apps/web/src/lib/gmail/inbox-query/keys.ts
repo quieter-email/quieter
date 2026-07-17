@@ -14,16 +14,6 @@ export const getMessagesQueryKey = (
   searchQuery?: string | null,
 ) => ["messages", mailboxId, mailbox, normalizeSearchQuery(searchQuery) ?? ""] as const;
 
-export const mailKeys = {
-  all: ["mail"] as const,
-  badges: (mailboxId: string) => ["mail", "badges", mailboxId] as const,
-  labels: (mailboxId: string) => ["gmail-labels", mailboxId] as const,
-  sync: (mailboxId: string) => ["mail", "sync", mailboxId] as const,
-  thread: (mailboxId: string, threadId: string) =>
-    ["message-thread", 3, mailboxId, threadId] as const,
-  threads: getMessagesQueryKey,
-};
-
 export const getLiveSyncQueryKey = (
   mailboxId: string,
   mailbox: MailboxCategory,

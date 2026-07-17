@@ -77,7 +77,7 @@ export const runForwardMigrations = async (input: {
         const temporaryConfigPath = join(temporaryDirectory, "drizzle.config.ts");
         writeFileSync(
           temporaryConfigPath,
-          `export default { out: ${JSON.stringify(prefixDirectory)}, dialect: "postgresql", dbCredentials: { url: process.env.DATABASE_URL! } };\n`,
+          `export default { out: ${JSON.stringify(prefixDirectory)}, dialect: "postgresql", dbCredentials: { url: ${JSON.stringify(input.databaseUrl)} } };\n`,
         );
         await runKitMigrate(temporaryConfigPath);
       } finally {
