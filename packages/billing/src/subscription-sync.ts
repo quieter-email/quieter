@@ -6,7 +6,7 @@ import {
   type BillingSubscriptionStatus,
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
-import { and, eq, gt, or, sql } from "drizzle-orm";
+import { gt, or, sql } from "drizzle-orm";
 import { BILLING_PRODUCTS, billingProductIdSchema, type BillingProductId } from "./plans";
 
 export const BILLING_METADATA_PRODUCT = "quieterProduct";
