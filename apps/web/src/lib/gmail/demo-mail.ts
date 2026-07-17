@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { getMailboxCapabilities } from "@quieter/mail/data-plane";
 import type { ComposeDraftState } from "~/features/compose";
 import { parseStructuredSearchQuery } from "~/features/message-search/state/message-list-search-state";
 import { getMailboxesQueryKey } from "~/lib/mailboxes-query";
@@ -564,12 +565,13 @@ export const getDemoMailboxes = () => ({
       slug: "demo-team",
       mailboxes: [
         {
+          capabilities: getMailboxCapabilities({ provider: "gmail" }),
           connectionStatus: "connected" as const,
           displayName: "Demo Mailbox",
           emailAddress: DEMO_EMAIL_ADDRESS,
           grantRole: null,
-          gmailAutoLabelEnabled: false,
-          gmailUsefulDetailsEnabled: false,
+          autoLabelEnabled: false,
+          usefulDetailsEnabled: false,
           groupId: "demo-team",
           groupKind: "organization" as const,
           groupName: "Demo",
@@ -594,12 +596,13 @@ export const getLandingDemoMailboxes = () => ({
       slug: "landing-demo-team",
       mailboxes: [
         {
+          capabilities: getMailboxCapabilities({ provider: "gmail" }),
           connectionStatus: "connected" as const,
           displayName: "Demo Mailbox",
           emailAddress: DEMO_EMAIL_ADDRESS,
           grantRole: null,
-          gmailAutoLabelEnabled: false,
-          gmailUsefulDetailsEnabled: false,
+          autoLabelEnabled: false,
+          usefulDetailsEnabled: false,
           groupId: "landing-demo-team",
           groupKind: "organization" as const,
           groupName: "Demo",
@@ -869,6 +872,18 @@ export const createDemoMailboxActions = (
   },
   untrashThread: async (threadId: string) => {
     await updateDemoThreadLabels(queryClient, mailboxId, threadId, moveToInboxFromTrashChanges);
+  },
+  untrashThreads: async (threads: ThreadListEntry[]) => {
+    await Promise.all(
+      threads.map((thread) =>
+        updateDemoThreadLabels(
+          queryClient,
+          mailboxId,
+          thread.threadId,
+          moveToInboxFromTrashChanges,
+        ),
+      ),
+    );
   },
   updateMessageLabels: async (
     messageId: string,

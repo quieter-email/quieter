@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  Archive02Icon,
   Delete01Icon,
   Delete02Icon,
+  InboxIcon,
   Mail01Icon,
   MailOpen02Icon,
   Tag01Icon,
@@ -137,6 +139,30 @@ export const MessageList = (props: MessageListProps) => {
             },
           ]
         : [
+            ...(props.activeMailbox === "inbox" || props.activeMailbox === "unread"
+              ? [
+                  {
+                    icon: Archive02Icon,
+                    id: "archive-threads",
+                    label: "Archive",
+                    onSelect: async () => {
+                      await runBulkAction(props.mailboxActions.archiveThreads);
+                    },
+                  } satisfies MessageListBulkAction,
+                ]
+              : []),
+            ...(props.activeMailbox === "archive"
+              ? [
+                  {
+                    icon: InboxIcon,
+                    id: "move-threads-inbox",
+                    label: "Move to Inbox",
+                    onSelect: async () => {
+                      await runBulkAction(props.mailboxActions.untrashThreads);
+                    },
+                  } satisfies MessageListBulkAction,
+                ]
+              : []),
             {
               icon: MailOpen02Icon,
               id: "mark-threads-read",
@@ -206,6 +232,23 @@ export const MessageList = (props: MessageListProps) => {
   const scrollPaneKey = `${props.mailboxId}:${props.activeMailbox}:${props.searchQuery}`;
   const actionHotkeysEnabled =
     props.mailboxProvider !== "api" && !props.activeMessageId && props.activeMailbox !== "drafts";
+  const openFocusedThread = () => {
+    const thread = selection.focusedThread;
+    const isPending =
+      !!thread &&
+      (props.pendingActions.isMessageActionPending(thread.anchorMessage.id) ||
+        props.pendingActions.isThreadActionPending(thread.threadId));
+    if (
+      thread &&
+      selection.selectedThreadIds.size === 0 &&
+      thread.unreadCount > 0 &&
+      props.mailboxProvider !== "api" &&
+      !isPending
+    ) {
+      void props.mailboxActions.markThreadAsRead(thread.threadId).catch(() => {});
+    }
+    selection.openFocusedThread();
+  };
   const previousActiveMessageIdRef = useRef(props.activeMessageId);
 
   useLayoutEffect(() => {
@@ -273,7 +316,7 @@ export const MessageList = (props: MessageListProps) => {
         hotkey: "O",
         callback: (event) => {
           if (shouldIgnoreAppShortcut(event)) return;
-          selection.openFocusedThread();
+          openFocusedThread();
         },
         options: { enabled: threadedMessages.length > 0 },
       },
@@ -281,7 +324,7 @@ export const MessageList = (props: MessageListProps) => {
         hotkey: "Enter",
         callback: (event) => {
           if (shouldIgnoreAppShortcut(event)) return;
-          selection.openFocusedThread();
+          openFocusedThread();
         },
         options: { enabled: threadedMessages.length > 0 },
       },
@@ -305,6 +348,21 @@ export const MessageList = (props: MessageListProps) => {
           selection.clearSelection();
         },
         options: { enabled: threadedMessages.length > 0 || !!props.activeMessageId },
+      },
+      {
+        hotkey: "E",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          void runActionThreads(
+            props.mailboxActions.archiveThreads,
+            (threads) => `${formatConversationCount(threads.length)} archived.`,
+          );
+        },
+        options: {
+          enabled:
+            actionHotkeysEnabled &&
+            (props.activeMailbox === "inbox" || props.activeMailbox === "unread"),
+        },
       },
       {
         hotkey: "Shift+3",

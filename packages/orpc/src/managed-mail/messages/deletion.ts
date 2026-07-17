@@ -1,9 +1,9 @@
 import type { S3Client } from "@aws-sdk/client-s3";
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
-import { managedMailMessage } from "@quieter/database/schema";
+import { mailbox, managedMailMessage } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
-import { and, eq, or, type SQL } from "drizzle-orm";
+import { and, eq, or, sql, type SQL } from "drizzle-orm";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 
 let s3Client: S3Client | null = null;
@@ -83,6 +83,7 @@ const deleteRawMailObject = async (object: RawMailObjectReference) => {
 };
 
 const deleteManagedMailRecords = async (
+  mailboxId: string,
   records: Array<{
     id: string;
     rawObjectBucket: string | null;
@@ -99,7 +100,13 @@ const deleteManagedMailRecords = async (
     if (object) objects.set(`${object.provider}\0${object.bucket}\0${object.key}`, object);
   }
 
-  await db.delete(managedMailMessage).where(condition);
+  await db.transaction(async (tx) => {
+    await tx.delete(managedMailMessage).where(condition);
+    await tx
+      .update(mailbox)
+      .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
+      .where(eq(mailbox.id, mailboxId));
+  });
   for (const object of objects.values()) {
     const [otherReference] = await db
       .select({ id: managedMailMessage.id })
@@ -168,7 +175,7 @@ export const deleteManagedMessage = async (input: {
     throw new ORPCError("NOT_FOUND", { message: "Message not found." });
   }
 
-  await deleteManagedMailRecords(records, condition);
+  await deleteManagedMailRecords(input.mailboxId, records, condition);
   return { id: input.messageId, isUnread: false, labelIds: [] };
 };
 
@@ -201,7 +208,7 @@ export const deleteManagedThread = async (input: {
     throw new ORPCError("NOT_FOUND", { message: "Message thread not found." });
   }
 
-  await deleteManagedMailRecords(records, condition);
+  await deleteManagedMailRecords(input.mailboxId, records, condition);
   return {
     messages: records.map((record) => ({
       id: record.id,

@@ -1,7 +1,10 @@
+import { parseStructuredSearchQuery, serializeStructuredSearchState } from "@quieter/mail/search";
 import type { MailboxCategory } from "../gmail";
 
 export const normalizeSearchQuery = (searchQuery: string | null | undefined) => {
-  const normalized = searchQuery?.trim();
+  const normalized = serializeStructuredSearchState(
+    parseStructuredSearchQuery(searchQuery?.trim() ?? ""),
+  );
   return normalized && normalized.length > 0 ? normalized : undefined;
 };
 

@@ -9,8 +9,12 @@ const tempDir = resolve(webPublicDir, ".asset-tmp");
 
 const brand = {
   dark: "#1a1a1a",
+  devDark: "#8f3b16",
+  devLight: "#ffe7b8",
   light: "#f2f2f2",
   page: "#f7f4ee",
+  reviewDark: "#164e8b",
+  reviewLight: "#dcebff",
   themeDark: "#141414",
   themeLight: "#f7f4ee",
 };
@@ -60,6 +64,30 @@ await writeFile(
   resolve(webPublicDir, "icon.svg"),
   lightLogo ? buildSchemeIconSvg({ dark: logo, light: lightLogo }) : buildStaticIconSvg(logo, 1000),
 );
+const environmentIcons = lightLogo
+  ? [
+      {
+        file: "dev",
+        staticLogo: recolorLogo(logo, brand.devDark, brand.devLight),
+        svg: buildSchemeIconSvg({
+          dark: recolorLogo(logo, brand.devDark, brand.devLight),
+          light: recolorLogo(lightLogo, brand.devDark, brand.devLight),
+        }),
+      },
+      {
+        file: "review",
+        staticLogo: recolorLogo(logo, brand.reviewDark, brand.reviewLight),
+        svg: buildSchemeIconSvg({
+          dark: recolorLogo(logo, brand.reviewDark, brand.reviewLight),
+          light: recolorLogo(lightLogo, brand.reviewDark, brand.reviewLight),
+        }),
+      },
+    ]
+  : [];
+
+for (const icon of environmentIcons) {
+  await writeFile(resolve(webPublicDir, `icon-${icon.file}.svg`), icon.svg);
+}
 await writeFile(resolve(webPublicDir, "safari-pinned-tab.svg"), buildPinnedTabSvg(logo));
 await writeFile(
   resolve(webPublicDir, "site.webmanifest"),
@@ -81,16 +109,24 @@ for (const job of renderJobs) {
   renderSvg(svgPath, outputPath, job.size, job.height ?? job.size);
 }
 
-const favicon16 = resolve(tempDir, "favicon-16.png");
-const favicon32 = resolve(tempDir, "favicon-32.png");
-const faviconSvg = resolve(tempDir, "favicon.svg");
-await writeFile(faviconSvg, buildStaticIconSvg(logo, 1000));
-renderSvg(faviconSvg, favicon16, 16, 16);
-renderSvg(faviconSvg, favicon32, 32, 32);
-await writeFile(
-  resolve(webPublicDir, "favicon.ico"),
-  buildIco([await readFile(favicon16), await readFile(favicon32)], [16, 32]),
-);
+for (const favicon of [
+  { file: "favicon", svg: buildStaticIconSvg(logo, 1000) },
+  ...environmentIcons.map((icon) => ({
+    file: `favicon-${icon.file}`,
+    svg: buildStaticIconSvg(icon.staticLogo, 1000),
+  })),
+]) {
+  const favicon16 = resolve(tempDir, `${favicon.file}-16.png`);
+  const favicon32 = resolve(tempDir, `${favicon.file}-32.png`);
+  const faviconSvg = resolve(tempDir, `${favicon.file}.svg`);
+  await writeFile(faviconSvg, favicon.svg);
+  renderSvg(faviconSvg, favicon16, 16, 16);
+  renderSvg(faviconSvg, favicon32, 32, 32);
+  await writeFile(
+    resolve(webPublicDir, `${favicon.file}.ico`),
+    buildIco([await readFile(favicon16), await readFile(favicon32)], [16, 32]),
+  );
+}
 
 await rm(tempDir, { force: true, recursive: true });
 
@@ -106,7 +142,11 @@ if (combinationPath) {
 }
 
 console.log("  apps/web/public/favicon.ico");
+console.log("  apps/web/public/favicon-dev.ico");
+console.log("  apps/web/public/favicon-review.ico");
 console.log("  apps/web/public/icon.svg");
+console.log("  apps/web/public/icon-dev.svg");
+console.log("  apps/web/public/icon-review.svg");
 console.log("  apps/web/public/apple-touch-icon.png");
 console.log("  apps/web/public/icon-192.png");
 console.log("  apps/web/public/icon-512.png");
@@ -416,6 +456,21 @@ ${indent(logo.dark.content, 4)}
 `;
 }
 
+function recolorLogo(
+  logo: { content: string; foreground: string; viewBox: string },
+  dark: string,
+  light: string,
+) {
+  const recolor = (value: string) =>
+    value.replaceAll(brand.dark, dark).replaceAll(brand.light, light);
+
+  return {
+    content: recolor(logo.content),
+    foreground: recolor(logo.foreground),
+    viewBox: logo.viewBox,
+  };
+}
+
 function buildStaticIconSvg(logo: { content: string; viewBox: string }, size: number) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="${logo.viewBox}">
@@ -465,6 +520,7 @@ function buildManifest() {
       { purpose: "maskable", sizes: "512x512", src: "/icon-maskable-512.png", type: "image/png" },
     ],
     name: "quieter",
+    protocol_handlers: [{ protocol: "mailto", url: "/?compose=mailto&mailto=%s" }],
     short_name: "quieter",
     start_url: "/",
     theme_color: brand.themeLight,

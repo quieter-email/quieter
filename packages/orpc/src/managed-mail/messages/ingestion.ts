@@ -1,7 +1,7 @@
 import { db } from "@quieter/database/client";
 import { mailbox, managedMailAttachment, managedMailMessage } from "@quieter/database/schema";
 import { parseRawMailMessage, type ParsedRawMailMessage } from "@quieter/mail/raw-message";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { enqueueMailboxActionsForMessage } from "../../mailbox-actions/enqueue";
 import { processManagedMailAutomation } from "../automation";
@@ -154,6 +154,13 @@ export const recordInboundManagedMessage = async (input: {
             size: attachment.size,
           })),
         );
+      }
+
+      if (message) {
+        await tx
+          .update(mailbox)
+          .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
+          .where(eq(mailbox.id, targetMailbox.id));
       }
 
       return message;

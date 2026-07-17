@@ -1,5 +1,6 @@
 import type { IconSvgElement } from "@hugeicons/react";
 import {
+  Archive02Icon,
   Calendar01Icon,
   Calendar03Icon,
   Delete01Icon,
@@ -31,6 +32,12 @@ export const searchFilterOptions: ReadonlyArray<{
     hint: "is:read",
     icon: MailOpen02Icon,
     label: "Read",
+  },
+  {
+    filter: { type: "is", value: "archived" },
+    hint: "is:archived",
+    icon: Archive02Icon,
+    label: "Archived",
   },
   {
     filter: { type: "is", value: "inbound" },

@@ -3,9 +3,11 @@
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
+import { getThreadQueryKey, getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
 import type { MessageListProps } from "./message-list-types";
 import type { useMessageListSelection } from "./use-message-list-selection";
 import { MessageRow } from "./message-row";
@@ -85,11 +87,38 @@ export const MessageListScrollPane = ({
   selection,
   threadedMessages,
 }: MessageListScrollPaneProps) => {
+  const queryClient = useQueryClient();
+  const intentTimerRef = useRef<number | undefined>(undefined);
+  const intentThreadIdRef = useRef<string | null>(null);
   const flattenedMessages = list.messages.flatMap((page) => page.messages);
   const activeThreadId =
     flattenedMessages.find((message) => message.id === list.activeMessageId)?.threadId ?? null;
-  const isLoadingEmptyMessages =
-    threadedMessages.length === 0 && (list.isPending || list.isRefreshing);
+  const isLoadingEmptyMessages = threadedMessages.length === 0 && list.isPending;
+  const handleThreadIntent = useCallback(
+    (threadId: string | null) => {
+      if (intentTimerRef.current !== undefined) {
+        window.clearTimeout(intentTimerRef.current);
+        intentTimerRef.current = undefined;
+      }
+      intentThreadIdRef.current = threadId;
+      if (!threadId) return;
+      intentTimerRef.current = window.setTimeout(() => {
+        intentTimerRef.current = undefined;
+        if (intentThreadIdRef.current !== threadId) return;
+        const queryKey = getThreadQueryKey(list.mailboxId, threadId);
+        if (queryClient.isFetching({ queryKey, exact: true }) > 0) return;
+        void queryClient.prefetchQuery(getThreadWithDetailsOptions(list.mailboxId, threadId));
+      }, 200);
+    },
+    [list.mailboxId, queryClient],
+  );
+
+  useLayoutEffect(
+    () => () => {
+      if (intentTimerRef.current !== undefined) window.clearTimeout(intentTimerRef.current);
+    },
+    [],
+  );
 
   // Track when we first see each thread ID to identify new messages
   const seenTimestampsRef = useRef<Map<string, number> | null>(null);
@@ -123,13 +152,6 @@ export const MessageListScrollPane = ({
     overscan: MESSAGE_LIST_OVERSCAN,
   });
   const virtualItems = messageVirtualizer.getVirtualItems();
-  const visibleMessageIds = virtualItems.flatMap(
-    (virtualItem) =>
-      threadedMessages[virtualItem.index]?.messages.map((message) => message.id) ?? [],
-  );
-  const visibleMessageIdsKey = visibleMessageIds.join(":");
-  const visibleMessageIdsRef = useRef(visibleMessageIds);
-  visibleMessageIdsRef.current = visibleMessageIds;
   const hasMountedPrefetchRef = useRef(false);
 
   useLayoutEffect(() => {
@@ -152,10 +174,6 @@ export const MessageListScrollPane = ({
     selection.scrollRef,
     threadedMessages.length,
   ]);
-
-  useLayoutEffect(() => {
-    list.onVisibleMessageIdsChange?.(visibleMessageIdsRef.current);
-  }, [list.onVisibleMessageIdsChange, visibleMessageIdsKey]);
 
   useLayoutEffect(() => {
     const threadId = selection.keyboardFocusedThreadId;
@@ -249,6 +267,7 @@ export const MessageListScrollPane = ({
                   mailboxProvider={list.mailboxProvider}
                   offsetY={virtualItem.start}
                   onThreadFocus={selection.focusThread}
+                  onThreadIntent={handleThreadIntent}
                   onOpenDraft={list.onOpenDraft}
                   onThreadPress={selection.handleThreadPress}
                   onThreadSelectionPress={selection.handleThreadSelectionPress}

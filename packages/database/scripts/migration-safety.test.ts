@@ -119,6 +119,24 @@ describe("automated migration safety", () => {
     ).not.toThrow();
   });
 
+  test("requires concurrent indexes to use the non-transactional runner", () => {
+    expect(() =>
+      assertMigrationSqlIsDeploySafe(
+        'CREATE INDEX CONCURRENTLY "mailbox_idx" ON "mailbox" ("id");',
+        "concurrent_index",
+      ),
+    ).toThrow("quieter:no-transaction");
+  });
+
+  test("reserves non-transactional migrations for concurrent indexes", () => {
+    expect(() =>
+      assertMigrationSqlIsDeploySafe(
+        '-- quieter:no-transaction\nALTER TABLE "mailbox" ADD COLUMN "revision" bigint;',
+        "unnecessary_non_transactional",
+      ),
+    ).toThrow("opts out of transactions");
+  });
+
   test.each([
     'DROP TABLE "user";',
     "DROP SCHEMA public CASCADE;",

@@ -1,4 +1,5 @@
 import type { MailboxGrantRole } from "@quieter/database/schema";
+import type { MailboxCapabilities } from "@quieter/mail/data-plane";
 
 export type MailboxGroupMetadata = {
   groupId: string;
@@ -13,6 +14,7 @@ export type MailboxDivisionGrantSummary = {
 };
 
 export type MailboxListItem = MailboxGroupMetadata & {
+  capabilities: MailboxCapabilities;
   connectionStatus: "connected" | "needs_reconnect";
   directGrantRole: MailboxGrantRole | null;
   displayName: string | null;
@@ -21,8 +23,8 @@ export type MailboxListItem = MailboxGroupMetadata & {
   divisionName: string | null;
   emailAddress: string;
   grantRole: MailboxGrantRole | null;
-  gmailAutoLabelEnabled: boolean;
-  gmailUsefulDetailsEnabled: boolean;
+  autoLabelEnabled: boolean;
+  usefulDetailsEnabled: boolean;
   id: string;
   includeApiSentMessages: boolean;
   organizationId: string;

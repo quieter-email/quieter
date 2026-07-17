@@ -93,7 +93,14 @@ describe("web client environment", () => {
     const env = createWebClientEnv({});
 
     expect(env.VITE_PUBLIC_POSTHOG_HOST).toBe("https://eu.i.posthog.com");
+    expect(env.VITE_QUIETER_DEPLOYMENT_ENV).toBe("production");
     expect(env.VITE_QUIETER_PREVIEW_PERSONAS_ENABLED).toBe("false");
+  });
+
+  test("accepts the Review deployment environment", () => {
+    const env = createWebClientEnv({ VITE_QUIETER_DEPLOYMENT_ENV: "preview" });
+
+    expect(env.VITE_QUIETER_DEPLOYMENT_ENV).toBe("preview");
   });
 
   test("accepts preview personas flag", () => {

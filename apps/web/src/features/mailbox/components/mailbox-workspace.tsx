@@ -392,6 +392,14 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     { enabled: isWorkspaceReady && !!selectedMailboxId, ignoreInputs: true },
   );
   useHotkeySequence(
+    ["G", "A"],
+    (event) => {
+      if (shouldIgnoreAppShortcut(event)) return;
+      selectMailboxFromHotkey("archive");
+    },
+    { enabled: isWorkspaceReady && !!selectedMailboxId, ignoreInputs: true },
+  );
+  useHotkeySequence(
     ["G", "D"],
     (event) => {
       if (shouldIgnoreAppShortcut(event)) return;

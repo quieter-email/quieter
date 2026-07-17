@@ -13,10 +13,9 @@ import {
   syncMessages,
 } from "~/lib/gmail/inbox-query";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
-import { useGmailLiveSync } from "~/lib/gmail/use-gmail-live-sync";
+import { useMailboxLiveSync } from "~/lib/gmail/use-gmail-live-sync";
 import { getMailboxesQueryKey } from "~/lib/mailboxes-query";
 import { isMailboxScopeRepairRequiredError } from "~/lib/orpc-errors";
-import { useVisibleMessageRefresh } from "./use-visible-message-refresh";
 
 type UseMailboxMessagesOptions = {
   activeMailbox: MailboxCategory;
@@ -146,12 +145,10 @@ export const useMailboxMessages = ({
       isLiveSyncEnabled,
     ),
   );
-  useGmailLiveSync({
+  useMailboxLiveSync({
     enabled: isLiveSyncEnabled && mailboxProvider === "gmail",
-    mailbox: activeMailbox,
     mailboxId: selectedMailboxId ?? "",
     queryClient,
-    searchQuery: normalizedQuery,
   });
   const flattenedMessages = useMemo(() => messages.flatMap((page) => page.messages), [messages]);
   const cachedSelectedMessage =
@@ -217,14 +214,6 @@ export const useMailboxMessages = ({
     );
   }, [activeMailbox, normalizedQuery, queryClient, selectedMailboxId]);
 
-  const handleVisibleMessageIdsChange = useVisibleMessageRefresh({
-    activeMailbox,
-    messages,
-    queryClient,
-    searchQuery: normalizedQuery,
-    selectedMailboxId,
-  });
-
   const selectedMessage =
     cachedSelectedMessage ??
     selectedThreadData?.messages.find((message) => message.id === messageId) ??
@@ -232,8 +221,7 @@ export const useMailboxMessages = ({
 
   const isRefreshing =
     isManualRefreshing || isSyncFetching || (isRefetching && !isFetchingNextPage);
-  const isLoadingEmptyMessages =
-    !messages.some((page) => page.messages.length > 0) && (isPending || isRefreshing);
+  const isLoadingEmptyMessages = !hasLoadedMessages && isPending;
 
   const loadMoreMessages = useCallback(() => {
     if (!hasNextPage || isFetchingNextPage || isPending || isError) {
@@ -258,7 +246,6 @@ export const useMailboxMessages = ({
 
   return {
     flattenedMessages,
-    handleVisibleMessageIdsChange,
     hasMessagePages: !!messagesData?.pages.length,
     isLoadingEmptyMessages,
     isRefreshing,

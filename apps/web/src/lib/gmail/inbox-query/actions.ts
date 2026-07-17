@@ -1,3 +1,4 @@
+import type { MailCommand, MailMutationTarget } from "@quieter/mail/data-plane";
 import type { QueryClient } from "@tanstack/react-query";
 import { rpc } from "~/lib/orpc";
 import { getGmailUnreadCountsQueryKey } from "../../mailboxes-query";
@@ -47,6 +48,82 @@ type MessageActionArgs = {
   messageId: string;
   signal?: AbortSignal;
 };
+
+const mailboxMutationQueues = new Map<string, Promise<void>>();
+
+const enqueueMailboxMutation = async <T>(mailboxId: string, operation: () => Promise<T>) => {
+  const previous = mailboxMutationQueues.get(mailboxId) ?? Promise.resolve();
+  const current = previous.catch(() => {}).then(operation);
+  const settled = current.then(
+    () => undefined,
+    () => undefined,
+  );
+  mailboxMutationQueues.set(mailboxId, settled);
+
+  try {
+    return await current;
+  } finally {
+    if (mailboxMutationQueues.get(mailboxId) === settled) {
+      mailboxMutationQueues.delete(mailboxId);
+    }
+  }
+};
+
+const getOptimisticCommandUpdater = (command: MailCommand) => (message: MessageListItem) => {
+  if (command.kind === "set-read") {
+    return command.read ? markMessageReadLocally(message) : markMessageUnreadLocally(message);
+  }
+  if (command.kind === "set-labels") {
+    return applyMessageLabelChangesLocally(message, {
+      addLabelIds: command.addIds,
+      removeLabelIds: command.removeIds,
+    });
+  }
+  if (command.kind === "delete-permanently") return message;
+  if (command.destination === "archive") {
+    return applyMessageLabelChangesLocally(message, ARCHIVE_LABEL_CHANGES);
+  }
+  if (command.destination === "spam") {
+    return applyMessageLabelChangesLocally(message, MARK_AS_SPAM_LABEL_CHANGES);
+  }
+  if (command.destination === "trash") {
+    return applyMessageLabelChangesLocally(message, MOVE_TO_TRASH_LABEL_CHANGES);
+  }
+  return applyMessageLabelChangesLocally(message, {
+    addLabelIds: [MAILBOX_LABELS.inbox],
+    removeLabelIds: [MAILBOX_LABELS.archive, MAILBOX_LABELS.spam, MAILBOX_LABELS.trash],
+  });
+};
+
+export const applyBulkChangesInMailbox = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  targets: MailMutationTarget[],
+  command: MailCommand,
+) =>
+  await enqueueMailboxMutation(mailboxId, async () => {
+    const snapshots = snapshotMessagesQueries(queryClient, mailboxId);
+    const messageIds = new Set(targets.flatMap((target) => target.messageIds));
+    const updater = getOptimisticCommandUpdater(command);
+    const touchedQueryKeys = updateMessagesInCachedMailboxQueries(
+      queryClient,
+      mailboxId,
+      (message) => messageIds.has(message.id),
+      updater,
+    );
+    await persistQueryKeys(queryClient, touchedQueryKeys);
+
+    try {
+      return await rpc.mail.applyChanges({ command, mailboxId, targets });
+    } catch (error) {
+      restoreMessagesQueries(queryClient, snapshots);
+      await persistQueryKeys(
+        queryClient,
+        snapshots.map((snapshot) => snapshot.queryKey),
+      );
+      throw error;
+    }
+  });
 
 const MARK_AS_SPAM_LABEL_CHANGES = {
   addLabelIds: [MAILBOX_LABELS.spam],

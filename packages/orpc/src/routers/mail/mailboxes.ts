@@ -113,7 +113,7 @@ export const mailboxProcedures = {
     .handler(async ({ context, input }) =>
       setGmailUsefulDetailFeedback({ ...input, userId: context.userId }),
     ),
-  createGmailLiveSyncConnection: protectedProcedure
+  createLiveSyncConnection: protectedProcedure
     .input(z.object({ mailboxId: mailboxIdSchema }))
     .handler(async ({ context, input }) =>
       createGmailLiveSyncConnection({ ...input, userId: context.userId }),

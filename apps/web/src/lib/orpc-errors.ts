@@ -29,11 +29,11 @@ export const isMailboxScopeRepairRequiredError = (
 
 export const shouldRetryOrpcError = (failureCount: number, error: unknown) => {
   if (isMailboxScopeRepairRequiredError(error)) return false;
-  if (!error || typeof error !== "object") return failureCount < 3;
+  if (!error || typeof error !== "object") return failureCount < 1;
 
   const candidate = error as OrpcErrorLike;
   if (candidate.code === "NOT_FOUND") return false;
   if (typeof candidate.status === "number" && candidate.status < 500) return false;
 
-  return failureCount < 3;
+  return failureCount < 1;
 };

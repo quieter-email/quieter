@@ -1,4 +1,9 @@
-import { GMAIL_UNREAD_LABEL, MAILBOX_LABELS, type MailboxCategory } from "@quieter/gmail";
+import {
+  GMAIL_UNREAD_LABEL,
+  isGmailMessageArchived,
+  MAILBOX_LABELS,
+  type MailboxCategory,
+} from "@quieter/gmail";
 
 export {
   MAILBOX_LABELS,
@@ -11,7 +16,7 @@ export {
   type ThreadMessagesResult,
 } from "@quieter/gmail";
 
-export const GMAIL_QUERY_STALE_TIME_MS = 1000 * 60 * 2;
+export const GMAIL_QUERY_STALE_TIME_MS = 1000 * 30;
 export const GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS = 1000 * 60;
 
 const normalizeLabelIds = (labelIds: string[] | undefined): string[] | undefined => {
@@ -67,6 +72,9 @@ export const hasRenderableMessageBody = (message: {
 
 export const isMessageInMailbox = (message: { labelIds?: string[] }, mailbox: MailboxCategory) => {
   const labelIds = message.labelIds;
+  if (mailbox === "archive") {
+    return isGmailMessageArchived(labelIds);
+  }
   if (!labelIds?.includes(MAILBOX_LABELS[mailbox])) {
     return false;
   }

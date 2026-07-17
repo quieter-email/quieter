@@ -1,4 +1,5 @@
 import type { ComposeDraftAnchor } from "@quieter/mail/compose/schema";
+import type { MailCategory } from "@quieter/mail/data-plane";
 import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
 import {
   decodePartBody,
@@ -7,10 +8,12 @@ import {
   extractMessageContent,
   findRenderablePart,
 } from "@quieter/mail/message-content";
+import { parseStructuredSearchQuery, serializeStructuredSearchState } from "@quieter/mail/search";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
 import { z } from "zod";
 
 export const MAILBOX_LABELS = {
+  archive: "ARCHIVE",
   inbox: "INBOX",
   unread: "UNREAD",
   spam: "SPAM",
@@ -19,7 +22,7 @@ export const MAILBOX_LABELS = {
   drafts: "DRAFT",
 } as const;
 
-export type MailboxCategory = keyof typeof MAILBOX_LABELS;
+export type MailboxCategory = MailCategory;
 
 export const GMAIL_UNREAD_LABEL = MAILBOX_LABELS.unread;
 
@@ -138,6 +141,12 @@ const gmailWatchSchema = z.object({
 
 const listMessagesSchema = z.object({
   messages: z.array(z.object({ id: z.string(), threadId: z.string() })).default([]),
+  nextPageToken: z.string().optional(),
+  resultSizeEstimate: z.number().optional(),
+});
+
+const listThreadsSchema = z.object({
+  threads: z.array(z.object({ id: z.string(), historyId: z.string().optional() })).default([]),
   nextPageToken: z.string().optional(),
   resultSizeEstimate: z.number().optional(),
 });
@@ -313,10 +322,6 @@ export type MailboxSyncDelta = {
   requiresFullRefresh: boolean;
   updatedMessages: MessageListItem[];
 };
-export type MailboxMessagesRefreshResult = {
-  removedMessageIds: string[];
-  updatedMessages: MessageListItem[];
-};
 export type GmailAddedMessageHistoryPage = {
   hasMore: boolean;
   historyExpired: boolean;
@@ -354,8 +359,9 @@ const GMAIL_THREAD_PAYLOAD_METADATA_FIELDS =
 const GMAIL_MESSAGE_METADATA_FIELDS = `id,threadId,labelIds,snippet,historyId,internalDate,payload(${GMAIL_MESSAGE_PAYLOAD_METADATA_FIELDS})`;
 const GMAIL_THREAD_DETAIL_MESSAGE_FIELDS = `id,threadId,labelIds,snippet,historyId,internalDate,payload(${GMAIL_THREAD_PAYLOAD_METADATA_FIELDS})`;
 const GMAIL_THREAD_DETAIL_FIELDS = `id,snippet,messages(${GMAIL_THREAD_DETAIL_MESSAGE_FIELDS})`;
-const GMAIL_THREAD_LIST_METADATA_FIELDS = `id,messages(id,threadId,labelIds,payload(${GMAIL_MESSAGE_PAYLOAD_METADATA_FIELDS}))`;
+const GMAIL_THREAD_LIST_METADATA_FIELDS = `id,historyId,snippet,messages(id,threadId,labelIds,snippet,historyId,internalDate,payload(${GMAIL_MESSAGE_PAYLOAD_METADATA_FIELDS}))`;
 const GMAIL_MESSAGE_LIST_FIELDS = "messages(id,threadId),nextPageToken,resultSizeEstimate";
+const GMAIL_THREAD_LIST_FIELDS = "threads(id,historyId),nextPageToken,resultSizeEstimate";
 const GMAIL_DRAFT_LIST_FIELDS = "drafts(id,message(id,threadId)),nextPageToken,resultSizeEstimate";
 const GMAIL_LABEL_LIST_FIELDS = "labels(id,name,type,labelListVisibility,messageListVisibility)";
 const GMAIL_PROFILE_FIELDS = "emailAddress,historyId,messagesTotal,threadsTotal";
@@ -375,7 +381,20 @@ const hasUnreadLabel = (labelIds: string[] | undefined): boolean =>
 const hasDraftLabel = (labelIds: string[] | undefined): boolean =>
   !!labelIds?.includes(MAILBOX_LABELS.drafts);
 
+export const isGmailMessageArchived = (labelIds: readonly string[] | undefined): boolean =>
+  !!labelIds &&
+  ![
+    MAILBOX_LABELS.inbox,
+    MAILBOX_LABELS.sent,
+    MAILBOX_LABELS.drafts,
+    MAILBOX_LABELS.spam,
+    MAILBOX_LABELS.trash,
+  ].some((labelId) => labelIds.includes(labelId));
+
 const isMessageInMailbox = (mailbox: MailboxCategory, labelIds: string[] | undefined): boolean => {
+  if (mailbox === "archive") {
+    return isGmailMessageArchived(labelIds);
+  }
   if (!labelIds?.includes(MAILBOX_LABELS[mailbox])) return false;
   if (mailbox === "trash") return true;
   if (labelIds.includes(MAILBOX_LABELS.trash)) return false;
@@ -396,7 +415,50 @@ const appendGmailQueryTerms = (
 const getListMessagesQuery = (mailbox: MailboxCategory | undefined, query: string | undefined) =>
   mailbox === "unread"
     ? appendGmailQueryTerms(query, ["-in:spam", "-in:trash"])
-    : query?.trim() || undefined;
+    : mailbox === "archive"
+      ? appendGmailQueryTerms(query, [
+          "-in:inbox",
+          "-in:sent",
+          "-label:drafts",
+          "-in:spam",
+          "-in:trash",
+        ])
+      : query?.trim() || undefined;
+
+const compileGmailSearchQuery = (
+  mailbox: MailboxCategory | undefined,
+  query: string | undefined,
+) => {
+  const parsed = parseStructuredSearchQuery(query ?? "");
+  const archived = parsed.filters.some(
+    (filter) =>
+      !filter.negated && filter.type === "is" && filter.value.toLowerCase() === "archived",
+  );
+  const notArchived = parsed.filters.some(
+    (filter) => filter.negated && filter.type === "is" && filter.value.toLowerCase() === "archived",
+  );
+  const providerQuery = serializeStructuredSearchState({
+    ...parsed,
+    filters: parsed.filters.filter(
+      (filter) => !(filter.type === "is" && filter.value.toLowerCase() === "archived"),
+    ),
+  });
+  const archiveQuery = archived
+    ? appendGmailQueryTerms(providerQuery, [
+        "-in:inbox",
+        "-in:sent",
+        "-label:drafts",
+        "-in:spam",
+        "-in:trash",
+      ])
+    : providerQuery;
+  return getListMessagesQuery(
+    mailbox,
+    notArchived
+      ? appendGmailQueryTerms(archiveQuery, ["{in:inbox in:sent label:drafts in:spam in:trash}"])
+      : archiveQuery,
+  );
+};
 
 const isKnownGmailRateLimit = (details: {
   googleReason?: string;
@@ -601,6 +663,11 @@ const parseBatchResponseParts = (response: Response, text: string) => {
     .map((part) => {
       const normalizedPart = part.replace(/\r\n/g, "\n");
       const nestedResponseIndex = normalizedPart.indexOf("\n\n");
+      const outerHeaders =
+        nestedResponseIndex === -1 ? "" : normalizedPart.slice(0, nestedResponseIndex);
+      const contentId = outerHeaders
+        .match(/^content-id:\s*<?(?:response-)?([^>\s]+)>?$/im)?.[1]
+        ?.trim();
       const nestedResponse =
         nestedResponseIndex === -1 ? normalizedPart : normalizedPart.slice(nestedResponseIndex + 2);
 
@@ -622,6 +689,7 @@ const parseBatchResponseParts = (response: Response, text: string) => {
 
       return {
         body: responseBody,
+        contentId,
         status,
       };
     });
@@ -862,9 +930,39 @@ const listMessages = async (
       fields: GMAIL_MESSAGE_LIST_FIELDS,
       maxResults: options?.maxResults ?? 20,
       pageToken: options?.pageToken,
-      labelIds: options?.mailbox ? [MAILBOX_LABELS[options.mailbox]] : undefined,
+      labelIds:
+        options?.mailbox && options.mailbox !== "archive"
+          ? [MAILBOX_LABELS[options.mailbox]]
+          : undefined,
       includeSpamTrash: includesSpamTrash ? true : undefined,
-      q: getListMessagesQuery(options?.mailbox, options?.query),
+      q: compileGmailSearchQuery(options?.mailbox, options?.query),
+    },
+    signal: options?.signal,
+  });
+};
+
+const listThreads = async (
+  accessToken: string,
+  options?: {
+    pageToken?: string;
+    maxResults?: number;
+    mailbox?: MailboxCategory;
+    query?: string;
+    signal?: AbortSignal;
+  },
+) => {
+  const includesSpamTrash = options?.mailbox === "spam" || options?.mailbox === "trash";
+  return await requestGmail(accessToken, "/gmail/v1/users/me/threads", listThreadsSchema, {
+    query: {
+      fields: GMAIL_THREAD_LIST_FIELDS,
+      maxResults: options?.maxResults ?? 15,
+      pageToken: options?.pageToken,
+      labelIds:
+        options?.mailbox && options.mailbox !== "archive"
+          ? [MAILBOX_LABELS[options.mailbox]]
+          : undefined,
+      includeSpamTrash: includesSpamTrash ? true : undefined,
+      q: compileGmailSearchQuery(options?.mailbox, options?.query),
     },
     signal: options?.signal,
   });
@@ -1028,26 +1126,11 @@ export const getGmailMessageSender = async (
   signal?: AbortSignal,
 ) => getHeader(await getGmailMessageMetadata(accessToken, messageId, signal), "From");
 
-const getGmailMessageMetadataOrNull = async (
-  accessToken: string,
-  messageId: string,
-  signal?: AbortSignal,
-) => {
-  try {
-    return await getGmailMessageMetadata(accessToken, messageId, signal);
-  } catch (error) {
-    if (isErrorWithStatus(error) && error.status === 404) {
-      return null;
-    }
-
-    throw error;
-  }
-};
-
 const getGmailMessagesMetadataBatch = async (
   accessToken: string,
   messageIds: readonly string[],
   signal?: AbortSignal,
+  attempt = 0,
 ) => {
   if (messageIds.length === 0) return [];
 
@@ -1089,12 +1172,25 @@ const getGmailMessagesMetadataBatch = async (
     throw new Error("Gmail batch response size did not match the requested message count.");
   }
 
-  return parts.map((part) => {
+  const partsById = new Map(
+    parts.map((part, index) => [part.contentId ?? `message-${index}`, part]),
+  );
+  const results: Array<GmailMessage | null> = [];
+  const retryIndexes: number[] = [];
+  for (const [index] of messageIds.entries()) {
+    const part = partsById.get(`message-${index}`);
+    if (!part) throw new Error("Gmail batch response omitted a requested message.");
     if (part.status === 404) {
-      return null;
+      results.push(null);
+      continue;
     }
 
     if (part.status < 200 || part.status >= 300) {
+      if ((part.status === 429 || part.status === 503) && attempt === 0 && !signal?.aborted) {
+        retryIndexes.push(index);
+        results.push(null);
+        continue;
+      }
       const error = new Error(
         part.body || `Gmail batch subrequest failed with status ${part.status}.`,
       ) as Error & { status: number };
@@ -1103,8 +1199,21 @@ const getGmailMessagesMetadataBatch = async (
     }
 
     const parsed = part.body.trim() ? JSON.parse(part.body) : {};
-    return gmailMessageSchema.parse(parsed);
-  });
+    results.push(gmailMessageSchema.parse(parsed));
+  }
+  if (retryIndexes.length > 0) {
+    await sleep(1000 + Math.floor(Math.random() * 100), signal);
+    const retried = await getGmailMessagesMetadataBatch(
+      accessToken,
+      retryIndexes.map((index) => messageIds[index]!),
+      signal,
+      attempt + 1,
+    );
+    retryIndexes.forEach((resultIndex, retryIndex) => {
+      results[resultIndex] = retried[retryIndex] ?? null;
+    });
+  }
+  return results;
 };
 
 export const watchGmailMailbox = async (
@@ -1192,22 +1301,26 @@ const getGmailMessagesMetadata = async (
   const messages: Array<GmailMessage | null> = [];
 
   for (const batchMessageIds of chunkArray(messageIds, GMAIL_BATCH_MESSAGE_CHUNK_SIZE)) {
-    try {
-      messages.push(...(await getGmailMessagesMetadataBatch(accessToken, batchMessageIds, signal)));
-    } catch {
-      for (const messageId of batchMessageIds) {
-        messages.push(await getGmailMessageMetadataOrNull(accessToken, messageId, signal));
-      }
-    }
+    messages.push(...(await getGmailMessagesMetadataBatch(accessToken, batchMessageIds, signal)));
   }
 
   return messages;
 };
 
+export const getGmailMessageThreadAssociations = async (
+  accessToken: string,
+  messageIds: readonly string[],
+  signal?: AbortSignal,
+) =>
+  (await getGmailMessagesMetadata(accessToken, messageIds, signal)).flatMap((message) =>
+    message ? [{ id: message.id, threadId: message.threadId }] : [],
+  );
+
 const getGmailThreadsListMetadataBatch = async (
   accessToken: string,
   threadIds: readonly string[],
   signal?: AbortSignal,
+  attempt = 0,
 ) => {
   if (threadIds.length === 0) return [];
 
@@ -1249,12 +1362,25 @@ const getGmailThreadsListMetadataBatch = async (
     throw new Error("Gmail batch response size did not match the requested thread count.");
   }
 
-  return parts.map((part) => {
+  const partsById = new Map(
+    parts.map((part, index) => [part.contentId ?? `thread-${index}`, part]),
+  );
+  const results: Array<z.infer<typeof gmailThreadSchema> | null> = [];
+  const retryIndexes: number[] = [];
+  for (const [index] of threadIds.entries()) {
+    const part = partsById.get(`thread-${index}`);
+    if (!part) throw new Error("Gmail batch response omitted a requested thread.");
     if (part.status === 404) {
-      return null;
+      results.push(null);
+      continue;
     }
 
     if (part.status < 200 || part.status >= 300) {
+      if ((part.status === 429 || part.status === 503) && attempt === 0 && !signal?.aborted) {
+        retryIndexes.push(index);
+        results.push(null);
+        continue;
+      }
       const error = new Error(
         part.body || `Gmail batch subrequest failed with status ${part.status}.`,
       ) as Error & { status: number };
@@ -1263,8 +1389,21 @@ const getGmailThreadsListMetadataBatch = async (
     }
 
     const parsed = part.body.trim() ? JSON.parse(part.body) : {};
-    return gmailThreadSchema.parse(parsed);
-  });
+    results.push(gmailThreadSchema.parse(parsed));
+  }
+  if (retryIndexes.length > 0) {
+    await sleep(1000 + Math.floor(Math.random() * 100), signal);
+    const retried = await getGmailThreadsListMetadataBatch(
+      accessToken,
+      retryIndexes.map((index) => threadIds[index]!),
+      signal,
+      attempt + 1,
+    );
+    retryIndexes.forEach((resultIndex, retryIndex) => {
+      results[resultIndex] = retried[retryIndex] ?? null;
+    });
+  }
+  return results;
 };
 
 const getGmailThreadsListMetadata = async (
@@ -1276,36 +1415,7 @@ const getGmailThreadsListMetadata = async (
   const threads: Array<z.infer<typeof gmailThreadSchema> | null> = [];
 
   for (const batchThreadIds of chunkArray(uniqueThreadIds, GMAIL_BATCH_MESSAGE_CHUNK_SIZE)) {
-    try {
-      threads.push(
-        ...(await getGmailThreadsListMetadataBatch(accessToken, batchThreadIds, signal)),
-      );
-    } catch {
-      for (const threadId of batchThreadIds) {
-        try {
-          const thread = await requestGmail(
-            accessToken,
-            `/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}`,
-            gmailThreadSchema,
-            {
-              query: {
-                fields: GMAIL_THREAD_LIST_METADATA_FIELDS,
-                format: "full",
-              },
-              signal,
-            },
-          );
-          threads.push(thread);
-        } catch (error) {
-          if (isErrorWithStatus(error) && error.status === 404) {
-            threads.push(null);
-            continue;
-          }
-
-          throw error;
-        }
-      }
-    }
+    threads.push(...(await getGmailThreadsListMetadataBatch(accessToken, batchThreadIds, signal)));
   }
 
   return threads;
@@ -1348,38 +1458,52 @@ export const listMessagesWithDetails = async (
     signal?: AbortSignal;
   },
 ): Promise<ListMessagesPageResult> => {
-  const list = await listMessages(accessToken, options);
-  const messageIds = list.messages.map((message) => message.id);
-  const details = await getGmailMessagesMetadata(accessToken, messageIds, options?.signal);
-  const detailsById = new Map(
-    details
-      .filter((message): message is GmailMessage => !!message)
-      .map((message) => [message.id, message] as const),
-  );
-  const orderedDetails = list.messages
-    .map((message) => detailsById.get(message.id))
-    .filter((message): message is GmailMessage => !!message);
-  const mailbox = options?.mailbox;
-  const activeDetails = mailbox
-    ? orderedDetails.filter((message) =>
-        isMessageInMailbox(mailbox, normalizeLabelIds(message.labelIds)),
-      )
-    : orderedDetails;
-  const threadSummariesById = await getThreadListSummaries(
+  const list = await listThreads(accessToken, options);
+  const threads = await getGmailThreadsListMetadata(
     accessToken,
-    activeDetails.map((message) => message.threadId),
-    { includeDrafts: false },
+    list.threads.map((thread) => thread.id),
     options?.signal,
   );
+  const mailbox = options?.mailbox;
+  const rows = threads.flatMap((thread) => {
+    if (!thread) return [];
+    const messages = (thread.messages ?? []).filter((message) => !hasDraftLabel(message.labelIds));
+    const matchingMessages = mailbox
+      ? messages.filter((message) =>
+          isMessageInMailbox(mailbox, normalizeLabelIds(message.labelIds)),
+        )
+      : messages;
+    const anchor = matchingMessages.reduce<GmailMessage | undefined>(
+      (latest, message) =>
+        !latest || Number(message.internalDate ?? 0) > Number(latest.internalDate ?? 0)
+          ? message
+          : latest,
+      undefined,
+    );
+    if (!anchor) return [];
+    return [
+      {
+        anchor,
+        summary: {
+          attachmentCount: messages.reduce(
+            (count, message) => count + extractMessageAttachments(message.payload).length,
+            0,
+          ),
+          messageCount: messages.length,
+        },
+      },
+    ];
+  });
   const historyId =
-    orderedDetails[0]?.historyId ?? (await getGmailProfile(accessToken, options?.signal)).historyId;
+    threads.find((thread) => thread?.historyId)?.historyId ??
+    (await getGmailProfile(accessToken, options?.signal)).historyId;
 
   return {
     messages: await Promise.all(
-      activeDetails.map(
-        async (message) =>
-          await toMessageListItem(accessToken, message, {
-            threadSummary: threadSummariesById.get(message.threadId),
+      rows.map(
+        async ({ anchor, summary }) =>
+          await toMessageListItem(accessToken, anchor, {
+            threadSummary: summary,
           }),
       ),
     ),
@@ -1714,7 +1838,7 @@ export const getMailboxSyncDelta = async (
     signal?: AbortSignal;
   },
 ): Promise<MailboxSyncDelta> => {
-  const mailboxLabel = MAILBOX_LABELS[options.mailbox];
+  const mailboxLabel = options.mailbox === "archive" ? undefined : MAILBOX_LABELS[options.mailbox];
   let pageToken: string | undefined;
   const changedMessageIds = new Set<string>();
   const mailboxAdditionCandidateIds = new Set<string>();
@@ -1754,7 +1878,7 @@ export const getMailboxSyncDelta = async (
           const labelIds = normalizeLabelIds(labelsAdded.labelIds);
           changedMessageIds.add(labelsAdded.message.id);
 
-          if (labelIds?.includes(mailboxLabel)) {
+          if (mailboxLabel && labelIds?.includes(mailboxLabel)) {
             removedMessageIds.delete(labelsAdded.message.id);
             mailboxAdditionCandidateIds.add(labelsAdded.message.id);
             refreshFirstPage = true;
@@ -1763,7 +1887,7 @@ export const getMailboxSyncDelta = async (
 
         for (const labelsRemoved of historyRecord.labelsRemoved ?? []) {
           const labelIds = normalizeLabelIds(labelsRemoved.labelIds);
-          if (labelIds?.includes(mailboxLabel)) {
+          if (mailboxLabel && labelIds?.includes(mailboxLabel)) {
             removedMessageIds.add(labelsRemoved.message.id);
             changedMessageIds.delete(labelsRemoved.message.id);
             mailboxAdditionCandidateIds.delete(labelsRemoved.message.id);
@@ -1850,62 +1974,6 @@ export const getMailboxSyncDelta = async (
     refreshFirstPage,
     removedMessageIds: Array.from(removedMessageIds),
     requiresFullRefresh: false,
-    updatedMessages,
-  };
-};
-
-export const refreshMailboxMessages = async (
-  accessToken: string,
-  options: {
-    mailbox: Exclude<MailboxCategory, "drafts">;
-    messageIds: readonly string[];
-    signal?: AbortSignal;
-  },
-): Promise<MailboxMessagesRefreshResult> => {
-  const messageIds = Array.from(
-    new Set(options.messageIds.map((messageId) => messageId.trim()).filter(Boolean)),
-  ).slice(0, GMAIL_BATCH_MESSAGE_CHUNK_SIZE);
-  const removedMessageIds = new Set<string>();
-  const updatedMessages: MessageListItem[] = [];
-
-  if (messageIds.length === 0) {
-    return {
-      removedMessageIds: [],
-      updatedMessages: [],
-    };
-  }
-
-  const messages = await getGmailMessagesMetadata(accessToken, messageIds, options.signal);
-  const activeMessages = messages.flatMap((message, index) => {
-    if (!message) {
-      removedMessageIds.add(messageIds[index]);
-      return [];
-    }
-
-    if (!isMessageInMailbox(options.mailbox, normalizeLabelIds(message.labelIds))) {
-      removedMessageIds.add(message.id);
-      return [];
-    }
-
-    return [message];
-  });
-  const threadSummariesById = await getThreadListSummaries(
-    accessToken,
-    activeMessages.map((message) => message.threadId),
-    { includeDrafts: false },
-    options.signal,
-  );
-
-  for (const message of activeMessages) {
-    updatedMessages.push(
-      await toMessageListItem(accessToken, message, {
-        threadSummary: threadSummariesById.get(message.threadId),
-      }),
-    );
-  }
-
-  return {
-    removedMessageIds: Array.from(removedMessageIds),
     updatedMessages,
   };
 };
@@ -2057,6 +2125,28 @@ export const updateMessageLabels = async (
   );
 
   return toMessageMetadataUpdate(updated);
+};
+
+export const batchModifyMessages = async (
+  accessToken: string,
+  messageIds: readonly string[],
+  changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
+  signal?: AbortSignal,
+) => {
+  const ids = Array.from(new Set(messageIds.map((id) => id.trim()).filter(Boolean)));
+  for (const chunk of chunkArray(ids, 1000)) {
+    await requestGmail(
+      accessToken,
+      "/gmail/v1/users/me/messages/batchModify",
+      z.object({}).passthrough(),
+      {
+        method: "POST",
+        body: { ids: chunk, ...changes },
+        signal,
+      },
+    );
+  }
+  return { ids };
 };
 
 export const moveThreadToTrash = async (

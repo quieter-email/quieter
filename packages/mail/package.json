@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./data-plane": "./src/data-plane.ts",
     "./compose/draft-anchor": "./src/compose/draft-anchor.ts",
     "./compose/mime": "./src/compose/mime.ts",
     "./compose/schema": "./src/compose/schema.ts",

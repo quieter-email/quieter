@@ -5,19 +5,22 @@ import {
   listGmailMessageIds,
   listGmailAddedMessageHistoryPage,
   listMessagesWithDetails,
-  refreshMailboxMessages,
   stopGmailWatch,
   watchGmailMailbox,
 } from "../src/service";
 
-const createBatchResponse = (boundary: string, bodies: readonly unknown[]) => {
-  return [
-    ...bodies.map((body) =>
+const createIdentifiedBatchResponse = (
+  boundary: string,
+  parts: readonly { body: unknown; contentId: string; status?: number }[],
+) =>
+  [
+    ...parts.map(({ body, contentId, status = 200 }) =>
       [
         `--${boundary}`,
         "Content-Type: application/http",
+        `Content-ID: <response-${contentId}>`,
         "",
-        "HTTP/1.1 200 OK",
+        `HTTP/1.1 ${status} ${status === 200 ? "OK" : "Service Unavailable"}`,
         "Content-Type: application/json",
         "",
         JSON.stringify(body),
@@ -26,22 +29,12 @@ const createBatchResponse = (boundary: string, bodies: readonly unknown[]) => {
     `--${boundary}--`,
     "",
   ].join("\r\n");
-};
 
 const getRequestBody = (body: BodyInit | null | undefined) =>
   typeof body === "string" ? body : "";
 
 const getRequestUrl = (input: RequestInfo | URL) =>
   typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-
-const getBatchRequestCount = (
-  body: BodyInit | null | undefined,
-  resource: "messages" | "threads",
-) => {
-  return (
-    getRequestBody(body).match(new RegExp(`/gmail/v1/users/me/${resource}/`, "g"))?.length ?? 0
-  );
-};
 
 const setFetch = (fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) => {
   Reflect.set(globalThis, "fetch", fetch);
@@ -79,81 +72,6 @@ describe("extractListUnsubscribeTargets", () => {
       mailto: undefined,
       url: "https://example.com/unsubscribe",
     });
-  });
-});
-
-describe("refreshMailboxMessages", () => {
-  test("caps requests, filters messages outside the mailbox, and includes thread counts", async () => {
-    const originalFetch = globalThis.fetch;
-    const calls: RequestInit[] = [];
-
-    setFetch(async (_input, init) => {
-      calls.push(init ?? {});
-      const body = getRequestBody(init?.body);
-
-      if (body.includes("/gmail/v1/users/me/messages/")) {
-        const messageCount = getBatchRequestCount(init?.body, "messages");
-        return new Response(
-          createBatchResponse(
-            "message_boundary",
-            Array.from({ length: messageCount }, (_, index) => ({
-              id: `message-${index}`,
-              threadId: `thread-${index}`,
-              labelIds: index === 1 ? ["TRASH"] : ["INBOX"],
-              payload: {
-                headers: [
-                  { name: "From", value: `Sender ${index} <sender-${index}@example.com>` },
-                  { name: "Subject", value: `Subject ${index}` },
-                ],
-              },
-            })),
-          ),
-          {
-            headers: {
-              "content-type": "multipart/mixed; boundary=message_boundary",
-            },
-          },
-        );
-      }
-
-      const threadCount = getBatchRequestCount(init?.body, "threads");
-      return new Response(
-        createBatchResponse(
-          "thread_boundary",
-          Array.from({ length: threadCount }, (_, index) => ({
-            id: `thread-${index}`,
-            messages: [
-              { id: `thread-message-${index}-a`, threadId: `thread-${index}` },
-              { id: `thread-message-${index}-b`, threadId: `thread-${index}` },
-            ],
-          })),
-        ),
-        {
-          headers: {
-            "content-type": "multipart/mixed; boundary=thread_boundary",
-          },
-        },
-      );
-    });
-
-    try {
-      const result = await refreshMailboxMessages("token", {
-        mailbox: "inbox",
-        messageIds: Array.from({ length: 30 }, (_, index) => `message-${index}`),
-      });
-
-      expect(getBatchRequestCount(calls[0].body, "messages")).toBe(25);
-      expect(result.removedMessageIds).toEqual(["message-1"]);
-      expect(result.updatedMessages).toHaveLength(24);
-      expect(result.updatedMessages[0]).toMatchObject({
-        id: "message-0",
-        labelIds: ["INBOX"],
-        subject: "Subject 0",
-        threadMessageCount: 2,
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
   });
 });
 
@@ -246,74 +164,169 @@ describe("listGmailMessageIds", () => {
 });
 
 describe("listMessagesWithDetails", () => {
+  test("compiles Archive to Gmail system-category exclusions", async () => {
+    const originalFetch = globalThis.fetch;
+    let requestedUrl = "";
+
+    setFetch(async (input) => {
+      const url = getRequestUrl(input);
+      if (url.includes("/profile")) {
+        return Response.json({ emailAddress: "user@example.com", historyId: "10" });
+      }
+      requestedUrl = url;
+      return Response.json({ threads: [], resultSizeEstimate: 0 });
+    });
+
+    try {
+      const result = await listMessagesWithDetails("token", {
+        mailbox: "archive",
+        query: "is:archived from:alex@example.com",
+      });
+      const query = new URL(requestedUrl).searchParams.get("q");
+
+      expect(result.messages).toEqual([]);
+      expect(query).toContain("from:alex@example.com");
+      expect(query).toContain("-in:inbox");
+      expect(query).toContain("-in:sent");
+      expect(query).toContain("-label:drafts");
+      expect(query).not.toContain("is:archived");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("compiles negated Archive to Gmail system-category membership", async () => {
+    const originalFetch = globalThis.fetch;
+    let requestedUrl = "";
+
+    setFetch(async (input) => {
+      const url = getRequestUrl(input);
+      if (url.includes("/profile")) {
+        return Response.json({ emailAddress: "user@example.com", historyId: "10" });
+      }
+      requestedUrl = url;
+      return Response.json({ threads: [], resultSizeEstimate: 0 });
+    });
+
+    try {
+      await listMessagesWithDetails("token", {
+        mailbox: "inbox",
+        query: "-is:archived from:alex@example.com",
+      });
+      const query = new URL(requestedUrl).searchParams.get("q");
+
+      expect(query).toContain("{in:inbox in:sent label:drafts in:spam in:trash}");
+      expect(query).not.toContain("is:archived");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test("filters spam and trash out of unread mailbox details", async () => {
     const originalFetch = globalThis.fetch;
+    const calls: string[] = [];
+    let threadBatchCalls = 0;
 
     setFetch(async (input, init) => {
       const url = getRequestUrl(input);
-      if (url.includes("/gmail/v1/users/me/messages") && !url.includes("/batch/")) {
+      const body = getRequestBody(init?.body);
+      calls.push(`${url}\n${body}`);
+
+      if (url.includes("/gmail/v1/users/me/threads") && !url.includes("/batch/")) {
         return Response.json({
-          messages: [
-            { id: "message-spam", threadId: "thread-spam" },
-            { id: "message-trash", threadId: "thread-trash" },
-            { id: "message-active", threadId: "thread-active" },
-          ],
+          threads: [{ id: "thread-spam" }, { id: "thread-trash" }, { id: "thread-active" }],
           resultSizeEstimate: 3,
         });
       }
 
-      if (getRequestBody(init?.body).includes("/gmail/v1/users/me/messages/")) {
+      if (url.includes("/gmail/v1/users/me/profile")) {
+        return Response.json({ emailAddress: "user@example.com", historyId: "10" });
+      }
+
+      if (body.includes("/gmail/v1/users/me/threads/")) {
+        threadBatchCalls += 1;
+        if (threadBatchCalls > 1) {
+          return new Response(
+            createIdentifiedBatchResponse("thread_retry_boundary", [
+              {
+                contentId: "thread-0",
+                body: {
+                  id: "thread-trash",
+                  messages: [
+                    {
+                      id: "message-trash",
+                      threadId: "thread-trash",
+                      historyId: "10",
+                      labelIds: ["UNREAD", "TRASH"],
+                      payload: { headers: [{ name: "Subject", value: "Trash" }] },
+                    },
+                  ],
+                },
+              },
+            ]),
+            {
+              headers: {
+                "content-type": "multipart/mixed; boundary=thread_retry_boundary",
+              },
+            },
+          );
+        }
         return new Response(
-          createBatchResponse("message_boundary", [
+          createIdentifiedBatchResponse("thread_boundary", [
             {
-              id: "message-spam",
-              threadId: "thread-spam",
-              historyId: "10",
-              labelIds: ["UNREAD", "SPAM"],
-              payload: { headers: [{ name: "Subject", value: "Spam" }] },
+              contentId: "thread-2",
+              body: {
+                id: "thread-active",
+                messages: [
+                  {
+                    id: "message-active",
+                    threadId: "thread-active",
+                    historyId: "10",
+                    labelIds: ["UNREAD"],
+                    payload: { headers: [{ name: "Subject", value: "Active" }] },
+                  },
+                ],
+              },
             },
             {
-              id: "message-trash",
-              threadId: "thread-trash",
-              historyId: "10",
-              labelIds: ["UNREAD", "TRASH"],
-              payload: { headers: [{ name: "Subject", value: "Trash" }] },
+              contentId: "thread-0",
+              body: {
+                id: "thread-spam",
+                messages: [
+                  {
+                    id: "message-spam",
+                    threadId: "thread-spam",
+                    historyId: "10",
+                    labelIds: ["UNREAD", "SPAM"],
+                    payload: { headers: [{ name: "Subject", value: "Spam" }] },
+                  },
+                ],
+              },
             },
             {
-              id: "message-active",
-              threadId: "thread-active",
-              historyId: "10",
-              labelIds: ["UNREAD"],
-              payload: { headers: [{ name: "Subject", value: "Active" }] },
+              contentId: "thread-1",
+              body: { error: { message: "Temporary failure" } },
+              status: 503,
             },
           ]),
           {
             headers: {
-              "content-type": "multipart/mixed; boundary=message_boundary",
+              "content-type": "multipart/mixed; boundary=thread_boundary",
             },
           },
         );
       }
 
-      return new Response(
-        createBatchResponse("thread_boundary", [
-          {
-            id: "thread-active",
-            messages: [{ id: "message-active", threadId: "thread-active" }],
-          },
-        ]),
-        {
-          headers: {
-            "content-type": "multipart/mixed; boundary=thread_boundary",
-          },
-        },
-      );
+      throw new Error(`Unexpected Gmail request: ${url}`);
     });
 
     try {
       const result = await listMessagesWithDetails("token", { mailbox: "unread" });
 
       expect(result.messages.map((message) => message.id)).toEqual(["message-active"]);
+      expect(threadBatchCalls).toBe(2);
+      expect(calls).toHaveLength(4);
+      expect(calls.some((call) => call.includes("/gmail/v1/users/me/messages/"))).toBe(false);
     } finally {
       globalThis.fetch = originalFetch;
     }

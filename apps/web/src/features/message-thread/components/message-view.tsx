@@ -30,7 +30,7 @@ import { toast } from "@quieter/ui/toast";
 import { TooltipGroup } from "@quieter/ui/tooltip";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type {
   MailboxActions,
   MailboxPendingActions,
@@ -853,10 +853,8 @@ export const MessageView = ({
   );
   const {
     data: threadData,
-    isError: isThreadError,
     isFetching: isThreadFetching,
     isPending: isThreadPending,
-    refetch: refetchThread,
   } = useQuery({
     // react-doctor-disable-next-line react-doctor/no-event-handler
     ...getThreadWithDetailsOptions(mailboxId, message.threadId),
@@ -865,6 +863,14 @@ export const MessageView = ({
       snippet: message.snippet,
       subject: message.subject,
       messages: [message],
+    },
+    refetchInterval: (query) => {
+      const thread = query.state.data;
+      return thread &&
+        query.state.dataUpdateCount < 2 &&
+        getMessagesMissingLoadedBody(thread.messages).length > 0
+        ? 250
+        : false;
     },
   });
   const { data: usefulDetails = [] } = useQuery(
@@ -889,9 +895,6 @@ export const MessageView = ({
   const messages = threadMessages.filter((threadMessage) => !isDraftMessage(threadMessage));
   const visibleMessages = messages.length > 0 ? messages : [message];
   const messagesMissingLoadedBody = getMessagesMissingLoadedBody(visibleMessages);
-  const missingLoadedBodyKey = messagesMissingLoadedBody
-    .map((threadMessage) => threadMessage.id)
-    .join(":");
   const hasMissingLoadedBody = messagesMissingLoadedBody.length > 0;
   const isBodyRefreshPending = isThreadPending || isThreadFetching || hasMissingLoadedBody;
   const subject =
@@ -915,8 +918,6 @@ export const MessageView = ({
       messageId: threadMessage.id,
     })),
   );
-  const [autoMarkedThreadIds] = useState(() => new Set<string>());
-  const bodyRefreshRequestKeyRef = useRef<string | null>(null);
   const isActionPending =
     pendingActions.isMessageActionPending(message.id) ||
     pendingActions.isThreadActionPending(message.threadId);
@@ -1037,59 +1038,6 @@ export const MessageView = ({
     ],
     { ignoreInputs: true },
   );
-
-  useEffect(() => {
-    if (!hasMissingLoadedBody) {
-      bodyRefreshRequestKeyRef.current = null;
-      return;
-    }
-
-    if (isThreadError || isThreadFetching || isThreadPending) {
-      return;
-    }
-
-    const requestKey = `${mailboxId}:${message.threadId}:${missingLoadedBodyKey}`;
-    if (bodyRefreshRequestKeyRef.current === requestKey) {
-      return;
-    }
-
-    bodyRefreshRequestKeyRef.current = requestKey;
-    void refetchThread();
-  }, [
-    hasMissingLoadedBody,
-    isThreadError,
-    isThreadFetching,
-    isThreadPending,
-    mailboxId,
-    message.threadId,
-    missingLoadedBodyKey,
-    refetchThread,
-  ]);
-
-  // react-doctor-disable-next-line react-doctor/no-event-handler
-  useEffect(() => {
-    if (!threadIsUnread) {
-      autoMarkedThreadIds.delete(message.threadId);
-      return;
-    }
-
-    if (mailboxProvider === "api" || isActionPending || autoMarkedThreadIds.has(message.threadId)) {
-      return;
-    }
-
-    autoMarkedThreadIds.add(message.threadId);
-
-    Promise.resolve(mailboxActions.markThreadAsRead(message.threadId)).catch(() => {
-      autoMarkedThreadIds.delete(message.threadId);
-    });
-  }, [
-    autoMarkedThreadIds,
-    isActionPending,
-    mailboxActions,
-    mailboxProvider,
-    message.threadId,
-    threadIsUnread,
-  ]);
 
   return (
     <article className="w-full">

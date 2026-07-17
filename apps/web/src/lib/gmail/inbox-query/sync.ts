@@ -28,7 +28,7 @@ import {
   normalizeSearchQuery,
   parsePageToken,
 } from "./keys";
-import { applyVisibleMailboxMessagesRefreshToCache, getCachedMessagesQueries } from "./query-cache";
+import { getCachedMessagesQueries } from "./query-cache";
 
 // Keep full-refresh fallbacks bounded after an infinite query restores a deep persisted list.
 const GMAIL_MAILBOX_REFRESH_PAGE_LIMIT = 3;
@@ -36,14 +36,6 @@ const GMAIL_MAILBOX_REFRESH_PAGE_LIMIT = 3;
 type RefreshLoadedMessagesPagesOptions = {
   maxPageCount?: number;
   preserveUnrefreshedPages?: boolean;
-  signal?: AbortSignal;
-};
-
-type RefreshVisibleMessagesArgs = {
-  mailboxId: string;
-  mailbox: MailboxCategory;
-  messageIds: readonly string[];
-  searchQuery?: string | null;
   signal?: AbortSignal;
 };
 
@@ -66,7 +58,7 @@ const fetchMessagesPage = async (
     return listManagedDemoMessages({
       category: mailbox,
       pageToken,
-      maxResults: pageToken ? 25 : 50,
+      maxResults: 15,
       query: normalizeSearchQuery(searchQuery),
     });
   }
@@ -76,17 +68,17 @@ const fetchMessagesPage = async (
       mailboxId,
       category: mailbox,
       pageToken,
-      maxResults: pageToken ? 25 : 50,
+      maxResults: 15,
       query: normalizeSearchQuery(searchQuery),
     });
   }
 
-  return await rpc.mail.listMessages(
+  return await rpc.mail.listThreads(
     {
       mailboxId,
       category: mailbox,
       pageToken,
-      maxResults: pageToken ? 25 : 50,
+      maxResults: 15,
       query: normalizeSearchQuery(searchQuery),
     },
     { signal },
@@ -159,32 +151,6 @@ export const refreshCachedMailboxQueries = async (
   );
 };
 
-export const refreshVisibleMailboxMessages = async (
-  queryClient: QueryClient,
-  args: RefreshVisibleMessagesArgs,
-) => {
-  if (isSandboxMailboxId(args.mailboxId)) {
-    return;
-  }
-
-  if (args.mailbox === "drafts" || args.messageIds.length === 0) return;
-
-  const messageIds = Array.from(new Set(args.messageIds.map((messageId) => messageId.trim())))
-    .filter(Boolean)
-    .slice(0, 25);
-  if (messageIds.length === 0) return;
-
-  const result = await rpc.mail.refreshMessages(
-    {
-      mailboxId: args.mailboxId,
-      category: args.mailbox,
-      messageIds,
-    },
-    { signal: args.signal },
-  );
-  await applyVisibleMailboxMessagesRefreshToCache(queryClient, args, result);
-};
-
 export const applyMailboxSyncDelta = async (
   queryClient: QueryClient,
   mailboxId: string,
@@ -254,7 +220,7 @@ export const syncMessages = async (
     });
   }
 
-  const syncDelta = await rpc.mail.getMailboxSyncDelta(
+  const syncDelta = await rpc.mail.syncMailbox(
     {
       mailboxId,
       category: mailbox,
@@ -328,6 +294,7 @@ export const messagesQueryOptions = (
       : {}),
     getNextPageParam: (lastPage: ListMessagesPageResult) => lastPage.nextPageToken ?? undefined,
     staleTime: GMAIL_QUERY_STALE_TIME_MS,
+    gcTime: 1000 * 60 * 30,
     enabled,
     ...(normalizeSearchQuery(searchQuery) ? {} : { persister: messagesQueryPersister }),
     retry: shouldRetryOrpcError,
@@ -353,9 +320,9 @@ export const liveSyncQueryOptions = (
       )?.pages[0],
     retry: shouldRetryOrpcError,
     staleTime: 0,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: "always",
-    refetchOnReconnect: "always",
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     refetchInterval: GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
     refetchIntervalInBackground: false,
   });

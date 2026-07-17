@@ -1,5 +1,5 @@
 import { ORPCError } from "@orpc/server";
-import { db } from "@quieter/database/client";
+import { db, type DatabaseClient } from "@quieter/database/client";
 import {
   managedMailLabel,
   managedMailMessage,
@@ -8,14 +8,19 @@ import {
 import { and, eq, inArray, ne } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
+type ManagedMailDatabase =
+  | DatabaseClient
+  | Parameters<Parameters<DatabaseClient["transaction"]>[0]>[0];
+
 export const assertManagedLabelsBelongToMailbox = async (
   mailboxId: string,
   labelIds: readonly string[],
+  database: ManagedMailDatabase = db,
 ) => {
   const uniqueLabelIds = Array.from(new Set(labelIds));
   if (uniqueLabelIds.length === 0) return [];
 
-  const labels = await db
+  const labels = await database
     .select()
     .from(managedMailLabel)
     .where(
@@ -35,13 +40,19 @@ export const updateManagedMessageLabelAssignments = async (input: {
   source: "ai_auto_label" | "backfill" | "inherited" | "manual" | "rule";
   ruleId?: string;
   userId?: string;
+  database?: ManagedMailDatabase;
 }) => {
   const addLabelIds = Array.from(new Set(input.addLabelIds ?? []));
   const removeLabelIds = Array.from(new Set(input.removeLabelIds ?? []));
-  await assertManagedLabelsBelongToMailbox(input.mailboxId, [...addLabelIds, ...removeLabelIds]);
+  const database = input.database ?? db;
+  await assertManagedLabelsBelongToMailbox(
+    input.mailboxId,
+    [...addLabelIds, ...removeLabelIds],
+    database,
+  );
 
   if (removeLabelIds.length > 0 && input.messageIds.length > 0) {
-    await db
+    await database
       .delete(managedMailMessageLabel)
       .where(
         and(
@@ -53,7 +64,7 @@ export const updateManagedMessageLabelAssignments = async (input: {
   }
 
   if (addLabelIds.length > 0 && input.messageIds.length > 0) {
-    await db
+    await database
       .insert(managedMailMessageLabel)
       .values(
         input.messageIds.flatMap((messageId) =>
@@ -76,7 +87,7 @@ export const updateManagedMessageLabelAssignments = async (input: {
 
   const assignments =
     input.messageIds.length > 0
-      ? await db
+      ? await database
           .select({
             labelId: managedMailMessageLabel.labelId,
             messageId: managedMailMessageLabel.messageId,

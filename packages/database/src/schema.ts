@@ -67,7 +67,7 @@ export type GmailUsefulDetailFeedbackSignal = "not_useful" | "useful";
 export type MailAutomationAgent = "auto_label" | "useful_detail";
 export type MailAutoLabelFeedbackSignal = "added" | "removed";
 export type ManagedMailDirection = "inbound" | "outbound";
-export type ManagedMailMailboxState = "active" | "draft" | "spam" | "trash";
+export type ManagedMailMailboxState = "active" | "archived" | "draft" | "spam" | "trash";
 export type ManagedMailRawObjectProvider = "r2" | "s3";
 export type ManagedMailLabelAssignmentSource =
   | "ai_auto_label"
@@ -411,6 +411,7 @@ export const mailbox = pgTable(
     }),
     status: text("status").$type<MailboxConnectionStatus>().notNull().default("connected"),
     includeApiSentMessages: boolean("includeApiSentMessages").notNull().default(false),
+    contentRevision: bigint("contentRevision", { mode: "number" }).notNull().default(0),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
   },
@@ -1174,7 +1175,7 @@ export const managedMailMessage = pgTable(
     ),
     check(
       "managed_mail_message_mailbox_state_check",
-      sql`${table.mailboxState} in ('active', 'draft', 'spam', 'trash')`,
+      sql`${table.mailboxState} in ('active', 'archived', 'draft', 'spam', 'trash')`,
     ),
     check(
       "managed_mail_message_raw_object_provider_check",
@@ -1191,6 +1192,19 @@ export const managedMailMessage = pgTable(
       table.sentAt,
     ),
     index("managed_mail_message_mailbox_thread_id_idx").on(table.mailboxId, table.threadId),
+    index("managed_mail_message_mailbox_state_direction_thread_sent_id_idx").on(
+      table.mailboxId,
+      table.mailboxState,
+      table.direction,
+      table.threadId,
+      table.sentAt,
+      table.id,
+    ),
+    index("managed_mail_message_mailbox_unread_thread_sent_id_idx")
+      .on(table.mailboxId, table.threadId, table.sentAt, table.id)
+      .where(
+        sql`${table.mailboxState} = 'active' and ${table.direction} = 'inbound' and ${table.isRead} = false`,
+      ),
     index("managed_mail_message_mailbox_from_normalized_idx").on(
       table.mailboxId,
       table.fromNormalized,

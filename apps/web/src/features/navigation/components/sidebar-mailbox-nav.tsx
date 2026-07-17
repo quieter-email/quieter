@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Archive02Icon,
   Delete01Icon,
   Delete02Icon,
   Edit01Icon,
@@ -22,6 +23,7 @@ const SIDEBAR_MAILBOX_ITEMS: ReadonlyArray<{
 }> = [
   { id: "inbox", label: "Inbox", icon: InboxIcon },
   { id: "unread", label: "Unread", icon: Mail01Icon },
+  { id: "archive", label: "Archive", icon: Archive02Icon },
   { id: "sent", label: "Sent", icon: MailSend02Icon },
   { id: "drafts", label: "Drafts", icon: Edit01Icon },
   { id: "trash", label: "Trash", icon: Delete01Icon },

@@ -38,8 +38,8 @@ describe("query persistence allowlist", () => {
     );
   });
 
-  test("revalidates persisted mailbox connection status on mount", () => {
-    expect(mailboxesQueryOptions().refetchOnMount).toBe("always");
+  test("uses fresh mailbox metadata without a duplicate mount fetch", () => {
+    expect(mailboxesQueryOptions().refetchOnMount).toBe(false);
   });
 
   test("does not persist opened threads or managed rules", () => {

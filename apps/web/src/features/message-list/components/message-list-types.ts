@@ -31,7 +31,6 @@ export type MessageListProps = {
   onOpenDraft: (message: MessageListItem) => void;
   onRefresh: () => void;
   onSearch: (query: string) => void;
-  onVisibleMessageIdsChange?: (messageIds: readonly string[]) => void;
   pendingActions: MailboxPendingActions;
   searchQuery: string;
 };

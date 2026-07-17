@@ -40,6 +40,7 @@
     "SENTRY_ENVIRONMENT": "review",
     "SST_RESOURCE_App": "{\"name\":\"quieter\",\"stage\":\"review\"}",
     "VITE_LOGO_DEV_PUBLISHABLE_KEY": "",
+    "VITE_QUIETER_DEPLOYMENT_ENV": "preview",
     "VITE_PUBLIC_POSTHOG_HOST": "https://eu.i.posthog.com",
     "VITE_PUBLIC_POSTHOG_PROJECT_TOKEN": "",
     "VITE_QUIETER_PREVIEW_PERSONAS_ENABLED": "false",

@@ -45,6 +45,7 @@ type MessageRowProps = {
   offsetY: number;
   onOpenDraft: MessageListProps["onOpenDraft"];
   onThreadFocus: (threadId: string | null) => void;
+  onThreadIntent: (threadId: string | null) => void;
   onThreadPress: ReturnType<typeof useMessageListSelection>["handleThreadPress"];
   onThreadSelectionPress: ReturnType<typeof useMessageListSelection>["handleThreadSelectionPress"];
   pendingActions: MessageListProps["pendingActions"];
@@ -94,6 +95,7 @@ const MessageRowContent = ({
   mailboxProvider,
   onOpenDraft,
   onThreadFocus,
+  onThreadIntent,
   onThreadPress,
   onThreadSelectionPress,
   pendingActions,
@@ -173,6 +175,10 @@ const MessageRowContent = ({
       return;
     }
 
+    if (!showSelectionControl && unread && mailboxProvider !== "api" && !isActionPending) {
+      void mailboxActions.markThreadAsRead(thread.threadId).catch(() => {});
+    }
+
     onThreadPress(thread, gesture);
   };
   const handleRowKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
@@ -188,6 +194,7 @@ const MessageRowContent = ({
     if (trigger.matches(":focus-visible")) {
       row.setAttribute("data-focus-visible", "");
       onThreadFocus(thread.threadId);
+      onThreadIntent(thread.threadId);
       return;
     }
 
@@ -211,6 +218,7 @@ const MessageRowContent = ({
 
     event.currentTarget.removeAttribute("data-focus-visible");
     onThreadFocus(null);
+    onThreadIntent(null);
   };
 
   return (
@@ -222,6 +230,8 @@ const MessageRowContent = ({
       data-message-row
       onBlurCapture={handleRowBlurCapture}
       onFocusCapture={handleRowFocusCapture}
+      onMouseEnter={() => onThreadIntent(thread.threadId)}
+      onMouseLeave={() => onThreadIntent(null)}
       onPointerDown={(event) => {
         if (event.pointerType !== "mouse") {
           return;
@@ -431,6 +441,7 @@ export const MessageRow = ({
   offsetY,
   onOpenDraft,
   onThreadFocus,
+  onThreadIntent,
   onThreadPress,
   onThreadSelectionPress,
   pendingActions,
@@ -451,6 +462,7 @@ export const MessageRow = ({
       mailboxProvider={mailboxProvider}
       onOpenDraft={onOpenDraft}
       onThreadFocus={onThreadFocus}
+      onThreadIntent={onThreadIntent}
       onThreadPress={onThreadPress}
       onThreadSelectionPress={onThreadSelectionPress}
       pendingActions={pendingActions}

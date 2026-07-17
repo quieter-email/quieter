@@ -32,8 +32,8 @@ export const labelsQueryOptions = (mailboxId: string, enabled = true) =>
     },
     enabled,
     persister: queryPersister.persisterFn,
-    staleTime: 0,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: "always",
-    refetchOnReconnect: "always",
+    staleTime: 1000 * 60 * 5,
+    refetchOnMount: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });

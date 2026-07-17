@@ -141,6 +141,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
   const actions = props.actions;
   const isUnread = props.isUnread ?? isMessageUnread(props.message);
   const isDraftMailbox = props.mailbox === "drafts";
+  const isArchiveMailbox = props.mailbox === "archive";
   const isSpamMailbox = props.mailbox === "spam";
   const isTrashMailbox = props.mailbox === "trash";
   const isBusy = !!props.isPending;
@@ -150,7 +151,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
   const hasFolderAction =
     (showMarkAsSpam && !!actions.onMarkAsSpam) ||
     (isSpamMailbox && !!actions.onUnmarkAsSpam) ||
-    (isTrashMailbox && !!actions.onUntrash) ||
+    ((isTrashMailbox || isArchiveMailbox) && !!actions.onUntrash) ||
     (!isTrashMailbox && !!actions.onMoveToTrash);
   const hasReadStateAction = !!actions.onMarkAsRead || !!actions.onMarkAsUnread;
 
@@ -279,7 +280,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
           },
         ]
       : []),
-    ...(isTrashMailbox && actions.onUntrash
+    ...((isTrashMailbox || isArchiveMailbox) && actions.onUntrash
       ? [
           {
             type: "item" as const,
