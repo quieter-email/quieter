@@ -13,7 +13,9 @@ const boundaries = [
 ];
 
 const files = [
-  join(serverDirectory, "server.js"),
+  ...(await readdir(serverDirectory))
+    .filter((file) => file.endsWith(".js"))
+    .map((file) => join(serverDirectory, file)),
   ...(await readdir(assetDirectory))
     .filter((file) => file.endsWith(".js"))
     .map((file) => join(assetDirectory, file)),
