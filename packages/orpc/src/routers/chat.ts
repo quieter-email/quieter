@@ -246,7 +246,7 @@ const assertCanUseAiCredits = async (
   const usage = await getBillingCreditUsage(entitlement.account);
   if (usage.costMicroCents >= usage.creditAmountMicroCents) {
     throw new ORPCError("FORBIDDEN", {
-      message: "AI chat requires available credits.",
+      message: "AI chat requires available usage balance.",
     });
   }
 };

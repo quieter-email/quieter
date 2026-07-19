@@ -29,7 +29,6 @@ export const createSstEnv = (
   const env = createEnv({
     emptyStringAsUndefined: true,
     runtimeEnvStrict: {
-      AI_USD_TO_EUR_RATE: runtimeEnv.AI_USD_TO_EUR_RATE,
       DATABASE_URL: runtimeEnv.DATABASE_URL,
       CONNECTOR_TOKEN_ENCRYPTION_KEY: runtimeEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY,
       GMAIL_PUBSUB_PUSH_AUDIENCE: runtimeEnv.GMAIL_PUBSUB_PUSH_AUDIENCE,
@@ -46,7 +45,6 @@ export const createSstEnv = (
       LINEAR_CLIENT_SECRET: runtimeEnv.LINEAR_CLIENT_SECRET,
       OPENROUTER_API_KEY: runtimeEnv.OPENROUTER_API_KEY,
       POLAR_ACCESS_TOKEN: runtimeEnv.POLAR_ACCESS_TOKEN,
-      POLAR_METER_CREDIT_USAGE_ID: runtimeEnv.POLAR_METER_CREDIT_USAGE_ID,
       POLAR_ORGANIZATION_ID: runtimeEnv.POLAR_ORGANIZATION_ID,
       POLAR_PRODUCT_MANAGED_ID: runtimeEnv.POLAR_PRODUCT_MANAGED_ID,
       POLAR_PRODUCT_PRO_ID: runtimeEnv.POLAR_PRODUCT_PRO_ID,
@@ -59,7 +57,6 @@ export const createSstEnv = (
       R2_SECRET_ACCESS_KEY: runtimeEnv.R2_SECRET_ACCESS_KEY,
     },
     server: {
-      AI_USD_TO_EUR_RATE: z.coerce.number().positive(),
       DATABASE_URL: z.string().trim().url(),
       CONNECTOR_TOKEN_ENCRYPTION_KEY: optionalString,
       GMAIL_PUBSUB_PUSH_AUDIENCE: optionalString,
@@ -76,7 +73,6 @@ export const createSstEnv = (
       LINEAR_CLIENT_SECRET: optionalString,
       OPENROUTER_API_KEY: z.string().trim().min(1),
       POLAR_ACCESS_TOKEN: z.string().trim().min(1),
-      POLAR_METER_CREDIT_USAGE_ID: optionalString,
       POLAR_ORGANIZATION_ID: optionalString,
       POLAR_PRODUCT_MANAGED_ID: optionalString,
       POLAR_PRODUCT_PRO_ID: optionalString,

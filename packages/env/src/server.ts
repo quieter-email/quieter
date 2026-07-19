@@ -14,7 +14,6 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
   createEnv({
     emptyStringAsUndefined: true,
     runtimeEnvStrict: {
-      AI_USD_TO_EUR_RATE: runtimeEnv.AI_USD_TO_EUR_RATE,
       APP_SITE_PASSWORD: runtimeEnv.APP_SITE_PASSWORD,
       AWS_DEFAULT_REGION: runtimeEnv.AWS_DEFAULT_REGION,
       AWS_REGION: runtimeEnv.AWS_REGION,
@@ -53,7 +52,6 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       NODE_ENV: runtimeEnv.NODE_ENV,
       OPENROUTER_API_KEY: runtimeEnv.OPENROUTER_API_KEY,
       POLAR_ACCESS_TOKEN: runtimeEnv.POLAR_ACCESS_TOKEN,
-      POLAR_METER_CREDIT_USAGE_ID: runtimeEnv.POLAR_METER_CREDIT_USAGE_ID,
       POLAR_ORGANIZATION_ID: runtimeEnv.POLAR_ORGANIZATION_ID,
       POLAR_PRODUCT_MANAGED_ID: runtimeEnv.POLAR_PRODUCT_MANAGED_ID,
       POLAR_PRODUCT_PRO_ID: runtimeEnv.POLAR_PRODUCT_PRO_ID,
@@ -80,7 +78,6 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       VITE_LOGO_DEV_PUBLISHABLE_KEY: runtimeEnv.VITE_LOGO_DEV_PUBLISHABLE_KEY,
     },
     server: {
-      AI_USD_TO_EUR_RATE: z.coerce.number().positive().default(1),
       APP_SITE_PASSWORD: optionalString,
       AWS_DEFAULT_REGION: optionalString,
       AWS_REGION: optionalString,
@@ -119,7 +116,6 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       NODE_ENV: nodeEnvironment,
       OPENROUTER_API_KEY: optionalString,
       POLAR_ACCESS_TOKEN: optionalString,
-      POLAR_METER_CREDIT_USAGE_ID: optionalString,
       POLAR_ORGANIZATION_ID: optionalString,
       POLAR_PRODUCT_MANAGED_ID: optionalString,
       POLAR_PRODUCT_PRO_ID: optionalString,

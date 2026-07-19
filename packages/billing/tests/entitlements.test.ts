@@ -88,13 +88,15 @@ describe("billing products", () => {
     expect(productHasManagedMail("pro")).toBe(true);
   });
 
-  test("keeps a platform fee above the included monthly credits", () => {
+  test("keeps a platform fee above the included monthly usage balance", () => {
     expect(BILLING_PRODUCTS.managed).toMatchObject({
       creditAmountCents: 1_000,
+      currency: "usd",
       monthlyPriceCents: 1_500,
     });
     expect(BILLING_PRODUCTS.pro).toMatchObject({
       creditAmountCents: 2_000,
+      currency: "usd",
       monthlyPriceCents: 2_500,
     });
   });
