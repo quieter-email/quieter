@@ -4,7 +4,6 @@ import { createServerEnv } from "./server";
 import { createSstEnv } from "./sst";
 
 const requiredSstEnvironment = {
-  AI_USD_TO_EUR_RATE: "0.92",
   DATABASE_URL: "postgresql://user:password@example.com/database",
   GMAIL_TOKEN_ENCRYPTION_KEY: "gmail-encryption-secret",
   GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: "current-gmail-encryption-secret",

@@ -5,7 +5,7 @@ import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { serverEnv } from "@quieter/env/server";
 
 export const MAIL_AUTOMATION_AI_PAUSED_MESSAGE =
-  "AI automation is paused until team credits are available.";
+  "AI automation is paused until usage balance is available.";
 
 const mailAutomationAiRuntimeEnabled = () =>
   serverEnv.QUIETER_GMAIL_AI_AUTOMATION_ENABLED ??

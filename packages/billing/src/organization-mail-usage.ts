@@ -12,7 +12,7 @@ import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits";
 import { getOrganizationBillingEntitlement } from "./entitlements";
 import {
-  getManagedUsageMarkupBasisPoints,
+  applyManagedUsageMarkup,
   getManagedUsageRates,
   SES_INBOUND_CHUNK_BYTES,
   SES_INBOUND_CHUNK_MICROCENTS,
@@ -59,10 +59,10 @@ const getBillingPeriod = (start: Date | null, end: Date | null) => {
   return { end: calendarEnd, start: calendarStart };
 };
 
-const applyUsageMarkup = (sesCostMicroCents: number, product: "managed" | "pro" | null) =>
-  Math.ceil(
-    sesCostMicroCents * (1 + getManagedUsageMarkupBasisPoints(product ?? "managed") / 10_000),
-  );
+const getManagedUsageCostMicroCents = (sesCostUsdMicroCents: number) =>
+  applyManagedUsageMarkup({
+    sesCostUsdMicroCents,
+  });
 
 export const withOrganizationMailUsageLock = async <T>(
   organizationId: string,
@@ -201,7 +201,9 @@ export const estimateInboundOrganizationMailUsage = (input: {
   recipientCount: number;
 }): OrganizationMailUsageEstimate => {
   const incomingChunkCount =
-    input.messageSizeBytes > 0 ? Math.ceil(input.messageSizeBytes / SES_INBOUND_CHUNK_BYTES) : 0;
+    input.messageSizeBytes > 0 ? Math.floor(input.messageSizeBytes / SES_INBOUND_CHUNK_BYTES) : 0;
+  const incomingDataCostMicroCents =
+    (input.messageSizeBytes / SES_INBOUND_CHUNK_BYTES) * SES_INBOUND_CHUNK_MICROCENTS;
 
   return {
     attachmentSizeBytes: 0,
@@ -210,8 +212,7 @@ export const estimateInboundOrganizationMailUsage = (input: {
     messageCount: 1,
     messageSizeBytes: input.messageSizeBytes,
     recipientCount: input.recipientCount,
-    sesCostMicroCents:
-      SES_INBOUND_MESSAGE_MICROCENTS + incomingChunkCount * SES_INBOUND_CHUNK_MICROCENTS,
+    sesCostMicroCents: Math.ceil(SES_INBOUND_MESSAGE_MICROCENTS + incomingDataCostMicroCents),
   };
 };
 
@@ -337,10 +338,7 @@ export const assertCanConsumeOrganizationMailUsage = async (input: {
 
   if (entitlement.account) {
     const usage = await getBillingCreditUsage(entitlement.account);
-    const costMicroCents = applyUsageMarkup(
-      input.estimate.sesCostMicroCents,
-      entitlement.product ?? "managed",
-    );
+    const costMicroCents = getManagedUsageCostMicroCents(input.estimate.sesCostMicroCents);
     const projectedBillableCostMicroCents = Math.max(
       0,
       usage.costMicroCents + costMicroCents - usage.creditAmountMicroCents,
@@ -349,7 +347,7 @@ export const assertCanConsumeOrganizationMailUsage = async (input: {
 
     if (projectedBillableCostMicroCents > 0 && !settings.overageEnabled) {
       throw new ORPCError("FORBIDDEN", {
-        message: "Team credit overage is disabled for this team.",
+        message: "Usage beyond this team's monthly balance is disabled.",
         status: 403,
       });
     }
@@ -359,7 +357,7 @@ export const assertCanConsumeOrganizationMailUsage = async (input: {
       projectedBillableCostMicroCents > settings.monthlyOverageLimitMicroCents
     ) {
       throw new ORPCError("FORBIDDEN", {
-        message: "Team credit overage limit reached for this billing period.",
+        message: "This team's usage limit has been reached for the billing period.",
         status: 403,
       });
     }
@@ -378,10 +376,7 @@ export const recordOrganizationMailUsage = async (input: OrganizationMailUsageIn
     : await getOrganizationMailUsageSettings(input.organizationId);
   const now = new Date();
   const dedupeKey = `${input.direction}:${input.organizationId}:${input.providerMessageId}`;
-  const customerCostMicroCents = applyUsageMarkup(
-    input.sesCostMicroCents,
-    entitlement.product ?? "managed",
-  );
+  const customerCostMicroCents = getManagedUsageCostMicroCents(input.sesCostMicroCents);
   const [insertedUsageEvent] = await db
     .insert(organizationMailUsageEvent)
     .values({
@@ -480,13 +475,14 @@ export const getOrganizationMailUsageOverview = async (organizationId: string) =
     entitlement.account ? getBillingCreditUsage(entitlement.account) : null,
   ]);
   const creditAmountMicroCents = creditUsage?.creditAmountMicroCents ?? 0;
-  const usedCreditMicroCents = creditUsage?.costMicroCents ?? mailUsage.sesCostMicroCents;
+  const usedCreditMicroCents =
+    creditUsage?.costMicroCents ?? getManagedUsageCostMicroCents(mailUsage.sesCostMicroCents);
 
   return {
     hasAccess: entitlement.hasAccess,
     hasUnlimitedAccess: entitlement.hasUnlimitedAccess,
     includedSesUsageMicroCents: creditAmountMicroCents,
-    managedUsageRates: getManagedUsageRates(entitlement.product ?? "managed"),
+    managedUsageRates: getManagedUsageRates(),
     period,
     remainingIncludedSesUsageMicroCents: entitlement.hasUnlimitedAccess
       ? null

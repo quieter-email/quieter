@@ -24,7 +24,6 @@
     },
   ],
   "vars": {
-    "AI_USD_TO_EUR_RATE": "1",
     "AWS_DEFAULT_REGION": "eu-central-1",
     "AWS_REGION": "eu-central-1",
     "BETTER_AUTH_APP_NAME": "Quieter Review",

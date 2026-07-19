@@ -68,7 +68,7 @@ function PrivacyPage() {
       <h2>Processors and integrations</h2>
       <ul>
         <li>Google for identity sign-in and Gmail mailbox authorization.</li>
-        <li>Polar for checkout, subscriptions, billing portal access, and credit metering.</li>
+        <li>Polar for checkout, subscriptions, billing portal access, and usage metering.</li>
         <li>OpenRouter and selected model providers for optional AI features.</li>
         <li>PostHog for product analytics only after measurement consent.</li>
         <li>Sentry for error and reliability monitoring in production.</li>

@@ -5,6 +5,7 @@ import {
   normalizeOrganizationMailAlertMilestones,
 } from "../src/organization-mail-usage";
 import {
+  applyManagedUsageMarkup,
   getManagedUsageRates,
   SES_INBOUND_CHUNK_BYTES,
   SES_INBOUND_CHUNK_MICROCENTS,
@@ -27,15 +28,32 @@ describe("organization mail usage", () => {
     expect(estimate.sesCostMicroCents).toBe(2 * SES_OUTBOUND_MESSAGE_MICROCENTS);
   });
 
-  test("charges inbound data in whole provider chunks", () => {
+  test("attributes inbound data proportionally without rounding each message up", () => {
     const estimate = estimateInboundOrganizationMailUsage({
       messageSizeBytes: SES_INBOUND_CHUNK_BYTES + 1,
       recipientCount: 1,
     });
 
-    expect(estimate.incomingChunkCount).toBe(2);
+    expect(estimate.incomingChunkCount).toBe(1);
     expect(estimate.sesCostMicroCents).toBe(
-      SES_INBOUND_MESSAGE_MICROCENTS + 2 * SES_INBOUND_CHUNK_MICROCENTS,
+      SES_INBOUND_MESSAGE_MICROCENTS + SES_INBOUND_CHUNK_MICROCENTS + 1,
+    );
+
+    const incompleteChunk = estimateInboundOrganizationMailUsage({
+      messageSizeBytes: 255 * 1024,
+      recipientCount: 1,
+    });
+
+    expect(incompleteChunk.incomingChunkCount).toBe(0);
+
+    const smallMessage = estimateInboundOrganizationMailUsage({
+      messageSizeBytes: 32 * 1024,
+      recipientCount: 1,
+    });
+
+    expect(smallMessage.incomingChunkCount).toBe(0);
+    expect(1_000 * (smallMessage.sesCostMicroCents - SES_INBOUND_MESSAGE_MICROCENTS)).toBe(
+      125 * SES_INBOUND_CHUNK_MICROCENTS,
     );
   });
 
@@ -44,16 +62,18 @@ describe("organization mail usage", () => {
   });
 
   test("applies the configured managed mail margins", () => {
-    const teamRates = getManagedUsageRates("managed");
-    const teamAiRates = getManagedUsageRates("pro");
+    const rates = getManagedUsageRates();
 
-    expect(teamRates.messagesPerThousandDollars).toBeCloseTo(0.225);
-    expect(teamAiRates.messagesPerThousandDollars).toBeCloseTo(0.25);
-    expect(teamRates.attachmentDataPerGbDollars).toBeCloseTo(0.27);
-    expect(teamAiRates.attachmentDataPerGbDollars).toBeCloseTo(0.3);
-    expect(teamRates.inboundProcessingPerThousandDollars).toBeCloseTo(0.2025);
-    expect(teamAiRates.inboundProcessingPerThousandDollars).toBeCloseTo(0.225);
-    expect(teamRates.markupPercent).toBe(125);
-    expect(teamAiRates.markupPercent).toBe(150);
+    expect(rates.messagesPerThousandUsd).toBeCloseTo(0.2);
+    expect(rates.attachmentDataPerGbUsd).toBeCloseTo(0.24);
+    expect(rates.inboundProcessingPerThousandUsd).toBeCloseTo(0.18);
+  });
+
+  test("applies markup directly to the SES USD cost", () => {
+    expect(
+      applyManagedUsageMarkup({
+        sesCostUsdMicroCents: SES_OUTBOUND_MESSAGE_MICROCENTS * 1_000,
+      }),
+    ).toBe(20_000_000);
   });
 });

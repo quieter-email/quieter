@@ -9,7 +9,7 @@ import { settingsRowValueClass } from "~/features/settings/components/settings-l
 import { formatBillingProduct } from "~/features/settings/domain/billing";
 
 const moneyFormatter = new Intl.NumberFormat("en-US", {
-  currency: "EUR",
+  currency: "USD",
   maximumFractionDigits: 2,
   minimumFractionDigits: 2,
   style: "currency",
@@ -100,8 +100,8 @@ export const BillingCreditSummary = ({
     <span>{formatBillingProduct(product)}</span>
     {creditAmountCents != null && (
       <span>
-        {moneyFormatter.format((usage?.remainingCreditCents ?? creditAmountCents) / 100)} credits
-        remaining
+        {moneyFormatter.format((usage?.remainingCreditCents ?? creditAmountCents) / 100)} usage
+        balance remaining
       </span>
     )}
     {!!usage?.billableCostCents && (

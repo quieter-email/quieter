@@ -114,7 +114,6 @@ export default $config({
             ? "review.quieter.email"
             : undefined,
         environment: {
-          AI_USD_TO_EUR_RATE: process.env.AI_USD_TO_EUR_RATE || "1",
           AWS_DEFAULT_REGION: process.env.AWS_REGION || "eu-central-1",
           AWS_REGION: process.env.AWS_REGION || "eu-central-1",
           BETTER_AUTH_APP_NAME: process.env.BETTER_AUTH_APP_NAME || "quieter",
@@ -298,7 +297,6 @@ export default $config({
     });
 
     const openRouterApiKey = env.OPENROUTER_API_KEY;
-    const aiUsdToEurRate = String(env.AI_USD_TO_EUR_RATE);
     const connectorTokenEncryptionKey = env.CONNECTOR_TOKEN_ENCRYPTION_KEY ?? "";
     const googleCalendarClientId = env.GOOGLE_CALENDAR_CLIENT_ID ?? "";
     const googleCalendarClientSecret = env.GOOGLE_CALENDAR_CLIENT_SECRET ?? "";
@@ -329,7 +327,6 @@ export default $config({
         GOOGLE_CALENDAR_CLIENT_SECRET: googleCalendarClientSecret,
         GOOGLE_GMAIL_CLIENT_ID: googleGmailClientId,
         GOOGLE_GMAIL_CLIENT_SECRET: googleGmailClientSecret,
-        AI_USD_TO_EUR_RATE: aiUsdToEurRate,
         OPENROUTER_API_KEY: openRouterApiKey,
         POLAR_ACCESS_TOKEN: polarAccessToken,
         POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
@@ -389,7 +386,6 @@ export default $config({
           GOOGLE_GMAIL_CLIENT_SECRET: googleGmailClientSecret,
           LINEAR_CLIENT_ID: linearClientId,
           LINEAR_CLIENT_SECRET: linearClientSecret,
-          AI_USD_TO_EUR_RATE: aiUsdToEurRate,
           OPENROUTER_API_KEY: openRouterApiKey,
           POLAR_ACCESS_TOKEN: polarAccessToken,
           POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
@@ -470,7 +466,6 @@ export default $config({
             GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: gmailTokenEncryptionKeyCurrent,
             GOOGLE_GMAIL_CLIENT_ID: googleGmailClientId,
             GOOGLE_GMAIL_CLIENT_SECRET: googleGmailClientSecret,
-            AI_USD_TO_EUR_RATE: aiUsdToEurRate,
             OPENROUTER_API_KEY: openRouterApiKey,
             POLAR_ACCESS_TOKEN: polarAccessToken,
             POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
@@ -531,7 +526,6 @@ export default $config({
           GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: gmailTokenEncryptionKeyCurrent,
           GOOGLE_GMAIL_CLIENT_ID: googleGmailClientId,
           GOOGLE_GMAIL_CLIENT_SECRET: googleGmailClientSecret,
-          AI_USD_TO_EUR_RATE: aiUsdToEurRate,
           OPENROUTER_API_KEY: openRouterApiKey,
           POLAR_ACCESS_TOKEN: polarAccessToken,
           POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
@@ -627,7 +621,6 @@ export default $config({
     });
     const web = createWeb(
       {
-        AI_USD_TO_EUR_RATE: aiUsdToEurRate,
         CHAT_GENERATION_START_URL: chatGenerationEnqueue.url,
         GMAIL_LIVE_SYNC_URL: gmailLiveSyncUrl,
         MAILBOX_ACTION_QUEUE_URL: mailboxActionQueue.url,
@@ -635,7 +628,6 @@ export default $config({
         MAIL_RECEIPT_ROLE_ARN: mailReceiptRole.arn,
         MAIL_RECEIPT_RULE_SET_NAME: mailReceiptRuleSetName,
         MAIL_RECEIPT_TOPIC_ARN: mailReceiptTopic.arn,
-        POLAR_METER_CREDIT_USAGE_ID: env.POLAR_METER_CREDIT_USAGE_ID ?? "",
         POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
         POLAR_PRODUCT_MANAGED_ID: env.POLAR_PRODUCT_MANAGED_ID ?? "",
         POLAR_PRODUCT_PRO_ID: env.POLAR_PRODUCT_PRO_ID ?? "",

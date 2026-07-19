@@ -210,7 +210,10 @@ const refreshUserAiContextAttempt = async (
   if (!(await canRefreshUserAiContext({ organizationId, userId: input.userId }))) {
     await db
       .update(userAiContextEvent)
-      .set({ lastError: "AI memory refresh requires available credits.", updatedAt: new Date() })
+      .set({
+        lastError: "AI memory refresh requires available usage balance.",
+        updatedAt: new Date(),
+      })
       .where(inArray(userAiContextEvent.id, eventIds));
     return { status: "ineligible" as const };
   }

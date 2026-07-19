@@ -2,7 +2,7 @@ import { describe, expect, test } from "vite-plus/test";
 import {
   AI_COST_RECOVERY_BASIS_POINTS,
   applyAiCostRecoveryFee,
-  convertProviderCostToCreditMicroCents,
+  getAiUsageCostMicroCents,
 } from "../src/ai-pricing";
 import { BILLING_USAGE_KINDS } from "../src/credits";
 
@@ -17,22 +17,14 @@ describe("AI usage pricing", () => {
     expect(BILLING_USAGE_KINDS).toContain("aiMemory");
   });
 
-  test("converts the provider's exact USD cost to euro credits before the fee", () => {
-    expect(convertProviderCostToCreditMicroCents({ costUsd: 1, usdToEurRate: 0.92 })).toBe(
-      105_800_000,
-    );
+  test("records the provider's exact USD cost before the fee", () => {
+    expect(getAiUsageCostMicroCents(1)).toBe(115_000_000);
   });
 
-  test.each([
-    { costUsd: Number.NaN, usdToEurRate: 0.92 },
-    { costUsd: Number.POSITIVE_INFINITY, usdToEurRate: 0.92 },
-    { costUsd: 0, usdToEurRate: 0.92 },
-    { costUsd: -1, usdToEurRate: 0.92 },
-    { costUsd: 1, usdToEurRate: Number.NaN },
-    { costUsd: 1, usdToEurRate: Number.POSITIVE_INFINITY },
-    { costUsd: 1, usdToEurRate: 0 },
-    { costUsd: 1, usdToEurRate: -0.92 },
-  ])("rejects invalid provider cost conversion input %#", (input) => {
-    expect(() => convertProviderCostToCreditMicroCents(input)).toThrow();
-  });
+  test.each([Number.NaN, Number.POSITIVE_INFINITY, 0, -1])(
+    "rejects invalid provider costs %#",
+    (costUsd) => {
+      expect(() => getAiUsageCostMicroCents(costUsd)).toThrow();
+    },
+  );
 });

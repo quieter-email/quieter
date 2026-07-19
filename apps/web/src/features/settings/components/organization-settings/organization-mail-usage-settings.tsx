@@ -42,14 +42,14 @@ type Milestone = {
 };
 
 const moneyFormatter = new Intl.NumberFormat("en-US", {
-  currency: "EUR",
+  currency: "USD",
   maximumFractionDigits: 2,
   minimumFractionDigits: 2,
   style: "currency",
 });
 
 const rateFormatter = new Intl.NumberFormat("en-US", {
-  currency: "EUR",
+  currency: "USD",
   maximumFractionDigits: 4,
   minimumFractionDigits: 3,
   style: "currency",
@@ -76,7 +76,7 @@ const createInitialMilestones = (percents: number[]): Milestone[] =>
 
 const ManagedUsageLoading = ({ message }: { message: string }) => (
   <section className={settingsInsetSectionClass}>
-    <SettingsRowText title="Team credits">
+    <SettingsRowText title="Usage balance">
       <span className="inline-flex items-center gap-2">
         <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
         {message}
@@ -87,7 +87,7 @@ const ManagedUsageLoading = ({ message }: { message: string }) => (
 
 const ManagedUsageUnavailable = ({ message }: { message: string }) => (
   <section className={settingsInsetSectionClass}>
-    <SettingsRowText title="Team credits">{message}</SettingsRowText>
+    <SettingsRowText title="Usage balance">{message}</SettingsRowText>
   </section>
 );
 
@@ -293,7 +293,7 @@ const ManagedUsageSettingsForm = ({
         organizationId,
         overageEnabled,
       });
-      toast.success("Team credit settings saved.");
+      toast.success("Usage balance settings saved.");
     } catch (error) {
       toast.error((error as { message?: string })?.message ?? "Could not update usage settings.");
     }
@@ -303,7 +303,7 @@ const ManagedUsageSettingsForm = ({
     return (
       <section className={settingsInsetSectionClass}>
         <SettingsInsetRow className="justify-between gap-4">
-          <SettingsRowText title="Team credits">
+          <SettingsRowText title="Usage balance">
             {formatMoney(managedUsageCostCents)} tracked this period
           </SettingsRowText>
           <span className="rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success squircle">
@@ -317,7 +317,7 @@ const ManagedUsageSettingsForm = ({
   return (
     <section className={settingsInsetDividerClass}>
       <div className="flex flex-col gap-4 px-4 pt-6 md:flex-row md:items-start md:justify-between md:px-6">
-        <SettingsRowText title="Team credits">
+        <SettingsRowText title="Usage balance">
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             <span>Managed mail rates</span>
             {periodEnd ? <span>Resets {periodEnd}</span> : null}
@@ -334,7 +334,7 @@ const ManagedUsageSettingsForm = ({
             <p className="mt-1 text-xs text-muted-foreground">used across team features</p>
           </div>
           <p className="text-right text-xs text-muted-foreground">
-            {formatMoney(includedUsageCents)} monthly credits
+            {formatMoney(includedUsageCents)} monthly usage balance
             <br />
             {formatMoney(overview.usage.billableCostCents)} overage
           </p>
@@ -356,17 +356,17 @@ const ManagedUsageSettingsForm = ({
         <Price
           label="Messages"
           suffix="/ 1K"
-          value={overview.managedUsageRates.messagesPerThousandDollars}
+          value={overview.managedUsageRates.messagesPerThousandUsd}
         />
         <Price
           label="Attachment data"
           suffix="/ GB"
-          value={overview.managedUsageRates.attachmentDataPerGbDollars}
+          value={overview.managedUsageRates.attachmentDataPerGbUsd}
         />
         <Price
           label="Incoming mail processing"
           suffix="/ 1K units"
-          value={overview.managedUsageRates.inboundProcessingPerThousandDollars}
+          value={overview.managedUsageRates.inboundProcessingPerThousandUsd}
         />
       </div>
 
@@ -376,7 +376,7 @@ const ManagedUsageSettingsForm = ({
             className="max-w-xl"
             title={<label htmlFor="managed-overage-toggle">Allow overage</label>}
           >
-            <span>When disabled, new paid usage stops after the team credits are used.</span>
+            <span>When disabled, new paid usage stops after the monthly balance is used.</span>
           </SettingsRowText>
           <Switch
             checked={overageEnabled}
@@ -391,14 +391,14 @@ const ManagedUsageSettingsForm = ({
 
         <SettingsInsetFieldRow>
           <SettingsRowText className="max-w-xl" title="Monthly overage limit">
-            <span>Maximum usage billed above the monthly team credits.</span>
+            <span>Maximum usage billed above the monthly usage balance.</span>
           </SettingsRowText>
 
           <div className="flex items-center gap-2">
             <NumberField
               disabled={!canManageOrganizationMailUsage || !overageEnabled}
               format={{
-                currency: "EUR",
+                currency: "USD",
                 maximumFractionDigits: 2,
                 minimumFractionDigits: 2,
                 style: "currency",
@@ -490,7 +490,7 @@ const ManagedUsageSettingsForm = ({
                       ? "Enter a threshold"
                       : formatMoney(includedThresholdCents)}
                   </span>{" "}
-                  of monthly credits
+                  of the monthly usage balance
                 </span>
                 {overageThresholdCents != null && (
                   <span>

@@ -1,8 +1,4 @@
-export const ORGANIZATION_MAIL_INCLUDED_SES_USAGE_MICROCENTS = 1_000_000_000;
-export const ORGANIZATION_MAIL_OVERAGE_MARKUP_BASIS_POINTS = {
-  managed: 12_500,
-  pro: 15_000,
-} as const;
+export const ORGANIZATION_MAIL_COST_RECOVERY_BASIS_POINTS = 10_000;
 
 export const SES_OUTBOUND_MESSAGE_MICROCENTS = 10_000;
 export const SES_OUTBOUND_ATTACHMENT_DATA_MICROCENTS_PER_GB = 12_000_000;
@@ -10,43 +6,32 @@ export const SES_INBOUND_MESSAGE_MICROCENTS = 10_000;
 export const SES_INBOUND_CHUNK_MICROCENTS = 9_000;
 export const SES_INBOUND_CHUNK_BYTES = 256 * 1024;
 
-type ManagedUsagePlan = keyof typeof ORGANIZATION_MAIL_OVERAGE_MARKUP_BASIS_POINTS;
+export const applyManagedUsageMarkup = (input: { sesCostUsdMicroCents: number }) => {
+  if (!Number.isFinite(input.sesCostUsdMicroCents) || input.sesCostUsdMicroCents < 0) {
+    throw new Error("SES cost must be a finite non-negative number.");
+  }
 
-export const getManagedUsageMarkupBasisPoints = (plan: ManagedUsagePlan | null) =>
-  ORGANIZATION_MAIL_OVERAGE_MARKUP_BASIS_POINTS[plan === "pro" ? "pro" : "managed"];
-
-const applyManagedUsageMarkup = (microCents: number, plan: ManagedUsagePlan) =>
-  Math.ceil(microCents * (1 + getManagedUsageMarkupBasisPoints(plan) / 10_000));
+  return Math.ceil(
+    input.sesCostUsdMicroCents * (1 + ORGANIZATION_MAIL_COST_RECOVERY_BASIS_POINTS / 10_000),
+  );
+};
 
 const microCentsToCurrency = (microCents: number) => microCents / 100_000_000;
 
-export const getManagedUsageRates = (plan: ManagedUsagePlan) => ({
-  attachmentDataPerGbDollars: microCentsToCurrency(
-    applyManagedUsageMarkup(SES_OUTBOUND_ATTACHMENT_DATA_MICROCENTS_PER_GB, plan),
+export const getManagedUsageRates = () => ({
+  attachmentDataPerGbUsd: microCentsToCurrency(
+    applyManagedUsageMarkup({
+      sesCostUsdMicroCents: SES_OUTBOUND_ATTACHMENT_DATA_MICROCENTS_PER_GB,
+    }),
   ),
-  inboundProcessingPerThousandDollars: microCentsToCurrency(
-    applyManagedUsageMarkup(SES_INBOUND_CHUNK_MICROCENTS * 1_000, plan),
+  inboundProcessingPerThousandUsd: microCentsToCurrency(
+    applyManagedUsageMarkup({
+      sesCostUsdMicroCents: SES_INBOUND_CHUNK_MICROCENTS * 1_000,
+    }),
   ),
-  markupPercent: getManagedUsageMarkupBasisPoints(plan) / 100,
-  messagesPerThousandDollars: microCentsToCurrency(
-    applyManagedUsageMarkup(SES_OUTBOUND_MESSAGE_MICROCENTS * 1_000, plan),
+  messagesPerThousandUsd: microCentsToCurrency(
+    applyManagedUsageMarkup({
+      sesCostUsdMicroCents: SES_OUTBOUND_MESSAGE_MICROCENTS * 1_000,
+    }),
   ),
 });
-
-const formatRate = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    currency: "EUR",
-    maximumFractionDigits: 4,
-    minimumFractionDigits: 3,
-    style: "currency",
-  }).format(value);
-
-export const formatManagedUsagePriceFeature = (plan: ManagedUsagePlan) => {
-  const rates = getManagedUsageRates(plan);
-
-  return `Managed mail costs ${formatRate(
-    rates.messagesPerThousandDollars,
-  )}/1K outbound mails, ${formatRate(rates.attachmentDataPerGbDollars)}/GB attachments, ${formatRate(
-    rates.inboundProcessingPerThousandDollars,
-  )}/1K inbound mails`;
-};

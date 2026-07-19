@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { formatManagedUsagePriceFeature } from "./ses-pricing";
 
 export const BILLING_PRODUCT_IDS = ["managed", "pro"] as const;
 export const billingProductIdSchema = z.enum(BILLING_PRODUCT_IDS);
@@ -54,14 +53,14 @@ export const BILLING_FEATURES = {
 export const BILLING_PRODUCTS = {
   managed: {
     creditAmountCents: 1_000,
-    currency: "eur",
-    description: "A shared team credit balance for managed mail.",
+    currency: "usd",
+    description: "Managed mail for your team with a shared monthly usage balance.",
     features: [
-      "€10 in monthly team credits",
+      "$10 monthly usage balance",
       "Managed sending and receiving",
       "Custom team domains",
       "Team API keys",
-      formatManagedUsagePriceFeature("managed"),
+      "Managed mail from $0.20 per 1,000 messages",
     ],
     highlight: false,
     monthlyPriceCents: 1_500,
@@ -70,13 +69,13 @@ export const BILLING_PRODUCTS = {
   },
   pro: {
     creditAmountCents: 2_000,
-    currency: "eur",
-    description: "A larger shared balance with managed mail and AI for team members.",
+    currency: "usd",
+    description: "Managed mail and AI for every team member with a larger shared balance.",
     features: [
-      "€20 in monthly team credits",
+      "$20 monthly usage balance",
       "Everything in Managed",
       "AI features",
-      formatManagedUsagePriceFeature("pro"),
+      "AI usage at model cost plus 15%",
     ],
     highlight: true,
     monthlyPriceCents: 2_500,
@@ -87,7 +86,7 @@ export const BILLING_PRODUCTS = {
   BillingProductId,
   {
     creditAmountCents: number;
-    currency: "eur";
+    currency: "usd";
     description: string;
     features: string[];
     highlight: boolean;

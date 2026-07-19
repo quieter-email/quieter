@@ -5,7 +5,7 @@ import { db } from "@quieter/database/client";
 import { billingSubscription, mailbox, member, organization } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { convertProviderCostToCreditMicroCents } from "./ai-pricing";
+import { getAiUsageCostMicroCents } from "./ai-pricing";
 import { getBillingCreditUsage, recordBillingCreditUsage, type BillingUsageKind } from "./credits";
 import {
   getOrganizationBillingEntitlement,
@@ -26,7 +26,7 @@ import {
 export {
   AI_COST_RECOVERY_BASIS_POINTS,
   applyAiCostRecoveryFee,
-  convertProviderCostToCreditMicroCents,
+  getAiUsageCostMicroCents,
 } from "./ai-pricing";
 
 export { syncBillingSubscription };
@@ -386,10 +386,9 @@ export const reportAiUsage = async (input: {
     throw new Error("The AI provider did not report a generation cost.");
   }
 
-  const costMicroCents = convertProviderCostToCreditMicroCents({
-    costUsd: input.costUsd,
-    usdToEurRate: serverEnv.AI_USD_TO_EUR_RATE,
-  });
+  if (input.costUsd <= 0) return;
+
+  const costMicroCents = getAiUsageCostMicroCents(input.costUsd);
   if (costMicroCents <= 0) return;
 
   await recordAiCreditUsage({
