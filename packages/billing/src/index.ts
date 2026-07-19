@@ -386,6 +386,8 @@ export const reportAiUsage = async (input: {
     throw new Error("The AI provider did not report a generation cost.");
   }
 
+  if (input.costUsd <= 0) return;
+
   const costMicroCents = getAiUsageCostMicroCents(input.costUsd);
   if (costMicroCents <= 0) return;
 
