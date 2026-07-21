@@ -33,6 +33,7 @@
     "@sentry/tanstackstart-react": "^10.62.0",
     "@tanstack/ai": "catalog:",
     "@tanstack/ai-react": "catalog:",
+    "@tanstack/hotkeys": "catalog:",
     "@tanstack/query-core": "catalog:",
     "@tanstack/query-persist-client-core": "catalog:",
     "@tanstack/react-form": "catalog:",

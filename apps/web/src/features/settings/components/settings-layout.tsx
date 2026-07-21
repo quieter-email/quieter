@@ -37,16 +37,22 @@ export const SettingsPageHeader = ({
   eyebrow?: string;
   title: string;
 }) => (
-  <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-    <div className="min-w-0">
-      {eyebrow && (
-        <p className="mb-2 text-xs tracking-[0.14em] text-muted-foreground uppercase">{eyebrow}</p>
-      )}
-      <h1 className="text-xl font-normal tracking-tight text-foreground">{title}</h1>
-      {children && <div className="mt-2 max-w-2xl text-sm/6 text-muted-foreground">{children}</div>}
-    </div>
-    {action && <div className="shrink-0">{action}</div>}
-  </header>
+  <div className="@container">
+    <header className="flex flex-col gap-3 @md:flex-row @md:items-end @md:justify-between">
+      <div className="min-w-0">
+        {eyebrow && (
+          <p className="mb-2 text-xs tracking-[0.14em] text-muted-foreground uppercase">
+            {eyebrow}
+          </p>
+        )}
+        <h1 className="text-xl font-normal tracking-tight text-foreground">{title}</h1>
+        {children && (
+          <div className="mt-2 max-w-2xl text-sm/6 text-muted-foreground">{children}</div>
+        )}
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </header>
+  </div>
 );
 
 export const SettingsSection = ({
@@ -80,7 +86,7 @@ export const SettingsCard = ({
 }) => (
   <div
     className={cn(
-      "overflow-hidden rounded-lg border border-border/70 bg-background/58 squircle",
+      "@container overflow-hidden rounded-lg border border-border/70 bg-background/58 squircle",
       className,
     )}
   >
@@ -89,26 +95,26 @@ export const SettingsCard = ({
 );
 
 export const settingsInsetDividerClass =
-  "relative after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden md:after:inset-x-6";
+  "relative after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:after:inset-x-6";
 export const settingsRowTitleClass = "text-[0.8rem] font-normal text-foreground";
 export const settingsRowValueClass = "text-xs leading-4 text-muted-foreground";
-export const settingsRowPaddingClass = "px-4 py-3 md:px-6";
+export const settingsRowPaddingClass = "px-4 py-3 @md:px-6";
 export const settingsDivideClass = "divide-y divide-border/70";
 
 export const settingsInsetRowClass = cn("flex w-full items-center gap-4", settingsRowPaddingClass);
 
 export const settingsInsetFieldRowClass = cn(
-  "flex w-full flex-col gap-4 md:flex-row md:items-center md:justify-between",
+  "flex w-full flex-col gap-4 @md:flex-row @md:items-center @md:justify-between",
   settingsRowPaddingClass,
 );
 
 export const settingsInsetStackedRowClass = cn(
-  "flex w-full flex-col gap-3 md:flex-row md:items-center",
+  "flex w-full flex-col gap-3 @md:flex-row @md:items-center",
   settingsRowPaddingClass,
 );
 
 export const settingsListRowClass = cn(
-  "flex flex-col gap-3 border-b border-border/70 last:border-b-0 md:flex-row md:items-center md:justify-between",
+  "flex flex-col gap-3 border-b border-border/70 last:border-b-0 @md:flex-row @md:items-center @md:justify-between",
   settingsRowPaddingClass,
 );
 
@@ -161,7 +167,7 @@ const settingsRowShellClass = cn(
 );
 
 const settingsFieldRowShellClass = cn(
-  "flex w-full flex-col items-start justify-between gap-4 md:flex-row md:items-center",
+  "flex w-full flex-col items-start justify-between gap-4 @md:flex-row @md:items-center",
   settingsRowPaddingClass,
   settingsInsetDividerClass,
 );
@@ -256,7 +262,7 @@ export const SettingsNavigationRow = ({
       <span className="block truncate text-[0.8rem] font-normal text-foreground">{title}</span>
       <span className={cn("mt-0.5 block truncate", settingsRowValueClass)}>{description}</span>
     </span>
-    {meta && <span className="hidden text-xs text-muted-foreground sm:block">{meta}</span>}
+    {meta && <span className="hidden text-xs text-muted-foreground @sm:block">{meta}</span>}
     <HugeiconsIcon
       aria-hidden
       className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"

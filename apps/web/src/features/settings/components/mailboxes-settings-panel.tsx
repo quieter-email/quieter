@@ -254,7 +254,7 @@ export const MailboxesSettingsPanel = () => {
     hasOrganizationAiAccess(billing, selectedManagedMailboxDetails.mailbox.organizationId);
 
   return (
-    <div className="space-y-8">
+    <div className="@container space-y-8">
       <section className="space-y-4">
         <h2 className="text-sm font-medium text-foreground">Connected Gmail</h2>
 
@@ -437,7 +437,7 @@ export const MailboxesSettingsPanel = () => {
                       </div>
                     </div>
 
-                    <div className="grid border-t border-border/60 sm:grid-cols-2 sm:divide-x sm:divide-border/60">
+                    <div className="grid border-t border-border/60 @2xl:grid-cols-2 @2xl:divide-x @2xl:divide-border/60">
                       <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
                         <span className="min-w-0 flex-1">
                           <span className="block text-xs font-medium text-foreground">
@@ -487,7 +487,7 @@ export const MailboxesSettingsPanel = () => {
                       <label
                         className={cn(
                           settingsInsetRowClass,
-                          "cursor-pointer gap-3 border-t border-border/60 sm:border-t-0",
+                          "cursor-pointer gap-3 border-t border-border/60 @2xl:border-t-0",
                         )}
                       >
                         <span className="min-w-0 flex-1">
@@ -710,7 +710,7 @@ export const MailboxesSettingsPanel = () => {
         )}
 
         {selectedManagedOrganizationId && (
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
+          <div className="grid gap-4 @5xl:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
             <div className="overflow-hidden rounded-lg border border-border/70 squircle">
               {(managedAdminData?.mailboxes ?? []).length > 0 ? (
                 <SettingsInsetRows>

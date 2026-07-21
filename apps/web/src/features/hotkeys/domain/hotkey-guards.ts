@@ -1,3 +1,9 @@
+import {
+  DEFAULT_SEQUENCE_TIMEOUT,
+  getSequenceManager,
+  matchesKeyboardEvent,
+} from "@tanstack/hotkeys";
+
 const editableSelector = [
   "input:not([type='button']):not([type='checkbox']):not([type='radio']):not([type='reset']):not([type='submit'])",
   "textarea",
@@ -8,6 +14,24 @@ const editableSelector = [
 
 const getElementTarget = (target: EventTarget | null) =>
   target instanceof Element ? target : null;
+
+export const isAppShortcutSequenceContinuation = (event: KeyboardEvent, now = Date.now()) => {
+  for (const registration of getSequenceManager().registrations.state.values()) {
+    const nextHotkey = registration.sequence[registration.matchedStepCount];
+    if (
+      registration.options.enabled !== false &&
+      registration.matchedStepCount > 0 &&
+      nextHotkey &&
+      now - registration.partialMatchLastKeyTime <=
+        (registration.options.timeout ?? DEFAULT_SEQUENCE_TIMEOUT) &&
+      matchesKeyboardEvent(event, nextHotkey, registration.options.platform)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+};
 
 export const isEditableShortcutTarget = (target: EventTarget | null) => {
   const element = getElementTarget(target);
@@ -20,4 +44,6 @@ export const hasOpenBlockingDialog = () =>
   );
 
 export const shouldIgnoreAppShortcut = (event: KeyboardEvent) =>
-  isEditableShortcutTarget(event.target) || hasOpenBlockingDialog();
+  isEditableShortcutTarget(event.target) ||
+  hasOpenBlockingDialog() ||
+  isAppShortcutSequenceContinuation(event);

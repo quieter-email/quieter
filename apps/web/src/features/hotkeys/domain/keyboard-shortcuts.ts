@@ -230,8 +230,6 @@ export const KEYBOARD_SHORTCUTS: readonly KeyboardShortcut[] = [
     keys: ["E"],
     label: "Archive",
     scope: "message-detail",
-    status: "coming-soon",
-    description: "Needs an Archive view or undo before this can be safely enabled.",
   },
   {
     category: "Message detail",

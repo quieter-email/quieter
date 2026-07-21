@@ -131,6 +131,7 @@
 - Icon-only controls should use the shared tooltip wrapper from `@quieter/ui` and a concise `aria-label`.
 - Never use native `<select>` controls in app code. Use the shared Base UI-backed Select components from `@quieter/ui`.
 - For incremental UI refinements, preserve existing layout, density, and hierarchy unless asked to redesign.
+- Prefer container queries over viewport media queries when a component's layout should respond to its own available space. Keep media queries for viewport-level page shells, device or input capabilities, user preferences, and print styles.
 - Prefer colocated one-off UI logic over extracting helpers used once.
 - Inline one-off schemas or validators used only once or twice instead of extracting a named constant for them.
 - Avoid unnecessary fallback logic and placeholder compatibility code.

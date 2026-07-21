@@ -335,6 +335,7 @@ const MessageRowContent = ({
         actions={createMailboxThreadMessageActionHandlers({
           mailboxActions,
           onOpenDraft,
+          supportsArchive: mailboxProvider !== "api",
           supportsFolders: mailboxProvider === "gmail",
           supportsLabels: mailboxProvider !== "api",
           supportsReadState: mailboxProvider !== "api",

@@ -7,6 +7,7 @@ export type LabelChanges = {
 };
 
 export type ThreadActionHandlers = {
+  onArchive?: (threadId: string) => void | Promise<void>;
   onDeleteDraft?: (message: MessageListItem) => void | Promise<void>;
   onMarkAsRead?: (threadId: string) => void | Promise<void>;
   onMarkAsSpam?: (threadId: string) => void | Promise<void>;
@@ -22,6 +23,7 @@ export type ThreadActionHandlers = {
 export const createMailboxThreadMessageActionHandlers = ({
   mailboxActions,
   onOpenDraft,
+  supportsArchive = true,
   supportsFolders = true,
   supportsLabels = true,
   supportsReadState = true,
@@ -29,11 +31,15 @@ export const createMailboxThreadMessageActionHandlers = ({
 }: {
   mailboxActions: MailboxActions;
   onOpenDraft?: (message: MessageListItem) => void | Promise<void>;
+  supportsArchive?: boolean;
   supportsFolders?: boolean;
   supportsLabels?: boolean;
   supportsReadState?: boolean;
   supportsUnsubscribe?: boolean;
 }): ThreadActionHandlers => ({
+  ...(supportsArchive
+    ? { onArchive: (threadId: string) => mailboxActions.archiveThread(threadId) }
+    : {}),
   ...(supportsReadState
     ? {
         onMarkAsRead: (threadId: string) => mailboxActions.markThreadAsRead(threadId),
