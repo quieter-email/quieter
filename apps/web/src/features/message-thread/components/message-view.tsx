@@ -244,7 +244,7 @@ const MessageHeaderContent = ({
             <button
               aria-controls={`message-body-${message.id}`}
               aria-expanded={isExpanded}
-              className="w-full min-w-0 cursor-pointer rounded-sm text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60 @sm:flex-1"
+              className="w-full min-w-0 cursor-pointer rounded-sm text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring/60 @sm:flex-1"
               onClick={(event) => {
                 const selection = window.getSelection();
                 if (selection && !selection.isCollapsed && selection.toString().trim()) {
