@@ -188,7 +188,7 @@ const MessageHeaderContent = ({
 
         <span
           className={cn(
-            "max-w-full min-w-0 shrink truncate text-sm text-foreground sm:text-[15px]",
+            "max-w-full min-w-0 shrink truncate text-sm text-foreground @sm:text-[15px]",
             senderNameClassName,
             {
               "font-semibold text-foreground": !!isExpanded || isMessageUnread(message),
@@ -200,12 +200,12 @@ const MessageHeaderContent = ({
         </span>
 
         {senderEmail && (
-          <span className="max-w-full min-w-0 shrink truncate text-xs text-muted-foreground sm:text-sm">
+          <span className="max-w-full min-w-0 shrink truncate text-xs text-muted-foreground @sm:text-sm">
             {senderEmail}
           </span>
         )}
 
-        <span className="shrink-0 basis-full text-xs whitespace-nowrap text-muted-foreground sm:basis-auto sm:text-sm">
+        <span className="shrink-0 basis-full text-xs whitespace-nowrap text-muted-foreground @sm:basis-auto @sm:text-sm">
           {date}
         </span>
       </div>
@@ -217,7 +217,7 @@ const MessageHeaderContent = ({
       {showParticipants && (
         <div className="mt-1.5 space-y-1">
           {participantRows.map((row) => (
-            <div className="flex min-w-0 items-start gap-2 text-xs sm:text-sm" key={row.label}>
+            <div className="flex min-w-0 items-start gap-2 text-xs @sm:text-sm" key={row.label}>
               <span className="shrink-0 text-muted-foreground">{row.label}</span>
               <span className="min-w-0 wrap-break-word text-foreground">{row.value}</span>
             </div>
@@ -239,12 +239,12 @@ const MessageHeaderContent = ({
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+        <div className="flex min-w-0 flex-col gap-3 @sm:flex-row @sm:items-start @sm:justify-between">
           {onToggleExpanded ? (
             <button
               aria-controls={`message-body-${message.id}`}
               aria-expanded={isExpanded}
-              className="w-full min-w-0 cursor-pointer rounded-sm text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60 sm:flex-1"
+              className="w-full min-w-0 cursor-pointer rounded-sm text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60 @sm:flex-1"
               onClick={(event) => {
                 const selection = window.getSelection();
                 if (selection && !selection.isCollapsed && selection.toString().trim()) {
@@ -262,11 +262,11 @@ const MessageHeaderContent = ({
               {content}
             </button>
           ) : (
-            <div className="w-full min-w-0 sm:flex-1">{content}</div>
+            <div className="w-full min-w-0 @sm:flex-1">{content}</div>
           )}
 
           <TooltipGroup>
-            <div className="flex min-w-0 flex-wrap items-center gap-1 gap-y-2 max-sm:justify-start sm:w-auto sm:justify-end sm:pl-4">
+            <div className="flex min-w-0 flex-wrap items-center justify-start gap-1 gap-y-2 @sm:w-auto @sm:justify-end @sm:pl-4">
               {headerActions}
               {trailing}
             </div>
@@ -299,10 +299,7 @@ const MessageHeaderActions = ({
   showReplyAll?: boolean;
 }) => (
   <div
-    className={cn(
-      "flex flex-wrap items-center gap-0.5 max-sm:justify-start sm:justify-end",
-      className,
-    )}
+    className={cn("flex flex-wrap items-center justify-start gap-0.5 @sm:justify-end", className)}
   >
     {onContinueDraft && (
       <IconButtonTooltip label="Continue with draft">
@@ -523,7 +520,7 @@ const ThreadMessageBody = ({
     <div className="min-h-0 overflow-hidden">
       <div
         className={cn(
-          "px-4 pb-4 transition-[opacity,transform,padding] duration-200 ease-out sm:px-5 sm:pb-5",
+          "px-4 pb-4 transition-[opacity,transform,padding] duration-200 ease-out @sm:px-5 @sm:pb-5",
           {
             "translate-y-0 opacity-100": expanded,
             "-translate-y-1 opacity-0": !expanded,
@@ -627,7 +624,7 @@ const ThreadMessageCard = ({
       })}
     >
       <MessageHeaderContent
-        className="p-4 sm:px-5 sm:py-4"
+        className="p-4 @sm:px-5 @sm:py-4"
         gmailLabels={gmailLabels}
         headerActions={
           expanded ? (
@@ -659,7 +656,7 @@ const ThreadMessageCard = ({
       />
 
       {usefulDetails.length > 0 && (
-        <div className="space-y-1.5 px-4 pb-3 sm:px-5">
+        <div className="space-y-1.5 px-4 pb-3 @sm:px-5">
           {usefulDetails.map((detail) => (
             <GmailUsefulDetailCard detail={detail} key={detail.id} mailboxId={mailboxId} />
           ))}
@@ -731,7 +728,7 @@ const SingleMessageCard = ({
   return (
     <section>
       <MessageHeaderContent
-        className="p-4 sm:p-5"
+        className="p-4 @sm:p-5"
         gmailLabels={gmailLabels}
         headerActions={
           <MessageHeaderActions
@@ -752,14 +749,14 @@ const SingleMessageCard = ({
       />
 
       {usefulDetails.length > 0 && (
-        <div className="space-y-1.5 px-4 pb-3 sm:px-5">
+        <div className="space-y-1.5 px-4 pb-3 @sm:px-5">
           {usefulDetails.map((detail) => (
             <GmailUsefulDetailCard detail={detail} key={detail.id} mailboxId={mailboxId} />
           ))}
         </div>
       )}
 
-      <div className="px-4 pb-4 sm:px-5 sm:pb-5">
+      <div className="px-4 pb-4 @sm:px-5 @sm:pb-5">
         <MessageBody html={message.bodyHtml} isLoading={isLoading} text={message.bodyText} />
       </div>
 
@@ -972,6 +969,22 @@ export const MessageView = ({
         },
       },
       {
+        hotkey: "E",
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) return;
+          void runHotkeyThreadAction(async () => {
+            await mailboxActions.archiveThread(hotkeyMessage.threadId);
+            onBackToList?.();
+          }, "Conversation archived.");
+        },
+        options: {
+          enabled:
+            !isActionPending &&
+            mailboxProvider !== "api" &&
+            (activeMailbox === "inbox" || activeMailbox === "unread"),
+        },
+      },
+      {
         hotkey: "Shift+3",
         callback: (event) => {
           if (shouldIgnoreAppShortcut(event)) return;
@@ -1040,15 +1053,15 @@ export const MessageView = ({
   );
 
   return (
-    <article className="w-full">
-      <header className="w-full border-b p-5 sm:p-6">
-        <div className="flex min-w-0 flex-col items-start gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-8">
-          <h1 className="min-w-0 text-lg/tight font-medium tracking-tight wrap-break-word text-foreground sm:text-xl">
+    <article className="@container w-full">
+      <header className="w-full border-b p-5 @sm:p-6">
+        <div className="flex min-w-0 flex-col items-start gap-3 @sm:grid @sm:grid-cols-[minmax(0,1fr)_auto] @sm:items-center @sm:gap-8">
+          <h1 className="min-w-0 text-lg/tight font-medium tracking-tight wrap-break-word text-foreground @sm:text-xl">
             {subject}
           </h1>
 
           {mailboxProvider !== "api" && (
-            <div className="shrink-0 sm:justify-self-end">
+            <div className="shrink-0 @sm:justify-self-end">
               <MessageActionsDropdown
                 actions={createMailboxThreadMessageActionHandlers({
                   mailboxActions,

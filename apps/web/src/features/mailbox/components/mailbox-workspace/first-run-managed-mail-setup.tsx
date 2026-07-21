@@ -162,8 +162,8 @@ export const FirstRunManagedMailSetup = ({
   } satisfies Record<(typeof setupSteps)[number]["id"], boolean>;
 
   return (
-    <div className="mx-auto flex max-h-[calc(100dvh-4rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-border/70 bg-background/88 text-left shadow-2xl backdrop-blur-xl">
-      <div className="flex flex-col gap-4 border-b border-border/70 p-5 md:flex-row md:items-start md:justify-between">
+    <div className="@container mx-auto flex max-h-[calc(100dvh-4rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-border/70 bg-background/88 text-left shadow-2xl backdrop-blur-xl">
+      <div className="flex flex-col gap-4 border-b border-border/70 p-5 @3xl:flex-row @3xl:items-start @3xl:justify-between">
         <div>
           <Button
             className="mb-3 -ml-2 text-muted-foreground"
@@ -193,7 +193,7 @@ export const FirstRunManagedMailSetup = ({
           }}
           value={organizationId}
         >
-          <SelectTrigger aria-label="Organization" className="w-full md:w-60">
+          <SelectTrigger aria-label="Organization" className="w-full @3xl:w-60">
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="end">
@@ -206,9 +206,9 @@ export const FirstRunManagedMailSetup = ({
         </Select>
       </div>
 
-      <div className="grid min-h-0 flex-1 overflow-hidden md:grid-cols-[15rem_minmax(0,1fr)]">
-        <nav className="border-b border-border/70 p-4 md:border-r md:border-b-0">
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-1">
+      <div className="grid min-h-0 flex-1 overflow-hidden @3xl:grid-cols-[15rem_minmax(0,1fr)]">
+        <nav className="border-b border-border/70 p-4 @3xl:border-r @3xl:border-b-0">
+          <div className="grid grid-cols-2 gap-2 @3xl:grid-cols-1">
             {setupSteps.map((step) => (
               <div
                 className={cn("flex items-center gap-2 rounded-md px-3 py-2 text-sm", {
@@ -247,7 +247,7 @@ export const FirstRunManagedMailSetup = ({
                 Managed mail is active for this organization.
               </p>
             ) : (
-              <div className="grid gap-3 lg:grid-cols-2">
+              <div className="grid gap-3 @5xl:grid-cols-2">
                 {(["managed", "pro"] as const).map((product) => (
                   <BillingProductCard
                     canChoose={canManageBilling}

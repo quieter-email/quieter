@@ -2,6 +2,7 @@
 
 import type { CSSProperties, PropsWithChildren } from "react";
 import {
+  Archive02Icon,
   ArrowUpRight01Icon,
   Delete01Icon,
   Delete02Icon,
@@ -146,9 +147,11 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
   const isTrashMailbox = props.mailbox === "trash";
   const isBusy = !!props.isPending;
   const [openLabelsDialog, setOpenLabelsDialog] = useState(false);
+  const showArchive = props.mailbox === "inbox" || props.mailbox === "unread";
   const showMarkAsSpam = props.mailbox === "inbox";
   const unsubscribeTarget = getMessageUnsubscribeTarget(props.message);
   const hasFolderAction =
+    (showArchive && !!actions.onArchive) ||
     (showMarkAsSpam && !!actions.onMarkAsSpam) ||
     (isSpamMailbox && !!actions.onUnmarkAsSpam) ||
     ((isTrashMailbox || isArchiveMailbox) && !!actions.onUntrash) ||
@@ -251,6 +254,20 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
         ]
       : []),
     ...(hasFolderAction ? [{ type: "separator" as const, id: "separator" }] : []),
+    ...(showArchive && actions.onArchive
+      ? [
+          {
+            type: "item" as const,
+            id: "archive",
+            disabled: isBusy,
+            icon: Archive02Icon,
+            label: "Archive",
+            onSelect: () => {
+              void actions.onArchive?.(props.message.threadId);
+            },
+          },
+        ]
+      : []),
     ...(showMarkAsSpam && actions.onMarkAsSpam
       ? [
           {

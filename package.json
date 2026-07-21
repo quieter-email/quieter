@@ -27,6 +27,7 @@
       "@linear/sdk": "^88.0.0",
       "@hugeicons/core-free-icons": "^4.2.2",
       "@hugeicons/react": "^1.1.9",
+      "@tanstack/hotkeys": "0.8.0",
       "@tanstack/query-core": "^5.101.2",
       "@tanstack/react-form": "^1.33.0",
       "@tanstack/react-hotkeys": "^0.10.0",
