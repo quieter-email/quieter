@@ -123,6 +123,7 @@ export const ActionsSettingsPanel = () => {
       replace: true,
       search: (previous) => ({
         ...previous,
+        mailboxId: "",
         organizationId: "",
         organizationView: "overview",
         tab: "mailboxes",

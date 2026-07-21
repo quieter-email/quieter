@@ -24,7 +24,6 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
-import { Pill } from "@quieter/ui/pill";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
 import { type ReactNode, useRef, useState } from "react";
 import { VerticalSlot } from "~/components/vertical-slot";
@@ -147,56 +146,38 @@ const getMailboxSwitcherOrder = (groups: MailboxSwitcherGroup[]): MailboxSwitche
 
 const formatUnreadCount = (count: number) => (count > 99 ? "99+" : String(Math.max(0, count)));
 
-const MailboxInboxStatusPill = ({ mailbox }: { mailbox: MailboxSwitcherMailbox }) => {
+const MailboxInboxStatus = ({ mailbox }: { mailbox: MailboxSwitcherMailbox }) => {
   if (mailbox.connectionStatus === "needs_reconnect") {
-    return <Pill tone="mailbox-reconnect">Reconnect</Pill>;
+    return null;
   }
 
   if (mailbox.provider === "api") {
-    return <Pill tone="mailbox-api">Sending</Pill>;
+    return <span className="text-xs text-muted-foreground">Send only</span>;
   }
 
   if (mailbox.unreadNonSpamCount === 0) {
-    return <Pill tone="mailbox-ready">Inbox Zero</Pill>;
+    return null;
   }
 
   return (
-    <Pill tone="mailbox-attention">{formatUnreadCount(mailbox.unreadNonSpamCount)} unread</Pill>
+    <span className="text-xs text-muted-foreground">
+      {formatUnreadCount(mailbox.unreadNonSpamCount)}
+    </span>
   );
 };
 
 const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => {
   const displayName = mailbox.displayName?.trim() || null;
-  const showSecondRow = Boolean(displayName);
-  const showPin = Boolean(action);
-
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1.5 rounded-md", className)}>
-      <div
-        className={cn(
-          "grid min-w-0 items-center gap-x-3 gap-y-1.5",
-          showPin ? "grid-cols-[minmax(0,1fr)_auto_auto]" : "grid-cols-[minmax(0,1fr)_auto]",
-        )}
-      >
+    <div className={cn("flex min-w-0 items-center gap-2 rounded-md", className)}>
+      <div className="min-w-0 flex-1">
         <p className="truncate text-sm/5 text-foreground">{displayName || mailbox.emailAddress}</p>
-        {showPin ? (
-          <div className={cn("flex items-center", { "row-span-2": showSecondRow })}>{action}</div>
-        ) : null}
-        <div className="flex h-5 items-center justify-end">
-          <MailboxInboxStatusPill mailbox={mailbox} />
-        </div>
-        {showSecondRow ? (
-          <>
-            <p className="truncate text-xs/5 text-muted-foreground">{mailbox.emailAddress}</p>
-            <span />
-          </>
-        ) : null}
+        {displayName && (
+          <p className="truncate text-xs/4 text-muted-foreground">{mailbox.emailAddress}</p>
+        )}
       </div>
-      {mailbox.connectionStatus === "needs_reconnect" && (
-        <p className="truncate text-xs text-destructive">
-          This account needs to reconnect through Google.
-        </p>
-      )}
+      {action}
+      <MailboxInboxStatus mailbox={mailbox} />
     </div>
   );
 };
@@ -258,10 +239,12 @@ const SortableGroup = ({
   return (
     <LazyMotion features={domAnimation}>
       <m.section
-        className={cn("will-change-[height,opacity]", {
+        className={cn({
           "opacity-70": isDragSource,
         })}
+        layout="size"
         ref={sectionRef}
+        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
       >
         <div className="group/header flex min-h-7 items-center rounded-xs transition-colors squircle focus-within:bg-background/50 hover:bg-background/50">
           <button
@@ -304,12 +287,11 @@ const SortableGroup = ({
         <AnimatePresence initial={false}>
           {!collapsed && (
             <m.div
-              animate={{ opacity: 1 }}
-              className="overflow-hidden will-change-[opacity,transform]"
-              exit={{ opacity: 0 }}
-              initial={{ opacity: 0 }}
-              layout
-              transition={{ duration: 0.16, ease: "easeOut" }}
+              animate={{ opacity: 1, scaleY: 1, y: 0 }}
+              className="origin-top overflow-hidden"
+              exit={{ opacity: 0, scaleY: 0.98, y: -2 }}
+              initial={{ opacity: 0, scaleY: 0.98, y: -2 }}
+              transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
             >
               <div className="space-y-1 pt-1">{children}</div>
             </m.div>
@@ -499,16 +481,18 @@ export const MailboxSwitcherDropdown = ({
           <div className="flex max-h-96 flex-col gap-1 overflow-y-auto p-1">
             {mailboxes.length > 0 ? (
               <>
-                <div className="sticky top-0 z-10 bg-popover p-1">
-                  <Input
-                    aria-label="Search mailboxes"
-                    className="h-8"
-                    onChange={(event) => setSearchQuery(event.currentTarget.value)}
-                    placeholder="Search mailboxes"
-                    size="sm"
-                    value={searchQuery}
-                  />
-                </div>
+                {mailboxes.length >= 8 && (
+                  <div className="sticky top-0 z-10 bg-popover p-1">
+                    <Input
+                      aria-label="Search mailboxes"
+                      className="h-8"
+                      onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                      placeholder="Search mailboxes"
+                      size="sm"
+                      value={searchQuery}
+                    />
+                  </div>
+                )}
                 {(isFiltering ? filteredGroups : groups).map((group, groupIndex) => {
                   const isCollapsed = collapsedGroupIds.has(group.id);
                   const canReorderMailboxes = !isFiltering && group.mailboxes.length > 1;
@@ -548,62 +532,50 @@ export const MailboxSwitcherDropdown = ({
                                 mailbox={mailbox}
                               >
                                 <DropdownMenuItem
+                                  aria-current={isActive ? "true" : undefined}
                                   className={cn("group/item rounded-xs px-2.5 py-2 squircle", {
                                     "bg-background": isActive,
                                   })}
                                   onSelect={() => onSelectMailboxId(mailbox.id)}
                                 >
-                                  {needsReconnect ? (
-                                    <div className="flex w-full min-w-0 items-center gap-2">
-                                      <p className="min-w-0 flex-1 truncate text-sm text-foreground">
-                                        {mailbox.displayName?.trim() || mailbox.emailAddress}
-                                      </p>
-                                      <button
-                                        aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
-                                        className="flex h-7 shrink-0 items-center gap-1 px-1 text-xs font-medium text-destructive transition-colors hover:text-destructive/80"
-                                        disabled={isReconnecting}
-                                        onClick={(event) => {
-                                          event.preventDefault();
-                                          event.stopPropagation();
-                                          onReconnectMailbox(mailbox);
-                                        }}
-                                        type="button"
-                                      >
-                                        <HugeiconsIcon
-                                          aria-hidden
-                                          className={cn("size-3.5", {
-                                            "animate-spin": isReconnecting,
-                                          })}
-                                          icon={isReconnecting ? Loading03Icon : Mail01Icon}
-                                        />
-                                        Reconnect
-                                      </button>
-                                      {canSetDefault && (
-                                        <MailboxDefaultButton
-                                          defaultMailboxLabel={defaultMailboxLabel}
-                                          isDefault={isDefault}
-                                          mailboxId={mailbox.id}
-                                          onSetDefaultMailbox={onSetDefaultMailbox}
-                                        />
-                                      )}
-                                      <MailboxInboxStatusPill mailbox={mailbox} />
-                                    </div>
-                                  ) : (
-                                    <MailboxSummary
-                                      action={
-                                        canSetDefault ? (
+                                  <MailboxSummary
+                                    action={
+                                      <div className="flex items-center gap-1">
+                                        {needsReconnect && (
+                                          <button
+                                            aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
+                                            className="flex h-7 shrink-0 items-center gap-1 px-1 text-xs font-medium text-destructive transition-colors hover:text-destructive/80"
+                                            disabled={isReconnecting}
+                                            onClick={(event) => {
+                                              event.preventDefault();
+                                              event.stopPropagation();
+                                              onReconnectMailbox(mailbox);
+                                            }}
+                                            type="button"
+                                          >
+                                            <HugeiconsIcon
+                                              aria-hidden
+                                              className={cn("size-3.5", {
+                                                "animate-spin": isReconnecting,
+                                              })}
+                                              icon={isReconnecting ? Loading03Icon : Mail01Icon}
+                                            />
+                                            Reconnect
+                                          </button>
+                                        )}
+                                        {canSetDefault && (
                                           <MailboxDefaultButton
                                             defaultMailboxLabel={defaultMailboxLabel}
                                             isDefault={isDefault}
                                             mailboxId={mailbox.id}
                                             onSetDefaultMailbox={onSetDefaultMailbox}
                                           />
-                                        ) : null
-                                      }
-                                      className="w-full"
-                                      mailbox={mailbox}
-                                    />
-                                  )}
+                                        )}
+                                      </div>
+                                    }
+                                    className="w-full"
+                                    mailbox={mailbox}
+                                  />
                                 </DropdownMenuItem>
                               </SortableMailboxRow>
                             );
@@ -615,6 +587,20 @@ export const MailboxSwitcherDropdown = ({
                     </SortableGroup>
                   );
                 })}
+                {!embedded && (
+                  <div className="border-t border-border/70 pt-1">
+                    <LinkButton
+                      className="w-full justify-between"
+                      search={{ from: "/", mailboxId: "", tab: "mailboxes" }}
+                      size="sm"
+                      to="/settings"
+                      variant="ghost"
+                    >
+                      Manage mailboxes
+                      <HugeiconsIcon aria-hidden className="size-4" icon={Settings01Icon} />
+                    </LinkButton>
+                  </div>
+                )}
               </>
             ) : (
               <div className="rounded-md px-2.5 py-2 text-sm text-muted-foreground">No Mailbox</div>
