@@ -516,8 +516,8 @@ export const MailboxesSettingsPanel = () => {
                     {verifiedDomains.length === 0 && !areManagedDomainsLoading && (
                       <p className="text-xs/5 text-muted-foreground">
                         Add and verify a mail domain in{" "}
-                        {selectedManagedOrganization?.name ?? "team"}
-                        settings before creating a shared inbox.
+                        {selectedManagedOrganization?.name ?? "team"} settings before creating a
+                        shared inbox.
                       </p>
                     )}
                     {createManagedMailboxMutation.isError && (

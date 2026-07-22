@@ -1,3 +1,4 @@
+import { withRequestDatabaseClient } from "@quieter/database/client";
 import { serverEnv } from "@quieter/env/server";
 import { createFileRoute } from "@tanstack/react-router";
 
@@ -12,7 +13,7 @@ export const Route = createFileRoute("/api/review-health")({
         try {
           const { assertReviewDatabaseSchema } = await import("@quieter/orpc/review-health");
 
-          await assertReviewDatabaseSchema();
+          await withRequestDatabaseClient((client) => assertReviewDatabaseSchema(client));
 
           return new Response(null, {
             headers: { "cache-control": "no-store" },

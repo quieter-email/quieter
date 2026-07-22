@@ -24,7 +24,7 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
-import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
+import { AnimatePresence, domMax, LazyMotion, m, useReducedMotion } from "motion/react";
 import { type ReactNode, useRef, useState } from "react";
 import { VerticalSlot } from "~/components/vertical-slot";
 import { SidebarSimpleHoverSurface } from "~/features/navigation/components/sidebar-surfaces";
@@ -36,7 +36,7 @@ type MailboxSwitcherMailbox = {
   emailAddress: string;
   groupName: string;
   id: string;
-  provider: string;
+  provider: "api" | "gmail" | "managed";
   grantRole?: "manager" | "reader" | "responder" | null;
   unreadNonSpamCount: number;
 };
@@ -222,6 +222,7 @@ const SortableGroup = ({
 }: SortableGroupProps) => {
   const sectionRef = useRef<HTMLElement>(null);
   const headerRef = useRef<HTMLButtonElement>(null);
+  const shouldReduceMotion = useReducedMotion();
   const { isDragSource } = useSortable({
     accept: GROUP_SORTABLE_TYPE,
     disabled,
@@ -237,14 +238,12 @@ const SortableGroup = ({
   });
 
   return (
-    <LazyMotion features={domAnimation}>
-      <m.section
+    <LazyMotion features={domMax}>
+      <section
         className={cn({
           "opacity-70": isDragSource,
         })}
-        layout="size"
         ref={sectionRef}
-        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
       >
         <div className="group/header flex min-h-7 items-center rounded-xs transition-colors squircle focus-within:bg-background/50 hover:bg-background/50">
           <button
@@ -287,17 +286,24 @@ const SortableGroup = ({
         <AnimatePresence initial={false}>
           {!collapsed && (
             <m.div
-              animate={{ opacity: 1, scaleY: 1, y: 0 }}
-              className="origin-top overflow-hidden"
-              exit={{ opacity: 0, scaleY: 0.98, y: -2 }}
-              initial={{ opacity: 0, scaleY: 0.98, y: -2 }}
-              transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+              animate={{ height: "auto", opacity: 1 }}
+              className="overflow-hidden"
+              exit={{ height: shouldReduceMotion ? "auto" : 0, opacity: 0 }}
+              initial={{ height: shouldReduceMotion ? "auto" : 0, opacity: 0 }}
+              transition={
+                shouldReduceMotion
+                  ? { duration: 0.1 }
+                  : {
+                      height: { duration: 0.18, ease: [0.23, 1, 0.32, 1] },
+                      opacity: { duration: 0.12, ease: [0.23, 1, 0.32, 1] },
+                    }
+              }
             >
               <div className="space-y-1 pt-1">{children}</div>
             </m.div>
           )}
         </AnimatePresence>
-      </m.section>
+      </section>
     </LazyMotion>
   );
 };
@@ -481,7 +487,7 @@ export const MailboxSwitcherDropdown = ({
           <div className="flex max-h-96 flex-col gap-1 overflow-y-auto p-1">
             {mailboxes.length > 0 ? (
               <>
-                {mailboxes.length >= 8 && (
+                {(mailboxes.length >= 8 || isFiltering) && (
                   <div className="sticky top-0 z-10 bg-popover p-1">
                     <Input
                       aria-label="Search mailboxes"
@@ -590,7 +596,7 @@ export const MailboxSwitcherDropdown = ({
                 {!embedded && (
                   <div className="border-t border-border/70 pt-1">
                     <LinkButton
-                      className="w-full justify-between"
+                      className="h-auto min-h-9 w-full justify-between rounded-xs px-2.5 py-2 squircle"
                       search={{ from: "/", mailboxId: "", tab: "mailboxes" }}
                       size="sm"
                       to="/settings"

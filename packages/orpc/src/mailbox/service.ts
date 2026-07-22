@@ -1,7 +1,7 @@
 import type {
   MailboxConnectionStatus,
   MailboxGrantRole,
-  MailboxProvider,
+  PersistedMailboxProvider,
 } from "@quieter/database/schema";
 import { ORPCError } from "@orpc/server";
 import { getSessionWithOrganization } from "@quieter/auth/session";
@@ -368,7 +368,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
     includeApiSentMessages: boolean | null;
     organizationId: string;
     ownerUserId: string | null;
-    provider: MailboxProvider;
+    provider: PersistedMailboxProvider;
     status: MailboxConnectionStatus;
   };
   const managedMailboxRecords = new Map<string, ManagedMailboxRecord>();
