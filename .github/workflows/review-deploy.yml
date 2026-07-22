@@ -15,26 +15,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: >-
-    ${{
-      ((github.event_name == 'workflow_dispatch' &&
-        github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-        github.actor == 'leanderriefel') ||
-      (github.event_name == 'issue_comment' &&
-        github.event.issue.pull_request &&
-        github.event.comment.user.login == 'leanderriefel' &&
-        github.event.comment.user.id == 71840441 &&
-        github.event.comment.body == 'quieter review') ||
-      github.event_name == 'pull_request_target') &&
-      format('quieter-review-prepare-{0}',
-        github.event.pull_request.number ||
-        github.event.issue.number ||
-        inputs.pull_request) ||
-      format('quieter-review-ignored-{0}', github.run_id)
-    }}
-  cancel-in-progress: true
-
 env:
   REVIEW_URL: https://review.quieter.email
 
@@ -48,8 +28,7 @@ jobs:
       (github.event_name == 'issue_comment' &&
         github.event.issue.pull_request &&
         github.event.comment.user.login == 'leanderriefel' &&
-        github.event.comment.user.id == 71840441 &&
-        github.event.comment.body == 'quieter review') ||
+        github.event.comment.user.id == 71840441) ||
       github.event_name == 'pull_request_target'
     permissions:
       checks: write
@@ -89,17 +68,15 @@ jobs:
                 (comment) =>
                   comment.user?.id === ownerUserId &&
                   comment.user?.login === ownerLogin &&
-                  comment.body === 'quieter review',
+                  comment.body.trim() === 'quieter review',
               );
               if (!authorized) {
                 core.notice('This pull request has not opted into automatic Review deployments.');
                 return;
               }
             } else {
-              const { data: actor } = await github.rest.users.getByUsername({
-                username: context.actor,
-              });
-              if (actor.id !== ownerUserId || actor.login !== ownerLogin) {
+              const actor = context.payload.sender;
+              if (actor?.id !== ownerUserId || actor.login !== ownerLogin) {
                 core.setFailed('Only the repository owner can request a Review deployment.');
                 return;
               }
@@ -109,9 +86,9 @@ jobs:
                 if (
                   comment.user?.id !== ownerUserId ||
                   comment.user?.login !== ownerLogin ||
-                  comment.body !== 'quieter review'
+                  comment.body.trim() !== 'quieter review'
                 ) {
-                  core.setFailed('The Review comment command is not authorized.');
+                  core.notice('Ignoring a comment that is not the Review deployment command.');
                   return;
                 }
               }
@@ -151,6 +128,26 @@ jobs:
               });
             }
 
+            const detailsUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const { data: checkRun } = await github.rest.checks.create({
+              owner,
+              repo,
+              name: 'Review deployment',
+              head_sha: pullRequest.head.sha,
+              status: 'in_progress',
+              started_at: new Date().toISOString(),
+              details_url: detailsUrl,
+              output: {
+                title: 'Preparing review build',
+                summary: `Building \`${pullRequest.head.sha.slice(0, 12)}\` for ${process.env.REVIEW_URL}.`,
+              },
+            });
+
+            core.setOutput('check-run-id', String(checkRun.id));
+            core.setOutput('eligible', 'true');
+            core.setOutput('number', String(pullRequestNumber));
+            core.setOutput('sha', pullRequest.head.sha);
+
             const supersededSha = isPullRequestUpdate ? context.payload.before : undefined;
             if (supersededSha && supersededSha !== pullRequest.head.sha) {
               const { data: previousChecks } = await github.rest.checks.listForRef({
@@ -188,7 +185,7 @@ jobs:
               per_page: 100,
             });
             for (const check of currentChecks.check_runs) {
-              if (check.status !== 'completed') {
+              if (check.id !== checkRun.id && check.status !== 'completed') {
                 await github.rest.checks.update({
                   owner,
                   repo,
@@ -204,25 +201,6 @@ jobs:
               }
             }
 
-            const detailsUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
-            const { data: checkRun } = await github.rest.checks.create({
-              owner,
-              repo,
-              name: 'Review deployment',
-              head_sha: pullRequest.head.sha,
-              status: 'in_progress',
-              started_at: new Date().toISOString(),
-              details_url: detailsUrl,
-              output: {
-                title: 'Preparing review build',
-                summary: `Building \`${pullRequest.head.sha.slice(0, 12)}\` for ${process.env.REVIEW_URL}.`,
-              },
-            });
-
-            core.setOutput('check-run-id', String(checkRun.id));
-            core.setOutput('eligible', 'true');
-            core.setOutput('number', String(pullRequestNumber));
-            core.setOutput('sha', pullRequest.head.sha);
             await core.summary
               .addHeading('Review deployment candidate')
               .addLink(`#${pullRequestNumber}: ${pullRequest.title}`, pullRequest.html_url)
@@ -240,6 +218,9 @@ jobs:
     if: ${{ needs.resolve.outputs.eligible == 'true' }}
     permissions:
       contents: read
+    concurrency:
+      group: quieter-review-prepare-${{ needs.resolve.outputs.number }}
+      cancel-in-progress: true
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     outputs:
