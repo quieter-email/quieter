@@ -1,129 +1,44 @@
-import type { ComponentPropsWithoutRef, CSSProperties } from "react";
+import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "@quieter/ui/cn";
 
-type LoadingSpinnerProps = ComponentPropsWithoutRef<"output">;
+type LoadingSpinnerProps = ComponentPropsWithoutRef<"svg">;
 
-const particleCount = 128;
-const squircleExponent = 3.5;
-const viewBoxSize = 100;
-const duration = 1.8;
-const tau = Math.PI * 2;
-const squircleRadius = 30;
-const arcSampleCount = 4096;
+const logoOutlinePath =
+  "M84 50C84 56.44 79.2 62.5 70.8 70.8C62.5 79.2 56.44 84 50 84C43.56 84 37.5 79.2 29.2 70.8C20.8 62.5 16 56.44 16 50C16 43.56 20.8 37.5 29.2 29.2C37.5 20.8 43.56 16 50 16C56.44 16 62.5 20.8 70.8 29.2C79.2 37.5 84 43.56 84 50Z";
 
-const round = (value: number) => Math.round(value * 1e6) / 1e6;
-
-const seededRandom = (index: number, salt: number) => {
-  const value = Math.sin((index + 1) * 12.9898 + salt * 78.233) * 43758.5453123;
-  return value - Math.floor(value);
-};
-
-type SpinnerParticle = {
-  bright: number;
-  delay: number;
-  dim: number;
-  radius: number;
-  x: number;
-  y: number;
-};
-
-const squirclePower = 2 / squircleExponent;
-
-const squirclePoint = (angle: number) => {
-  const cosine = Math.cos(angle);
-  const sine = Math.sin(angle);
-  const unitX = Math.sign(cosine) * Math.abs(cosine) ** squirclePower;
-  const unitY = Math.sign(sine) * Math.abs(sine) ** squirclePower;
-
-  return {
-    x: (unitX - unitY) * Math.SQRT1_2 * squircleRadius,
-    y: (unitX + unitY) * Math.SQRT1_2 * squircleRadius,
-  };
-};
-
-const arcLengths = (() => {
-  const lengths = [0];
-  let total = 0;
-
-  for (let index = 1; index <= arcSampleCount; index += 1) {
-    const previous = squirclePoint(((index - 1) / arcSampleCount) * tau);
-    const current = squirclePoint((index / arcSampleCount) * tau);
-    total += Math.hypot(current.x - previous.x, current.y - previous.y);
-    lengths.push(total);
-  }
-
-  return { lengths, total };
-})();
-
-const angleAtArcLength = (target: number) => {
-  const { lengths, total } = arcLengths;
-  const clamped = ((target % total) + total) % total;
-
-  let low = 1;
-  let high = arcSampleCount;
-
-  while (low < high) {
-    const mid = (low + high) >> 1;
-    if (lengths[mid]! < clamped) low = mid + 1;
-    else high = mid;
-  }
-
-  const segmentStart = lengths[low - 1]!;
-  const segmentEnd = lengths[low]!;
-  const segmentT =
-    segmentEnd > segmentStart ? (clamped - segmentStart) / (segmentEnd - segmentStart) : 0;
-
-  const angleStart = ((low - 1) / arcSampleCount) * tau;
-  const angleEnd = (low / arcSampleCount) * tau;
-  return angleStart + segmentT * (angleEnd - angleStart);
-};
-
-const particles: SpinnerParticle[] = (() => {
-  const { total } = arcLengths;
-  const result: SpinnerParticle[] = [];
-
-  for (let index = 0; index < particleCount; index += 1) {
-    const t = index / particleCount;
-    const { x, y } = squirclePoint(angleAtArcLength(t * total));
-    const seed = 0.5 + seededRandom(index, 3) * 0.5;
-
-    result.push({
-      bright: round(0.45 + seed * 0.45),
-      delay: round(-t * duration),
-      dim: round(0.03 + seed * 0.04),
-      radius: round((0.7 + seed * 0.55) * 1.1),
-      x: round(x),
-      y: round(y),
-    });
-  }
-
-  return result;
-})();
+const trailOpacities = [
+  0.02, 0.03, 0.045, 0.06, 0.08, 0.105, 0.135, 0.17, 0.21, 0.255, 0.305, 0.36, 0.42, 0.48, 0.545,
+  0.61, 0.675, 0.735, 0.79, 0.84, 0.885, 0.925, 0.96, 1,
+];
 
 export const LoadingSpinner = ({ className, ...props }: LoadingSpinnerProps) => (
-  <output {...props} className={cn("relative isolate size-20 text-primary", className)}>
-    <svg
-      aria-hidden="true"
-      className="absolute inset-0 size-full"
-      viewBox={`-${viewBoxSize / 2} -${viewBoxSize / 2} ${viewBoxSize} ${viewBoxSize}`}
-    >
-      {particles.map((particle, index) => (
-        <circle
-          className="loading-spinner-dot"
-          cx={particle.x}
-          cy={particle.y}
-          fill="currentColor"
-          key={index}
-          r={particle.radius}
-          style={
-            {
-              "--_bright": particle.bright,
-              "--_dim": particle.dim,
-              animationDelay: `${particle.delay}s`,
-            } as CSSProperties
-          }
-        />
-      ))}
-    </svg>
-  </output>
+  <svg
+    {...props}
+    aria-hidden="true"
+    className={cn("size-20 overflow-visible text-primary", className)}
+    fill="none"
+    focusable="false"
+    viewBox="0 0 100 100"
+  >
+    <path
+      d={logoOutlinePath}
+      opacity="0.12"
+      pathLength="100"
+      stroke="currentColor"
+      strokeWidth="2.25"
+    />
+    {trailOpacities.map((opacity, index) => (
+      <path
+        className="loading-spinner-segment"
+        d={logoOutlinePath}
+        key={opacity}
+        opacity={opacity}
+        stroke="currentColor"
+        strokeLinecap="butt"
+        strokeLinejoin="round"
+        strokeWidth="2.5"
+        style={{ animationDelay: `${index * -12}ms` }}
+      />
+    ))}
+  </svg>
 );
