@@ -421,17 +421,13 @@ jobs:
             application_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
               --header 'cache-control: no-cache' \
               "${REVIEW_URL}/?revision=${REVIEW_SHA}" || true)
-            schema_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
-              --header 'cache-control: no-cache' \
-              "${REVIEW_URL}/api/review-health?revision=${REVIEW_SHA}" || true)
             if [ "$deployed_revision" = "$REVIEW_SHA" ] && \
-              [[ "$application_status" =~ ^[23] ]] && \
-              [ "$schema_status" = "204" ]; then
+              [[ "$application_status" =~ ^[23] ]]; then
               exit 0
             fi
             sleep 2
           done
-          echo "Review environment did not promote a healthy, schema-compatible revision ${REVIEW_SHA}." >&2
+          echo "Review environment did not promote a healthy revision ${REVIEW_SHA}." >&2
           exit 1
 
       - name: Record deployment result

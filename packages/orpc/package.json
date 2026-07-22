@@ -16,7 +16,6 @@
     "./server-client": "./src/server-client.ts",
     "./organization-mail": "./src/organization-mail.ts",
     "./organization-mail-policy": "./src/organization-mail-policy.ts",
-    "./review-health": "./src/review-health.ts",
     "./router": "./src/routers/index.ts",
     "./chat-generation": "./src/chat/generation/runner.ts",
     "./chat-run-stream": "./src/chat-run-stream.ts",
