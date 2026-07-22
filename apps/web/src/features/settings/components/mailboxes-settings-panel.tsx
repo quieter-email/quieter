@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  Add01Icon,
+  ArrowRight01Icon,
   Delete02Icon,
   Loading03Icon,
   Mail01Icon,
@@ -10,22 +12,41 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@quieter/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@quieter/ui/select";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   MailboxAccessPill,
   type MailboxGrantRole,
 } from "~/features/mailbox/components/mailbox-access-pill";
-import { fullOrganizationQueryOptions } from "~/features/settings/components/organization-settings/domain";
+import {
+  fullOrganizationQueryOptions,
+  hasOrganizationRole,
+} from "~/features/settings/components/organization-settings/domain";
 import { organizationMailDomainsQueryOptions } from "~/features/settings/components/organization-settings/mail-domains";
 import {
   settingsInsetRowClass,
-  settingsRowPaddingClass,
+  SettingsCard,
   SettingsInsetRows,
+  SettingsNavigationRow,
+  SettingsPageHeader,
+  SettingsRow,
+  SettingsRows,
+  SettingsSection,
 } from "~/features/settings/components/settings-layout";
 import {
   hasOrganizationAiAccess,
@@ -35,8 +56,10 @@ import { authClient } from "~/lib/auth";
 import { openGoogleAccountLink } from "~/lib/google-account-link";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import { orpc, rpc } from "~/lib/orpc";
+import { settingsRouteApi } from "~/lib/route-apis";
 
-const getSettingsReturnTo = () => "/settings?tab=mailboxes";
+const getSettingsReturnTo = (mailboxId?: string) =>
+  `/settings?tab=mailboxes${mailboxId ? `&mailboxId=${encodeURIComponent(mailboxId)}` : ""}`;
 const getMutationErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
 const mailboxGrantRoleOptions = [
@@ -45,89 +68,129 @@ const mailboxGrantRoleOptions = [
   { value: "manager", label: "Manager" },
 ] as const;
 const mailboxGrantSelectItems = [{ value: "none", label: "No access" }, ...mailboxGrantRoleOptions];
+const switchClassName =
+  "h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary";
+
+const getProviderLabel = (provider: string) => {
+  if (provider === "gmail") return "Gmail";
+  if (provider === "managed") return "Shared inbox";
+  return "Send-only mailbox";
+};
 
 export const MailboxesSettingsPanel = () => {
+  const navigate = useNavigate({ from: "/settings" });
+  const { mailboxId } = settingsRouteApi.useSearch();
   const queryClient = useQueryClient();
+  const session = authClient.useSession().data;
   const organizations = authClient.useListOrganizations().data ?? [];
+  const [isAddMailboxOpen, setIsAddMailboxOpen] = useState(false);
   const [gmailOrganizationId, setGmailOrganizationId] = useState("");
   const [managedOrganizationId, setManagedOrganizationId] = useState("");
   const [managedDisplayName, setManagedDisplayName] = useState("");
   const [managedDivisionId, setManagedDivisionId] = useState<string | null>(null);
-  const [selectedManagedMailboxId, setSelectedManagedMailboxId] = useState<string | null>(null);
   const [managedLocalPart, setManagedLocalPart] = useState("");
-  const [managedDomain, setManagedDomain] = useState<string | undefined>(undefined);
+  const [managedDomain, setManagedDomain] = useState<string>();
   const [isStartingGmail, setIsStartingGmail] = useState(false);
   const {
     data: mailboxesData,
     error: mailboxesError,
     isError: isMailboxesError,
+    isPending: areMailboxesPending,
   } = useQuery(mailboxesQueryOptions());
   const { data: billing, isSuccess: isBillingSuccess } = useQuery(userBillingQueryOptions());
   const groups = mailboxesData?.groups ?? [];
-  const gmailGroups = groups.reduce<typeof groups>((nextGroups, group) => {
-    const mailboxes = group.mailboxes.filter((mailbox) => mailbox.provider === "gmail");
-    if (mailboxes.length > 0) {
-      nextGroups.push({ ...group, mailboxes });
-    }
-    return nextGroups;
-  }, []);
+  const mailboxes = groups.flatMap((group) => group.mailboxes);
+  const selectedMailbox = mailboxId
+    ? (mailboxes.find((mailbox) => mailbox.id === mailboxId) ?? null)
+    : null;
   const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
+  const selectedManagedOrganizationId = managedOrganizationId || organizations[0]?.id || "";
+  const selectedManagedDetailOrganizationId =
+    selectedMailbox?.provider === "managed" ? selectedMailbox.organizationId : "";
+  const selectedManagedOrganization = organizations.find(
+    (organization) => organization.id === selectedManagedOrganizationId,
+  );
   const placementItems = organizations.map((organization) => ({
     value: organization.id,
     label: organization.name,
   }));
-  const organizationItems = organizations.map((organization) => ({
-    value: organization.id,
-    label: organization.name,
-  }));
-  const selectedManagedOrganizationId = managedOrganizationId || organizations[0]?.id || "";
   const { data: managedDomainsData, isLoading: areManagedDomainsLoading } = useQuery({
     ...organizationMailDomainsQueryOptions(selectedManagedOrganizationId),
-    enabled: selectedManagedOrganizationId.length > 0,
+    enabled: isAddMailboxOpen && selectedManagedOrganizationId.length > 0,
   });
-  const { data: selectedManagedOrganization } = useQuery({
-    ...fullOrganizationQueryOptions(selectedManagedOrganizationId),
-    enabled: selectedManagedOrganizationId.length > 0,
-  });
+  const { data: createManagedOrganization, isPending: isCreateManagedOrganizationPending } =
+    useQuery({
+      ...fullOrganizationQueryOptions(selectedManagedOrganizationId),
+      enabled: isAddMailboxOpen && selectedManagedOrganizationId.length > 0,
+    });
   const { data: managedDivisionsData } = useQuery({
     queryKey: ["organization", selectedManagedOrganizationId, "divisions"],
     queryFn: ({ signal }) =>
       rpc.organization.listDivisions({ organizationId: selectedManagedOrganizationId }, { signal }),
-    enabled: selectedManagedOrganizationId.length > 0,
+    enabled: isAddMailboxOpen && selectedManagedOrganizationId.length > 0,
   });
-  const { data: managedAdminData } = useQuery({
-    queryKey: ["mail", "managed-mailbox-admin", selectedManagedOrganizationId],
+  const { data: detailManagedOrganization } = useQuery({
+    ...fullOrganizationQueryOptions(selectedManagedDetailOrganizationId),
+    enabled: selectedMailbox?.provider === "managed" && selectedMailbox.grantRole === "manager",
+  });
+  const { data: detailManagedDivisionsData } = useQuery({
+    queryKey: ["organization", selectedManagedDetailOrganizationId, "divisions"],
     queryFn: ({ signal }) =>
-      rpc.mail.listManagedMailboxAdministration(
-        { organizationId: selectedManagedOrganizationId },
+      rpc.organization.listDivisions(
+        { organizationId: selectedManagedDetailOrganizationId },
         { signal },
       ),
-    enabled: selectedManagedOrganizationId.length > 0,
+    enabled: selectedMailbox?.provider === "managed" && selectedMailbox.grantRole === "manager",
   });
-  const { data: selectedManagedMailboxDetails } = useQuery({
-    queryKey: ["mail", "managed-mailbox-details", selectedManagedMailboxId],
+  const {
+    data: selectedManagedMailboxDetails,
+    error: selectedManagedMailboxError,
+    isPending: isSelectedManagedMailboxPending,
+  } = useQuery({
+    queryKey: ["mail", "managed-mailbox-details", selectedMailbox?.id],
     queryFn: ({ signal }) =>
-      rpc.mail.getManagedMailboxDetails({ mailboxId: selectedManagedMailboxId ?? "" }, { signal }),
-    enabled: !!selectedManagedMailboxId,
+      rpc.mail.getManagedMailboxDetails({ mailboxId: selectedMailbox?.id ?? "" }, { signal }),
+    enabled: selectedMailbox?.provider === "managed" && selectedMailbox.grantRole === "manager",
   });
   const verifiedDomains = (managedDomainsData?.domains ?? []).filter(
     (domain) => domain.status === "verified",
   );
   const selectedDomain = managedDomain ?? verifiedDomains[0]?.domain ?? "";
   const trimmedLocalPart = managedLocalPart.trim();
+  const createManagedMember = createManagedOrganization?.members.find(
+    (member) => member.userId === session?.user.id,
+  );
+  const canCreateManagedMailbox =
+    !!createManagedMember &&
+    (hasOrganizationRole(createManagedMember.role, "owner") ||
+      hasOrganizationRole(createManagedMember.role, "admin"));
+
+  const navigateToMailbox = (nextMailboxId: string) => {
+    void navigate({
+      search: (previous) => ({ ...previous, mailboxId: nextMailboxId, tab: "mailboxes" }),
+      to: ".",
+    });
+  };
   const invalidateMailboxes = async () => {
     await queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() });
   };
   const invalidateSelectedManagedMailbox = async () => {
-    if (!selectedManagedMailboxId) return;
+    if (!selectedMailbox?.id) return;
     await queryClient.invalidateQueries({
-      queryKey: ["mail", "managed-mailbox-details", selectedManagedMailboxId],
+      queryKey: ["mail", "managed-mailbox-details", selectedMailbox.id],
     });
   };
   const disconnectMailboxMutation = useMutation({
     ...orpc.mail.disconnectMailbox.mutationOptions(),
     mutationKey: ["mail", "disconnect-mailbox"],
-    onSuccess: invalidateMailboxes,
+    onSuccess: async () => {
+      await invalidateMailboxes();
+      void navigate({
+        replace: true,
+        search: (previous) => ({ ...previous, mailboxId: "" }),
+        to: ".",
+      });
+    },
   });
   const moveGmailMailboxMutation = useMutation({
     ...orpc.mail.moveGmailMailbox.mutationOptions(),
@@ -142,79 +205,42 @@ export const MailboxesSettingsPanel = () => {
   const createManagedMailboxMutation = useMutation({
     ...orpc.mail.createManagedMailbox.mutationOptions(),
     mutationKey: ["mail", "create-managed-mailbox"],
-    onSuccess: async () => {
+    onSuccess: async ({ mailboxId: createdMailboxId }) => {
       setManagedLocalPart("");
       setManagedDisplayName("");
       setManagedDivisionId(null);
+      setIsAddMailboxOpen(false);
       await invalidateMailboxes();
-      await queryClient.invalidateQueries({
-        queryKey: ["mail", "managed-mailbox-admin", selectedManagedOrganizationId],
-      });
-      toast.success("Managed mailbox created.");
+      toast.success("Shared inbox created.");
+      navigateToMailbox(createdMailboxId);
     },
   });
   const updateManagedMailboxMutation = useMutation({
     ...orpc.mail.updateManagedMailbox.mutationOptions(),
     mutationKey: ["mail", "update-managed-mailbox"],
     onSuccess: async () => {
-      await Promise.all([
-        invalidateMailboxes(),
-        queryClient.invalidateQueries({
-          queryKey: ["mail", "managed-mailbox-admin", selectedManagedOrganizationId],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["mail", "managed-mailbox-details", selectedManagedMailboxId],
-        }),
-      ]);
+      await Promise.all([invalidateMailboxes(), invalidateSelectedManagedMailbox()]);
     },
   });
   const setManagedMailboxGrantMutation = useMutation({
     ...orpc.mail.setManagedMailboxGrant.mutationOptions(),
     mutationKey: ["mail", "set-managed-mailbox-grant"],
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateMailboxes(),
-        queryClient.invalidateQueries({
-          queryKey: ["mail", "managed-mailbox-details", selectedManagedMailboxId],
-        }),
-      ]);
-    },
+    onSuccess: invalidateSelectedManagedMailbox,
   });
   const removeManagedMailboxGrantMutation = useMutation({
     ...orpc.mail.removeManagedMailboxGrant.mutationOptions(),
     mutationKey: ["mail", "remove-managed-mailbox-grant"],
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateMailboxes(),
-        queryClient.invalidateQueries({
-          queryKey: ["mail", "managed-mailbox-details", selectedManagedMailboxId],
-        }),
-      ]);
-    },
+    onSuccess: invalidateSelectedManagedMailbox,
   });
   const setManagedMailboxDivisionGrantMutation = useMutation({
     ...orpc.mail.setManagedMailboxDivisionGrant.mutationOptions(),
     mutationKey: ["mail", "set-managed-mailbox-division-grant"],
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateMailboxes(),
-        queryClient.invalidateQueries({
-          queryKey: ["mail", "managed-mailbox-details", selectedManagedMailboxId],
-        }),
-      ]);
-    },
+    onSuccess: invalidateSelectedManagedMailbox,
   });
   const removeManagedMailboxDivisionGrantMutation = useMutation({
     ...orpc.mail.removeManagedMailboxDivisionGrant.mutationOptions(),
     mutationKey: ["mail", "remove-managed-mailbox-division-grant"],
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateMailboxes(),
-        queryClient.invalidateQueries({
-          queryKey: ["mail", "managed-mailbox-details", selectedManagedMailboxId],
-        }),
-      ]);
-    },
+    onSuccess: invalidateSelectedManagedMailbox,
   });
   const setGmailAutoLabelingMutation = useMutation({
     ...orpc.mail.setGmailAutoLabeling.mutationOptions(),
@@ -241,784 +267,875 @@ export const MailboxesSettingsPanel = () => {
             ? gmailOrganizationId || organizations[0]?.id
             : input.organizationId,
         queryClient,
-        returnTo: getSettingsReturnTo(),
+        returnTo: getSettingsReturnTo(input?.mailboxId),
       });
     } catch (error) {
       setIsStartingGmail(false);
       toast.error(error instanceof Error ? error.message : "Could not start Gmail connection.");
     }
   };
-  const hasSelectedManagedAutomationAccess =
-    !!selectedManagedMailboxDetails &&
-    isBillingSuccess &&
-    hasOrganizationAiAccess(billing, selectedManagedMailboxDetails.mailbox.organizationId);
+  const setDefaultMailbox = (nextMailboxId: string) => {
+    const isDefault = nextMailboxId === defaultMailboxId;
+    setDefaultMailboxMutation.mutate(
+      { mailboxId: isDefault ? null : nextMailboxId },
+      {
+        onError: (error) =>
+          toast.error(getMutationErrorMessage(error, "Could not update default mailbox.")),
+      },
+    );
+  };
 
-  return (
-    <div className="@container space-y-8">
-      <section className="space-y-4">
-        <h2 className="text-sm font-medium text-foreground">Connected Gmail</h2>
+  if (!mailboxId) {
+    return (
+      <div className="space-y-8">
+        <SettingsPageHeader
+          action={
+            <Button onClick={() => setIsAddMailboxOpen(true)} size="sm" type="button">
+              <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
+              Add mailbox
+            </Button>
+          }
+          title="Mailboxes"
+        >
+          Connect personal mail and manage the shared inboxes you can access.
+        </SettingsPageHeader>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Select
-            items={placementItems}
-            onValueChange={(value) => setGmailOrganizationId(value ?? "")}
-            value={gmailOrganizationId || organizations[0]?.id}
-          >
-            <SelectTrigger aria-label="Gmail mailbox placement" className="w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent align="start">
-              {organizations.map((organization) => (
-                <SelectItem key={organization.id} value={organization.id}>
-                  {organization.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            disabled={isStartingGmail}
-            onClick={() => void startGmailConnection()}
-            size="sm"
-            type="button"
-          >
-            <HugeiconsIcon
-              aria-hidden
-              className={cn("size-4", { "animate-spin": isStartingGmail })}
-              icon={isStartingGmail ? Loading03Icon : Mail01Icon}
-            />
-            {isStartingGmail ? "Opening Google" : "Connect Gmail"}
-          </Button>
-        </div>
-
-        {isMailboxesError && (
-          <p className="text-sm text-destructive">
-            {mailboxesError.message ?? "Could not load mailboxes."}
-          </p>
-        )}
-
-        {gmailGroups.map((group) => (
-          <div className="space-y-2" key={group.id}>
-            <p className="text-xs text-muted-foreground">{group.name}</p>
-            <div className="space-y-2">
-              {group.mailboxes.map((mailbox) => {
-                const isDefault = mailbox.id === defaultMailboxId;
-                const hasGmailAutomationAccess =
-                  isBillingSuccess && hasOrganizationAiAccess(billing, mailbox.organizationId);
-                return (
-                  <div
-                    className="overflow-hidden rounded-lg border border-border/70 bg-muted/15 squircle"
-                    key={mailbox.id}
-                  >
-                    <div className={cn(settingsInsetRowClass, "flex-wrap gap-2")}>
-                      <div className="min-w-48 flex-1">
-                        <p className="truncate text-sm text-foreground">{mailbox.emailAddress}</p>
-                        {mailbox.connectionStatus === "needs_reconnect" && (
-                          <p className="mt-0.5 text-xs text-destructive">
-                            This account needs to reconnect through Google.
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center justify-end gap-1">
-                        <Button
-                          aria-label={
-                            isDefault ? "Unset default mailbox" : "Set as default mailbox"
+        <SettingsSection title="Your mailboxes">
+          {isMailboxesError ? (
+            <SettingsCard className="p-6 text-sm text-destructive">
+              {mailboxesError.message ?? "Could not load mailboxes."}
+            </SettingsCard>
+          ) : areMailboxesPending ? (
+            <SettingsCard className="p-6 text-sm text-muted-foreground">
+              Loading mailboxes…
+            </SettingsCard>
+          ) : groups.length > 0 ? (
+            <div className="space-y-5">
+              {groups.map((group) => (
+                <div className="space-y-2" key={group.id}>
+                  <p className="px-1 text-xs text-muted-foreground">{group.name}</p>
+                  <SettingsRows>
+                    {group.mailboxes.map((mailbox) => {
+                      const description = [
+                        mailbox.displayName?.trim() ? mailbox.emailAddress : null,
+                        getProviderLabel(mailbox.provider),
+                        mailbox.provider === "managed" && mailbox.grantRole
+                          ? `${mailbox.grantRole} access`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" — ");
+                      return (
+                        <SettingsNavigationRow
+                          description={description}
+                          key={mailbox.id}
+                          meta={
+                            mailbox.connectionStatus === "needs_reconnect" ? (
+                              <span className="text-destructive">Reconnect</span>
+                            ) : mailbox.id === defaultMailboxId ? (
+                              <span>Default</span>
+                            ) : undefined
                           }
-                          className={cn({
-                            "text-foreground": isDefault,
-                            "text-muted-foreground": !isDefault,
-                          })}
-                          disabled={setDefaultMailboxMutation.isPending}
-                          onClick={() => {
-                            setDefaultMailboxMutation.mutate(
-                              {
-                                mailboxId: isDefault ? null : mailbox.id,
-                              },
-                              {
-                                onError: (error) => {
-                                  toast.error(
-                                    getMutationErrorMessage(
-                                      error,
-                                      "Could not update default mailbox.",
-                                    ),
-                                  );
-                                },
-                              },
-                            );
-                          }}
-                          size="sm"
-                          type="button"
-                          variant="ghost"
-                        >
-                          <HugeiconsIcon
-                            aria-hidden
-                            className="size-4"
-                            icon={isDefault ? PinIcon : PinOffIcon}
-                          />
-                          {isDefault ? "Default" : "Set default"}
-                        </Button>
+                          onClick={() => navigateToMailbox(mailbox.id)}
+                          title={mailbox.displayName?.trim() || mailbox.emailAddress}
+                        />
+                      );
+                    })}
+                  </SettingsRows>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <SettingsCard className="p-6">
+              <p className="text-sm text-foreground">No mailboxes yet</p>
+              <p className="mt-1 text-sm/6 text-muted-foreground">
+                Connect Gmail or create a shared inbox to start using Quieter.
+              </p>
+            </SettingsCard>
+          )}
+        </SettingsSection>
 
+        <Dialog onOpenChange={setIsAddMailboxOpen} open={isAddMailboxOpen}>
+          <DialogContent className="w-[min(92vw,36rem)]">
+            <DialogHeader>
+              <DialogTitle>Add mailbox</DialogTitle>
+              <DialogDescription>
+                Connect Gmail for yourself or create a shared inbox for a team.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogBody className="space-y-6">
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm text-foreground">Gmail</p>
+                  <p className="mt-1 text-xs/5 text-muted-foreground">
+                    Choose the team where this private mailbox should appear.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 @sm:flex-row">
+                  <Select
+                    items={placementItems}
+                    onValueChange={(value) => setGmailOrganizationId(value ?? "")}
+                    value={gmailOrganizationId || organizations[0]?.id}
+                  >
+                    <SelectTrigger aria-label="Gmail mailbox placement" className="flex-1">
+                      <SelectValue placeholder="Select team" />
+                    </SelectTrigger>
+                    <SelectContent align="start">
+                      {organizations.map((organization) => (
+                        <SelectItem key={organization.id} value={organization.id}>
+                          {organization.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    disabled={isStartingGmail || organizations.length === 0}
+                    onClick={() => void startGmailConnection()}
+                    type="button"
+                  >
+                    <HugeiconsIcon
+                      aria-hidden
+                      className={cn("size-4", { "animate-spin": isStartingGmail })}
+                      icon={isStartingGmail ? Loading03Icon : Mail01Icon}
+                    />
+                    {isStartingGmail ? "Opening Google" : "Connect Gmail"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-3 border-t border-border pt-5">
+                <div>
+                  <p className="text-sm text-foreground">Shared inbox</p>
+                  <p className="mt-1 text-xs/5 text-muted-foreground">
+                    Team owners and admins can create an address on a verified domain.
+                  </p>
+                </div>
+                <Select
+                  items={placementItems}
+                  onValueChange={(value) => {
+                    setManagedOrganizationId(value ?? "");
+                    setManagedDomain(undefined);
+                    setManagedDivisionId(null);
+                  }}
+                  value={selectedManagedOrganizationId || null}
+                >
+                  <SelectTrigger aria-label="Shared inbox team">
+                    <SelectValue placeholder="Select team" />
+                  </SelectTrigger>
+                  <SelectContent align="start">
+                    {organizations.map((organization) => (
+                      <SelectItem key={organization.id} value={organization.id}>
+                        {organization.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {isCreateManagedOrganizationPending ? (
+                  <p className="rounded-md border border-border/70 bg-muted/15 px-3 py-2 text-xs/5 text-muted-foreground squircle">
+                    Checking your team access…
+                  </p>
+                ) : canCreateManagedMailbox ? (
+                  <>
+                    <TextFieldInput
+                      aria-label="Shared inbox display name"
+                      onChange={(event) => setManagedDisplayName(event.currentTarget.value)}
+                      placeholder="Display name, such as Support"
+                      value={managedDisplayName}
+                    />
+                    <div className="keyboard-focus-within flex h-9 min-w-0 items-center rounded-md border border-input bg-background shadow-sm transition-colors squircle">
+                      <TextFieldInput
+                        aria-label="Mailbox address"
+                        chrome="ghost"
+                        className="h-full min-w-0 flex-1 pr-1"
+                        onChange={(event) =>
+                          setManagedLocalPart(event.currentTarget.value.replace(/[@\s]/g, ""))
+                        }
+                        placeholder="support"
+                        value={managedLocalPart}
+                      />
+                      <span aria-hidden className="text-sm text-muted-foreground select-none">
+                        @
+                      </span>
+                      {verifiedDomains.length > 0 ? (
                         <Select
-                          disabled={moveGmailMailboxMutation.isPending}
-                          items={placementItems}
-                          onValueChange={(value) => {
-                            if (!value) return;
-                            moveGmailMailboxMutation.mutate(
-                              {
-                                mailboxId: mailbox.id,
-                                organizationId: value,
-                              },
-                              {
-                                onError: (error) => {
-                                  toast.error(
-                                    getMutationErrorMessage(error, "Could not move mailbox."),
-                                  );
-                                },
-                              },
-                            );
-                          }}
-                          value={mailbox.organizationId}
+                          items={verifiedDomains.map((domain) => ({
+                            value: domain.domain,
+                            label: domain.domain,
+                          }))}
+                          onValueChange={(value) => setManagedDomain(value ?? undefined)}
+                          value={selectedDomain}
                         >
                           <SelectTrigger
-                            aria-label={`Placement for ${mailbox.emailAddress}`}
-                            className="max-w-40"
+                            aria-label="Mailbox domain"
+                            className="h-full rounded-l-none pr-2.5 pl-1.5 shadow-none active:scale-100"
                             size="sm"
                             variant="ghost"
                           >
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent align="end">
-                            {organizations.map((organization) => (
-                              <SelectItem key={organization.id} value={organization.id}>
-                                {organization.name}
+                            {verifiedDomains.map((domain) => (
+                              <SelectItem key={domain.id} value={domain.domain}>
+                                {domain.domain}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
-                        {mailbox.connectionStatus === "needs_reconnect" && (
-                          <Button
-                            disabled={isStartingGmail}
-                            onClick={() =>
-                              void startGmailConnection({
-                                mailboxId: mailbox.id,
-                                organizationId: mailbox.organizationId,
-                              })
-                            }
-                            size="sm"
-                            type="button"
-                            variant="ghost"
-                          >
-                            Reconnect
-                          </Button>
-                        )}
-                        <Button
-                          className="text-destructive hover:text-destructive"
-                          disabled={disconnectMailboxMutation.isPending}
-                          onClick={() => {
-                            disconnectMailboxMutation.mutate(
-                              {
-                                mailboxId: mailbox.id,
-                              },
-                              {
-                                onError: (error) => {
-                                  toast.error(
-                                    getMutationErrorMessage(error, "Could not remove mailbox."),
-                                  );
-                                },
-                              },
-                            );
-                          }}
-                          size="sm"
-                          type="button"
-                          variant="ghost"
-                        >
-                          <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
-                          Remove
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid border-t border-border/60 @2xl:grid-cols-2 @2xl:divide-x @2xl:divide-border/60">
-                      <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-xs font-medium text-foreground">
-                            Useful details
-                            {!hasGmailAutomationAccess && (
-                              <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground squircle">
-                                Pro
-                              </span>
-                            )}
-                          </span>
-                          <span className="mt-0.5 block text-[11px]/4 text-muted-foreground">
-                            Show codes, deliveries, and deadlines above the inbox.
-                          </span>
+                      ) : (
+                        <span className="px-2.5 text-sm text-muted-foreground">
+                          {areManagedDomainsLoading ? "loading…" : "no verified domain"}
                         </span>
-                        <Switch
-                          aria-label={`Find time-sensitive updates in new mail for ${mailbox.emailAddress}`}
-                          checked={mailbox.usefulDetailsEnabled}
-                          className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
-                          disabled={
-                            !hasGmailAutomationAccess ||
-                            setGmailUsefulDetailsMutation.isPending ||
-                            mailbox.connectionStatus !== "connected"
-                          }
-                          onCheckedChange={(enabled) => {
-                            setGmailUsefulDetailsMutation.mutate(
-                              {
-                                enabled,
-                                mailboxId: mailbox.id,
-                              },
-                              {
-                                onError: (error) => {
-                                  toast.error(
-                                    getMutationErrorMessage(
-                                      error,
-                                      "Could not update useful details.",
-                                    ),
-                                  );
-                                },
-                              },
-                            );
-                          }}
-                        >
-                          <SwitchThumb className="size-4 data-checked:translate-x-4" />
-                        </Switch>
-                      </label>
-
-                      <label
-                        className={cn(
-                          settingsInsetRowClass,
-                          "cursor-pointer gap-3 border-t border-border/60 @2xl:border-t-0",
-                        )}
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-xs font-medium text-foreground">
-                            Auto-label
-                            {!hasGmailAutomationAccess && (
-                              <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground squircle">
-                                Pro
-                              </span>
-                            )}
-                          </span>
-                          <span className="mt-0.5 block text-[11px]/4 text-muted-foreground">
-                            Label new Inbox mail using each label's include rules.
-                          </span>
-                        </span>
-                        <Switch
-                          aria-label={`Automatically label new mail for ${mailbox.emailAddress}`}
-                          checked={mailbox.autoLabelEnabled}
-                          className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
-                          disabled={
-                            !hasGmailAutomationAccess ||
-                            setGmailAutoLabelingMutation.isPending ||
-                            mailbox.connectionStatus !== "connected"
-                          }
-                          onCheckedChange={(enabled) => {
-                            setGmailAutoLabelingMutation.mutate(
-                              {
-                                enabled,
-                                mailboxId: mailbox.id,
-                              },
-                              {
-                                onError: (error) => {
-                                  toast.error(
-                                    getMutationErrorMessage(
-                                      error,
-                                      "Could not update auto-labeling.",
-                                    ),
-                                  );
-                                },
-                              },
-                            );
-                          }}
-                        >
-                          <SwitchThumb className="size-4 data-checked:translate-x-4" />
-                        </Switch>
-                      </label>
+                      )}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </section>
-
-      <section className="space-y-4 border-t border-border pt-6">
-        <h2 className="text-sm font-medium text-foreground">Shared inbox</h2>
-        {organizations.length > 0 ? (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-end gap-3">
-              <Select
-                items={organizationItems}
-                onValueChange={(value) => {
-                  setManagedOrganizationId(value ?? "");
-                  setManagedDomain(undefined);
-                  setManagedDivisionId(null);
-                  setSelectedManagedMailboxId(null);
-                }}
-                value={selectedManagedOrganizationId || null}
-              >
-                <SelectTrigger aria-label="Managed mailbox team" className="w-44">
-                  <SelectValue placeholder="Select team" />
-                </SelectTrigger>
-                <SelectContent
-                  align="start"
-                  alignItemWithTrigger={managedOrganizationId.length > 0}
-                  className="min-w-(--anchor-width)"
-                >
-                  {organizations.map((organization) => (
-                    <SelectItem key={organization.id} value={organization.id}>
-                      {organization.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <TextFieldInput
-                aria-label="Managed mailbox display name"
-                className="w-40"
-                onChange={(event) => setManagedDisplayName(event.currentTarget.value)}
-                placeholder="Support"
-                value={managedDisplayName}
-              />
-
-              <div className="keyboard-focus-within flex h-9 min-w-0 flex-1 items-center rounded-md border border-input bg-background shadow-sm transition-colors squircle">
-                <TextFieldInput
-                  aria-label="Mailbox address"
-                  chrome="ghost"
-                  className="h-full min-w-0 flex-1 pr-1"
-                  onChange={(event) =>
-                    setManagedLocalPart(event.currentTarget.value.replace(/[@\s]/g, ""))
-                  }
-                  placeholder="support"
-                  value={managedLocalPart}
-                />
-                <span aria-hidden className="text-sm text-muted-foreground select-none">
-                  @
-                </span>
-                {verifiedDomains.length > 0 ? (
-                  <Select
-                    items={verifiedDomains.map((domain) => ({
-                      value: domain.domain,
-                      label: domain.domain,
-                    }))}
-                    onValueChange={(value) => setManagedDomain(value ?? undefined)}
-                    value={selectedDomain}
-                  >
-                    <SelectTrigger
-                      aria-label="Mailbox domain"
-                      className="h-full rounded-l-none pr-2.5 pl-1.5 shadow-none active:scale-100"
-                      size="sm"
-                      variant="ghost"
+                    <Select
+                      items={[
+                        { value: "none", label: "No primary division" },
+                        ...(managedDivisionsData?.divisions ?? []).map((division) => ({
+                          value: division.id,
+                          label: division.name,
+                        })),
+                      ]}
+                      onValueChange={(value) =>
+                        setManagedDivisionId(value === "none" ? null : value)
+                      }
+                      value={managedDivisionId ?? "none"}
                     >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent align="end">
-                      {verifiedDomains.map((domain) => (
-                        <SelectItem key={domain.id} value={domain.domain}>
-                          {domain.domain}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                      <SelectTrigger aria-label="Primary division">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent align="start">
+                        <SelectItem value="none">No primary division</SelectItem>
+                        {(managedDivisionsData?.divisions ?? []).map((division) => (
+                          <SelectItem key={division.id} value={division.id}>
+                            {division.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {verifiedDomains.length === 0 && !areManagedDomainsLoading && (
+                      <p className="text-xs/5 text-muted-foreground">
+                        Add and verify a mail domain in{" "}
+                        {selectedManagedOrganization?.name ?? "team"} settings before creating a
+                        shared inbox.
+                      </p>
+                    )}
+                    {createManagedMailboxMutation.isError && (
+                      <p className="text-sm text-destructive">
+                        {createManagedMailboxMutation.error.message ??
+                          "Could not create shared inbox."}
+                      </p>
+                    )}
+                    <Button
+                      disabled={
+                        !trimmedLocalPart ||
+                        !selectedDomain ||
+                        createManagedMailboxMutation.isPending
+                      }
+                      onClick={() => {
+                        createManagedMailboxMutation.mutate(
+                          {
+                            displayName: managedDisplayName,
+                            divisionId: managedDivisionId,
+                            emailAddress: `${trimmedLocalPart}@${selectedDomain}`,
+                            organizationId: selectedManagedOrganizationId,
+                          },
+                          {
+                            onError: (error) =>
+                              toast.error(
+                                getMutationErrorMessage(error, "Could not create shared inbox."),
+                              ),
+                          },
+                        );
+                      }}
+                      type="button"
+                    >
+                      Create shared inbox
+                    </Button>
+                  </>
                 ) : (
-                  <span className="px-2.5 text-sm text-muted-foreground">
-                    {!selectedManagedOrganizationId
-                      ? "domain"
-                      : areManagedDomainsLoading
-                        ? "loading…"
-                        : "no verified domain"}
-                  </span>
+                  <p className="rounded-md border border-border/70 bg-muted/15 px-3 py-2 text-xs/5 text-muted-foreground squircle">
+                    Only a team owner or admin can create a shared inbox for this team.
+                  </p>
                 )}
               </div>
-            </div>
+            </DialogBody>
+            <DialogFooter>
+              <DialogCloseButton>Close</DialogCloseButton>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
 
-            <div className="flex flex-wrap items-end gap-3">
-              <Select
-                items={[
-                  { value: "none", label: "Unassigned" },
-                  ...(managedDivisionsData?.divisions ?? []).map((division) => ({
-                    value: division.id,
-                    label: division.name,
-                  })),
-                ]}
-                onValueChange={(value) => setManagedDivisionId(value === "none" ? null : value)}
-                value={managedDivisionId ?? "none"}
-              >
-                <SelectTrigger aria-label="Primary division" className="w-44">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent align="start">
-                  <SelectItem value="none">Unassigned</SelectItem>
-                  {(managedDivisionsData?.divisions ?? []).map((division) => (
-                    <SelectItem key={division.id} value={division.id}>
-                      {division.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+  if (areMailboxesPending) {
+    return (
+      <SettingsCard className="p-6 text-sm text-muted-foreground">Loading mailbox…</SettingsCard>
+    );
+  }
 
-              <Button
-                disabled={
-                  !trimmedLocalPart ||
-                  !selectedDomain ||
-                  !selectedManagedOrganizationId ||
-                  createManagedMailboxMutation.isPending
-                }
-                onClick={() => {
-                  createManagedMailboxMutation.mutate(
-                    {
-                      displayName: managedDisplayName,
-                      divisionId: managedDivisionId,
-                      emailAddress: `${trimmedLocalPart}@${selectedDomain}`,
-                      organizationId: selectedManagedOrganizationId,
-                    },
-                    {
-                      onError: (error) => {
-                        toast.error(
-                          getMutationErrorMessage(error, "Could not create managed mailbox."),
-                        );
-                      },
-                    },
-                  );
-                }}
-                size="sm"
-                type="button"
-              >
-                Create Managed Mailbox
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Create a team before creating a Managed mailbox.
-          </p>
-        )}
-        {organizations.length > 0 &&
-          selectedManagedOrganizationId.length > 0 &&
-          !areManagedDomainsLoading &&
-          verifiedDomains.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              This team has no verified domain yet. Add and verify one in team settings to create a
-              shared inbox.
-            </p>
-          )}
-        {createManagedMailboxMutation.isError && (
-          <p className="text-sm text-destructive">
-            {createManagedMailboxMutation.error.message ?? "Could not create managed mailbox."}
-          </p>
-        )}
+  if (!selectedMailbox) {
+    return (
+      <div className="space-y-8">
+        <SettingsPageHeader title="Mailbox unavailable">
+          This mailbox is no longer available to your account.
+        </SettingsPageHeader>
+        <SettingsCard className="p-6">
+          <Button
+            onClick={() =>
+              void navigate({
+                replace: true,
+                search: (previous) => ({ ...previous, mailboxId: "" }),
+                to: ".",
+              })
+            }
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            View mailboxes
+          </Button>
+        </SettingsCard>
+      </div>
+    );
+  }
 
-        {selectedManagedOrganizationId && (
-          <div className="grid gap-4 @5xl:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
-            <div className="overflow-hidden rounded-lg border border-border/70 squircle">
-              {(managedAdminData?.mailboxes ?? []).length > 0 ? (
-                <SettingsInsetRows>
-                  {(managedAdminData?.mailboxes ?? []).map((mailbox) => (
-                    <div className={cn(settingsInsetRowClass, "gap-3")} key={mailbox.id}>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm text-foreground">
-                          {mailbox.displayName?.trim() || mailbox.emailAddress}
-                        </p>
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {mailbox.emailAddress} / {mailbox.divisionName ?? "Unassigned"} /{" "}
-                          {mailbox.directGrantCount + mailbox.divisionGrantCount} grants
-                        </p>
-                      </div>
-                      <Button
-                        onClick={() => setSelectedManagedMailboxId(mailbox.id)}
-                        size="sm"
-                        type="button"
-                        variant={selectedManagedMailboxId === mailbox.id ? "default" : "outline"}
-                      >
-                        Manage
-                      </Button>
-                    </div>
-                  ))}
-                </SettingsInsetRows>
-              ) : (
-                <p className={cn("text-sm text-muted-foreground", settingsRowPaddingClass)}>
-                  No managed mailboxes in this team yet.
-                </p>
-              )}
-            </div>
+  const isDefault = selectedMailbox.id === defaultMailboxId;
+  const hasAutomationAccess =
+    isBillingSuccess && hasOrganizationAiAccess(billing, selectedMailbox.organizationId);
+  const title = selectedMailbox.displayName?.trim() || selectedMailbox.emailAddress;
+  const detailGroup = groups.find((group) =>
+    group.mailboxes.some((mailbox) => mailbox.id === selectedMailbox.id),
+  );
 
-            {selectedManagedMailboxDetails ? (
-              <div className="space-y-5 overflow-hidden rounded-lg border border-border/70 bg-muted/10 p-4 squircle">
-                <div>
-                  <h3 className="text-sm font-medium text-foreground">
-                    {selectedManagedMailboxDetails.mailbox.displayName?.trim() ||
-                      selectedManagedMailboxDetails.mailbox.emailAddress}
-                  </h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {selectedManagedMailboxDetails.mailbox.emailAddress}
-                  </p>
-                </div>
+  return (
+    <div className="space-y-8">
+      <SettingsPageHeader eyebrow={getProviderLabel(selectedMailbox.provider)} title={title}>
+        {selectedMailbox.displayName?.trim() && <span>{selectedMailbox.emailAddress} — </span>}
+        {detailGroup?.name}
+      </SettingsPageHeader>
 
-                <div className="grid gap-2">
-                  <TextFieldInput
-                    aria-label="Managed mailbox display name"
-                    defaultValue={selectedManagedMailboxDetails.mailbox.displayName ?? ""}
-                    key={`${selectedManagedMailboxId}-display-name`}
-                    onBlur={(event) => {
-                      updateManagedMailboxMutation.mutate(
-                        {
-                          displayName: event.currentTarget.value,
-                          mailboxId: selectedManagedMailboxDetails.mailbox.id,
-                        },
-                        {
-                          onError: (error) =>
-                            toast.error(
-                              getMutationErrorMessage(error, "Could not update mailbox."),
-                            ),
-                        },
-                      );
-                    }}
-                    placeholder="Display name"
+      <SettingsSection
+        description="Choose where this mailbox appears and which mailbox opens by default."
+        title="General"
+      >
+        <SettingsRows>
+          {selectedMailbox.provider !== "api" && (
+            <SettingsRow
+              action={
+                <Button
+                  disabled={setDefaultMailboxMutation.isPending}
+                  onClick={() => setDefaultMailbox(selectedMailbox.id)}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={isDefault ? PinIcon : PinOffIcon}
                   />
-                  <Select
-                    items={[
-                      { value: "none", label: "Unassigned" },
-                      ...(managedDivisionsData?.divisions ?? []).map((division) => ({
-                        value: division.id,
-                        label: division.name,
-                      })),
-                    ]}
-                    onValueChange={(value) => {
-                      updateManagedMailboxMutation.mutate(
-                        {
-                          divisionId: value === "none" ? null : value,
-                          mailboxId: selectedManagedMailboxDetails.mailbox.id,
-                        },
+                  {isDefault ? "Default" : "Set as default"}
+                </Button>
+              }
+              title="Default mailbox"
+            >
+              Open this mailbox when no other mailbox is selected.
+            </SettingsRow>
+          )}
+
+          {selectedMailbox.provider === "gmail" && (
+            <SettingsRow
+              action={
+                <Select
+                  disabled={moveGmailMailboxMutation.isPending}
+                  items={placementItems}
+                  onValueChange={(value) => {
+                    if (!value) return;
+                    moveGmailMailboxMutation.mutate(
+                      { mailboxId: selectedMailbox.id, organizationId: value },
+                      {
+                        onError: (error) =>
+                          toast.error(getMutationErrorMessage(error, "Could not move mailbox.")),
+                      },
+                    );
+                  }}
+                  value={selectedMailbox.organizationId}
+                >
+                  <SelectTrigger
+                    aria-label={`Team for ${selectedMailbox.emailAddress}`}
+                    className="max-w-44"
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent align="end">
+                    {organizations.map((organization) => (
+                      <SelectItem key={organization.id} value={organization.id}>
+                        {organization.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              }
+              title="Team"
+            >
+              Placement keeps mailbox switching organized; this mailbox remains private to you.
+            </SettingsRow>
+          )}
+
+          {selectedMailbox.provider === "managed" && selectedMailbox.grantRole && (
+            <SettingsRow
+              action={<MailboxAccessPill role={selectedMailbox.grantRole} />}
+              title="Your access"
+            >
+              {selectedMailbox.grantRole === "manager"
+                ? "You can configure this shared inbox and its access."
+                : selectedMailbox.grantRole === "responder"
+                  ? "You can read and reply, but only managers can change mailbox settings."
+                  : "You can read this inbox, but only managers can change mailbox settings."}
+            </SettingsRow>
+          )}
+
+          {selectedMailbox.provider === "gmail" && (
+            <SettingsRow
+              action={
+                selectedMailbox.connectionStatus === "needs_reconnect" ? (
+                  <Button
+                    disabled={isStartingGmail}
+                    onClick={() =>
+                      void startGmailConnection({
+                        mailboxId: selectedMailbox.id,
+                        organizationId: selectedMailbox.organizationId,
+                      })
+                    }
+                    size="sm"
+                    type="button"
+                  >
+                    <HugeiconsIcon
+                      aria-hidden
+                      className={cn("size-4", { "animate-spin": isStartingGmail })}
+                      icon={isStartingGmail ? Loading03Icon : Mail01Icon}
+                    />
+                    Reconnect
+                  </Button>
+                ) : (
+                  <span className="text-xs text-muted-foreground">Connected</span>
+                )
+              }
+              title="Connection"
+            >
+              {selectedMailbox.connectionStatus === "needs_reconnect"
+                ? "Reconnect through Google to resume reading and sending mail."
+                : "Quieter can read and send mail for this account."}
+            </SettingsRow>
+          )}
+        </SettingsRows>
+      </SettingsSection>
+
+      {selectedMailbox.provider === "gmail" && (
+        <>
+          <SettingsSection
+            description="Optional features that organize new Inbox mail and surface timely information."
+            title="Intelligence"
+          >
+            <SettingsCard>
+              <SettingsInsetRows>
+                <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm text-foreground">Useful details</span>
+                    <span className="mt-0.5 block text-xs/5 text-muted-foreground">
+                      Show codes, deliveries, and deadlines above the inbox.
+                      {!hasAutomationAccess && " Requires Pro access for this team."}
+                    </span>
+                  </span>
+                  <Switch
+                    aria-label={`Find time-sensitive updates in new mail for ${selectedMailbox.emailAddress}`}
+                    checked={selectedMailbox.usefulDetailsEnabled}
+                    className={switchClassName}
+                    disabled={
+                      !hasAutomationAccess ||
+                      setGmailUsefulDetailsMutation.isPending ||
+                      selectedMailbox.connectionStatus !== "connected"
+                    }
+                    onCheckedChange={(enabled) =>
+                      setGmailUsefulDetailsMutation.mutate(
+                        { enabled, mailboxId: selectedMailbox.id },
                         {
                           onError: (error) =>
                             toast.error(
-                              getMutationErrorMessage(error, "Could not update mailbox division."),
+                              getMutationErrorMessage(error, "Could not update useful details."),
                             ),
                         },
-                      );
-                    }}
-                    value={selectedManagedMailboxDetails.mailbox.divisionId ?? "none"}
+                      )
+                    }
                   >
-                    <SelectTrigger aria-label="Primary division">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent align="start">
-                      <SelectItem value="none">Unassigned</SelectItem>
-                      {(managedDivisionsData?.divisions ?? []).map((division) => (
-                        <SelectItem key={division.id} value={division.id}>
-                          {division.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                    <SwitchThumb className="size-4 data-checked:translate-x-4" />
+                  </Switch>
+                </label>
+                <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm text-foreground">Auto-label</span>
+                    <span className="mt-0.5 block text-xs/5 text-muted-foreground">
+                      Label new Inbox mail using each label&apos;s inclusion criteria.
+                      {!hasAutomationAccess && " Requires Pro access for this team."}
+                    </span>
+                  </span>
+                  <Switch
+                    aria-label={`Automatically label new mail for ${selectedMailbox.emailAddress}`}
+                    checked={selectedMailbox.autoLabelEnabled}
+                    className={switchClassName}
+                    disabled={
+                      !hasAutomationAccess ||
+                      setGmailAutoLabelingMutation.isPending ||
+                      selectedMailbox.connectionStatus !== "connected"
+                    }
+                    onCheckedChange={(enabled) =>
+                      setGmailAutoLabelingMutation.mutate(
+                        { enabled, mailboxId: selectedMailbox.id },
+                        {
+                          onError: (error) =>
+                            toast.error(
+                              getMutationErrorMessage(error, "Could not update auto-labeling."),
+                            ),
+                        },
+                      )
+                    }
+                  >
+                    <SwitchThumb className="size-4 data-checked:translate-x-4" />
+                  </Switch>
+                </label>
+              </SettingsInsetRows>
+            </SettingsCard>
+          </SettingsSection>
 
-                <div>
-                  <h4 className="text-xs font-medium text-foreground">Features</h4>
-                  <SettingsInsetRows className="mt-2">
-                    <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-xs font-medium text-foreground">
-                          Useful details
-                          {!hasSelectedManagedAutomationAccess && (
-                            <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground squircle">
-                              Pro
-                            </span>
-                          )}
-                        </span>
-                        <span className="mt-0.5 block text-[11px]/4 text-muted-foreground">
-                          Show codes, deliveries, and deadlines above the inbox.
-                        </span>
-                      </span>
-                      <Switch
-                        aria-label={`Find time-sensitive updates in new mail for ${selectedManagedMailboxDetails.mailbox.emailAddress}`}
-                        checked={selectedManagedMailboxDetails.mailbox.usefulDetailsEnabled}
-                        className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
-                        disabled={
-                          !hasSelectedManagedAutomationAccess ||
-                          setGmailUsefulDetailsMutation.isPending
-                        }
-                        onCheckedChange={(enabled) => {
-                          setGmailUsefulDetailsMutation.mutate(
+          <SettingsSection title="Remove mailbox">
+            <SettingsCard>
+              <SettingsRow
+                action={
+                  <Button
+                    className="text-destructive hover:text-destructive"
+                    disabled={disconnectMailboxMutation.isPending}
+                    onClick={() =>
+                      disconnectMailboxMutation.mutate(
+                        { mailboxId: selectedMailbox.id },
+                        {
+                          onError: (error) =>
+                            toast.error(
+                              getMutationErrorMessage(error, "Could not remove mailbox."),
+                            ),
+                        },
+                      )
+                    }
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+                    Remove
+                  </Button>
+                }
+                title="Disconnect Gmail"
+              >
+                Remove this account and its saved credentials from Quieter.
+              </SettingsRow>
+            </SettingsCard>
+          </SettingsSection>
+        </>
+      )}
+
+      {selectedMailbox.provider === "managed" && selectedMailbox.grantRole !== "manager" && (
+        <SettingsSection title="Mailbox settings">
+          <SettingsCard className="p-6">
+            <p className="text-sm text-foreground">Manager access required</p>
+            <p className="mt-1 max-w-2xl text-sm/6 text-muted-foreground">
+              A mailbox manager can change shared-inbox features, routing, and member access. Your
+              current role still lets you use every mail action included with that role.
+            </p>
+          </SettingsCard>
+        </SettingsSection>
+      )}
+
+      {selectedMailbox.provider === "managed" && selectedMailbox.grantRole === "manager" && (
+        <>
+          {isSelectedManagedMailboxPending ? (
+            <SettingsCard className="p-6 text-sm text-muted-foreground">
+              Loading shared inbox settings…
+            </SettingsCard>
+          ) : selectedManagedMailboxError || !selectedManagedMailboxDetails ? (
+            <SettingsCard className="p-6 text-sm text-destructive">
+              {selectedManagedMailboxError?.message ?? "Could not load shared inbox settings."}
+            </SettingsCard>
+          ) : (
+            <>
+              <SettingsSection
+                description="Set the name, primary division, and which messages appear in this inbox."
+                title="Shared inbox"
+              >
+                <SettingsCard>
+                  <SettingsInsetRows>
+                    <div className={cn(settingsInsetRowClass, "gap-4")}>
+                      <span className="min-w-0 flex-1 text-sm text-foreground">Display name</span>
+                      <TextFieldInput
+                        aria-label="Shared inbox display name"
+                        className="max-w-64"
+                        defaultValue={selectedManagedMailboxDetails.mailbox.displayName ?? ""}
+                        key={`${selectedMailbox.id}-display-name`}
+                        onBlur={(event) =>
+                          updateManagedMailboxMutation.mutate(
                             {
-                              enabled,
-                              mailboxId: selectedManagedMailboxDetails.mailbox.id,
+                              displayName: event.currentTarget.value,
+                              mailboxId: selectedMailbox.id,
                             },
                             {
-                              onError: (error) => {
+                              onError: (error) =>
+                                toast.error(
+                                  getMutationErrorMessage(error, "Could not update mailbox."),
+                                ),
+                            },
+                          )
+                        }
+                        placeholder="Display name"
+                      />
+                    </div>
+                    <div className={cn(settingsInsetRowClass, "gap-4")}>
+                      <span className="min-w-0 flex-1 text-sm text-foreground">
+                        Primary division
+                      </span>
+                      <Select
+                        items={[
+                          { value: "none", label: "Unassigned" },
+                          ...(detailManagedDivisionsData?.divisions ?? []).map((division) => ({
+                            value: division.id,
+                            label: division.name,
+                          })),
+                        ]}
+                        onValueChange={(value) =>
+                          updateManagedMailboxMutation.mutate(
+                            {
+                              divisionId: value === "none" ? null : value,
+                              mailboxId: selectedMailbox.id,
+                            },
+                            {
+                              onError: (error) =>
                                 toast.error(
                                   getMutationErrorMessage(
                                     error,
-                                    "Could not update useful details.",
+                                    "Could not update mailbox division.",
                                   ),
-                                );
-                              },
+                                ),
                             },
-                          );
-                        }}
+                          )
+                        }
+                        value={selectedManagedMailboxDetails.mailbox.divisionId ?? "none"}
                       >
-                        <SwitchThumb className="size-4 data-checked:translate-x-4" />
-                      </Switch>
-                    </label>
-
+                        <SelectTrigger aria-label="Primary division" size="sm" variant="ghost">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent align="end">
+                          <SelectItem value="none">Unassigned</SelectItem>
+                          {(detailManagedDivisionsData?.divisions ?? []).map((division) => (
+                            <SelectItem key={division.id} value={division.id}>
+                              {division.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-xs font-medium text-foreground">
-                          Auto-label
-                          {!hasSelectedManagedAutomationAccess && (
-                            <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground squircle">
-                              Pro
-                            </span>
-                          )}
-                        </span>
-                        <span className="mt-0.5 block text-[11px]/4 text-muted-foreground">
-                          Label new Inbox mail using existing shared labels.
+                        <span className="block text-sm text-foreground">Include API messages</span>
+                        <span className="mt-0.5 block text-xs/5 text-muted-foreground">
+                          Also show messages sent from this exact address through the team API.
                         </span>
                       </span>
                       <Switch
-                        aria-label={`Automatically label new mail for ${selectedManagedMailboxDetails.mailbox.emailAddress}`}
-                        checked={selectedManagedMailboxDetails.mailbox.autoLabelEnabled}
-                        className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
-                        disabled={
-                          !hasSelectedManagedAutomationAccess ||
-                          setGmailAutoLabelingMutation.isPending
-                        }
-                        onCheckedChange={(enabled) => {
-                          setGmailAutoLabelingMutation.mutate(
-                            {
-                              enabled,
-                              mailboxId: selectedManagedMailboxDetails.mailbox.id,
-                            },
-                            {
-                              onError: (error) => {
-                                toast.error(
-                                  getMutationErrorMessage(error, "Could not update auto-labeling."),
-                                );
-                              },
-                            },
-                          );
-                        }}
-                      >
-                        <SwitchThumb className="size-4 data-checked:translate-x-4" />
-                      </Switch>
-                    </label>
-
-                    <div className={cn(settingsInsetRowClass, "gap-3")}>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-xs font-medium text-foreground">
-                          API messages
-                        </span>
-                        <span className="mt-0.5 block text-[11px]/4 text-muted-foreground">
-                          Also show matching API sends in this mailbox.
-                        </span>
-                      </span>
-                      <Switch
-                        aria-label={`Show API messages sent from ${selectedManagedMailboxDetails.mailbox.emailAddress} in this mailbox`}
+                        aria-label={`Show API messages sent from ${selectedMailbox.emailAddress}`}
                         checked={selectedManagedMailboxDetails.mailbox.includeApiSentMessages}
-                        className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
+                        className={switchClassName}
                         disabled={updateManagedMailboxMutation.isPending}
-                        onCheckedChange={(includeApiSentMessages) => {
+                        onCheckedChange={(includeApiSentMessages) =>
                           updateManagedMailboxMutation.mutate(
+                            { includeApiSentMessages, mailboxId: selectedMailbox.id },
                             {
-                              includeApiSentMessages,
-                              mailboxId: selectedManagedMailboxDetails.mailbox.id,
-                            },
-                            {
-                              onError: (error) => {
+                              onError: (error) =>
                                 toast.error(
                                   getMutationErrorMessage(
                                     error,
                                     "Could not update API message setting.",
                                   ),
-                                );
-                              },
+                                ),
                             },
-                          );
-                        }}
+                          )
+                        }
                       >
                         <SwitchThumb className="size-4 data-checked:translate-x-4" />
                       </Switch>
-                    </div>
+                    </label>
                   </SettingsInsetRows>
-                </div>
+                </SettingsCard>
+              </SettingsSection>
 
-                <div>
-                  <h4 className="text-xs font-medium text-foreground">Division access</h4>
-                  <SettingsInsetRows className="mt-2">
-                    {(managedDivisionsData?.divisions ?? []).map((division) => {
-                      const grant = selectedManagedMailboxDetails.divisionGrants.find(
-                        (item) => item.divisionId === division.id,
-                      );
-                      return (
-                        <div className={cn(settingsInsetRowClass, "gap-3")} key={division.id}>
-                          <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                            {division.name}
-                          </span>
-                          <Select
-                            items={mailboxGrantSelectItems}
-                            onValueChange={(value) => {
-                              if (!value || value === "none") {
-                                removeManagedMailboxDivisionGrantMutation.mutate(
+              <SettingsSection
+                description="Organize new messages and surface time-sensitive information for everyone using this inbox."
+                title="Intelligence"
+              >
+                <SettingsCard>
+                  <SettingsInsetRows>
+                    <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm text-foreground">Useful details</span>
+                        <span className="mt-0.5 block text-xs/5 text-muted-foreground">
+                          Show codes, deliveries, and deadlines above the inbox.
+                          {!hasAutomationAccess && " Requires Pro access for this team."}
+                        </span>
+                      </span>
+                      <Switch
+                        aria-label={`Find time-sensitive updates in new mail for ${selectedMailbox.emailAddress}`}
+                        checked={selectedManagedMailboxDetails.mailbox.usefulDetailsEnabled}
+                        className={switchClassName}
+                        disabled={!hasAutomationAccess || setGmailUsefulDetailsMutation.isPending}
+                        onCheckedChange={(enabled) =>
+                          setGmailUsefulDetailsMutation.mutate(
+                            { enabled, mailboxId: selectedMailbox.id },
+                            {
+                              onError: (error) =>
+                                toast.error(
+                                  getMutationErrorMessage(
+                                    error,
+                                    "Could not update useful details.",
+                                  ),
+                                ),
+                            },
+                          )
+                        }
+                      >
+                        <SwitchThumb className="size-4 data-checked:translate-x-4" />
+                      </Switch>
+                    </label>
+                    <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm text-foreground">Auto-label</span>
+                        <span className="mt-0.5 block text-xs/5 text-muted-foreground">
+                          Label new Inbox mail using existing shared labels.
+                          {!hasAutomationAccess && " Requires Pro access for this team."}
+                        </span>
+                      </span>
+                      <Switch
+                        aria-label={`Automatically label new mail for ${selectedMailbox.emailAddress}`}
+                        checked={selectedManagedMailboxDetails.mailbox.autoLabelEnabled}
+                        className={switchClassName}
+                        disabled={!hasAutomationAccess || setGmailAutoLabelingMutation.isPending}
+                        onCheckedChange={(enabled) =>
+                          setGmailAutoLabelingMutation.mutate(
+                            { enabled, mailboxId: selectedMailbox.id },
+                            {
+                              onError: (error) =>
+                                toast.error(
+                                  getMutationErrorMessage(error, "Could not update auto-labeling."),
+                                ),
+                            },
+                          )
+                        }
+                      >
+                        <SwitchThumb className="size-4 data-checked:translate-x-4" />
+                      </Switch>
+                    </label>
+                  </SettingsInsetRows>
+                </SettingsCard>
+              </SettingsSection>
+
+              <SettingsSection
+                description="Give an entire division the same level of access to this inbox."
+                title="Division access"
+              >
+                <SettingsCard>
+                  {(detailManagedDivisionsData?.divisions ?? []).length > 0 ? (
+                    <SettingsInsetRows>
+                      {(detailManagedDivisionsData?.divisions ?? []).map((division) => {
+                        const grant = selectedManagedMailboxDetails.divisionGrants.find(
+                          (item) => item.divisionId === division.id,
+                        );
+                        return (
+                          <div className={cn(settingsInsetRowClass, "gap-3")} key={division.id}>
+                            <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                              {division.name}
+                            </span>
+                            <Select
+                              items={mailboxGrantSelectItems}
+                              onValueChange={(value) => {
+                                if (!value || value === "none") {
+                                  removeManagedMailboxDivisionGrantMutation.mutate(
+                                    { divisionId: division.id, mailboxId: selectedMailbox.id },
+                                    {
+                                      onError: (error) =>
+                                        toast.error(
+                                          getMutationErrorMessage(
+                                            error,
+                                            "Could not remove access.",
+                                          ),
+                                        ),
+                                    },
+                                  );
+                                  return;
+                                }
+                                setManagedMailboxDivisionGrantMutation.mutate(
                                   {
                                     divisionId: division.id,
-                                    mailboxId: selectedManagedMailboxDetails.mailbox.id,
+                                    mailboxId: selectedMailbox.id,
+                                    role: value as MailboxGrantRole,
                                   },
                                   {
                                     onError: (error) =>
                                       toast.error(
-                                        getMutationErrorMessage(error, "Could not remove access."),
+                                        getMutationErrorMessage(error, "Could not update access."),
                                       ),
                                   },
                                 );
-                                return;
-                              }
-                              setManagedMailboxDivisionGrantMutation.mutate(
-                                {
-                                  divisionId: division.id,
-                                  mailboxId: selectedManagedMailboxDetails.mailbox.id,
-                                  role: value as MailboxGrantRole,
-                                },
-                                {
-                                  onError: (error) =>
-                                    toast.error(
-                                      getMutationErrorMessage(error, "Could not update access."),
-                                    ),
-                                },
-                              );
-                            }}
-                            value={grant?.role ?? "none"}
-                          >
-                            <SelectTrigger
-                              aria-label={`${division.name} mailbox role`}
-                              size="sm"
-                              variant="ghost"
+                              }}
+                              value={grant?.role ?? "none"}
                             >
-                              {grant ? (
-                                <MailboxAccessPill role={grant.role} />
-                              ) : (
-                                <span className="text-muted-foreground">No access</span>
-                              )}
-                            </SelectTrigger>
-                            <SelectContent align="end">
-                              <SelectItem value="none">No access</SelectItem>
-                              {mailboxGrantRoleOptions.map((role) => (
-                                <SelectItem key={role.value} value={role.value}>
-                                  <MailboxAccessPill role={role.value} />
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      );
-                    })}
-                  </SettingsInsetRows>
-                </div>
+                              <SelectTrigger
+                                aria-label={`${division.name} mailbox role`}
+                                size="sm"
+                                variant="ghost"
+                              >
+                                {grant ? (
+                                  <MailboxAccessPill role={grant.role} />
+                                ) : (
+                                  <span className="text-muted-foreground">No access</span>
+                                )}
+                              </SelectTrigger>
+                              <SelectContent align="end">
+                                <SelectItem value="none">No access</SelectItem>
+                                {mailboxGrantRoleOptions.map((role) => (
+                                  <SelectItem key={role.value} value={role.value}>
+                                    <MailboxAccessPill role={role.value} />
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        );
+                      })}
+                    </SettingsInsetRows>
+                  ) : (
+                    <p className="p-6 text-sm text-muted-foreground">
+                      This team has no divisions yet.
+                    </p>
+                  )}
+                </SettingsCard>
+              </SettingsSection>
 
-                <div>
-                  <h4 className="text-xs font-medium text-foreground">Direct member access</h4>
-                  <SettingsInsetRows className="mt-2 max-h-72 overflow-y-auto">
-                    {(selectedManagedOrganization?.members ?? []).map((member) => {
+              <SettingsSection
+                description="Override division access for an individual team member."
+                title="Direct member access"
+              >
+                <SettingsCard>
+                  <SettingsInsetRows>
+                    {(detailManagedOrganization?.members ?? []).map((member) => {
                       const grant = selectedManagedMailboxDetails.directGrants.find(
                         (item) => item.userId === member.userId,
                       );
@@ -1037,10 +1154,7 @@ export const MailboxesSettingsPanel = () => {
                             onValueChange={(value) => {
                               if (!value || value === "none") {
                                 removeManagedMailboxGrantMutation.mutate(
-                                  {
-                                    mailboxId: selectedManagedMailboxDetails.mailbox.id,
-                                    userId: member.userId,
-                                  },
+                                  { mailboxId: selectedMailbox.id, userId: member.userId },
                                   {
                                     onError: (error) =>
                                       toast.error(
@@ -1052,7 +1166,7 @@ export const MailboxesSettingsPanel = () => {
                               }
                               setManagedMailboxGrantMutation.mutate(
                                 {
-                                  mailboxId: selectedManagedMailboxDetails.mailbox.id,
+                                  mailboxId: selectedMailbox.id,
                                   role: value as MailboxGrantRole,
                                   userId: member.userId,
                                 },
@@ -1090,16 +1204,45 @@ export const MailboxesSettingsPanel = () => {
                       );
                     })}
                   </SettingsInsetRows>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground squircle">
-                Select a managed mailbox to configure access.
-              </div>
-            )}
-          </div>
-        )}
-      </section>
+                </SettingsCard>
+              </SettingsSection>
+            </>
+          )}
+        </>
+      )}
+
+      {selectedMailbox.provider === "api" && (
+        <SettingsSection title="Mailbox capabilities">
+          <SettingsCard className="p-6">
+            <p className="text-sm text-foreground">Send-only mailbox</p>
+            <p className="mt-1 max-w-2xl text-sm/6 text-muted-foreground">
+              This address sends through your team API. Its domain and access are managed in team
+              settings.
+            </p>
+            <Button
+              className="mt-4"
+              onClick={() =>
+                void navigate({
+                  search: (previous) => ({
+                    ...previous,
+                    mailboxId: "",
+                    organizationId: selectedMailbox.organizationId,
+                    organizationView: "api-keys",
+                    tab: "organization",
+                  }),
+                  to: ".",
+                })
+              }
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Open team settings
+              <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
+            </Button>
+          </SettingsCard>
+        </SettingsSection>
+      )}
     </div>
   );
 };

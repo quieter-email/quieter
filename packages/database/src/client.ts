@@ -74,13 +74,22 @@ const getDatabaseClient = () => {
   return directDatabaseClient;
 };
 
-export const withRequestDatabaseClient = <Result>(callback: () => Result) => {
-  if (requestDatabaseClient.getStore()) {
-    return callback();
+export function withRequestDatabaseClient<Result>(
+  callback: (client: DatabaseClient) => Result,
+): Result;
+export function withRequestDatabaseClient<Result>(callback: () => Result): Result;
+export function withRequestDatabaseClient<Result>(
+  callback: ((client: DatabaseClient) => Result) | (() => Result),
+) {
+  const runCallback: (client: DatabaseClient) => Result = callback;
+  const requestClient = requestDatabaseClient.getStore();
+  if (requestClient) {
+    return runCallback(requestClient);
   }
 
-  return requestDatabaseClient.run(createDatabaseClient(), callback);
-};
+  const client = createDatabaseClient();
+  return requestDatabaseClient.run(client, () => runCallback(client));
+}
 
 export const db = new Proxy({} as DatabaseClient, {
   get: (_target, property) => Reflect.get(getDatabaseClient(), property),

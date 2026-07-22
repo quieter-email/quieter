@@ -23,6 +23,7 @@ export const Route = createFileRoute("/settings")({
       connector: z.enum(["connected", "error"]).optional().catch(undefined),
       gmail: z.enum(["connected", "error"]).optional().catch(undefined),
       tab: z.string().trim().pipe(z.enum(SETTINGS_TABS)).catch("overview").default("overview"),
+      mailboxId: z.string().trim().catch("").default(""),
       organizationId: z.string().trim().catch("").default(""),
       organizationView: z
         .string()

@@ -40,7 +40,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
   const navigate = useNavigate({
     from: "/settings",
   });
-  const { from, organizationId, tab } = settingsRouteApi.useSearch();
+  const { from, mailboxId, organizationId, tab } = settingsRouteApi.useSearch();
 
   const setTab = (nextTab: SettingsTab) => {
     void navigate({
@@ -48,6 +48,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
       search: (previous) => ({
         ...previous,
         tab: nextTab,
+        mailboxId: "",
         organizationId: "",
         organizationView: "overview",
       }),
@@ -59,6 +60,16 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
       to: from,
     });
   };
+  const goBackToMailboxes = () => {
+    void navigate({
+      replace: true,
+      search: (previous) => ({
+        ...previous,
+        mailboxId: "",
+      }),
+      to: ".",
+    });
+  };
   const detail = tab === "overview" ? null : SETTINGS_DETAIL_TITLES[tab];
 
   return (
@@ -68,6 +79,8 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
       <WorkspaceDitherBackground />
       {tab === "overview" ? (
         <SettingsBackButton onClick={goBackToApp}>Back</SettingsBackButton>
+      ) : tab === "mailboxes" && mailboxId ? (
+        <SettingsBackButton onClick={goBackToMailboxes}>Mailboxes</SettingsBackButton>
       ) : tab === "organization" && organizationId ? null : (
         <SettingsBackButton onClick={() => setTab("overview")}>Settings</SettingsBackButton>
       )}
@@ -77,7 +90,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
             <SettingsOverviewPanel initialUser={initialUser} onSelectTab={setTab} />
           ) : (
             <div className="space-y-8">
-              {detail && tab !== "actions" && (
+              {detail && tab !== "actions" && tab !== "mailboxes" && (
                 <header>
                   <h1 className="text-xl font-normal tracking-tight text-foreground">
                     {detail.title}

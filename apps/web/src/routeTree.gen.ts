@@ -20,6 +20,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
 import { Route as ApiSitePasswordRouteImport } from './routes/api/site-password'
+import { Route as ApiReviewHealthRouteImport } from './routes/api/review-health'
 import { Route as ApiPreviewPersonaRouteImport } from './routes/api/preview-persona'
 import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
 import { Route as ApiV1SendRouteImport } from './routes/api/v1/send'
@@ -85,6 +86,11 @@ const ApiSitePasswordRoute = ApiSitePasswordRouteImport.update({
   path: '/api/site-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiReviewHealthRoute = ApiReviewHealthRouteImport.update({
+  id: '/api/review-health',
+  path: '/api/review-health',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPreviewPersonaRoute = ApiPreviewPersonaRouteImport.update({
   id: '/api/preview-persona',
   path: '/api/preview-persona',
@@ -144,6 +150,7 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
+  '/api/review-health': typeof ApiReviewHealthRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -166,6 +173,7 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
+  '/api/review-health': typeof ApiReviewHealthRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -189,6 +197,7 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
+  '/api/review-health': typeof ApiReviewHealthRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -213,6 +222,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/api/openapi'
     | '/api/preview-persona'
+    | '/api/review-health'
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
@@ -235,6 +245,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/api/openapi'
     | '/api/preview-persona'
+    | '/api/review-health'
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
@@ -257,6 +268,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/api/openapi'
     | '/api/preview-persona'
+    | '/api/review-health'
     | '/api/site-password'
     | '/api/waitlist'
     | '/api/auth/$'
@@ -280,6 +292,7 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   ApiOpenapiRoute: typeof ApiOpenapiRoute
   ApiPreviewPersonaRoute: typeof ApiPreviewPersonaRoute
+  ApiReviewHealthRoute: typeof ApiReviewHealthRoute
   ApiSitePasswordRoute: typeof ApiSitePasswordRoute
   ApiWaitlistRoute: typeof ApiWaitlistRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -370,6 +383,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSitePasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/review-health': {
+      id: '/api/review-health'
+      path: '/api/review-health'
+      fullPath: '/api/review-health'
+      preLoaderRoute: typeof ApiReviewHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/preview-persona': {
       id: '/api/preview-persona'
       path: '/api/preview-persona'
@@ -448,6 +468,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   ApiOpenapiRoute: ApiOpenapiRoute,
   ApiPreviewPersonaRoute: ApiPreviewPersonaRoute,
+  ApiReviewHealthRoute: ApiReviewHealthRoute,
   ApiSitePasswordRoute: ApiSitePasswordRoute,
   ApiWaitlistRoute: ApiWaitlistRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

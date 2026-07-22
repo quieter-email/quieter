@@ -21,7 +21,7 @@ export type ConnectorConnectionStatus = "connected" | "needs_reconnect";
 export type ConnectorProvider = "google_calendar" | "linear";
 export type MailboxConnectionStatus = "connected" | "needs_reconnect";
 export type MailboxGrantRole = "manager" | "reader" | "responder";
-export type MailboxProvider = "gmail" | "managed";
+export type PersistedMailboxProvider = "gmail" | "managed";
 export type MailboxAccessSource = "direct" | "division";
 export type MailboxActionStatus = "needs_attention" | "ready";
 export type MailboxActionRevisionValidationStatus = "invalid" | "valid";
@@ -395,7 +395,7 @@ export const mailbox = pgTable(
   "mailbox",
   {
     id: text("id").primaryKey(),
-    provider: text("provider").$type<MailboxProvider>().notNull(),
+    provider: text("provider").$type<PersistedMailboxProvider>().notNull(),
     emailAddress: text("emailAddress").notNull(),
     displayName: text("displayName"),
     ownerUserId: text("ownerUserId").references(() => user.id, {
@@ -1000,7 +1000,7 @@ export const mailAutoLabelFeedback = pgTable(
     mailboxId: text("mailboxId")
       .notNull()
       .references(() => mailbox.id, { onDelete: "cascade" }),
-    provider: text("provider").$type<MailboxProvider>().notNull(),
+    provider: text("provider").$type<PersistedMailboxProvider>().notNull(),
     providerMessageId: text("providerMessageId").notNull(),
     labelId: text("labelId").notNull(),
     labelName: text("labelName"),

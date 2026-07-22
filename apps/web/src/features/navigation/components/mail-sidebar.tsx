@@ -66,7 +66,7 @@ type MailSidebarProps = {
       emailAddress: string;
       displayName: string | null;
       groupName: string;
-      provider: string;
+      provider: "api" | "gmail" | "managed";
       unreadNonSpamCount: number;
     }>;
     name: string;

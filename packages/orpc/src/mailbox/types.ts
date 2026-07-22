@@ -1,4 +1,4 @@
-import type { MailboxGrantRole } from "@quieter/database/schema";
+import type { MailboxGrantRole, PersistedMailboxProvider } from "@quieter/database/schema";
 import type { MailboxCapabilities } from "@quieter/mail/data-plane";
 
 export type MailboxGroupMetadata = {
@@ -29,7 +29,7 @@ export type MailboxListItem = MailboxGroupMetadata & {
   includeApiSentMessages: boolean;
   organizationId: string;
   ownerUserId: string | null;
-  provider: "api" | "gmail" | "managed";
+  provider: "api" | PersistedMailboxProvider;
   unreadNonSpamCount: number;
 };
 

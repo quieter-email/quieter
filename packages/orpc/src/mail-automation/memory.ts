@@ -9,7 +9,7 @@ import {
   mailbox,
   type MailAutomationAgent,
   type MailAutoLabelFeedbackSignal,
-  type MailboxProvider,
+  type PersistedMailboxProvider,
 } from "@quieter/database/schema";
 import { MAILBOX_LABELS } from "@quieter/gmail";
 import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
@@ -203,7 +203,11 @@ export const loadAutoLabelUserCorrectionPrompt = async (mailboxId: string) => {
   return serialized.length <= AUTO_LABEL_CORRECTION_PROMPT_BUDGET ? serialized : null;
 };
 
-const listLabelNames = async (mailboxId: string, provider: MailboxProvider, labelIds: string[]) => {
+const listLabelNames = async (
+  mailboxId: string,
+  provider: PersistedMailboxProvider,
+  labelIds: string[],
+) => {
   const uniqueLabelIds = Array.from(new Set(labelIds));
   if (uniqueLabelIds.length === 0) return new Map<string, string | null>();
 

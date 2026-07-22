@@ -152,6 +152,7 @@ const AuthCredentials = ({
         callbackURL: callbackUrl,
         errorCallbackURL: errorCallbackHref,
         requestSignUp: isSignup,
+        fetchOptions: { timeout: 15_000 },
       });
       if (response.error) {
         throw new Error(response.error.message ?? "Could not start Google sign-in.");
