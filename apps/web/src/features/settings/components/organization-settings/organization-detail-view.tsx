@@ -14,26 +14,31 @@ import {
   hasOrganizationPermission,
   normalizeOrganizationRole,
 } from "./domain";
+import { DomainDetailView } from "./domain-detail-view";
 import { DomainsView } from "./domains-view";
 import { MembersView } from "./members-view";
 import { OrganizationOverviewView } from "./organization-overview-view";
 
 export const OrganizationDetailView = ({
+  domainId,
   onBackToList,
   onBackToOrganization,
   onOpenApiKeys,
   onOpenDivisions,
   onOpenDomains,
+  onOpenDomain,
   onOpenMembers,
   organization,
   userId,
   view,
 }: {
+  domainId: string;
   onBackToList: () => void;
   onBackToOrganization: () => void;
   onOpenApiKeys: () => void;
   onOpenDivisions: () => void;
   onOpenDomains: () => void;
+  onOpenDomain: (domainId: string) => void;
   onOpenMembers: () => void;
   organization: OrganizationSummary;
   userId: string;
@@ -125,6 +130,19 @@ export const OrganizationDetailView = ({
   }
 
   if (view === "domains") {
+    if (domainId) {
+      return (
+        <DomainDetailView
+          billingAccessUnknown={isBillingError}
+          billingPending={isBillingPending}
+          canManageDomains={canUpdateOrganization}
+          canUseOrganizationDomains={canUseTeamFeatures}
+          domainId={domainId}
+          onBack={onOpenDomains}
+          organization={fullOrganization}
+        />
+      );
+    }
     return (
       <DomainsView
         billingAccessUnknown={isBillingError}
@@ -132,6 +150,7 @@ export const OrganizationDetailView = ({
         canManageDomains={canUpdateOrganization}
         canUseOrganizationDomains={canUseTeamFeatures}
         onBack={onBackToOrganization}
+        onOpenDomain={onOpenDomain}
         organization={fullOrganization}
       />
     );

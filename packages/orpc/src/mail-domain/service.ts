@@ -10,7 +10,7 @@ import { resolveCname, resolveMx, resolveTxt } from "node:dns/promises";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DMARC_RECORD_PREFIX, type MailDomainCheck } from "./records";
+import type { MailDomainCheck } from "./records";
 
 type MxLookupRecord = {
   exchange: string;
@@ -77,6 +77,23 @@ const getSesv2Client = async (): Promise<SESv2Client> => {
 const toLookupName = (name: string) => name.replace(/\.$/, "").toLowerCase();
 
 const normalizeDnsValue = (value: string) => value.replace(/\.$/, "").toLowerCase();
+
+const isValidDmarcRecord = (value: string) => {
+  const tags = value.split(";").map((tag) => tag.trim().toLowerCase());
+  return (
+    tags[0] === "v=dmarc1" &&
+    tags.some((tag) => tag === "p=none" || tag === "p=quarantine" || tag === "p=reject")
+  );
+};
+
+const isValidMailFromSpfRecord = (value: string) => {
+  const terms = value.trim().split(/\s+/);
+  return (
+    terms[0] === "v=spf1" &&
+    terms.includes("include:amazonses.com") &&
+    (terms.includes("-all") || terms.includes("~all"))
+  );
+};
 
 const isAwsAlreadyExistsError = (error: unknown) =>
   typeof error === "object" &&
@@ -311,24 +328,25 @@ export const ensureReceiptRule = async (domain: string) => {
   }
 };
 
-export const deleteMailDomainAwsResources = async (domain: string) => {
-  let cleanupSucceeded = true;
-
+export const deleteMailDomainReceiptRule = async (domain: string) => {
   try {
     const config = await getReceiptRuleConfig();
-
     const { DeleteReceiptRuleCommand } = await import("@aws-sdk/client-ses");
     const client = await getSesClient();
-
     await client.send(
       new DeleteReceiptRuleCommand({
         RuleName: createReceiptRuleName(domain),
         RuleSetName: config.ruleSetName,
       }),
     );
+    return true;
   } catch (error) {
-    cleanupSucceeded = cleanupSucceeded && isAwsNotFoundError(error);
+    return isAwsNotFoundError(error);
   }
+};
+
+export const deleteMailDomainAwsResources = async (domain: string) => {
+  let cleanupSucceeded = await deleteMailDomainReceiptRule(domain);
 
   try {
     const { DeleteEmailIdentityCommand } = await import("@aws-sdk/client-sesv2");
@@ -362,6 +380,7 @@ const checkCnameRecord = async (
     message: ok ? "DKIM CNAME record is present." : "DKIM CNAME record is missing.",
     ok,
     purpose: "dkim",
+    recordName: record.name,
   };
 };
 
@@ -389,6 +408,7 @@ const checkMxRecord = async (
     message: ok ? "MX record is present." : "MX record is missing.",
     ok,
     purpose: record.purpose,
+    recordName: record.name,
   };
 };
 
@@ -409,8 +429,10 @@ const checkTxtRecord = async (
 
   const ok =
     record.purpose === "dmarc"
-      ? found.some((value) => value.startsWith(DMARC_RECORD_PREFIX.toLowerCase()))
-      : found.some((value) => expected.includes(value));
+      ? found.some(isValidDmarcRecord)
+      : record.purpose === "mail_from_spf"
+        ? found.some(isValidMailFromSpfRecord)
+        : found.some((value) => expected.includes(value));
   const recordLabel = record.purpose === "ownership" ? "Ownership TXT" : "TXT";
 
   return {
@@ -419,6 +441,7 @@ const checkTxtRecord = async (
     message: ok ? `${recordLabel} record is present.` : `${recordLabel} record is missing.`,
     ok,
     purpose: record.purpose,
+    recordName: record.name,
   };
 };
 

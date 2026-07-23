@@ -12,7 +12,7 @@ export const OrganizationSettingsPanel = () => {
   const navigate = useNavigate({
     from: "/settings",
   });
-  const { organizationId, organizationView } = settingsRouteApi.useSearch();
+  const { domainId, organizationId, organizationView } = settingsRouteApi.useSearch();
   const sessionState = authClient.useSession();
   const organizationsState = authClient.useListOrganizations();
   const organizations = organizationsState.data ?? [];
@@ -26,6 +26,7 @@ export const OrganizationSettingsPanel = () => {
     void navigate({
       search: (previous) => ({
         ...previous,
+        domainId: "",
         organizationId: "",
         organizationView: "overview",
       }),
@@ -37,6 +38,7 @@ export const OrganizationSettingsPanel = () => {
     void navigate({
       search: (previous) => ({
         ...previous,
+        domainId: "",
         tab: "organization",
         organizationId: nextOrganizationId,
         organizationView: "overview",
@@ -69,6 +71,18 @@ export const OrganizationSettingsPanel = () => {
     void navigate({
       search: (previous) => ({
         ...previous,
+        domainId: "",
+        organizationView: "domains",
+      }),
+      to: ".",
+    });
+  };
+
+  const navigateToDomain = (nextDomainId: string) => {
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        domainId: nextDomainId,
         organizationView: "domains",
       }),
       to: ".",
@@ -89,6 +103,7 @@ export const OrganizationSettingsPanel = () => {
     void navigate({
       search: (previous) => ({
         ...previous,
+        domainId: "",
         organizationView: "overview",
       }),
       to: ".",
@@ -117,11 +132,13 @@ export const OrganizationSettingsPanel = () => {
         ) : selectedOrganization ? (
           <OrganizationDetailView
             key={selectedOrganization.id}
+            domainId={domainId}
             onOpenApiKeys={navigateToApiKeys}
             onBackToList={navigateToOrganizationsList}
             onBackToOrganization={navigateToOrganizationOverview}
             onOpenDivisions={navigateToDivisions}
             onOpenDomains={navigateToDomains}
+            onOpenDomain={navigateToDomain}
             onOpenMembers={navigateToMembers}
             organization={selectedOrganization}
             userId={userId}

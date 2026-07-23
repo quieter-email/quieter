@@ -153,7 +153,7 @@ export const MailboxesSettingsPanel = () => {
     enabled: selectedMailbox?.provider === "managed" && selectedMailbox.grantRole === "manager",
   });
   const verifiedDomains = (managedDomainsData?.domains ?? []).filter(
-    (domain) => domain.status === "verified",
+    (domain) => domain.status === "verified" && domain.mode === "send_and_receive",
   );
   const selectedDomain = managedDomain ?? verifiedDomains[0]?.domain ?? "";
   const trimmedLocalPart = managedLocalPart.trim();
@@ -407,7 +407,8 @@ export const MailboxesSettingsPanel = () => {
                 <div>
                   <p className="text-sm text-foreground">Shared inbox</p>
                   <p className="mt-1 text-xs/5 text-muted-foreground">
-                    Team owners and admins can create an address on a verified domain.
+                    Team owners and admins can create an address on a verified domain with incoming
+                    mail enabled.
                   </p>
                 </div>
                 <Select
@@ -484,7 +485,7 @@ export const MailboxesSettingsPanel = () => {
                         </Select>
                       ) : (
                         <span className="px-2.5 text-sm text-muted-foreground">
-                          {areManagedDomainsLoading ? "loading…" : "no verified domain"}
+                          {areManagedDomainsLoading ? "loading…" : "no receiving domain"}
                         </span>
                       )}
                     </div>
@@ -515,7 +516,7 @@ export const MailboxesSettingsPanel = () => {
                     </Select>
                     {verifiedDomains.length === 0 && !areManagedDomainsLoading && (
                       <p className="text-xs/5 text-muted-foreground">
-                        Add and verify a mail domain in{" "}
+                        Add and verify a send-and-receive domain in{" "}
                         {selectedManagedOrganization?.name ?? "team"} settings before creating a
                         shared inbox.
                       </p>

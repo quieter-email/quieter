@@ -1,6 +1,7 @@
 import type {
   MailDomainCheckResult,
   MailDomainDnsRecord,
+  MailDomainMode,
   MailDomainStatus,
 } from "@quieter/database/schema";
 import { ORPCError } from "@orpc/server";
@@ -47,6 +48,7 @@ export const normalizeMailDomain = (input: string) => {
 export const createMailDomainDnsRecords = (input: {
   dkimTokens: string[];
   domain: string;
+  mode: MailDomainMode;
   ownershipToken: string;
   region: string;
 }): MailDomainDnsRecord[] => {
@@ -81,14 +83,18 @@ export const createMailDomainDnsRecords = (input: {
       type: "TXT",
       value: "v=spf1 include:amazonses.com -all",
     },
-    {
-      name: input.domain,
-      priority: 10,
-      purpose: "inbound_mx",
-      required: true,
-      type: "MX",
-      value: `inbound-smtp.${input.region}.amazonaws.com`,
-    },
+    ...(input.mode === "send_and_receive"
+      ? [
+          {
+            name: input.domain,
+            priority: 10,
+            purpose: "inbound_mx" as const,
+            required: true as const,
+            type: "MX" as const,
+            value: `inbound-smtp.${input.region}.amazonaws.com`,
+          },
+        ]
+      : []),
     {
       name: `_dmarc.${input.domain}`,
       purpose: "dmarc",

@@ -4,6 +4,7 @@ export const githubSstSecrets = {
   CHAT_GENERATION_START_TOKEN: "ChatGenerationStartToken",
   CONNECTOR_TOKEN_ENCRYPTION_KEY: "ConnectorTokenEncryptionKey",
   DATABASE_URL: "DatabaseUrl",
+  DOMAIN_CONNECT_PRIVATE_KEY_B64: "DomainConnectPrivateKeyB64",
   GMAIL_CREDENTIAL_ROTATION_TOKEN: "GmailCredentialRotationToken",
   GMAIL_LIVE_SYNC_TOKEN_SECRET: "GmailLiveSyncTokenSecret",
   GMAIL_PUBSUB_PROCESS_TOKEN: "GmailPubSubProcessToken",

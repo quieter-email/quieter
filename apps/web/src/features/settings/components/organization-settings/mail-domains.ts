@@ -5,6 +5,7 @@ import { rpc } from "~/lib/orpc";
 export type OrganizationMailDomain = RouterOutputs["mailDomains"]["list"]["domains"][number];
 export type OrganizationMailDomainStatus = OrganizationMailDomain["status"];
 export type OrganizationMailDomainDnsRecord = OrganizationMailDomain["requiredDnsRecords"][number];
+export type OrganizationMailDomainDetail = RouterOutputs["mailDomains"]["get"];
 
 export const getOrganizationMailDomainsQueryKey = (organizationId: string) =>
   ["mail-domains", organizationId] as const;
@@ -14,6 +15,27 @@ export const organizationMailDomainsQueryOptions = (organizationId: string) =>
     queryFn: () => rpc.mailDomains.list({ organizationId }),
     queryKey: getOrganizationMailDomainsQueryKey(organizationId),
     staleTime: 30_000,
+  });
+
+export const getOrganizationMailDomainQueryKey = (organizationId: string, domainId: string) =>
+  ["mail-domains", organizationId, domainId] as const;
+
+export const organizationMailDomainQueryOptions = (organizationId: string, domainId: string) =>
+  queryOptions({
+    queryFn: () => rpc.mailDomains.get({ domainId, organizationId }),
+    queryKey: getOrganizationMailDomainQueryKey(organizationId, domainId),
+    staleTime: 15_000,
+  });
+
+export const organizationDomainConnectQueryOptions = (organizationId: string, domainId: string) =>
+  queryOptions({
+    queryFn: () =>
+      rpc.mailDomains.getDomainConnectAvailability({
+        domainId,
+        organizationId,
+      }),
+    queryKey: ["mail-domains", organizationId, domainId, "domain-connect"],
+    staleTime: 60_000,
   });
 
 export const formatMailDomainStatus = (status: OrganizationMailDomainStatus) => {

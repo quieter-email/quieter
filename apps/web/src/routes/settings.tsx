@@ -21,6 +21,11 @@ export const Route = createFileRoute("/settings")({
       billing: z.enum(["canceled", "success"]).optional().catch(undefined),
       checkoutId: z.uuid().optional().catch(undefined),
       connector: z.enum(["connected", "error"]).optional().catch(undefined),
+      domainConnect: z
+        .enum(["canceled", "error", "needs_dns", "verified"])
+        .optional()
+        .catch(undefined),
+      domainId: z.string().trim().catch("").default(""),
       gmail: z.enum(["connected", "error"]).optional().catch(undefined),
       tab: z.string().trim().pipe(z.enum(SETTINGS_TABS)).catch("overview").default("overview"),
       mailboxId: z.string().trim().catch("").default(""),

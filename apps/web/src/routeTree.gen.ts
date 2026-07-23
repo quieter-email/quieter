@@ -26,9 +26,11 @@ import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
 import { Route as ApiV1SendRouteImport } from './routes/api/v1/send'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
 import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callback'
+import { Route as ApiDomainConnectCallbackRouteImport } from './routes/api/domain-connect.callback'
 import { Route as ApiConnectorsCallbackRouteImport } from './routes/api/connectors.callback'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 import { Route as ApiInternalGmailCredentialsRotateRouteImport } from './routes/api.internal.gmail-credentials.rotate'
+import { Route as ApiDomainConnectTemplatesServiceIdRouteImport } from './routes/api/domain-connect.templates.$serviceId'
 import { Route as ApiChatRunsRunIdStreamRouteImport } from './routes/api/chat.runs.$runId.stream'
 
 const TermsRoute = TermsRouteImport.update({
@@ -116,6 +118,12 @@ const ApiGmailCallbackRoute = ApiGmailCallbackRouteImport.update({
   path: '/api/gmail/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDomainConnectCallbackRoute =
+  ApiDomainConnectCallbackRouteImport.update({
+    id: '/api/domain-connect/callback',
+    path: '/api/domain-connect/callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiConnectorsCallbackRoute = ApiConnectorsCallbackRouteImport.update({
   id: '/api/connectors/callback',
   path: '/api/connectors/callback',
@@ -130,6 +138,12 @@ const ApiInternalGmailCredentialsRotateRoute =
   ApiInternalGmailCredentialsRotateRouteImport.update({
     id: '/api/internal/gmail-credentials/rotate',
     path: '/api/internal/gmail-credentials/rotate',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiDomainConnectTemplatesServiceIdRoute =
+  ApiDomainConnectTemplatesServiceIdRouteImport.update({
+    id: '/api/domain-connect/templates/$serviceId',
+    path: '/api/domain-connect/templates/$serviceId',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiChatRunsRunIdStreamRoute = ApiChatRunsRunIdStreamRouteImport.update({
@@ -155,9 +169,11 @@ export interface FileRoutesByFullPath {
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
+  '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
   '/api/v1/send': typeof ApiV1SendRoute
+  '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
@@ -178,9 +194,11 @@ export interface FileRoutesByTo {
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
+  '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
   '/api/v1/send': typeof ApiV1SendRoute
+  '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
@@ -202,9 +220,11 @@ export interface FileRoutesById {
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
+  '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
   '/api/v1/send': typeof ApiV1SendRoute
+  '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
@@ -227,9 +247,11 @@ export interface FileRouteTypes {
     | '/api/waitlist'
     | '/api/auth/$'
     | '/api/connectors/callback'
+    | '/api/domain-connect/callback'
     | '/api/gmail/callback'
     | '/api/orpc/$'
     | '/api/v1/send'
+    | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/chat/runs/$runId/stream'
   fileRoutesByTo: FileRoutesByTo
@@ -250,9 +272,11 @@ export interface FileRouteTypes {
     | '/api/waitlist'
     | '/api/auth/$'
     | '/api/connectors/callback'
+    | '/api/domain-connect/callback'
     | '/api/gmail/callback'
     | '/api/orpc/$'
     | '/api/v1/send'
+    | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/chat/runs/$runId/stream'
   id:
@@ -273,9 +297,11 @@ export interface FileRouteTypes {
     | '/api/waitlist'
     | '/api/auth/$'
     | '/api/connectors/callback'
+    | '/api/domain-connect/callback'
     | '/api/gmail/callback'
     | '/api/orpc/$'
     | '/api/v1/send'
+    | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/chat/runs/$runId/stream'
   fileRoutesById: FileRoutesById
@@ -297,9 +323,11 @@ export interface RootRouteChildren {
   ApiWaitlistRoute: typeof ApiWaitlistRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiConnectorsCallbackRoute: typeof ApiConnectorsCallbackRoute
+  ApiDomainConnectCallbackRoute: typeof ApiDomainConnectCallbackRoute
   ApiGmailCallbackRoute: typeof ApiGmailCallbackRoute
   ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
   ApiV1SendRoute: typeof ApiV1SendRoute
+  ApiDomainConnectTemplatesServiceIdRoute: typeof ApiDomainConnectTemplatesServiceIdRoute
   ApiInternalGmailCredentialsRotateRoute: typeof ApiInternalGmailCredentialsRotateRoute
   ApiChatRunsRunIdStreamRoute: typeof ApiChatRunsRunIdStreamRoute
 }
@@ -425,6 +453,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGmailCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/domain-connect/callback': {
+      id: '/api/domain-connect/callback'
+      path: '/api/domain-connect/callback'
+      fullPath: '/api/domain-connect/callback'
+      preLoaderRoute: typeof ApiDomainConnectCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/connectors/callback': {
       id: '/api/connectors/callback'
       path: '/api/connectors/callback'
@@ -444,6 +479,13 @@ declare module '@tanstack/react-router' {
       path: '/api/internal/gmail-credentials/rotate'
       fullPath: '/api/internal/gmail-credentials/rotate'
       preLoaderRoute: typeof ApiInternalGmailCredentialsRotateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/domain-connect/templates/$serviceId': {
+      id: '/api/domain-connect/templates/$serviceId'
+      path: '/api/domain-connect/templates/$serviceId'
+      fullPath: '/api/domain-connect/templates/$serviceId'
+      preLoaderRoute: typeof ApiDomainConnectTemplatesServiceIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat/runs/$runId/stream': {
@@ -473,9 +515,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiWaitlistRoute: ApiWaitlistRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiConnectorsCallbackRoute: ApiConnectorsCallbackRoute,
+  ApiDomainConnectCallbackRoute: ApiDomainConnectCallbackRoute,
   ApiGmailCallbackRoute: ApiGmailCallbackRoute,
   ApiOrpcSplatRoute: ApiOrpcSplatRoute,
   ApiV1SendRoute: ApiV1SendRoute,
+  ApiDomainConnectTemplatesServiceIdRoute:
+    ApiDomainConnectTemplatesServiceIdRoute,
   ApiInternalGmailCredentialsRotateRoute:
     ApiInternalGmailCredentialsRotateRoute,
   ApiChatRunsRunIdStreamRoute: ApiChatRunsRunIdStreamRoute,

@@ -93,7 +93,7 @@ export const FirstRunManagedMailSetup = ({
     enabled: organizationId.length > 0 && hasManagedAccess,
   });
   const verifiedDomains = (domainsData?.domains ?? []).filter(
-    (domain) => domain.status === "verified",
+    (domain) => domain.status === "verified" && domain.mode === "send_and_receive",
   );
   const [selectedDomain, setSelectedDomain] = useState<string | undefined>(undefined);
   const domain = selectedDomain ?? verifiedDomains[0]?.domain ?? "";
@@ -297,13 +297,27 @@ export const FirstRunManagedMailSetup = ({
                     {verifiedDomain.domain}
                   </span>
                 ))}
-                <RegisterDomainDialog organizationId={organizationId}>
+                <RegisterDomainDialog
+                  onCreated={(domainId) =>
+                    window.location.assign(
+                      `/settings?tab=organization&organizationId=${encodeURIComponent(organizationId)}&organizationView=domains&domainId=${encodeURIComponent(domainId)}`,
+                    )
+                  }
+                  organizationId={organizationId}
+                >
                   <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
                   Add another
                 </RegisterDomainDialog>
               </div>
             ) : (
-              <RegisterDomainDialog organizationId={organizationId}>
+              <RegisterDomainDialog
+                onCreated={(domainId) =>
+                  window.location.assign(
+                    `/settings?tab=organization&organizationId=${encodeURIComponent(organizationId)}&organizationView=domains&domainId=${encodeURIComponent(domainId)}`,
+                  )
+                }
+                organizationId={organizationId}
+              >
                 <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
                 Register domain
               </RegisterDomainDialog>

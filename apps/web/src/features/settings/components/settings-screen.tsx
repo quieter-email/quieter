@@ -40,7 +40,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
   const navigate = useNavigate({
     from: "/settings",
   });
-  const { from, mailboxId, organizationId, tab } = settingsRouteApi.useSearch();
+  const { domainId, from, mailboxId, organizationId, tab } = settingsRouteApi.useSearch();
 
   const setTab = (nextTab: SettingsTab) => {
     void navigate({
@@ -49,6 +49,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
         ...previous,
         tab: nextTab,
         mailboxId: "",
+        domainId: "",
         organizationId: "",
         organizationView: "overview",
       }),
@@ -81,7 +82,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
         <SettingsBackButton onClick={goBackToApp}>Back</SettingsBackButton>
       ) : tab === "mailboxes" && mailboxId ? (
         <SettingsBackButton onClick={goBackToMailboxes}>Mailboxes</SettingsBackButton>
-      ) : tab === "organization" && organizationId ? null : (
+      ) : tab === "organization" && (organizationId || domainId) ? null : (
         <SettingsBackButton onClick={() => setTab("overview")}>Settings</SettingsBackButton>
       )}
       <div className="relative z-10 min-h-0 flex-1 overflow-y-auto">
