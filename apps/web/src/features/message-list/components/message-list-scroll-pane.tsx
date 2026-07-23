@@ -155,7 +155,16 @@ export const MessageListScrollPane = ({
   const hasMountedPrefetchRef = useRef(false);
 
   useLayoutEffect(() => {
-    if (hasMountedPrefetchRef.current) return;
+    if (
+      hasMountedPrefetchRef.current ||
+      !list.hasNextPage ||
+      list.isError ||
+      list.isFetchingNextPage ||
+      list.isPending
+    ) {
+      return;
+    }
+
     hasMountedPrefetchRef.current = true;
     loadMoreIfNeeded({
       element: selection.scrollRef.current,
