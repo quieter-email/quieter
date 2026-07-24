@@ -162,11 +162,13 @@ export const handler = async (event: SnsEvent) => {
         bucket: Resource.MailBucket.name,
         key: s3Key,
       });
-      await recordInboundOrganizationMailUsage({
-        messageSizeBytes,
-        providerMessageId,
-        recipients,
-      });
+      if (mailboxIds.length > 0) {
+        await recordInboundOrganizationMailUsage({
+          messageSizeBytes,
+          providerMessageId,
+          recipients,
+        });
+      }
 
       console.info("Processed SES receipt notification.", {
         mailboxCount: mailboxIds.length,

@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { BillingProductCard } from "~/features/settings/components/billing-product-card";
 import {
@@ -63,6 +64,7 @@ export const FirstRunManagedMailSetup = ({
   onBack: () => void;
   organizations: FirstRunOrganization[];
 }) => {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const authOrganizations = authClient.useListOrganizations().data;
   const organizationNames = new Map(
@@ -93,7 +95,7 @@ export const FirstRunManagedMailSetup = ({
     enabled: organizationId.length > 0 && hasManagedAccess,
   });
   const verifiedDomains = (domainsData?.domains ?? []).filter(
-    (domain) => domain.status === "verified",
+    (domain) => domain.status === "verified" && domain.mode === "send_and_receive",
   );
   const [selectedDomain, setSelectedDomain] = useState<string | undefined>(undefined);
   const domain = selectedDomain ?? verifiedDomains[0]?.domain ?? "";
@@ -101,6 +103,17 @@ export const FirstRunManagedMailSetup = ({
     selectedOrganization?.mailboxes.some((mailbox) => mailbox.provider === "managed") === true;
   const hasApiKey = (apiKeysData?.apiKeys ?? []).length > 0;
   const trimmedLocalPart = localPart.trim();
+  const openRegisteredDomain = (domainId: string) => {
+    void navigate({
+      search: {
+        domainId,
+        organizationId,
+        organizationView: "domains",
+        tab: "organization",
+      },
+      to: "/settings",
+    });
+  };
   const checkoutMutation = useMutation({
     ...orpc.billing.createCheckout.mutationOptions(),
     onError: (error) => toast.error(error.message || "Could not start checkout."),
@@ -297,13 +310,19 @@ export const FirstRunManagedMailSetup = ({
                     {verifiedDomain.domain}
                   </span>
                 ))}
-                <RegisterDomainDialog organizationId={organizationId}>
+                <RegisterDomainDialog
+                  onCreated={openRegisteredDomain}
+                  organizationId={organizationId}
+                >
                   <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
                   Add another
                 </RegisterDomainDialog>
               </div>
             ) : (
-              <RegisterDomainDialog organizationId={organizationId}>
+              <RegisterDomainDialog
+                onCreated={openRegisteredDomain}
+                organizationId={organizationId}
+              >
                 <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
                 Register domain
               </RegisterDomainDialog>

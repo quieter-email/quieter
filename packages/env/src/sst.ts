@@ -30,6 +30,7 @@ export const createSstEnv = (
     emptyStringAsUndefined: true,
     runtimeEnvStrict: {
       DATABASE_URL: runtimeEnv.DATABASE_URL,
+      DOMAIN_CONNECT_PRIVATE_KEY_B64: runtimeEnv.DOMAIN_CONNECT_PRIVATE_KEY_B64,
       CONNECTOR_TOKEN_ENCRYPTION_KEY: runtimeEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY,
       GMAIL_PUBSUB_PUSH_AUDIENCE: runtimeEnv.GMAIL_PUBSUB_PUSH_AUDIENCE,
       GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: runtimeEnv.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT,
@@ -58,6 +59,7 @@ export const createSstEnv = (
     },
     server: {
       DATABASE_URL: z.string().trim().url(),
+      DOMAIN_CONNECT_PRIVATE_KEY_B64: optionalString,
       CONNECTOR_TOKEN_ENCRYPTION_KEY: optionalString,
       GMAIL_PUBSUB_PUSH_AUDIENCE: optionalString,
       GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: z.string().trim().email().optional(),
@@ -102,6 +104,9 @@ export const createSstEnv = (
   }
   if (options.production && !env.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT) {
     throw new Error("GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT is required in production.");
+  }
+  if (options.production && !env.DOMAIN_CONNECT_PRIVATE_KEY_B64) {
+    throw new Error("DOMAIN_CONNECT_PRIVATE_KEY_B64 is required in production.");
   }
 
   const missingConnectorVariables = connectorVariableNames.filter((name) => !env[name]);

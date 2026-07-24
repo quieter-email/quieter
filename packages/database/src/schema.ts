@@ -17,6 +17,13 @@ import {
 import { defineRelations } from "drizzle-orm/relations";
 
 export type MailDomainStatus = "failed" | "pending_dns" | "verified";
+export type MailDomainMode = "send_and_receive" | "send_only";
+export type MailDomainConnectAttemptStatus =
+  | "canceled"
+  | "expired"
+  | "failed"
+  | "pending"
+  | "returned";
 export type ConnectorConnectionStatus = "connected" | "needs_reconnect";
 export type ConnectorProvider = "google_calendar" | "linear";
 export type MailboxConnectionStatus = "connected" | "needs_reconnect";
@@ -117,6 +124,7 @@ export type MailDomainCheckResult = {
     found?: string[];
     message: string;
     ok: boolean;
+    recordName?: string;
     purpose:
       | "dkim"
       | "dmarc"
@@ -1520,6 +1528,11 @@ export const mailDomain = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     domain: text("domain").notNull(),
     mailFromDomain: text("mailFromDomain").notNull(),
+    mode: text("mode").$type<MailDomainMode>().notNull().default("send_and_receive"),
+    modeUpdatedAt: timestamp("modeUpdatedAt"),
+    modeUpdatedByUserId: text("modeUpdatedByUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
     status: text("status").$type<MailDomainStatus>().notNull(),
     requiredDnsRecords: jsonb("requiredDnsRecords").$type<MailDomainDnsRecord[]>().notNull(),
     lastCheckResult: jsonb("lastCheckResult").$type<MailDomainCheckResult>(),
@@ -1528,8 +1541,49 @@ export const mailDomain = pgTable(
     verifiedAt: timestamp("verifiedAt"),
   },
   (table) => [
+    check("mail_domain_mode_check", sql`${table.mode} in ('send_only', 'send_and_receive')`),
     index("mail_domain_organization_id_idx").on(table.organizationId),
     unique("mail_domain_domain_unique").on(table.domain),
+  ],
+);
+
+export const mailDomainConnectAttempt = pgTable(
+  "mailDomainConnectAttempt",
+  {
+    id: text("id").primaryKey(),
+    domainId: text("domainId")
+      .notNull()
+      .references(() => mailDomain.id, { onDelete: "cascade" }),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    mode: text("mode").$type<MailDomainMode>().notNull(),
+    providerId: text("providerId").notNull(),
+    providerName: text("providerName").notNull(),
+    serviceId: text("serviceId").notNull(),
+    templateVersion: integer("templateVersion").notNull(),
+    status: text("status").$type<MailDomainConnectAttemptStatus>().notNull(),
+    callbackError: text("callbackError"),
+    expiresAt: timestamp("expiresAt").notNull(),
+    consumedAt: timestamp("consumedAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "mail_domain_connect_attempt_mode_check",
+      sql`${table.mode} in ('send_only', 'send_and_receive')`,
+    ),
+    check(
+      "mail_domain_connect_attempt_status_check",
+      sql`${table.status} in ('pending', 'returned', 'canceled', 'failed', 'expired')`,
+    ),
+    index("mail_domain_connect_attempt_domain_idx").on(table.domainId, table.createdAt),
+    index("mail_domain_connect_attempt_expiry_idx").on(table.expiresAt),
+    index("mail_domain_connect_attempt_user_idx").on(table.userId),
   ],
 );
 
@@ -1931,6 +1985,7 @@ export const tables = {
   managedMailRuleBackfill,
   managedMailSavedView,
   mailDomain,
+  mailDomainConnectAttempt,
   organizationApiMailAttachment,
   organizationApiMailMessage,
   organizationMailUsageAlertEvent,
@@ -1982,6 +2037,10 @@ export const authRelations = defineRelations(tables, (r) => ({
       to: r.gmailOAuthState.userId,
     }),
     mailboxGrants: r.many.mailboxGrant({ from: r.user.id, to: r.mailboxGrant.userId }),
+    mailDomainConnectAttempts: r.many.mailDomainConnectAttempt({
+      from: r.user.id,
+      to: r.mailDomainConnectAttempt.userId,
+    }),
     ownedMailboxes: r.many.mailbox({ from: r.user.id, to: r.mailbox.ownerUserId }),
     memberships: r.many.member({ from: r.user.id, to: r.member.userId }),
     sessions: r.many.session({ from: r.user.id, to: r.session.userId }),
@@ -2051,6 +2110,10 @@ export const authRelations = defineRelations(tables, (r) => ({
     gmailOAuthStates: r.many.gmailOAuthState({
       from: r.organization.id,
       to: r.gmailOAuthState.organizationId,
+    }),
+    mailDomainConnectAttempts: r.many.mailDomainConnectAttempt({
+      from: r.organization.id,
+      to: r.mailDomainConnectAttempt.organizationId,
     }),
     mailboxActions: r.many.mailboxAction({
       from: r.organization.id,
@@ -2670,9 +2733,35 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
   },
   mailDomain: {
+    connectAttempts: r.many.mailDomainConnectAttempt({
+      from: r.mailDomain.id,
+      to: r.mailDomainConnectAttempt.domainId,
+    }),
+    modeUpdatedBy: r.one.user({
+      from: r.mailDomain.modeUpdatedByUserId,
+      to: r.user.id,
+      optional: true,
+    }),
     organization: r.one.organization({
       from: r.mailDomain.organizationId,
       to: r.organization.id,
+      optional: false,
+    }),
+  },
+  mailDomainConnectAttempt: {
+    domain: r.one.mailDomain({
+      from: r.mailDomainConnectAttempt.domainId,
+      to: r.mailDomain.id,
+      optional: false,
+    }),
+    organization: r.one.organization({
+      from: r.mailDomainConnectAttempt.organizationId,
+      to: r.organization.id,
+      optional: false,
+    }),
+    user: r.one.user({
+      from: r.mailDomainConnectAttempt.userId,
+      to: r.user.id,
       optional: false,
     }),
   },

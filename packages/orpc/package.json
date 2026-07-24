@@ -21,6 +21,8 @@
     "./chat-generation": "./src/chat/generation/runner.ts",
     "./chat-run-stream": "./src/chat-run-stream.ts",
     "./connectors": "./src/connectors/service.ts",
+    "./domain-connect": "./src/mail-domain/domain-connect-service.ts",
+    "./domain-connect-template": "./src/mail-domain/domain-connect.ts",
     "./gmail-live-sync": "./src/gmail-live-sync.ts",
     "./gmail-live-sync-token": "./src/gmail-live-sync-token.ts",
     "./gmail-credential-rotation": "./src/gmail-credential-rotation.ts",

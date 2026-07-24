@@ -1,5 +1,10 @@
 import { db } from "@quieter/database/client";
-import { mailbox, managedMailAttachment, managedMailMessage } from "@quieter/database/schema";
+import {
+  mailbox,
+  mailDomain,
+  managedMailAttachment,
+  managedMailMessage,
+} from "@quieter/database/schema";
 import { parseRawMailMessage, type ParsedRawMailMessage } from "@quieter/mail/raw-message";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
@@ -71,6 +76,15 @@ export const recordInboundManagedMessage = async (input: {
   const targetMailboxes = await db
     .select({ id: mailbox.id })
     .from(mailbox)
+    .innerJoin(
+      mailDomain,
+      and(
+        eq(mailDomain.organizationId, mailbox.organizationId),
+        eq(mailDomain.mode, "send_and_receive"),
+        eq(mailDomain.status, "verified"),
+        sql`lower(split_part(${mailbox.emailAddress}, '@', 2)) = ${mailDomain.domain}`,
+      ),
+    )
     .where(and(eq(mailbox.provider, "managed"), inArray(mailbox.emailAddress, recipients)));
   if (targetMailboxes.length === 0) return [];
 

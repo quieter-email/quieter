@@ -6,6 +6,7 @@ import {
   mailboxAutomationSettings,
   mailboxDivisionGrant,
   mailboxGrant,
+  mailDomain,
   member,
   organizationDivision,
   user,
@@ -77,6 +78,25 @@ export const createManagedMailbox = async (input: {
     userId: input.userId,
   });
   await assertDivisionBelongsToOrganization(input.divisionId, input.organizationId);
+  const emailAddress = normalizeEmailAddress(input.emailAddress);
+  const domain = emailAddress.split("@")[1] ?? "";
+  const [receivingDomain] = await db
+    .select({ id: mailDomain.id })
+    .from(mailDomain)
+    .where(
+      and(
+        eq(mailDomain.domain, domain),
+        eq(mailDomain.organizationId, input.organizationId),
+        eq(mailDomain.status, "verified"),
+        eq(mailDomain.mode, "send_and_receive"),
+      ),
+    )
+    .limit(1);
+  if (!receivingDomain) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Shared inboxes require a verified domain with incoming mail enabled.",
+    });
+  }
 
   const mailboxId = randomUUID();
   const now = new Date();
@@ -84,7 +104,7 @@ export const createManagedMailbox = async (input: {
     await tx.insert(mailbox).values({
       createdAt: now,
       displayName: input.displayName?.trim() || null,
-      emailAddress: normalizeEmailAddress(input.emailAddress),
+      emailAddress,
       id: mailboxId,
       includeApiSentMessages: input.includeApiSentMessages ?? false,
       divisionId: input.divisionId ?? null,

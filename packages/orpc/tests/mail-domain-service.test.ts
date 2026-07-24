@@ -24,6 +24,7 @@ describe("createMailDomainDnsRecords", () => {
     const records = createMailDomainDnsRecords({
       dkimTokens: ["one", "two", "three"],
       domain: "example.com",
+      mode: "send_and_receive",
       ownershipToken: "org-token",
       region: "eu-central-1",
     });
@@ -96,6 +97,7 @@ describe("checkMailDomainDnsRecords", () => {
     const records = createMailDomainDnsRecords({
       dkimTokens: ["one"],
       domain: "example.com",
+      mode: "send_and_receive",
       ownershipToken: "org-token",
       region: "eu-central-1",
     });
@@ -108,10 +110,10 @@ describe("checkMailDomainDnsRecords", () => {
             : [{ exchange: "feedback-smtp.eu-central-1.amazonses.com.", priority: 10 }],
         resolveTxt: async (name) =>
           name === "_dmarc.example.com"
-            ? [["v=DMARC1; p=none; rua=mailto:dmarc@example.com"]]
+            ? [["v=DMARC1; p=reject; rua=mailto:dmarc@example.com"]]
             : name === "_quieter-verify.example.com"
               ? [["quieter-domain-verification=org-token"]]
-              : [["v=spf1 include:amazonses.com -all"]],
+              : [["v=spf1 include:amazonses.com ~all"]],
       },
       records,
     );
@@ -124,6 +126,7 @@ describe("checkMailDomainDnsRecords", () => {
     const records = createMailDomainDnsRecords({
       dkimTokens: ["one"],
       domain: "example.com",
+      mode: "send_and_receive",
       ownershipToken: "org-token",
       region: "eu-central-1",
     });
@@ -139,4 +142,17 @@ describe("checkMailDomainDnsRecords", () => {
     expect(checks.every((check) => check.ok)).toBe(false);
     expect(aggregateMailDomainStatus(checks)).toBe("failed");
   });
+});
+
+test("send-only domains omit incoming mail routing", () => {
+  const records = createMailDomainDnsRecords({
+    dkimTokens: ["one", "two", "three"],
+    domain: "example.com",
+    mode: "send_only",
+    ownershipToken: "org-token",
+    region: "eu-central-1",
+  });
+
+  expect(records.some((record) => record.purpose === "inbound_mx")).toBe(false);
+  expect(records).toHaveLength(7);
 });
