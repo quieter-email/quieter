@@ -105,9 +105,6 @@ export const createSstEnv = (
   if (options.production && !env.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT) {
     throw new Error("GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT is required in production.");
   }
-  if (options.production && !env.DOMAIN_CONNECT_PRIVATE_KEY_B64) {
-    throw new Error("DOMAIN_CONNECT_PRIVATE_KEY_B64 is required in production.");
-  }
 
   const missingConnectorVariables = connectorVariableNames.filter((name) => !env[name]);
   const missingLinearConnectorVariables = linearConnectorVariableNames.filter((name) => !env[name]);

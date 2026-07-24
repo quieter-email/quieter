@@ -1,4 +1,4 @@
-import { githubSstSecrets } from "@quieter/env/github";
+import { githubSstOptionalSecrets, githubSstSecrets } from "@quieter/env/github";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +10,8 @@ if (!stage) {
   throw new Error("Usage: bun scripts/sync-sst-secrets.ts --stage <stage>");
 }
 
-const configuredSecrets = Object.entries(githubSstSecrets).filter(
+const syncableSecrets = { ...githubSstSecrets, ...githubSstOptionalSecrets };
+const configuredSecrets = Object.entries(syncableSecrets).filter(
   ([environmentName]) => process.env[environmentName],
 );
 const missing = Object.keys(githubSstSecrets).filter((name) => !process.env[name]);
