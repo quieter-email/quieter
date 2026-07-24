@@ -16,7 +16,6 @@ const requiredSstEnvironment = {
 const completeProductionSstEnvironment = {
   ...requiredSstEnvironment,
   CONNECTOR_TOKEN_ENCRYPTION_KEY: "connector-encryption-secret",
-  DOMAIN_CONNECT_PRIVATE_KEY_B64: "encoded-private-key",
   GOOGLE_CALENDAR_CLIENT_ID: "calendar-client-id",
   GOOGLE_CALENDAR_CLIENT_SECRET: "calendar-client-secret",
   LINEAR_CLIENT_ID: "linear-client-id",
@@ -229,11 +228,21 @@ describe("SST environment", () => {
     );
   });
 
-  test("requires Domain Connect signing in production", () => {
-    const { DOMAIN_CONNECT_PRIVATE_KEY_B64: _, ...environment } = completeProductionSstEnvironment;
+  test("allows production without Domain Connect signing", () => {
+    const env = createSstEnv({ production: true }, completeProductionSstEnvironment);
 
-    expect(() => createSstEnv({ production: true }, environment)).toThrow(
-      "DOMAIN_CONNECT_PRIVATE_KEY_B64 is required in production",
+    expect(env.DOMAIN_CONNECT_PRIVATE_KEY_B64).toBeUndefined();
+  });
+
+  test("accepts optional Domain Connect signing when present", () => {
+    const env = createSstEnv(
+      { production: true },
+      {
+        ...completeProductionSstEnvironment,
+        DOMAIN_CONNECT_PRIVATE_KEY_B64: "encoded-private-key",
+      },
     );
+
+    expect(env.DOMAIN_CONNECT_PRIVATE_KEY_B64).toBe("encoded-private-key");
   });
 });
