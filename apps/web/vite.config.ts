@@ -12,7 +12,7 @@ import { defineConfig, Environment, lazyPlugins } from "vite-plus";
  * Cloudflare's Worker env defaults include the "browser" resolve condition. Vite merges
  * condition arrays, so user overrides cannot remove it. AWS SDK v3 then resolves
  * `@aws-sdk/core/client` browser stubs (Symbol.for("node-only")) while Node runtimeConfig
- * still calls emitWarningIfUnsupportedVersion — breaking SESv2Client in createSetup.
+ * still calls emitWarningIfUnsupportedVersion, breaking SESv2Client in createSetup.
  * @see https://github.com/cloudflare/workers-sdk/issues/13952
  */
 const preferNodeAwsSdkResolution = (): Plugin => {

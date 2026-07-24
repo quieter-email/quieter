@@ -505,7 +505,7 @@ export const DomainDetailView = ({
                     {priority ? (
                       <DnsCopyCell value={priority} />
                     ) : (
-                      <span className="px-1.5 font-mono text-xs text-muted-foreground">—</span>
+                      <span className="px-1.5 font-mono text-xs text-muted-foreground">-</span>
                     )}
                   </div>
                   <div className="min-w-0 px-1.5 text-xs text-foreground" role="cell">
@@ -644,7 +644,7 @@ export const DomainDetailView = ({
                     <span className="text-sm text-foreground">{item.label}</span>
                     {item.required ? null : (
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        Recommended. Any valid policy works — quarantine is preferred.
+                        Recommended. Any valid policy works; quarantine is preferred.
                       </p>
                     )}
                   </div>
