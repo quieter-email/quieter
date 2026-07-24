@@ -5,6 +5,7 @@ import {
   assertMigrationExecutionAllowed,
 } from "./database-url";
 import { assertMigrationSqlIsDeploySafe } from "./migration-safety";
+import { parseReviewPullRequestNumber } from "./review-database";
 
 describe("destructive database target guard", () => {
   test("accepts the dedicated local migration test database", () => {
@@ -168,5 +169,15 @@ describe("automated migration safety", () => {
     'ALTER TABLE "user" ALTER COLUMN "id" TYPE uuid;',
   ])("rejects destructive SQL: %s", (sql) => {
     expect(() => assertMigrationSqlIsDeploySafe(sql, "unsafe")).toThrow("destructive SQL");
+  });
+});
+
+describe("review pull request marker", () => {
+  test("parses a positive pull request number", () => {
+    expect(parseReviewPullRequestNumber("180")).toBe(180);
+  });
+
+  test.each(["", "0", "-1", "1.5", "abc", undefined])("rejects %s", (value) => {
+    expect(() => parseReviewPullRequestNumber(value)).toThrow("REVIEW_PR_NUMBER");
   });
 });

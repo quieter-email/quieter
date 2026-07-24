@@ -61,8 +61,9 @@ mode and lists the permitted reviewers explicitly. Shared Review deployments dis
 personas, while Better Auth permits first-time Google signup only in Review so an approved test
 user can enter through the fixed callback. The trusted deploy job applies the promoted revision's
 committed expand migrations to the synthetic Review database before the health probe, using a
-Review-only `DATABASE_MIGRATION_URL`. Each deploy wipes the Review schemas and replays the
-promoted revision's migrations so the health probe always matches the artifact under test.
+Review-only `DATABASE_MIGRATION_URL`. The first Review deploy for a pull request wipes the
+Review schemas and replays that revision's migrations; later deploys of the same pull request
+only apply new migrations so review data can survive pushes.
 
 ## GitHub environment contract
 

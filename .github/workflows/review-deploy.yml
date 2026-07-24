@@ -401,16 +401,17 @@ jobs:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
           QUIETER_ALLOW_REMOTE_MIGRATIONS: review
           QUIETER_REVIEW_DEPLOYMENT: "true"
+          REVIEW_PR_NUMBER: ${{ needs.resolve.outputs.number }}
           REVIEW_SHA: ${{ needs.resolve.outputs.sha }}
         run: |
           test -n "$DATABASE_MIGRATION_URL"
+          test -n "$REVIEW_PR_NUMBER"
           ./node_modules/.bin/vp run @quieter/env#build
           git fetch --depth=1 origin "$REVIEW_SHA"
           rm -rf packages/database/drizzle
           git checkout "$REVIEW_SHA" -- packages/database/drizzle
-          # Disposable Review DB: wipe and replay the promoted revision's
-          # migrations so schema always matches the artifact under test.
-          ./node_modules/.bin/vp run @quieter/database#db:reset-review
+          # First Review deploy for a PR wipes; later pushes only migrate.
+          ./node_modules/.bin/vp run @quieter/database#db:prepare-review
           ./node_modules/.bin/vp run @quieter/database#db:deploy
           ./node_modules/.bin/vp run @quieter/database#db:grant-review
 
