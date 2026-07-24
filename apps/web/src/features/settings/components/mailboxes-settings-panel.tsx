@@ -615,7 +615,7 @@ export const MailboxesSettingsPanel = () => {
 
   return (
     <div className="space-y-8">
-      <SettingsPageHeader eyebrow={getProviderLabel(selectedMailbox.provider)} title={title}>
+      <SettingsPageHeader title={title}>
         {selectedMailbox.displayName?.trim() && <span>{selectedMailbox.emailAddress}, </span>}
         {detailGroup?.name}
       </SettingsPageHeader>

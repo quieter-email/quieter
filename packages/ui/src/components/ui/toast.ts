@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Toast } from "@base-ui/react/toast";
 
 export const toastManager = Toast.createToastManager();
@@ -9,7 +10,7 @@ export const DEFAULT_TOAST_TIMEOUT = 4000;
 type ToastType = "default" | "success" | "error" | "warning" | "info" | "loading";
 
 export type ToastOptions = {
-  description?: string;
+  description?: ReactNode;
   duration?: number;
   id?: string;
 };
@@ -24,10 +25,13 @@ type PromiseOptions<T> = {
 
 type ManagerUpdate = Parameters<typeof toastManager.update>[1];
 
-const toastIdFor = (type: ToastType, title: string, description?: string) =>
-  `toast:${type}:${title}${description ? `:${description}` : ""}`;
+const toastIdFor = (type: ToastType, title: ReactNode, description?: ReactNode) => {
+  const titleKey = typeof title === "string" ? title : "node";
+  const descriptionKey = typeof description === "string" ? `:${description}` : "";
+  return `toast:${type}:${titleKey}${descriptionKey}`;
+};
 
-const toAddOptions = (type: ToastType, title: string, options: ToastOptions = {}) => ({
+const toAddOptions = (type: ToastType, title: ReactNode, options: ToastOptions = {}) => ({
   description: options.description,
   id: options.id ?? toastIdFor(type, title, options.description),
   timeout:
@@ -57,23 +61,23 @@ const resolvePromiseMessage = <T>(
   return toUpdateOptions(message);
 };
 
-const showToast = (type: ToastType, title: string, options?: ToastOptions) =>
+const showToast = (type: ToastType, title: ReactNode, options?: ToastOptions) =>
   toastManager.add(toAddOptions(type, title, options));
 
-const toastFn = (title: string, options?: ToastOptions) => showToast("default", title, options);
+const toastFn = (title: ReactNode, options?: ToastOptions) => showToast("default", title, options);
 
 export const toast = Object.assign(toastFn, {
   dismiss: (id?: string) => toastManager.close(id),
-  error: (title: string, options?: ToastOptions) => showToast("error", title, options),
-  info: (title: string, options?: ToastOptions) => showToast("info", title, options),
-  loading: (title: string, options?: ToastOptions) => showToast("loading", title, options),
-  message: (title: string, options?: ToastOptions) => showToast("default", title, options),
+  error: (title: ReactNode, options?: ToastOptions) => showToast("error", title, options),
+  info: (title: ReactNode, options?: ToastOptions) => showToast("info", title, options),
+  loading: (title: ReactNode, options?: ToastOptions) => showToast("loading", title, options),
+  message: (title: ReactNode, options?: ToastOptions) => showToast("default", title, options),
   promise: <T>(promiseValue: Promise<T>, options: PromiseOptions<T>) =>
     toastManager.promise(promiseValue, {
       error: resolvePromiseMessage(options.error),
       loading: { ...toUpdateOptions(options.loading), timeout: 0 },
       success: resolvePromiseMessage(options.success),
     }),
-  success: (title: string, options?: ToastOptions) => showToast("success", title, options),
-  warning: (title: string, options?: ToastOptions) => showToast("warning", title, options),
+  success: (title: ReactNode, options?: ToastOptions) => showToast("success", title, options),
+  warning: (title: ReactNode, options?: ToastOptions) => showToast("warning", title, options),
 });

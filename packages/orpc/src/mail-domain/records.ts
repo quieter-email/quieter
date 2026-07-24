@@ -130,13 +130,15 @@ export const getMailDomainOwnershipToken = (records: MailDomainDnsRecord[]) => {
   return record?.value.slice(OWNERSHIP_RECORD_PREFIX.length) ?? null;
 };
 
-const isProviderLagCheck = (check: MailDomainCheck) =>
-  check.purpose === "ses_identity" || check.purpose === "ses_mail_from";
+const isNonDnsStatusCheck = (check: MailDomainCheck) =>
+  check.purpose === "ses_identity" ||
+  check.purpose === "ses_mail_from" ||
+  check.purpose === "receipt_rule";
 
-/** Domain verification is required DNS (+ inbound routing). DMARC is recommended; provider sending can lag. */
+/** Domain verification is required DNS. DMARC is recommended; provider sending and inbound routing can lag. */
 export const aggregateMailDomainStatus = (checks: MailDomainCheck[]): MailDomainStatus => {
   const requiredChecks = checks.filter(
-    (check) => !isProviderLagCheck(check) && !isOptionalMailDomainDnsPurpose(check.purpose),
+    (check) => !isNonDnsStatusCheck(check) && !isOptionalMailDomainDnsPurpose(check.purpose),
   );
   return requiredChecks.length > 0 && requiredChecks.every((check) => check.ok)
     ? MAIL_DOMAIN_STATUS_VERIFIED

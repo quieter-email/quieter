@@ -29,22 +29,15 @@ export const SettingsBackButton = ({
 export const SettingsPageHeader = ({
   action,
   children,
-  eyebrow,
   title,
 }: {
   action?: ReactNode;
   children?: ReactNode;
-  eyebrow?: string;
   title: string;
 }) => (
   <div className="@container">
     <header className="flex flex-col gap-3 @md:flex-row @md:items-end @md:justify-between">
       <div className="min-w-0">
-        {eyebrow && (
-          <p className="mb-2 text-xs tracking-[0.14em] text-muted-foreground uppercase">
-            {eyebrow}
-          </p>
-        )}
         <h1 className="text-xl font-normal tracking-tight text-foreground">{title}</h1>
         {children && (
           <div className="mt-2 max-w-2xl text-sm/6 text-muted-foreground">{children}</div>
