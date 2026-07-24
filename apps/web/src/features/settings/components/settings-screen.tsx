@@ -44,7 +44,6 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
 
   const setTab = (nextTab: SettingsTab) => {
     void navigate({
-      replace: true,
       search: (previous) => ({
         ...previous,
         tab: nextTab,
@@ -63,7 +62,6 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
   };
   const goBackToMailboxes = () => {
     void navigate({
-      replace: true,
       search: (previous) => ({
         ...previous,
         mailboxId: "",

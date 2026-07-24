@@ -55,7 +55,12 @@ const trustedOrigins = [
 const organizationApiKeyPlugin = apiKey({
   configId: ORGANIZATION_API_KEY_CONFIG_ID,
   defaultPrefix: "quieter_",
+  maximumNameLength: 64,
   references: "organization",
+  startingCharactersConfig: {
+    charactersLength: 12,
+    shouldStore: true,
+  },
 });
 
 export const auth = betterAuth({

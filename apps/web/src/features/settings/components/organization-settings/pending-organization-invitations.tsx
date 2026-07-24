@@ -3,11 +3,13 @@
 import { Delete02Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { authClient } from "~/lib/auth";
-import { SettingsInsetRows, SettingsInsetStackedRow } from "../settings-layout";
+import { SettingsCard, SettingsSection, settingsRowPaddingClass } from "../settings-layout";
 import { type FullOrganization, formatRoleLabel, getFullOrganizationQueryKey } from "./domain";
+import { SettingsRow } from "./settings-row";
 
 export const PendingOrganizationInvitations = ({
   canCancelInvitations,
@@ -58,48 +60,47 @@ export const PendingOrganizationInvitations = ({
   };
 
   return (
-    <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">Pending invitations</p>
-
-      <SettingsInsetRows>
+    <SettingsSection title="Pending invitations">
+      <SettingsCard>
         {pendingInvitations.map((invitation) => {
           const isPending =
             pendingInvitationId === invitation.id && cancelInvitationMutation.isPending;
 
           return (
-            <SettingsInsetStackedRow key={invitation.id}>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm text-foreground">{invitation.email}</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {formatRoleLabel(invitation.role)}
-                </p>
-              </div>
-
-              {canCancelInvitations && (
-                <Button
-                  disabled={isPending}
-                  onClick={() => void handleCancelInvitation(invitation.id)}
-                  size="sm"
-                  variant="outline"
-                >
-                  {isPending ? (
-                    <HugeiconsIcon
-                      aria-hidden
-                      className="size-4 animate-spin"
-                      icon={Loading03Icon}
-                    />
-                  ) : (
-                    <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
-                  )}
-                  Cancel
-                </Button>
-              )}
-            </SettingsInsetStackedRow>
+            <SettingsRow
+              action={
+                canCancelInvitations ? (
+                  <Button
+                    disabled={isPending}
+                    onClick={() => void handleCancelInvitation(invitation.id)}
+                    size="sm"
+                    variant="outline"
+                  >
+                    {isPending ? (
+                      <HugeiconsIcon
+                        aria-hidden
+                        className="size-4 animate-spin"
+                        icon={Loading03Icon}
+                      />
+                    ) : (
+                      <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+                    )}
+                    Cancel
+                  </Button>
+                ) : null
+              }
+              key={invitation.id}
+              label={invitation.email}
+              value={formatRoleLabel(invitation.role)}
+            />
           );
         })}
-      </SettingsInsetRows>
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
-    </div>
+        {error && (
+          <p className={cn("text-sm text-destructive", settingsRowPaddingClass)} role="alert">
+            {error}
+          </p>
+        )}
+      </SettingsCard>
+    </SettingsSection>
   );
 };

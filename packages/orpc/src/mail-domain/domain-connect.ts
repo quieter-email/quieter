@@ -143,7 +143,7 @@ const sharedTemplateRecords = [
     type: "SPFM",
   },
   {
-    data: "v=DMARC1; p=none",
+    data: "v=DMARC1; p=quarantine",
     essential: "OnApply",
     host: "_dmarc",
     ttl: 300,

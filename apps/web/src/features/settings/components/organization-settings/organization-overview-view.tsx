@@ -1,49 +1,47 @@
 "use client";
 
 import {
-  ArrowRight01Icon,
-  Delete02Icon,
+  Alert02Icon,
   Edit01Icon,
   Globe02Icon,
   Key02Icon,
-  Logout03Icon,
+  LeftToRightListBulletIcon,
   UserGroupIcon,
+  Wallet02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
-import { Button } from "@quieter/ui/button";
 import { useQuery } from "@tanstack/react-query";
-import type { UserBillingOverview } from "~/features/settings/domain/billing";
-import { authClient } from "~/lib/auth";
-import { SettingsBackButton, SettingsCard, SettingsSection } from "../settings-layout";
-import { organizationApiKeysQueryOptions } from "./api-keys";
 import {
-  type FullOrganization,
-  type OrganizationRoleOption,
-  type OrganizationSummary,
-  formatCount,
-  formatRoleLabel,
-  hasOrganizationRole,
-} from "./domain";
+  formatBillingProduct,
+  normalizeBillingProduct,
+  type UserBillingOverview,
+} from "~/features/settings/domain/billing";
+import { SettingsBackButton, SettingsNavigationRow, SettingsRows } from "../settings-layout";
+import { organizationApiKeysQueryOptions } from "./api-keys";
+import { type FullOrganization, type OrganizationSummary, formatCount } from "./domain";
 import { organizationMailDomainsQueryOptions } from "./mail-domains";
-import { DeleteOrganizationDialog, LeaveOrganizationDialog } from "./organization-action-dialogs";
-import { OrganizationBillingSettings } from "./organization-billing-settings";
 import { OrganizationFormDialog } from "./organization-form-dialog";
-import { OrganizationMailUsageSettings } from "./organization-mail-usage-settings";
-import { MutedActionButton, SettingsRow } from "./settings-row";
+import { MutedActionButton } from "./settings-row";
+
+const moneyFormatter = new Intl.NumberFormat("en-US", {
+  currency: "USD",
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 2,
+  style: "currency",
+});
 
 export const OrganizationOverviewView = ({
-  activeRole,
   billing,
   billingAccessUnknown,
   billingPending,
-  canDeleteOrganization,
   canUpdateOrganization,
   canUseOrganizationApiKeys,
   canUseOrganizationDomains,
-  canUseOrganizationMail,
   onBackToList,
   onOpenApiKeys,
+  onOpenBilling,
+  onOpenDanger,
   onOpenDivisions,
   onOpenDomains,
   onOpenMembers,
@@ -51,17 +49,16 @@ export const OrganizationOverviewView = ({
   pendingInvitationsCount,
   fullOrganization,
 }: {
-  activeRole: OrganizationRoleOption | null;
   billing: UserBillingOverview["teams"][number] | null;
   billingAccessUnknown: boolean;
   billingPending: boolean;
-  canDeleteOrganization: boolean;
   canUpdateOrganization: boolean;
   canUseOrganizationApiKeys: boolean;
   canUseOrganizationDomains: boolean;
-  canUseOrganizationMail: boolean;
   onBackToList: () => void;
   onOpenApiKeys: () => void;
+  onOpenBilling: () => void;
+  onOpenDanger: () => void;
   onOpenDivisions: () => void;
   onOpenDomains: () => void;
   onOpenMembers: () => void;
@@ -69,7 +66,6 @@ export const OrganizationOverviewView = ({
   pendingInvitationsCount: number;
   fullOrganization: FullOrganization;
 }) => {
-  const organizationCount = authClient.useListOrganizations().data?.length ?? 0;
   const {
     data: apiKeys,
     isError: isApiKeysError,
@@ -86,19 +82,8 @@ export const OrganizationOverviewView = ({
     ...organizationMailDomainsQueryOptions(organization.id),
     enabled: canUseOrganizationDomains && !!organization.id,
   });
-  const ownerCount = fullOrganization.members.filter((member) =>
-    hasOrganizationRole(member.role, "owner"),
-  ).length;
   const updateOrganizationReason =
     (!canUpdateOrganization && "Only admins and owners can edit team details.") || null;
-  const leaveOrganizationReason =
-    (organizationCount <= 1 && "Create another team before leaving your only team.") ||
-    (activeRole === "owner" && ownerCount <= 1 && "Assign another owner before leaving.") ||
-    null;
-  const deleteOrganizationReason =
-    (organizationCount <= 1 && "Create another team before deleting your only team.") ||
-    (!canDeleteOrganization && "Only owners can delete teams.") ||
-    null;
   const peopleSummary = [
     formatCount(fullOrganization.members.length, "Member", "Members"),
     pendingInvitationsCount > 0 && formatCount(pendingInvitationsCount, "pending invitation"),
@@ -127,6 +112,22 @@ export const OrganizationOverviewView = ({
           : isApiKeysError
             ? "Could not load API keys."
             : formatCount(apiKeys.apiKeys.length, "API Key", "API Keys");
+  const billingProduct = normalizeBillingProduct(billing?.product);
+  const billingSummary = billingPending
+    ? "Loading billing…"
+    : billingAccessUnknown
+      ? "Could not load billing."
+      : !billing
+        ? "Billing details unavailable."
+        : [
+            formatBillingProduct(billingProduct),
+            billing.creditAmountCents != null &&
+              `${moneyFormatter.format(
+                (billing.usage?.remainingCreditCents ?? billing.creditAmountCents) / 100,
+              )} usage balance remaining`,
+          ]
+            .filter(Boolean)
+            .join(" · ");
 
   return (
     <section className="space-y-6">
@@ -149,124 +150,44 @@ export const OrganizationOverviewView = ({
         )}
       </div>
 
-      <SettingsSection title="Team settings">
-        <SettingsCard>
-          <SettingsRow
-            action={
-              <Button onClick={onOpenMembers} size="sm" variant="outline">
-                <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
-                Open
-              </Button>
-            }
-            label="Members"
-            value={
-              <span className="inline-flex items-center gap-1.5">
-                <HugeiconsIcon aria-hidden className="size-4" icon={UserGroupIcon} />
-                {peopleSummary}
-              </span>
-            }
-          />
-
-          <SettingsRow
-            action={
-              <Button onClick={onOpenDivisions} size="sm" variant="outline">
-                <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
-                Open
-              </Button>
-            }
-            label="Divisions"
-            value={
-              <span className="inline-flex items-center gap-1.5">
-                <HugeiconsIcon aria-hidden className="size-4" icon={UserGroupIcon} />
-                Mailbox access groups
-              </span>
-            }
-          />
-
-          <SettingsRow
-            action={
-              <Button onClick={onOpenDomains} size="sm" variant="outline">
-                <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
-                Open
-              </Button>
-            }
-            label="Domains"
-            value={
-              <span className="inline-flex items-center gap-1.5">
-                <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
-                {domainsSummary}
-              </span>
-            }
-          />
-
-          <SettingsRow
-            action={
-              <Button onClick={onOpenApiKeys} size="sm" variant="outline">
-                <HugeiconsIcon aria-hidden className="size-4" icon={ArrowRight01Icon} />
-                Open
-              </Button>
-            }
-            label="API keys"
-            value={
-              <span className="inline-flex items-center gap-1.5">
-                <HugeiconsIcon aria-hidden className="size-4" icon={Key02Icon} />
-                {apiKeysSummary}
-              </span>
-            }
-          />
-
-          <OrganizationBillingSettings
-            billing={billing}
-            billingAccessUnknown={billingAccessUnknown}
-            billingPending={billingPending}
-            organizationId={organization.id}
-          />
-
-          <OrganizationMailUsageSettings
-            billingAccessUnknown={billingAccessUnknown}
-            billingPending={billingPending}
-            canManageOrganizationMailUsage={canUpdateOrganization}
-            canUseOrganizationMail={canUseOrganizationMail}
-            organizationId={organization.id}
-          />
-
-          <SettingsRow
-            action={
-              leaveOrganizationReason ? (
-                <MutedActionButton
-                  icon={<HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />}
-                  label="Leave"
-                  reason={leaveOrganizationReason}
-                />
-              ) : (
-                <LeaveOrganizationDialog onLeft={onBackToList} organization={fullOrganization} />
-              )
-            }
-            label="Membership"
-            value={activeRole ? formatRoleLabel(activeRole) : "Team member"}
-          />
-
-          <SettingsRow
-            action={
-              deleteOrganizationReason ? (
-                <MutedActionButton
-                  buttonClassName="pointer-events-none border-destructive/25 bg-destructive/10 text-destructive/80 opacity-100 hover:bg-destructive/10 hover:text-destructive/80"
-                  icon={<HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />}
-                  label="Delete"
-                  reason={deleteOrganizationReason}
-                />
-              ) : (
-                <DeleteOrganizationDialog
-                  onDeleted={onBackToList}
-                  organization={fullOrganization}
-                />
-              )
-            }
-            label="Delete team"
-            value="Permanent"
-          />
-        </SettingsCard>
-      </SettingsSection>
+      <SettingsRows>
+        <SettingsNavigationRow
+          description={peopleSummary}
+          icon={<HugeiconsIcon aria-hidden icon={UserGroupIcon} />}
+          onClick={onOpenMembers}
+          title="Members"
+        />
+        <SettingsNavigationRow
+          description="Mailbox access groups"
+          icon={<HugeiconsIcon aria-hidden icon={LeftToRightListBulletIcon} />}
+          onClick={onOpenDivisions}
+          title="Divisions"
+        />
+        <SettingsNavigationRow
+          description={domainsSummary}
+          icon={<HugeiconsIcon aria-hidden icon={Globe02Icon} />}
+          onClick={onOpenDomains}
+          title="Domains"
+        />
+        <SettingsNavigationRow
+          description={apiKeysSummary}
+          icon={<HugeiconsIcon aria-hidden icon={Key02Icon} />}
+          onClick={onOpenApiKeys}
+          title="API keys"
+        />
+        <SettingsNavigationRow
+          description={billingSummary}
+          icon={<HugeiconsIcon aria-hidden icon={Wallet02Icon} />}
+          onClick={onOpenBilling}
+          title="Billing"
+        />
+        <SettingsNavigationRow
+          description="Leave or delete this team."
+          icon={<HugeiconsIcon aria-hidden icon={Alert02Icon} />}
+          onClick={onOpenDanger}
+          title="Danger zone"
+        />
+      </SettingsRows>
     </section>
   );
 };

@@ -433,12 +433,23 @@ const checkTxtRecord = async (
       : record.purpose === "mail_from_spf"
         ? found.some(isValidMailFromSpfRecord)
         : found.some((value) => expected.includes(value));
-  const recordLabel = record.purpose === "ownership" ? "Ownership TXT" : "TXT";
+  const message =
+    record.purpose === "dmarc"
+      ? ok
+        ? "DMARC policy is present."
+        : "DMARC is recommended but optional."
+      : record.purpose === "ownership"
+        ? ok
+          ? "Ownership TXT record is present."
+          : "Ownership TXT record is missing."
+        : ok
+          ? "TXT record is present."
+          : "TXT record is missing.";
 
   return {
     expected,
     found,
-    message: ok ? `${recordLabel} record is present.` : `${recordLabel} record is missing.`,
+    message,
     ok,
     purpose: record.purpose,
     recordName: record.name,

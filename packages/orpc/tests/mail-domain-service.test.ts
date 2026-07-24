@@ -20,7 +20,7 @@ describe("normalizeMailDomain", () => {
 });
 
 describe("createMailDomainDnsRecords", () => {
-  test("creates SES, inbound, and DMARC records", () => {
+  test("creates SES, inbound, and recommended DMARC records", () => {
     const records = createMailDomainDnsRecords({
       dkimTokens: ["one", "two", "three"],
       domain: "example.com",
@@ -84,16 +84,16 @@ describe("createMailDomainDnsRecords", () => {
       {
         name: "_dmarc.example.com",
         purpose: "dmarc",
-        required: true,
+        required: false,
         type: "TXT",
-        value: "v=DMARC1; p=none",
+        value: "v=DMARC1; p=quarantine",
       },
     ]);
   });
 });
 
 describe("checkMailDomainDnsRecords", () => {
-  test("checks records against mocked DNS responses", async () => {
+  test("accepts any valid DMARC policy and verifies without DMARC", async () => {
     const records = createMailDomainDnsRecords({
       dkimTokens: ["one"],
       domain: "example.com",
@@ -101,28 +101,64 @@ describe("checkMailDomainDnsRecords", () => {
       ownershipToken: "org-token",
       region: "eu-central-1",
     });
-    const checks = await checkMailDomainDnsRecords(
+    const dns = {
+      resolveCname: async () => ["one.dkim.amazonses.com."],
+      resolveMx: async (name: string) =>
+        name === "example.com"
+          ? [{ exchange: "inbound-smtp.eu-central-1.amazonaws.com.", priority: 10 }]
+          : [{ exchange: "feedback-smtp.eu-central-1.amazonses.com.", priority: 10 }],
+      resolveTxt: async (name: string) =>
+        name === "_dmarc.example.com"
+          ? [["v=DMARC1; p=reject; rua=mailto:dmarc@example.com"]]
+          : name === "_quieter-verify.example.com"
+            ? [["quieter-domain-verification=org-token"]]
+            : [["v=spf1 include:amazonses.com ~all"]],
+    };
+
+    const withDmarc = await checkMailDomainDnsRecords(dns, records);
+    expect(withDmarc.every((check) => check.ok)).toBe(true);
+    expect(aggregateMailDomainStatus(withDmarc)).toBe("verified");
+
+    const withoutDmarc = await checkMailDomainDnsRecords(
       {
-        resolveCname: async () => ["one.dkim.amazonses.com."],
-        resolveMx: async (name) =>
-          name === "example.com"
-            ? [{ exchange: "inbound-smtp.eu-central-1.amazonaws.com.", priority: 10 }]
-            : [{ exchange: "feedback-smtp.eu-central-1.amazonses.com.", priority: 10 }],
-        resolveTxt: async (name) =>
+        ...dns,
+        resolveTxt: async (name: string) =>
           name === "_dmarc.example.com"
-            ? [["v=DMARC1; p=reject; rua=mailto:dmarc@example.com"]]
+            ? []
             : name === "_quieter-verify.example.com"
               ? [["quieter-domain-verification=org-token"]]
               : [["v=spf1 include:amazonses.com ~all"]],
       },
       records,
     );
-
-    expect(checks.every((check) => check.ok)).toBe(true);
-    expect(aggregateMailDomainStatus(checks)).toBe("verified");
+    expect(withoutDmarc.find((check) => check.purpose === "dmarc")?.ok).toBe(false);
+    expect(aggregateMailDomainStatus(withoutDmarc)).toBe("verified");
   });
 
-  test("marks missing DNS as failed", async () => {
+  test("ignores provider sending lag when required DNS checks pass", () => {
+    expect(
+      aggregateMailDomainStatus([
+        {
+          message: "Sending identity is not verified yet.",
+          ok: false,
+          purpose: "ses_identity",
+        },
+        {
+          message: "Custom MAIL FROM is not verified yet.",
+          ok: false,
+          purpose: "ses_mail_from",
+        },
+        {
+          message: "Ownership TXT record is present.",
+          ok: true,
+          purpose: "ownership",
+          recordName: "_quieter-verify.example.com",
+        },
+      ]),
+    ).toBe("verified");
+  });
+
+  test("marks missing required DNS as failed", async () => {
     const records = createMailDomainDnsRecords({
       dkimTokens: ["one"],
       domain: "example.com",

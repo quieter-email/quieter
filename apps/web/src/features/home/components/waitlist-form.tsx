@@ -38,7 +38,7 @@ export const WaitlistForm = () => {
 
     const request = addToWaitlist(new FormData(form));
 
-    toast.promise(request, {
+    void toast.promise(request, {
       error: "Something went wrong. Try again.",
       loading: "Adding you to the waitlist...",
       success: (response) =>

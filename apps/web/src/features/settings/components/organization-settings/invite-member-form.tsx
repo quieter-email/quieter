@@ -10,6 +10,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
+import { settingsInsetFieldRowClass } from "../settings-layout";
 import { type FullOrganization, getFullOrganizationQueryKey } from "./domain";
 
 export const InviteMemberForm = ({
@@ -73,21 +74,23 @@ export const InviteMemberForm = ({
 
   return (
     <form
-      className={cn("space-y-2", className)}
+      className={cn(className)}
       action={async () => {
         await form.handleSubmit();
       }}
     >
-      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <div className={cn(settingsInsetFieldRowClass, "gap-3")}>
         <form.Field name="email">
           {(field) => {
             const hasErrors = field.state.meta.errors.length > 0;
 
             return (
-              <TextField className="min-w-0">
+              <TextField className="min-w-0 flex-1">
                 <TextFieldInput
                   aria-describedby={hasErrors ? emailErrorId : undefined}
                   aria-invalid={hasErrors}
+                  chrome="ghost"
+                  className="h-9 px-0"
                   name={field.name}
                   onBlur={() => field.handleBlur()}
                   onChange={(event) => {
@@ -111,7 +114,11 @@ export const InviteMemberForm = ({
           }}
         </form.Field>
 
-        <Button className="sm:w-24" disabled={inviteMemberMutation.isPending} type="submit">
+        <Button
+          className="shrink-0 sm:w-24"
+          disabled={inviteMemberMutation.isPending}
+          type="submit"
+        >
           {inviteMemberMutation.isPending ? (
             <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
           ) : (
@@ -122,7 +129,7 @@ export const InviteMemberForm = ({
       </div>
 
       {submitError && (
-        <p className="text-sm text-destructive" role="alert">
+        <p className="px-4 pb-3 text-sm text-destructive @md:px-6" role="alert">
           {submitError}
         </p>
       )}

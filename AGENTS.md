@@ -6,14 +6,14 @@
 - Client state: TanStack Query, TanStack Store, TanStack Hotkeys
 - API: oRPC + `@orpc/tanstack-query`
 - DB: Drizzle + Postgres (postgres-js against local Postgres or Neon; Cloudflare Workers use Hyperdrive). Every Worker request, including local Cloudflare Vite development, owns its Postgres client through `withRequestDatabaseClient`; never reuse an I/O-bound client across requests.
-- UI: Tailwind CSS 4, `@quieter/ui`, Base UI, Vaul, Sonner, Hugeicons, Tiptap
+- UI: Tailwind CSS 4, `@quieter/ui`, Base UI, Vaul, Hugeicons, Tiptap
 - Tooling: Vite+ (`vp`), including Vite, Oxfmt, Oxlint, type-aware checks, Vitest, tsdown, and Vite Task
 
 ## Boundaries
 
 - `apps/*` consume shared logic via package imports.
 - `apps/*` consume reusable UI through `@quieter/ui`.
-- Do not import Base UI, Vaul, or Sonner directly in app code unless extending `packages/ui` in the same change.
+- Do not import Base UI or Vaul directly in app code unless extending `packages/ui` in the same change.
 - `packages/orpc` is the boundary between app and DB logic.
 - AWS handlers import only deployment-safe `@quieter/orpc` entrypoints. Keep authenticated
   application services, routers, and framework adapters out of ingestion and worker dependency

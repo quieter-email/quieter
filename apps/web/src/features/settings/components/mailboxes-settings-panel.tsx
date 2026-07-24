@@ -37,7 +37,10 @@ import {
   fullOrganizationQueryOptions,
   hasOrganizationRole,
 } from "~/features/settings/components/organization-settings/domain";
-import { organizationMailDomainsQueryOptions } from "~/features/settings/components/organization-settings/mail-domains";
+import {
+  organizationMailDomainsQueryOptions,
+  resolveMailDomainVerified,
+} from "~/features/settings/components/organization-settings/mail-domains";
 import {
   settingsInsetRowClass,
   SettingsCard,
@@ -153,7 +156,7 @@ export const MailboxesSettingsPanel = () => {
     enabled: selectedMailbox?.provider === "managed" && selectedMailbox.grantRole === "manager",
   });
   const verifiedDomains = (managedDomainsData?.domains ?? []).filter(
-    (domain) => domain.status === "verified" && domain.mode === "send_and_receive",
+    (domain) => resolveMailDomainVerified(domain) && domain.mode === "send_and_receive",
   );
   const selectedDomain = managedDomain ?? verifiedDomains[0]?.domain ?? "";
   const trimmedLocalPart = managedLocalPart.trim();

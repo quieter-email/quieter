@@ -50,10 +50,11 @@
     "@fontsource-variable/geist": "catalog:",
     "@fontsource-variable/geist-mono": "catalog:",
     "@fontsource-variable/merriweather": "catalog:",
+    "@hugeicons/core-free-icons": "catalog:",
+    "@hugeicons/react": "catalog:",
     "class-variance-authority": "^0.7.1",
     "date-fns": "^4.4.0",
     "react-day-picker": "^10.0.1",
-    "sonner": "catalog:",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "catalog:",
     "vaul": "catalog:"

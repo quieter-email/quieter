@@ -120,7 +120,6 @@ export const ActionsSettingsPanel = () => {
 
   const openMailboxesSettings = () => {
     void navigate({
-      replace: true,
       search: (previous) => ({
         ...previous,
         mailboxId: "",

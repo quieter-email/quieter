@@ -12,7 +12,11 @@ import {
   settingsRowPaddingClass,
 } from "../settings-layout";
 import { formatCount, type FullOrganization } from "./domain";
-import { formatMailDomainStatus, organizationMailDomainsQueryOptions } from "./mail-domains";
+import {
+  formatMailDomainStatus,
+  organizationMailDomainsQueryOptions,
+  resolveMailDomainVerified,
+} from "./mail-domains";
 import { RegisterDomainDialog } from "./register-domain-dialog";
 import { MutedActionButton } from "./settings-row";
 
@@ -96,7 +100,11 @@ export const DomainsView = ({
                 domain.mode === "send_only" ? "Outbound mail only" : "Outbound and incoming mail"
               }
               key={domain.id}
-              meta={formatMailDomainStatus(domain.status)}
+              meta={
+                resolveMailDomainVerified(domain)
+                  ? "Verified"
+                  : formatMailDomainStatus(domain.status)
+              }
               onClick={() => onOpenDomain(domain.id)}
               title={domain.domain}
             />

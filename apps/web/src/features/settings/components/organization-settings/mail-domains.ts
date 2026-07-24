@@ -46,3 +46,35 @@ export const formatMailDomainStatus = (status: OrganizationMailDomainStatus) => 
   if (status === "pending_dns") return "Needs DNS";
   return "Check failed";
 };
+
+const isProviderLagCheck = (purpose: string) =>
+  purpose === "ses_identity" || purpose === "ses_mail_from";
+
+const isOptionalDnsPurpose = (purpose: string) => purpose === "dmarc";
+
+/** Required DNS (+ inbound routing) counts as verified; DMARC and provider sending can lag. */
+export const resolveMailDomainVerified = (domain: {
+  lastCheckResult: OrganizationMailDomain["lastCheckResult"];
+  requiredDnsRecords: OrganizationMailDomain["requiredDnsRecords"];
+  status: OrganizationMailDomainStatus;
+}) => {
+  if (domain.status === "verified") return true;
+
+  const requiredRecords = domain.requiredDnsRecords.filter(
+    (record) => record.required && !isOptionalDnsPurpose(record.purpose),
+  );
+  if (requiredRecords.length === 0) return false;
+
+  const checks = domain.lastCheckResult?.checks ?? [];
+  const requiredDnsReady = requiredRecords.every((record) =>
+    checks.some(
+      (check) => check.recordName === record.name && check.purpose === record.purpose && check.ok,
+    ),
+  );
+  if (!requiredDnsReady) return false;
+
+  return !checks.some(
+    (check) =>
+      !check.ok && !isProviderLagCheck(check.purpose) && !isOptionalDnsPurpose(check.purpose),
+  );
+};
