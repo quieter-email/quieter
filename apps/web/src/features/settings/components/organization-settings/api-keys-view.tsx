@@ -110,6 +110,8 @@ const formatApiKeyPreview = (apiKey: OrganizationApiKey) => {
 const formatApiKeyMeta = (apiKey: OrganizationApiKey) =>
   `Expires ${formatApiKeyDate(apiKey.expiresAt)}, last used ${formatApiKeyDate(apiKey.lastRequest)}`;
 
+const IMMEDIATE_EXPIRES_IN_SECONDS = 1;
+
 const remainingExpiresInSeconds = (expiresAt: Date | string | null) => {
   if (!expiresAt) return null;
 
@@ -117,7 +119,7 @@ const remainingExpiresInSeconds = (expiresAt: Date | string | null) => {
   if (Number.isNaN(date.getTime())) return null;
 
   const seconds = Math.floor((date.getTime() - Date.now()) / 1000);
-  return seconds > 0 ? seconds : null;
+  return seconds > 0 ? seconds : IMMEDIATE_EXPIRES_IN_SECONDS;
 };
 
 const copyText = async (value: string) => {
@@ -407,18 +409,19 @@ const ResetApiKeyDialog = ({
         keyId: apiKey.id,
       });
 
-      if (deleteResponse.error) {
-        throw new Error(
-          deleteResponse.error.message ??
-            "Created a new key, but could not remove the previous one.",
-        );
-      }
-
-      return createResponse.data;
+      return {
+        cleanupFailed: Boolean(deleteResponse.error),
+        key: createResponse.data.key,
+      };
     },
     mutationKey: ["organization-api-keys", organizationId, apiKey.id, "reset"],
     onSuccess: (data) => {
       setCreatedKey(data.key);
+      if (data.cleanupFailed) {
+        toast.warning(
+          "Created a new key, but could not remove the previous one. Delete the old key manually.",
+        );
+      }
     },
     onError: (error) => {
       void queryClient.invalidateQueries({
@@ -460,7 +463,7 @@ const ResetApiKeyDialog = ({
         >
           <HugeiconsIcon
             aria-hidden
-            className={cn("size-4", resetMutation.isPending && "animate-spin")}
+            className={cn("size-4", { "animate-spin": resetMutation.isPending })}
             icon={resetMutation.isPending ? Loading03Icon : Refresh01Icon}
           />
         </Button>
@@ -581,7 +584,10 @@ const DeleteApiKeyDialog = ({
         >
           <HugeiconsIcon
             aria-hidden
-            className={cn("size-4", deleteMutation.isPending ? "animate-spin" : "text-destructive")}
+            className={cn("size-4", {
+              "animate-spin": deleteMutation.isPending,
+              "text-destructive": !deleteMutation.isPending,
+            })}
             icon={deleteMutation.isPending ? Loading03Icon : Delete02Icon}
           />
         </Button>

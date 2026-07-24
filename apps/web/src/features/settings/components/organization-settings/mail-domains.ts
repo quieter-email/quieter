@@ -47,10 +47,10 @@ export const formatMailDomainStatus = (status: OrganizationMailDomainStatus) => 
   return "Check failed";
 };
 
-const isProviderLagCheck = (purpose: string) =>
+export const isProviderLagCheck = (purpose: string) =>
   purpose === "ses_identity" || purpose === "ses_mail_from";
 
-const isOptionalDnsPurpose = (purpose: string) => purpose === "dmarc";
+export const isOptionalDnsPurpose = (purpose: string) => purpose === "dmarc";
 
 /** Required DNS (+ inbound routing) counts as verified; DMARC and provider sending can lag. */
 export const resolveMailDomainVerified = (domain: {

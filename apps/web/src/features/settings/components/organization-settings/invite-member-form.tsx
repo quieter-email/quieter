@@ -115,7 +115,7 @@ export const InviteMemberForm = ({
         </form.Field>
 
         <Button
-          className="shrink-0 sm:w-24"
+          className="shrink-0 @md:w-24"
           disabled={inviteMemberMutation.isPending}
           type="submit"
         >

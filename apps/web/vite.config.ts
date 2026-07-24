@@ -29,7 +29,9 @@ const preferNodeAwsSdkResolution = (): Plugin => {
       for (const [name, environment] of Object.entries(config.environments)) {
         if (name === "client") continue;
         withoutBrowser(environment.resolve.conditions);
-        withoutBrowser(environment.optimizeDeps.esbuildOptions?.conditions);
+        environment.optimizeDeps.esbuildOptions ??= {};
+        environment.optimizeDeps.esbuildOptions.platform = "node";
+        withoutBrowser(environment.optimizeDeps.esbuildOptions.conditions);
         const rolldownResolve = (
           environment.optimizeDeps as {
             rolldownOptions?: { resolve?: { conditionNames?: string[] } };

@@ -32,7 +32,10 @@ export const OrganizationDangerView = ({
   ).length;
   const leaveOrganizationReason =
     (organizationCount <= 1 && "Create another team before leaving your only team.") ||
-    (activeRole === "owner" && ownerCount <= 1 && "Assign another owner before leaving.") ||
+    (activeRole != null &&
+      hasOrganizationRole(activeRole, "owner") &&
+      ownerCount <= 1 &&
+      "Assign another owner before leaving.") ||
     null;
   const deleteOrganizationReason =
     (organizationCount <= 1 && "Create another team before deleting your only team.") ||

@@ -17,6 +17,7 @@ import {
   type ReactNode,
 } from "react";
 import { cn } from "../../lib/cn";
+import { IconButtonTooltip } from "./icon-button-tooltip";
 
 const toastManager = Toast.createToastManager();
 
@@ -86,7 +87,7 @@ export const toast = Object.assign(toastFn, {
   promise: <T,>(promiseValue: Promise<T>, options: PromiseOptions<T>) =>
     toastManager.promise(promiseValue, {
       error: resolvePromiseMessage(options.error),
-      loading: toUpdateOptions(options.loading),
+      loading: { ...toUpdateOptions(options.loading), timeout: 0 },
       success: resolvePromiseMessage(options.success),
     }),
   success: (title: string, options?: ToastOptions) => showToast("success", title, options),
@@ -180,12 +181,16 @@ const ToastItem = ({ toast: item }: { toast: Toast.Root.ToastObject }) => {
           {item.title ? <Toast.Title className="text-sm font-semibold text-current" /> : null}
           {item.description ? <Toast.Description className="text-sm text-current/75" /> : null}
         </div>
-        <Toast.Close
-          aria-label="Dismiss"
-          className="absolute top-3 right-3 flex size-7 items-center justify-center rounded-md text-muted-foreground transition-transform duration-100 ease-out outline-none squircle hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
-        >
-          <HugeiconsIcon aria-hidden className="size-3.5" icon={Cancel01Icon} />
-        </Toast.Close>
+        <span className="absolute top-3 right-3">
+          <IconButtonTooltip label="Dismiss">
+            <Toast.Close
+              aria-label="Dismiss"
+              className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-transform duration-100 ease-out outline-none squircle hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
+            >
+              <HugeiconsIcon aria-hidden className="size-3.5" icon={Cancel01Icon} />
+            </Toast.Close>
+          </IconButtonTooltip>
+        </span>
       </Toast.Content>
     </Toast.Root>
   );

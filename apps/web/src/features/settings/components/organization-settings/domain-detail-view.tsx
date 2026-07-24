@@ -41,6 +41,8 @@ import {
   getOrganizationDomainConnectQueryKey,
   getOrganizationMailDomainQueryKey,
   getOrganizationMailDomainsQueryKey,
+  isOptionalDnsPurpose,
+  isProviderLagCheck,
   organizationDomainConnectQueryOptions,
   organizationMailDomainQueryOptions,
   resolveMailDomainVerified,
@@ -217,7 +219,7 @@ export const DomainDetailView = ({
 
   const dnsChecks = domain.lastCheckResult?.checks.filter((check) => check.recordName) ?? [];
   const requiredDnsRecords = domain.requiredDnsRecords.filter(
-    (record) => record.required && record.purpose !== "dmarc",
+    (record) => record.required && !isOptionalDnsPurpose(record.purpose),
   );
   const requiredDnsChecks = dnsChecks.filter((check) =>
     requiredDnsRecords.some(
@@ -228,15 +230,13 @@ export const DomainDetailView = ({
   const totalRecords = requiredDnsRecords.length;
   const remainingRecords = Math.max(0, totalRecords - passingRecords);
   const isVerified = resolveMailDomainVerified(domain);
-  const verifiedSendingChecks =
-    domain.lastCheckResult?.checks.filter(
-      (check) =>
-        (check.purpose === "ses_identity" || check.purpose === "ses_mail_from") && check.ok,
-    ).length ?? 0;
+  const sendingChecks =
+    domain.lastCheckResult?.checks.filter((check) => isProviderLagCheck(check.purpose)) ?? [];
+  const verifiedSendingChecks = sendingChecks.filter((check) => check.ok).length;
   const status = isVerified
     ? {
         description:
-          verifiedSendingChecks === 2
+          sendingChecks.length > 0 && verifiedSendingChecks === sendingChecks.length
             ? "Every required check is passing."
             : "All DNS records are ready. Sending may still catch up for a short while.",
         label: "Verified",
