@@ -404,15 +404,15 @@ jobs:
           REVIEW_SHA: ${{ needs.resolve.outputs.sha }}
         run: |
           test -n "$DATABASE_MIGRATION_URL"
-          vp run @quieter/env#build
+          ./node_modules/.bin/vp run @quieter/env#build
           git fetch --depth=1 origin "$REVIEW_SHA"
           rm -rf packages/database/drizzle
           git checkout "$REVIEW_SHA" -- packages/database/drizzle
           # Disposable Review DB: wipe and replay the promoted revision's
           # migrations so schema always matches the artifact under test.
-          vp run @quieter/database#db:reset-review
-          vp run @quieter/database#db:deploy
-          vp run @quieter/database#db:grant-review
+          ./node_modules/.bin/vp run @quieter/database#db:reset-review
+          ./node_modules/.bin/vp run @quieter/database#db:deploy
+          ./node_modules/.bin/vp run @quieter/database#db:grant-review
 
       - name: Upload artifact with trusted configuration
         if: ${{ needs.prepare.result == 'success' }}
