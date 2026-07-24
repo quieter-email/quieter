@@ -28,18 +28,18 @@ export const chatModels = [
   },
   {
     group: "anthropic",
-    label: "Claude Opus 4.8",
-    value: "anthropic/claude-opus-4.8",
+    label: "Claude Opus 5",
+    value: "anthropic/claude-opus-5",
   },
   {
     group: "google",
-    label: "Gemini 3.1 Flash Lite",
-    value: "google/gemini-3.1-flash-lite",
+    label: "Gemini 3.5 Flash Lite",
+    value: "google/gemini-3.5-flash-lite",
   },
   {
     group: "google",
-    label: "Gemini 3.5 Flash",
-    value: "google/gemini-3.5-flash",
+    label: "Gemini 3.6 Flash",
+    value: "google/gemini-3.6-flash",
   },
   {
     group: "google",
@@ -50,6 +50,21 @@ export const chatModels = [
     group: "deepseek",
     label: "DeepSeek V4 Flash",
     value: "deepseek/deepseek-v4-flash",
+  },
+  {
+    group: "deepseek",
+    label: "DeepSeek V4 Pro",
+    value: "deepseek/deepseek-v4-pro",
+  },
+  {
+    group: "deepseek",
+    label: "GLM 5.2",
+    value: "z-ai/glm-5.2",
+  },
+  {
+    group: "deepseek",
+    label: "Kimi K3",
+    value: "moonshotai/kimi-k3",
   },
 ] as const;
 
