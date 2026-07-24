@@ -22,8 +22,8 @@ export default defineConfig({
         dependsOn: dependencyBuild,
         cache: false,
       },
-      "db:reset-review": {
-        command: "bun --env-file=../../.env.local scripts/reset-review-database.ts",
+      "db:prepare-review": {
+        command: "bun --env-file=../../.env.local scripts/prepare-review-database.ts",
         dependsOn: dependencyBuild,
         cache: false,
       },
