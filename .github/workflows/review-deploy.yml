@@ -246,7 +246,7 @@ jobs:
         run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Build environment package
-        run: ./node_modules/.bin/./node_modules/.bin/vp run @quieter/env#build
+        run: ./node_modules/.bin/vp run @quieter/env#build
 
       - name: Create credential-free Worker build configuration
         run: |
@@ -404,7 +404,7 @@ jobs:
           REVIEW_SHA: ${{ needs.resolve.outputs.sha }}
         run: |
           test -n "$DATABASE_MIGRATION_URL"
-          vp run @quieter/env#build
+          ./node_modules/.bin/vp run @quieter/env#build
           git fetch --depth=1 origin "$REVIEW_SHA"
           rm -rf packages/database/drizzle
           git checkout "$REVIEW_SHA" -- packages/database/drizzle
