@@ -1,10 +1,16 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
+import { lazy, Suspense } from "react";
 import { z } from "zod";
-import { AuthRouteComponent } from "~/components/auth-route-component";
 import { LoadingPage } from "~/components/loading-page";
 import { getSessionUser } from "~/lib/auth.functions";
 import { getSafeAuthReturnTo } from "~/lib/return-to";
+
+const AuthRouteComponent = lazy(() =>
+  import("~/components/auth-route-component").then(({ AuthRouteComponent: Component }) => ({
+    default: Component,
+  })),
+);
 
 export const Route = createFileRoute("/auth")({
   validateSearch: zodValidator(
@@ -31,5 +37,9 @@ export const Route = createFileRoute("/auth")({
     }
   },
   pendingComponent: LoadingPage,
-  component: AuthRouteComponent,
+  component: () => (
+    <Suspense fallback={<LoadingPage />}>
+      <AuthRouteComponent />
+    </Suspense>
+  ),
 });

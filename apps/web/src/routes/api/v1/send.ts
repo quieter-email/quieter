@@ -1,6 +1,7 @@
-import { MAX_SEND_PAYLOAD_BYTES } from "@quieter/mail/send";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
+
+const MAX_SEND_PAYLOAD_BYTES = 25 * 1024 * 1024;
 
 export const Route = createFileRoute("/api/v1/send")({
   server: {

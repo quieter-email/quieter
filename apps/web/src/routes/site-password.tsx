@@ -1,7 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
+import { lazy, Suspense } from "react";
 import { z } from "zod";
-import { SitePasswordRoute } from "~/components/site-password-route";
+import { LoadingPage } from "~/components/loading-page";
+
+const SitePasswordRoute = lazy(() =>
+  import("~/components/site-password-route").then(({ SitePasswordRoute: Component }) => ({
+    default: Component,
+  })),
+);
 
 export const Route = createFileRoute("/site-password")({
   validateSearch: zodValidator(
@@ -30,5 +37,10 @@ export const Route = createFileRoute("/site-password")({
         .default(false),
     }),
   ),
-  component: SitePasswordRoute,
+  pendingComponent: LoadingPage,
+  component: () => (
+    <Suspense fallback={<LoadingPage />}>
+      <SitePasswordRoute />
+    </Suspense>
+  ),
 });

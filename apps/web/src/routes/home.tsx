@@ -1,6 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { HomeRouteComponent } from "~/features/home/components/home-route-component";
+import { lazy, Suspense } from "react";
+import { LoadingPage } from "~/components/loading-page";
+
+const HomeRouteComponent = lazy(() =>
+  import("~/features/home/components/home-route-component").then(
+    ({ HomeRouteComponent: Component }) => ({ default: Component }),
+  ),
+);
 
 export const Route = createFileRoute("/home")({
-  component: HomeRouteComponent,
+  pendingComponent: LoadingPage,
+  component: () => (
+    <Suspense fallback={<LoadingPage />}>
+      <HomeRouteComponent />
+    </Suspense>
+  ),
 });

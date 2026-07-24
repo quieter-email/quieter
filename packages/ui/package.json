@@ -40,7 +40,8 @@
     "./switch": "./src/components/ui/switch.tsx",
     "./tabs": "./src/components/ui/tabs.tsx",
     "./text-field": "./src/components/ui/text-field.tsx",
-    "./toast": "./src/components/ui/toast.tsx",
+    "./toast": "./src/components/ui/toast.ts",
+    "./toaster": "./src/components/ui/toaster.tsx",
     "./toggle": "./src/components/ui/toggle.tsx",
     "./toolbar": "./src/components/ui/toolbar.tsx",
     "./tooltip": "./src/components/ui/tooltip.tsx"

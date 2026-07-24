@@ -3,11 +3,12 @@
 import type { RouterOutputs } from "@quieter/orpc";
 import { useHotkey, useHotkeySequence } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ComposeDialogHandle } from "~/features/compose/components/compose-dialog";
+import type { ComposeDraftState } from "~/features/compose/domain/draft";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 import { LoadingPage } from "~/components/loading-page";
-import { parseMailtoComposeDraft, type ComposeDraftState } from "~/features/compose";
-import { type ComposeDialogHandle, ComposeDialog } from "~/features/compose";
+import { parseMailtoComposeDraft } from "~/features/compose/domain/mailto";
 import { shouldIgnoreAppShortcut } from "~/features/hotkeys/domain/hotkey-guards";
 import { useDemoModeEnabled } from "~/features/settings/domain/demo-mode-setting";
 import { useManagedDemoModeEnabled } from "~/features/settings/domain/managed-demo-mode-setting";
@@ -21,6 +22,12 @@ import { MailboxWorkspaceContent } from "./mailbox-workspace/mailbox-workspace-c
 import { useMailboxRouteSearch } from "./mailbox-workspace/use-mailbox-route-search";
 import { useMailboxSelection } from "./mailbox-workspace/use-mailbox-selection";
 import { useWorkspaceUiState } from "./mailbox-workspace/use-workspace-ui-state";
+
+const ComposeDialog = lazy(() =>
+  import("~/features/compose/components/compose-dialog").then(({ ComposeDialog: Component }) => ({
+    default: Component,
+  })),
+);
 
 type MailboxWorkspaceProps = {
   user: {
@@ -444,14 +451,16 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     return (
       <>
         <LoadingPage />
-        <ComposeDialog
-          key={selectedMailboxId ?? user.id ?? "signed-out"}
-          demoMode={isDemoMode}
-          managedDemoMode={isManagedDemoMode}
-          mailboxId={selectedMailboxId}
-          persistDrafts={selectedMailboxProvider !== "api"}
-          ref={composeDialogRef}
-        />
+        <Suspense fallback={null}>
+          <ComposeDialog
+            key={selectedMailboxId ?? user.id ?? "signed-out"}
+            demoMode={isDemoMode}
+            managedDemoMode={isManagedDemoMode}
+            mailboxId={selectedMailboxId}
+            persistDrafts={selectedMailboxProvider !== "api"}
+            ref={composeDialogRef}
+          />
+        </Suspense>
       </>
     );
   }
@@ -555,14 +564,16 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         selectedMailboxNeedsReconnect={selectedMailboxNeedsReconnect}
         selectedView={view}
       />
-      <ComposeDialog
-        key={selectedMailboxId ?? user.id ?? "signed-out"}
-        demoMode={isDemoMode}
-        managedDemoMode={isManagedDemoMode}
-        mailboxId={selectedMailboxId}
-        persistDrafts={!isManagedDemoMode && selectedMailboxProvider !== "api"}
-        ref={composeDialogRef}
-      />
+      <Suspense fallback={null}>
+        <ComposeDialog
+          key={selectedMailboxId ?? user.id ?? "signed-out"}
+          demoMode={isDemoMode}
+          managedDemoMode={isManagedDemoMode}
+          mailboxId={selectedMailboxId}
+          persistDrafts={!isManagedDemoMode && selectedMailboxProvider !== "api"}
+          ref={composeDialogRef}
+        />
+      </Suspense>
     </>
   );
 };
