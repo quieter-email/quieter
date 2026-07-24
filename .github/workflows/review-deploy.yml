@@ -246,7 +246,7 @@ jobs:
         run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Build environment package
-        run: ./node_modules/.bin/vp run @quieter/env#build
+        run: ./node_modules/.bin/./node_modules/.bin/vp run @quieter/env#build
 
       - name: Create credential-free Worker build configuration
         run: |
@@ -395,6 +395,25 @@ jobs:
               },
             });
 
+      - name: Apply review database migrations
+        if: ${{ needs.prepare.result == 'success' }}
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: review
+          QUIETER_REVIEW_DEPLOYMENT: "true"
+          REVIEW_SHA: ${{ needs.resolve.outputs.sha }}
+        run: |
+          test -n "$DATABASE_MIGRATION_URL"
+          vp run @quieter/env#build
+          git fetch --depth=1 origin "$REVIEW_SHA"
+          rm -rf packages/database/drizzle
+          git checkout "$REVIEW_SHA" -- packages/database/drizzle
+          # Disposable Review DB: wipe and replay the promoted revision's
+          # migrations so schema always matches the artifact under test.
+          ./node_modules/.bin/vp run @quieter/database#db:reset-review
+          ./node_modules/.bin/vp run @quieter/database#db:deploy
+          ./node_modules/.bin/vp run @quieter/database#db:grant-review
+
       - name: Upload artifact with trusted configuration
         if: ${{ needs.prepare.result == 'success' }}
         env:
@@ -432,6 +451,7 @@ jobs:
             sleep 2
           done
           echo "Review environment did not promote a healthy, schema-compatible revision ${REVIEW_SHA}." >&2
+          echo "revision=${deployed_revision} app=${application_status} schema=${schema_status}" >&2
           exit 1
 
       - name: Record deployment result
