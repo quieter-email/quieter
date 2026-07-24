@@ -86,9 +86,23 @@ describe("migration execution boundary", () => {
     ).not.toThrow();
   });
 
+  const approvedReviewEnvironment = {
+    CI: "true",
+    GITHUB_ACTIONS: "true",
+    GITHUB_REPOSITORY: "quieter-email/quieter",
+    QUIETER_ALLOW_REMOTE_MIGRATIONS: "review",
+    QUIETER_REVIEW_DEPLOYMENT: "true",
+  };
+
   test("allows remote migrations only in the approved production job", () => {
     expect(() =>
       assertMigrationExecutionAllowed(remoteDatabaseUrl, approvedProductionEnvironment),
+    ).not.toThrow();
+  });
+
+  test("allows remote migrations in the approved review deployment job", () => {
+    expect(() =>
+      assertMigrationExecutionAllowed(remoteDatabaseUrl, approvedReviewEnvironment),
     ).not.toThrow();
   });
 
@@ -104,6 +118,14 @@ describe("migration execution boundary", () => {
     [
       "missing production marker",
       { ...approvedProductionEnvironment, QUIETER_ALLOW_REMOTE_MIGRATIONS: undefined },
+    ],
+    [
+      "review without deployment marker",
+      { ...approvedReviewEnvironment, QUIETER_REVIEW_DEPLOYMENT: undefined },
+    ],
+    [
+      "review from a different repository",
+      { ...approvedReviewEnvironment, GITHUB_REPOSITORY: "fork/quieter" },
     ],
   ])("rejects remote migrations from %s", (_, environment) => {
     expect(() => assertMigrationExecutionAllowed(remoteDatabaseUrl, environment)).toThrow(
