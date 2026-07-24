@@ -26,6 +26,7 @@ describe("Domain Connect templates", () => {
     expect(sendAndReceive.records).toHaveLength(8);
     expect(sendAndReceive.records.at(-1)).toMatchObject({
       host: "@",
+      pointsTo: "inbound-smtp.%AWS_REGION%.amazonaws.com",
       type: "MX",
     });
   });

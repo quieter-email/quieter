@@ -54,13 +54,16 @@ are exact, fixed values:
 The Review environment has a dedicated least-privilege Cloudflare deployment token. The Worker has
 dedicated OAuth clients, encryption keys, and a Hyperdrive binding to a synthetic non-production
 database; the raw database credential is not a Worker environment variable. It has no production
-mail, billing, AI, storage, or migration credentials. Approved pull-request code necessarily runs
-with the isolated Review runtime bindings, so reviewers must use only dedicated test mailboxes and
-must never connect a personal or production Gmail mailbox. The Google OAuth project remains in
-testing mode and lists the permitted reviewers explicitly. Shared Review deployments disable
-preview personas, while Better Auth permits first-time Google signup only in Review so an approved
-test user can enter through the fixed callback. Review deployments never run remote database
-migrations.
+mail, billing, AI, or storage credentials. Approved pull-request code necessarily runs with the
+isolated Review runtime bindings, so reviewers must use only dedicated test mailboxes and must
+never connect a personal or production Gmail mailbox. The Google OAuth project remains in testing
+mode and lists the permitted reviewers explicitly. Shared Review deployments disable preview
+personas, while Better Auth permits first-time Google signup only in Review so an approved test
+user can enter through the fixed callback. The trusted deploy job applies the promoted revision's
+committed expand migrations to the synthetic Review database before the health probe, using a
+Review-only `DATABASE_MIGRATION_URL`. The first Review deploy for a pull request wipes the
+Review schemas and replays that revision's migrations; later deploys of the same pull request
+only apply new migrations so review data can survive pushes.
 
 ## GitHub environment contract
 
@@ -77,12 +80,12 @@ The Cloudflare web Worker reaches Postgres through Hyperdrive (`sst.cloudflare.H
 `AppDatabase`), not a raw `DATABASE_URL` TCP pool. AWS mail/background functions still use
 `DATABASE_URL` directly.
 
-The GitHub Review environment provides only `CLOUDFLARE_API_TOKEN` and the non-secret
-`CLOUDFLARE_DEFAULT_ACCOUNT_ID`. Runtime OAuth client secrets and encryption keys live only as
-encrypted bindings on the isolated Review Worker. Non-secret Worker configuration, OAuth client
-ids, the fixed domain, and the Review Hyperdrive id are source-controlled in
-`.github/review-worker.wrangler.jsonc`. Rotate runtime secrets directly on the Review Worker; do not
-copy them into pull-request jobs or source control.
+The GitHub Review environment provides `CLOUDFLARE_API_TOKEN`, the Review-only
+`DATABASE_MIGRATION_URL`, and the non-secret `CLOUDFLARE_DEFAULT_ACCOUNT_ID`. Runtime OAuth client
+secrets and encryption keys live only as encrypted bindings on the isolated Review Worker.
+Non-secret Worker configuration, OAuth client ids, the fixed domain, and the Review Hyperdrive id
+are source-controlled in `.github/review-worker.wrangler.jsonc`. Rotate runtime secrets directly on
+the Review Worker; do not copy them into pull-request jobs or source control.
 
 ## Database safety
 

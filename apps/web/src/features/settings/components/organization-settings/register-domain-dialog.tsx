@@ -20,9 +20,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { z } from "zod";
 import { orpc } from "~/lib/orpc";
-import { getOrganizationMailDomainsQueryKey } from "./mail-domains";
+import { getOrganizationMailDomainsQueryKey, type OrganizationMailDomain } from "./mail-domains";
 
-type MailDomainMode = "send_and_receive" | "send_only";
+type MailDomainMode = OrganizationMailDomain["mode"];
 
 const modeOptions = [
   {

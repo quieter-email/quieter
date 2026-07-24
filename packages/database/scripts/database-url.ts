@@ -90,15 +90,23 @@ export const assertMigrationExecutionAllowed = (
     return;
   }
 
-  const isApprovedRemoteMigrationJob =
-    environment.QUIETER_ALLOW_REMOTE_MIGRATIONS === "production" &&
+  const isGitHubActionsJob =
     environment.CI === "true" &&
     environment.GITHUB_ACTIONS === "true" &&
-    environment.GITHUB_REF === productionMigrationTarget.ref &&
-    (!productionMigrationTarget.protectedRef || environment.GITHUB_REF_PROTECTED === "true") &&
     environment.GITHUB_REPOSITORY === PRODUCTION_REPOSITORY;
 
-  if (!isApprovedRemoteMigrationJob) {
+  const isApprovedProductionMigrationJob =
+    isGitHubActionsJob &&
+    environment.QUIETER_ALLOW_REMOTE_MIGRATIONS === "production" &&
+    environment.GITHUB_REF === productionMigrationTarget.ref &&
+    (!productionMigrationTarget.protectedRef || environment.GITHUB_REF_PROTECTED === "true");
+
+  const isApprovedReviewMigrationJob =
+    isGitHubActionsJob &&
+    environment.QUIETER_ALLOW_REMOTE_MIGRATIONS === "review" &&
+    environment.QUIETER_REVIEW_DEPLOYMENT === "true";
+
+  if (!isApprovedProductionMigrationJob && !isApprovedReviewMigrationJob) {
     throw new Error(
       "Remote database migrations are restricted to approved GitHub Actions deployment jobs",
     );

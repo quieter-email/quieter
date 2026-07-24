@@ -1,16 +1,15 @@
 import {
   createDomainConnectTemplate,
+  domainConnectModes,
   getDomainConnectService,
 } from "@quieter/orpc/domain-connect-template";
 import { createFileRoute } from "@tanstack/react-router";
-
-const modes = ["send_only", "send_and_receive"] as const;
 
 export const Route = createFileRoute("/api/domain-connect/templates/$serviceId")({
   server: {
     handlers: {
       GET: async ({ params }) => {
-        const mode = modes.find(
+        const mode = domainConnectModes.find(
           (candidate) => getDomainConnectService(candidate).id === params.serviceId,
         );
         if (!mode) {

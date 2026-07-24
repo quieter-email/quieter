@@ -20,6 +20,9 @@ export const organizationMailDomainsQueryOptions = (organizationId: string) =>
 export const getOrganizationMailDomainQueryKey = (organizationId: string, domainId: string) =>
   ["mail-domains", organizationId, domainId] as const;
 
+export const getOrganizationDomainConnectQueryKey = (organizationId: string, domainId: string) =>
+  ["mail-domains", organizationId, domainId, "domain-connect"] as const;
+
 export const organizationMailDomainQueryOptions = (organizationId: string, domainId: string) =>
   queryOptions({
     queryFn: () => rpc.mailDomains.get({ domainId, organizationId }),
@@ -34,7 +37,7 @@ export const organizationDomainConnectQueryOptions = (organizationId: string, do
         domainId,
         organizationId,
       }),
-    queryKey: ["mail-domains", organizationId, domainId, "domain-connect"],
+    queryKey: getOrganizationDomainConnectQueryKey(organizationId, domainId),
     staleTime: 60_000,
   });
 

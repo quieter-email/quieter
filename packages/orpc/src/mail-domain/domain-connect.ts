@@ -21,6 +21,10 @@ const domainConnectServices = {
   },
 } as const satisfies Record<MailDomainMode, { id: string; name: string; version: number }>;
 
+export const domainConnectModes = Object.keys(domainConnectServices) as Array<
+  keyof typeof domainConnectServices
+>;
+
 const trustedProviderEndpoints = [
   {
     discovery: ["https://api.cloudflare.com/client/v4/dns/domainconnect"],
@@ -165,7 +169,7 @@ export const createDomainConnectTemplate = (mode: MailDomainMode) => {
         ? [
             {
               host: "@",
-              pointsTo: "%INBOUND_MX%",
+              pointsTo: "inbound-smtp.%AWS_REGION%.amazonaws.com",
               priority: 10,
               ttl: 300,
               type: "MX" as const,

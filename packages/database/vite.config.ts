@@ -17,6 +17,16 @@ export default defineConfig({
         dependsOn: dependencyBuild,
         cache: false,
       },
+      "db:grant-review": {
+        command: "bun --env-file=../../.env.local scripts/grant-review-database.ts",
+        dependsOn: dependencyBuild,
+        cache: false,
+      },
+      "db:prepare-review": {
+        command: "bun --env-file=../../.env.local scripts/prepare-review-database.ts",
+        dependsOn: dependencyBuild,
+        cache: false,
+      },
       "db:generate": {
         command: "bun scripts/generate-migration.ts",
         dependsOn: dependencyBuild,

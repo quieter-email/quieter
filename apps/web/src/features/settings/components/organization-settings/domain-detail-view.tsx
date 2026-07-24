@@ -40,6 +40,7 @@ import {
   SettingsSection,
 } from "../settings-layout";
 import {
+  getOrganizationDomainConnectQueryKey,
   getOrganizationMailDomainQueryKey,
   getOrganizationMailDomainsQueryKey,
   organizationDomainConnectQueryOptions,
@@ -158,7 +159,7 @@ export const DomainDetailView = ({
         queryKey: getOrganizationMailDomainsQueryKey(organization.id),
       }),
       queryClient.invalidateQueries({
-        queryKey: ["mail-domains", organization.id, domainId, "domain-connect"],
+        queryKey: getOrganizationDomainConnectQueryKey(organization.id, domainId),
       }),
     ]);
   };
@@ -180,7 +181,7 @@ export const DomainDetailView = ({
   });
   const startDomainConnectMutation = useMutation({
     ...orpc.mailDomains.startDomainConnect.mutationOptions(),
-    mutationKey: ["mail-domains", organization.id, domainId, "domain-connect"],
+    mutationKey: getOrganizationDomainConnectQueryKey(organization.id, domainId),
     onSuccess: ({ authorizationUrl }) => {
       window.location.assign(authorizationUrl);
     },

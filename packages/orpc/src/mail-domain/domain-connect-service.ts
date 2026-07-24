@@ -1,6 +1,10 @@
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
-import { mailDomain, mailDomainConnectAttempt } from "@quieter/database/schema";
+import {
+  mailDomain,
+  mailDomainConnectAttempt,
+  type MailDomainMode,
+} from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -9,9 +13,39 @@ import {
   discoverDomainConnect,
   DOMAIN_CONNECT_STATE_TTL_MS,
   getDomainConnectService,
+  type DomainConnectDiscovery,
 } from "./domain-connect";
 import { assertUserCanManageMailDomains, assertUserOrganizationMember } from "./service";
 import { verifyMailDomainSetup } from "./verification";
+
+const DOMAIN_CONNECT_DISCOVERY_CACHE_TTL_MS = 60_000;
+
+const discoveryCache = new Map<
+  string,
+  {
+    expiresAt: number;
+    result: DomainConnectDiscovery;
+  }
+>();
+
+const getCachedDomainConnectDiscovery = async (input: {
+  configured: boolean;
+  domain: string;
+  mode: MailDomainMode;
+}) => {
+  const cacheKey = `${input.domain}\0${input.mode}\0${input.configured ? "1" : "0"}`;
+  const cached = discoveryCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.result;
+  }
+
+  const result = await discoverDomainConnect(input);
+  discoveryCache.set(cacheKey, {
+    expiresAt: Date.now() + DOMAIN_CONNECT_DISCOVERY_CACHE_TTL_MS,
+    result,
+  });
+  return result;
+};
 
 const getDomainConnectPrivateKey = () => {
   const encoded = serverEnv.DOMAIN_CONNECT_PRIVATE_KEY_B64;
@@ -58,7 +92,7 @@ export const getDomainConnectAvailability = async (input: {
 }) => {
   await assertUserOrganizationMember(input);
   const domain = await getDomainForConnect(input);
-  return discoverDomainConnect({
+  return getCachedDomainConnectDiscovery({
     configured: !!getDomainConnectPrivateKey() && !!serverEnv.BETTER_AUTH_URL,
     domain: domain.domain,
     mode: domain.mode,
@@ -80,7 +114,7 @@ export const startDomainConnect = async (input: {
     });
   }
 
-  const discovery = await discoverDomainConnect({
+  const discovery = await getCachedDomainConnectDiscovery({
     configured: true,
     domain: domain.domain,
     mode: domain.mode,

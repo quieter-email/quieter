@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { BillingProductCard } from "~/features/settings/components/billing-product-card";
 import {
@@ -63,6 +64,7 @@ export const FirstRunManagedMailSetup = ({
   onBack: () => void;
   organizations: FirstRunOrganization[];
 }) => {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const authOrganizations = authClient.useListOrganizations().data;
   const organizationNames = new Map(
@@ -101,6 +103,17 @@ export const FirstRunManagedMailSetup = ({
     selectedOrganization?.mailboxes.some((mailbox) => mailbox.provider === "managed") === true;
   const hasApiKey = (apiKeysData?.apiKeys ?? []).length > 0;
   const trimmedLocalPart = localPart.trim();
+  const openRegisteredDomain = (domainId: string) => {
+    void navigate({
+      search: {
+        domainId,
+        organizationId,
+        organizationView: "domains",
+        tab: "organization",
+      },
+      to: "/settings",
+    });
+  };
   const checkoutMutation = useMutation({
     ...orpc.billing.createCheckout.mutationOptions(),
     onError: (error) => toast.error(error.message || "Could not start checkout."),
@@ -298,11 +311,7 @@ export const FirstRunManagedMailSetup = ({
                   </span>
                 ))}
                 <RegisterDomainDialog
-                  onCreated={(domainId) =>
-                    window.location.assign(
-                      `/settings?tab=organization&organizationId=${encodeURIComponent(organizationId)}&organizationView=domains&domainId=${encodeURIComponent(domainId)}`,
-                    )
-                  }
+                  onCreated={openRegisteredDomain}
                   organizationId={organizationId}
                 >
                   <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
@@ -311,11 +320,7 @@ export const FirstRunManagedMailSetup = ({
               </div>
             ) : (
               <RegisterDomainDialog
-                onCreated={(domainId) =>
-                  window.location.assign(
-                    `/settings?tab=organization&organizationId=${encodeURIComponent(organizationId)}&organizationView=domains&domainId=${encodeURIComponent(domainId)}`,
-                  )
-                }
+                onCreated={openRegisteredDomain}
                 organizationId={organizationId}
               >
                 <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
