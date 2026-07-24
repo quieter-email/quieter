@@ -25,7 +25,7 @@ import {
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { orpc } from "~/lib/orpc";
 import { settingsRouteApi } from "~/lib/route-apis";
 import type { FullOrganization } from "./domain";
@@ -63,44 +63,36 @@ const formatDate = (value: Date | string | null) => {
 const dnsTableColumns =
   "grid grid-cols-[3.25rem_minmax(7rem,0.85fr)_minmax(10rem,1.6fr)_4rem_3.25rem_5.25rem] items-center gap-3";
 
-const DnsCopyCell = ({ value }: { value: string }) => {
-  const [copied, setCopied] = useState(false);
-  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(
-    () => () => {
-      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
-    },
-    [],
-  );
-
-  return (
-    <button
-      aria-label={copied ? `Copied ${value}` : `Copy ${value}`}
-      className={cn(
-        "max-w-full min-w-0 rounded-md px-1.5 py-0.5 text-left font-mono text-xs outline-none squircle",
-        "transition-[transform,background-color,color] duration-100 ease-out",
-        "hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/30",
-        "active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
-        copied ? "bg-success/15 text-success" : "text-foreground",
-      )}
-      onClick={() => {
-        void navigator.clipboard.writeText(value).then(
-          () => {
-            setCopied(true);
-            if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
-            resetTimerRef.current = setTimeout(() => setCopied(false), 1100);
-          },
-          () => toast.error("Could not copy to clipboard."),
-        );
-      }}
-      title={copied ? "Copied" : `Copy ${value}`}
-      type="button"
-    >
-      <span className="block truncate">{value}</span>
-    </button>
-  );
-};
+const DnsCopyCell = ({ value }: { value: string }) => (
+  <button
+    aria-label={`Copy ${value}`}
+    className={cn(
+      "max-w-full min-w-0 rounded-md px-1.5 py-0.5 text-left font-mono text-xs text-foreground outline-none squircle",
+      "transition-[transform,background-color] duration-100 ease-out",
+      "hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/30",
+      "active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+    )}
+    onClick={() => {
+      void navigator.clipboard.writeText(value).then(
+        () =>
+          toast.success(
+            <>
+              Copied{" "}
+              <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs font-normal break-all">
+                {value}
+              </code>
+            </>,
+            { id: `dns-copy:${value}` },
+          ),
+        () => toast.error("Could not copy to clipboard."),
+      );
+    }}
+    title={`Copy ${value}`}
+    type="button"
+  >
+    <span className="block truncate">{value}</span>
+  </button>
+);
 
 const RecordState = ({ message, ok }: { message: string; ok: boolean | null }) => (
   <span
@@ -229,20 +221,21 @@ export const DomainDetailView = ({
   const passingRecords = requiredDnsChecks.filter((check) => check.ok).length;
   const totalRecords = requiredDnsRecords.length;
   const remainingRecords = Math.max(0, totalRecords - passingRecords);
-  const isVerified = resolveMailDomainVerified(domain);
+  const dnsComplete = totalRecords > 0 && remainingRecords === 0;
+  const isVerified = dnsComplete || resolveMailDomainVerified(domain);
   const sendingChecks =
     domain.lastCheckResult?.checks.filter((check) => isProviderLagCheck(check.purpose)) ?? [];
   const verifiedSendingChecks = sendingChecks.filter((check) => check.ok).length;
+  const sendingReady = sendingChecks.length > 0 && verifiedSendingChecks === sendingChecks.length;
   const status = isVerified
     ? {
-        description:
-          sendingChecks.length > 0 && verifiedSendingChecks === sendingChecks.length
-            ? "Every required check is passing."
-            : "All DNS records are ready. Sending may still catch up for a short while.",
+        description: sendingReady
+          ? "Every required check is passing."
+          : "All DNS records are ready. Sending may still catch up for a short while.",
         label: "Verified",
         tone: "success" as const,
       }
-    : passingRecords > 0
+    : remainingRecords > 0 && passingRecords > 0
       ? {
           description: `${passingRecords} of ${totalRecords} DNS records are ready. Fix the remaining ${remainingRecords}.`,
           label: "Partially verified",
@@ -307,7 +300,6 @@ export const DomainDetailView = ({
             </Button>
           )
         }
-        eyebrow={organization.name}
         title={domain.domain}
       >
         Registered {formatDate(domain.createdAt)}
@@ -387,7 +379,7 @@ export const DomainDetailView = ({
           </div>
           {[
             ["DNS records", `${passingRecords}/${totalRecords}`],
-            ["Sending", verifiedSendingChecks === 2 ? "Ready" : "Checking"],
+            ["Sending", sendingReady ? "Ready" : "Checking"],
             ["Incoming mail", domain.mode === "send_only" ? "Off" : "Enabled"],
           ].map(([label, value]) => (
             <div className="border-l border-border/70 pl-4" key={label}>

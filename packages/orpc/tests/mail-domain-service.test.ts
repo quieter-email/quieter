@@ -149,6 +149,11 @@ describe("checkMailDomainDnsRecords", () => {
           purpose: "ses_mail_from",
         },
         {
+          message: "Incoming mail routing could not be configured.",
+          ok: false,
+          purpose: "receipt_rule",
+        },
+        {
           message: "Ownership TXT record is present.",
           ok: true,
           purpose: "ownership",
