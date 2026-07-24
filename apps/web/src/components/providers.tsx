@@ -1,12 +1,11 @@
 "use client";
 
 import { ColorModeProvider } from "@quieter/ui/color-mode";
-import { Toaster } from "@quieter/ui/toast";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useLocation } from "@tanstack/react-router";
 import { MotionConfig } from "motion/react";
-import { type PropsWithChildren, useEffect, useState } from "react";
+import { lazy, Suspense, type PropsWithChildren, useEffect, useState } from "react";
 import { ConsentManager } from "~/components/consent-manager";
 import { FocusModalityProvider } from "~/components/focus-modality-provider";
 import { MailtoProtocolHandler } from "~/components/mailto-protocol-handler";
@@ -16,6 +15,10 @@ import { KeyboardShortcutsProvider } from "~/features/hotkeys/components/keyboar
 import { authClient } from "~/lib/auth";
 import { shouldRetryOrpcError } from "~/lib/orpc-errors";
 import { setQueryPersistenceUser } from "~/lib/query-persister";
+
+const Toaster = lazy(() =>
+  import("@quieter/ui/toaster").then(({ Toaster: Component }) => ({ default: Component })),
+);
 
 const QueryPersistenceSessionBoundary = () => {
   const session = authClient.useSession();
@@ -75,7 +78,9 @@ export const Providers = ({ children }: PropsWithChildren) => {
                   <KeyboardShortcutsProvider>
                     <MailtoProtocolHandler />
                     {children}
-                    <Toaster />
+                    <Suspense fallback={null}>
+                      <Toaster />
+                    </Suspense>
                   </KeyboardShortcutsProvider>
                 </FocusModalityProvider>
               </QueryClientProvider>

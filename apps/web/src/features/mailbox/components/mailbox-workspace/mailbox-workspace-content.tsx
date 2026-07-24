@@ -5,16 +5,26 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { domAnimation, LazyMotion, m } from "motion/react";
-import { useState, type ComponentProps } from "react";
-import type { ComposeDraftState } from "~/features/compose";
+import { lazy, Suspense, useState, type ComponentProps } from "react";
+import type { ComposeDraftState } from "~/features/compose/domain/draft";
 import type { MailboxWorkspaceView } from "~/features/mailbox/domain/mailbox-workspace-view";
 import type { MailboxSwitcherOrder } from "~/features/navigation/components/mailbox-switcher";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
-import { ChatView } from "~/features/chat/components/chat-view";
 import { MailSidebar } from "~/features/navigation/components/mail-sidebar";
-import { FirstRunManagedMailSetup } from "./first-run-managed-mail-setup";
 import { MailboxMessagesPanel } from "./mailbox-messages-panel";
+
+const ChatView = lazy(() =>
+  import("~/features/chat/components/chat-view").then(({ ChatView: Component }) => ({
+    default: Component,
+  })),
+);
+
+const FirstRunManagedMailSetup = lazy(() =>
+  import("./first-run-managed-mail-setup").then(({ FirstRunManagedMailSetup: Component }) => ({
+    default: Component,
+  })),
+);
 
 type MailboxSidebarGroups = ComponentProps<typeof MailSidebar>["groups"];
 type MailboxSidebarChats = ComponentProps<typeof MailSidebar>["chats"];
@@ -112,18 +122,20 @@ const NoMailboxWorkspace = ({
         </LinkButton>
         {setupMode === "managed" ? (
           <m.div className="w-full" {...workspaceContentMotion}>
-            <FirstRunManagedMailSetup
-              onBack={() => setSetupMode("choice")}
-              organizations={mailboxGroups.map((group) => ({
-                id: group.id,
-                mailboxes: group.mailboxes.flatMap((mailbox) =>
-                  mailbox.provider === "api"
-                    ? []
-                    : [{ provider: mailbox.provider as "gmail" | "managed" }],
-                ),
-                name: group.name,
-              }))}
-            />
+            <Suspense fallback={null}>
+              <FirstRunManagedMailSetup
+                onBack={() => setSetupMode("choice")}
+                organizations={mailboxGroups.map((group) => ({
+                  id: group.id,
+                  mailboxes: group.mailboxes.flatMap((mailbox) =>
+                    mailbox.provider === "api"
+                      ? []
+                      : [{ provider: mailbox.provider as "gmail" | "managed" }],
+                  ),
+                  name: group.name,
+                }))}
+              />
+            </Suspense>
           </m.div>
         ) : (
           <m.div className="w-full max-w-2xl text-center" {...workspaceContentMotion}>
@@ -272,20 +284,22 @@ export const MailboxWorkspaceContent = ({
               animate={{ opacity: 1 }}
               transition={{ duration: 0.08, ease: "linear" }}
             >
-              <ChatView
-                activeMailbox={activeMailbox}
-                mailContext={chatContext}
-                chatId={chatId}
-                draftChatKey={draftChatKey}
-                mailboxId={selectedMailboxId}
-                mailboxOrganizationId={
-                  mailboxGroups.find((group) =>
-                    group.mailboxes.some((mailbox) => mailbox.id === selectedMailboxId),
-                  )?.id ?? ""
-                }
-                onChatIdChange={onChatIdChange}
-                onOpenSidebar={onOpenSidebar}
-              />
+              <Suspense fallback={null}>
+                <ChatView
+                  activeMailbox={activeMailbox}
+                  mailContext={chatContext}
+                  chatId={chatId}
+                  draftChatKey={draftChatKey}
+                  mailboxId={selectedMailboxId}
+                  mailboxOrganizationId={
+                    mailboxGroups.find((group) =>
+                      group.mailboxes.some((mailbox) => mailbox.id === selectedMailboxId),
+                    )?.id ?? ""
+                  }
+                  onChatIdChange={onChatIdChange}
+                  onOpenSidebar={onOpenSidebar}
+                />
+              </Suspense>
             </m.div>
           ) : (
             <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">

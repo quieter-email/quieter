@@ -1,17 +1,19 @@
-import { withRequestDatabaseClient } from "@quieter/database/client";
-import { serverEnv } from "@quieter/env/server";
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/api/review-health")({
   server: {
     handlers: {
       GET: async () => {
+        const { serverEnv } = await import("@quieter/env/server");
+
         if (serverEnv.QUIETER_DEPLOYMENT_ENV !== "preview") {
           return new Response(null, { status: 404 });
         }
 
         try {
-          const { assertReviewDatabaseSchema } = await import("@quieter/orpc/review-health");
+          const [{ withRequestDatabaseClient }, { assertReviewDatabaseSchema }] = await Promise.all(
+            [import("@quieter/database/client"), import("@quieter/orpc/review-health")],
+          );
 
           await withRequestDatabaseClient((client) => assertReviewDatabaseSchema(client));
 

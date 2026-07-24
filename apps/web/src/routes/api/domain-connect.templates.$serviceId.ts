@@ -1,14 +1,12 @@
-import {
-  createDomainConnectTemplate,
-  domainConnectModes,
-  getDomainConnectService,
-} from "@quieter/orpc/domain-connect-template";
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/api/domain-connect/templates/$serviceId")({
   server: {
     handlers: {
       GET: async ({ params }) => {
+        const { createDomainConnectTemplate, domainConnectModes, getDomainConnectService } =
+          await import("@quieter/orpc/domain-connect-template");
+
         const mode = domainConnectModes.find(
           (candidate) => getDomainConnectService(candidate).id === params.serviceId,
         );
