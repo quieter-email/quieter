@@ -127,7 +127,7 @@ export const OrganizationOverviewView = ({
               )} usage balance remaining`,
           ]
             .filter(Boolean)
-            .join(" · ");
+            .join(" — ");
 
   return (
     <section className="space-y-6">
