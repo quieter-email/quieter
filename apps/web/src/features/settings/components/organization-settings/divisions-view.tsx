@@ -426,7 +426,7 @@ const DivisionDetailView = ({
       <div>
         <h1 className="text-base font-semibold text-foreground">{division.name}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {formatCount(division.members.length, "Member")} —{" "}
+          {formatCount(division.members.length, "Member")},{" "}
           {formatCount(division.mailboxCount, "Mailbox", "Mailboxes")}
         </p>
       </div>
@@ -619,7 +619,7 @@ export const DivisionsView = ({
         <SettingsRows>
           {divisions.map((division) => (
             <SettingsNavigationRow
-              description={`${formatCount(division.members.length, "Member")} — ${formatCount(division.mailboxCount, "Mailbox", "Mailboxes")}`}
+              description={`${formatCount(division.members.length, "Member")}, ${formatCount(division.mailboxCount, "Mailbox", "Mailboxes")}`}
               icon={<HugeiconsIcon aria-hidden icon={UserGroupIcon} />}
               key={division.id}
               onClick={() => setSelectedDivisionId(division.id)}
