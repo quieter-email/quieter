@@ -17,6 +17,8 @@ import {
 import { DomainDetailView } from "./domain-detail-view";
 import { DomainsView } from "./domains-view";
 import { MembersView } from "./members-view";
+import { OrganizationBillingView } from "./organization-billing-view";
+import { OrganizationDangerView } from "./organization-danger-view";
 import { OrganizationOverviewView } from "./organization-overview-view";
 
 export const OrganizationDetailView = ({
@@ -24,6 +26,8 @@ export const OrganizationDetailView = ({
   onBackToList,
   onBackToOrganization,
   onOpenApiKeys,
+  onOpenBilling,
+  onOpenDanger,
   onOpenDivisions,
   onOpenDomains,
   onOpenDomain,
@@ -36,6 +40,8 @@ export const OrganizationDetailView = ({
   onBackToList: () => void;
   onBackToOrganization: () => void;
   onOpenApiKeys: () => void;
+  onOpenBilling: () => void;
+  onOpenDanger: () => void;
   onOpenDivisions: () => void;
   onOpenDomains: () => void;
   onOpenDomain: (domainId: string) => void;
@@ -180,20 +186,46 @@ export const OrganizationDetailView = ({
     );
   }
 
+  if (view === "billing") {
+    return (
+      <OrganizationBillingView
+        billing={teamBilling}
+        billingAccessUnknown={isBillingError}
+        billingPending={isBillingPending}
+        canManageOrganizationMailUsage={canUpdateOrganization}
+        canUseOrganizationMail={canUseTeamFeatures}
+        onBack={onBackToOrganization}
+        organizationId={organization.id}
+        organizationName={fullOrganization.name}
+      />
+    );
+  }
+
+  if (view === "danger") {
+    return (
+      <OrganizationDangerView
+        activeRole={activeRole}
+        canDeleteOrganization={canDeleteOrganization}
+        fullOrganization={fullOrganization}
+        onBack={onBackToOrganization}
+        onLeftOrDeleted={onBackToList}
+      />
+    );
+  }
+
   return (
     <OrganizationOverviewView
-      activeRole={activeRole}
       billing={teamBilling}
       billingAccessUnknown={isBillingError}
       billingPending={isBillingPending}
-      canDeleteOrganization={canDeleteOrganization}
       canUpdateOrganization={canUpdateOrganization}
       canUseOrganizationApiKeys={canUseTeamFeatures}
       canUseOrganizationDomains={canUseTeamFeatures}
-      canUseOrganizationMail={canUseTeamFeatures}
       fullOrganization={fullOrganization}
       onBackToList={onBackToList}
       onOpenApiKeys={onOpenApiKeys}
+      onOpenBilling={onOpenBilling}
+      onOpenDanger={onOpenDanger}
       onOpenDivisions={onOpenDivisions}
       onOpenDomains={onOpenDomains}
       onOpenMembers={onOpenMembers}

@@ -99,6 +99,26 @@ export const OrganizationSettingsPanel = () => {
     });
   };
 
+  const navigateToBilling = () => {
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        organizationView: "billing",
+      }),
+      to: ".",
+    });
+  };
+
+  const navigateToDanger = () => {
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        organizationView: "danger",
+      }),
+      to: ".",
+    });
+  };
+
   const navigateToOrganizationOverview = () => {
     void navigate({
       search: (previous) => ({
@@ -136,6 +156,8 @@ export const OrganizationSettingsPanel = () => {
             onOpenApiKeys={navigateToApiKeys}
             onBackToList={navigateToOrganizationsList}
             onBackToOrganization={navigateToOrganizationOverview}
+            onOpenBilling={navigateToBilling}
+            onOpenDanger={navigateToDanger}
             onOpenDivisions={navigateToDivisions}
             onOpenDomains={navigateToDomains}
             onOpenDomain={navigateToDomain}

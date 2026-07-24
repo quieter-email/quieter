@@ -3,10 +3,15 @@
 import { Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@quieter/ui/cn";
-import { Separator } from "@quieter/ui/separator";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { useState } from "react";
-import { SettingsBackButton, settingsRowPaddingClass } from "../settings-layout";
+import {
+  SettingsBackButton,
+  SettingsCard,
+  settingsInsetDividerClass,
+  settingsInsetRowClass,
+  settingsRowPaddingClass,
+} from "../settings-layout";
 import {
   type FullOrganization,
   type OrganizationMember,
@@ -49,9 +54,10 @@ export const MembersView = ({
         ),
       )
     : sortedMembers;
+  const showMemberSearch = sortedMembers.length > 1;
 
   return (
-    <div className="space-y-6">
+    <section className="space-y-6">
       <SettingsBackButton onClick={onBack}>{organization.name}</SettingsBackButton>
 
       <div>
@@ -62,56 +68,56 @@ export const MembersView = ({
       </div>
 
       {permissions.canInviteMembers && (
-        <>
+        <SettingsCard>
           <InviteMemberForm
             canInviteMembers={permissions.canInviteMembers}
             organization={organization}
           />
-          <Separator />
-        </>
+        </SettingsCard>
       )}
 
-      <TextField className="relative">
-        <HugeiconsIcon
-          aria-hidden
-          className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-          icon={Search01Icon}
-        />
-        <TextFieldInput
-          aria-label="Search members"
-          className="pl-9"
-          onChange={(event) => setMemberSearch(event.target.value)}
-          placeholder="Search members"
-          value={memberSearch}
-        />
-      </TextField>
-
-      <div>
-        {visibleMembers.map((member) => {
-          return (
-            <MemberActions
-              activeMember={activeMember}
-              canRemoveMembers={permissions.canRemoveMembers}
-              canUpdateMemberRole={permissions.canUpdateMemberRole}
-              key={member.id}
-              member={member}
-              organizationId={organization.id}
+      <SettingsCard>
+        {showMemberSearch && (
+          <TextField className={cn(settingsInsetRowClass, settingsInsetDividerClass, "relative")}>
+            <HugeiconsIcon
+              aria-hidden
+              className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground @md:left-6"
+              icon={Search01Icon}
             />
-          );
-        })}
+            <TextFieldInput
+              aria-label="Search members"
+              chrome="ghost"
+              className="h-9 pl-7"
+              onChange={(event) => setMemberSearch(event.target.value)}
+              placeholder="Search members"
+              value={memberSearch}
+            />
+          </TextField>
+        )}
+
+        {visibleMembers.map((member) => (
+          <MemberActions
+            activeMember={activeMember}
+            canRemoveMembers={permissions.canRemoveMembers}
+            canUpdateMemberRole={permissions.canUpdateMemberRole}
+            key={member.id}
+            member={member}
+            organizationId={organization.id}
+          />
+        ))}
 
         {visibleMembers.length === 0 && (
           <p className={cn("text-center text-sm text-muted-foreground", settingsRowPaddingClass)}>
             No members found.
           </p>
         )}
-      </div>
+      </SettingsCard>
 
       <PendingOrganizationInvitations
         canCancelInvitations={permissions.canCancelInvitations}
         invitations={organization.invitations}
         organizationId={organization.id}
       />
-    </div>
+    </section>
   );
 };

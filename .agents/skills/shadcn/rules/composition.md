@@ -5,7 +5,7 @@
 - Items always inside their Group component
 - Callouts use Alert
 - Empty states use Empty component
-- Toast notifications use sonner
+- Toast notifications use `@quieter/ui/toast`
 - Choosing between overlay components
 - Dialog, Sheet, and Drawer always need a Title
 - Card structure
@@ -88,17 +88,16 @@ Chat components nest in a fixed order (`MessageScrollerProvider` → `MessageScr
 
 ---
 
-## Toast notifications use sonner
+## Toast notifications use `@quieter/ui/toast`
 
 ```tsx
-import { toast } from "sonner"
+import { toast } from "@quieter/ui/toast"
 
 toast.success("Changes saved.")
 toast.error("Something went wrong.")
-toast("File deleted.", {
-  action: { label: "Undo", onClick: () => undoDelete() },
-})
 ```
+
+Identical messages upsert and shake instead of stacking duplicates.
 
 ---
 

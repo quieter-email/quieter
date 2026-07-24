@@ -13,6 +13,7 @@ import {
   createMailDomainOwnershipToken,
   getMailDomainOwnershipToken,
   normalizeMailDomain,
+  normalizeMailDomainDnsRecords,
 } from "../mail-domain/records";
 import {
   assertUserCanManageMailDomains,
@@ -90,7 +91,12 @@ export const mailDomainsRouter = {
         .where(eq(mailDomain.organizationId, input.organizationId))
         .orderBy(desc(mailDomain.createdAt));
 
-      return { domains };
+      return {
+        domains: domains.map((domain) => ({
+          ...domain,
+          requiredDnsRecords: normalizeMailDomainDnsRecords(domain.requiredDnsRecords),
+        })),
+      };
     }),
 
   get: protectedProcedure
@@ -139,7 +145,10 @@ export const mailDomainsRouter = {
         organizationId: input.organizationId,
       });
       return {
-        domain,
+        domain: {
+          ...domain,
+          requiredDnsRecords: normalizeMailDomainDnsRecords(domain.requiredDnsRecords),
+        },
         managedMailboxCount,
         modeChangeBlockedReason:
           domain.mode === "send_and_receive" && managedMailboxCount > 0

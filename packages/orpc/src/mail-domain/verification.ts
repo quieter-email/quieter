@@ -10,6 +10,7 @@ import {
   createMailDomainOwnershipToken,
   getMailDomainOwnershipToken,
   MAIL_DOMAIN_STATUS_VERIFIED,
+  normalizeMailDomainDnsRecords,
 } from "./records";
 import {
   checkMailDomainDnsRecords,
@@ -53,7 +54,7 @@ export const verifyMailDomainSetup = async (input: {
     identity = { $metadata: {} };
   }
 
-  const requiredDnsRecords =
+  const requiredDnsRecords = normalizeMailDomainDnsRecords(
     getMailDomainOwnershipToken(storedDomain.requiredDnsRecords) == null
       ? createMailDomainDnsRecords({
           dkimTokens: getDkimTokens(identity),
@@ -62,7 +63,8 @@ export const verifyMailDomainSetup = async (input: {
           ownershipToken: createMailDomainOwnershipToken(),
           region: getAwsRegion(),
         })
-      : storedDomain.requiredDnsRecords;
+      : storedDomain.requiredDnsRecords,
+  );
   let checks = [
     createSesIdentityCheck(identity),
     createSesMailFromCheck(identity),

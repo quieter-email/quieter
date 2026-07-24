@@ -2,9 +2,7 @@
 
 import {
   Alert02Icon,
-  CancelCircleIcon,
   CheckmarkCircle01Icon,
-  Copy01Icon,
   Delete02Icon,
   Globe02Icon,
   Loading03Icon,
@@ -27,7 +25,7 @@ import {
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { orpc } from "~/lib/orpc";
 import { settingsRouteApi } from "~/lib/route-apis";
 import type { FullOrganization } from "./domain";
@@ -43,23 +41,13 @@ import {
   getOrganizationDomainConnectQueryKey,
   getOrganizationMailDomainQueryKey,
   getOrganizationMailDomainsQueryKey,
+  isOptionalDnsPurpose,
+  isProviderLagCheck,
   organizationDomainConnectQueryOptions,
   organizationMailDomainQueryOptions,
-  type OrganizationMailDomainDnsRecord,
+  resolveMailDomainVerified,
 } from "./mail-domains";
 import { MutedActionButton } from "./settings-row";
-
-const dnsRecordCopy = {
-  dkim: { description: "Authenticates messages sent from this domain.", label: "DKIM" },
-  dmarc: { description: "Publishes the domain's authentication policy.", label: "DMARC" },
-  inbound_mx: { description: "Routes incoming messages to Quieter.", label: "Incoming MX" },
-  mail_from_mx: { description: "Routes outgoing delivery feedback.", label: "Bounce MX" },
-  mail_from_spf: { description: "Authorizes mail sent through the bounce domain.", label: "SPF" },
-  ownership: { description: "Proves this team controls the domain.", label: "Ownership" },
-} satisfies Record<
-  OrganizationMailDomainDnsRecord["purpose"],
-  { description: string; label: string }
->;
 
 const dateFormatter = new Intl.DateTimeFormat("en", {
   dateStyle: "medium",
@@ -72,51 +60,59 @@ const formatDate = (value: Date | string | null) => {
   return Number.isNaN(date.getTime()) ? "Unknown" : dateFormatter.format(date);
 };
 
-const copyText = async (value: string, label: string) => {
-  try {
-    await navigator.clipboard.writeText(value);
-    toast.success(`${label} copied.`);
-  } catch {
-    toast.error("Could not copy to clipboard.");
-  }
-};
+const dnsTableColumns =
+  "grid grid-cols-[3.25rem_minmax(7rem,0.85fr)_minmax(10rem,1.6fr)_4rem_3.25rem_5.25rem] items-center gap-3";
 
-const CopyValue = ({ label, value }: { label: string; value: string }) => (
-  <button
-    className="group min-w-0 rounded-md text-left outline-none squircle focus-visible:ring-2 focus-visible:ring-ring/30"
-    onClick={() => void copyText(value, label)}
-    type="button"
-  >
-    <span className="flex items-center gap-1 text-[0.65rem] font-medium tracking-[0.12em] text-muted-foreground uppercase">
-      {label}
-      <HugeiconsIcon
-        aria-hidden
-        className="size-3 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-        icon={Copy01Icon}
-      />
-    </span>
-    <span className="mt-1 block font-mono text-xs break-all text-foreground">{value}</span>
-  </button>
-);
+const DnsCopyCell = ({ value }: { value: string }) => {
+  const [copied, setCopied] = useState(false);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    },
+    [],
+  );
+
+  return (
+    <button
+      aria-label={copied ? `Copied ${value}` : `Copy ${value}`}
+      className={cn(
+        "max-w-full min-w-0 rounded-md px-1.5 py-0.5 text-left font-mono text-xs outline-none squircle",
+        "transition-[transform,background-color,color] duration-100 ease-out",
+        "hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/30",
+        "active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+        copied ? "bg-success/15 text-success" : "text-foreground",
+      )}
+      onClick={() => {
+        void navigator.clipboard.writeText(value).then(
+          () => {
+            setCopied(true);
+            if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+            resetTimerRef.current = setTimeout(() => setCopied(false), 1100);
+          },
+          () => toast.error("Could not copy to clipboard."),
+        );
+      }}
+      title={copied ? "Copied" : `Copy ${value}`}
+      type="button"
+    >
+      <span className="block truncate">{value}</span>
+    </button>
+  );
+};
 
 const RecordState = ({ message, ok }: { message: string; ok: boolean | null }) => (
   <span
     className={cn(
-      "inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.7rem] font-medium",
+      "inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[0.7rem] font-medium",
       ok === true
-        ? "border-success/30 bg-success/10 text-success"
+        ? "bg-success/15 text-success"
         : ok === false
-          ? "border-destructive/30 bg-destructive/8 text-destructive"
-          : "border-border/70 bg-muted/25 text-muted-foreground",
+          ? "bg-destructive/10 text-destructive"
+          : "bg-muted/40 text-muted-foreground",
     )}
   >
-    {ok === true ? (
-      <HugeiconsIcon aria-hidden className="size-3.5" icon={CheckmarkCircle01Icon} />
-    ) : ok === false ? (
-      <HugeiconsIcon aria-hidden className="size-3.5" icon={CancelCircleIcon} />
-    ) : (
-      <span className="size-1.5 rounded-full bg-current opacity-60" />
-    )}
     {message}
   </span>
 );
@@ -222,33 +218,47 @@ export const DomainDetailView = ({
   }
 
   const dnsChecks = domain.lastCheckResult?.checks.filter((check) => check.recordName) ?? [];
-  const passingRecords = dnsChecks.filter((check) => check.ok).length;
-  const failedRecords = dnsChecks.filter((check) => !check.ok).length;
-  const totalRecords = domain.requiredDnsRecords.length;
-  const status =
-    domain.status === "verified"
+  const requiredDnsRecords = domain.requiredDnsRecords.filter(
+    (record) => record.required && !isOptionalDnsPurpose(record.purpose),
+  );
+  const requiredDnsChecks = dnsChecks.filter((check) =>
+    requiredDnsRecords.some(
+      (record) => record.name === check.recordName && record.purpose === check.purpose,
+    ),
+  );
+  const passingRecords = requiredDnsChecks.filter((check) => check.ok).length;
+  const totalRecords = requiredDnsRecords.length;
+  const remainingRecords = Math.max(0, totalRecords - passingRecords);
+  const isVerified = resolveMailDomainVerified(domain);
+  const sendingChecks =
+    domain.lastCheckResult?.checks.filter((check) => isProviderLagCheck(check.purpose)) ?? [];
+  const verifiedSendingChecks = sendingChecks.filter((check) => check.ok).length;
+  const status = isVerified
+    ? {
+        description:
+          sendingChecks.length > 0 && verifiedSendingChecks === sendingChecks.length
+            ? "Every required check is passing."
+            : "All DNS records are ready. Sending may still catch up for a short while.",
+        label: "Verified",
+        tone: "success" as const,
+      }
+    : passingRecords > 0
       ? {
-          description: "Every required check is passing.",
-          label: "Verified",
-          tone: "success" as const,
+          description: `${passingRecords} of ${totalRecords} DNS records are ready. Fix the remaining ${remainingRecords}.`,
+          label: "Partially verified",
+          tone: "warning" as const,
         }
-      : passingRecords > 0
+      : domain.status === "failed"
         ? {
-            description: `${passingRecords} of ${totalRecords} DNS records are ready. Fix the remaining ${failedRecords || totalRecords - passingRecords}.`,
-            label: "Partially verified",
-            tone: "warning" as const,
+            description: "Required DNS records are missing or incorrect.",
+            label: "Check failed",
+            tone: "error" as const,
           }
-        : domain.status === "failed"
-          ? {
-              description: "Required DNS records are missing or incorrect.",
-              label: "Check failed",
-              tone: "error" as const,
-            }
-          : {
-              description: "Add the required DNS records, then run verification.",
-              label: "Pending DNS",
-              tone: "neutral" as const,
-            };
+        : {
+            description: "Add the required DNS records, then run verification.",
+            label: "Pending DNS",
+            tone: "neutral" as const,
+          };
   const manageReason =
     (billingPending && "Loading billing access…") ||
     (billingAccessUnknown && "Could not load billing access.") ||
@@ -256,11 +266,6 @@ export const DomainDetailView = ({
       `Managing domains requires ${BILLING_FEATURES.organizationDomains.requirementLabel} billing.`) ||
     (!canManageDomains && "Only admins and owners can manage team domains.") ||
     null;
-  const verifiedSendingChecks =
-    domain.lastCheckResult?.checks.filter(
-      (check) =>
-        (check.purpose === "ses_identity" || check.purpose === "ses_mail_from") && check.ok,
-    ).length ?? 0;
 
   return (
     <div className="@container space-y-8">
@@ -386,9 +391,7 @@ export const DomainDetailView = ({
             ["Incoming mail", domain.mode === "send_only" ? "Off" : "Enabled"],
           ].map(([label, value]) => (
             <div className="border-l border-border/70 pl-4" key={label}>
-              <p className="text-[0.68rem] tracking-[0.12em] text-muted-foreground uppercase">
-                {label}
-              </p>
+              <p className="text-xs text-muted-foreground">{label}</p>
               <p className="mt-1 text-sm font-medium text-foreground">{value}</p>
             </div>
           ))}
@@ -399,120 +402,133 @@ export const DomainDetailView = ({
         description="Use one-click setup when your provider confirms support, or add every record manually."
         title="DNS setup"
       >
-        <SettingsCard className="@container p-4 @md:p-5">
-          <div className="flex flex-col gap-4 @md:flex-row @md:items-center @md:justify-between">
-            <div>
-              <p className="text-sm font-medium text-foreground">
-                {domainConnectAvailability?.available
-                  ? `Connect with ${domainConnectAvailability.provider.displayName}`
-                  : isDomainConnectPending
-                    ? "Checking your DNS provider…"
-                    : domainConnectAvailability?.providerName
-                      ? `${domainConnectAvailability.providerName} needs manual setup`
-                      : "Manual setup"}
-              </p>
-              <p className="mt-1 max-w-2xl text-xs/5 text-muted-foreground">
-                {domainConnectAvailability?.available
-                  ? "Review and authorize the exact records at your DNS provider. Quieter verifies DNS again when you return."
-                  : "One-click setup is only shown after the provider confirms support for this exact Quieter template."}
-              </p>
-            </div>
-            {domainConnectAvailability?.available &&
-              (manageReason ? (
-                <MutedActionButton
-                  icon={<HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />}
-                  label="Connect DNS"
-                  reason={manageReason}
-                />
-              ) : (
-                <Button
-                  disabled={startDomainConnectMutation.isPending}
-                  onClick={() =>
-                    startDomainConnectMutation.mutate(
-                      { domainId, organizationId: organization.id },
-                      {
-                        onError: (mutationError) =>
-                          toast.error(
-                            mutationError instanceof Error
-                              ? mutationError.message
-                              : "Could not start one-click setup.",
-                          ),
-                      },
-                    )
-                  }
-                  size="sm"
-                >
-                  <HugeiconsIcon
-                    aria-hidden
-                    className={cn("size-4", startDomainConnectMutation.isPending && "animate-spin")}
-                    icon={startDomainConnectMutation.isPending ? Loading03Icon : Globe02Icon}
+        {(domainConnectAvailability?.available || isDomainConnectPending) && (
+          <SettingsCard className="@container p-3.5 @md:px-4">
+            <div className="flex flex-col gap-3 @md:flex-row @md:items-center @md:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">
+                  {domainConnectAvailability?.available
+                    ? `Connect with ${domainConnectAvailability.provider.displayName}`
+                    : "Checking your DNS provider…"}
+                </p>
+                {domainConnectAvailability?.available ? (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Authorize the exact records, then Quieter verifies DNS when you return.
+                  </p>
+                ) : null}
+              </div>
+              {domainConnectAvailability?.available &&
+                (manageReason ? (
+                  <MutedActionButton
+                    icon={<HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />}
+                    label="Connect DNS"
+                    reason={manageReason}
                   />
-                  Connect DNS
-                </Button>
-              ))}
-          </div>
-        </SettingsCard>
+                ) : (
+                  <Button
+                    disabled={startDomainConnectMutation.isPending}
+                    onClick={() =>
+                      startDomainConnectMutation.mutate(
+                        { domainId, organizationId: organization.id },
+                        {
+                          onError: (mutationError) =>
+                            toast.error(
+                              mutationError instanceof Error
+                                ? mutationError.message
+                                : "Could not start one-click setup.",
+                            ),
+                        },
+                      )
+                    }
+                    size="sm"
+                  >
+                    <HugeiconsIcon
+                      aria-hidden
+                      className={cn(
+                        "size-4",
+                        startDomainConnectMutation.isPending && "animate-spin",
+                      )}
+                      icon={startDomainConnectMutation.isPending ? Loading03Icon : Globe02Icon}
+                    />
+                    Connect DNS
+                  </Button>
+                ))}
+            </div>
+          </SettingsCard>
+        )}
 
         <div
-          aria-label="Required DNS records"
-          className="@container overflow-hidden rounded-lg border border-border/70 bg-background/58 squircle"
+          aria-label="DNS records"
+          className="overflow-x-auto rounded-lg border border-border/70 bg-background/58 squircle"
           role="table"
         >
-          <div
-            className="hidden grid-cols-[minmax(8rem,0.8fr)_minmax(9rem,1.1fr)_minmax(12rem,1.8fr)_6rem_7rem] gap-4 border-b border-border/70 bg-muted/20 px-5 py-2.5 text-[0.65rem] font-medium tracking-[0.12em] text-muted-foreground uppercase @3xl:grid"
-            role="row"
-          >
-            <span role="columnheader">Record</span>
-            <span role="columnheader">Host</span>
-            <span role="columnheader">Value</span>
-            <span role="columnheader">Priority</span>
-            <span role="columnheader">State</span>
+          <div className="min-w-160 p-2">
+            <div
+              className={cn(
+                dnsTableColumns,
+                "rounded-md bg-muted/35 px-3 py-1.5 text-xs font-medium text-muted-foreground",
+              )}
+              role="row"
+            >
+              <span role="columnheader">Type</span>
+              <span role="columnheader">Host</span>
+              <span role="columnheader">Value</span>
+              <span role="columnheader">Priority</span>
+              <span role="columnheader">TTL</span>
+              <span role="columnheader">Status</span>
+            </div>
+            {domain.requiredDnsRecords.map((record) => {
+              const check = dnsChecks.find(
+                (candidate) =>
+                  candidate.recordName === record.name && candidate.purpose === record.purpose,
+              );
+              const priority = record.priority == null ? null : String(record.priority);
+              return (
+                <div
+                  className={cn(
+                    dnsTableColumns,
+                    "border-b border-border/50 px-3 py-1.5 last:border-b-0",
+                  )}
+                  key={`${record.type}:${record.name}:${record.value}`}
+                  role="row"
+                >
+                  <div className="min-w-0" role="cell">
+                    <DnsCopyCell value={record.type} />
+                  </div>
+                  <div className="min-w-0" role="cell">
+                    <DnsCopyCell value={record.name} />
+                  </div>
+                  <div className="min-w-0" role="cell">
+                    <DnsCopyCell value={record.value} />
+                  </div>
+                  <div className="min-w-0" role="cell">
+                    {priority ? (
+                      <DnsCopyCell value={priority} />
+                    ) : (
+                      <span className="px-1.5 font-mono text-xs text-muted-foreground">-</span>
+                    )}
+                  </div>
+                  <div className="min-w-0 px-1.5 text-xs text-foreground" role="cell">
+                    Auto
+                  </div>
+                  <div role="cell">
+                    <RecordState
+                      message={
+                        check?.ok
+                          ? "Verified"
+                          : record.required
+                            ? check
+                              ? "Fix"
+                              : "Pending"
+                            : "Recommended"
+                      }
+                      ok={check?.ok ? true : record.required ? (check?.ok ?? null) : null}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          {domain.requiredDnsRecords.map((record) => {
-            const check = dnsChecks.find(
-              (candidate) =>
-                candidate.recordName === record.name && candidate.purpose === record.purpose,
-            );
-            return (
-              <div
-                className={cn(
-                  "@container grid gap-4 border-b border-border/70 p-4 last:border-b-0 @md:px-5",
-                  "@3xl:grid-cols-[minmax(8rem,0.8fr)_minmax(9rem,1.1fr)_minmax(12rem,1.8fr)_6rem_7rem] @3xl:items-center",
-                )}
-                key={`${record.type}:${record.name}:${record.value}`}
-                role="row"
-              >
-                <div role="cell">
-                  <p className="text-sm font-medium text-foreground">
-                    {dnsRecordCopy[record.purpose].label}
-                  </p>
-                  <p className="mt-1 text-xs/5 text-muted-foreground">
-                    {record.type} — {dnsRecordCopy[record.purpose].description}
-                  </p>
-                </div>
-                <div role="cell">
-                  <CopyValue label="Host" value={record.name} />
-                </div>
-                <div role="cell">
-                  <CopyValue label="Value" value={record.value} />
-                </div>
-                <div role="cell">
-                  <span className="text-[0.65rem] font-medium tracking-[0.12em] text-muted-foreground uppercase @3xl:hidden">
-                    Priority
-                  </span>
-                  <p className="mt-1 font-mono text-xs text-foreground @3xl:mt-0">
-                    {record.priority ?? "—"}
-                  </p>
-                </div>
-                <div role="cell">
-                  <RecordState
-                    message={check ? (check.ok ? "Verified" : "Fix record") : "Pending"}
-                    ok={check?.ok ?? null}
-                  />
-                </div>
-              </div>
-            );
-          })}
         </div>
       </SettingsSection>
 
@@ -598,22 +614,51 @@ export const DomainDetailView = ({
       >
         <SettingsCard>
           <SettingsInsetRows>
-            {[
-              ["DKIM signing", "dkim"],
-              ["SPF authorization", "mail_from_spf"],
-              ["DMARC policy", "dmarc"],
-            ].map(([label, purpose]) => {
-              const checks = dnsChecks.filter((check) => check.purpose === purpose);
+            {(
+              [
+                {
+                  label: "DKIM signing",
+                  purpose: "dkim",
+                  required: true,
+                },
+                {
+                  label: "SPF authorization",
+                  purpose: "mail_from_spf",
+                  required: true,
+                },
+                {
+                  label: "DMARC policy",
+                  purpose: "dmarc",
+                  required: false,
+                },
+              ] as const
+            ).map((item) => {
+              const checks = dnsChecks.filter((check) => check.purpose === item.purpose);
               const ready = checks.length > 0 && checks.every((check) => check.ok);
               return (
                 <div
                   className={cn("flex items-center justify-between gap-4", settingsRowPaddingClass)}
-                  key={purpose}
+                  key={item.purpose}
                 >
-                  <span className="text-sm text-foreground">{label}</span>
+                  <div>
+                    <span className="text-sm text-foreground">{item.label}</span>
+                    {item.required ? null : (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Recommended. Any valid policy works; quarantine is preferred.
+                      </p>
+                    )}
+                  </div>
                   <RecordState
-                    message={ready ? "Ready" : checks.length > 0 ? "Needs attention" : "Pending"}
-                    ok={checks.length > 0 ? ready : null}
+                    message={
+                      ready
+                        ? "Ready"
+                        : item.required
+                          ? checks.length > 0
+                            ? "Needs attention"
+                            : "Pending"
+                          : "Recommended"
+                    }
+                    ok={ready ? true : item.required ? (checks.length > 0 ? false : null) : null}
                   />
                 </div>
               );

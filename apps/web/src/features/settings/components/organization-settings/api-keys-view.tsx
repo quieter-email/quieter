@@ -2,10 +2,10 @@
 
 import {
   Add01Icon,
-  Calendar03Icon,
   Delete02Icon,
   Key02Icon,
   Loading03Icon,
+  Refresh01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
@@ -33,6 +33,7 @@ import {
   DialogTitle,
 } from "@quieter/ui/dialog";
 import { FieldLabel } from "@quieter/ui/field";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import {
   Select,
   SelectContent,
@@ -50,7 +51,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
-import { SettingsBackButton, settingsRowPaddingClass, SettingsListRow } from "../settings-layout";
+import {
+  SettingsBackButton,
+  SettingsRow,
+  SettingsRows,
+  settingsRowPaddingClass,
+} from "../settings-layout";
 import { getOrganizationApiKeysQueryKey, organizationApiKeysQueryOptions } from "./api-keys";
 import { formatCount, type FullOrganization } from "./domain";
 import { MutedActionButton } from "./settings-row";
@@ -65,6 +71,8 @@ type OrganizationApiKey = {
   prefix: string | null;
   start: string | null;
 };
+
+const DEFAULT_API_KEY_PREFIX = "quieter_";
 
 const expirationOptions = [
   { label: "1 week", value: "one_week", seconds: 60 * 60 * 24 * 7 },
@@ -89,6 +97,31 @@ const formatApiKeyDate = (value: Date | string | null) => {
   return Number.isNaN(date.getTime()) ? "Unknown" : dateFormatter.format(date);
 };
 
+const formatApiKeyPreview = (apiKey: OrganizationApiKey) => {
+  const prefix = apiKey.prefix?.trim() || DEFAULT_API_KEY_PREFIX;
+
+  if (apiKey.start && apiKey.start.startsWith(prefix)) {
+    return `${apiKey.start}…`;
+  }
+
+  return `${prefix}…`;
+};
+
+const formatApiKeyMeta = (apiKey: OrganizationApiKey) =>
+  `Expires ${formatApiKeyDate(apiKey.expiresAt)}, last used ${formatApiKeyDate(apiKey.lastRequest)}`;
+
+const IMMEDIATE_EXPIRES_IN_SECONDS = 1;
+
+const remainingExpiresInSeconds = (expiresAt: Date | string | null) => {
+  if (!expiresAt) return null;
+
+  const date = expiresAt instanceof Date ? expiresAt : new Date(expiresAt);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const seconds = Math.floor((date.getTime() - Date.now()) / 1000);
+  return seconds > 0 ? seconds : IMMEDIATE_EXPIRES_IN_SECONDS;
+};
+
 const copyText = async (value: string) => {
   try {
     await navigator.clipboard.writeText(value);
@@ -97,6 +130,42 @@ const copyText = async (value: string) => {
     toast.error("Could not copy to clipboard.");
   }
 };
+
+const CreatedApiKeyReveal = ({
+  createdKey,
+  onClose,
+  title,
+}: {
+  createdKey: string;
+  onClose: () => void;
+  title: string;
+}) => (
+  <>
+    <DialogHeader>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogDescription>
+        The full key is shown once. Store it before closing this dialog.
+      </DialogDescription>
+    </DialogHeader>
+
+    <DialogBody className="space-y-3">
+      <button
+        className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-xs break-all text-foreground outline-none squircle hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring/30"
+        onClick={() => void copyText(createdKey)}
+        type="button"
+      >
+        {createdKey}
+      </button>
+      <p className="text-sm text-muted-foreground">Click the key to copy it.</p>
+    </DialogBody>
+
+    <DialogFooter>
+      <Button onClick={onClose} size="sm">
+        Done
+      </Button>
+    </DialogFooter>
+  </>
+);
 
 const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
   const [open, setOpen] = useState(false);
@@ -108,14 +177,13 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
       expiresIn: number | null;
       name: string;
       organizationId: string;
-      prefix: string;
     }) => {
       const response = await authClient.apiKey.create({
         configId: ORGANIZATION_API_KEY_CONFIG_ID,
         expiresIn: input.expiresIn,
         name: input.name,
         organizationId: input.organizationId,
-        prefix: input.prefix,
+        prefix: DEFAULT_API_KEY_PREFIX,
       });
 
       if (response.error) {
@@ -140,7 +208,6 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
     defaultValues: {
       expiration: "one_month" as ExpirationValue,
       name: "",
-      prefix: "quieter_",
     },
     onSubmit: async ({ value }) => {
       setSubmitError(null);
@@ -151,7 +218,6 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
           expiresIn: expiration?.seconds ?? null,
           name: value.name.trim(),
           organizationId,
-          prefix: value.prefix.trim(),
         });
       } catch (mutationError) {
         setSubmitError(
@@ -164,12 +230,6 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
       onDynamic: z.object({
         expiration: z.enum(expirationOptions.map((option) => option.value)),
         name: z.string().trim().min(1, "Name is required.").max(64, "Name is too long."),
-        prefix: z
-          .string()
-          .trim()
-          .min(1, "Prefix is required.")
-          .max(32, "Prefix is too long.")
-          .regex(/^[a-zA-Z0-9_-]+$/, "Use letters, numbers, underscores, or hyphens."),
       }),
     },
   });
@@ -179,7 +239,6 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
     form.reset({
       expiration: "one_month",
       name: "",
-      prefix: "quieter_",
     });
   };
 
@@ -204,36 +263,28 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
         open={open}
       >
         <DialogContent className="w-[min(92vw,34rem)]">
-          <DialogHeader>
-            <DialogTitle>Create API key</DialogTitle>
-            <DialogDescription>
-              The full key is shown once. Store it before closing this dialog.
-            </DialogDescription>
-          </DialogHeader>
-
           {createdKey ? (
-            <>
-              <DialogBody className="space-y-3">
-                <button
-                  className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-xs break-all text-foreground outline-none squircle hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring/30"
-                  onClick={() => void copyText(createdKey)}
-                  type="button"
-                >
-                  {createdKey}
-                </button>
-                <p className="text-sm text-muted-foreground">Click the key to copy it.</p>
-              </DialogBody>
-
-              <DialogFooter>
-                <DialogCloseButton>Close</DialogCloseButton>
-              </DialogFooter>
-            </>
+            <CreatedApiKeyReveal
+              createdKey={createdKey}
+              onClose={() => {
+                setOpen(false);
+                resetDialog();
+              }}
+              title="API key created"
+            />
           ) : (
             <form
               action={async () => {
                 await form.handleSubmit();
               }}
             >
+              <DialogHeader>
+                <DialogTitle>Create API key</DialogTitle>
+                <DialogDescription>
+                  The full key is shown once. Store it before closing this dialog.
+                </DialogDescription>
+              </DialogHeader>
+
               <DialogBody className="space-y-4">
                 <form.Field name="name">
                   {(field) => (
@@ -248,30 +299,6 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
                           field.handleChange(event.target.value);
                         }}
                         placeholder="Production"
-                        value={field.state.value}
-                      />
-                      {field.state.meta.errors.map((error) => (
-                        <p className="text-sm text-destructive" key={error?.message}>
-                          {error?.message}
-                        </p>
-                      ))}
-                    </TextField>
-                  )}
-                </form.Field>
-
-                <form.Field name="prefix">
-                  {(field) => (
-                    <TextField>
-                      <FieldLabel>Prefix</FieldLabel>
-                      <TextFieldInput
-                        aria-invalid={field.state.meta.errors.length > 0}
-                        name={field.name}
-                        onBlur={() => field.handleBlur()}
-                        onChange={(event) => {
-                          setSubmitError(null);
-                          field.handleChange(event.target.value);
-                        }}
-                        placeholder="quieter_"
                         value={field.state.value}
                       />
                       {field.state.meta.errors.map((error) => (
@@ -349,6 +376,166 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
   );
 };
 
+const ResetApiKeyDialog = ({
+  apiKey,
+  organizationId,
+}: {
+  apiKey: OrganizationApiKey;
+  organizationId: string;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [createdKey, setCreatedKey] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      const createResponse = await authClient.apiKey.create({
+        configId: ORGANIZATION_API_KEY_CONFIG_ID,
+        expiresIn: remainingExpiresInSeconds(apiKey.expiresAt),
+        name: apiKey.name?.trim() || "API key",
+        organizationId,
+        prefix: apiKey.prefix?.trim() || DEFAULT_API_KEY_PREFIX,
+      });
+
+      if (createResponse.error) {
+        throw new Error(createResponse.error.message ?? "Could not create the replacement key.");
+      }
+
+      if (!createResponse.data?.key) {
+        throw new Error("Could not read the replacement API key.");
+      }
+
+      const deleteResponse = await authClient.apiKey.delete({
+        configId: ORGANIZATION_API_KEY_CONFIG_ID,
+        keyId: apiKey.id,
+      });
+
+      return {
+        cleanupFailed: Boolean(deleteResponse.error),
+        key: createResponse.data.key,
+      };
+    },
+    mutationKey: ["organization-api-keys", organizationId, apiKey.id, "reset"],
+    onSuccess: (data) => {
+      setCreatedKey(data.key);
+      if (data.cleanupFailed) {
+        toast.warning(
+          "Created a new key, but could not remove the previous one. Delete the old key manually.",
+        );
+      }
+    },
+    onError: (error) => {
+      void queryClient.invalidateQueries({
+        queryKey: getOrganizationApiKeysQueryKey(organizationId),
+      });
+      toast.error((error as { message?: string })?.message ?? "Could not reset API key.");
+    },
+  });
+  const closeDialog = () => {
+    const shouldRefresh = createdKey !== null;
+    setOpen(false);
+    setCreatedKey(null);
+    if (shouldRefresh) {
+      void queryClient.invalidateQueries({
+        queryKey: getOrganizationApiKeysQueryKey(organizationId),
+      });
+    }
+  };
+
+  return (
+    <AlertDialog
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) {
+          setOpen(true);
+          return;
+        }
+        closeDialog();
+      }}
+      open={open}
+    >
+      <IconButtonTooltip label="Reset key">
+        <Button
+          aria-label="Reset key"
+          disabled={resetMutation.isPending}
+          onClick={() => setOpen(true)}
+          size="icon-sm"
+          type="button"
+          variant="ghost"
+        >
+          <HugeiconsIcon
+            aria-hidden
+            className={cn("size-4", { "animate-spin": resetMutation.isPending })}
+            icon={resetMutation.isPending ? Loading03Icon : Refresh01Icon}
+          />
+        </Button>
+      </IconButtonTooltip>
+
+      <AlertDialogContent>
+        {createdKey ? (
+          <>
+            <AlertDialogHeader>
+              <AlertDialogTitle>API key reset</AlertDialogTitle>
+              <AlertDialogDescription>
+                The previous key no longer works. Store the new key before closing.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+
+            <AlertDialogBody className="space-y-3">
+              <button
+                className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-xs break-all text-foreground outline-none squircle hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring/30"
+                onClick={() => void copyText(createdKey)}
+                type="button"
+              >
+                {createdKey}
+              </button>
+              <p className="text-sm text-muted-foreground">Click the key to copy it.</p>
+            </AlertDialogBody>
+
+            <AlertDialogFooter>
+              <Button onClick={closeDialog} size="sm">
+                Done
+              </Button>
+            </AlertDialogFooter>
+          </>
+        ) : (
+          <>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Reset API key</AlertDialogTitle>
+              <AlertDialogDescription>
+                This replaces {apiKey.name ?? "this key"} with a new secret. The current key stops
+                working immediately.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+
+            <AlertDialogBody>
+              <p className="text-sm text-muted-foreground">
+                Update any integrations that still use the old key.
+              </p>
+            </AlertDialogBody>
+
+            <AlertDialogFooter>
+              <AlertDialogCloseButton disabled={resetMutation.isPending}>
+                Cancel
+              </AlertDialogCloseButton>
+              <Button
+                disabled={resetMutation.isPending}
+                onClick={() => resetMutation.mutate()}
+                size="sm"
+              >
+                {resetMutation.isPending ? (
+                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                ) : (
+                  <HugeiconsIcon aria-hidden className="size-4" icon={Refresh01Icon} />
+                )}
+                Reset
+              </Button>
+            </AlertDialogFooter>
+          </>
+        )}
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+};
+
 const DeleteApiKeyDialog = ({
   apiKey,
   organizationId,
@@ -386,20 +573,31 @@ const DeleteApiKeyDialog = ({
 
   return (
     <AlertDialog onOpenChange={setOpen} open={open}>
-      <Button onClick={() => setOpen(true)} size="sm" variant="outline">
-        {deleteMutation.isPending ? (
-          <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-        ) : (
-          <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
-        )}
-        Remove
-      </Button>
+      <IconButtonTooltip label="Remove key">
+        <Button
+          aria-label="Remove key"
+          disabled={deleteMutation.isPending}
+          onClick={() => setOpen(true)}
+          size="icon-sm"
+          type="button"
+          variant="ghost"
+        >
+          <HugeiconsIcon
+            aria-hidden
+            className={cn("size-4", {
+              "animate-spin": deleteMutation.isPending,
+              "text-destructive": !deleteMutation.isPending,
+            })}
+            icon={deleteMutation.isPending ? Loading03Icon : Delete02Icon}
+          />
+        </Button>
+      </IconButtonTooltip>
 
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Remove API key</AlertDialogTitle>
           <AlertDialogDescription>
-            This immediately disables access for {apiKey.name ?? apiKey.start ?? "this key"}.
+            This immediately disables access for {apiKey.name ?? "this key"}.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -429,46 +627,6 @@ const DeleteApiKeyDialog = ({
     </AlertDialog>
   );
 };
-
-const ApiKeyRow = ({
-  apiKey,
-  canManageApiKeys,
-  organizationId,
-}: {
-  apiKey: OrganizationApiKey;
-  canManageApiKeys: boolean;
-  organizationId: string;
-}) => (
-  <SettingsListRow>
-    <div className="min-w-0">
-      <div className="flex min-w-0 items-center gap-2">
-        <HugeiconsIcon
-          aria-hidden
-          className="size-4 shrink-0 text-muted-foreground"
-          icon={Key02Icon}
-        />
-        <p className="truncate text-sm font-medium text-foreground">{apiKey.name ?? "API key"}</p>
-      </div>
-      <p className="mt-1 font-mono text-xs text-muted-foreground">
-        {apiKey.start ?? `${apiKey.prefix ?? "quieter_"}...`}
-      </p>
-    </div>
-
-    <div className="flex flex-col gap-2 text-sm text-muted-foreground md:items-end">
-      <span className="inline-flex items-center gap-1.5">
-        <HugeiconsIcon aria-hidden className="size-4" icon={Calendar03Icon} />
-        Expires {formatApiKeyDate(apiKey.expiresAt)}
-      </span>
-      <span>Last used {formatApiKeyDate(apiKey.lastRequest)}</span>
-    </div>
-
-    {canManageApiKeys && (
-      <div className="shrink-0">
-        <DeleteApiKeyDialog apiKey={apiKey} organizationId={organizationId} />
-      </div>
-    )}
-  </SettingsListRow>
-);
 
 export const ApiKeysView = ({
   billingAccessUnknown,
@@ -501,10 +659,10 @@ export const ApiKeysView = ({
     null;
 
   return (
-    <div className="space-y-6">
+    <div className="@container space-y-6">
       <SettingsBackButton onClick={onBack}>{organization.name}</SettingsBackButton>
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
         <div>
           <h1 className="text-base font-semibold text-foreground">API keys</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -523,36 +681,46 @@ export const ApiKeysView = ({
         )}
       </div>
 
-      <div>
-        {isApiKeysPending ? (
-          <div
-            className={cn(
-              "flex items-center gap-2 text-sm text-muted-foreground",
-              settingsRowPaddingClass,
-            )}
-          >
-            <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-            Loading API keys…
-          </div>
-        ) : isApiKeysError ? (
-          <p className={cn("text-sm text-destructive", settingsRowPaddingClass)}>
-            {apiKeysError?.message ?? "Could not load API keys."}
-          </p>
-        ) : apiKeys.length > 0 ? (
-          apiKeys.map((apiKey) => (
-            <ApiKeyRow
-              apiKey={apiKey}
-              canManageApiKeys={canManageApiKeys}
+      {isApiKeysPending ? (
+        <div
+          className={cn(
+            "flex items-center gap-2 text-sm text-muted-foreground",
+            settingsRowPaddingClass,
+          )}
+        >
+          <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+          Loading API keys…
+        </div>
+      ) : isApiKeysError ? (
+        <p className={cn("text-sm text-destructive", settingsRowPaddingClass)}>
+          {apiKeysError?.message ?? "Could not load API keys."}
+        </p>
+      ) : apiKeys.length > 0 ? (
+        <SettingsRows>
+          {apiKeys.map((apiKey) => (
+            <SettingsRow
+              action={
+                canManageApiKeys ? (
+                  <div className="flex items-center gap-1">
+                    <ResetApiKeyDialog apiKey={apiKey} organizationId={organization.id} />
+                    <DeleteApiKeyDialog apiKey={apiKey} organizationId={organization.id} />
+                  </div>
+                ) : undefined
+              }
+              icon={<HugeiconsIcon aria-hidden icon={Key02Icon} />}
               key={apiKey.id}
-              organizationId={organization.id}
-            />
-          ))
-        ) : (
-          <p className={cn("text-center text-sm text-muted-foreground", settingsRowPaddingClass)}>
-            No API keys.
-          </p>
-        )}
-      </div>
+              title={apiKey.name ?? "API key"}
+            >
+              <span className="font-mono">{formatApiKeyPreview(apiKey)}</span>
+              {`. ${formatApiKeyMeta(apiKey)}`}
+            </SettingsRow>
+          ))}
+        </SettingsRows>
+      ) : (
+        <p className={cn("text-center text-sm text-muted-foreground", settingsRowPaddingClass)}>
+          No API keys.
+        </p>
+      )}
     </div>
   );
 };

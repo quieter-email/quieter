@@ -26,7 +26,10 @@ import {
   getOrganizationApiKeysQueryKey,
   organizationApiKeysQueryOptions,
 } from "~/features/settings/components/organization-settings/api-keys";
-import { organizationMailDomainsQueryOptions } from "~/features/settings/components/organization-settings/mail-domains";
+import {
+  organizationMailDomainsQueryOptions,
+  resolveMailDomainVerified,
+} from "~/features/settings/components/organization-settings/mail-domains";
 import { RegisterDomainDialog } from "~/features/settings/components/organization-settings/register-domain-dialog";
 import {
   getTeamBilling,
@@ -95,7 +98,7 @@ export const FirstRunManagedMailSetup = ({
     enabled: organizationId.length > 0 && hasManagedAccess,
   });
   const verifiedDomains = (domainsData?.domains ?? []).filter(
-    (domain) => domain.status === "verified" && domain.mode === "send_and_receive",
+    (domain) => resolveMailDomainVerified(domain) && domain.mode === "send_and_receive",
   );
   const [selectedDomain, setSelectedDomain] = useState<string | undefined>(undefined);
   const domain = selectedDomain ?? verifiedDomains[0]?.domain ?? "";

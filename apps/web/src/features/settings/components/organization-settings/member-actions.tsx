@@ -14,7 +14,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { authClient } from "~/lib/auth";
-import { settingsInsetRowClass, settingsRowPaddingClass } from "../settings-layout";
+import {
+  settingsInsetDividerClass,
+  settingsInsetRowClass,
+  settingsRowPaddingClass,
+} from "../settings-layout";
 import {
   type OrganizationMember,
   type OrganizationRoleOption,
@@ -104,12 +108,12 @@ export const MemberActions = ({
 
   return (
     <div className="space-y-1">
-      <div className={cn(settingsInsetRowClass, "gap-3")}>
+      <div className={cn(settingsInsetRowClass, settingsInsetDividerClass, "gap-3")}>
         <div className="min-w-0 flex-1 text-left">
           <p className="truncate text-sm font-medium text-foreground">
             {member.user.name || member.user.email}
           </p>
-          <p className="mt-1 truncate text-sm text-muted-foreground">{member.user.email}</p>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">{member.user.email}</p>
         </div>
 
         <p className="shrink-0 text-sm text-muted-foreground">

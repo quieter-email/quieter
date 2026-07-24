@@ -13,7 +13,11 @@ export const MAIL_DOMAIN_STATUS_VERIFIED = "verified" satisfies MailDomainStatus
 const MAIL_DOMAIN_STATUS_FAILED = "failed" satisfies MailDomainStatus;
 const MAIL_FROM_PREFIX = "bounce";
 const OWNERSHIP_RECORD_PREFIX = "quieter-domain-verification=";
-export const DMARC_RECORD_PREFIX = "v=DMARC1; p=none";
+export const DMARC_RECORD_PREFIX = "v=DMARC1; p=quarantine";
+
+export const isOptionalMailDomainDnsPurpose = (
+  purpose: MailDomainCheck["purpose"] | MailDomainDnsRecord["purpose"],
+) => purpose === "dmarc";
 
 export const normalizeMailDomain = (input: string) => {
   const trimmed = input.trim();
@@ -98,12 +102,23 @@ export const createMailDomainDnsRecords = (input: {
     {
       name: `_dmarc.${input.domain}`,
       purpose: "dmarc",
-      required: true,
+      required: false,
       type: "TXT",
       value: DMARC_RECORD_PREFIX,
     },
   ];
 };
+
+export const normalizeMailDomainDnsRecords = (records: MailDomainDnsRecord[]) =>
+  records.map((record) =>
+    record.purpose === "dmarc"
+      ? {
+          ...record,
+          required: false,
+          value: DMARC_RECORD_PREFIX,
+        }
+      : record,
+  );
 
 export const createMailDomainOwnershipToken = () => randomBytes(24).toString("base64url");
 
@@ -115,5 +130,15 @@ export const getMailDomainOwnershipToken = (records: MailDomainDnsRecord[]) => {
   return record?.value.slice(OWNERSHIP_RECORD_PREFIX.length) ?? null;
 };
 
-export const aggregateMailDomainStatus = (checks: MailDomainCheck[]): MailDomainStatus =>
-  checks.every((check) => check.ok) ? MAIL_DOMAIN_STATUS_VERIFIED : MAIL_DOMAIN_STATUS_FAILED;
+const isProviderLagCheck = (check: MailDomainCheck) =>
+  check.purpose === "ses_identity" || check.purpose === "ses_mail_from";
+
+/** Domain verification is required DNS (+ inbound routing). DMARC is recommended; provider sending can lag. */
+export const aggregateMailDomainStatus = (checks: MailDomainCheck[]): MailDomainStatus => {
+  const requiredChecks = checks.filter(
+    (check) => !isProviderLagCheck(check) && !isOptionalMailDomainDnsPurpose(check.purpose),
+  );
+  return requiredChecks.length > 0 && requiredChecks.every((check) => check.ok)
+    ? MAIL_DOMAIN_STATUS_VERIFIED
+    : MAIL_DOMAIN_STATUS_FAILED;
+};

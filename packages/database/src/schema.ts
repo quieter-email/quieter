@@ -113,7 +113,7 @@ export type MailDomainDnsRecord = {
   name: string;
   priority?: number;
   purpose: "dkim" | "dmarc" | "inbound_mx" | "mail_from_mx" | "mail_from_spf" | "ownership";
-  required: true;
+  required: boolean;
   type: "CNAME" | "MX" | "TXT";
   value: string;
 };
