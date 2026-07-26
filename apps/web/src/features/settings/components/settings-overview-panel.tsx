@@ -39,6 +39,7 @@ type SettingsUser = {
 
 type SettingsOverviewPanelProps = {
   initialUser: SettingsUser;
+  onPrefetchTab: (tab: SettingsTab) => void;
   onSelectTab: (tab: SettingsTab) => void;
 };
 
@@ -58,7 +59,11 @@ const SETTINGS_NAV_ICONS = {
 
 const SETTINGS_SECTIONS: SettingsNavSection[] = ["preferences", "workspace", "personal"];
 
-export const SettingsOverviewPanel = ({ initialUser, onSelectTab }: SettingsOverviewPanelProps) => {
+export const SettingsOverviewPanel = ({
+  initialUser,
+  onPrefetchTab,
+  onSelectTab,
+}: SettingsOverviewPanelProps) => {
   const organizations = authClient.useListOrganizations().data ?? [];
   const { data: connectorsData } = useQuery(connectorsQueryOptions());
   const { data: mailboxesData } = useQuery(mailboxesQueryOptions());
@@ -114,6 +119,7 @@ export const SettingsOverviewPanel = ({ initialUser, onSelectTab }: SettingsOver
                     key={tab}
                     meta={meta ? <span>{meta}</span> : undefined}
                     onClick={() => onSelectTab(tab)}
+                    onIntent={() => onPrefetchTab(tab)}
                     title={title}
                   />
                 );

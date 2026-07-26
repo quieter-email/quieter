@@ -159,6 +159,7 @@ export const userInvitationsQueryOptions = (userId: string, enabled = true) =>
     enabled,
     queryFn: loadUserInvitations,
     queryKey: getUserInvitationsQueryKey(userId),
+    staleTime: 30_000,
   });
 
 const loadFullOrganization = async (organizationId: string): Promise<FullOrganization | null> => {
@@ -179,4 +180,5 @@ export const fullOrganizationQueryOptions = (organizationId: string) =>
   queryOptions({
     queryFn: () => loadFullOrganization(organizationId),
     queryKey: getFullOrganizationQueryKey(organizationId),
+    staleTime: 30_000,
   });

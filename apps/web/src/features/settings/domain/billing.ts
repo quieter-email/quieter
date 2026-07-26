@@ -13,7 +13,7 @@ export const USER_BILLING_QUERY_KEY = ["user-billing"] as const;
 
 export const userBillingQueryOptions = () =>
   queryOptions({
-    queryFn: () => rpc.billing.overview(),
+    queryFn: ({ signal }) => rpc.billing.overview(undefined, { signal }),
     queryKey: USER_BILLING_QUERY_KEY,
     staleTime: 30_000,
   });

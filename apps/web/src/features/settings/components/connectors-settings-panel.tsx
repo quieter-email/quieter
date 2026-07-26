@@ -13,7 +13,13 @@ import {
   type ConnectorProvider,
 } from "~/lib/connectors-query";
 import { orpc } from "~/lib/orpc";
-import { SettingsRow, SettingsRows, SettingsSection } from "./settings-layout";
+import {
+  SettingsErrorState,
+  SettingsLoadingRows,
+  SettingsRow,
+  SettingsRows,
+  SettingsSection,
+} from "./settings-layout";
 
 const getSettingsReturnTo = () => "/settings?tab=connectors";
 
@@ -34,7 +40,7 @@ const connectorIcons = {
 export const ConnectorsSettingsPanel = () => {
   const queryClient = useQueryClient();
   const [startingProvider, setStartingProvider] = useState<ConnectorProvider | null>(null);
-  const { data, isLoading } = useQuery(connectorsQueryOptions());
+  const { data, error, isError, isLoading, refetch } = useQuery(connectorsQueryOptions());
   const disconnectConnectorMutation = useMutation({
     ...orpc.connectors.disconnect.mutationOptions(),
     mutationKey: ["connectors", "disconnect"],
@@ -64,88 +70,88 @@ export const ConnectorsSettingsPanel = () => {
       description="Connect outside services to add mail actions and optional chat capabilities."
       title="Services"
     >
-      <SettingsRows>
-        {isLoading && connectors.length === 0 ? (
-          <SettingsRow
-            icon={<HugeiconsIcon aria-hidden className="animate-spin" icon={Loading03Icon} />}
-            title="Loading connectors"
-          >
-            Checking connected services.
-          </SettingsRow>
-        ) : null}
+      {isError && connectors.length === 0 ? (
+        <SettingsErrorState
+          message={error.message ?? "Could not load connectors."}
+          onRetry={() => void refetch()}
+        />
+      ) : isLoading && connectors.length === 0 ? (
+        <SettingsLoadingRows label="Loading connectors" rows={2} />
+      ) : (
+        <SettingsRows>
+          {connectors.map((connector) => {
+            const isConnected = connector.status === "connected";
+            const needsReconnect = connector.status === "needs_reconnect";
+            const isStarting = startingProvider === connector.provider;
+            const accountSummary = connector.accounts
+              .map((account) => {
+                const workspace = account.providerWorkspaceName
+                  ? `${account.providerWorkspaceName}: `
+                  : "";
+                return `${workspace}${account.accountEmail ?? account.displayName ?? "Connected"}`;
+              })
+              .join(", ");
+            const isDisconnecting =
+              disconnectConnectorMutation.isPending &&
+              disconnectConnectorMutation.variables?.provider === connector.provider;
 
-        {connectors.map((connector) => {
-          const isConnected = connector.status === "connected";
-          const needsReconnect = connector.status === "needs_reconnect";
-          const isStarting = startingProvider === connector.provider;
-          const accountSummary = connector.accounts
-            .map((account) => {
-              const workspace = account.providerWorkspaceName
-                ? `${account.providerWorkspaceName}: `
-                : "";
-              return `${workspace}${account.accountEmail ?? account.displayName ?? "Connected"}`;
-            })
-            .join(", ");
-          const isDisconnecting =
-            disconnectConnectorMutation.isPending &&
-            disconnectConnectorMutation.variables?.provider === connector.provider;
-
-          return (
-            <SettingsRow
-              action={
-                isConnected ? (
-                  <Button
-                    disabled={isDisconnecting}
-                    onClick={() =>
-                      disconnectConnectorMutation.mutate({ provider: connector.provider })
-                    }
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    {isDisconnecting ? (
-                      <HugeiconsIcon
-                        aria-hidden
-                        className="size-4 animate-spin"
-                        icon={Loading03Icon}
-                      />
-                    ) : null}
-                    Disconnect
-                  </Button>
-                ) : (
-                  <Button
-                    disabled={!connector.isConfigured || isStarting}
-                    onClick={() => void startConnection(connector.provider)}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    {isStarting ? (
-                      <HugeiconsIcon
-                        aria-hidden
-                        className="size-4 animate-spin"
-                        icon={Loading03Icon}
-                      />
-                    ) : null}
-                    {needsReconnect ? "Reconnect" : "Connect"}
-                  </Button>
-                )
-              }
-              icon={connectorIcons[connector.provider]}
-              key={connector.provider}
-              title={connector.displayName}
-            >
-              {isConnected
-                ? `Connected${accountSummary ? ` as ${accountSummary}` : ""}.`
-                : needsReconnect
-                  ? "Reconnect this service before using its actions."
-                  : connector.isConfigured
-                    ? connector.description
-                    : "This connector is not available in this environment."}
-            </SettingsRow>
-          );
-        })}
-      </SettingsRows>
+            return (
+              <SettingsRow
+                action={
+                  isConnected ? (
+                    <Button
+                      disabled={isDisconnecting}
+                      onClick={() =>
+                        disconnectConnectorMutation.mutate({ provider: connector.provider })
+                      }
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      {isDisconnecting ? (
+                        <HugeiconsIcon
+                          aria-hidden
+                          className="size-4 animate-spin"
+                          icon={Loading03Icon}
+                        />
+                      ) : null}
+                      Disconnect
+                    </Button>
+                  ) : (
+                    <Button
+                      disabled={!connector.isConfigured || isStarting}
+                      onClick={() => void startConnection(connector.provider)}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      {isStarting ? (
+                        <HugeiconsIcon
+                          aria-hidden
+                          className="size-4 animate-spin"
+                          icon={Loading03Icon}
+                        />
+                      ) : null}
+                      {needsReconnect ? "Reconnect" : "Connect"}
+                    </Button>
+                  )
+                }
+                icon={connectorIcons[connector.provider]}
+                key={connector.provider}
+                title={connector.displayName}
+              >
+                {isConnected
+                  ? `Connected${accountSummary ? ` as ${accountSummary}` : ""}.`
+                  : needsReconnect
+                    ? "Reconnect this service before using its actions."
+                    : connector.isConfigured
+                      ? connector.description
+                      : "This connector is not available in this environment."}
+              </SettingsRow>
+            );
+          })}
+        </SettingsRows>
+      )}
     </SettingsSection>
   );
 };

@@ -230,12 +230,14 @@ export const SettingsNavigationRow = ({
   icon,
   meta,
   onClick,
+  onIntent,
   title,
 }: {
   description: string;
   icon?: ReactNode;
   meta?: ReactNode;
   onClick: () => void;
+  onIntent?: () => void;
   title: string;
 }) => (
   <button
@@ -243,7 +245,12 @@ export const SettingsNavigationRow = ({
       settingsRowShellClass,
       "group text-left transition-colors outline-none squircle hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
     )}
+    onFocus={onIntent}
+    onMouseEnter={onIntent}
     onClick={onClick}
+    onPointerDown={(event) => {
+      if (event.pointerType !== "mouse") onIntent?.();
+    }}
     type="button"
   >
     {icon && (
@@ -262,4 +269,52 @@ export const SettingsNavigationRow = ({
       icon={ArrowRight01Icon}
     />
   </button>
+);
+
+export const SettingsLoadingRows = ({
+  label = "Loading settings",
+  rows = 3,
+}: {
+  label?: string;
+  rows?: number;
+}) => (
+  <output aria-label={label} aria-live="polite" className="block">
+    <SettingsCard>
+      <div className="divide-y divide-border/70">
+        {Array.from({ length: rows }, (_, index) => (
+          <div
+            className={cn(
+              settingsInsetRowClass,
+              "min-h-15 animate-pulse motion-reduce:animate-none",
+            )}
+            key={index}
+          >
+            <span className="size-8 shrink-0 rounded-md bg-muted/45 squircle" />
+            <span className="min-w-0 flex-1 space-y-2">
+              <span className="block h-2.5 w-28 rounded-full bg-muted/65" />
+              <span className="block h-2 w-[min(70%,18rem)] rounded-full bg-muted/35" />
+            </span>
+          </div>
+        ))}
+      </div>
+    </SettingsCard>
+    <span className="sr-only">{label}</span>
+  </output>
+);
+
+export const SettingsErrorState = ({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) => (
+  <SettingsCard className="flex min-h-15 items-center justify-between gap-4 px-4 py-3">
+    <p role="alert" className="text-sm text-destructive">
+      {message}
+    </p>
+    <Button onClick={onRetry} size="sm" type="button" variant="outline">
+      Try again
+    </Button>
+  </SettingsCard>
 );
