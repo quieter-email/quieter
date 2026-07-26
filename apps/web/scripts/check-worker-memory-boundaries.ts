@@ -6,12 +6,24 @@ const assetDirectory = join(serverDirectory, "assets");
 const serverFiles = await readdir(serverDirectory);
 const cloudflareBundle = serverFiles.includes("wrangler.json");
 const maximumChunkBytes = cloudflareBundle ? 1_800_000 : 800_000;
-const boundaries = [
+const boundaries: Array<{
+  forbiddenMarkers?: string[];
+  marker: string;
+  maximumStaticGraphBytes: number;
+}> = [
   {
     marker: "src/features/home/components/home-page.tsx",
     maximumStaticGraphBytes: cloudflareBundle ? 1_200_000 : 1_000_000,
   },
-  { marker: "src/router.tsx", maximumStaticGraphBytes: cloudflareBundle ? 3_000_000 : 1_200_000 },
+  {
+    forbiddenMarkers: [
+      "src/features/settings/components/settings-layout.tsx",
+      "src/features/settings/components/settings-overview-panel.tsx",
+      "src/components/workspace-dither-background.tsx",
+    ],
+    marker: "src/router.tsx",
+    maximumStaticGraphBytes: cloudflareBundle ? 3_000_000 : 1_200_000,
+  },
   {
     marker: "packages/auth/src/session.ts",
     maximumStaticGraphBytes: cloudflareBundle ? 2_700_000 : 1_500_000,
@@ -36,7 +48,7 @@ const sources = new Map<string, string>(
   await Promise.all(files.map(async (file) => [file, await readFile(file, "utf8")] as const)),
 );
 
-for (const { marker, maximumStaticGraphBytes } of boundaries) {
+for (const { forbiddenMarkers = [], marker, maximumStaticGraphBytes } of boundaries) {
   const entry = [...sources].find(([, source]) => source.includes(marker))?.[0];
   if (!entry) throw new Error(`Could not find the Worker memory boundary entry for ${marker}.`);
 
@@ -57,6 +69,15 @@ for (const { marker, maximumStaticGraphBytes } of boundaries) {
     }
   };
   visit(entry);
+
+  for (const forbiddenMarker of forbiddenMarkers) {
+    const dependency = [...reachable].find((file) => sources.get(file)?.includes(forbiddenMarker));
+    if (dependency) {
+      throw new Error(
+        `${marker} eagerly loads forbidden module ${forbiddenMarker} through ${dependency}.`,
+      );
+    }
+  }
 
   const sizes = await Promise.all(
     [...reachable].map(async (file) => ({ bytes: (await stat(file)).size, file })),
