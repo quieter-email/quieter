@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { OrganizationSettingsView } from "~/features/settings/domain/organization-settings-view";
 import { getTeamBilling, userBillingQueryOptions } from "~/features/settings/domain/billing";
-import { SettingsBackButton, SettingsErrorState, SettingsLoadingRows } from "../settings-layout";
+import { SettingsBackButton, SettingsErrorState, SettingsLoadingState } from "../settings-layout";
 import { ApiKeysView } from "./api-keys-view";
 import { DivisionsView } from "./divisions-view";
 import {
@@ -90,7 +90,7 @@ export const OrganizationDetailView = ({
     return (
       <>
         <SettingsBackButton onClick={onBackToList}>Teams</SettingsBackButton>
-        <SettingsLoadingRows label="Loading team" rows={5} />
+        <SettingsLoadingState className="min-h-64" label="Loading team" />
       </>
     );
   }

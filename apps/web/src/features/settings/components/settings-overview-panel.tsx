@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import {
   AiBrain01Icon,
   CodeIcon,
@@ -27,6 +28,7 @@ import { connectorsQueryOptions } from "~/lib/connectors-query";
 import { mailboxesQueryOptions } from "~/lib/mailboxes-query";
 import {
   SettingsNavigationRow,
+  SettingsInlineLoading,
   SettingsPageHeader,
   SettingsRows,
   SettingsSection,
@@ -64,7 +66,8 @@ export const SettingsOverviewPanel = ({
   onPrefetchTab,
   onSelectTab,
 }: SettingsOverviewPanelProps) => {
-  const organizations = authClient.useListOrganizations().data ?? [];
+  const organizationsState = authClient.useListOrganizations();
+  const organizations = organizationsState.data ?? [];
   const { data: connectorsData } = useQuery(connectorsQueryOptions());
   const { data: mailboxesData } = useQuery(mailboxesQueryOptions());
   const mailboxCount =
@@ -76,27 +79,55 @@ export const SettingsOverviewPanel = ({
     email: sessionUser?.email ?? initialUser.email,
     name: sessionUser?.name ?? initialUser.name,
   };
+  const meta: Partial<Record<SettingsTab, ReactNode>> = {
+    account: user.name || <SettingsInlineLoading label="Loading account" />,
+    connectors: connectorsData ? (
+      connectedConnectorCount === 1 ? (
+        "1 Connected"
+      ) : (
+        `${connectedConnectorCount} Connected`
+      )
+    ) : (
+      <SettingsInlineLoading label="Loading connectors" />
+    ),
+    mailboxes: mailboxesData ? (
+      mailboxCount === 1 ? (
+        "1 Mailbox"
+      ) : (
+        `${mailboxCount} Mailboxes`
+      )
+    ) : (
+      <SettingsInlineLoading label="Loading mailboxes" />
+    ),
+    organization: organizationsState.isPending ? (
+      <SettingsInlineLoading label="Loading teams" />
+    ) : organizations.length === 1 ? (
+      "1 Team"
+    ) : (
+      `${organizations.length} Teams`
+    ),
+  };
+
+  return (
+    <SettingsOverviewContent meta={meta} onPrefetchTab={onPrefetchTab} onSelectTab={onSelectTab} />
+  );
+};
+
+export const SettingsOverviewContent = ({
+  disabled = false,
+  meta,
+  onPrefetchTab,
+  onSelectTab,
+}: {
+  disabled?: boolean;
+  meta: Partial<Record<SettingsTab, ReactNode>>;
+  onPrefetchTab?: (tab: SettingsTab) => void;
+  onSelectTab?: (tab: SettingsTab) => void;
+}) => {
   const showDevelopment = isDemoModeAvailable();
   const navItems = SETTINGS_NAV_ITEMS.filter(
     (item) => !("developmentOnly" in item && item.developmentOnly) || showDevelopment,
   );
-
-  const metaForTab = (tab: (typeof SETTINGS_NAV_ITEMS)[number]["tab"]) => {
-    switch (tab) {
-      case "mailboxes":
-        return mailboxCount === 1 ? "1 Mailbox" : `${mailboxCount} Mailboxes`;
-      case "organization":
-        return organizations.length === 1 ? "1 Team" : `${organizations.length} Teams`;
-      case "connectors":
-        return connectedConnectorCount === 1
-          ? "1 Connected"
-          : `${connectedConnectorCount} Connected`;
-      case "account":
-        return user.name;
-      default:
-        return null;
-    }
-  };
 
   return (
     <div className="w-full space-y-8">
@@ -110,16 +141,15 @@ export const SettingsOverviewPanel = ({
           <SettingsSection key={section} title={SETTINGS_SECTION_LABELS[section]}>
             <SettingsRows>
               {items.map(({ tab, title, description }) => {
-                const meta = metaForTab(tab);
-
                 return (
                   <SettingsNavigationRow
                     description={description}
+                    disabled={disabled}
                     icon={<HugeiconsIcon aria-hidden icon={SETTINGS_NAV_ICONS[tab]} />}
                     key={tab}
-                    meta={meta ? <span>{meta}</span> : undefined}
-                    onClick={() => onSelectTab(tab)}
-                    onIntent={() => onPrefetchTab(tab)}
+                    meta={meta[tab] ? <span>{meta[tab]}</span> : undefined}
+                    onClick={() => onSelectTab?.(tab)}
+                    onIntent={onPrefetchTab ? () => onPrefetchTab(tab) : undefined}
                     title={title}
                   />
                 );

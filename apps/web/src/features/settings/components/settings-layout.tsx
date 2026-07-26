@@ -227,6 +227,7 @@ export const SettingsRow = ({
 
 export const SettingsNavigationRow = ({
   description,
+  disabled,
   icon,
   meta,
   onClick,
@@ -234,6 +235,7 @@ export const SettingsNavigationRow = ({
   title,
 }: {
   description: string;
+  disabled?: boolean;
   icon?: ReactNode;
   meta?: ReactNode;
   onClick: () => void;
@@ -244,7 +246,9 @@ export const SettingsNavigationRow = ({
     className={cn(
       settingsRowShellClass,
       "group text-left transition-colors outline-none squircle hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+      { "pointer-events-none": disabled },
     )}
+    disabled={disabled}
     onFocus={onIntent}
     onMouseEnter={onIntent}
     onClick={onClick}
@@ -271,33 +275,32 @@ export const SettingsNavigationRow = ({
   </button>
 );
 
-export const SettingsLoadingRows = ({
+export const SettingsLoadingState = ({
+  className,
   label = "Loading settings",
-  rows = 3,
 }: {
+  className?: string;
   label?: string;
-  rows?: number;
 }) => (
-  <output aria-label={label} aria-live="polite" className="block">
-    <SettingsCard>
-      <div className="divide-y divide-border/70">
-        {Array.from({ length: rows }, (_, index) => (
-          <div
-            className={cn(
-              settingsInsetRowClass,
-              "min-h-15 animate-pulse motion-reduce:animate-none",
-            )}
-            key={index}
-          >
-            <span className="size-8 shrink-0 rounded-md bg-muted/45 squircle" />
-            <span className="min-w-0 flex-1 space-y-2">
-              <span className="block h-2.5 w-28 rounded-full bg-muted/65" />
-              <span className="block h-2 w-[min(70%,18rem)] rounded-full bg-muted/35" />
-            </span>
-          </div>
-        ))}
-      </div>
-    </SettingsCard>
+  <output
+    aria-label={label}
+    aria-live="polite"
+    className={cn("flex min-h-24 items-center justify-center", className)}
+  >
+    <span
+      aria-hidden
+      className="size-1.5 animate-pulse rounded-full bg-muted-foreground/55 motion-reduce:animate-none"
+    />
+    <span className="sr-only">{label}</span>
+  </output>
+);
+
+export const SettingsInlineLoading = ({ label }: { label: string }) => (
+  <output aria-label={label} aria-live="polite" className="inline-flex w-12 justify-end">
+    <span
+      aria-hidden
+      className="h-2 w-10 animate-pulse rounded-full bg-muted/65 motion-reduce:animate-none"
+    />
     <span className="sr-only">{label}</span>
   </output>
 );

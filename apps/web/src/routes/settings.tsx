@@ -13,11 +13,20 @@ const SettingsRouteComponent = lazy(() =>
   ),
 );
 
-const SettingsPage = () => (
-  <Suspense fallback={<SettingsLoadingPage />}>
-    <SettingsRouteComponent />
-  </Suspense>
-);
+const SettingsPage = () => {
+  const { tab } = Route.useSearch();
+
+  return (
+    <Suspense fallback={<SettingsLoadingPage tab={tab} />}>
+      <SettingsRouteComponent />
+    </Suspense>
+  );
+};
+
+const SettingsPendingPage = () => {
+  const { tab } = Route.useSearch();
+  return <SettingsLoadingPage tab={tab} />;
+};
 
 export const Route = createFileRoute("/settings")({
   validateSearch: zodValidator(
@@ -64,6 +73,6 @@ export const Route = createFileRoute("/settings")({
       user,
     };
   },
-  pendingComponent: SettingsLoadingPage,
+  pendingComponent: SettingsPendingPage,
   component: SettingsPage,
 });

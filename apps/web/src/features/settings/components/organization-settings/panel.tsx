@@ -4,7 +4,7 @@ import { TooltipGroup } from "@quieter/ui/tooltip";
 import { useNavigate } from "@tanstack/react-router";
 import { authClient } from "~/lib/auth";
 import { settingsRouteApi } from "~/lib/route-apis";
-import { SettingsBackButton, SettingsLoadingRows } from "../settings-layout";
+import { SettingsBackButton, SettingsLoadingState } from "../settings-layout";
 import { OrganizationDetailView } from "./organization-detail-view";
 import { OrganizationsListView } from "./organizations-list-view";
 
@@ -133,18 +133,21 @@ export const OrganizationSettingsPanel = () => {
   return (
     <TooltipGroup>
       <div className="space-y-6">
-        {organizationsState.isPending || sessionState.isPending ? (
+        {!organizationId ? (
+          <OrganizationsListView
+            error={loadError?.message ?? (loadError ? "Could not load teams." : undefined)}
+            isPending={organizationsState.isPending || sessionState.isPending}
+            onSelectOrganization={navigateToOrganization}
+            organizations={organizations}
+          />
+        ) : organizationsState.isPending || sessionState.isPending ? (
           <>
-            {organizationId ? (
-              <SettingsBackButton onClick={navigateToOrganizationsList}>Teams</SettingsBackButton>
-            ) : null}
-            <SettingsLoadingRows label="Loading teams" rows={3} />
+            <SettingsBackButton onClick={navigateToOrganizationsList}>Teams</SettingsBackButton>
+            <SettingsLoadingState className="min-h-48" label="Loading teams" />
           </>
         ) : loadError ? (
           <>
-            {organizationId ? (
-              <SettingsBackButton onClick={navigateToOrganizationsList}>Teams</SettingsBackButton>
-            ) : null}
+            <SettingsBackButton onClick={navigateToOrganizationsList}>Teams</SettingsBackButton>
             <p className="text-sm text-destructive">
               {loadError.message ?? "Could not load teams."}
             </p>
@@ -166,12 +169,7 @@ export const OrganizationSettingsPanel = () => {
             userId={userId}
             view={organizationView}
           />
-        ) : (
-          <OrganizationsListView
-            onSelectOrganization={navigateToOrganization}
-            organizations={organizations}
-          />
-        )}
+        ) : null}
       </div>
     </TooltipGroup>
   );

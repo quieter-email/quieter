@@ -53,6 +53,7 @@ import { z } from "zod";
 import { authClient } from "~/lib/auth";
 import {
   SettingsBackButton,
+  SettingsLoadingState,
   SettingsRow,
   SettingsRows,
   settingsRowPaddingClass,
@@ -682,15 +683,7 @@ export const ApiKeysView = ({
       </div>
 
       {isApiKeysPending ? (
-        <div
-          className={cn(
-            "flex items-center gap-2 text-sm text-muted-foreground",
-            settingsRowPaddingClass,
-          )}
-        >
-          <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-          Loading API keys…
-        </div>
+        <SettingsLoadingState label="Loading API keys" />
       ) : isApiKeysError ? (
         <p className={cn("text-sm text-destructive", settingsRowPaddingClass)}>
           {apiKeysError?.message ?? "Could not load API keys."}

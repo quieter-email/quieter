@@ -15,7 +15,7 @@ import {
 import { orpc } from "~/lib/orpc";
 import {
   SettingsErrorState,
-  SettingsLoadingRows,
+  SettingsLoadingState,
   SettingsRow,
   SettingsRows,
   SettingsSection,
@@ -27,14 +27,7 @@ const connectorIcons = {
   google_calendar: (
     <img alt="" aria-hidden className="size-4" height={16} src="/google-calendar.svg" width={16} />
   ),
-  linear: (
-    <span
-      aria-hidden
-      className="flex size-4 items-center justify-center rounded-[5px] bg-[#5e6ad2] text-[10px] font-medium text-white"
-    >
-      L
-    </span>
-  ),
+  linear: <img alt="" aria-hidden className="size-4" height={16} src="/linear.svg" width={16} />,
 } as const;
 
 export const ConnectorsSettingsPanel = () => {
@@ -76,7 +69,7 @@ export const ConnectorsSettingsPanel = () => {
           onRetry={() => void refetch()}
         />
       ) : isLoading && connectors.length === 0 ? (
-        <SettingsLoadingRows label="Loading connectors" rows={2} />
+        <SettingsLoadingState label="Loading connectors" />
       ) : (
         <SettingsRows>
           {connectors.map((connector) => {

@@ -26,7 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
-import { useMutation, usePrefetchQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
@@ -49,7 +49,7 @@ import {
   SettingsErrorState,
   SettingsInsetRows,
   SettingsNavigationRow,
-  SettingsLoadingRows,
+  SettingsLoadingState,
   SettingsPageHeader,
   SettingsRow,
   SettingsRows,
@@ -85,19 +85,6 @@ const getProviderLabel = (provider: string) => {
   return "Send-only mailbox";
 };
 
-const ManagedMailboxDetailPrefetch = ({
-  mailboxId,
-  organizationId,
-}: {
-  mailboxId: string;
-  organizationId: string;
-}) => {
-  usePrefetchQuery(fullOrganizationQueryOptions(organizationId));
-  usePrefetchQuery(organizationDivisionsQueryOptions(organizationId));
-  usePrefetchQuery(managedMailboxSettingsQueryOptions(mailboxId));
-  return null;
-};
-
 export const MailboxesSettingsPanel = () => {
   const navigate = useNavigate({ from: "/settings" });
   const { mailboxId } = settingsRouteApi.useSearch();
@@ -126,8 +113,6 @@ export const MailboxesSettingsPanel = () => {
     ? (mailboxes.find((mailbox) => mailbox.id === mailboxId) ?? null)
     : null;
   const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
-  const likelyMailbox =
-    mailboxes.find((mailbox) => mailbox.id === defaultMailboxId) ?? mailboxes[0];
   const selectedManagedOrganizationId = managedOrganizationId || organizations[0]?.id || "";
   const selectedManagedDetailOrganizationId =
     selectedMailbox?.provider === "managed" ? selectedMailbox.organizationId : "";
@@ -179,8 +164,6 @@ export const MailboxesSettingsPanel = () => {
     !!createManagedMember &&
     (hasOrganizationRole(createManagedMember.role, "owner") ||
       hasOrganizationRole(createManagedMember.role, "admin"));
-  const shouldPrefetchLikelyMailbox =
-    !mailboxId && likelyMailbox?.provider === "managed" && likelyMailbox.grantRole === "manager";
 
   const navigateToMailbox = (nextMailboxId: string) => {
     void navigate({
@@ -305,12 +288,6 @@ export const MailboxesSettingsPanel = () => {
   if (!mailboxId) {
     return (
       <div className="space-y-8">
-        {shouldPrefetchLikelyMailbox && likelyMailbox ? (
-          <ManagedMailboxDetailPrefetch
-            mailboxId={likelyMailbox.id}
-            organizationId={likelyMailbox.organizationId}
-          />
-        ) : null}
         <SettingsPageHeader
           action={
             <Button onClick={() => setIsAddMailboxOpen(true)} size="sm" type="button">
@@ -330,7 +307,7 @@ export const MailboxesSettingsPanel = () => {
               onRetry={() => void refetchMailboxes()}
             />
           ) : areMailboxesPending ? (
-            <SettingsLoadingRows label="Loading mailboxes" rows={3} />
+            <SettingsLoadingState label="Loading mailboxes" />
           ) : groups.length > 0 ? (
             <div className="space-y-5">
               {groups.map((group) => (
@@ -594,7 +571,7 @@ export const MailboxesSettingsPanel = () => {
   }
 
   if (areMailboxesPending) {
-    return <SettingsLoadingRows label="Loading mailbox" rows={5} />;
+    return <SettingsLoadingState className="min-h-64" label="Loading mailbox" />;
   }
 
   if (!selectedMailbox) {
@@ -883,9 +860,7 @@ export const MailboxesSettingsPanel = () => {
       {selectedMailbox.provider === "managed" && selectedMailbox.grantRole === "manager" && (
         <>
           {isSelectedManagedMailboxPending ? (
-            <SettingsCard className="p-6 text-sm text-muted-foreground">
-              Loading shared inbox settings…
-            </SettingsCard>
+            <SettingsLoadingState className="min-h-48" label="Loading shared inbox settings" />
           ) : selectedManagedMailboxError || !selectedManagedMailboxDetails ? (
             <SettingsCard className="p-6 text-sm text-destructive">
               {selectedManagedMailboxError?.message ?? "Could not load shared inbox settings."}

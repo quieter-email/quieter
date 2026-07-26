@@ -33,6 +33,7 @@ import {
   SettingsBackButton,
   SettingsCard,
   SettingsInsetRows,
+  SettingsLoadingState,
   SettingsPageHeader,
   settingsRowPaddingClass,
   SettingsSection,
@@ -191,10 +192,7 @@ export const DomainDetailView = ({
     return (
       <>
         <SettingsBackButton onClick={onBack}>Domains</SettingsBackButton>
-        <SettingsCard className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
-          <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-          Loading domain…
-        </SettingsCard>
+        <SettingsLoadingState className="min-h-48" label="Loading domain" />
       </>
     );
   }

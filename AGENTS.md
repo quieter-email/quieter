@@ -55,13 +55,16 @@
 - Validate search params with `validateSearch` + Zod (colocated on the route file; settings tab ids are shared via `apps/web/src/features/settings/domain/settings-tab.ts`).
 - Keep inbox `loaderDeps` limited to `mailboxId`.
 - Keep the Settings shell and overview bundle small. Lazy-load detail panels, and prefetch their
-  named TanStack Query options independently so warming data never eagerly downloads every
-  destination's UI code.
+  code chunks in the background after Settings is entered so the initial app bundle stays small
+  while subsequent Settings navigation is immediate.
 - Use TanStack Query's built-in prefetch hooks and `QueryClient` intent prefetching for Settings
-  data. Do not add effects whose only job is warming queries. Prefetch shared dependencies at the
-  shell, one bounded likely detail from parent lists, and exact permission-aware destinations on
-  hover, focus, or touch/pointer intent.
-- Settings first-load feedback must reserve the content's final footprint in place. Do not reorder
+  data. Do not add effects whose only job is warming queries. Entering Settings should prefetch the
+  complete accessible hierarchy: every main destination, every accessible team and common team
+  child, every accessible mailbox detail, and every mailbox action/detail. Keep exact
+  permission-aware intent prefetching on hover, focus, or touch/pointer intent as a final fallback.
+- Render static Settings structure and copy immediately. Confine loading feedback to the exact data
+  slot that is unavailable. Skeletons are allowed only when the final position and dimensions are
+  known; otherwise use the neutral Settings loading signal in reserved space. Do not reorder
   sections to hide layout shifts, and never replace usable cached data with a blocking loader during
   background refresh.
 - Gmail REST calls run server-side through `packages/gmail`; tokens are decrypted and refreshed through `packages/orpc`.

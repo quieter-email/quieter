@@ -1,20 +1,17 @@
 "use client";
 
-import { usePrefetchQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
-import { userBillingQueryOptions } from "~/features/settings/domain/billing";
 import { isDemoModeAvailable } from "~/features/settings/domain/demo-mode-setting";
 import { SETTINGS_DETAIL_TITLES } from "~/features/settings/domain/settings-navigation";
-import { type SettingsTab } from "~/features/settings/domain/settings-tab";
-import { authClient } from "~/lib/auth";
-import { connectorsQueryOptions } from "~/lib/connectors-query";
-import { mailboxesQueryOptions } from "~/lib/mailboxes-query";
+import { SETTINGS_TABS, type SettingsTab } from "~/features/settings/domain/settings-tab";
 import { settingsRouteApi } from "~/lib/route-apis";
 import { BillingCheckoutResult } from "./billing-checkout-result";
 import { ConnectorConnectionResult } from "./connector-connection-result";
-import { SettingsBackButton, SettingsLoadingRows } from "./settings-layout";
+import { SettingsDataPrefetch } from "./settings-data-prefetch";
+import { SettingsBackButton, SettingsLoadingState } from "./settings-layout";
 import { SettingsOverviewPanel } from "./settings-overview-panel";
 import { prefetchSettingsTab } from "./settings-prefetch";
 
@@ -118,10 +115,6 @@ type SettingsScreenProps = {
 
 export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
   const queryClient = useQueryClient();
-  authClient.useListOrganizations();
-  usePrefetchQuery(mailboxesQueryOptions());
-  usePrefetchQuery(connectorsQueryOptions());
-  usePrefetchQuery(userBillingQueryOptions());
   const navigate = useNavigate({
     from: "/settings",
   });
@@ -156,8 +149,13 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
   };
   const detail = tab === "overview" ? null : SETTINGS_DETAIL_TITLES[tab];
 
+  useEffect(() => {
+    void Promise.all(SETTINGS_TABS.map(preloadSettingsPanel));
+  }, []);
+
   return (
     <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-background-dark text-foreground">
+      <SettingsDataPrefetch />
       <BillingCheckoutResult />
       <ConnectorConnectionResult />
       <WorkspaceDitherBackground />
@@ -191,7 +189,10 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
 
               <Suspense
                 fallback={
-                  <SettingsLoadingRows label={`Loading ${detail?.title ?? "settings"}`} rows={4} />
+                  <SettingsLoadingState
+                    className="min-h-64"
+                    label={`Loading ${detail?.title ?? "settings"}`}
+                  />
                 }
               >
                 {tab === "appearance" && <AppearanceSettingsPanel />}
