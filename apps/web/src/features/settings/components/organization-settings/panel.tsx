@@ -4,7 +4,7 @@ import { TooltipGroup } from "@quieter/ui/tooltip";
 import { useNavigate } from "@tanstack/react-router";
 import { authClient } from "~/lib/auth";
 import { settingsRouteApi } from "~/lib/route-apis";
-import { SettingsBackButton } from "../settings-layout";
+import { SettingsBackButton, SettingsLoadingRows } from "../settings-layout";
 import { OrganizationDetailView } from "./organization-detail-view";
 import { OrganizationsListView } from "./organizations-list-view";
 
@@ -138,7 +138,7 @@ export const OrganizationSettingsPanel = () => {
             {organizationId ? (
               <SettingsBackButton onClick={navigateToOrganizationsList}>Teams</SettingsBackButton>
             ) : null}
-            <p className="text-sm text-muted-foreground">Loading teams…</p>
+            <SettingsLoadingRows label="Loading teams" rows={3} />
           </>
         ) : loadError ? (
           <>

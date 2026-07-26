@@ -1,11 +1,9 @@
 "use client";
 
-import { Loading03Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { useQuery } from "@tanstack/react-query";
 import type { OrganizationSettingsView } from "~/features/settings/domain/organization-settings-view";
 import { getTeamBilling, userBillingQueryOptions } from "~/features/settings/domain/billing";
-import { SettingsBackButton } from "../settings-layout";
+import { SettingsBackButton, SettingsErrorState, SettingsLoadingRows } from "../settings-layout";
 import { ApiKeysView } from "./api-keys-view";
 import { DivisionsView } from "./divisions-view";
 import {
@@ -55,6 +53,7 @@ export const OrganizationDetailView = ({
     error: fullOrganizationError,
     isError: isFullOrganizationError,
     isPending: isFullOrganizationPending,
+    refetch: refetchFullOrganization,
   } = useQuery(fullOrganizationQueryOptions(organization.id));
   const {
     data: billing,
@@ -91,10 +90,7 @@ export const OrganizationDetailView = ({
     return (
       <>
         <SettingsBackButton onClick={onBackToList}>Teams</SettingsBackButton>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-          Loading team…
-        </div>
+        <SettingsLoadingRows label="Loading team" rows={5} />
       </>
     );
   }
@@ -103,9 +99,10 @@ export const OrganizationDetailView = ({
     return (
       <>
         <SettingsBackButton onClick={onBackToList}>Teams</SettingsBackButton>
-        <p className="text-sm text-destructive">
-          {fullOrganizationError.message ?? "Could not load team."}
-        </p>
+        <SettingsErrorState
+          message={fullOrganizationError.message ?? "Could not load team."}
+          onRetry={() => void refetchFullOrganization()}
+        />
       </>
     );
   }

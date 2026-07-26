@@ -4,21 +4,24 @@ import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, usePrefetchQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { authClient } from "~/lib/auth";
 import {
   SettingsCard,
   SettingsNavigationRow,
+  SettingsLoadingRows,
   SettingsRows,
   SettingsSection,
   settingsRowPaddingClass,
 } from "../settings-layout";
+import { prefetchOrganizationSettingsDetail } from "../settings-prefetch";
 import {
   type OrganizationSummary,
   type UserInvitation,
   formatDate,
   formatRoleLabel,
+  fullOrganizationQueryOptions,
   getUserInvitationsQueryKey,
   userInvitationsQueryOptions,
 } from "./domain";
@@ -93,7 +96,7 @@ const PendingInvitationsSection = () => {
   };
 
   if (areUserInvitationsPending) {
-    return <p className="text-sm text-muted-foreground">Loading invitations…</p>;
+    return <SettingsLoadingRows label="Loading invitations" rows={1} />;
   }
 
   if (userInvitationsError) {
@@ -162,38 +165,56 @@ const PendingInvitationsSection = () => {
   );
 };
 
+const OrganizationDetailPrefetch = ({ organizationId }: { organizationId: string }) => {
+  usePrefetchQuery(fullOrganizationQueryOptions(organizationId));
+  return null;
+};
+
 export const OrganizationsListView = ({
   onSelectOrganization,
   organizations,
 }: {
   onSelectOrganization: (organizationId: string) => void;
   organizations: OrganizationSummary[];
-}) => (
-  <div className="space-y-8">
-    <div className="flex items-center justify-between gap-4">
-      <h1 className="text-sm font-normal text-foreground">Teams</h1>
-      <OrganizationFormDialog />
+}) => {
+  const queryClient = useQueryClient();
+  const likelyOrganizationId = organizations[0]?.id;
+
+  return (
+    <div className="space-y-8">
+      {likelyOrganizationId ? (
+        <OrganizationDetailPrefetch organizationId={likelyOrganizationId} />
+      ) : null}
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-sm font-normal text-foreground">Teams</h1>
+        <OrganizationFormDialog />
+      </div>
+
+      <div className="min-h-15">
+        <PendingInvitationsSection />
+      </div>
+
+      {organizations.length > 0 ? (
+        <SettingsSection title="Your teams">
+          <SettingsRows>
+            {organizations
+              .toSorted((left, right) => left.name.localeCompare(right.name))
+              .map((organization) => (
+                <SettingsNavigationRow
+                  description={organization.slug}
+                  key={organization.id}
+                  onClick={() => onSelectOrganization(organization.id)}
+                  onIntent={() =>
+                    void prefetchOrganizationSettingsDetail(queryClient, organization.id)
+                  }
+                  title={organization.name}
+                />
+              ))}
+          </SettingsRows>
+        </SettingsSection>
+      ) : (
+        <p className="text-sm text-muted-foreground">No teams yet.</p>
+      )}
     </div>
-
-    <PendingInvitationsSection />
-
-    {organizations.length > 0 ? (
-      <SettingsSection title="Your teams">
-        <SettingsRows>
-          {organizations
-            .toSorted((left, right) => left.name.localeCompare(right.name))
-            .map((organization) => (
-              <SettingsNavigationRow
-                description={organization.slug}
-                key={organization.id}
-                onClick={() => onSelectOrganization(organization.id)}
-                title={organization.name}
-              />
-            ))}
-        </SettingsRows>
-      </SettingsSection>
-    ) : (
-      <p className="text-sm text-muted-foreground">No teams yet.</p>
-    )}
-  </div>
-);
+  );
+};

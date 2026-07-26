@@ -11,17 +11,19 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   formatBillingProduct,
   normalizeBillingProduct,
   type UserBillingOverview,
 } from "~/features/settings/domain/billing";
 import { SettingsBackButton, SettingsNavigationRow, SettingsRows } from "../settings-layout";
+import { prefetchOrganizationDivisions } from "../settings-prefetch";
 import { organizationApiKeysQueryOptions } from "./api-keys";
 import { type FullOrganization, type OrganizationSummary, formatCount } from "./domain";
 import { organizationMailDomainsQueryOptions } from "./mail-domains";
 import { OrganizationFormDialog } from "./organization-form-dialog";
+import { organizationMailUsageQueryOptions } from "./organization-mail-usage-query";
 import { MutedActionButton } from "./settings-row";
 
 const moneyFormatter = new Intl.NumberFormat("en-US", {
@@ -66,6 +68,7 @@ export const OrganizationOverviewView = ({
   pendingInvitationsCount: number;
   fullOrganization: FullOrganization;
 }) => {
+  const queryClient = useQueryClient();
   const {
     data: apiKeys,
     isError: isApiKeysError,
@@ -161,24 +164,40 @@ export const OrganizationOverviewView = ({
           description="Mailbox access groups"
           icon={<HugeiconsIcon aria-hidden icon={LeftToRightListBulletIcon} />}
           onClick={onOpenDivisions}
+          onIntent={() => void prefetchOrganizationDivisions(queryClient, organization.id)}
           title="Divisions"
         />
         <SettingsNavigationRow
           description={domainsSummary}
           icon={<HugeiconsIcon aria-hidden icon={Globe02Icon} />}
           onClick={onOpenDomains}
+          onIntent={() => {
+            if (canUseOrganizationDomains) {
+              void queryClient.prefetchQuery(organizationMailDomainsQueryOptions(organization.id));
+            }
+          }}
           title="Domains"
         />
         <SettingsNavigationRow
           description={apiKeysSummary}
           icon={<HugeiconsIcon aria-hidden icon={Key02Icon} />}
           onClick={onOpenApiKeys}
+          onIntent={() => {
+            if (canUseOrganizationApiKeys) {
+              void queryClient.prefetchQuery(organizationApiKeysQueryOptions(organization.id));
+            }
+          }}
           title="API keys"
         />
         <SettingsNavigationRow
           description={billingSummary}
           icon={<HugeiconsIcon aria-hidden icon={Wallet02Icon} />}
           onClick={onOpenBilling}
+          onIntent={() => {
+            if (canUpdateOrganization && canUseOrganizationDomains) {
+              void queryClient.prefetchQuery(organizationMailUsageQueryOptions(organization.id));
+            }
+          }}
           title="Billing"
         />
         <SettingsNavigationRow

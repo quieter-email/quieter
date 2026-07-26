@@ -37,7 +37,7 @@ import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { z } from "zod";
-import { orpc, rpc } from "~/lib/orpc";
+import { orpc } from "~/lib/orpc";
 import {
   SettingsBackButton,
   SettingsCard,
@@ -48,11 +48,12 @@ import {
   settingsInsetRowClass,
   settingsRowPaddingClass,
 } from "../settings-layout";
+import {
+  getOrganizationDivisionsQueryKey,
+  organizationDivisionsQueryOptions,
+} from "./divisions-query";
 import { formatCount, type FullOrganization, type OrganizationMember } from "./domain";
 import { SettingsRow } from "./settings-row";
-
-const getOrganizationDivisionsQueryKey = (organizationId: string) =>
-  ["organization", organizationId, "divisions"] as const;
 
 const getMutationErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
@@ -560,11 +561,7 @@ export const DivisionsView = ({
     error: divisionsError,
     isError: isDivisionsError,
     isPending: isDivisionsPending,
-  } = useQuery({
-    queryKey: getOrganizationDivisionsQueryKey(organization.id),
-    queryFn: ({ signal }) =>
-      rpc.organization.listDivisions({ organizationId: organization.id }, { signal }),
-  });
+  } = useQuery(organizationDivisionsQueryOptions(organization.id));
   const divisions = divisionsData?.divisions ?? [];
   const selectedDivision = divisions.find((division) => division.id === selectedDivisionId) ?? null;
 

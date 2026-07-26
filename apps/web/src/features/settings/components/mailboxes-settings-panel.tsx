@@ -26,13 +26,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, usePrefetchQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   MailboxAccessPill,
   type MailboxGrantRole,
 } from "~/features/mailbox/components/mailbox-access-pill";
+import { managedMailboxSettingsQueryOptions } from "~/features/settings/components/managed-mailbox-settings-query";
+import { organizationDivisionsQueryOptions } from "~/features/settings/components/organization-settings/divisions-query";
 import {
   fullOrganizationQueryOptions,
   hasOrganizationRole,
@@ -44,13 +46,16 @@ import {
 import {
   settingsInsetRowClass,
   SettingsCard,
+  SettingsErrorState,
   SettingsInsetRows,
   SettingsNavigationRow,
+  SettingsLoadingRows,
   SettingsPageHeader,
   SettingsRow,
   SettingsRows,
   SettingsSection,
 } from "~/features/settings/components/settings-layout";
+import { prefetchMailboxSettingsDetail } from "~/features/settings/components/settings-prefetch";
 import {
   hasOrganizationAiAccess,
   userBillingQueryOptions,
@@ -58,7 +63,7 @@ import {
 import { authClient } from "~/lib/auth";
 import { openGoogleAccountLink } from "~/lib/google-account-link";
 import { getMailboxesQueryKey, mailboxesQueryOptions } from "~/lib/mailboxes-query";
-import { orpc, rpc } from "~/lib/orpc";
+import { orpc } from "~/lib/orpc";
 import { settingsRouteApi } from "~/lib/route-apis";
 
 const getSettingsReturnTo = (mailboxId?: string) =>
@@ -80,6 +85,19 @@ const getProviderLabel = (provider: string) => {
   return "Send-only mailbox";
 };
 
+const ManagedMailboxDetailPrefetch = ({
+  mailboxId,
+  organizationId,
+}: {
+  mailboxId: string;
+  organizationId: string;
+}) => {
+  usePrefetchQuery(fullOrganizationQueryOptions(organizationId));
+  usePrefetchQuery(organizationDivisionsQueryOptions(organizationId));
+  usePrefetchQuery(managedMailboxSettingsQueryOptions(mailboxId));
+  return null;
+};
+
 export const MailboxesSettingsPanel = () => {
   const navigate = useNavigate({ from: "/settings" });
   const { mailboxId } = settingsRouteApi.useSearch();
@@ -99,6 +117,7 @@ export const MailboxesSettingsPanel = () => {
     error: mailboxesError,
     isError: isMailboxesError,
     isPending: areMailboxesPending,
+    refetch: refetchMailboxes,
   } = useQuery(mailboxesQueryOptions());
   const { data: billing, isSuccess: isBillingSuccess } = useQuery(userBillingQueryOptions());
   const groups = mailboxesData?.groups ?? [];
@@ -107,6 +126,8 @@ export const MailboxesSettingsPanel = () => {
     ? (mailboxes.find((mailbox) => mailbox.id === mailboxId) ?? null)
     : null;
   const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
+  const likelyMailbox =
+    mailboxes.find((mailbox) => mailbox.id === defaultMailboxId) ?? mailboxes[0];
   const selectedManagedOrganizationId = managedOrganizationId || organizations[0]?.id || "";
   const selectedManagedDetailOrganizationId =
     selectedMailbox?.provider === "managed" ? selectedMailbox.organizationId : "";
@@ -127,9 +148,7 @@ export const MailboxesSettingsPanel = () => {
       enabled: isAddMailboxOpen && selectedManagedOrganizationId.length > 0,
     });
   const { data: managedDivisionsData } = useQuery({
-    queryKey: ["organization", selectedManagedOrganizationId, "divisions"],
-    queryFn: ({ signal }) =>
-      rpc.organization.listDivisions({ organizationId: selectedManagedOrganizationId }, { signal }),
+    ...organizationDivisionsQueryOptions(selectedManagedOrganizationId),
     enabled: isAddMailboxOpen && selectedManagedOrganizationId.length > 0,
   });
   const { data: detailManagedOrganization } = useQuery({
@@ -137,12 +156,7 @@ export const MailboxesSettingsPanel = () => {
     enabled: selectedMailbox?.provider === "managed" && selectedMailbox.grantRole === "manager",
   });
   const { data: detailManagedDivisionsData } = useQuery({
-    queryKey: ["organization", selectedManagedDetailOrganizationId, "divisions"],
-    queryFn: ({ signal }) =>
-      rpc.organization.listDivisions(
-        { organizationId: selectedManagedDetailOrganizationId },
-        { signal },
-      ),
+    ...organizationDivisionsQueryOptions(selectedManagedDetailOrganizationId),
     enabled: selectedMailbox?.provider === "managed" && selectedMailbox.grantRole === "manager",
   });
   const {
@@ -150,9 +164,7 @@ export const MailboxesSettingsPanel = () => {
     error: selectedManagedMailboxError,
     isPending: isSelectedManagedMailboxPending,
   } = useQuery({
-    queryKey: ["mail", "managed-mailbox-details", selectedMailbox?.id],
-    queryFn: ({ signal }) =>
-      rpc.mail.getManagedMailboxDetails({ mailboxId: selectedMailbox?.id ?? "" }, { signal }),
+    ...managedMailboxSettingsQueryOptions(selectedMailbox?.id ?? ""),
     enabled: selectedMailbox?.provider === "managed" && selectedMailbox.grantRole === "manager",
   });
   const verifiedDomains = (managedDomainsData?.domains ?? []).filter(
@@ -167,6 +179,8 @@ export const MailboxesSettingsPanel = () => {
     !!createManagedMember &&
     (hasOrganizationRole(createManagedMember.role, "owner") ||
       hasOrganizationRole(createManagedMember.role, "admin"));
+  const shouldPrefetchLikelyMailbox =
+    !mailboxId && likelyMailbox?.provider === "managed" && likelyMailbox.grantRole === "manager";
 
   const navigateToMailbox = (nextMailboxId: string) => {
     void navigate({
@@ -291,6 +305,12 @@ export const MailboxesSettingsPanel = () => {
   if (!mailboxId) {
     return (
       <div className="space-y-8">
+        {shouldPrefetchLikelyMailbox && likelyMailbox ? (
+          <ManagedMailboxDetailPrefetch
+            mailboxId={likelyMailbox.id}
+            organizationId={likelyMailbox.organizationId}
+          />
+        ) : null}
         <SettingsPageHeader
           action={
             <Button onClick={() => setIsAddMailboxOpen(true)} size="sm" type="button">
@@ -305,13 +325,12 @@ export const MailboxesSettingsPanel = () => {
 
         <SettingsSection title="Your mailboxes">
           {isMailboxesError ? (
-            <SettingsCard className="p-6 text-sm text-destructive">
-              {mailboxesError.message ?? "Could not load mailboxes."}
-            </SettingsCard>
+            <SettingsErrorState
+              message={mailboxesError.message ?? "Could not load mailboxes."}
+              onRetry={() => void refetchMailboxes()}
+            />
           ) : areMailboxesPending ? (
-            <SettingsCard className="p-6 text-sm text-muted-foreground">
-              Loading mailboxes…
-            </SettingsCard>
+            <SettingsLoadingRows label="Loading mailboxes" rows={3} />
           ) : groups.length > 0 ? (
             <div className="space-y-5">
               {groups.map((group) => (
@@ -340,6 +359,7 @@ export const MailboxesSettingsPanel = () => {
                             ) : undefined
                           }
                           onClick={() => navigateToMailbox(mailbox.id)}
+                          onIntent={() => void prefetchMailboxSettingsDetail(queryClient, mailbox)}
                           title={mailbox.displayName?.trim() || mailbox.emailAddress}
                         />
                       );
@@ -574,9 +594,7 @@ export const MailboxesSettingsPanel = () => {
   }
 
   if (areMailboxesPending) {
-    return (
-      <SettingsCard className="p-6 text-sm text-muted-foreground">Loading mailbox…</SettingsCard>
-    );
+    return <SettingsLoadingRows label="Loading mailbox" rows={5} />;
   }
 
   if (!selectedMailbox) {
