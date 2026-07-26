@@ -5,6 +5,7 @@ import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { LoadingSpinner } from "~/components/loading-spinner";
 
 export const SettingsBackButton = ({
   children,
@@ -287,10 +288,7 @@ export const SettingsLoadingState = ({
     aria-live="polite"
     className={cn("flex min-h-24 items-center justify-center", className)}
   >
-    <span
-      aria-hidden
-      className="size-1.5 animate-pulse rounded-full bg-muted-foreground/55 motion-reduce:animate-none"
-    />
+    <LoadingSpinner className="size-8 text-muted-foreground" />
     <span className="sr-only">{label}</span>
   </output>
 );

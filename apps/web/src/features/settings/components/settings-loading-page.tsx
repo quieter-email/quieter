@@ -13,6 +13,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { SettingsTab } from "~/features/settings/domain/settings-tab";
+import { LoadingSpinner } from "~/components/loading-spinner";
 import {
   SETTINGS_DETAIL_TITLES,
   SETTINGS_NAV_ITEMS,
@@ -117,10 +118,8 @@ export const SettingsLoadingPage = ({ tab = "overview" }: { tab?: SettingsTab })
             aria-live="polite"
             className="flex min-h-64 items-center justify-center"
           >
-            <span
-              aria-hidden
-              className="size-1.5 animate-pulse rounded-full bg-muted-foreground/55 motion-reduce:animate-none"
-            />
+            <LoadingSpinner className="size-8 text-muted-foreground" />
+            <span className="sr-only">Loading {tab} settings</span>
           </output>
         </div>
       )}

@@ -2,11 +2,11 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense } from "react";
+import type { SettingsTab } from "~/features/settings/domain/settings-tab";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
 import { isDemoModeAvailable } from "~/features/settings/domain/demo-mode-setting";
 import { SETTINGS_DETAIL_TITLES } from "~/features/settings/domain/settings-navigation";
-import { SETTINGS_TABS, type SettingsTab } from "~/features/settings/domain/settings-tab";
 import { settingsRouteApi } from "~/lib/route-apis";
 import { BillingCheckoutResult } from "./billing-checkout-result";
 import { ConnectorConnectionResult } from "./connector-connection-result";
@@ -149,13 +149,9 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
   };
   const detail = tab === "overview" ? null : SETTINGS_DETAIL_TITLES[tab];
 
-  useEffect(() => {
-    void Promise.all(SETTINGS_TABS.map(preloadSettingsPanel));
-  }, []);
-
   return (
     <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-background-dark text-foreground">
-      <SettingsDataPrefetch />
+      <SettingsDataPrefetch tab={tab} />
       <BillingCheckoutResult />
       <ConnectorConnectionResult />
       <WorkspaceDitherBackground />

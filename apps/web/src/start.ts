@@ -44,8 +44,8 @@ const getRateLimitPolicy = (pathname: string) => {
   if (pathname === "/api/v1/send") {
     return { group: "send", limit: 60, windowMs: 60_000 };
   }
-  if (pathname.includes("/chat")) return { group: "chat", limit: 30, windowMs: 60_000 };
-  return { group: "default", limit: 120, windowMs: 60_000 };
+  if (pathname.includes("/chat")) return { group: "chat", limit: 120, windowMs: 60_000 };
+  return { group: "default", limit: 600, windowMs: 60_000 };
 };
 
 const abuseProtectionMiddleware = createMiddleware().server(async ({ next, request }) => {
