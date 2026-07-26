@@ -27,7 +27,16 @@ const connectorIcons = {
   google_calendar: (
     <img alt="" aria-hidden className="size-4" height={16} src="/google-calendar.svg" width={16} />
   ),
-  linear: <img alt="" aria-hidden className="size-4" height={16} src="/linear.svg" width={16} />,
+  linear: (
+    <img
+      alt=""
+      aria-hidden
+      className="size-4 invert dark:invert-0"
+      height={16}
+      src="/linear.svg"
+      width={16}
+    />
+  ),
 } as const;
 
 export const ConnectorsSettingsPanel = () => {

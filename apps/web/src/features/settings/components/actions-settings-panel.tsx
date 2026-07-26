@@ -564,7 +564,7 @@ const ActionSimpleEditor = ({
                         <img
                           alt=""
                           aria-hidden
-                          className="size-4"
+                          className="size-4 invert dark:invert-0"
                           height={16}
                           src="/linear.svg"
                           width={16}
