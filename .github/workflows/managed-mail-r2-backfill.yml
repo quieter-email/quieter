@@ -14,7 +14,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: quieter-deploy-production
@@ -25,13 +24,16 @@ jobs:
     name: Backfill managed mail raw objects
     runs-on: blacksmith-2vcpu-ubuntu-2404
     environment: production
+    permissions:
+      contents: read
+      id-token: write
     timeout-minutes: 60
     env:
       AWS_DEFAULT_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@v1

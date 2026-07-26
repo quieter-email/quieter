@@ -227,7 +227,7 @@ jobs:
       artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
     steps:
       - name: Checkout exact pull request revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
           ref: ${{ needs.resolve.outputs.sha }}
@@ -329,7 +329,7 @@ jobs:
     steps:
       - name: Checkout trusted deployment code
         if: ${{ needs.prepare.result == 'success' }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
           ref: ${{ github.sha }}
