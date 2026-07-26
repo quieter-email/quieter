@@ -57,6 +57,9 @@
 - Keep the Settings shell and overview bundle small. Lazy-load detail panels, and prefetch their
   code chunks in the background after Settings is entered so the initial app bundle stays small
   while subsequent Settings navigation is immediate.
+- Keep the route-level Settings pending UI standalone and dependency-light. It must not import the
+  shared Settings layout, data-aware overview, dither background, auth client, or query clients;
+  those dependencies belong behind the lazy Settings route boundary.
 - Use TanStack Query's built-in prefetch hooks and `QueryClient` intent prefetching for Settings
   data. Do not add effects whose only job is warming queries. Entering Settings should prefetch the
   complete accessible hierarchy: every main destination, every accessible team and common team
