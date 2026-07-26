@@ -281,6 +281,10 @@ export default $config({
       R2_ENDPOINT: env.R2_ENDPOINT ?? "",
       R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY ?? "",
     };
+    const sentryEnvironment = {
+      SENTRY_DSN: secretResources.SENTRY_DSN.value,
+      SENTRY_ENVIRONMENT: process.env.SENTRY_ENVIRONMENT || $app.stage,
+    };
 
     mailReceiptTopic.subscribe("MailReceiptProcessor", {
       environment: {
@@ -290,6 +294,7 @@ export default $config({
         POLAR_SANDBOX: polarSandbox,
         QUIETER_GMAIL_AI_AUTOMATION_ENABLED: mailAutomationAiEnabled,
         ...r2Environment,
+        ...sentryEnvironment,
       },
       handler: "packages/aws/src/receipt.handler",
       link: [mailBucket],
@@ -331,6 +336,7 @@ export default $config({
         POLAR_ACCESS_TOKEN: polarAccessToken,
         POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
         POLAR_SANDBOX: polarSandbox,
+        ...sentryEnvironment,
       },
       handler: "packages/aws/src/chat-generation-workflow.handler",
       timeout: {
@@ -340,6 +346,7 @@ export default $config({
     });
     chatGenerationQueue.subscribe(
       {
+        environment: sentryEnvironment,
         handler: "packages/aws/src/chat-generation-starter.handler",
         link: [chatGenerationWorkflow],
         timeout: "30 seconds",
@@ -351,6 +358,7 @@ export default $config({
       },
     );
     const chatGenerationEnqueue = new sst.aws.Function("ChatGenerationEnqueue", {
+      environment: sentryEnvironment,
       handler: "packages/aws/src/chat-generation-enqueue.handler",
       link: [chatGenerationQueue, chatGenerationStartToken],
       timeout: "30 seconds",
@@ -390,6 +398,7 @@ export default $config({
           POLAR_ACCESS_TOKEN: polarAccessToken,
           POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
           POLAR_SANDBOX: polarSandbox,
+          ...sentryEnvironment,
         },
         handler: "packages/aws/src/mailbox-action-consumer.handler",
         timeout: "15 minutes",
@@ -420,6 +429,7 @@ export default $config({
         POLAR_ACCESS_TOKEN: polarAccessToken,
         POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
         POLAR_SANDBOX: polarSandbox,
+        ...sentryEnvironment,
       },
       handler: "packages/aws/src/gmail-live-sync-websocket.handler",
       link: [gmailLiveSyncConnections, gmailLiveSyncTokenSecret],
@@ -471,6 +481,7 @@ export default $config({
             POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
             POLAR_SANDBOX: polarSandbox,
             QUIETER_GMAIL_AI_AUTOMATION_ENABLED: mailAutomationAiEnabled,
+            ...sentryEnvironment,
           },
           handler: "packages/aws/src/gmail-pubsub-consumer.handler",
           link: [gmailLiveSyncApi, gmailLiveSyncConnections],
@@ -498,6 +509,7 @@ export default $config({
           DATABASE_URL: databaseUrl,
           ...gmailPubSubEnvironment,
           GMAIL_PUBSUB_QUEUE_URL: gmailPubSubQueue.url,
+          ...sentryEnvironment,
         },
         handler: "packages/aws/src/gmail-pubsub-ingress.handler",
         link: [gmailPubSubQueue, gmailLiveSyncApi, gmailLiveSyncConnections],
@@ -510,6 +522,7 @@ export default $config({
           environment: {
             DATABASE_URL: databaseUrl,
             GMAIL_PUBSUB_QUEUE_URL: gmailPubSubQueue.url,
+            ...sentryEnvironment,
           },
           handler: "packages/aws/src/gmail-pubsub-maintenance.handler",
           link: [gmailPubSubQueue],
@@ -531,6 +544,7 @@ export default $config({
           POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
           POLAR_SANDBOX: polarSandbox,
           QUIETER_GMAIL_AI_AUTOMATION_ENABLED: mailAutomationAiEnabled,
+          ...sentryEnvironment,
         },
         handler: "packages/aws/src/gmail-pubsub-process.handler",
         link: [gmailLiveSyncApi, gmailLiveSyncConnections, gmailPubSubProcessToken],
@@ -603,6 +617,7 @@ export default $config({
         DATABASE_URL: databaseUrl,
         QUIETER_GMAIL_AI_AUTOMATION_ENABLED: mailAutomationAiEnabled,
         ...r2Environment,
+        ...sentryEnvironment,
       },
       handler: "packages/aws/src/inbound.handler",
       link: [mailBucket, mailIngestToken],

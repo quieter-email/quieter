@@ -12,6 +12,7 @@ import {
   type LambdaFunctionUrlResponse,
 } from "./function-url";
 import { notifyGmailLiveSyncConnections } from "./gmail-live-sync";
+import { reportAwsError } from "./sentry";
 
 const notificationSchema = z.object({
   emailAddress: z.string().email(),
@@ -23,19 +24,20 @@ const notificationSchema = z.object({
 export const handler = async (
   event: LambdaFunctionUrlEvent,
 ): Promise<LambdaFunctionUrlResponse> => {
-  try {
-    if (event.requestContext?.http?.method?.toUpperCase() !== "POST") {
-      return toJson({ error: "Method not allowed" }, 405);
-    }
-    const token = getBearerToken(event.headers);
-    if (!bearerTokenMatches(token, process.env.GMAIL_PUBSUB_PROCESS_TOKEN || "")) {
-      return toJson({ error: "Unauthorized" }, 401);
-    }
+  if (event.requestContext?.http?.method?.toUpperCase() !== "POST") {
+    return toJson({ error: "Method not allowed" }, 405);
+  }
+  const token = getBearerToken(event.headers);
+  if (!bearerTokenMatches(token, process.env.GMAIL_PUBSUB_PROCESS_TOKEN || "")) {
+    return toJson({ error: "Unauthorized" }, 401);
+  }
 
-    const message = notificationSchema.parse(
-      parseEventJson(event),
-    ) satisfies GmailPubSubNotificationMessage;
-    await processGmailPubSubNotification(message, {
+  const message = notificationSchema.safeParse(parseEventJson(event));
+  if (!message.success) {
+    return toJson({ error: "Invalid notification" }, 400);
+  }
+  try {
+    await processGmailPubSubNotification(message.data satisfies GmailPubSubNotificationMessage, {
       onAccepted: async ({ mailboxId }) => {
         await notifyGmailLiveSyncConnections(mailboxId);
       },
@@ -46,6 +48,7 @@ export const handler = async (
 
     return { body: "", statusCode: 204 };
   } catch (error) {
+    await reportAwsError(error, "GmailPubSubProcess");
     console.error(
       "Could not process Gmail Pub/Sub notification.",
       error instanceof Error ? error.message : "Unknown error.",

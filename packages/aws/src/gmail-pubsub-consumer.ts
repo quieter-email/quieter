@@ -5,6 +5,7 @@ import {
 } from "@quieter/orpc/gmail-pubsub";
 import { z } from "zod";
 import { notifyGmailLiveSyncConnections } from "./gmail-live-sync";
+import { reportAwsError } from "./sentry";
 
 const queueMessageSchema = z.discriminatedUnion("type", [
   z.object({
@@ -65,6 +66,7 @@ export const handler = async (event: SqsEvent) => {
         }
       }
     } catch (error) {
+      await reportAwsError(error, "GmailPubSubConsumer");
       console.error(
         `Could not process Gmail Pub/Sub queue message ${record.messageId}.`,
         error instanceof Error ? error.message : "Unknown error.",

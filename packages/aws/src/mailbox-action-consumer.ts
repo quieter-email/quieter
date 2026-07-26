@@ -1,5 +1,6 @@
 import { executeMailboxActionRun } from "@quieter/orpc/mailbox-actions";
 import { z } from "zod";
+import { reportAwsError } from "./sentry";
 
 const queuePayloadSchema = z.object({
   runId: z.string().trim().min(1),
@@ -22,6 +23,7 @@ export const handler = async (event: SqsEvent) => {
       const { runId } = queuePayloadSchema.parse(JSON.parse(record.body));
       await executeMailboxActionRun(runId);
     } catch (error) {
+      await reportAwsError(error, "MailboxActionConsumer");
       console.error(
         `Could not process mailbox action queue message ${record.messageId}.`,
         error instanceof Error ? error.message : "Unknown error.",

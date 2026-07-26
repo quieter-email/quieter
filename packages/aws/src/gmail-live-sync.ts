@@ -11,6 +11,7 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import { serverEnv } from "@quieter/env/server";
 import { Resource } from "sst";
+import { reportAwsError } from "./sentry";
 
 const dynamo = DynamoDBDocumentClient.from(
   new DynamoDBClient({
@@ -59,6 +60,7 @@ const notifyConnection = async (
       return;
     }
 
+    await reportAwsError(error, "GmailLiveSyncFanout");
     console.error(
       `Could not notify Gmail live-sync connection ${connectionId}.`,
       error instanceof Error ? error.message : "Unknown error.",

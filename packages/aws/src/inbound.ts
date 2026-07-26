@@ -17,6 +17,7 @@ import {
   getCanonicalRawMailProvider,
   putRawMailObject,
 } from "./raw-mail-object";
+import { reportAwsError } from "./sentry";
 
 const inboundPayloadSchema = z
   .object({
@@ -171,6 +172,7 @@ export const handler = async (
       201,
     );
   } catch (error) {
+    await reportAwsError(error, "MailIngress");
     console.error(error);
 
     return toJson(

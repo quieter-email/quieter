@@ -4,6 +4,7 @@ import { serverEnv } from "@quieter/env/server";
 import { getGmailLiveSyncAccess } from "@quieter/orpc/gmail-live-sync";
 import { verifyGmailLiveSyncToken } from "@quieter/orpc/gmail-live-sync-token";
 import { Resource } from "sst";
+import { reportAwsError, withSentry } from "./sentry";
 
 const CONNECTION_TTL_SECONDS = 60 * 60 * 3;
 
@@ -32,8 +33,14 @@ const handleConnect = async (event: WebSocketEvent, connectionId: string) => {
     return response(401);
   }
 
+  let payload: ReturnType<typeof verifyGmailLiveSyncToken>;
   try {
-    const payload = verifyGmailLiveSyncToken(token, Resource.GmailLiveSyncTokenSecret.value);
+    payload = verifyGmailLiveSyncToken(token, Resource.GmailLiveSyncTokenSecret.value);
+  } catch {
+    return response(403);
+  }
+
+  try {
     const access = await getGmailLiveSyncAccess({
       mailboxId: payload.mailboxId,
       userId: payload.userId,
@@ -57,15 +64,16 @@ const handleConnect = async (event: WebSocketEvent, connectionId: string) => {
     );
     return response(200);
   } catch (error) {
-    console.warn(
-      "Rejected Gmail live-sync connection.",
+    await reportAwsError(error, "GmailLiveSyncWebSocket");
+    console.error(
+      "Could not establish Gmail live-sync connection.",
       error instanceof Error ? error.message : "Unknown error.",
     );
-    return response(403);
+    return response(500);
   }
 };
 
-export const handler = async (event: WebSocketEvent) => {
+export const handler = withSentry("GmailLiveSyncWebSocket", async (event: WebSocketEvent) => {
   const connectionId = event.requestContext?.connectionId;
   const routeKey = event.requestContext?.routeKey;
   if (!connectionId || !routeKey) {
@@ -85,4 +93,4 @@ export const handler = async (event: WebSocketEvent) => {
   }
 
   return response(200);
-};
+});

@@ -10,6 +10,7 @@ import {
   type LambdaFunctionUrlEvent,
   type LambdaFunctionUrlResponse,
 } from "./function-url";
+import { reportAwsError } from "./sentry";
 
 const enqueuePayloadSchema = z.object({
   runId: z.string().trim().min(1),
@@ -42,18 +43,22 @@ export const handler = async (
       return toJson({ error: "Unauthorized" }, 401);
     }
 
-    const payload = enqueuePayloadSchema.parse(parseEventJson(event));
+    const payload = enqueuePayloadSchema.safeParse(parseEventJson(event));
+    if (!payload.success) {
+      return toJson({ error: "Invalid chat generation request." }, 400);
+    }
     const queueUrl = Resource.ChatGenerationQueue.url;
 
     await getSqsClient().send(
       new SendMessageCommand({
-        MessageBody: JSON.stringify({ runId: payload.runId }),
+        MessageBody: JSON.stringify({ runId: payload.data.runId }),
         QueueUrl: queueUrl,
       }),
     );
 
-    return toJson({ enqueued: true, runId: payload.runId });
-  } catch {
-    return toJson({ error: "Could not enqueue chat generation." }, 400);
+    return toJson({ enqueued: true, runId: payload.data.runId });
+  } catch (error) {
+    await reportAwsError(error, "ChatGenerationEnqueue");
+    return toJson({ error: "Could not enqueue chat generation." }, 500);
   }
 };
