@@ -39,6 +39,29 @@ describe("settings prefetch hierarchy", () => {
     ]);
   });
 
+  test("warms only the default mailbox action list on actions intent", async () => {
+    const { prefetchQuery, queryClient } = createQueryClient();
+    queryClient.setQueryData(["mailboxes"], {
+      groups: [
+        {
+          mailboxes: [
+            { id: "api-one", provider: "api" },
+            { id: "gmail-one", provider: "gmail" },
+            { id: "managed-one", provider: "managed" },
+          ],
+        },
+      ],
+    });
+
+    await prefetchSettingsTab(queryClient, "actions");
+
+    expect(prefetchQuery.mock.calls.map(([options]) => options.queryKey)).toEqual([
+      ["mailboxes"],
+      ["connectors"],
+      ["mailbox-actions", "gmail-one"],
+    ]);
+  });
+
   test("warms manager-only mailbox detail data without fetching it for private mailboxes", async () => {
     const { prefetchQuery, queryClient } = createQueryClient();
 

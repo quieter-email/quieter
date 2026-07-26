@@ -184,10 +184,6 @@ export const OrganizationsListView = ({
         <OrganizationFormDialog />
       </div>
 
-      <div className="min-h-15">
-        <PendingInvitationsSection />
-      </div>
-
       <SettingsSection title="Your teams">
         {isPending ? (
           <SettingsLoadingState label="Loading teams" />
@@ -213,6 +209,8 @@ export const OrganizationsListView = ({
           <p className="text-sm text-muted-foreground">No teams yet.</p>
         )}
       </SettingsSection>
+
+      <PendingInvitationsSection />
     </div>
   );
 };
