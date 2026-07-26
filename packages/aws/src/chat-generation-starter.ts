@@ -1,6 +1,7 @@
 import { Resource } from "sst";
 import { workflow } from "sst/aws/workflow";
 import { z } from "zod";
+import { reportAwsError } from "./sentry";
 
 const queuePayloadSchema = z.object({
   runId: z.string().trim().min(1),
@@ -43,7 +44,8 @@ export const handler = async (event: SqsEvent) => {
 
         throw error;
       }
-    } catch {
+    } catch (error) {
+      await reportAwsError(error, "ChatGenerationStarter");
       batchItemFailures.push({ itemIdentifier: record.messageId });
     }
   }

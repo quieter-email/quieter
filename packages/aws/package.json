@@ -32,6 +32,7 @@
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
     "@quieter/orpc": "workspace:*",
+    "@sentry/node": "catalog:",
     "drizzle-orm": "catalog:",
     "jose": "5.10.0",
     "zod": "catalog:"

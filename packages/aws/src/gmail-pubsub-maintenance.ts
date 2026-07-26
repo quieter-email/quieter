@@ -2,6 +2,7 @@ import { SendMessageBatchCommand, SQSClient } from "@aws-sdk/client-sqs";
 import { requireServerEnv, serverEnv } from "@quieter/env/server";
 import { listGmailPubSubMaintenanceJobs } from "@quieter/orpc/gmail-pubsub";
 import { createHash } from "node:crypto";
+import { withSentry } from "./sentry";
 
 let sqsClient: SQSClient | null = null;
 
@@ -12,7 +13,7 @@ const getSqsClient = () => {
   return sqsClient;
 };
 
-export const handler = async () => {
+export const handler = withSentry("GmailPubSubMaintenance", async () => {
   const queueUrl = requireServerEnv("GMAIL_PUBSUB_QUEUE_URL");
   const jobs = await listGmailPubSubMaintenanceJobs();
   const maintenanceWindow = Math.floor(Date.now() / (1000 * 60 * 15));
@@ -44,4 +45,4 @@ export const handler = async () => {
   }
 
   return { enqueued: jobs.length };
-};
+});

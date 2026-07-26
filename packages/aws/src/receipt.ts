@@ -9,6 +9,7 @@ import {
   getCanonicalRawMailProvider,
   putRawMailObject,
 } from "./raw-mail-object";
+import { withSentry } from "./sentry";
 
 type SnsRecord = {
   Sns?: {
@@ -57,7 +58,7 @@ const getS3Client = () => {
   return s3Client;
 };
 
-export const handler = async (event: SnsEvent) => {
+export const handler = withSentry("MailReceiptProcessor", async (event: SnsEvent) => {
   for (const record of event.Records ?? []) {
     if (!record.Sns?.Message) {
       continue;
@@ -183,4 +184,4 @@ export const handler = async (event: SnsEvent) => {
       throw error;
     }
   }
-};
+});

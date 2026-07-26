@@ -11,6 +11,7 @@ import {
   type LambdaFunctionUrlEvent,
   type LambdaFunctionUrlResponse,
 } from "./function-url";
+import { reportAwsError } from "./sentry";
 
 const GOOGLE_JWKS = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
 
@@ -66,23 +67,30 @@ const verifyPushToken = async (token: string) => {
 export const handler = async (
   event: LambdaFunctionUrlEvent,
 ): Promise<LambdaFunctionUrlResponse> => {
+  if (event.requestContext?.http?.method?.toUpperCase() !== "POST") {
+    return toJson({ error: "Method not allowed" }, 405);
+  }
+
+  const token = getBearerToken(event.headers);
+  if (!token) {
+    return toJson({ error: "Unauthorized" }, 401);
+  }
   try {
-    if (event.requestContext?.http?.method?.toUpperCase() !== "POST") {
-      return toJson({ error: "Method not allowed" }, 405);
-    }
-
-    const token = getBearerToken(event.headers);
-    if (!token) {
-      return toJson({ error: "Unauthorized" }, 401);
-    }
     await verifyPushToken(token);
+  } catch {
+    return toJson({ error: "Unauthorized" }, 401);
+  }
 
-    const envelope = pubSubEnvelopeSchema.parse(parseEventJson(event));
-    if (envelope.subscription !== requireServerEnv("GMAIL_PUBSUB_SUBSCRIPTION")) {
+  const envelope = pubSubEnvelopeSchema.safeParse(parseEventJson(event));
+  if (!envelope.success) {
+    return toJson({ error: "Invalid notification" }, 400);
+  }
+  try {
+    if (envelope.data.subscription !== requireServerEnv("GMAIL_PUBSUB_SUBSCRIPTION")) {
       return toJson({ error: "Unexpected subscription" }, 403);
     }
 
-    const notification = parseGmailPubSubNotification(envelope.message.data);
+    const notification = parseGmailPubSubNotification(envelope.data.message.data);
     const emailAddress = notification.emailAddress.trim().toLowerCase();
     const accepted = await acceptGmailPubSubNotification({ emailAddress });
     if (accepted.accepted) {
@@ -102,10 +110,10 @@ export const handler = async (
         MessageBody: JSON.stringify({
           emailAddress,
           historyId: notification.historyId,
-          pubSubMessageId: envelope.message.messageId,
+          pubSubMessageId: envelope.data.message.messageId,
           type: "notification",
         }),
-        MessageDeduplicationId: envelope.message.messageId,
+        MessageDeduplicationId: envelope.data.message.messageId,
         MessageGroupId: createHash("sha256").update(emailAddress).digest("hex"),
         QueueUrl: requireServerEnv("GMAIL_PUBSUB_QUEUE_URL"),
       }),
@@ -119,10 +127,11 @@ export const handler = async (
       statusCode: 204,
     };
   } catch (error) {
+    await reportAwsError(error, "GmailPubSubIngress");
     console.error(
       "Could not accept Gmail Pub/Sub notification.",
       error instanceof Error ? error.message : "Unknown error.",
     );
-    return toJson({ error: "Could not accept notification" }, 400);
+    return toJson({ error: "Could not accept notification" }, 500);
   }
 };
