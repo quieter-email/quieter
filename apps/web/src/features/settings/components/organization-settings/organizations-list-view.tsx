@@ -4,13 +4,13 @@ import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import { useMutation, usePrefetchQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { authClient } from "~/lib/auth";
 import {
   SettingsCard,
   SettingsNavigationRow,
-  SettingsLoadingRows,
+  SettingsLoadingState,
   SettingsRows,
   SettingsSection,
   settingsRowPaddingClass,
@@ -21,7 +21,6 @@ import {
   type UserInvitation,
   formatDate,
   formatRoleLabel,
-  fullOrganizationQueryOptions,
   getUserInvitationsQueryKey,
   userInvitationsQueryOptions,
 } from "./domain";
@@ -96,7 +95,7 @@ const PendingInvitationsSection = () => {
   };
 
   if (areUserInvitationsPending) {
-    return <SettingsLoadingRows label="Loading invitations" rows={1} />;
+    return <SettingsLoadingState className="min-h-15" label="Loading invitations" />;
   }
 
   if (userInvitationsError) {
@@ -165,26 +164,21 @@ const PendingInvitationsSection = () => {
   );
 };
 
-const OrganizationDetailPrefetch = ({ organizationId }: { organizationId: string }) => {
-  usePrefetchQuery(fullOrganizationQueryOptions(organizationId));
-  return null;
-};
-
 export const OrganizationsListView = ({
+  error,
+  isPending = false,
   onSelectOrganization,
   organizations,
 }: {
+  error?: string;
+  isPending?: boolean;
   onSelectOrganization: (organizationId: string) => void;
   organizations: OrganizationSummary[];
 }) => {
   const queryClient = useQueryClient();
-  const likelyOrganizationId = organizations[0]?.id;
 
   return (
     <div className="space-y-8">
-      {likelyOrganizationId ? (
-        <OrganizationDetailPrefetch organizationId={likelyOrganizationId} />
-      ) : null}
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-sm font-normal text-foreground">Teams</h1>
         <OrganizationFormDialog />
@@ -194,8 +188,12 @@ export const OrganizationsListView = ({
         <PendingInvitationsSection />
       </div>
 
-      {organizations.length > 0 ? (
-        <SettingsSection title="Your teams">
+      <SettingsSection title="Your teams">
+        {isPending ? (
+          <SettingsLoadingState label="Loading teams" />
+        ) : error ? (
+          <p className="text-sm text-destructive">{error}</p>
+        ) : organizations.length > 0 ? (
           <SettingsRows>
             {organizations
               .toSorted((left, right) => left.name.localeCompare(right.name))
@@ -211,10 +209,10 @@ export const OrganizationsListView = ({
                 />
               ))}
           </SettingsRows>
-        </SettingsSection>
-      ) : (
-        <p className="text-sm text-muted-foreground">No teams yet.</p>
-      )}
+        ) : (
+          <p className="text-sm text-muted-foreground">No teams yet.</p>
+        )}
+      </SettingsSection>
     </div>
   );
 };

@@ -1,12 +1,13 @@
 "use client";
 
-import { Globe02Icon, Loading03Icon } from "@hugeicons/core-free-icons";
+import { Globe02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { cn } from "@quieter/ui/cn";
 import { useQuery } from "@tanstack/react-query";
 import {
   SettingsBackButton,
+  SettingsLoadingState,
   SettingsNavigationRow,
   SettingsRows,
   settingsRowPaddingClass,
@@ -79,15 +80,7 @@ export const DomainsView = ({
       </div>
 
       {isDomainsPending ? (
-        <div
-          className={cn(
-            "flex items-center gap-2 text-sm text-muted-foreground",
-            settingsRowPaddingClass,
-          )}
-        >
-          <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-          Loading domains…
-        </div>
+        <SettingsLoadingState label="Loading domains" />
       ) : isDomainsError ? (
         <p className={cn("text-sm text-destructive", settingsRowPaddingClass)}>
           {domainsError?.message ?? "Could not load domains."}

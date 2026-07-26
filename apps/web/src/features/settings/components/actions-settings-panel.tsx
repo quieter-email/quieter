@@ -52,6 +52,7 @@ import { orpc } from "~/lib/orpc";
 import { usePreviewPersona } from "~/lib/preview-personas";
 import {
   SettingsCard,
+  SettingsLoadingState,
   SettingsPageHeader,
   SettingsRow,
   SettingsRowText,
@@ -138,11 +139,7 @@ export const ActionsSettingsPanel = () => {
       </SettingsPageHeader>
 
       {mailboxesLoading ? (
-        <SettingsCard className="p-6">
-          <SettingsRowText title="Loading mailboxes">
-            Checking which mailboxes you can use for actions.
-          </SettingsRowText>
-        </SettingsCard>
+        <SettingsLoadingState className="min-h-48" label="Loading actions" />
       ) : !hasActionableMailbox ? (
         <SettingsCard className="p-6">
           <div className="space-y-4">
@@ -564,7 +561,14 @@ const ActionSimpleEditor = ({
                           icon={Loading03Icon}
                         />
                       ) : (
-                        <LinearBadge />
+                        <img
+                          alt=""
+                          aria-hidden
+                          className="size-4"
+                          height={16}
+                          src="/linear.svg"
+                          width={16}
+                        />
                       )}
                       Connect Linear
                     </Button>
@@ -731,15 +735,6 @@ const SimpleField = ({
     </div>
     <div className="min-w-0">{children}</div>
   </div>
-);
-
-const LinearBadge = () => (
-  <span
-    aria-hidden
-    className="flex size-4 shrink-0 items-center justify-center rounded-[5px] bg-[#5e6ad2] text-[10px] font-medium text-white"
-  >
-    L
-  </span>
 );
 
 const getLinearAccountLabel = (

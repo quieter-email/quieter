@@ -25,7 +25,7 @@ describe("settings prefetch hierarchy", () => {
     ]);
   });
 
-  test("bounds likely team detail warming to the selected team query", async () => {
+  test("keeps exact team intent prefetching as a deduplicated fallback", async () => {
     const { prefetchQuery, queryClient } = createQueryClient();
 
     await prefetchOrganizationSettingsDetail(queryClient, "team-one");

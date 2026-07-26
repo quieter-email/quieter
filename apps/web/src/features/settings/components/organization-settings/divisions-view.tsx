@@ -42,6 +42,7 @@ import {
   SettingsBackButton,
   SettingsCard,
   SettingsInsetRows,
+  SettingsLoadingState,
   SettingsNavigationRow,
   SettingsRows,
   SettingsSection,
@@ -599,15 +600,7 @@ export const DivisionsView = ({
       </div>
 
       {isDivisionsPending ? (
-        <div
-          className={cn(
-            "flex items-center gap-2 text-sm text-muted-foreground",
-            settingsRowPaddingClass,
-          )}
-        >
-          <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-          Loading divisions…
-        </div>
+        <SettingsLoadingState label="Loading divisions" />
       ) : isDivisionsError ? (
         <p className={cn("text-sm text-destructive", settingsRowPaddingClass)}>
           {divisionsError?.message ?? "Could not load divisions."}
