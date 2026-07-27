@@ -19,7 +19,7 @@
   },
   "scripts": {
     "backfill:managed-mail-r2": "bun --env-file=../../.env.local scripts/backfill-managed-mail-r2.ts",
-    "dev": "bun ../../scripts/sst.ts dev"
+    "dev": "bun --cwd ../.. --env-file=.env.local --env-file=.env.sst.local run vp exec sst dev --config sst.config.ts --stage mail-dev"
   },
   "dependencies": {
     "@aws-sdk/client-apigatewaymanagementapi": "catalog:",

@@ -19,18 +19,11 @@ const forbiddenLocalKeys = [
   "GMAIL_PUBSUB_QUEUE_URL",
   "GMAIL_PUBSUB_SUBSCRIPTION",
   "GMAIL_PUBSUB_TOPIC",
-  "GOOGLE_API_KEY",
   "MAIL_BUCKET",
+  "MAILBOX_ACTION_QUEUE_URL",
   "MAIL_RECEIPT_ROLE_ARN",
   "MAIL_RECEIPT_RULE_SET_NAME",
   "MAIL_RECEIPT_TOPIC_ARN",
-  "OPENROUTER_API_KEY",
-  "POLAR_ACCESS_TOKEN",
-  "POLAR_METER_CREDIT_USAGE_ID",
-  "POLAR_ORGANIZATION_ID",
-  "POLAR_PRODUCT_MANAGED_ID",
-  "POLAR_PRODUCT_PRO_ID",
-  "POLAR_WEBHOOK_SECRET",
   "QUIETER_MAIL_API_KEY",
   "R2_ACCESS_KEY_ID",
   "R2_ACCOUNT_ID",
@@ -70,6 +63,7 @@ const parseEnvFile = (path: string) => {
 };
 
 const getHostname = (value: string) => new URL(value).hostname.replace(/^\[(.*)\]$/, "$1");
+const normalizeNeonHostname = (hostname: string) => hostname.toLowerCase().replace("-pooler.", ".");
 
 if (!existsSync(localEnvPath)) {
   throw new Error(".env.local is missing. Copy .env.example or run the local environment setup.");
@@ -77,6 +71,7 @@ if (!existsSync(localEnvPath)) {
 
 const env = parseEnvFile(localEnvPath);
 const errors: string[] = [];
+const configuredNeonHost = env.get("QUIETER_LOCAL_NEON_HOST");
 
 for (const key of forbiddenLocalKeys) {
   if (env.has(key)) {
@@ -89,8 +84,15 @@ for (const key of ["DATABASE_URL", "DATABASE_MIGRATION_URL"] as const) {
   if (!value) continue;
 
   try {
-    if (!loopbackHosts.has(getHostname(value))) {
-      errors.push(`${key} must target loopback PostgreSQL in .env.local.`);
+    const hostname = getHostname(value);
+    const isAllowlistedNeon =
+      configuredNeonHost &&
+      configuredNeonHost.endsWith(".neon.tech") &&
+      normalizeNeonHostname(hostname) === normalizeNeonHostname(configuredNeonHost);
+    if (!loopbackHosts.has(hostname) && !isAllowlistedNeon) {
+      errors.push(
+        `${key} must target loopback PostgreSQL or QUIETER_LOCAL_NEON_HOST in .env.local.`,
+      );
     }
   } catch {
     errors.push(`${key} is not a valid URL.`);
@@ -108,6 +110,14 @@ if (authUrl) {
   }
 }
 
+if (env.get("QUIETER_DEPLOYMENT_ENV") !== "local") {
+  errors.push("QUIETER_DEPLOYMENT_ENV=local is required in .env.local.");
+}
+
+if (env.has("POLAR_ACCESS_TOKEN") && env.get("POLAR_SANDBOX") !== "true") {
+  errors.push("POLAR_SANDBOX=true is required when local Polar credentials are configured.");
+}
+
 if (env.get("QUIETER_AUTH_MAIL_MODE") !== "console") {
   errors.push("QUIETER_AUTH_MAIL_MODE=console is required in .env.local.");
 }
@@ -118,4 +128,6 @@ if (errors.length > 0) {
   );
 }
 
-console.log("Local environment is isolated from production-shaped service keys.");
+console.log(
+  "Local environment uses bounded in-process background work and no persistent cloud queues.",
+);

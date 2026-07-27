@@ -40,6 +40,7 @@ describe("local development billing entitlement", () => {
   test("fakes paid access only with an explicit local opt-in", () => {
     expect(
       isLocalDevelopmentBillingEntitlementEnabled({
+        BETTER_AUTH_URL: "http://localhost:3000",
         NODE_ENV: "development",
         QUIETER_LOCAL_BILLING_BYPASS: true,
         QUIETER_DEPLOYMENT_ENV: "local",
@@ -47,6 +48,7 @@ describe("local development billing entitlement", () => {
     ).toBe(true);
     expect(
       isLocalDevelopmentBillingEntitlementEnabled({
+        BETTER_AUTH_URL: "http://localhost:3000",
         NODE_ENV: "development",
         QUIETER_LOCAL_BILLING_BYPASS: undefined,
         QUIETER_DEPLOYMENT_ENV: "local",
@@ -54,6 +56,7 @@ describe("local development billing entitlement", () => {
     ).toBe(false);
     expect(
       isLocalDevelopmentBillingEntitlementEnabled({
+        BETTER_AUTH_URL: "http://localhost:3000",
         NODE_ENV: "development",
         QUIETER_LOCAL_BILLING_BYPASS: true,
         QUIETER_DEPLOYMENT_ENV: "preview",
@@ -61,13 +64,23 @@ describe("local development billing entitlement", () => {
     ).toBe(false);
     expect(
       isLocalDevelopmentBillingEntitlementEnabled({
+        BETTER_AUTH_URL: "https://review.quieter.email",
         NODE_ENV: "production",
         QUIETER_LOCAL_BILLING_BYPASS: true,
-        QUIETER_DEPLOYMENT_ENV: "preview",
+        QUIETER_DEPLOYMENT_ENV: "local",
       }),
     ).toBe(false);
     expect(
       isLocalDevelopmentBillingEntitlementEnabled({
+        BETTER_AUTH_URL: "http://localhost:3000",
+        NODE_ENV: "production",
+        QUIETER_LOCAL_BILLING_BYPASS: true,
+        QUIETER_DEPLOYMENT_ENV: "local",
+      }),
+    ).toBe(true);
+    expect(
+      isLocalDevelopmentBillingEntitlementEnabled({
+        BETTER_AUTH_URL: "http://localhost:3000",
         NODE_ENV: "test",
         QUIETER_LOCAL_BILLING_BYPASS: true,
         QUIETER_DEPLOYMENT_ENV: "local",

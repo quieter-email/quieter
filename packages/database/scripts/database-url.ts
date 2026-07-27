@@ -10,6 +10,21 @@ const productionMigrationTarget = {
 } as const;
 
 const getHostname = (url: URL) => url.hostname.replace(/^\[(.*)\]$/, "$1");
+const normalizeNeonHostname = (hostname: string) => hostname.replace("-pooler.", ".");
+
+const isExplicitLocalNeonUrl = (url: URL, environment: Record<string, string | undefined>) => {
+  const configuredHost = environment.QUIETER_LOCAL_NEON_HOST?.trim().toLowerCase();
+  if (!configuredHost || environment.QUIETER_DEPLOYMENT_ENV !== "local") {
+    return false;
+  }
+
+  const hostname = normalizeNeonHostname(getHostname(url).toLowerCase());
+  return (
+    ["postgres:", "postgresql:"].includes(url.protocol) &&
+    configuredHost.endsWith(".neon.tech") &&
+    hostname === normalizeNeonHostname(configuredHost)
+  );
+};
 
 const toDirectPostgresUrl = (value: string) => {
   const url = new URL(value);
@@ -71,10 +86,13 @@ export const assertLocalDevelopmentDatabaseUrls = (
     }
 
     try {
-      assertLocalDatabaseUrl(value);
+      const url = new URL(value);
+      if (!isExplicitLocalNeonUrl(url, environment)) {
+        assertLocalDatabaseUrl(value);
+      }
     } catch {
       throw new Error(
-        `${name} must target local PostgreSQL during development. Developers must never receive production database credentials.`,
+        `${name} must target loopback PostgreSQL or the explicitly allowlisted local Neon host.`,
       );
     }
   }
@@ -87,6 +105,10 @@ export const assertMigrationExecutionAllowed = (
   const url = new URL(value);
 
   if (LOOPBACK_HOSTS.has(getHostname(url))) {
+    return;
+  }
+
+  if (isExplicitLocalNeonUrl(url, environment)) {
     return;
   }
 

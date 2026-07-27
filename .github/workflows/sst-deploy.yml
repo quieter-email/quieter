@@ -14,128 +14,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  changes:
-    name: Detect migration changes
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    outputs:
-      database: ${{ steps.changes.outputs.database }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Detect migration-related changes
-        id: changes
-        env:
-          BEFORE_SHA: ${{ github.event.before }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "database=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if git diff --quiet "$BEFORE_SHA...HEAD" -- \
-            bun.lock \
-            package.json \
-            packages/database/drizzle \
-            packages/database/drizzle.config.ts \
-            packages/database/package.json \
-            packages/database/scripts \
-            packages/database/src/schema.ts \
-            vite.config.ts; then
-            echo "database=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "database=true" >> "$GITHUB_OUTPUT"
-          fi
-
   verify:
     name: Verify release
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1
-        with:
-          cache: true
-          node-version: "24.18.0"
-
-      - name: Install dependencies
-        run: vp install --frozen-lockfile
-
-      - name: Check
-        run: vp check
-
-      - name: Check copy policy
-        run: vp run check:copy
-
-      - name: Check backend import boundaries
-        run: vp run @quieter/aws#check:boundaries
-
-      - name: Bundle AWS handlers
-        run: vp run @quieter/aws#check:bundles
-
-      - name: Test
-        run: vp test
-
-  migration-integration:
-    name: Migration integration tests
-    needs: changes
-    if: ${{ needs.changes.outputs.database == 'true' }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 10
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: quieter_migration_test
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_USER: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d quieter_migration_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      DATABASE_MIGRATION_URL: postgresql://postgres:postgres@localhost:5432/quieter_migration_test
-      MIGRATION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/quieter_migration_test
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1
-        with:
-          cache: true
-          node-version: "24.18.0"
-
-      - name: Install dependencies
-        run: vp install --frozen-lockfile
-
-      - name: Check committed migrations match the schema
-        run: vp run @quieter/database#db:check
-
-      - name: Test committed database migrations
-        run: vp run @quieter/database#db:test-migrations
+    uses: ./.github/workflows/ci-main.yml
+    permissions:
+      contents: read
 
   deploy:
     name: Deploy production
-    needs:
-      - migration-integration
-      - verify
-    if: >-
-      ${{
-        always() &&
-        needs.verify.result == 'success' &&
-        (needs.migration-integration.result == 'success' ||
-          needs.migration-integration.result == 'skipped')
-      }}
+    needs: verify
     runs-on: blacksmith-2vcpu-ubuntu-2404
     environment: production
     permissions:

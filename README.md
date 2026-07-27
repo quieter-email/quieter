@@ -68,30 +68,33 @@ Prerequisites:
 vp install --frozen-lockfile
 cp .env.example .env.local
 createdb quieter
-vp run db:migrate
-vp run dev
+bun run dev
 ```
 
 On PowerShell, use `Copy-Item .env.example .env.local`.
 
-`vp run dev` starts the web app only and deliberately refuses remote database URLs. Developers use
-local PostgreSQL, CI uses a temporary PostgreSQL service, and production credentials remain in
-protected deployment secrets. See [Development](docs/development.md) for provider setup, the
-optional mail-infrastructure session, and alternative commands.
+`bun run dev` starts the local Worker as one native foreground Vite process. Chat generation,
+automation, and mailbox actions run in that process, so Ctrl+C stops the complete local runtime.
+Database migrations are an explicit schema operation rather than a side effect of starting the
+server. Developers use loopback PostgreSQL or an exactly allowlisted disposable Neon branch, CI
+uses a temporary PostgreSQL service, and production credentials remain in protected deployment
+secrets. See [Development](docs/development.md) for provider setup, process isolation, and the
+explicit remote-infrastructure commands.
 
 ## Common Commands
 
 ```bash
-vp run dev               # web app only
-vp run dev:mail          # optional SST mail/background stack
-vp run dev:all           # web app plus optional SST stack
-vp run env:doctor        # verify .env.local is isolated from production-shaped keys
+bun run dev              # complete local app; async work shares one foreground process
+bun run dev:mail         # explicit remote SST mail/background infrastructure
+bun run dev:cloud        # web app plus explicit remote SST infrastructure
+vp run env:doctor        # verify local database and background-work isolation
 vp check                 # format, lint, and type-check
 vp run check:copy        # enforce the copy policy
 vp test                  # all tests
 vp run -r build          # build every workspace package in dependency order
 vp run db:generate       # generate a migration after changing schema.ts
 vp run db:check          # validate migration history and schema drift
+vp run db:migrate        # explicitly apply committed migrations
 ```
 
 Before finishing a change, run:

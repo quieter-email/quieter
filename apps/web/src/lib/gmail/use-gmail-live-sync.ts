@@ -1,13 +1,14 @@
 "use client";
 
 import type { QueryClient } from "@tanstack/react-query";
+import * as Sentry from "@sentry/tanstackstart-react";
 import { useEffect } from "react";
+import { isExpectedClientError } from "../client-error-reporting";
 import { getGmailUnreadCountsQueryKey } from "../mailboxes-query";
 import { rpc } from "../orpc";
 import { getGmailUsefulDetailsQueryKey } from "./useful-details-query";
 
 const KEEPALIVE_INTERVAL_MS = 1000 * 60 * 5;
-const MAX_CONNECTION_ATTEMPTS = 12;
 const MAX_RECONNECT_DELAY_MS = 1000 * 30;
 
 const parseMailboxEvent = (value: unknown, mailboxId: string) => {
@@ -43,6 +44,7 @@ export const useMailboxLiveSync = (input: {
     let keepaliveTimer: number | undefined;
     let reconnectDelay = 1000;
     let reconnectTimer: number | undefined;
+    let reportedConnectionFailure = false;
     let socket: WebSocket | null = null;
 
     const clearKeepalive = () => {
@@ -80,14 +82,41 @@ export const useMailboxLiveSync = (input: {
     };
     const scheduleReconnect = () => {
       clearKeepalive();
-      if (disposed || connectionAttempts >= MAX_CONNECTION_ATTEMPTS) {
+      if (disposed || reconnectTimer !== undefined) {
         return;
       }
 
       reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = undefined;
         void connect();
       }, reconnectDelay);
       reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY_MS);
+    };
+    const reportConnectionFailure = (
+      error: unknown,
+      phase: "connection" | "socket-close" | "socket-error",
+      details?: { closeCode?: number; endpoint?: string },
+    ) => {
+      if (disposed || reportedConnectionFailure || isExpectedClientError(error)) {
+        return;
+      }
+
+      reportedConnectionFailure = true;
+      Sentry.captureException(error, {
+        contexts: {
+          liveSync: {
+            attempt: connectionAttempts,
+            closeCode: details?.closeCode,
+            endpoint: details?.endpoint,
+            online: navigator.onLine,
+          },
+        },
+        tags: {
+          boundary: "GmailLiveSync",
+          phase,
+          transport: "websocket",
+        },
+      });
     };
     const connect = async () => {
       connectionAttempts += 1;
@@ -98,18 +127,27 @@ export const useMailboxLiveSync = (input: {
           return;
         }
 
-        socket = new WebSocket(connection.url);
-        socket.addEventListener("open", () => {
+        const nextSocket = new WebSocket(connection.url);
+        socket = nextSocket;
+        const endpointUrl = new URL(connection.url);
+        const endpoint = `${endpointUrl.origin}${endpointUrl.pathname}`;
+        nextSocket.addEventListener("open", () => {
+          if (disposed || socket !== nextSocket) {
+            nextSocket.close();
+            return;
+          }
+
           connectionAttempts = 0;
           reconnectDelay = 1000;
+          reportedConnectionFailure = false;
           clearKeepalive();
           keepaliveTimer = window.setInterval(() => {
-            if (socket?.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify({ action: "ping" }));
+            if (nextSocket.readyState === WebSocket.OPEN) {
+              nextSocket.send(JSON.stringify({ action: "ping" }));
             }
           }, KEEPALIVE_INTERVAL_MS);
         });
-        socket.addEventListener("message", (event) => {
+        nextSocket.addEventListener("message", (event) => {
           try {
             const eventType = parseMailboxEvent(JSON.parse(String(event.data)), mailboxId);
             if (eventType === "mailbox-dirty") {
@@ -121,9 +159,28 @@ export const useMailboxLiveSync = (input: {
             // Ignore malformed server messages and keep the connection alive.
           }
         });
-        socket.addEventListener("close", scheduleReconnect);
-        socket.addEventListener("error", () => socket?.close());
-      } catch {
+        nextSocket.addEventListener("close", (event) => {
+          if (socket !== nextSocket) {
+            return;
+          }
+
+          socket = null;
+          if (!event.wasClean && !disposed) {
+            reportConnectionFailure(
+              new Error("Gmail live sync connection closed unexpectedly."),
+              "socket-close",
+              { closeCode: event.code, endpoint },
+            );
+          }
+          scheduleReconnect();
+        });
+        nextSocket.addEventListener("error", () => {
+          reportConnectionFailure(new Error("Gmail live sync connection failed."), "socket-error", {
+            endpoint,
+          });
+        });
+      } catch (error) {
+        reportConnectionFailure(error, "connection");
         scheduleReconnect();
       }
     };

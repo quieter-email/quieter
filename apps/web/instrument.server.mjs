@@ -1,9 +1,24 @@
 import * as Sentry from "@sentry/tanstackstart-react";
 
 const isSentryEnabled = process.env.NODE_ENV !== "development" && !!process.env.SENTRY_DSN;
+const gmailReauthorizationMessage = "Google access needs to be reconnected for this mailbox.";
+
+const isExpectedServerError = (event, originalException) => {
+  const error =
+    originalException && typeof originalException === "object" ? originalException : undefined;
+
+  return (
+    error?.code === "MAILBOX_SCOPE_REPAIR_REQUIRED" ||
+    error?.message === gmailReauthorizationMessage ||
+    event.message === gmailReauthorizationMessage ||
+    event.exception?.values?.some(({ value }) => value === gmailReauthorizationMessage)
+  );
+};
 
 if (isSentryEnabled) {
   Sentry.init({
+    beforeSend: (event, hint) =>
+      isExpectedServerError(event, hint.originalException) ? null : event,
     dsn: process.env.SENTRY_DSN,
     enableLogs: false,
     environment:

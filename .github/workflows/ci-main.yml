@@ -1,6 +1,7 @@
 name: Checks
 
 on:
+  workflow_call:
   workflow_dispatch:
   pull_request:
     branches:
@@ -14,43 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  changes:
-    name: Detect migration changes
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    outputs:
-      database: ${{ steps.changes.outputs.database }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Detect migration-related changes
-        id: changes
-        env:
-          BASE_REF: ${{ github.base_ref }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "database=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if git diff --quiet "origin/$BASE_REF...HEAD" -- \
-            .github/workflows/ci-main.yml \
-            bun.lock \
-            package.json \
-            packages/database/drizzle \
-            packages/database/drizzle.config.ts \
-            packages/database/package.json \
-            packages/database/scripts \
-            packages/database/src/schema.ts \
-            vite.config.ts; then
-            echo "database=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "database=true" >> "$GITHUB_OUTPUT"
-          fi
-
   quality:
     name: Check and test
     runs-on: blacksmith-2vcpu-ubuntu-2404
@@ -107,8 +71,7 @@ jobs:
 
   migration-conflict:
     name: Migration conflict check
-    needs: changes
-    if: ${{ needs.changes.outputs.database == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     permissions:
@@ -145,8 +108,6 @@ jobs:
 
   migration-integration:
     name: Migration integration tests
-    needs: changes
-    if: ${{ needs.changes.outputs.database == 'true' }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     services:
@@ -182,7 +143,6 @@ jobs:
         run: vp install --frozen-lockfile
 
       - name: Check committed migrations match the schema
-        if: ${{ needs.changes.outputs.database == 'true' }}
         run: vp run @quieter/database#db:check
 
       - name: Test committed database migrations

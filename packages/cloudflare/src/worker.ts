@@ -1,3 +1,4 @@
+import { DurableObject } from "cloudflare:workers";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
 
@@ -158,12 +159,7 @@ const handlePubSub = async (request: Request, env: Env) => {
   return new Response(null, { status: 204 });
 };
 
-export class GmailLiveSyncMailbox {
-  constructor(
-    private readonly state: DurableObjectState,
-    private readonly env: Env,
-  ) {}
-
+export class GmailLiveSyncMailbox extends DurableObject<Env> {
   async fetch(request: Request) {
     const upgrade = request.headers.get("upgrade");
     if (upgrade?.toLowerCase() === "websocket") {
@@ -176,7 +172,7 @@ export class GmailLiveSyncMailbox {
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
       server.serializeAttachment({ mailboxId: payload.mailboxId });
-      this.state.acceptWebSocket(server);
+      this.ctx.acceptWebSocket(server);
       return new Response(null, { status: 101, webSocket: client });
     }
 
@@ -186,7 +182,7 @@ export class GmailLiveSyncMailbox {
           type: z.enum(["mailbox-details-dirty", "mailbox-dirty"]),
         })
         .parse(await request.json());
-      for (const socket of this.state.getWebSockets()) {
+      for (const socket of this.ctx.getWebSockets()) {
         const attachment = z
           .object({ mailboxId: z.string().min(1) })
           .safeParse(socket.deserializeAttachment());
@@ -204,6 +200,10 @@ export class GmailLiveSyncMailbox {
     if (typeof message === "string" && message.includes("ping")) {
       socket.send(JSON.stringify({ type: "pong" }));
     }
+  }
+
+  webSocketClose(socket: WebSocket, code: number, reason: string) {
+    socket.close(code, reason);
   }
 }
 

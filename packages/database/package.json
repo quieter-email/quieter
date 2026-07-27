@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     "./client": "./src/client.ts",
+    "./local-development": "./scripts/database-url.ts",
     "./schema": "./src/schema.ts"
   },
   "dependencies": {

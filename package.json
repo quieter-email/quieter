@@ -76,14 +76,13 @@
     "db:migrate": "vp run @quieter/database#db:migrate",
     "db:push": "vp run @quieter/database#db:push",
     "db:test-migrations": "vp run @quieter/database#db:test-migrations",
-    "dev": "bun --env-file=.env.local packages/database/scripts/assert-local-development.ts && vp run @quieter/web#dev",
-    "dev:all": "bun --env-file=.env.local packages/database/scripts/assert-local-development.ts && vp run --parallel --filter=@quieter/web --filter=@quieter/aws dev",
+    "dev": "bun --cwd apps/web --env-file=../../.env.local vp dev --port 3000 --strictPort --configLoader runner",
+    "dev:cloud": "bun --env-file=.env.local packages/database/scripts/assert-local-development.ts && vp run --parallel --filter=@quieter/web --filter=@quieter/aws dev",
     "dev:mail": "bun --env-file=.env.local packages/database/scripts/assert-local-development.ts && vp run @quieter/aws#dev",
-    "dev:web": "bun --env-file=.env.local packages/database/scripts/assert-local-development.ts && vp run @quieter/web#dev",
     "env:doctor": "bun scripts/env-doctor.ts",
     "generate:assets": "bun scripts/generate-web-assets.ts",
     "prepare": "vp config --no-agent",
-    "sst": "bun scripts/sst.ts"
+    "sst": "bun --env-file=.env.local --env-file=.env.sst.local run vp exec sst"
   },
   "devDependencies": {
     "@quieter/env": "workspace:*",

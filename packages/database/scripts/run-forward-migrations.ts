@@ -59,7 +59,28 @@ export const runForwardMigrations = async (input: {
   await sql`select pg_advisory_lock(hashtext('quieter-forward-migrations'))`;
 
   try {
-    for (const migration of nonTransactionalMigrations) {
+    const migrationTableExists = await sql<{ exists: boolean }[]>`
+      select to_regclass('drizzle.__drizzle_migrations') is not null as exists
+    `;
+    const appliedNames = new Set(
+      migrationTableExists[0]?.exists
+        ? (
+            await sql<{ name: string | null }[]>`
+              select name from drizzle.__drizzle_migrations where name is not null
+            `
+          ).flatMap(({ name }) => (name ? [name] : []))
+        : [],
+    );
+    const pendingNonTransactionalMigrations = nonTransactionalMigrations.filter(
+      ({ name }) => !appliedNames.has(name),
+    );
+
+    if (pendingNonTransactionalMigrations.length === 0) {
+      await runKitMigrate();
+      return;
+    }
+
+    for (const migration of pendingNonTransactionalMigrations) {
       const temporaryDirectory = mkdtempSync(join(input.packageDirectory, ".migration-prefix-"));
       const prefixDirectory = join(temporaryDirectory, "drizzle");
 
@@ -83,11 +104,6 @@ export const runForwardMigrations = async (input: {
       } finally {
         rmSync(temporaryDirectory, { force: true, recursive: true });
       }
-
-      const applied = await sql<{ name: string | null }[]>`
-        select name from drizzle.__drizzle_migrations where name = ${migration.name}
-      `;
-      if (applied.length > 0) continue;
 
       for (const statement of migration.sql.split(STATEMENT_BREAKPOINT)) {
         const executable = statement.replace(NON_TRANSACTIONAL_MARKER, "").trim();

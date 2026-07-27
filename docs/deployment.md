@@ -3,13 +3,14 @@
 ## Production
 
 Production deploys run through `.github/workflows/sst-deploy.yml` on pushes to `main` or a manual
-workflow dispatch. The protected GitHub `production` environment is the only manually configured
-source of deployment variables and secrets.
+workflow dispatch. It calls `.github/workflows/ci-main.yml` as the same reusable verification
+workflow used by pull requests. The protected GitHub `production` environment is the only manually
+configured source of deployment variables and secrets.
 
 The release workflow:
 
 1. runs type, lint, copy, boundary, bundle, and test checks;
-2. validates database migrations when database inputs changed;
+2. validates database migrations against a temporary PostgreSQL service;
 3. applies committed forward-only production migrations;
 4. synchronizes GitHub secrets into SST's encrypted secret store;
 5. runs `sst deploy`, which deploys the AWS mail/background stack and the Cloudflare web Worker;

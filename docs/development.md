@@ -4,12 +4,13 @@
 
 - Vite+ (`vp`), which manages the pinned Node runtime and Bun package manager
 - Git
-- PostgreSQL 16 or newer installed locally
+- PostgreSQL 16 or newer locally, or a dedicated disposable Neon development branch
 - Non-production AWS credentials only when running the SST mail and background-processing stack
 - OAuth and provider credentials for integrations you want to test
 
-Hosted development databases are intentionally unsupported. Every developer uses local PostgreSQL,
-and no developer receives production database credentials.
+Local PostgreSQL remains supported. A dedicated Neon development branch is also supported when its
+exact direct endpoint hostname is pinned with `QUIETER_LOCAL_NEON_HOST`; arbitrary hosted or
+production database URLs remain rejected.
 
 ## Install
 
@@ -26,9 +27,9 @@ On PowerShell:
 Copy-Item .env.example .env.local
 ```
 
-Do not copy production secrets into `.env.local`.
-Run `vp run env:doctor` after editing `.env.local`; it fails if remote database URLs or
-production-shaped provider keys are present.
+Do not copy production database credentials or persistent queue endpoints into `.env.local`.
+Run `vp run env:doctor` after editing `.env.local`; it rejects unknown remote databases,
+production-shaped background infrastructure, and non-sandbox Polar credentials.
 
 ## Local Database
 
@@ -46,6 +47,17 @@ postgresql://postgres:postgres@localhost:5432/quieter
 
 Adjust the username, password, or port for your local PostgreSQL installation. Keep the hostname
 loopback-only.
+
+For a disposable Neon branch, use its pooled connection string for `DATABASE_URL`, its direct
+connection string for `DATABASE_MIGRATION_URL`, and pin the direct hostname:
+
+```text
+QUIETER_DEPLOYMENT_ENV=local
+QUIETER_LOCAL_NEON_HOST=ep-your-development-branch.region.aws.neon.tech
+```
+
+The local guards normalize pooled and direct Neon hostnames but accept only that exact endpoint.
+Never point the allowlist at a production branch.
 
 Apply the committed application migrations:
 
@@ -68,14 +80,14 @@ Start with `.env.example`. Environment variables are validated by `@quieter/env`
 
 Local development requires only the values needed by the paths you exercise. Important groups:
 
-- `DATABASE_URL`: local PostgreSQL only
+- `DATABASE_URL`: loopback PostgreSQL or the explicitly allowlisted Neon development branch
 - Better Auth: application URL and secret
 - Auth email mode: `QUIETER_AUTH_MAIL_MODE=console` prints local auth links without managed mail
 - Google identity OAuth: sign-in only
 - Google Gmail OAuth: separate client for mailbox authorization
 - Gmail credential encryption keys
 - OpenRouter: chat and mailbox AI features
-- AWS and SST: managed mail, queues, workflows, and live synchronization
+- AWS and SST: optional provider-infrastructure integration tests only
 - Polar: checkout and subscription flows
 - PostHog, Sentry, and logo.dev: optional integrations
 
@@ -86,21 +98,28 @@ Keep `DATABASE_MIGRATION_URL` unset locally. Local migration commands fall back 
 Run the normal local web session:
 
 ```bash
-vp run dev
+bun run dev
 ```
 
-Vite Task starts `apps/web` on `http://localhost:3000`. This path does not start SST and should not
-need AWS, R2, live-sync, or managed-mail provider credentials.
+This directly starts the Cloudflare/Vite production-shaped Worker runtime on
+`http://localhost:3000` as the only foreground process. Vite validates that the database is
+loopback-only or the explicitly allowlisted Neon branch before serving. Chat generation, AI
+automation, and mailbox actions use their in-process fallbacks, so stopping this command stops all
+local background work without a custom orchestrator. Apply migrations explicitly with
+`vp run db:migrate` after pulling or generating schema changes.
 
-Run the optional mail and background-processing stack only when you need it:
+Run the optional remote mail and background-processing infrastructure only for explicit provider
+integration tests:
 
 ```bash
-vp run dev:mail
+bun run dev:mail
 ```
 
-Run both sessions together with `vp run dev:all`. The SST wrapper defaults to the `mail-dev`
-stage and loads `.env.local` plus optional `.env.sst.local`. Keep AWS credentials out of
-`.env.local`; put non-production SST credentials in `.env.sst.local` when the mail stack is needed.
+`bun run dev` is the single safe local runtime. Use `bun run dev:cloud` when you explicitly need the
+web app and SST together. The package commands invoke SST directly with the `mail-dev` stage and
+load `.env.local` plus optional `.env.sst.local`. Keep AWS credentials out of `.env.local`; put
+non-production SST credentials in `.env.sst.local`. Remote queues and schedules can outlive the
+terminal, so remove the stage after infrastructure testing rather than relying on Ctrl+C.
 
 ## Where Changes Belong
 

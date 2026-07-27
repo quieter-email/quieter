@@ -43,13 +43,20 @@ type BillingEntitlement = {
 
 type BillingRuntimeEnvironment = Pick<
   typeof serverEnv,
-  "NODE_ENV" | "QUIETER_DEPLOYMENT_ENV" | "QUIETER_LOCAL_BILLING_BYPASS"
+  "BETTER_AUTH_URL" | "NODE_ENV" | "QUIETER_DEPLOYMENT_ENV" | "QUIETER_LOCAL_BILLING_BYPASS"
 >;
+
+const isLoopbackUrl = (value: string | undefined) => {
+  if (!value) return false;
+  const hostname = new URL(value).hostname;
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+};
 
 export const isLocalDevelopmentBillingEntitlementEnabled = (
   env: BillingRuntimeEnvironment = serverEnv,
 ) =>
-  env.NODE_ENV === "development" &&
+  env.NODE_ENV !== "test" &&
+  (env.NODE_ENV === "development" || isLoopbackUrl(env.BETTER_AUTH_URL)) &&
   env.QUIETER_DEPLOYMENT_ENV === "local" &&
   env.QUIETER_LOCAL_BILLING_BYPASS === true;
 
