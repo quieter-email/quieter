@@ -8,6 +8,7 @@ import {
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { useForm } from "@tanstack/react-form";
+import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { type FormEvent, useState } from "react";
 import type { ComposeFormValues } from "~/features/compose/domain/compose-form";
 import { ComposeEditor } from "~/features/compose/components/compose-editor";
@@ -15,6 +16,7 @@ import {
   getRenderableComposeBodyHtml,
   normalizeComposeBodyHtml,
 } from "~/features/compose/domain/draft";
+import { getAppPresenceMotion } from "~/features/motion/app-motion";
 import type { InlineComposeAction } from "../../types";
 import { ToolStep } from "./tools/tool-step";
 
@@ -119,6 +121,7 @@ export const InlineComposeTool = ({
   processing,
   result,
 }: InlineComposeToolProps) => {
+  const shouldReduceMotion = useReducedMotion();
   const [showCc, setShowCc] = useState(!!initial.cc.trim());
   const [showBcc, setShowBcc] = useState(!!initial.bcc.trim());
   const [pendingAction, setPendingAction] = useState<InlineComposeAction | null>(null);
@@ -313,13 +316,22 @@ export const InlineComposeTool = ({
       </fieldset>
 
       <div className="mt-3 flex items-center gap-2">
-        {error ? (
-          <p aria-live="polite" className="min-w-0 flex-1 truncate text-xs text-destructive">
-            {error}
-          </p>
-        ) : (
-          <span className="min-w-0 flex-1" />
-        )}
+        <div className="min-w-0 flex-1">
+          <AnimatePresence initial={false}>
+            {error ? (
+              <m.p
+                {...getAppPresenceMotion({
+                  distance: 2,
+                  reducedMotion: shouldReduceMotion,
+                })}
+                aria-live="polite"
+                className="truncate text-xs text-destructive"
+              >
+                {error}
+              </m.p>
+            ) : null}
+          </AnimatePresence>
+        </div>
         <Button
           disabled={disabled || isBusy}
           onClick={() => void resolve("decline")}

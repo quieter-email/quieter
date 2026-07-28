@@ -1,17 +1,19 @@
 "use client";
 
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
+import type { FocusEvent, KeyboardEvent, MouseEvent } from "react";
 import { FileAttachmentIcon, MessageMultiple01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { splitMailAddressList } from "@quieter/mail/compose/schema";
 import { cn } from "@quieter/ui/cn";
 import { m, useReducedMotion } from "motion/react";
-import { type FocusEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { useState } from "react";
 import type { ThreadListEntry } from "~/lib/gmail/thread-list";
 import { SenderAvatar } from "~/components/sender-avatar";
 import { MessageLabels } from "~/features/message-labels/components/message-labels";
 import { createMailboxThreadMessageActionHandlers } from "~/features/message-thread/components/message-action-handlers";
 import { MessageActionsContextMenu } from "~/features/message-thread/components/message-actions";
+import { appEaseOut, appMotionDuration, getAppStaggerDelay } from "~/features/motion/app-motion";
 import { formatMessageListDate, parseSender } from "~/lib/gmail/message-utils";
 import type { MessageListProps } from "./message-list-types";
 import type { useMessageListSelection } from "./use-message-list-selection";
@@ -35,6 +37,8 @@ const getSelectionGesture = (event: MessageRowGestureEvent): MessageRowSelection
 const clearRowFocusRing = (row: HTMLElement | null) => {
   row?.removeAttribute("data-focus-visible");
 };
+
+const rowPressTransition = { damping: 28, mass: 0.7, stiffness: 700, type: "spring" } as const;
 
 type MessageRowProps = {
   activeMailbox: MessageListProps["activeMailbox"];
@@ -102,10 +106,14 @@ const MessageRowContent = ({
   state,
   thread,
 }: MessageRowContentProps) => {
-  const shouldReduceMotion = useReducedMotion();
+  const reducedMotion = useReducedMotion();
+  const [isHovered, setIsHovered] = useState(false);
+  const [isPressed, setIsPressed] = useState(false);
+  const [isSelectHovered, setIsSelectHovered] = useState(false);
   const isActive = !!state?.active;
   const isSelected = !!state?.selected;
   const showSelectionControl = !!state?.selectionMode;
+  const showCheckbox = showSelectionControl || isSelectHovered;
   const anchorMessage = thread.anchorMessage;
   const subject = anchorMessage.subject || "(No subject)";
   const isDraftMailbox = activeMailbox === "drafts";
@@ -131,6 +139,11 @@ const MessageRowContent = ({
     "text-muted-foreground": !unread,
     "text-foreground/75": isActive && !unread,
   });
+  const surfaceOpacity = Math.max(
+    isActive ? 1 : 0,
+    isSelected ? (isHovered ? 0.9 : 0.75) : 0,
+    isHovered ? 0.5 : 0,
+  );
   const selectionAriaLabel = isDraftMailbox ? "Select draft" : "Select conversation";
   const openAriaLabel = isDraftMailbox
     ? `Open draft: ${subject}`
@@ -223,18 +236,20 @@ const MessageRowContent = ({
 
   return (
     <m.div
-      className={cn(
-        "relative flex h-17 items-stretch overflow-hidden rounded-lg transition-colors active:bg-muted motion-reduce:transition-none",
-        {
-          "bg-muted hover:bg-muted": isActive || isSelected,
-          "hover:bg-secondary": !isActive && !isSelected,
-        },
-      )}
+      animate={{ scale: reducedMotion || !isPressed ? 1 : 0.97 }}
+      className="relative flex h-17 items-stretch overflow-hidden rounded-lg"
       data-message-row
+      initial={false}
       onBlurCapture={handleRowBlurCapture}
       onFocusCapture={handleRowFocusCapture}
-      onMouseEnter={() => onThreadIntent(thread.threadId)}
-      onMouseLeave={() => onThreadIntent(null)}
+      onMouseEnter={() => {
+        setIsHovered(true);
+        onThreadIntent(thread.threadId);
+      }}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        onThreadIntent(null);
+      }}
       onPointerDown={(event) => {
         if (event.pointerType !== "mouse") {
           return;
@@ -251,79 +266,84 @@ const MessageRowContent = ({
           active.blur();
         }
       }}
-      whileTap={{
-        scale: shouldReduceMotion ? 1 : 0.97,
-      }}
+      transition={rowPressTransition}
     >
+      <m.span
+        animate={{ opacity: surfaceOpacity }}
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-0 rounded-lg bg-muted"
+        initial={false}
+        transition={{ duration: appMotionDuration.feedback, ease: appEaseOut }}
+      />
+
       {unread && (
         <span
           aria-hidden
-          className="pointer-events-none absolute top-1/2 left-0 h-8 w-0.75 -translate-y-1/2 rounded-r-full bg-primary"
+          className="pointer-events-none absolute top-1/2 left-0 z-20 h-8 w-0.75 -translate-y-1/2 rounded-r-full bg-primary"
         />
       )}
-      <div className="relative ml-2 flex h-full w-9.5 shrink-0 items-center justify-center @sm:ml-3">
+      <div className="relative z-10 ml-2 flex h-full shrink-0 items-center justify-center @sm:ml-3">
         <button
           aria-label={selectionAriaLabel}
-          aria-pressed={!!isSelected}
-          className={cn(
-            "absolute inset-0 flex items-center justify-center rounded-xl transition-[opacity,transform] duration-100 ease-out outline-none focus-visible:shadow-none",
-            {
-              "pointer-events-none scale-95 opacity-0": showSelectionControl,
-              "scale-100 opacity-100": !showSelectionControl,
-            },
-          )}
+          aria-pressed={isSelected}
+          className="relative size-9.5 rounded-lg outline-none focus-visible:shadow-none disabled:pointer-events-none"
           disabled={isActionPending}
           onKeyDown={handleSelectionKeyDown}
           onMouseDown={handleSelectionPress}
+          onMouseEnter={() => setIsSelectHovered(true)}
+          onMouseLeave={() => setIsSelectHovered(false)}
           tabIndex={-1}
           type="button"
         >
-          <SenderAvatar
-            avatarUrlDark={anchorMessage.senderAvatarUrls?.dark}
-            avatarUrlLight={anchorMessage.senderAvatarUrls?.light}
-            className="size-9.5 rounded-lg"
-            fallbackLabel={senderInitial}
-          />
-        </button>
-
-        <button
-          aria-label={selectionAriaLabel}
-          aria-pressed={!!isSelected}
-          className={cn(
-            "absolute inset-0 flex items-center justify-center rounded-xl transition-[opacity,transform] duration-100 ease-out outline-none focus-visible:shadow-none",
-            {
-              "scale-100 opacity-100": showSelectionControl,
-              "pointer-events-none scale-95 opacity-0": !showSelectionControl,
-            },
-          )}
-          disabled={isActionPending}
-          onKeyDown={handleSelectionKeyDown}
-          onMouseDown={handleSelectionPress}
-          tabIndex={-1}
-          type="button"
-        >
-          <span
-            aria-hidden="true"
-            className={cn(
-              "flex size-4.5 items-center justify-center rounded-[5px] border bg-background text-transparent shadow-xs transition-[background-color,border-color,color,box-shadow] duration-100 ease-out",
-              {
-                "border-primary bg-primary text-primary-foreground": isSelected,
-                "border-input": !isSelected,
-              },
-            )}
+          <m.span
+            animate={{
+              opacity: showCheckbox ? 0 : 1,
+              scale: reducedMotion || !showCheckbox ? 1 : 0.92,
+            }}
+            className="block"
+            initial={false}
+            transition={{ duration: appMotionDuration.feedback, ease: appEaseOut }}
           >
-            <svg
-              className="size-3.5"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              viewBox="0 0 14 14"
+            <SenderAvatar
+              avatarUrlDark={anchorMessage.senderAvatarUrls?.dark}
+              avatarUrlLight={anchorMessage.senderAvatarUrls?.light}
+              className="size-9.5 rounded-lg"
+              fallbackLabel={senderInitial}
+            />
+          </m.span>
+
+          <m.span
+            animate={{
+              opacity: showCheckbox ? 1 : 0,
+              scale: reducedMotion || showCheckbox ? 1 : 0.8,
+            }}
+            aria-hidden="true"
+            className="absolute inset-0 flex items-center justify-center"
+            initial={false}
+            transition={{ duration: appMotionDuration.feedback, ease: appEaseOut }}
+          >
+            <span
+              className={cn(
+                "flex size-4.5 items-center justify-center rounded-[5px] border bg-background text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
+                {
+                  "border-primary bg-primary text-primary-foreground": isSelected,
+                  "border-input": !isSelected,
+                },
+              )}
             >
-              <path d="M3 7.5 5.75 10 11 4.75" />
-            </svg>
-          </span>
+              <svg
+                className="size-3.5"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                viewBox="0 0 14 14"
+              >
+                <path d="M3 7.5 5.75 10 11 4.75" />
+              </svg>
+            </span>
+          </m.span>
         </button>
       </div>
 
@@ -346,11 +366,15 @@ const MessageRowContent = ({
         <button
           aria-label={openAriaLabel}
           aria-current={isActive ? "true" : undefined}
-          className="relative flex h-full min-w-0 flex-1 items-center rounded-xl text-left transition-transform duration-100 ease-out outline-none focus-visible:shadow-none"
+          className="relative z-10 flex h-full min-w-0 flex-1 items-center rounded-lg text-left outline-none focus-visible:shadow-none"
           data-message-row-trigger
           onClick={handleRowClick}
           onKeyDown={handleRowKeyDown}
           onMouseDown={handleRowMouseDown}
+          onPointerCancel={() => setIsPressed(false)}
+          onPointerDown={() => setIsPressed(true)}
+          onPointerLeave={() => setIsPressed(false)}
+          onPointerUp={() => setIsPressed(false)}
           type="button"
         >
           <div className="relative z-10 flex min-w-0 flex-1 items-center gap-2 px-2 @sm:gap-3 @sm:px-3">
@@ -468,7 +492,7 @@ export const MessageRow = ({
 
   return (
     <li
-      className={cn("group relative", className, {
+      className={cn("relative", className, {
         "overflow-hidden": isNew,
       })}
       data-index={dataIndex}
@@ -480,14 +504,16 @@ export const MessageRow = ({
     >
       {isNew ? (
         <m.div
-          initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -24, scale: 0.985 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
+          animate={{ opacity: 1, transform: "translate3d(0, 0, 0)" }}
+          initial={
+            shouldReduceMotion
+              ? { opacity: 0 }
+              : { opacity: 0, transform: "translate3d(0, -8px, 0)" }
+          }
           transition={{
-            type: "spring",
-            stiffness: 260,
-            damping: 24,
-            mass: 0.8,
-            delay: staggerIndex * 0.05,
+            delay: shouldReduceMotion ? 0 : getAppStaggerDelay(staggerIndex),
+            duration: shouldReduceMotion ? appMotionDuration.feedback : appMotionDuration.enter,
+            ease: appEaseOut,
           }}
         >
           {element}

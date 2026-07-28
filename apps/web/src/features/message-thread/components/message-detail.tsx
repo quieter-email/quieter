@@ -4,7 +4,7 @@ import { ArrowLeft01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import { m } from "motion/react";
+import { m, useReducedMotion } from "motion/react";
 import { Suspense } from "react";
 import type { ComposeDraftState } from "~/features/compose";
 import type {
@@ -13,6 +13,7 @@ import type {
 } from "~/features/mailbox/components/mailbox-action-handlers";
 import type { MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
 import { EmptyMessageState } from "~/components/empty-message-state";
+import { appEaseOut, appMotionDuration } from "~/features/motion/app-motion";
 import { MessageView } from "./message-view";
 
 type MessageDetailProps = {
@@ -27,14 +28,6 @@ type MessageDetailProps = {
   pendingActions: MailboxPendingActions;
   selectedMessage: MessageListItem | null;
 };
-
-const messageDetailContentMotion = {
-  initial: { opacity: 0, scale: 0.96, filter: "blur(14px)" },
-  animate: { opacity: 1, scale: 1, filter: "blur(0px)" },
-  exit: { opacity: 0, scale: 0.96, filter: "blur(14px)" },
-  style: { transformOrigin: "center center" },
-  transition: { duration: 0.18, ease: "easeOut" },
-} as const;
 
 const MessageDetailLoadingSkeleton = () => (
   // react-doctor-disable-next-line react-doctor/prefer-tag-over-role
@@ -80,6 +73,7 @@ export const MessageDetail = ({
   mailboxId,
   mailboxProvider,
 }: MessageDetailProps) => {
+  const reducedMotion = useReducedMotion();
   const emptyState =
     activeMailbox === "drafts" ? (
       <EmptyMessageState description="Choose a draft from the list." title="Select a draft" />
@@ -109,7 +103,24 @@ export const MessageDetail = ({
         className="flex min-h-0 flex-1 flex-col overflow-y-auto"
         data-message-detail-scroll-container
       >
-        <m.div className="flex min-h-full flex-1 flex-col" {...messageDetailContentMotion}>
+        <m.div
+          animate={{ filter: "blur(0px)", opacity: 1, transform: "translate3d(0, 0, 0)" }}
+          className="flex min-h-full flex-1 flex-col"
+          initial={
+            reducedMotion
+              ? { opacity: 0 }
+              : {
+                  filter: "blur(4px)",
+                  opacity: 0.55,
+                  transform: "translate3d(8px, 0, 0)",
+                }
+          }
+          key={selectedMessage?.id ?? (isPending ? "loading" : "empty")}
+          transition={{
+            duration: reducedMotion ? appMotionDuration.feedback : appMotionDuration.layout,
+            ease: appEaseOut,
+          }}
+        >
           {isPending && !selectedMessage ? (
             <MessageDetailLoadingSkeleton />
           ) : selectedMessage ? (

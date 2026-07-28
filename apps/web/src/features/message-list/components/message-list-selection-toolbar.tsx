@@ -25,7 +25,7 @@ const MessageListBulkActions = ({
     <IconButtonTooltip label="Bulk actions">
       <DropdownMenuTrigger
         aria-label="Open bulk actions"
-        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-input bg-background text-foreground shadow-sm outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:bg-muted/80 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
+        className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-input bg-background text-foreground shadow-sm outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:bg-muted/80 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
         disabled={disabled || actions.length === 0}
         type="button"
       >
@@ -70,7 +70,7 @@ export const MessageListSelectionToolbar = ({
   onToggleAll: (selected: boolean) => void;
   selectedCount: number;
 }) => (
-  <div className="bg-transparent p-4">
+  <div className="bg-transparent p-4 pb-3">
     <div className="flex min-w-0 items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-2.5">
         <IconButtonTooltip label="Select all">
@@ -98,7 +98,7 @@ export const MessageListSelectionToolbar = ({
             aria-label="Clear selection"
             disabled={disabled}
             onClick={onClearSelection}
-            size="icon-sm"
+            size="icon-lg"
             type="button"
             variant="outline"
           >

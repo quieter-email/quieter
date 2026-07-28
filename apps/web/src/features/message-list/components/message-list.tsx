@@ -12,12 +12,13 @@ import {
 import { toast } from "@quieter/ui/toast";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { useQuery } from "@tanstack/react-query";
-import { m } from "motion/react";
+import { m, useReducedMotion } from "motion/react";
 import { useLayoutEffect, useRef, useState } from "react";
 import type { MessageListItem } from "~/lib/gmail/gmail";
 import { shouldIgnoreAppShortcut } from "~/features/hotkeys/domain/hotkey-guards";
 import { MessageLabelsDialog } from "~/features/message-labels/components/message-labels-dialog";
 import { MessageListSearch } from "~/features/message-search/components/message-list-search";
+import { appEaseOut, appMotionDuration } from "~/features/motion/app-motion";
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
 import { buildThreadListEntries, type ThreadListEntry } from "~/lib/gmail/thread-list";
 import type { MessageListBulkAction, MessageListProps } from "./message-list-types";
@@ -25,14 +26,6 @@ import { GmailUsefulDetails } from "./gmail-useful-details";
 import { MessageListScrollPane } from "./message-list-scroll-pane";
 import { MessageListSelectionToolbar } from "./message-list-selection-toolbar";
 import { useMessageListSelection } from "./use-message-list-selection";
-
-const messageListContentMotion = {
-  initial: { opacity: 0, scale: 0.96, filter: "blur(14px)" },
-  animate: { opacity: 1, scale: 1, filter: "blur(0px)" },
-  exit: { opacity: 0, scale: 0.96, filter: "blur(14px)" },
-  style: { transformOrigin: "center center" },
-  transition: { duration: 0.18, ease: "easeOut" },
-} as const;
 
 const buildDraftListEntry = (message: MessageListItem): ThreadListEntry => ({
   threadId: message.draftId ?? message.id,
@@ -50,6 +43,7 @@ const formatConversationCount = (count: number) =>
   `${count} ${count === 1 ? "conversation" : "conversations"}`;
 
 export const MessageList = (props: MessageListProps) => {
+  const reducedMotion = useReducedMotion();
   const [isBulkLabelsOpen, setIsBulkLabelsOpen] = useState(false);
   const { data: gmailLabels = [] } = useQuery(
     labelsQueryOptions(props.mailboxId, props.mailboxProvider !== "api"),
@@ -467,10 +461,26 @@ export const MessageList = (props: MessageListProps) => {
           />
         )}
 
-      <m.div className="flex min-h-0 flex-1 flex-col" {...messageListContentMotion}>
+      <m.div
+        animate={{ filter: "blur(0px)", opacity: 1, transform: "translate3d(0, 0, 0)" }}
+        className="flex min-h-0 flex-1 flex-col"
+        initial={
+          reducedMotion
+            ? { opacity: 0 }
+            : {
+                filter: "blur(4px)",
+                opacity: 0.55,
+                transform: "translate3d(0, 4px, 0)",
+              }
+        }
+        key={scrollPaneKey}
+        transition={{
+          duration: reducedMotion ? appMotionDuration.feedback : appMotionDuration.layout,
+          ease: appEaseOut,
+        }}
+      >
         <MessageListScrollPane
           gmailLabels={gmailLabels}
-          key={scrollPaneKey}
           list={props}
           selection={selection}
           threadedMessages={threadedMessages}

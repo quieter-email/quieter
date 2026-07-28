@@ -10,15 +10,18 @@ import {
   ScrollAreaThumb,
   ScrollAreaViewport,
 } from "@quieter/ui/scroll-area";
-import { AnimatePresence, m } from "motion/react";
+import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { getAppPresenceMotion } from "~/features/motion/app-motion";
 import type { ChatTurn, ResolveComposeTool } from "../types";
 import { ChatError } from "./chat-error";
+import { createChatTurnEntranceState, trackChatTurnEntrances } from "./chat-turn-entrance";
 import { ConversationTurn } from "./conversation-turn";
 
 type ChatTranscriptProps = {
   actionsDisabled?: boolean;
   errorMessage?: string;
+  hydrated: boolean;
   isStreaming: boolean;
   onCopy: (text: string) => void;
   onEditSubmit: (userMessageId: string, message: string) => void;
@@ -45,6 +48,7 @@ const scrollTranscriptToBottom = (
 export const ChatTranscript = ({
   actionsDisabled,
   errorMessage,
+  hydrated,
   isStreaming,
   onCopy,
   onEditSubmit,
@@ -52,11 +56,18 @@ export const ChatTranscript = ({
   onResolveCompose,
   turns,
 }: ChatTranscriptProps) => {
+  const shouldReduceMotion = useReducedMotion();
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = useRef(true);
+  const turnEntranceStateRef = useRef(createChatTurnEntranceState());
   const [showScrollButton, setShowScrollButton] = useState(false);
   const retryAssistantId = turns.at(-1)?.assistant?.id;
+  const enteringTurnIds = trackChatTurnEntrances(
+    turnEntranceStateRef.current,
+    turns.map((turn) => turn.id),
+    hydrated,
+  );
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -98,26 +109,46 @@ export const ChatTranscript = ({
               ref={contentRef}
               className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-4 py-8 pb-10 sm:px-6"
             >
-              {turns.map((turn, index) => (
-                <ConversationTurn
-                  actionsDisabled={actionsDisabled}
-                  isLastTurn={index === turns.length - 1}
-                  isStreaming={isStreaming && index === turns.length - 1}
-                  key={turn.id}
-                  onCopy={onCopy}
-                  onEditSubmit={onEditSubmit}
-                  onRegenerate={onRegenerate}
-                  onResolveCompose={onResolveCompose}
-                  turn={turn}
-                />
-              ))}
-              {errorMessage ? (
-                <ChatError
-                  disabled={actionsDisabled}
-                  message={errorMessage}
-                  onRetry={retryAssistantId ? () => onRegenerate(retryAssistantId) : undefined}
-                />
-              ) : null}
+              {turns.map((turn, index) => {
+                const animateTurnEntrance = enteringTurnIds.has(turn.id);
+                const turnMotion = getAppPresenceMotion({
+                  reducedMotion: shouldReduceMotion,
+                });
+
+                return (
+                  <m.div
+                    key={turn.id}
+                    {...turnMotion}
+                    initial={animateTurnEntrance ? turnMotion.initial : false}
+                  >
+                    <ConversationTurn
+                      actionsDisabled={actionsDisabled}
+                      animateEntrance={turnEntranceStateRef.current.newTurnIds.has(turn.id)}
+                      isLastTurn={index === turns.length - 1}
+                      isStreaming={isStreaming && index === turns.length - 1}
+                      onCopy={onCopy}
+                      onEditSubmit={onEditSubmit}
+                      onRegenerate={onRegenerate}
+                      onResolveCompose={onResolveCompose}
+                      turn={turn}
+                    />
+                  </m.div>
+                );
+              })}
+              <AnimatePresence initial={false}>
+                {errorMessage ? (
+                  <m.div
+                    key="chat-error"
+                    {...getAppPresenceMotion({ reducedMotion: shouldReduceMotion })}
+                  >
+                    <ChatError
+                      disabled={actionsDisabled}
+                      message={errorMessage}
+                      onRetry={retryAssistantId ? () => onRegenerate(retryAssistantId) : undefined}
+                    />
+                  </m.div>
+                ) : null}
+              </AnimatePresence>
             </div>
           </ScrollAreaContent>
         </ScrollAreaViewport>
@@ -126,34 +157,35 @@ export const ChatTranscript = ({
         </ScrollAreaScrollbar>
       </ScrollArea>
 
-      <AnimatePresence>
-        {showScrollButton ? (
-          <m.button
-            animate={{ opacity: 1, y: 0 }}
-            aria-label="Scroll to bottom"
-            className={cn(
-              "absolute bottom-4 left-1/2 -translate-x-1/2",
-              "flex items-center gap-1.5 rounded-full border border-border/70 bg-background/95 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm",
-              "transition-colors hover:bg-muted/60 hover:text-foreground",
-            )}
-            exit={{ opacity: 0, y: 4 }}
-            initial={{ opacity: 0, y: 4 }}
-            onClick={() =>
-              scrollTranscriptToBottom(
-                viewportRef.current,
-                "smooth",
-                isNearBottomRef,
-                setShowScrollButton,
-              )
-            }
-            transition={{ duration: 0.15 }}
-            type="button"
-          >
-            <HugeiconsIcon aria-hidden className="size-3" icon={ArrowDown01Icon} />
-            New messages
-          </m.button>
-        ) : null}
-      </AnimatePresence>
+      <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
+        <AnimatePresence initial={false}>
+          {showScrollButton ? (
+            <m.button
+              {...getAppPresenceMotion({
+                distance: 4,
+                reducedMotion: shouldReduceMotion,
+              })}
+              aria-label="Scroll to bottom"
+              className={cn(
+                "pointer-events-auto flex items-center gap-1.5 rounded-full border border-border/70 bg-background/95 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm",
+                "transition-colors hover:bg-muted/60 hover:text-foreground",
+              )}
+              onClick={() =>
+                scrollTranscriptToBottom(
+                  viewportRef.current,
+                  "smooth",
+                  isNearBottomRef,
+                  setShowScrollButton,
+                )
+              }
+              type="button"
+            >
+              <HugeiconsIcon aria-hidden className="size-3" icon={ArrowDown01Icon} />
+              New messages
+            </m.button>
+          ) : null}
+        </AnimatePresence>
+      </div>
     </div>
   );
 };

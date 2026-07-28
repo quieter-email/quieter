@@ -173,14 +173,12 @@ const MessageHeaderContent = ({
   const senderEmail = sender.email || "";
   const senderInitial = (senderName.trim().charAt(0) || "?").toUpperCase();
   const date = formatMessageDate(message, "full") || "--";
-  const preview = previewMode === "collapsed" && !isExpanded ? message.snippet?.trim() || "" : "";
+  const preview = message.snippet?.trim() || "";
   const participantRows = [{ label: "To", value: formatEnvelopeValue(message.to) }].filter(
     (row) => !!row.value,
   );
-  const showParticipants =
-    participantRows.length > 0 && (previewMode !== "collapsed" || !!isExpanded);
   const content = (
-    <div className="w-full min-w-0 flex-1">
+    <div className="w-full min-w-0 flex-1 select-text">
       <div className="flex w-full min-w-0 flex-wrap items-baseline justify-start gap-x-2 gap-y-1">
         {isMessageUnread(message) && (
           <span aria-hidden className="size-2 shrink-0 rounded-full bg-foreground/75" />
@@ -188,42 +186,42 @@ const MessageHeaderContent = ({
 
         <span
           className={cn(
-            "max-w-full min-w-0 shrink truncate text-sm text-foreground @sm:text-[15px]",
+            "max-w-full min-w-0 shrink cursor-text truncate text-sm font-medium text-foreground @sm:text-[15px]",
             senderNameClassName,
-            {
-              "font-semibold text-foreground": !!isExpanded || isMessageUnread(message),
-              "font-medium": !isExpanded && !isMessageUnread(message),
-            },
           )}
         >
           {senderName}
         </span>
 
         {senderEmail && (
-          <span className="max-w-full min-w-0 shrink truncate text-xs text-muted-foreground @sm:text-sm">
+          <span className="max-w-full min-w-0 shrink cursor-text truncate text-xs text-muted-foreground @sm:text-sm">
             {senderEmail}
           </span>
         )}
 
-        <span className="shrink-0 basis-full text-xs whitespace-nowrap text-muted-foreground @sm:basis-auto @sm:text-sm">
+        <span className="shrink-0 basis-full cursor-text text-xs whitespace-nowrap text-muted-foreground @sm:basis-auto @sm:text-sm">
           {date}
         </span>
       </div>
 
-      {preview && <p className="mt-1 truncate text-sm text-foreground">{preview}</p>}
-
-      <MessageLabels className="mt-1.5" labelIds={message.labelIds} labels={gmailLabels} />
-
-      {showParticipants && (
-        <div className="mt-1.5 space-y-1">
+      {previewMode === "collapsed" && !isExpanded ? (
+        <p className="mt-1 min-h-5 cursor-text truncate text-sm text-foreground">
+          {preview || <span aria-hidden>&nbsp;</span>}
+        </p>
+      ) : (
+        <div className="mt-1 min-h-5 space-y-1">
           {participantRows.map((row) => (
             <div className="flex min-w-0 items-start gap-2 text-xs @sm:text-sm" key={row.label}>
-              <span className="shrink-0 text-muted-foreground">{row.label}</span>
-              <span className="min-w-0 wrap-break-word text-foreground">{row.value}</span>
+              <span className="shrink-0 cursor-text text-muted-foreground">{row.label}</span>
+              <span className="min-w-0 cursor-text wrap-break-word text-foreground">
+                {row.value}
+              </span>
             </div>
           ))}
         </div>
       )}
+
+      <MessageLabels className="mt-1.5" labelIds={message.labelIds} labels={gmailLabels} />
     </div>
   );
 
@@ -244,7 +242,7 @@ const MessageHeaderContent = ({
             <button
               aria-controls={`message-body-${message.id}`}
               aria-expanded={isExpanded}
-              className="w-full min-w-0 cursor-pointer rounded-sm text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring/60 @sm:flex-1"
+              className="w-full min-w-0 rounded-sm text-left outline-hidden transition-colors select-text focus-visible:ring-2 focus-visible:ring-ring/60 @sm:flex-1"
               onClick={(event) => {
                 const selection = window.getSelection();
                 if (selection && !selection.isCollapsed && selection.toString().trim()) {
@@ -513,17 +511,16 @@ const ThreadMessageBody = ({
 }) => (
   <div
     aria-hidden={!expanded}
-    className="grid overflow-hidden"
+    className="grid overflow-hidden transition-[grid-template-rows] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-in-out) motion-reduce:transition-none"
     style={{
       gridTemplateRows: expanded ? "1fr" : "0fr",
       pointerEvents: expanded ? "auto" : "none",
-      transition: "grid-template-rows 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease-out",
     }}
   >
     <div className="min-h-0 overflow-hidden">
       <div
         className={cn(
-          "px-4 pb-4 transition-[opacity,transform,padding] duration-200 ease-out @sm:px-5 @sm:pb-5",
+          "px-4 pb-4 transition-[opacity,transform] duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out) motion-reduce:transition-none @sm:px-5 @sm:pb-5",
           {
             "translate-y-0 opacity-100": expanded,
             "-translate-y-1 opacity-0": !expanded,
@@ -559,9 +556,12 @@ const MessageExpandButton = ({
     >
       <HugeiconsIcon
         aria-hidden
-        className={cn("transition-transform duration-200", {
-          "rotate-180": expanded,
-        })}
+        className={cn(
+          "transition-transform duration-(--app-motion-duration-layout) ease-(--app-motion-ease-in-out) motion-reduce:transition-none",
+          {
+            "rotate-180": expanded,
+          },
+        )}
         icon={ArrowDown01Icon}
       />
     </Button>

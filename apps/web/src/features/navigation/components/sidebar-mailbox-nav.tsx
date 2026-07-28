@@ -11,9 +11,10 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { cn } from "@quieter/ui/cn";
-import { LayoutGroup, m } from "motion/react";
+import { LayoutGroup } from "motion/react";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 import { SidebarNavItem } from "~/features/navigation/components/sidebar-nav-item";
+import { SidebarEntrance } from "~/features/navigation/components/sidebar-surfaces";
 import { useSidebarNavHover } from "~/features/navigation/hooks/use-sidebar-nav-hover";
 
 const SIDEBAR_MAILBOX_ITEMS: ReadonlyArray<{
@@ -30,10 +31,6 @@ const SIDEBAR_MAILBOX_ITEMS: ReadonlyArray<{
   { id: "spam", label: "Spam", icon: Delete02Icon },
 ];
 const API_MAILBOX_ITEMS = SIDEBAR_MAILBOX_ITEMS.filter((item) => item.id === "sent");
-
-const getSidebarEntranceDelay = (step: number) => step * 0.1;
-const getSidebarEntranceInitial = (animateEntrance: boolean) =>
-  animateEntrance ? { opacity: 0, x: -20, filter: "blur(8px)" } : false;
 
 type SidebarMailboxNavProps = {
   animateEntrance: boolean;
@@ -69,16 +66,11 @@ export const SidebarMailboxNav = ({
             const itemHovered = isHovered(item.id);
 
             return (
-              <m.div
+              <SidebarEntrance
                 key={item.id}
-                className="w-full will-change-[transform,opacity,filter]"
-                initial={getSidebarEntranceInitial(animateEntrance)}
-                animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-                transition={{
-                  delay: getSidebarEntranceDelay(index + 3),
-                  duration: 0.5,
-                  ease: "easeOut",
-                }}
+                animateEntrance={animateEntrance}
+                className="w-full"
+                index={index + 3}
               >
                 <SidebarNavItem
                   active={isActive}
@@ -115,7 +107,7 @@ export const SidebarMailboxNav = ({
                   />
                   {item.label}
                 </SidebarNavItem>
-              </m.div>
+              </SidebarEntrance>
             );
           },
         )}
