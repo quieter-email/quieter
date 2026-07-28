@@ -223,10 +223,13 @@ const MessageRowContent = ({
 
   return (
     <m.div
-      className="relative flex h-17 items-stretch overflow-hidden rounded-lg motion-reduce:transition-none"
-      animate={{
-        backgroundColor: isActive || isSelected ? "var(--muted)" : "transparent",
-      }}
+      className={cn(
+        "relative flex h-17 items-stretch overflow-hidden rounded-lg transition-colors active:bg-muted motion-reduce:transition-none",
+        {
+          "bg-muted hover:bg-muted": isActive || isSelected,
+          "hover:bg-secondary": !isActive && !isSelected,
+        },
+      )}
       data-message-row
       onBlurCapture={handleRowBlurCapture}
       onFocusCapture={handleRowFocusCapture}
@@ -248,14 +251,7 @@ const MessageRowContent = ({
           active.blur();
         }
       }}
-      transition={{ duration: 0.1, ease: "easeOut" }}
-      whileHover={{
-        backgroundColor: isActive || isSelected ? "var(--muted)" : "var(--secondary)",
-        color: "var(--foreground)",
-      }}
       whileTap={{
-        backgroundColor: "var(--muted)",
-        color: "var(--foreground)",
         scale: shouldReduceMotion ? 1 : 0.97,
       }}
     >
@@ -265,7 +261,7 @@ const MessageRowContent = ({
           className="pointer-events-none absolute top-1/2 left-0 h-8 w-0.75 -translate-y-1/2 rounded-r-full bg-primary"
         />
       )}
-      <div className="relative ml-3 flex h-full w-9.5 shrink-0 items-center justify-center">
+      <div className="relative ml-2 flex h-full w-9.5 shrink-0 items-center justify-center @sm:ml-3">
         <button
           aria-label={selectionAriaLabel}
           aria-pressed={!!isSelected}
@@ -357,7 +353,7 @@ const MessageRowContent = ({
           onMouseDown={handleRowMouseDown}
           type="button"
         >
-          <div className="relative z-10 flex min-w-0 flex-1 items-center gap-3 px-3">
+          <div className="relative z-10 flex min-w-0 flex-1 items-center gap-2 px-2 @sm:gap-3 @sm:px-3">
             <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden">
               <div className="flex w-full min-w-0 items-center justify-between gap-2">
                 <p className="min-w-0 truncate text-left text-[13px]/4.5 text-foreground">
@@ -366,7 +362,9 @@ const MessageRowContent = ({
                     {senderLabel}
                   </span>
                   {senderEmail && (
-                    <span className="ml-2 text-[11px] text-muted-foreground">{senderEmail}</span>
+                    <span className="ml-2 hidden text-[11px] text-muted-foreground @sm:inline">
+                      {senderEmail}
+                    </span>
                   )}
                 </p>
 
@@ -415,13 +413,9 @@ const MessageRowContent = ({
                     subject
                   )}
                 </p>
-                <MessageLabels
-                  className="shrink-0 flex-nowrap"
-                  compact
-                  labelIds={threadLabelIds}
-                  labels={gmailLabels}
-                  limit={2}
-                />
+                <div className="hidden shrink-0 @sm:block">
+                  <MessageLabels compact labelIds={threadLabelIds} labels={gmailLabels} limit={2} />
+                </div>
               </div>
             </div>
           </div>

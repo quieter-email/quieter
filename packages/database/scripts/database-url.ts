@@ -10,29 +10,44 @@ const productionMigrationTarget = {
 } as const;
 
 const getHostname = (url: URL) => url.hostname.replace(/^\[(.*)\]$/, "$1");
+const normalizeNeonHostname = (hostname: string) => hostname.replace("-pooler.", ".");
 
-const toDirectPostgresUrl = (value: string) => {
-  const url = new URL(value);
-
-  if (url.hostname.includes("-pooler")) {
-    url.hostname = url.hostname.replace("-pooler", "");
-  }
-
-  url.searchParams.delete("pgbouncer");
-
-  return url;
+const isExplicitLocalNeonConfigured = (environment: Record<string, string | undefined>) => {
+  const configuredHost = environment.QUIETER_LOCAL_NEON_HOST?.trim().toLowerCase();
+  return (
+    !!configuredHost &&
+    configuredHost.endsWith(".neon.tech") &&
+    environment.QUIETER_DEPLOYMENT_ENV === "local"
+  );
 };
 
-export const getMigrationDatabaseUrl = () => {
-  const value = serverEnv.DATABASE_MIGRATION_URL ?? serverEnv.DATABASE_URL;
-
-  if (!value) {
-    throw new Error(
-      "DATABASE_MIGRATION_URL or DATABASE_URL is required. Local scripts load ../../.env.local — add one of these vars there.",
-    );
+const isExplicitLocalNeonUrl = (url: URL, environment: Record<string, string | undefined>) => {
+  const configuredHost = environment.QUIETER_LOCAL_NEON_HOST?.trim().toLowerCase();
+  if (!configuredHost || environment.QUIETER_DEPLOYMENT_ENV !== "local") {
+    return false;
   }
 
-  const url = toDirectPostgresUrl(value);
+  const hostname = normalizeNeonHostname(getHostname(url).toLowerCase());
+  return (
+    ["postgres:", "postgresql:"].includes(url.protocol) &&
+    configuredHost.endsWith(".neon.tech") &&
+    hostname === normalizeNeonHostname(configuredHost)
+  );
+};
+
+const assertDirectMigrationDatabaseUrl = (value: string) => {
+  const hostname = getHostname(new URL(value));
+  if (hostname.includes("-pooler")) {
+    throw new Error(
+      "DATABASE_MIGRATION_URL must use the direct Neon endpoint, not the pooled endpoint.",
+    );
+  }
+};
+
+const withMigrationTimeouts = (value: string) => {
+  const url = new URL(value);
+  url.searchParams.delete("pgbouncer");
+
   const options = [
     url.searchParams.get("options"),
     `-c lock_timeout=${LOCK_TIMEOUT}`,
@@ -43,6 +58,30 @@ export const getMigrationDatabaseUrl = () => {
 
   url.searchParams.set("options", options);
   return url.toString();
+};
+
+export const getMigrationDatabaseUrl = () => {
+  const migrationUrl = serverEnv.DATABASE_MIGRATION_URL?.trim();
+  if (migrationUrl) {
+    assertDirectMigrationDatabaseUrl(migrationUrl);
+    return withMigrationTimeouts(migrationUrl);
+  }
+
+  const databaseUrl = serverEnv.DATABASE_URL?.trim();
+  if (!databaseUrl) {
+    throw new Error(
+      "DATABASE_MIGRATION_URL or DATABASE_URL is required. Local scripts load ../../.env.local — add one of these vars there.",
+    );
+  }
+
+  const hostname = getHostname(new URL(databaseUrl));
+  if (!LOOPBACK_HOSTS.has(hostname)) {
+    throw new Error(
+      "DATABASE_MIGRATION_URL is required when DATABASE_URL is not loopback PostgreSQL. Use the direct Neon endpoint for migrations.",
+    );
+  }
+
+  return withMigrationTimeouts(databaseUrl);
 };
 
 export const assertLocalDatabaseUrl = (value: string, expectedDatabase?: string) => {
@@ -64,6 +103,16 @@ export const assertLocalDatabaseUrl = (value: string, expectedDatabase?: string)
 export const assertLocalDevelopmentDatabaseUrls = (
   environment: Record<string, string | undefined> = process.env,
 ) => {
+  if (isExplicitLocalNeonConfigured(environment)) {
+    const migrationUrl = environment.DATABASE_MIGRATION_URL?.trim();
+    if (!migrationUrl) {
+      throw new Error(
+        "DATABASE_MIGRATION_URL is required for the allowlisted local Neon branch and must use the direct endpoint.",
+      );
+    }
+    assertDirectMigrationDatabaseUrl(migrationUrl);
+  }
+
   for (const name of ["DATABASE_URL", "DATABASE_MIGRATION_URL"] as const) {
     const value = environment[name]?.trim();
     if (!value) {
@@ -71,10 +120,13 @@ export const assertLocalDevelopmentDatabaseUrls = (
     }
 
     try {
-      assertLocalDatabaseUrl(value);
+      const url = new URL(value);
+      if (!isExplicitLocalNeonUrl(url, environment)) {
+        assertLocalDatabaseUrl(value);
+      }
     } catch {
       throw new Error(
-        `${name} must target local PostgreSQL during development. Developers must never receive production database credentials.`,
+        `${name} must target loopback PostgreSQL or the explicitly allowlisted local Neon host.`,
       );
     }
   }
@@ -87,6 +139,10 @@ export const assertMigrationExecutionAllowed = (
   const url = new URL(value);
 
   if (LOOPBACK_HOSTS.has(getHostname(url))) {
+    return;
+  }
+
+  if (isExplicitLocalNeonUrl(url, environment)) {
     return;
   }
 

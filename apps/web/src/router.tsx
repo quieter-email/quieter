@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/tanstackstart-react";
 import { createRouter } from "@tanstack/react-router";
 import { clientEnv } from "./env";
+import { shouldDiscardClientError } from "./lib/client-error-reporting";
 import { routeTree } from "./routeTree.gen";
 
 const isSentryEnabled = !import.meta.env.DEV && !!clientEnv.VITE_SENTRY_DSN;
@@ -14,6 +15,8 @@ export function getRouter() {
 
   if (!router.isServer && isSentryEnabled) {
     Sentry.init({
+      beforeSend: (event, hint) =>
+        shouldDiscardClientError(event, hint.originalException) ? null : event,
       dsn: clientEnv.VITE_SENTRY_DSN,
       enableLogs: false,
       environment: import.meta.env.MODE,

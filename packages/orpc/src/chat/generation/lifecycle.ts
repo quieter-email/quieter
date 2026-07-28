@@ -67,7 +67,10 @@ const enqueueChatRun = async (runId: string) => {
 
 export const startChatRun = async (runId: string) => {
   if (!serverEnv.CHAT_GENERATION_START_URL) {
-    void ensureChatRunGeneration(runId);
+    const generation = ensureChatRunGeneration(runId);
+    if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local") {
+      await generation;
+    }
     return;
   }
 

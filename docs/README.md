@@ -2,6 +2,7 @@
 
 - [Development](development.md)
 - [Architecture](architecture.md)
+- [Responsive mail baseline](responsive-mail.md)
 - [Database safety](database-safety.md)
 - [Deployment and operations](deployment.md)
 

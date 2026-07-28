@@ -3,13 +3,14 @@
 ## Production
 
 Production deploys run through `.github/workflows/sst-deploy.yml` on pushes to `main` or a manual
-workflow dispatch. The protected GitHub `production` environment is the only manually configured
-source of deployment variables and secrets.
+workflow dispatch. It calls `.github/workflows/ci-main.yml` as the same reusable verification
+workflow used by pull requests. The protected GitHub `production` environment is the only manually
+configured source of deployment variables and secrets.
 
 The release workflow:
 
 1. runs type, lint, copy, boundary, bundle, and test checks;
-2. validates database migrations when database inputs changed;
+2. validates database migrations against a temporary PostgreSQL service;
 3. applies committed forward-only production migrations;
 4. synchronizes GitHub secrets into SST's encrypted secret store;
 5. runs `sst deploy`, which deploys the AWS mail/background stack and the Cloudflare web Worker;
@@ -90,8 +91,10 @@ the Review Worker; do not copy them into pull-request jobs or source control.
 ## Database safety
 
 `DATABASE_URL` is the least-privilege runtime role. `DATABASE_MIGRATION_URL` is available only to the
-protected production migration step. Local development must use local Postgres and must not store a
-remote migration credential in `.env.local`.
+protected production migration step. Local development must use loopback Postgres or an explicitly
+allowlisted disposable Neon branch. For Neon, keep `DATABASE_URL` pooled and set
+`DATABASE_MIGRATION_URL` to the matching direct endpoint pinned by `QUIETER_LOCAL_NEON_HOST`. Do not
+store production migration credentials in `.env.local`.
 
 Production migration history is never adopted or rewritten automatically. Automated production
 migrations reject destructive SQL; contract migrations require a separately reviewed manual

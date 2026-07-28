@@ -198,6 +198,7 @@ const EMAIL_SANITIZE_CONFIG: Config = {
     "width",
   ],
   ADD_TAGS: ["details", "summary", "style"],
+  WHOLE_DOCUMENT: true,
 };
 
 const createMailRenderStyles = (theme: MailRenderTheme): string => {

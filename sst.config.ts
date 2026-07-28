@@ -589,6 +589,9 @@ export default $config({
             tag: "v1",
           },
         ],
+        observability: {
+          enabled: true,
+        },
         url: true,
       });
       gmailPubSubCloudflareQueue.subscribe(

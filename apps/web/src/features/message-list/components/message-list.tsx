@@ -433,7 +433,7 @@ export const MessageList = (props: MessageListProps) => {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="@container flex min-h-0 flex-1 flex-col">
       {selection.selectedThreadIds.size > 0 && props.mailboxProvider !== "api" ? (
         <MessageListSelectionToolbar
           actions={bulkActions}

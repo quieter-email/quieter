@@ -236,7 +236,7 @@ export const MailboxWorkspaceContent = ({
   selectedView,
 }: MailboxWorkspaceContentProps) => (
   <LazyMotion features={domAnimation}>
-    <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-background-dark text-foreground">
+    <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-background-dark pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-foreground lg:p-0">
       <WorkspaceDitherBackground />
       <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
         {selectedMailboxId && (

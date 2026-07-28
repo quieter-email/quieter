@@ -60,7 +60,55 @@ describe("local development database boundary", () => {
       assertLocalDevelopmentDatabaseUrls({
         [name]: "postgresql://user:password@production.example.com/quieter",
       }),
-    ).toThrow(`${name} must target local PostgreSQL`);
+    ).toThrow(`${name} must target loopback PostgreSQL`);
+  });
+
+  test("allows an explicitly allowlisted local Neon branch", () => {
+    expect(() =>
+      assertLocalDevelopmentDatabaseUrls({
+        DATABASE_MIGRATION_URL:
+          "postgresql://user:password@ep-local-branch.eu-central-1.aws.neon.tech/neondb",
+        DATABASE_URL:
+          "postgresql://user:password@ep-local-branch-pooler.eu-central-1.aws.neon.tech/neondb",
+        QUIETER_DEPLOYMENT_ENV: "local",
+        QUIETER_LOCAL_NEON_HOST: "ep-local-branch.eu-central-1.aws.neon.tech",
+      }),
+    ).not.toThrow();
+  });
+
+  test("requires a direct DATABASE_MIGRATION_URL for an allowlisted Neon branch", () => {
+    expect(() =>
+      assertLocalDevelopmentDatabaseUrls({
+        DATABASE_URL:
+          "postgresql://user:password@ep-local-branch-pooler.eu-central-1.aws.neon.tech/neondb",
+        QUIETER_DEPLOYMENT_ENV: "local",
+        QUIETER_LOCAL_NEON_HOST: "ep-local-branch.eu-central-1.aws.neon.tech",
+      }),
+    ).toThrow("DATABASE_MIGRATION_URL is required");
+
+    expect(() =>
+      assertLocalDevelopmentDatabaseUrls({
+        DATABASE_MIGRATION_URL:
+          "postgresql://user:password@ep-local-branch-pooler.eu-central-1.aws.neon.tech/neondb",
+        DATABASE_URL:
+          "postgresql://user:password@ep-local-branch-pooler.eu-central-1.aws.neon.tech/neondb",
+        QUIETER_DEPLOYMENT_ENV: "local",
+        QUIETER_LOCAL_NEON_HOST: "ep-local-branch.eu-central-1.aws.neon.tech",
+      }),
+    ).toThrow("direct Neon endpoint");
+  });
+
+  test("rejects a Neon host that does not match the explicit allowlist", () => {
+    expect(() =>
+      assertLocalDevelopmentDatabaseUrls({
+        DATABASE_MIGRATION_URL:
+          "postgresql://user:password@ep-local-branch.eu-central-1.aws.neon.tech/neondb",
+        DATABASE_URL:
+          "postgresql://user:password@ep-production-pooler.eu-central-1.aws.neon.tech/neondb",
+        QUIETER_DEPLOYMENT_ENV: "local",
+        QUIETER_LOCAL_NEON_HOST: "ep-local-branch.eu-central-1.aws.neon.tech",
+      }),
+    ).toThrow("explicitly allowlisted local Neon host");
   });
 });
 
@@ -84,6 +132,18 @@ describe("migration execution boundary", () => {
   test("allows IPv6 loopback migrations without CI", () => {
     expect(() =>
       assertMigrationExecutionAllowed("postgresql://postgres:postgres@[::1]:5432/quieter", {}),
+    ).not.toThrow();
+  });
+
+  test("allows migrations on an explicitly allowlisted local Neon branch", () => {
+    expect(() =>
+      assertMigrationExecutionAllowed(
+        "postgresql://user:password@ep-local-branch.eu-central-1.aws.neon.tech/neondb",
+        {
+          QUIETER_DEPLOYMENT_ENV: "local",
+          QUIETER_LOCAL_NEON_HOST: "ep-local-branch.eu-central-1.aws.neon.tech",
+        },
+      ),
     ).not.toThrow();
   });
 

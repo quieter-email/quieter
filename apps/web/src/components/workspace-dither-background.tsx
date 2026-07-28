@@ -164,13 +164,21 @@ export const WorkspaceDitherBackground = ({
     gl.uniform3f(colorLocation, red || 0, green || 0, blue || 0);
     gl.uniform1f(alphaScaleLocation, activeStrength);
 
+    let drawFrame: number | null = null;
+    let lastDeviceHeight = 0;
+    let lastDeviceWidth = 0;
+
     const draw = () => {
+      drawFrame = null;
       const { height, width } = canvas.getBoundingClientRect();
       if (!height || !width) return;
 
       const pixelRatio = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
       const deviceWidth = Math.ceil(width * pixelRatio);
       const deviceHeight = Math.ceil(height * pixelRatio);
+      if (deviceWidth === lastDeviceWidth && deviceHeight === lastDeviceHeight) return;
+      lastDeviceWidth = deviceWidth;
+      lastDeviceHeight = deviceHeight;
 
       if (canvas.width !== deviceWidth || canvas.height !== deviceHeight) {
         canvas.width = deviceWidth;
@@ -187,13 +195,18 @@ export const WorkspaceDitherBackground = ({
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     };
 
+    const scheduleDraw = () => {
+      drawFrame ??= requestAnimationFrame(draw);
+    };
+
     draw();
 
-    const resizeObserver = new ResizeObserver(draw);
+    const resizeObserver = new ResizeObserver(scheduleDraw);
     resizeObserver.observe(canvas);
 
     return () => {
       resizeObserver.disconnect();
+      if (drawFrame !== null) cancelAnimationFrame(drawFrame);
       gl.deleteProgram(program);
       gl.deleteShader(vertexShader);
       gl.deleteShader(fragmentShader);
