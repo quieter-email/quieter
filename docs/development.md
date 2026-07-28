@@ -52,12 +52,15 @@ For a disposable Neon branch, use its pooled connection string for `DATABASE_URL
 connection string for `DATABASE_MIGRATION_URL`, and pin the direct hostname:
 
 ```text
+DATABASE_URL=postgresql://user:password@ep-your-development-branch-pooler.region.aws.neon.tech/neondb
+DATABASE_MIGRATION_URL=postgresql://user:password@ep-your-development-branch.region.aws.neon.tech/neondb
 QUIETER_DEPLOYMENT_ENV=local
 QUIETER_LOCAL_NEON_HOST=ep-your-development-branch.region.aws.neon.tech
 ```
 
 The local guards normalize pooled and direct Neon hostnames but accept only that exact endpoint.
-Never point the allowlist at a production branch.
+`DATABASE_MIGRATION_URL` is required for Neon and must use the direct endpoint. Never point the
+allowlist at a production branch.
 
 Apply the committed application migrations:
 
@@ -80,7 +83,9 @@ Start with `.env.example`. Environment variables are validated by `@quieter/env`
 
 Local development requires only the values needed by the paths you exercise. Important groups:
 
-- `DATABASE_URL`: loopback PostgreSQL or the explicitly allowlisted Neon development branch
+- `DATABASE_URL`: loopback PostgreSQL or the explicitly allowlisted Neon development branch (pooled)
+- `DATABASE_MIGRATION_URL`: required for Neon as the direct endpoint; optional on loopback, where
+  migration commands fall back to `DATABASE_URL`
 - Better Auth: application URL and secret
 - Auth email mode: `QUIETER_AUTH_MAIL_MODE=console` prints local auth links without managed mail
 - Google identity OAuth: sign-in only
@@ -90,8 +95,6 @@ Local development requires only the values needed by the paths you exercise. Imp
 - AWS and SST: optional provider-infrastructure integration tests only
 - Polar: checkout and subscription flows
 - PostHog, Sentry, and logo.dev: optional integrations
-
-Keep `DATABASE_MIGRATION_URL` unset locally. Local migration commands fall back to `DATABASE_URL`.
 
 ## Running
 

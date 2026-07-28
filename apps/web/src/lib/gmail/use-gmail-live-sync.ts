@@ -148,6 +148,10 @@ export const useMailboxLiveSync = (input: {
           }, KEEPALIVE_INTERVAL_MS);
         });
         nextSocket.addEventListener("message", (event) => {
+          if (disposed || socket !== nextSocket) {
+            return;
+          }
+
           try {
             const eventType = parseMailboxEvent(JSON.parse(String(event.data)), mailboxId);
             if (eventType === "mailbox-dirty") {
@@ -175,6 +179,10 @@ export const useMailboxLiveSync = (input: {
           scheduleReconnect();
         });
         nextSocket.addEventListener("error", () => {
+          if (socket !== nextSocket) {
+            return;
+          }
+
           reportConnectionFailure(new Error("Gmail live sync connection failed."), "socket-error", {
             endpoint,
           });

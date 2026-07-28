@@ -2,14 +2,24 @@ import * as Sentry from "@sentry/tanstackstart-react";
 
 const isSentryEnabled = process.env.NODE_ENV !== "development" && !!process.env.SENTRY_DSN;
 const gmailReauthorizationMessage = "Google access needs to be reconnected for this mailbox.";
+const mailboxScopeRepairRequired = "MAILBOX_SCOPE_REPAIR_REQUIRED";
 
 const isExpectedServerError = (event, originalException) => {
-  const error =
-    originalException && typeof originalException === "object" ? originalException : undefined;
+  let current = originalException;
+  const visited = new Set();
+
+  while (current && typeof current === "object" && !visited.has(current)) {
+    visited.add(current);
+    if (
+      current.code === mailboxScopeRepairRequired ||
+      current.message === gmailReauthorizationMessage
+    ) {
+      return true;
+    }
+    current = current.cause;
+  }
 
   return (
-    error?.code === "MAILBOX_SCOPE_REPAIR_REQUIRED" ||
-    error?.message === gmailReauthorizationMessage ||
     event.message === gmailReauthorizationMessage ||
     event.exception?.values?.some(({ value }) => value === gmailReauthorizationMessage)
   );

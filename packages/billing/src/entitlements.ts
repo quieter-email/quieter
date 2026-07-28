@@ -48,7 +48,7 @@ type BillingRuntimeEnvironment = Pick<
 
 const isLoopbackUrl = (value: string | undefined) => {
   if (!value) return false;
-  const hostname = new URL(value).hostname;
+  const hostname = new URL(value).hostname.replace(/^\[(.*)\]$/, "$1");
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 };
 

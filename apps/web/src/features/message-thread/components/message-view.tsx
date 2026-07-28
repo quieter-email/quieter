@@ -299,68 +299,70 @@ const MessageHeaderActions = ({
   showReplyAll?: boolean;
 }) => (
   <div
-    className={cn("flex flex-wrap items-center justify-start gap-0.5 @sm:justify-end", className)}
+    className={cn(
+      "flex flex-wrap items-center justify-start gap-1 @md:justify-end @md:gap-0.5",
+      className,
+    )}
   >
     {onContinueDraft && (
       <IconButtonTooltip label="Continue with draft">
         <Button
           aria-label="Continue with draft"
-          className="text-muted-foreground hover:text-foreground"
+          className="h-10 gap-1.5 px-2.5 text-muted-foreground hover:text-foreground @md:size-8 @md:px-0"
           onClick={onContinueDraft}
-          size="icon-sm"
           type="button"
           variant="ghost"
         >
           <HugeiconsIcon aria-hidden icon={Edit01Icon} />
+          <span className="@md:hidden">Draft</span>
         </Button>
       </IconButtonTooltip>
     )}
     <IconButtonTooltip label="Reply">
       <Button
         aria-label="Reply"
-        className="text-muted-foreground hover:text-foreground"
+        className="h-10 gap-1.5 px-2.5 text-muted-foreground hover:text-foreground @md:size-8 @md:px-0"
         onClick={onReply}
-        size="icon-sm"
         type="button"
         variant="ghost"
       >
         <HugeiconsIcon aria-hidden icon={MailReply02Icon} />
+        <span className="@md:hidden">Reply</span>
       </Button>
     </IconButtonTooltip>
     {showReplyAll && (
       <IconButtonTooltip label="Reply all">
         <Button
           aria-label="Reply all"
-          className="text-muted-foreground hover:text-foreground"
+          className="h-10 gap-1.5 px-2.5 text-muted-foreground hover:text-foreground @md:size-8 @md:px-0"
           onClick={onReplyAll}
-          size="icon-sm"
           type="button"
           variant="ghost"
         >
           <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
+          <span className="@md:hidden">Reply all</span>
         </Button>
       </IconButtonTooltip>
     )}
     <IconButtonTooltip label="Forward">
       <Button
         aria-label="Forward"
-        className="text-muted-foreground hover:text-foreground"
+        className="h-10 gap-1.5 px-2.5 text-muted-foreground hover:text-foreground @md:size-8 @md:px-0"
         onClick={onForward}
-        size="icon-sm"
         type="button"
         variant="ghost"
       >
         <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
+        <span className="@md:hidden">Forward</span>
       </Button>
     </IconButtonTooltip>
     {onUnsubscribe && (
       <IconButtonTooltip label="Unsubscribe">
         <Button
           aria-label="Unsubscribe"
-          className="text-muted-foreground hover:text-foreground"
+          className="h-10 gap-1.5 px-2.5 text-muted-foreground hover:text-foreground @md:size-8 @md:px-0"
           disabled={isPending && onUnsubscribe.kind === "mailto"}
           onClick={onUnsubscribe.onClick}
-          size="icon-sm"
           type="button"
           variant="ghost"
         >
@@ -368,19 +370,20 @@ const MessageHeaderActions = ({
             aria-hidden
             icon={onUnsubscribe.kind === "mailto" ? MailRemove01Icon : ArrowUpRight01Icon}
           />
+          <span className="@md:hidden">Unsubscribe</span>
         </Button>
       </IconButtonTooltip>
     )}
     <IconButtonTooltip label="Details">
       <Button
         aria-label="Details"
-        className="text-muted-foreground hover:text-foreground"
+        className="h-10 gap-1.5 px-2.5 text-muted-foreground hover:text-foreground @md:size-8 @md:px-0"
         onClick={onDetails}
-        size="icon-sm"
         type="button"
         variant="ghost"
       >
         <HugeiconsIcon aria-hidden icon={ZoomInAreaIcon} />
+        <span className="@md:hidden">Details</span>
       </Button>
     </IconButtonTooltip>
   </div>
@@ -1054,7 +1057,7 @@ export const MessageView = ({
 
   return (
     <article className="@container w-full">
-      <header className="w-full border-b p-5 @sm:p-6">
+      <header className="w-full border-b p-4 @sm:p-6">
         <div className="flex min-w-0 flex-col items-start gap-3 @sm:grid @sm:grid-cols-[minmax(0,1fr)_auto] @sm:items-center @sm:gap-8">
           <h1 className="min-w-0 text-lg/tight font-medium tracking-tight wrap-break-word text-foreground @sm:text-xl">
             {subject}

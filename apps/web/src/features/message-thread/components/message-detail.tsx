@@ -38,7 +38,11 @@ const messageDetailContentMotion = {
 
 const MessageDetailLoadingSkeleton = () => (
   // react-doctor-disable-next-line react-doctor/prefer-tag-over-role
-  <div aria-live="polite" className="mx-auto block w-full max-w-3xl space-y-6 py-6" role="status">
+  <div
+    aria-live="polite"
+    className="mx-auto block w-full max-w-3xl space-y-6 px-4 py-6"
+    role="status"
+  >
     <span className="sr-only">Loading message…</span>
     <div aria-hidden="true" className="animate-pulse space-y-8">
       <div className="space-y-2">
@@ -86,12 +90,12 @@ export const MessageDetail = ({
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {onBackToList && (
-        <div className="flex h-12 shrink-0 items-center border-b px-3 lg:hidden">
+        <div className="flex min-h-12 shrink-0 items-center border-b px-2 lg:hidden">
           <IconButtonTooltip label="Back to list">
             <Button
               aria-label="Back to list"
               onClick={onBackToList}
-              size="icon-sm"
+              size="icon-lg"
               type="button"
               variant="ghost"
             >

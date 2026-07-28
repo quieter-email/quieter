@@ -71,7 +71,7 @@ if (!existsSync(localEnvPath)) {
 
 const env = parseEnvFile(localEnvPath);
 const errors: string[] = [];
-const configuredNeonHost = env.get("QUIETER_LOCAL_NEON_HOST");
+const configuredNeonHost = env.get("QUIETER_LOCAL_NEON_HOST")?.trim().toLowerCase();
 
 for (const key of forbiddenLocalKeys) {
   if (env.has(key)) {
@@ -96,6 +96,26 @@ for (const key of ["DATABASE_URL", "DATABASE_MIGRATION_URL"] as const) {
     }
   } catch {
     errors.push(`${key} is not a valid URL.`);
+  }
+}
+
+if (configuredNeonHost?.endsWith(".neon.tech")) {
+  const migrationUrl = env.get("DATABASE_MIGRATION_URL");
+  if (!migrationUrl) {
+    errors.push(
+      "DATABASE_MIGRATION_URL is required for the allowlisted local Neon branch and must use the direct endpoint.",
+    );
+  } else {
+    try {
+      const migrationHostname = getHostname(migrationUrl);
+      if (migrationHostname.includes("-pooler")) {
+        errors.push(
+          "DATABASE_MIGRATION_URL must use the direct Neon endpoint, not the pooled endpoint.",
+        );
+      }
+    } catch {
+      // Invalid URL already reported above.
+    }
   }
 }
 

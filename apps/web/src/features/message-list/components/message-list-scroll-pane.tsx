@@ -65,7 +65,7 @@ const MessageListLoadingSkeleton = () => (
     {MESSAGE_LIST_SKELETON_ROW_IDS.map((rowId) => (
       <div
         aria-hidden="true"
-        className="flex h-17 animate-pulse items-center gap-3 rounded-xl px-3"
+        className="flex h-17 animate-pulse items-center gap-2 rounded-xl px-2 @sm:gap-3 @sm:px-3"
         key={rowId}
       >
         <div className="size-9.5 shrink-0 rounded-lg bg-muted/80" />
@@ -222,7 +222,7 @@ export const MessageListScrollPane = ({
 
   return (
     <div
-      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pt-1 pb-4 contain-strict"
+      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pt-1 pb-[max(1rem,env(safe-area-inset-bottom))] contain-strict @sm:px-4"
       onScroll={() => {
         if (selection.isProgrammaticScrollToTopRef.current) return;
         loadMoreIfNeeded({

@@ -165,6 +165,11 @@ export const useMessageListSearchController = ({
     setActiveDateFilterIndex(null);
   };
 
+  const dismissSearch = () => {
+    closeSearchOverlays();
+    textInputRef.current?.blur();
+  };
+
   const openSearchDropdown = () => {
     setActiveDateFilterIndex(null);
     openDropdown();
@@ -232,6 +237,11 @@ export const useMessageListSearchController = ({
       ...currentState,
       text: value,
     });
+    if (value.length > 0) {
+      closeDropdown();
+    } else if (currentState.text.length > 0) {
+      openDropdown(true);
+    }
   };
 
   const setSegmentRef = (index: number, node: HTMLElement | null) => {
@@ -796,6 +806,7 @@ export const useMessageListSearchController = ({
     clearSearch,
     currentState,
     datePopoverLeft,
+    dismissSearch,
     fieldRef,
     focusTextInput,
     handleFilterSelection,

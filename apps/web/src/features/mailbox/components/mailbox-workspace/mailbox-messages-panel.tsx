@@ -208,7 +208,7 @@ export const MailboxMessagesPanel = ({
     <>
       <section
         className={cn(
-          "m-2 ml-0 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 lg:flex",
+          "m-1.5 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 lg:m-2 lg:ml-0 lg:flex",
           {
             "flex flex-1": !isMessageRouteOpen,
             hidden: isMessageRouteOpen,
@@ -242,7 +242,7 @@ export const MailboxMessagesPanel = ({
 
       <div
         className={cn(
-          "m-2 ml-0 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 lg:flex",
+          "m-1.5 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 lg:m-2 lg:ml-0 lg:flex",
           {
             "flex flex-1": isMessageRouteOpen,
             hidden: !isMessageRouteOpen,

@@ -62,6 +62,7 @@ export const MessageListSearchView = ({
     clearSearch,
     currentState,
     datePopoverLeft,
+    dismissSearch,
     fieldRef,
     focusTextInput,
     handleFilterSelection,
@@ -94,7 +95,7 @@ export const MessageListSearchView = ({
     userLabels,
   } = controller;
   return (
-    <search className="block bg-transparent px-4 pt-4 pb-3 sm:px-5">
+    <search className="@container block bg-transparent p-2 @sm:px-4 @sm:pt-4 @sm:pb-3">
       <div className="relative">
         <div className="flex min-w-0 items-center gap-2 lg:-ml-2">
           {onOpenSidebar && (
@@ -349,7 +350,7 @@ export const MessageListSearchView = ({
               activeDateFilterIndex !== null &&
               (activeDateFilter.type === "after" || activeDateFilter.type === "before") && (
                 <div
-                  className="absolute top-full z-40 mt-2 rounded-lg bg-popover p-2 shadow-lg"
+                  className="absolute top-full z-40 mt-2 max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] overflow-auto overscroll-contain rounded-lg bg-popover p-2 shadow-lg"
                   style={{ left: datePopoverLeft }}
                 >
                   <div className="mb-2 grid grid-cols-2 gap-1 border-b pb-2">
@@ -411,6 +412,7 @@ export const MessageListSearchView = ({
               isLoadingLabels={isLoadingLabels}
               isOpen={isDropdownOpen}
               labelsErrorMessage={labelsErrorMessage}
+              onDismiss={dismissSearch}
               onSelectFilter={handleFilterSelection}
               onToggleLabel={toggleLabelToken}
               userLabels={userLabels}
