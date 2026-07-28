@@ -3,7 +3,8 @@
 import type { MessagePart } from "@tanstack/ai";
 import { composeEmailInputSchema } from "@quieter/ai/chat-agent";
 import { useNavigate } from "@tanstack/react-router";
-import { m } from "motion/react";
+import { m, useReducedMotion } from "motion/react";
+import { getAppPresenceMotion } from "~/features/motion/app-motion";
 import type { GmailSearchToolResult, ModifyMailToolResult, ResolveComposeTool } from "../../types";
 import { parseToolArguments, parseToolResult } from "../../domain/chat-tools";
 import { InlineComposeTool } from "./inline-compose-tool";
@@ -22,6 +23,7 @@ type ToolResult = Extract<MessagePart, { type: "tool-result" }>;
 
 type ToolPartProps = {
   actionsDisabled?: boolean;
+  animateEntrance?: boolean;
   assistantMessageId?: string;
   call?: ToolCall;
   isStreaming?: boolean;
@@ -44,6 +46,7 @@ const getResultError = (parsed: ReturnType<typeof parseToolResult>, result?: Too
 
 export const ToolPart = ({
   actionsDisabled,
+  animateEntrance = false,
   assistantMessageId,
   call,
   isStreaming = false,
@@ -51,6 +54,8 @@ export const ToolPart = ({
   onResolveCompose,
   result,
 }: ToolPartProps) => {
+  const shouldReduceMotion = useReducedMotion();
+  const composeMotion = getAppPresenceMotion({ reducedMotion: shouldReduceMotion });
   const navigate = useNavigate({ from: "/" });
   const name = call?.name ?? "unknown";
   const parsed = parseToolResult(name, result?.content ?? "");
@@ -86,10 +91,9 @@ export const ToolPart = ({
     if (isReady && initial.success && assistantMessageId && onResolveCompose) {
       return (
         <m.div
-          animate={{ opacity: 1 }}
+          {...composeMotion}
           className="py-1"
-          initial={{ opacity: 0 }}
-          transition={{ duration: 0.12 }}
+          initial={animateEntrance ? composeMotion.initial : false}
         >
           <InlineComposeTool
             disabled={actionsDisabled}

@@ -4,7 +4,8 @@ import type { ReactNode } from "react";
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@quieter/ui/cn";
-import { AnimatePresence, m } from "motion/react";
+import { AnimatePresence, m, useReducedMotion } from "motion/react";
+import { getAppPresenceMotion } from "~/features/motion/app-motion";
 import { LoadingDots } from "../../thinking-indicator";
 
 type ToolStepProps = {
@@ -32,6 +33,7 @@ export const ToolStep = ({
   onToggle,
   pending = false,
 }: ToolStepProps) => {
+  const shouldReduceMotion = useReducedMotion();
   const hasError = Boolean(error);
   const canExpand = expandable && !pending && !hasError;
 
@@ -53,10 +55,12 @@ export const ToolStep = ({
           canExpand ? (
             <HugeiconsIcon
               aria-hidden
-              className={cn(
-                "size-3.5 shrink-0 text-muted-foreground/45 transition-transform duration-200",
-                { "rotate-90": expanded },
-              )}
+              className={cn("size-3.5 shrink-0 text-muted-foreground/45", {
+                "rotate-90": expanded,
+                "transition-none": shouldReduceMotion,
+                "transition-transform duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out)":
+                  !shouldReduceMotion,
+              })}
               icon={ArrowRight01Icon}
             />
           ) : (
@@ -87,9 +91,14 @@ export const ToolStep = ({
           <HugeiconsIcon
             aria-hidden
             className={cn(
-              "size-3.5 shrink-0 text-muted-foreground/50 transition-transform duration-200",
+              "size-3.5 shrink-0 text-muted-foreground/50",
               "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
-              { "rotate-90 opacity-100": expanded },
+              {
+                "rotate-90 opacity-100": expanded,
+                "transition-none": shouldReduceMotion,
+                "transition-transform duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out)":
+                  !shouldReduceMotion,
+              },
             )}
             icon={ArrowRight01Icon}
           />
@@ -98,12 +107,7 @@ export const ToolStep = ({
 
       <AnimatePresence initial={false}>
         {expanded && children ? (
-          <m.div
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            initial={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
-          >
+          <m.div {...getAppPresenceMotion({ reducedMotion: shouldReduceMotion })}>
             <div
               className={cn("mt-1.5 border-l border-border/70", {
                 "ml-1.5 pl-3": nested,

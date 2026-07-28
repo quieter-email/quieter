@@ -4,8 +4,9 @@ import type { MessagePart } from "@tanstack/ai";
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@quieter/ui/cn";
-import { AnimatePresence, m } from "motion/react";
+import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { useState } from "react";
+import { getAppPresenceMotion } from "~/features/motion/app-motion";
 import type { ResolveComposeTool } from "../../../types";
 import { getActiveToolDetail, summarizeToolCalls } from "../../../domain/tool-summaries";
 import { LoadingDots } from "../../thinking-indicator";
@@ -16,6 +17,7 @@ type ToolResult = Extract<MessagePart, { type: "tool-result" }>;
 
 type ToolActivityGroupProps = {
   actionsDisabled?: boolean;
+  animateEntrance?: boolean;
   assistantMessageId: string;
   isStreaming?: boolean;
   items: Array<{ call: ToolCall; result?: ToolResult }>;
@@ -24,11 +26,13 @@ type ToolActivityGroupProps = {
 
 export const ToolActivityGroup = ({
   actionsDisabled,
+  animateEntrance = false,
   assistantMessageId,
   isStreaming = false,
   items,
   onResolveCompose,
 }: ToolActivityGroupProps) => {
+  const shouldReduceMotion = useReducedMotion();
   const hasPending = isStreaming && items.some((item) => !item.result);
   const [expanded, setExpanded] = useState(hasPending);
   const [previousHasPending, setPreviousHasPending] = useState(hasPending);
@@ -54,6 +58,7 @@ export const ToolActivityGroup = ({
     return (
       <ToolPart
         actionsDisabled={actionsDisabled}
+        animateEntrance={animateEntrance}
         assistantMessageId={assistantMessageId}
         call={item.call}
         isStreaming={isStreaming}
@@ -76,10 +81,12 @@ export const ToolActivityGroup = ({
         ) : (
           <HugeiconsIcon
             aria-hidden
-            className={cn(
-              "size-3.5 shrink-0 text-muted-foreground/45 transition-transform duration-200",
-              { "rotate-90": expanded },
-            )}
+            className={cn("size-3.5 shrink-0 text-muted-foreground/45", {
+              "rotate-90": expanded,
+              "transition-none": shouldReduceMotion,
+              "transition-transform duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out)":
+                !shouldReduceMotion,
+            })}
             icon={ArrowRight01Icon}
           />
         )}
@@ -93,16 +100,12 @@ export const ToolActivityGroup = ({
 
       <AnimatePresence initial={false}>
         {expanded ? (
-          <m.div
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            initial={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
-          >
+          <m.div {...getAppPresenceMotion({ reducedMotion: shouldReduceMotion })}>
             <div className="mt-1.5 space-y-0.5 border-l border-border/60 pl-3">
               {items.map((item) => (
                 <ToolPart
                   actionsDisabled={actionsDisabled}
+                  animateEntrance={animateEntrance}
                   assistantMessageId={assistantMessageId}
                   call={item.call}
                   isStreaming={isStreaming}

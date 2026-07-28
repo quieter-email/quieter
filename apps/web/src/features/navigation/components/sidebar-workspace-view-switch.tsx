@@ -3,9 +3,10 @@
 import { Chat01Icon, InboxIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { cn } from "@quieter/ui/cn";
-import { LayoutGroup, m } from "motion/react";
+import { LayoutGroup } from "motion/react";
 import type { MailboxWorkspaceView } from "~/features/mailbox/domain/mailbox-workspace-view";
 import { SidebarNavItem } from "~/features/navigation/components/sidebar-nav-item";
+import { SidebarEntrance } from "~/features/navigation/components/sidebar-surfaces";
 import { useSidebarNavHover } from "~/features/navigation/hooks/use-sidebar-nav-hover";
 
 const WORKSPACE_VIEW_OPTIONS: ReadonlyArray<{
@@ -22,10 +23,6 @@ type SidebarWorkspaceViewSwitchProps = {
   onSelectView: (view: MailboxWorkspaceView) => void;
   selectedView: MailboxWorkspaceView;
 };
-
-const getSidebarEntranceDelay = (step: number) => step * 0.1;
-const getSidebarEntranceInitial = (animateEntrance: boolean) =>
-  animateEntrance ? { opacity: 0, x: -20, filter: "blur(8px)" } : false;
 
 export const SidebarWorkspaceViewSwitch = ({
   animateEntrance,
@@ -45,12 +42,7 @@ export const SidebarWorkspaceViewSwitch = ({
   } = useSidebarNavHover<MailboxWorkspaceView>("workspace-view-hover");
 
   return (
-    <m.div
-      className="w-full min-w-0 will-change-[transform,opacity,filter]"
-      initial={getSidebarEntranceInitial(animateEntrance)}
-      animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-      transition={{ delay: getSidebarEntranceDelay(1), duration: 0.5, ease: "easeOut" }}
-    >
+    <SidebarEntrance animateEntrance={animateEntrance} className="w-full min-w-0" index={1}>
       <LayoutGroup id="workspace-view">
         <nav
           ref={navRef}
@@ -105,6 +97,6 @@ export const SidebarWorkspaceViewSwitch = ({
           })}
         </nav>
       </LayoutGroup>
-    </m.div>
+    </SidebarEntrance>
   );
 };

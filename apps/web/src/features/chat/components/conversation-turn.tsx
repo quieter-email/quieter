@@ -13,6 +13,7 @@ import { UserParts } from "./message-parts/user-parts";
 
 type ConversationTurnProps = {
   actionsDisabled?: boolean;
+  animateEntrance?: boolean;
   isLastTurn: boolean;
   isStreaming?: boolean;
   onCopy: (text: string) => void;
@@ -24,6 +25,7 @@ type ConversationTurnProps = {
 
 export const ConversationTurn = ({
   actionsDisabled = false,
+  animateEntrance = false,
   isLastTurn,
   isStreaming = false,
   onCopy,
@@ -141,6 +143,7 @@ export const ConversationTurn = ({
         <div className="group/message flex flex-col gap-1">
           <AssistantParts
             actionsDisabled={actionsDisabled}
+            animateEntrance={animateEntrance}
             assistantMessageId={turn.assistant.id}
             isStreaming={isStreaming}
             onResolveCompose={onResolveCompose}

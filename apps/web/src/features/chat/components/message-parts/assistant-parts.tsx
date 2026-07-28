@@ -104,12 +104,14 @@ const buildSegments = (
 
 export const AssistantParts = ({
   actionsDisabled,
+  animateEntrance = false,
   assistantMessageId,
   isStreaming = false,
   onResolveCompose,
   parts,
 }: {
   actionsDisabled?: boolean;
+  animateEntrance?: boolean;
   assistantMessageId: string;
   isStreaming?: boolean;
   onResolveCompose: ResolveComposeTool;
@@ -167,6 +169,7 @@ export const AssistantParts = ({
           return (
             <ToolPart
               actionsDisabled={actionsDisabled}
+              animateEntrance={animateEntrance}
               assistantMessageId={assistantMessageId}
               key={segment.result.toolCallId}
               onResolveCompose={onResolveCompose}
@@ -180,6 +183,7 @@ export const AssistantParts = ({
           return (
             <ToolPart
               actionsDisabled={actionsDisabled}
+              animateEntrance={animateEntrance}
               assistantMessageId={assistantMessageId}
               call={item.call}
               isStreaming={isStreaming}
@@ -193,6 +197,7 @@ export const AssistantParts = ({
         return (
           <ToolActivityGroup
             actionsDisabled={actionsDisabled}
+            animateEntrance={animateEntrance}
             assistantMessageId={assistantMessageId}
             isStreaming={isStreaming}
             items={segment.items}

@@ -7,12 +7,12 @@ export const sidebarHoverSurfaceItemClassName =
   "block size-full rounded-md bg-background/50 squircle";
 
 export const sidebarSurfaceSpringTransition = {
-  layout: { type: "spring" as const, stiffness: 1200, damping: 52, mass: 0.3 },
+  layout: { type: "spring" as const, stiffness: 560, damping: 38, mass: 0.55 },
 };
 
 export const sidebarSurfaceFadeTransition = {
-  opacity: { duration: 0.08, ease: "easeOut" as const },
-  scale: { duration: 0.08, ease: "easeOut" as const },
+  opacity: { duration: 0.18, ease: [0.23, 1, 0.32, 1] as const },
+  transform: { duration: 0.18, ease: [0.23, 1, 0.32, 1] as const },
 };
 
 export const sidebarNavButtonClassName =

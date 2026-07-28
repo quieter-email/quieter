@@ -113,11 +113,7 @@ const NoMailboxWorkspace = ({
           to="/settings"
           variant="ghost"
         >
-          <HugeiconsIcon
-            className="size-4 shrink-0 rotate-0 transition-transform duration-1000 ease-in-out group-hover:rotate-360"
-            icon={Settings01Icon}
-            strokeWidth={1.5}
-          />
+          <HugeiconsIcon className="size-4 shrink-0" icon={Settings01Icon} strokeWidth={1.5} />
           Settings
         </LinkButton>
         {setupMode === "managed" ? (

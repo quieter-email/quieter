@@ -55,8 +55,8 @@ import { EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LayoutGroup, m } from "motion/react";
-import { useEffect, useReducer, useState } from "react";
+import { LayoutGroup } from "motion/react";
+import { useReducer, useState } from "react";
 import { MailboxColorPicker } from "~/features/message-labels/components/mailbox-color-picker";
 import { mailboxLabelDotClassNameByColor } from "~/features/message-labels/domain/mailbox-label-presentation";
 import { serializeStructuredSearchState } from "~/features/message-search/components/message-list-search/message-list-search-utils";
@@ -66,6 +66,7 @@ import {
   parseStructuredSearchQuery,
 } from "~/features/message-search/state/message-list-search-state";
 import { SidebarNavItem } from "~/features/navigation/components/sidebar-nav-item";
+import { SidebarEntrance } from "~/features/navigation/components/sidebar-surfaces";
 import { useSidebarNavHover } from "~/features/navigation/hooks/use-sidebar-nav-hover";
 import { getLabelsQueryKey, labelsQueryOptions } from "~/lib/gmail/labels-query";
 import {
@@ -120,37 +121,19 @@ const ManagedLabelColorDot = ({
   />
 );
 
-const getSidebarEntranceDelay = (step: number) => step * 0.1;
-const getSidebarEntranceInitial = (animateEntrance: boolean) =>
-  animateEntrance ? { opacity: 0, x: -20, filter: "blur(8px)" } : false;
-
 const SidebarLabelEntrance = ({
   animateEntrance,
   children,
-  delayOffset,
   index,
 }: {
   animateEntrance: boolean;
   children: ReactNode;
-  delayOffset: number;
   index: number;
-}) => {
-  const [entrance] = useState(() => ({
-    animate: animateEntrance,
-    delay: delayOffset + getSidebarEntranceDelay(index),
-  }));
-
-  return (
-    <m.div
-      className="w-full will-change-[transform,opacity,filter]"
-      initial={getSidebarEntranceInitial(entrance.animate)}
-      animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-      transition={{ delay: entrance.delay, duration: 0.5, ease: "easeOut" }}
-    >
-      {children}
-    </m.div>
-  );
-};
+}) => (
+  <SidebarEntrance animateEntrance={animateEntrance} className="w-full" index={index}>
+    {children}
+  </SidebarEntrance>
+);
 
 const updateLabelFilter = (searchQuery: string, labelName: string, enabled: boolean) => {
   const state = parseStructuredSearchQuery(searchQuery);
@@ -246,15 +229,6 @@ export const SidebarLabelNav = ({
     isPending: areLabelsPending,
   } = useQuery(labelsQueryOptions(mailboxId ?? "", !!mailboxId));
   const labelsUnavailable = areLabelsError && !labels;
-
-  const [isLabelEntranceSlotOpen, openLabelEntranceSlot] = useReducer(() => true, !animateEntrance);
-
-  useEffect(() => {
-    if (isLabelEntranceSlotOpen) return;
-
-    const timeout = window.setTimeout(openLabelEntranceSlot, getSidebarEntranceDelay(9) * 1000);
-    return () => window.clearTimeout(timeout);
-  }, [isLabelEntranceSlotOpen]);
 
   const { data: managedLabelCounts = [] } = useQuery(
     managedLabelCountsQueryOptions(mailboxId ?? "", mailboxProvider === "managed" && !!mailboxId),
@@ -458,11 +432,10 @@ export const SidebarLabelNav = ({
 
   return (
     <section className="mt-4">
-      <m.div
-        className="mb-1 flex items-center justify-between px-2 will-change-[transform,opacity,filter]"
-        initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
-        animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-        transition={{ delay: getSidebarEntranceDelay(8), duration: 0.5, ease: "easeOut" }}
+      <SidebarEntrance
+        animateEntrance={shouldAnimateEntrance}
+        className="mb-1 flex items-center justify-between px-2"
+        index={8}
       >
         <p className="text-xs font-medium text-muted-foreground">{labelTitle}</p>
         {canManage && (
@@ -482,7 +455,7 @@ export const SidebarLabelNav = ({
             </Button>
           </IconButtonTooltip>
         )}
-      </m.div>
+      </SidebarEntrance>
 
       <LayoutGroup id="label-sidebar">
         <nav
@@ -492,32 +465,29 @@ export const SidebarLabelNav = ({
           onMouseLeave={clearLabelHover}
         >
           {areLabelsPending ? (
-            <m.p
-              className="px-2 py-1 text-xs text-muted-foreground will-change-[transform,opacity,filter]"
-              initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
-              animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-              transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
+            <SidebarEntrance
+              animateEntrance={shouldAnimateEntrance}
+              className="px-2 py-1 text-xs text-muted-foreground"
+              index={9}
             >
               Loading {labelNounPlural}…
-            </m.p>
-          ) : !isLabelEntranceSlotOpen ? null : labelsUnavailable ? (
-            <m.p
-              className="px-2 py-1 text-xs text-destructive will-change-[transform,opacity,filter]"
-              initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
-              animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-              transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
+            </SidebarEntrance>
+          ) : labelsUnavailable ? (
+            <SidebarEntrance
+              animateEntrance={shouldAnimateEntrance}
+              className="px-2 py-1 text-xs text-destructive"
+              index={9}
             >
               Could not load {labelNounPlural}.
-            </m.p>
+            </SidebarEntrance>
           ) : visibleUserLabels.length === 0 ? (
-            <m.p
-              className="px-2 py-1 text-xs text-muted-foreground will-change-[transform,opacity,filter]"
-              initial={getSidebarEntranceInitial(shouldAnimateEntrance)}
-              animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-              transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
+            <SidebarEntrance
+              animateEntrance={shouldAnimateEntrance}
+              className="px-2 py-1 text-xs text-muted-foreground"
+              index={9}
             >
               No {labelNounPlural} shown.
-            </m.p>
+            </SidebarEntrance>
           ) : (
             visibleUserLabels.map((label, index) => {
               const isActive = selectedLabelKeys.has(normalizeLabelSelectionKey(label.name));
@@ -525,7 +495,11 @@ export const SidebarLabelNav = ({
               const labelHoverExiting = isHoverExiting(label.id);
 
               return (
-                <SidebarLabelEntrance key={label.id} animateEntrance delayOffset={0} index={index}>
+                <SidebarLabelEntrance
+                  key={label.id}
+                  animateEntrance={shouldAnimateEntrance}
+                  index={index + 9}
+                >
                   <SidebarNavItem
                     active={isActive}
                     aria-pressed={isActive}

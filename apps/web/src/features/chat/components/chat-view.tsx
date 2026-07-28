@@ -10,12 +10,13 @@ import { toast } from "@quieter/ui/toast";
 import { type UseAudioRecorderReturn, useAudioRecorder } from "@tanstack/ai-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { LayoutGroup } from "motion/react";
+import { LayoutGroup, m, useReducedMotion } from "motion/react";
 import { type FormEvent, type KeyboardEvent, useRef, useState } from "react";
 import {
   setDefaultChatModel,
   useDefaultChatModel,
 } from "~/features/ai/domain/default-chat-model-setting";
+import { appEaseInOut, appMotionDuration } from "~/features/motion/app-motion";
 import {
   hasOrganizationAiAccess,
   USER_BILLING_QUERY_KEY,
@@ -78,6 +79,7 @@ export const ChatView = ({
   onOpenSidebar,
 }: ChatViewProps) => {
   const queryClient = useQueryClient();
+  const shouldReduceMotion = useReducedMotion();
   const { data: billing, isPending: isBillingPending } = useQuery(userBillingQueryOptions());
   const [input, setInput] = useState("");
   const defaultModel = useDefaultChatModel();
@@ -572,6 +574,7 @@ export const ChatView = ({
               <ChatTranscript
                 actionsDisabled={isStreaming || isActionPending || composerDisabled}
                 errorMessage={errorMessage}
+                hydrated={chatData !== undefined}
                 isStreaming={isStreaming}
                 onCopy={(text) => void copyToClipboard(text)}
                 onEditSubmit={handleEditSubmit}
@@ -581,7 +584,15 @@ export const ChatView = ({
               />
 
               <div className="w-full px-4 pb-5">
-                <div className="mx-auto w-full max-w-2xl">
+                <m.div
+                  className="mx-auto w-full max-w-2xl"
+                  layoutDependency={hasMessages}
+                  layoutId="chat-composer"
+                  transition={{
+                    duration: shouldReduceMotion ? 0 : appMotionDuration.layout,
+                    ease: appEaseInOut,
+                  }}
+                >
                   {!canUseAiChat && !isBillingPending && (
                     <PlanRequiredBlock
                       organizationId={mailboxOrganizationId}
@@ -605,12 +616,20 @@ export const ChatView = ({
                     submitting={isActionPending}
                     transcribing={isTranscribingAudio}
                   />
-                </div>
+                </m.div>
               </div>
             </>
           ) : (
             <div className="flex min-h-0 flex-1 items-center justify-center px-4">
-              <div className="w-full max-w-xl">
+              <m.div
+                className="w-full max-w-xl"
+                layoutDependency={hasMessages}
+                layoutId="chat-composer"
+                transition={{
+                  duration: shouldReduceMotion ? 0 : appMotionDuration.layout,
+                  ease: appEaseInOut,
+                }}
+              >
                 {!canUseAiChat && !isBillingPending && (
                   <PlanRequiredBlock
                     organizationId={mailboxOrganizationId}
@@ -634,7 +653,7 @@ export const ChatView = ({
                   submitting={isActionPending}
                   transcribing={isTranscribingAudio}
                 />
-              </div>
+              </m.div>
             </div>
           )}
         </div>

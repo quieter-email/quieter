@@ -3,6 +3,11 @@
 
 :root {
   --app-focus-ring: color-mix(in oklab, var(--foreground) 62%, transparent);
+  --app-motion-duration-enter: 240ms;
+  --app-motion-duration-feedback: 160ms;
+  --app-motion-duration-layout: 280ms;
+  --app-motion-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --app-motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 @supports not (color: color-mix(in oklab, black, transparent)) {
@@ -27,10 +32,6 @@
 }
 
 @layer components {
-  [data-message-row] {
-    transition: box-shadow 100ms ease-out;
-  }
-
   [data-message-row][data-focus-visible] {
     box-shadow: inset 0 0 0 2px var(--app-focus-ring);
   }
@@ -42,8 +43,10 @@
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    transition-property: color, background-color, border-color, box-shadow, opacity !important;
     transition-delay: 0ms !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: var(--app-motion-duration-feedback) !important;
+    transition-timing-function: var(--app-motion-ease-out) !important;
     scroll-behavior: auto !important;
   }
 }

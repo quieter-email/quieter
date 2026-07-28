@@ -20,7 +20,14 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
-import { AnimatePresence, domMax, LazyMotion, m } from "motion/react";
+import {
+  AnimatePresence,
+  domMax,
+  LayoutGroup,
+  LazyMotion,
+  m,
+  useReducedMotion,
+} from "motion/react";
 import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -40,6 +47,7 @@ import { SidebarLabelNav } from "~/features/navigation/components/sidebar-label-
 import { SidebarMailboxNav } from "~/features/navigation/components/sidebar-mailbox-nav";
 import {
   SidebarActiveSurface,
+  SidebarEntrance,
   SidebarSimpleHoverSurface,
 } from "~/features/navigation/components/sidebar-surfaces";
 import { SidebarWorkspaceViewSwitch } from "~/features/navigation/components/sidebar-workspace-view-switch";
@@ -99,11 +107,6 @@ type SidebarContentProps = Omit<MailSidebarProps, "isMobileOpen" | "onMobileOpen
   switcherSide?: "bottom" | "right";
 };
 
-const getSidebarEntranceDelay = (step: number) => step * 0.1;
-
-const getSidebarEntranceInitial = (animateEntrance: boolean) =>
-  animateEntrance ? { opacity: 0, x: -20, filter: "blur(8px)" } : false;
-
 let hasPlayedSidebarEntrance = false;
 
 type SidebarChat = MailSidebarProps["chats"][number];
@@ -140,18 +143,15 @@ const SidebarChatRow = ({
   onStartRename,
 }: SidebarChatRowProps) => {
   const title = chat.title?.trim() || "New chat";
+  const [isHovered, setIsHovered] = useState(false);
+  const [isFocusWithin, setIsFocusWithin] = useState(false);
 
   return (
-    <m.div
+    <SidebarEntrance
       key={chat.id}
-      className="w-full will-change-[transform,opacity,filter]"
-      initial={getSidebarEntranceInitial(animateEntrance)}
-      animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-      transition={{
-        delay: getSidebarEntranceDelay(index + 3),
-        duration: 0.5,
-        ease: "easeOut",
-      }}
+      animateEntrance={animateEntrance}
+      className="w-full"
+      index={index + 3}
     >
       {isEditing ? (
         <form className="w-full" onSubmit={onRenameSubmit}>
@@ -167,20 +167,31 @@ const SidebarChatRow = ({
           />
         </form>
       ) : (
-        <div className="group relative flex h-8 w-full items-center rounded-md py-px squircle">
+        <div
+          className="group relative flex h-8 w-full items-center rounded-md py-px squircle"
+          onBlurCapture={(event) => {
+            const next = event.relatedTarget;
+            if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
+              setIsFocusWithin(false);
+            }
+          }}
+          onFocusCapture={() => setIsFocusWithin(true)}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
           {isActive ? (
             <SidebarActiveSurface />
           ) : (
-            <span
-              aria-hidden
-              className="pointer-events-none absolute inset-0 rounded-md bg-background/50 opacity-0 transition-[opacity,transform] duration-100 ease-out squircle group-focus-within:opacity-100 group-hover:opacity-100 group-active:scale-[0.98]"
+            <SidebarSimpleHoverSurface
+              layoutId="sidebar-chat-row-hover"
+              visible={isHovered || isFocusWithin}
             />
           )}
           <Button
             aria-current={isActive ? "page" : undefined}
             className={cn(
               sidebarNavButtonClassName,
-              "h-full min-w-0 flex-1 justify-start gap-3 rounded-md px-3 text-left transition-colors",
+              "h-full min-w-0 flex-1 justify-start gap-3 rounded-md px-3 text-left transition-[color,transform] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) active:scale-[0.985] motion-reduce:active:scale-100",
               {
                 "text-foreground": isActive,
                 "text-muted-foreground group-focus-within:text-foreground group-hover:text-foreground":
@@ -204,7 +215,7 @@ const SidebarChatRow = ({
             <IconButtonTooltip label={`Options for "${title}"`}>
               <DropdownMenuTrigger
                 aria-label={`Options for "${title}"`}
-                className="pointer-events-none relative z-20 mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground opacity-0 transition-[opacity,background-color,color,transform] duration-100 outline-none squircle group-hover:pointer-events-auto group-hover:bg-background/45 group-hover:opacity-100 hover:bg-background/80 hover:text-foreground focus-visible:pointer-events-auto focus-visible:bg-background/60 focus-visible:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/20 active:scale-95 data-popup-open:pointer-events-auto data-popup-open:bg-background/70 data-popup-open:text-foreground data-popup-open:opacity-100"
+                className="pointer-events-none relative z-20 mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground opacity-0 transition-[opacity,background-color,color,transform] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) outline-none squircle group-hover:pointer-events-auto group-hover:bg-background/45 group-hover:opacity-100 hover:bg-background/80 hover:text-foreground focus-visible:pointer-events-auto focus-visible:bg-background/60 focus-visible:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/20 active:scale-95 data-popup-open:pointer-events-auto data-popup-open:bg-background/70 data-popup-open:text-foreground data-popup-open:opacity-100"
               >
                 <HugeiconsIcon aria-hidden className="size-3.5" icon={MoreVerticalIcon} />
               </DropdownMenuTrigger>
@@ -222,7 +233,7 @@ const SidebarChatRow = ({
           </DropdownMenu>
         </div>
       )}
-    </m.div>
+    </SidebarEntrance>
   );
 };
 
@@ -313,11 +324,9 @@ const SidebarContent = ({
 
   return (
     <div className="relative z-10 flex min-h-0 flex-1 flex-col p-6">
-      <m.div
-        className="flex min-w-0 items-start gap-2 rounded-md px-1 will-change-[transform,opacity,filter]"
-        initial={getSidebarEntranceInitial(animateEntrance)}
-        animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-        transition={{ delay: getSidebarEntranceDelay(0), duration: 0.5, ease: "easeOut" }}
+      <SidebarEntrance
+        animateEntrance={animateEntrance}
+        className="flex min-w-0 items-start gap-2 rounded-md px-1"
       >
         <MailboxSwitcherDropdown
           defaultMailboxId={defaultMailboxId}
@@ -346,7 +355,7 @@ const SidebarContent = ({
             </Button>
           </IconButtonTooltip>
         )}
-      </m.div>
+      </SidebarEntrance>
 
       {!embedded && !isApiMailbox && (
         <div className="mt-2 p-1">
@@ -359,12 +368,7 @@ const SidebarContent = ({
       )}
 
       {isInboxView && (
-        <m.div
-          className="mt-3 p-1 will-change-[transform,opacity,filter]"
-          initial={getSidebarEntranceInitial(animateEntrance)}
-          animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-          transition={{ delay: getSidebarEntranceDelay(2), duration: 0.5, ease: "easeOut" }}
-        >
+        <SidebarEntrance animateEntrance={animateEntrance} className="mt-3 p-1" index={2}>
           <Button
             aria-disabled={embedded || isApiMailbox}
             className="w-full justify-start rounded-md px-4"
@@ -375,7 +379,7 @@ const SidebarContent = ({
             <HugeiconsIcon className="size-4 shrink-0" icon={Edit01Icon} strokeWidth={1.5} />
             Compose
           </Button>
-        </m.div>
+        </SidebarEntrance>
       )}
 
       {isInboxView && (
@@ -418,12 +422,7 @@ const SidebarContent = ({
 
       {!isInboxView && (
         <>
-          <m.div
-            className="mt-3 p-1 will-change-[transform,opacity,filter]"
-            initial={getSidebarEntranceInitial(animateEntrance)}
-            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-            transition={{ delay: getSidebarEntranceDelay(2), duration: 0.5, ease: "easeOut" }}
-          >
+          <SidebarEntrance animateEntrance={animateEntrance} className="mt-3 p-1" index={2}>
             <Button
               className="w-full justify-start rounded-md px-4"
               onClick={() => {
@@ -435,45 +434,42 @@ const SidebarContent = ({
               <HugeiconsIcon className="size-4 shrink-0" icon={ChatAddIcon} strokeWidth={1.5} />
               New chat
             </Button>
-          </m.div>
+          </SidebarEntrance>
 
-          <nav
-            aria-label="Chats"
-            className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1"
-          >
-            {chats.map((chat, index) => {
-              const isActive = chat.id === activeChatId;
+          <LayoutGroup id="sidebar-chats">
+            <nav
+              aria-label="Chats"
+              className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1"
+            >
+              {chats.map((chat, index) => {
+                const isActive = chat.id === activeChatId;
 
-              return (
-                <SidebarChatRow
-                  key={chat.id}
-                  animateEntrance={animateEntrance}
-                  chat={chat}
-                  editingTitle={editingChat?.id === chat.id ? editingChat.title : ""}
-                  index={index}
-                  isActive={isActive}
-                  isEditing={editingChat?.id === chat.id}
-                  onCancelRename={() => setEditingChat(null)}
-                  onDelete={onDeleteChat}
-                  onEditingTitleChange={(title) => setEditingChat({ id: chat.id, title })}
-                  onRenameKeyDown={handleRenameKeyDown}
-                  onRenameSubmit={submitRenameChat}
-                  onSelect={handleSelectChat}
-                  onStartRename={startRenameChat}
-                />
-              );
-            })}
-          </nav>
+                return (
+                  <SidebarChatRow
+                    key={chat.id}
+                    animateEntrance={animateEntrance}
+                    chat={chat}
+                    editingTitle={editingChat?.id === chat.id ? editingChat.title : ""}
+                    index={index}
+                    isActive={isActive}
+                    isEditing={editingChat?.id === chat.id}
+                    onCancelRename={() => setEditingChat(null)}
+                    onDelete={onDeleteChat}
+                    onEditingTitleChange={(title) => setEditingChat({ id: chat.id, title })}
+                    onRenameKeyDown={handleRenameKeyDown}
+                    onRenameSubmit={submitRenameChat}
+                    onSelect={handleSelectChat}
+                    onStartRename={startRenameChat}
+                  />
+                );
+              })}
+            </nav>
+          </LayoutGroup>
         </>
       )}
 
       {!embedded && (
-        <m.div
-          className="mt-auto p-2 will-change-[transform,opacity,filter]"
-          initial={getSidebarEntranceInitial(animateEntrance)}
-          animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-          transition={{ delay: getSidebarEntranceDelay(9), duration: 0.5, ease: "easeOut" }}
-        >
+        <SidebarEntrance animateEntrance={animateEntrance} className="mt-auto p-2" index={9}>
           <div
             className="relative rounded-md squircle"
             onMouseEnter={() => setIsSettingsHovered(true)}
@@ -493,15 +489,11 @@ const SidebarContent = ({
               variant="ghost"
               to="/settings"
             >
-              <HugeiconsIcon
-                className="size-4 shrink-0 rotate-0 transition-transform duration-1000 ease-in-out group-hover:rotate-360"
-                icon={Settings01Icon}
-                strokeWidth={1.5}
-              />
+              <HugeiconsIcon className="size-4 shrink-0" icon={Settings01Icon} strokeWidth={1.5} />
               Settings
             </LinkButton>
           </div>
-        </m.div>
+        </SidebarEntrance>
       )}
     </div>
   );
@@ -513,6 +505,7 @@ export const MailSidebar = ({
   ...sidebarProps
 }: MailSidebarProps) => {
   const [animateEntrance, setAnimateEntrance] = useState(() => !hasPlayedSidebarEntrance);
+  const reducedMotion = useReducedMotion();
   const closeMobileSidebar = useEffectEvent(() => {
     onMobileOpenChange(false);
   });
@@ -522,9 +515,11 @@ export const MailSidebar = ({
       return;
     }
 
-    hasPlayedSidebarEntrance = true;
-    const frame = requestAnimationFrame(() => setAnimateEntrance(false));
-    return () => cancelAnimationFrame(frame);
+    const timeout = window.setTimeout(() => {
+      hasPlayedSidebarEntrance = true;
+      setAnimateEntrance(false);
+    }, 650);
+    return () => window.clearTimeout(timeout);
   }, [animateEntrance]);
 
   useEffect(() => {
@@ -569,10 +564,20 @@ export const MailSidebar = ({
               <m.aside
                 aria-label="Mail sidebar"
                 className="fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-hidden bg-background-dark pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-foreground shadow-2xl lg:hidden"
-                initial={{ x: "-100%" }}
-                animate={{ x: 0 }}
-                exit={{ x: "-100%" }}
-                transition={{ type: "spring", bounce: 0, duration: 0.24 }}
+                initial={
+                  reducedMotion
+                    ? { opacity: 0, transform: "translate3d(0, 0, 0)" }
+                    : { opacity: 1, transform: "translate3d(-100%, 0, 0)" }
+                }
+                animate={{ opacity: 1, transform: "translate3d(0, 0, 0)" }}
+                exit={
+                  reducedMotion
+                    ? { opacity: 0, transform: "translate3d(0, 0, 0)" }
+                    : { opacity: 1, transform: "translate3d(-100%, 0, 0)" }
+                }
+                transition={
+                  reducedMotion ? { duration: 0.1 } : { type: "spring", bounce: 0, duration: 0.24 }
+                }
               >
                 <WorkspaceDitherBackground />
                 <SidebarContent
