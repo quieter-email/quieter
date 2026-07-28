@@ -10,7 +10,7 @@ import { toast } from "@quieter/ui/toast";
 import { type UseAudioRecorderReturn, useAudioRecorder } from "@tanstack/ai-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { LayoutGroup, m, useReducedMotion } from "motion/react";
+import { domMax, LayoutGroup, LazyMotion, m, useReducedMotion } from "motion/react";
 import { type FormEvent, type KeyboardEvent, useRef, useState } from "react";
 import {
   setDefaultChatModel,
@@ -561,31 +561,69 @@ export const ChatView = ({
   };
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <header className="flex min-h-14 items-center px-3 lg:hidden">
-        <Button onClick={onOpenSidebar} size="sm" type="button" variant="ghost">
-          Sidebar
-        </Button>
-      </header>
-      <LayoutGroup id={chatId ?? draftChatKey}>
-        <div className="flex min-h-0 flex-1 flex-col">
-          {hasMessages ? (
-            <>
-              <ChatTranscript
-                actionsDisabled={isStreaming || isActionPending || composerDisabled}
-                errorMessage={errorMessage}
-                hydrated={chatData !== undefined}
-                isStreaming={isStreaming}
-                onCopy={(text) => void copyToClipboard(text)}
-                onEditSubmit={handleEditSubmit}
-                onRegenerate={handleRegenerate}
-                onResolveCompose={handleResolveCompose}
-                turns={turns}
-              />
+    <LazyMotion features={domMax}>
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <header className="flex min-h-14 items-center px-3 lg:hidden">
+          <Button onClick={onOpenSidebar} size="sm" type="button" variant="ghost">
+            Sidebar
+          </Button>
+        </header>
+        <LayoutGroup id={chatId ?? draftChatKey}>
+          <div className="flex min-h-0 flex-1 flex-col">
+            {hasMessages ? (
+              <>
+                <ChatTranscript
+                  actionsDisabled={isStreaming || isActionPending || composerDisabled}
+                  errorMessage={errorMessage}
+                  hydrated={chatData !== undefined}
+                  isStreaming={isStreaming}
+                  onCopy={(text) => void copyToClipboard(text)}
+                  onEditSubmit={handleEditSubmit}
+                  onRegenerate={handleRegenerate}
+                  onResolveCompose={handleResolveCompose}
+                  turns={turns}
+                />
 
-              <div className="w-full px-4 pb-5">
+                <div className="w-full px-4 pb-5">
+                  <m.div
+                    className="mx-auto w-full max-w-2xl"
+                    layoutDependency={hasMessages}
+                    layoutId="chat-composer"
+                    transition={{
+                      duration: shouldReduceMotion ? 0 : appMotionDuration.layout,
+                      ease: appEaseInOut,
+                    }}
+                  >
+                    {!canUseAiChat && !isBillingPending && (
+                      <PlanRequiredBlock
+                        organizationId={mailboxOrganizationId}
+                        requirementLabel={aiRequirement.requirementLabel}
+                      />
+                    )}
+                    <ChatComposer
+                      disabled={composerDisabled}
+                      input={input}
+                      model={model}
+                      onInputChange={setInput}
+                      onInputKeyDown={handleInputKeyDown}
+                      onModelChange={handleModelChange}
+                      onRecordingStart={handleRecordingStart}
+                      onRecordingStop={handleRecordingStop}
+                      onStop={handleStop}
+                      onSubmit={handleSubmit}
+                      recording={audioRecorder.isRecording}
+                      recordingSupported={audioRecorder.isSupported}
+                      streaming={isStreaming}
+                      submitting={isActionPending}
+                      transcribing={isTranscribingAudio}
+                    />
+                  </m.div>
+                </div>
+              </>
+            ) : (
+              <div className="flex min-h-0 flex-1 items-center justify-center px-4">
                 <m.div
-                  className="mx-auto w-full max-w-2xl"
+                  className="w-full max-w-xl"
                   layoutDependency={hasMessages}
                   layoutId="chat-composer"
                   transition={{
@@ -618,47 +656,11 @@ export const ChatView = ({
                   />
                 </m.div>
               </div>
-            </>
-          ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center px-4">
-              <m.div
-                className="w-full max-w-xl"
-                layoutDependency={hasMessages}
-                layoutId="chat-composer"
-                transition={{
-                  duration: shouldReduceMotion ? 0 : appMotionDuration.layout,
-                  ease: appEaseInOut,
-                }}
-              >
-                {!canUseAiChat && !isBillingPending && (
-                  <PlanRequiredBlock
-                    organizationId={mailboxOrganizationId}
-                    requirementLabel={aiRequirement.requirementLabel}
-                  />
-                )}
-                <ChatComposer
-                  disabled={composerDisabled}
-                  input={input}
-                  model={model}
-                  onInputChange={setInput}
-                  onInputKeyDown={handleInputKeyDown}
-                  onModelChange={handleModelChange}
-                  onRecordingStart={handleRecordingStart}
-                  onRecordingStop={handleRecordingStop}
-                  onStop={handleStop}
-                  onSubmit={handleSubmit}
-                  recording={audioRecorder.isRecording}
-                  recordingSupported={audioRecorder.isSupported}
-                  streaming={isStreaming}
-                  submitting={isActionPending}
-                  transcribing={isTranscribingAudio}
-                />
-              </m.div>
-            </div>
-          )}
-        </div>
-      </LayoutGroup>
-    </section>
+            )}
+          </div>
+        </LayoutGroup>
+      </section>
+    </LazyMotion>
   );
 };
 

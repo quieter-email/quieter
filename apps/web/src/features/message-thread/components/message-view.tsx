@@ -520,7 +520,7 @@ const ThreadMessageBody = ({
     <div className="min-h-0 overflow-hidden">
       <div
         className={cn(
-          "px-4 pb-4 transition-[opacity,transform] duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out) @sm:px-5 @sm:pb-5",
+          "px-4 pb-4 transition-[opacity,transform] duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out) motion-reduce:transition-none @sm:px-5 @sm:pb-5",
           {
             "translate-y-0 opacity-100": expanded,
             "-translate-y-1 opacity-0": !expanded,
