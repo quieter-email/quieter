@@ -29,6 +29,7 @@ export type ConnectorProvider = "google_calendar" | "linear";
 export type MailboxConnectionStatus = "connected" | "needs_reconnect";
 export type MailboxGrantRole = "manager" | "reader" | "responder";
 export type PersistedMailboxProvider = "gmail" | "managed";
+export type MailTemplateScope = "personal" | "team";
 export type MailboxAccessSource = "direct" | "division";
 export type MailboxActionStatus = "needs_attention" | "ready";
 export type MailboxActionRevisionValidationStatus = "invalid" | "valid";
@@ -438,6 +439,39 @@ export const mailbox = pgTable(
     index("mailbox_organization_id_idx").on(table.organizationId),
     index("mailbox_division_id_idx").on(table.divisionId),
     unique("mailbox_email_address_unique").on(table.emailAddress),
+  ],
+);
+
+export const mailTemplate = pgTable(
+  "mailTemplate",
+  {
+    id: text("id").primaryKey(),
+    scope: text("scope").$type<MailTemplateScope>().notNull(),
+    userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
+    organizationId: text("organizationId").references(() => organization.id, {
+      onDelete: "cascade",
+    }),
+    name: text("name").notNull(),
+    subject: text("subject").notNull().default(""),
+    bodyHtml: text("bodyHtml").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "mail_template_scope_owner_check",
+      sql`(
+        (${table.scope} = 'personal' and ${table.userId} is not null and ${table.organizationId} is null)
+        or
+        (${table.scope} = 'team' and ${table.userId} is null and ${table.organizationId} is not null)
+      )`,
+    ),
+    check("mail_template_scope_check", sql`${table.scope} in ('personal', 'team')`),
+    check("mail_template_name_length_check", sql`char_length(${table.name}) between 1 and 120`),
+    check("mail_template_subject_length_check", sql`char_length(${table.subject}) <= 998`),
+    check("mail_template_body_length_check", sql`char_length(${table.bodyHtml}) <= 100000`),
+    index("mail_template_user_updated_idx").on(table.userId, table.updatedAt),
+    index("mail_template_organization_updated_idx").on(table.organizationId, table.updatedAt),
   ],
 );
 
@@ -1974,6 +2008,7 @@ export const tables = {
   gmailOAuthState,
   gmailWatchState,
   mailbox,
+  mailTemplate,
   mailboxDivisionGrant,
   mailboxGrant,
   managedMailAttachment,
@@ -2041,6 +2076,7 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.user.id,
       to: r.mailDomainConnectAttempt.userId,
     }),
+    mailTemplates: r.many.mailTemplate({ from: r.user.id, to: r.mailTemplate.userId }),
     ownedMailboxes: r.many.mailbox({ from: r.user.id, to: r.mailbox.ownerUserId }),
     memberships: r.many.member({ from: r.user.id, to: r.member.userId }),
     sessions: r.many.session({ from: r.user.id, to: r.session.userId }),
@@ -2132,6 +2168,10 @@ export const authRelations = defineRelations(tables, (r) => ({
       to: r.organizationDivision.organizationId,
     }),
     mailboxes: r.many.mailbox({ from: r.organization.id, to: r.mailbox.organizationId }),
+    mailTemplates: r.many.mailTemplate({
+      from: r.organization.id,
+      to: r.mailTemplate.organizationId,
+    }),
     mailDomains: r.many.mailDomain({ from: r.organization.id, to: r.mailDomain.organizationId }),
     members: r.many.member({ from: r.organization.id, to: r.member.organizationId }),
     organizationApiMailAttachments: r.many.organizationApiMailAttachment({
@@ -2170,6 +2210,18 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.session.userId,
       to: r.user.id,
       optional: false,
+    }),
+  },
+  mailTemplate: {
+    organization: r.one.organization({
+      from: r.mailTemplate.organizationId,
+      to: r.organization.id,
+      optional: true,
+    }),
+    user: r.one.user({
+      from: r.mailTemplate.userId,
+      to: r.user.id,
+      optional: true,
     }),
   },
   account: {

@@ -10,14 +10,14 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../../lib/cn";
 
 const buttonVariants = cva(
-  "squircle inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm whitespace-nowrap transition-transform duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "squircle inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-sm whitespace-nowrap transition-transform duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         default:
           "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/85",
         outline:
-          "border border-input bg-background-light text-foreground shadow-sm hover:bg-muted active:bg-muted/80",
+          "border-input bg-background-light text-foreground shadow-sm hover:bg-muted active:bg-muted/80",
         ghost:
           "bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground active:bg-muted/80 active:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground",
         destructive:

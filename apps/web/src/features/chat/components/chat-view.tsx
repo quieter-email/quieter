@@ -674,7 +674,7 @@ const PlanRequiredBlock = ({
   const navigate = useNavigate();
 
   return (
-    <div className="mb-3 rounded-lg border border-border/70 bg-secondary/35 p-3 text-sm">
+    <div className="mb-3 rounded-lg border border-border bg-secondary/35 p-3 text-sm">
       <p className="font-medium text-foreground">Upgrade required</p>
       <p className="mt-1 text-muted-foreground">
         AI chat requires {requirementLabel} billing with available credits.

@@ -7,11 +7,13 @@ import type { MailboxCategory } from "~/lib/gmail/gmail";
 import type { MailboxSearch } from "~/routes/index";
 import { inboxRouteApi } from "~/lib/route-apis";
 
+type MailboxRouteCategory = MailboxSearch["mailbox"];
+
 type MailboxSearchPatch = {
   chatId?: string | null;
   compose?: "mailto" | null;
   mailto?: string | null;
-  mailbox?: MailboxCategory;
+  mailbox?: MailboxRouteCategory;
   mailboxId?: string | null;
   messageId?: string | null;
   threadId?: string | null;
@@ -26,7 +28,7 @@ type MailboxSearchOptions = {
 type InboxRouteState = {
   compose?: "mailto";
   mailto?: string;
-  mailbox: MailboxCategory;
+  mailbox: MailboxRouteCategory;
   mailboxId?: string;
   messageId?: string;
   threadId?: string;
@@ -79,7 +81,7 @@ const applyChatPatch = (state: ChatRouteState, patch: MailboxSearchPatch): ChatR
   chatId: patch.chatId === undefined ? state.chatId : normalizeSearchValue(patch.chatId),
   compose: patch.compose === undefined ? state.compose : normalizeComposeValue(patch.compose),
   mailto: patch.mailto === undefined ? state.mailto : normalizeSearchValue(patch.mailto),
-  mailbox: patch.mailbox ?? state.mailbox,
+  mailbox: patch.mailbox === "template" ? state.mailbox : (patch.mailbox ?? state.mailbox),
   mailboxId:
     patch.mailboxId === undefined ? state.mailboxId : normalizeSearchValue(patch.mailboxId),
   messageId:
@@ -110,7 +112,7 @@ export const useMailboxSearchActions = () => {
             chatId: previous.chatId,
             compose: previous.compose,
             mailto: previous.mailto,
-            mailbox: previous.mailbox,
+            mailbox: previous.mailbox === "template" ? "inbox" : previous.mailbox,
             mailboxId: previous.mailboxId,
             messageId: previous.messageId,
             query: previous.query,
@@ -136,7 +138,10 @@ export const useMailboxSearchActions = () => {
               ? chatStateRef.current
               : {
                   ...chatStateRef.current,
-                  mailbox: inboxStateRef.current.mailbox,
+                  mailbox:
+                    inboxStateRef.current.mailbox === "template"
+                      ? "inbox"
+                      : inboxStateRef.current.mailbox,
                   messageId: inboxStateRef.current.messageId,
                   query: inboxStateRef.current.query,
                   threadId: inboxStateRef.current.threadId,
@@ -169,7 +174,7 @@ export const useMailboxSearchActions = () => {
           messageId: nextInboxState.messageId,
           threadId: nextInboxState.threadId,
           query: nextInboxState.query,
-          view: "inbox",
+          view: nextView,
         } as MailboxSearch;
       },
       to: ".",
@@ -188,9 +193,11 @@ export const useMailboxThreadId = () =>
   });
 
 export const useMailboxRouteSearch = () => {
-  const activeMailbox = inboxRouteApi.useSearch({
+  const routeMailbox = inboxRouteApi.useSearch({
     select: (search) => search.mailbox,
   });
+  const isTemplateMailbox = routeMailbox === "template";
+  const activeMailbox = isTemplateMailbox ? "inbox" : routeMailbox;
   const chatId = inboxRouteApi.useSearch({
     select: (search) => search.chatId,
   });
@@ -225,6 +232,7 @@ export const useMailboxRouteSearch = () => {
     chatId,
     compose,
     gmailLink,
+    isTemplateMailbox,
     mailto,
     mailboxId,
     messageId,

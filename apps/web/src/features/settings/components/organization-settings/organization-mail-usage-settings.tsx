@@ -160,7 +160,7 @@ const UsageBreakdown = ({
 
   return (
     <div className="mt-3">
-      <div className="flex h-3 overflow-hidden rounded-full bg-muted shadow-inner ring-1 ring-border/60 squircle">
+      <div className="squircle flex h-3 overflow-hidden rounded-full bg-muted shadow-inner ring-1 ring-border/60">
         <div className="flex h-full min-w-1 overflow-hidden" style={{ width: `${usedPercent}%` }}>
           {items.flatMap((item) => {
             if (item.costCents <= 0) return [];
@@ -306,7 +306,7 @@ const ManagedUsageSettingsForm = ({
           <SettingsRowText title="Usage balance">
             {formatMoney(managedUsageCostCents)} tracked this period
           </SettingsRowText>
-          <span className="rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success squircle">
+          <span className="squircle rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
             Unlimited
           </span>
         </SettingsInsetRow>
@@ -352,7 +352,7 @@ const ManagedUsageSettingsForm = ({
         </Progress>
       </div>
 
-      <div className="mx-4 mt-5 mb-1 grid divide-y divide-border/70 border-y border-border/70 md:mx-6 md:grid-cols-3 md:divide-x md:divide-y-0">
+      <div className="mx-4 mt-5 mb-1 grid divide-y divide-border/70 border-y border-border md:mx-6 md:grid-cols-3 md:divide-x md:divide-y-0">
         <Price
           label="Messages"
           suffix="/ 1K"
@@ -380,7 +380,7 @@ const ManagedUsageSettingsForm = ({
           </SettingsRowText>
           <Switch
             checked={overageEnabled}
-            className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
+            className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
             disabled={!canManageOrganizationMailUsage}
             id="managed-overage-toggle"
             onCheckedChange={setOverageEnabled}

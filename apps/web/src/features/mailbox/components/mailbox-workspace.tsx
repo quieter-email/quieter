@@ -123,6 +123,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     chatId,
     compose,
     gmailLink,
+    isTemplateMailbox,
     mailboxId,
     mailto,
     messageId,
@@ -292,8 +293,8 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   };
 
   const selectMailbox = (mailbox: MailboxCategory) => {
-    if (mailbox === activeMailbox) return;
-    void setMailboxSearch({ mailbox, messageId: null });
+    if (!isTemplateMailbox && mailbox === activeMailbox && view === "inbox") return;
+    void setMailboxSearch({ mailbox, messageId: null, view: "inbox" });
   };
 
   const selectView = (nextView: MailboxWorkspaceView) => {
@@ -457,6 +458,14 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
             demoMode={isDemoMode}
             managedDemoMode={isManagedDemoMode}
             mailboxId={selectedMailboxId}
+            onManageTemplates={() => {
+              void setMailboxSearch({
+                mailbox: "template",
+                messageId: null,
+                threadId: null,
+                view: "inbox",
+              });
+            }}
             persistDrafts={selectedMailboxProvider !== "api"}
             ref={composeDialogRef}
           />
@@ -471,7 +480,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   return (
     <>
       <MailboxWorkspaceContent
-        activeMailbox={activeMailbox}
+        activeMailbox={isTemplateMailbox ? null : activeMailbox}
         chatContext={
           messageId || threadId || query.trim()
             ? {
@@ -570,7 +579,16 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
           demoMode={isDemoMode}
           managedDemoMode={isManagedDemoMode}
           mailboxId={selectedMailboxId}
+          onManageTemplates={() => {
+            void setMailboxSearch({
+              mailbox: "template",
+              messageId: null,
+              threadId: null,
+              view: "inbox",
+            });
+          }}
           persistDrafts={!isManagedDemoMode && selectedMailboxProvider !== "api"}
+          senderEmail={currentUserEmail}
           ref={composeDialogRef}
         />
       </Suspense>

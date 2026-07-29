@@ -46,7 +46,7 @@ export const SidebarNavItem = ({
 
   return (
     <div
-      className="relative w-full rounded-md py-px squircle"
+      className="squircle relative w-full rounded-md py-px"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onPointerCancel={() => setPressed(false)}

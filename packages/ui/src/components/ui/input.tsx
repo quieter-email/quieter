@@ -11,7 +11,7 @@ const inputVariants = cva(
     variants: {
       chrome: {
         default:
-          "keyboard-focus-ring squircle rounded-md border border-input bg-background-light shadow-sm read-only:cursor-default read-only:bg-muted/30",
+          "keyboard-focus-ring squircle rounded-md border border-border bg-background-dark/60 shadow-sm read-only:cursor-default read-only:bg-muted/30",
         ghost:
           "border-0 bg-transparent shadow-none read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0",
         primary:

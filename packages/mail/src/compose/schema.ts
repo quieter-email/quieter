@@ -1,6 +1,11 @@
 import { z } from "zod";
 
 const EMAIL_ADDRESS_PATTERN = /([a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+)/i;
+const UNRESOLVED_TEMPLATE_PLACEHOLDER_PATTERN =
+  /\{\{quieter:[^{}\n]{1,80}\}\}|data-quieter-template-placeholder=/;
+
+export const hasUnresolvedTemplatePlaceholders = (value: string) =>
+  UNRESOLVED_TEMPLATE_PLACEHOLDER_PATTERN.test(value);
 
 const normalizeMailAddressValue = (value: string | undefined) =>
   value?.replaceAll(/\r?\n\s+/g, " ").trim() ?? "";
@@ -173,15 +178,24 @@ export const composeDraftFormValuesSchema = z.object({
 
 export const composeSendFormValuesSchema = composeDraftFormValuesSchema.superRefine(
   (value, ctx) => {
-    if (splitMailAddressList(value.to).length > 0) {
-      return;
+    if (splitMailAddressList(value.to).length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Add at least one recipient in To.",
+        path: ["to"],
+      });
     }
 
-    ctx.addIssue({
-      code: "custom",
-      message: "Add at least one recipient in To.",
-      path: ["to"],
-    });
+    if (
+      hasUnresolvedTemplatePlaceholders(value.bodyHtml) ||
+      hasUnresolvedTemplatePlaceholders(value.bodyText)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Fill every template placeholder before sending.",
+        path: ["bodyHtml"],
+      });
+    }
   },
 );
 
@@ -234,15 +248,24 @@ export const composeDraftInputSchema = z.object({
 });
 
 export const composeMessageInputSchema = composeDraftInputSchema.superRefine((value, ctx) => {
-  if (splitMailAddressList(value.recipients.to).length > 0) {
-    return;
+  if (splitMailAddressList(value.recipients.to).length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Add at least one recipient in To.",
+      path: ["recipients", "to"],
+    });
   }
 
-  ctx.addIssue({
-    code: "custom",
-    message: "Add at least one recipient in To.",
-    path: ["recipients", "to"],
-  });
+  if (
+    hasUnresolvedTemplatePlaceholders(value.bodyHtml) ||
+    hasUnresolvedTemplatePlaceholders(value.bodyText)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Fill every template placeholder before sending.",
+      path: ["bodyHtml"],
+    });
+  }
 });
 
 export const composeSendDraftInputSchema = composeMessageInputSchema;

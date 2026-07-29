@@ -1,5 +1,6 @@
 import type { ComposeDraftAnchor } from "@quieter/mail/compose/schema";
 import { rpc } from "~/lib/orpc";
+import { serializeTemplatePlaceholders } from "./template-placeholders";
 
 const MAX_TOTAL_ATTACHMENT_BYTES = 24 * 1024 * 1024;
 const CONTENT_ID_PREFIX = "quieter-inline";
@@ -368,6 +369,7 @@ const serializeDraft = async (draft: ComposeDraftState) => {
   return {
     ...draft,
     attachments,
+    bodyHtml: serializeTemplatePlaceholders(draft.bodyHtml),
     inlineImages,
   };
 };

@@ -13,7 +13,7 @@ export const ContextMenuTrigger = ({
 }: ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Trigger>) => (
   <ContextMenuPrimitive.Trigger
     className={cn(
-      "transition-transform duration-100 ease-out outline-none squircle active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      "squircle transition-transform duration-100 ease-out outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
       className,
     )}
     {...props}
@@ -67,7 +67,7 @@ export const ContextMenuItem = ({
 }: ContextMenuItemProps) => (
   <ContextMenuPrimitive.Item
     className={cn(
-      "relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-sm text-foreground transition-transform duration-100 ease-out outline-none select-none squircle active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+      "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-sm text-foreground transition-transform duration-100 ease-out outline-none select-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
       className,
     )}
     closeOnClick={closeOnSelect}

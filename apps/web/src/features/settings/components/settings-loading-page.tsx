@@ -59,7 +59,7 @@ const SettingsPendingOverview = () => {
           <h2 className="text-sm font-normal text-foreground">
             {SETTINGS_SECTION_LABELS[section]}
           </h2>
-          <div className="@container overflow-hidden rounded-lg border border-border/70 bg-background/58 squircle">
+          <div className="squircle @container overflow-hidden rounded-lg border border-border bg-background/58">
             {navItems.map(({ description, section: itemSection, tab, title }) => {
               if (itemSection !== section) return null;
 
@@ -68,7 +68,7 @@ const SettingsPendingOverview = () => {
                   className="relative flex w-full items-center gap-4 px-4 py-3 after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6"
                   key={tab}
                 >
-                  <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-foreground squircle">
+                  <div className="squircle flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-foreground">
                     <HugeiconsIcon aria-hidden className="size-4" icon={SETTINGS_NAV_ICONS[tab]} />
                   </div>
                   <div className="min-w-0 flex-1">

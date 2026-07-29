@@ -604,7 +604,7 @@ const ActionSimpleEditor = ({
                   <textarea
                     aria-label="Action instruction"
                     className={cn(
-                      "min-h-36 w-full resize-y rounded-md border border-input bg-background-light px-3 py-2 text-sm text-foreground outline-none squircle placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/30",
+                      "squircle min-h-36 w-full resize-y rounded-md border border-input bg-background-light px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/30",
                     )}
                     onChange={(event) => setInstructions(event.target.value)}
                     placeholder={DEFAULT_ACTION_INSTRUCTIONS}

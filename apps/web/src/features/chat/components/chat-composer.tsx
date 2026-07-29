@@ -51,7 +51,7 @@ export const ChatComposer = ({
 
   return (
     <form
-      className="flex w-full flex-col rounded-xl border bg-background/85 shadow-xl squircle"
+      className="squircle flex w-full flex-col rounded-xl border bg-background/85 shadow-xl"
       onSubmit={onSubmit}
     >
       <textarea

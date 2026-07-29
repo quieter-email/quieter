@@ -151,7 +151,7 @@ const CreatedApiKeyReveal = ({
 
     <DialogBody className="space-y-3">
       <button
-        className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-xs break-all text-foreground outline-none squircle hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring/30"
+        className="squircle w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-xs break-all text-foreground outline-none hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring/30"
         onClick={() => void copyText(createdKey)}
         type="button"
       >
@@ -482,7 +482,7 @@ const ResetApiKeyDialog = ({
 
             <AlertDialogBody className="space-y-3">
               <button
-                className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-xs break-all text-foreground outline-none squircle hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring/30"
+                className="squircle w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-xs break-all text-foreground outline-none hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring/30"
                 onClick={() => void copyText(createdKey)}
                 type="button"
               >

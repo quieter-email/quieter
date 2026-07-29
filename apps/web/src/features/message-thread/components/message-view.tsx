@@ -1110,7 +1110,7 @@ export const MessageView = ({
                 Create mailbox
               </Button>
             ) : apiSource.senderMailboxId ? (
-              <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground squircle">
+              <span className="squircle rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
                 {apiSource.includedInMailbox ? "Included in mailbox" : "Mailbox copy disabled"}
               </span>
             ) : null}

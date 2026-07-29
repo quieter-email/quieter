@@ -11,6 +11,11 @@ export const appRouter = {
     import("./connectors").then(({ connectorsRouter }) => ({ default: connectorsRouter })),
   ),
   mail: lazy(() => import("./mail").then(({ mailRouter }) => ({ default: mailRouter }))),
+  mailTemplates: lazy(() =>
+    import("./mail-templates").then(({ mailTemplatesRouter }) => ({
+      default: mailTemplatesRouter,
+    })),
+  ),
   mailDomains: lazy(() =>
     import("./mail-domains").then(({ mailDomainsRouter }) => ({ default: mailDomainsRouter })),
   ),

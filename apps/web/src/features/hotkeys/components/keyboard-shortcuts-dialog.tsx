@@ -114,7 +114,7 @@ const getShortcutDisplay = (shortcut: KeyboardShortcut): string[][] => {
 };
 
 const KeyBadge = ({ value }: { value: string }) => (
-  <kbd className="inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-border/70 bg-background-light px-1.5 font-mono text-[11px] font-medium text-foreground shadow-xs squircle">
+  <kbd className="squircle inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-border bg-background-light px-1.5 font-mono text-[11px] font-medium text-foreground shadow-xs">
     {value}
   </kbd>
 );
@@ -146,7 +146,7 @@ const ShortcutRow = ({ item }: { item: ShortcutViewItem }) => {
   const context = item.context ?? (shortcut.status === "coming-soon" ? "Later" : null);
 
   return (
-    <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-border/55 px-3 py-2 last:border-b-0">
+    <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-border px-3 py-2 last:border-b-0">
       <div className="min-w-0">
         <p
           className={cn("truncate text-[0.8rem] font-normal text-foreground", {
@@ -179,7 +179,7 @@ export const KeyboardShortcutsDialog = ({ onOpenChange, open }: KeyboardShortcut
           {SHORTCUT_VIEW_SECTIONS.map((section) => (
             <section className="mb-4 break-inside-avoid space-y-2" key={section.title}>
               <h2 className="px-1 text-sm font-normal text-foreground">{section.title}</h2>
-              <div className="overflow-hidden rounded-lg border border-border/70 bg-background/58 squircle">
+              <div className="squircle overflow-hidden rounded-lg border border-border bg-background/58">
                 {section.items.map((item) => (
                   <ShortcutRow item={item} key={`${section.title}-${item.id}`} />
                 ))}

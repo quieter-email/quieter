@@ -1,10 +1,12 @@
 "use client";
 
+import { useHeadlessConsentUI } from "@c15t/react";
 import {
   Cancel01Icon,
   ChatAddIcon,
   Delete01Icon,
   Edit01Icon,
+  HelpCircleIcon,
   Loading03Icon,
   MoreVerticalIcon,
   Settings01Icon,
@@ -16,10 +18,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { Link } from "@tanstack/react-router";
 import {
   AnimatePresence,
   domMax,
@@ -81,7 +85,7 @@ type MailSidebarProps = {
   }>;
   selectedMailboxId: string | null;
   selectedMailboxProvider: "api" | "gmail" | "managed" | null;
-  selectedMailbox: MailboxCategory;
+  selectedMailbox: MailboxCategory | null;
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
   onReconnectMailbox: (mailbox: { emailAddress: string; id: string }) => void;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
@@ -127,6 +131,58 @@ type SidebarChatRowProps = {
   onStartRename: (chat: SidebarChat) => void;
 };
 
+const SidebarHelpMenu = ({ onRequestClose }: { onRequestClose?: () => void }) => {
+  const { openDialog } = useHeadlessConsentUI();
+  const [isHovered, setIsHovered] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <DropdownMenu onOpenChange={setIsOpen} open={isOpen}>
+      <div
+        className="squircle relative rounded-md"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <SidebarSimpleHoverSurface layoutId="sidebar-help-hover" visible={isHovered || isOpen} />
+        <IconButtonTooltip label="Help and legal">
+          <DropdownMenuTrigger
+            aria-label="Help and legal"
+            className="relative z-10 inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground hover:bg-transparent hover:text-foreground focus-visible:bg-transparent focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring/20 focus-visible:outline-none data-popup-open:bg-transparent data-popup-open:text-foreground"
+          >
+            <HugeiconsIcon aria-hidden className="size-4" icon={HelpCircleIcon} strokeWidth={1.5} />
+          </DropdownMenuTrigger>
+        </IconButtonTooltip>
+      </div>
+      <DropdownMenuContent align="end" side="top">
+        <DropdownMenuItem onSelect={onRequestClose} render={<Link to="/privacy" />}>
+          Privacy
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onRequestClose} render={<Link to="/cookies" />}>
+          Cookies
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onRequestClose} render={<Link to="/terms" />}>
+          Terms
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onRequestClose} render={<Link to="/imprint" />}>
+          Imprint
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() => {
+            onRequestClose?.();
+            openDialog();
+          }}
+        >
+          Privacy preferences
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem render={<a href="https://logo.dev" rel="noreferrer" target="_blank" />}>
+          Logos by logo.dev
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+
 const SidebarChatRow = ({
   animateEntrance,
   chat,
@@ -168,7 +224,7 @@ const SidebarChatRow = ({
         </form>
       ) : (
         <div
-          className="group relative flex h-8 w-full items-center rounded-md py-px squircle"
+          className="group squircle relative flex h-8 w-full items-center rounded-md py-px"
           onBlurCapture={(event) => {
             const next = event.relatedTarget;
             if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
@@ -215,7 +271,7 @@ const SidebarChatRow = ({
             <IconButtonTooltip label={`Options for "${title}"`}>
               <DropdownMenuTrigger
                 aria-label={`Options for "${title}"`}
-                className="pointer-events-none relative z-20 mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground opacity-0 transition-[opacity,background-color,color,transform] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) outline-none squircle group-hover:pointer-events-auto group-hover:bg-background/45 group-hover:opacity-100 hover:bg-background/80 hover:text-foreground focus-visible:pointer-events-auto focus-visible:bg-background/60 focus-visible:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/20 active:scale-95 data-popup-open:pointer-events-auto data-popup-open:bg-background/70 data-popup-open:text-foreground data-popup-open:opacity-100"
+                className="squircle pointer-events-none relative z-20 mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground opacity-0 transition-[opacity,background-color,color,transform] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) outline-none group-hover:pointer-events-auto group-hover:bg-background/45 group-hover:opacity-100 hover:bg-background/80 hover:text-foreground focus-visible:pointer-events-auto focus-visible:bg-background/60 focus-visible:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/20 active:scale-95 data-popup-open:pointer-events-auto data-popup-open:bg-background/70 data-popup-open:text-foreground data-popup-open:opacity-100"
               >
                 <HugeiconsIcon aria-hidden className="size-3.5" icon={MoreVerticalIcon} />
               </DropdownMenuTrigger>
@@ -266,6 +322,7 @@ const SidebarContent = ({
   switcherSide = "right",
 }: SidebarContentProps) => {
   const isInboxView = embedded || selectedView === "inbox";
+  const isChatView = !embedded && selectedView === "chat";
   const isApiMailbox = selectedMailboxProvider === "api";
   const selectedMailboxGrantRole = groups
     .flatMap((group) => group.mailboxes)
@@ -420,7 +477,7 @@ const SidebarContent = ({
         </div>
       )}
 
-      {!isInboxView && (
+      {isChatView && (
         <>
           <SidebarEntrance animateEntrance={animateEntrance} className="mt-3 p-1" index={2}>
             <Button
@@ -470,28 +527,35 @@ const SidebarContent = ({
 
       {!embedded && (
         <SidebarEntrance animateEntrance={animateEntrance} className="mt-auto p-2" index={9}>
-          <div
-            className="relative rounded-md squircle"
-            onMouseEnter={() => setIsSettingsHovered(true)}
-            onMouseLeave={() => setIsSettingsHovered(false)}
-          >
-            <SidebarSimpleHoverSurface
-              layoutId="sidebar-settings-hover"
-              visible={isSettingsHovered}
-            />
-            <LinkButton
-              aria-label="Settings"
-              className="group relative z-10 w-full justify-start bg-transparent hover:bg-transparent active:scale-100"
-              onClick={onRequestClose}
-              search={{
-                from: "/",
-              }}
-              variant="ghost"
-              to="/settings"
+          <div className="flex items-center gap-1">
+            <div
+              className="squircle relative min-w-0 flex-1 rounded-md"
+              onMouseEnter={() => setIsSettingsHovered(true)}
+              onMouseLeave={() => setIsSettingsHovered(false)}
             >
-              <HugeiconsIcon className="size-4 shrink-0" icon={Settings01Icon} strokeWidth={1.5} />
-              Settings
-            </LinkButton>
+              <SidebarSimpleHoverSurface
+                layoutId="sidebar-settings-hover"
+                visible={isSettingsHovered}
+              />
+              <LinkButton
+                aria-label="Settings"
+                className="group relative z-10 w-full justify-start bg-transparent hover:bg-transparent active:scale-100"
+                onClick={onRequestClose}
+                search={{
+                  from: "/",
+                }}
+                variant="ghost"
+                to="/settings"
+              >
+                <HugeiconsIcon
+                  className="size-4 shrink-0"
+                  icon={Settings01Icon}
+                  strokeWidth={1.5}
+                />
+                Settings
+              </LinkButton>
+            </div>
+            <SidebarHelpMenu onRequestClose={onRequestClose} />
           </div>
         </SidebarEntrance>
       )}

@@ -167,7 +167,7 @@ export const ChatTranscript = ({
               })}
               aria-label="Scroll to bottom"
               className={cn(
-                "pointer-events-auto flex items-center gap-1.5 rounded-full border border-border/70 bg-background/95 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm",
+                "pointer-events-auto flex items-center gap-1.5 rounded-full border border-border bg-background/95 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm",
                 "transition-colors hover:bg-muted/60 hover:text-foreground",
               )}
               onClick={() =>

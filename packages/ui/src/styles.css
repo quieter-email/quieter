@@ -28,10 +28,10 @@
   --foreground: oklch(0.15 0.002 264);
   --background-light: oklch(1 0.002 264);
   --background-dark: oklch(0.9 0.002 264);
-  --card: oklch(1 0.002 264);
-  --card-foreground: oklch(0.145 0.002 264);
-  --popover: oklch(0.975 0.002 264);
-  --popover-foreground: oklch(0.15 0.002 264);
+  --card: var(--background);
+  --card-foreground: var(--foreground);
+  --popover: var(--background);
+  --popover-foreground: var(--foreground);
   --primary: oklch(0.37 0.002 264);
   --primary-foreground: oklch(0.985 0.002 264);
   --secondary: oklch(0.875 0.002 264);
@@ -87,7 +87,7 @@
   --mailbox-status-reconnect-foreground: var(--label-red-foreground);
   --mailbox-status-api: var(--label-blue);
   --mailbox-status-api-foreground: var(--label-blue-foreground);
-  --border: oklch(0.84 0.002 264);
+  --border: oklch(0.84 0.002 264 / 0.6);
   --input: oklch(0.922 0.002 264);
   --ring: oklch(0.708 0.003 264);
   --scrollbar-thumb: var(--secondary);
@@ -123,7 +123,7 @@
     var(--destructive) 30%,
     transparent
   );
-  --keyboard-focus-ring-shadow: color-mix(in oklab, var(--ring) 36%, transparent);
+  --keyboard-focus-ring-shadow: color-mix(in oklab, var(--foreground) 5%, transparent);
 }
 
 @supports not (color: color-mix(in oklab, black, transparent)) {
@@ -140,10 +140,10 @@
   --background-light: oklch(0.255 0.003 264);
   --background-dark: oklch(0.145 0 264);
   --foreground: oklch(1 0.002 264);
-  --card: oklch(0.275 0.003 264);
-  --card-foreground: oklch(0.985 0.002 264);
-  --popover: oklch(0.28 0.003 264);
-  --popover-foreground: oklch(0.9 0.002 264);
+  --card: var(--background);
+  --card-foreground: var(--foreground);
+  --popover: var(--background);
+  --popover-foreground: var(--foreground);
   --primary: oklch(0.95 0.002 264);
   --primary-foreground: oklch(0.141 0.003 264);
   --secondary: oklch(0.31 0.003 264);
@@ -199,7 +199,7 @@
   --mailbox-status-reconnect-foreground: var(--label-red-foreground);
   --mailbox-status-api: var(--label-blue);
   --mailbox-status-api-foreground: var(--label-blue-foreground);
-  --border: oklch(0.25 0.004 264);
+  --border: oklch(0.25 0.004 264 / 0.6);
   --input: oklch(0.32 0.003 264);
   --ring: oklch(0.44 0.004 264);
   --scrollbar-thumb: var(--secondary);
@@ -297,26 +297,15 @@
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
 
-  --radius-xs: calc(var(--radius) - 4px);
-  --radius-sm: calc(var(--radius) - 2px);
-  --radius-md: var(--radius);
-  --radius-lg: calc(var(--radius) + 2px);
-  --radius-xl: calc(var(--radius) + 6px);
-  --radius-2xl: calc(var(--radius) + 10px);
-  --radius-3xl: calc(var(--radius) + 14px);
-  --radius-4xl: calc(var(--radius) + 18px);
-  --radius-5xl: calc(var(--radius) + 22px);
-  --radius-squircle-xs: calc(var(--radius-xs) * 2);
-  --radius-squircle-sm: calc(var(--radius-sm) * 2);
-  --radius-squircle-md: calc(var(--radius-md) * 2);
-  --radius-squircle-lg: calc(var(--radius-lg) * 2);
-  --radius-squircle-xl: calc(var(--radius-xl) * 2);
-  --radius-squircle-2xl: calc(var(--radius-2xl) * 2);
-  --radius-squircle-3xl: calc(var(--radius-3xl) * 2);
-  --radius-squircle-4xl: calc(var(--radius-4xl) * 2);
-  --radius-squircle-5xl: calc(var(--radius-5xl) * 2);
-  --radius-squircle-full: 9999px;
-
+  --radius-xs: calc(var(--radius) * 1.35 - 4px * 1.35);
+  --radius-sm: calc(var(--radius) * 1.35 - 2px * 1.35);
+  --radius-md: calc(var(--radius) * 1.35);
+  --radius-lg: calc(var(--radius) * 1.35 + 2px * 1.35);
+  --radius-xl: calc(var(--radius) * 1.35 + 6px * 1.35);
+  --radius-2xl: calc(var(--radius) * 1.35 + 10px * 1.35);
+  --radius-3xl: calc(var(--radius) * 1.35 + 14px * 1.35);
+  --radius-4xl: calc(var(--radius) * 1.35 + 18px * 1.35);
+  --radius-5xl: calc(var(--radius) * 1.35 + 22px * 1.35);
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);
@@ -336,6 +325,14 @@
     scrollbar-color: var(--scrollbar-thumb) transparent;
   }
 
+  @supports (corner-shape: squircle) {
+    *,
+    ::before,
+    ::after {
+      corner-shape: superellipse(1.825);
+    }
+  }
+
   *::-webkit-scrollbar-track {
     background: transparent;
   }
@@ -353,9 +350,9 @@
   }
 }
 
-@utility squircle {
+@utility not-squircle {
   @supports (corner-shape: squircle) {
-    corner-shape: superellipse(1.825);
+    corner-shape: round;
   }
 }
 
@@ -379,208 +376,6 @@
   .keyboard-focus-within:has([aria-invalid="true"]:focus-visible) {
     border-color: var(--destructive);
     box-shadow: 0 0 0 2px var(--keyboard-focus-destructive-ring-shadow);
-  }
-
-  @supports (corner-shape: squircle) {
-    .squircle {
-      corner-shape: superellipse(1.825);
-    }
-
-    .squircle.rounded-xs {
-      border-radius: var(--radius-squircle-xs) !important;
-    }
-    .squircle.rounded-sm {
-      border-radius: var(--radius-squircle-sm) !important;
-    }
-    .squircle.rounded-md {
-      border-radius: var(--radius-squircle-md) !important;
-    }
-    .squircle.rounded-lg {
-      border-radius: var(--radius-squircle-lg) !important;
-    }
-    .squircle.rounded-xl {
-      border-radius: var(--radius-squircle-xl) !important;
-    }
-    .squircle.rounded-2xl {
-      border-radius: var(--radius-squircle-2xl) !important;
-    }
-    .squircle.rounded-3xl {
-      border-radius: var(--radius-squircle-3xl) !important;
-    }
-    .squircle.rounded-4xl {
-      border-radius: var(--radius-squircle-4xl) !important;
-    }
-    .squircle.rounded-5xl {
-      border-radius: var(--radius-squircle-5xl) !important;
-    }
-    .squircle.rounded-full {
-      border-radius: var(--radius-squircle-full) !important;
-    }
-
-    @media (min-width: 40rem) {
-      .squircle.sm\:rounded-xs {
-        border-radius: var(--radius-squircle-xs) !important;
-      }
-      .squircle.sm\:rounded-sm {
-        border-radius: var(--radius-squircle-sm) !important;
-      }
-      .squircle.sm\:rounded-md {
-        border-radius: var(--radius-squircle-md) !important;
-      }
-      .squircle.sm\:rounded-lg {
-        border-radius: var(--radius-squircle-lg) !important;
-      }
-      .squircle.sm\:rounded-xl {
-        border-radius: var(--radius-squircle-xl) !important;
-      }
-      .squircle.sm\:rounded-2xl {
-        border-radius: var(--radius-squircle-2xl) !important;
-      }
-      .squircle.sm\:rounded-3xl {
-        border-radius: var(--radius-squircle-3xl) !important;
-      }
-      .squircle.sm\:rounded-4xl {
-        border-radius: var(--radius-squircle-4xl) !important;
-      }
-      .squircle.sm\:rounded-5xl {
-        border-radius: var(--radius-squircle-5xl) !important;
-      }
-      .squircle.sm\:rounded-full {
-        border-radius: var(--radius-squircle-full) !important;
-      }
-    }
-
-    @media (min-width: 48rem) {
-      .squircle.md\:rounded-xs {
-        border-radius: var(--radius-squircle-xs) !important;
-      }
-      .squircle.md\:rounded-sm {
-        border-radius: var(--radius-squircle-sm) !important;
-      }
-      .squircle.md\:rounded-md {
-        border-radius: var(--radius-squircle-md) !important;
-      }
-      .squircle.md\:rounded-lg {
-        border-radius: var(--radius-squircle-lg) !important;
-      }
-      .squircle.md\:rounded-xl {
-        border-radius: var(--radius-squircle-xl) !important;
-      }
-      .squircle.md\:rounded-2xl {
-        border-radius: var(--radius-squircle-2xl) !important;
-      }
-      .squircle.md\:rounded-3xl {
-        border-radius: var(--radius-squircle-3xl) !important;
-      }
-      .squircle.md\:rounded-4xl {
-        border-radius: var(--radius-squircle-4xl) !important;
-      }
-      .squircle.md\:rounded-5xl {
-        border-radius: var(--radius-squircle-5xl) !important;
-      }
-      .squircle.md\:rounded-full {
-        border-radius: var(--radius-squircle-full) !important;
-      }
-    }
-
-    @media (min-width: 64rem) {
-      .squircle.lg\:rounded-xs {
-        border-radius: var(--radius-squircle-xs) !important;
-      }
-      .squircle.lg\:rounded-sm {
-        border-radius: var(--radius-squircle-sm) !important;
-      }
-      .squircle.lg\:rounded-md {
-        border-radius: var(--radius-squircle-md) !important;
-      }
-      .squircle.lg\:rounded-lg {
-        border-radius: var(--radius-squircle-lg) !important;
-      }
-      .squircle.lg\:rounded-xl {
-        border-radius: var(--radius-squircle-xl) !important;
-      }
-      .squircle.lg\:rounded-2xl {
-        border-radius: var(--radius-squircle-2xl) !important;
-      }
-      .squircle.lg\:rounded-3xl {
-        border-radius: var(--radius-squircle-3xl) !important;
-      }
-      .squircle.lg\:rounded-4xl {
-        border-radius: var(--radius-squircle-4xl) !important;
-      }
-      .squircle.lg\:rounded-5xl {
-        border-radius: var(--radius-squircle-5xl) !important;
-      }
-      .squircle.lg\:rounded-full {
-        border-radius: var(--radius-squircle-full) !important;
-      }
-    }
-
-    @media (min-width: 80rem) {
-      .squircle.xl\:rounded-xs {
-        border-radius: var(--radius-squircle-xs) !important;
-      }
-      .squircle.xl\:rounded-sm {
-        border-radius: var(--radius-squircle-sm) !important;
-      }
-      .squircle.xl\:rounded-md {
-        border-radius: var(--radius-squircle-md) !important;
-      }
-      .squircle.xl\:rounded-lg {
-        border-radius: var(--radius-squircle-lg) !important;
-      }
-      .squircle.xl\:rounded-xl {
-        border-radius: var(--radius-squircle-xl) !important;
-      }
-      .squircle.xl\:rounded-2xl {
-        border-radius: var(--radius-squircle-2xl) !important;
-      }
-      .squircle.xl\:rounded-3xl {
-        border-radius: var(--radius-squircle-3xl) !important;
-      }
-      .squircle.xl\:rounded-4xl {
-        border-radius: var(--radius-squircle-4xl) !important;
-      }
-      .squircle.xl\:rounded-5xl {
-        border-radius: var(--radius-squircle-5xl) !important;
-      }
-      .squircle.xl\:rounded-full {
-        border-radius: var(--radius-squircle-full) !important;
-      }
-    }
-
-    @media (min-width: 96rem) {
-      .squircle.\32xl\:rounded-xs {
-        border-radius: var(--radius-squircle-xs) !important;
-      }
-      .squircle.\32xl\:rounded-sm {
-        border-radius: var(--radius-squircle-sm) !important;
-      }
-      .squircle.\32xl\:rounded-md {
-        border-radius: var(--radius-squircle-md) !important;
-      }
-      .squircle.\32xl\:rounded-lg {
-        border-radius: var(--radius-squircle-lg) !important;
-      }
-      .squircle.\32xl\:rounded-xl {
-        border-radius: var(--radius-squircle-xl) !important;
-      }
-      .squircle.\32xl\:rounded-2xl {
-        border-radius: var(--radius-squircle-2xl) !important;
-      }
-      .squircle.\32xl\:rounded-3xl {
-        border-radius: var(--radius-squircle-3xl) !important;
-      }
-      .squircle.\32xl\:rounded-4xl {
-        border-radius: var(--radius-squircle-4xl) !important;
-      }
-      .squircle.\32xl\:rounded-5xl {
-        border-radius: var(--radius-squircle-5xl) !important;
-      }
-      .squircle.\32xl\:rounded-full {
-        border-radius: var(--radius-squircle-full) !important;
-      }
-    }
   }
 }
 

@@ -101,7 +101,7 @@ export const ToolActivityGroup = ({
       <AnimatePresence initial={false}>
         {expanded ? (
           <m.div {...getAppPresenceMotion({ reducedMotion: shouldReduceMotion })}>
-            <div className="mt-1.5 space-y-0.5 border-l border-border/60 pl-3">
+            <div className="mt-1.5 space-y-0.5 border-l border-border pl-3">
               {items.map((item) => (
                 <ToolPart
                   actionsDisabled={actionsDisabled}

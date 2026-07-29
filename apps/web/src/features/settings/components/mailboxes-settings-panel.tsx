@@ -77,7 +77,7 @@ const mailboxGrantRoleOptions = [
 ] as const;
 const mailboxGrantSelectItems = [{ value: "none", label: "No access" }, ...mailboxGrantRoleOptions];
 const switchClassName =
-  "h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary";
+  "h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary";
 
 const getProviderLabel = (provider: string) => {
   if (provider === "gmail") return "Gmail";
@@ -433,7 +433,7 @@ export const MailboxesSettingsPanel = () => {
                 </Select>
 
                 {isCreateManagedOrganizationPending ? (
-                  <p className="rounded-md border border-border/70 bg-muted/15 px-3 py-2 text-xs/5 text-muted-foreground squircle">
+                  <p className="squircle rounded-md border border-border bg-muted/15 px-3 py-2 text-xs/5 text-muted-foreground">
                     Checking your team access…
                   </p>
                 ) : canCreateManagedMailbox ? (
@@ -444,7 +444,7 @@ export const MailboxesSettingsPanel = () => {
                       placeholder="Display name, such as Support"
                       value={managedDisplayName}
                     />
-                    <div className="keyboard-focus-within flex h-9 min-w-0 items-center rounded-md border border-input bg-background shadow-sm transition-colors squircle">
+                    <div className="keyboard-focus-within squircle flex h-9 min-w-0 items-center rounded-md border border-input bg-background shadow-sm transition-colors">
                       <TextFieldInput
                         aria-label="Mailbox address"
                         chrome="ghost"
@@ -555,7 +555,7 @@ export const MailboxesSettingsPanel = () => {
                     </Button>
                   </>
                 ) : (
-                  <p className="rounded-md border border-border/70 bg-muted/15 px-3 py-2 text-xs/5 text-muted-foreground squircle">
+                  <p className="squircle rounded-md border border-border bg-muted/15 px-3 py-2 text-xs/5 text-muted-foreground">
                     Only a team owner or admin can create a shared inbox for this team.
                   </p>
                 )}

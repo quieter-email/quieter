@@ -42,12 +42,12 @@ const SitePasswordRoute = SitePasswordRouteImport.update({
   id: '/site-password',
   path: '/site-password',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any).lazy(() => import('./routes/site-password.lazy').then((d) => d.Route))
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any).lazy(() => import('./routes/settings.lazy').then((d) => d.Route))
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
@@ -62,7 +62,7 @@ const HomeRoute = HomeRouteImport.update({
   id: '/home',
   path: '/home',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any).lazy(() => import('./routes/home.lazy').then((d) => d.Route))
 const CookiesRoute = CookiesRouteImport.update({
   id: '/cookies',
   path: '/cookies',
@@ -72,12 +72,12 @@ const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any).lazy(() => import('./routes/auth.lazy').then((d) => d.Route))
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any).lazy(() => import('./routes/index.lazy').then((d) => d.Route))
 const ApiWaitlistRoute = ApiWaitlistRouteImport.update({
   id: '/api/waitlist',
   path: '/api/waitlist',

@@ -161,10 +161,10 @@ export const RegisterDomainDialog = ({
                       return (
                         <label
                           className={cn(
-                            "flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors outline-none squircle",
+                            "squircle flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors outline-none",
                             selected
                               ? "border-foreground/30 bg-muted/40"
-                              : "border-border/70 hover:bg-muted/20",
+                              : "border-border hover:bg-muted/20",
                             "has-focus-visible:ring-2 has-focus-visible:ring-ring/30",
                           )}
                           key={option.value}

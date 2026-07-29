@@ -129,10 +129,22 @@ export default defineConfig(({ command }) => {
       ...sentryPlugins,
     ]),
     optimizeDeps: {
-      include: ["motion", "motion/react"],
+      include: ["@tiptap/core", "@tiptap/react", "@tiptap/starter-kit", "motion", "motion/react"],
     },
     resolve: {
-      dedupe: ["@tanstack/react-router", "react", "react-dom", "motion"],
+      dedupe: [
+        "@tanstack/react-router",
+        "@tiptap/core",
+        "@tiptap/pm",
+        "@tiptap/react",
+        "motion",
+        "prosemirror-model",
+        "prosemirror-state",
+        "prosemirror-transform",
+        "prosemirror-view",
+        "react",
+        "react-dom",
+      ],
       tsconfigPaths: true,
     },
     server: {

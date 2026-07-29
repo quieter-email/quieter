@@ -81,7 +81,7 @@ export const ReadingSettingsPanel = () => {
             <Switch
               aria-label="Allow external images"
               checked={externalImagesEnabled}
-              className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
+              className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
               id="external-images-toggle"
               onCheckedChange={setExternalImagesEnabled}
             >
@@ -124,7 +124,7 @@ export const PrivacySettingsPanel = () => (
     <SettingsRows>
       <SettingsRow
         action={
-          <ConsentPreferencesLink className="inline-flex h-8 items-center justify-center rounded-md border border-border/70 bg-background px-3 text-sm font-medium text-foreground transition-colors squircle hover:bg-muted/60" />
+          <ConsentPreferencesLink className="squircle inline-flex h-8 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/60" />
         }
         title="Cookie and analytics preferences"
       >
@@ -149,7 +149,7 @@ export const DevelopmentSettingsPanel = () => {
           action={
             <Switch
               checked={demoModeEnabled}
-              className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
+              className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
               id="demo-mode-toggle"
               onCheckedChange={setDemoModeEnabled}
             >
@@ -164,7 +164,7 @@ export const DevelopmentSettingsPanel = () => {
           action={
             <Switch
               checked={managedDemoModeEnabled}
-              className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
+              className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
               id="managed-demo-mode-toggle"
               onCheckedChange={setManagedDemoModeEnabled}
             >

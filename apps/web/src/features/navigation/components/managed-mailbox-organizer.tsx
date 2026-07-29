@@ -108,7 +108,7 @@ const SavedViewsSection = ({
               active={active}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light squircle",
+                "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light",
                 {
                   "text-foreground": active,
                   "text-muted-foreground": !active,
@@ -335,7 +335,7 @@ export const ManagedMailboxOrganizer = ({
                 <FullPageDialogDescription className="mt-1">
                   Save the current search for quick access from the sidebar.
                 </FullPageDialogDescription>
-                <div className="mt-5 rounded-xl bg-secondary/40 p-3 squircle">
+                <div className="squircle mt-5 rounded-xl bg-secondary/40 p-3">
                   <div className="flex gap-2">
                     <Input
                       aria-label="Saved view name"
@@ -375,7 +375,7 @@ export const ManagedMailboxOrganizer = ({
                 <div className="mt-5 space-y-1">
                   {views.map((view, index) => (
                     <div
-                      className="flex items-center gap-3 rounded-lg p-2 squircle hover:bg-secondary/25"
+                      className="squircle flex items-center gap-3 rounded-lg p-2 hover:bg-secondary/25"
                       key={view.id}
                     >
                       <span
@@ -584,7 +584,7 @@ export const ManagedMailboxOrganizer = ({
                           </Button>
                         ))}
                       </div>
-                      <div className="space-y-2 rounded-lg bg-secondary/40 p-3 squircle">
+                      <div className="squircle space-y-2 rounded-lg bg-secondary/40 p-3">
                         <p className="text-xs font-medium text-muted-foreground">Apply labels</p>
                         {(labelsData ?? []).flatMap((label) =>
                           label.type === "user"

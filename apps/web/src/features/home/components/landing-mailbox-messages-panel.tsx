@@ -105,7 +105,7 @@ export const LandingMailboxMessagesPanel = ({
     <>
       <section
         className={cn(
-          "m-2 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 squircle lg:ml-0 lg:flex",
+          "squircle m-2 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 lg:ml-0 lg:flex",
           {
             "flex flex-1": !isMessageRouteOpen,
             hidden: isMessageRouteOpen,
@@ -139,7 +139,7 @@ export const LandingMailboxMessagesPanel = ({
 
       <div
         className={cn(
-          "m-2 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 squircle lg:ml-0 lg:flex",
+          "squircle m-2 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 lg:ml-0 lg:flex",
           {
             "flex flex-1": isMessageRouteOpen,
             hidden: !isMessageRouteOpen,
