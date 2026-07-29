@@ -41,7 +41,7 @@ export const LandingMailboxDemo = () => {
   return (
     <LazyMotion features={domAnimation}>
       <div className="@container">
-        <div className="relative isolate h-[min(58dvh,520px)] w-full overflow-hidden rounded-xl border border-white/10 bg-background-dark text-foreground shadow-[0_40px_100px_-20px_rgba(0,0,0,0.55),0_16px_40px_-12px_rgba(0,0,0,0.35)] ring-1 ring-black/10 squircle @3xl:h-[min(82dvh,880px)] @3xl:rounded-2xl">
+        <div className="squircle relative isolate h-[min(58dvh,520px)] w-full overflow-hidden rounded-xl border border-white/10 bg-background-dark text-foreground shadow-[0_40px_100px_-20px_rgba(0,0,0,0.55),0_16px_40px_-12px_rgba(0,0,0,0.35)] ring-1 ring-black/10 @3xl:h-[min(82dvh,880px)] @3xl:rounded-2xl">
           <WorkspaceDitherBackground />
           <div className="relative z-10 flex h-full min-h-0 overflow-hidden">
             <MailSidebar

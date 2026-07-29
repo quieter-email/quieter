@@ -45,7 +45,7 @@ export const ConsentPreferencesDialog = () => {
 
             return (
               <div
-                className="flex items-start justify-between gap-4 border-b border-border/70 pb-4 last:border-b-0 last:pb-0"
+                className="flex items-start justify-between gap-4 border-b border-border pb-4 last:border-b-0 last:pb-0"
                 key={category}
               >
                 <div className="min-w-0">
@@ -56,7 +56,7 @@ export const ConsentPreferencesDialog = () => {
                 <Switch
                   aria-label={copy?.title ?? category}
                   checked={selectedConsents[category]}
-                  className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border/70 bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
+                  className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
                   disabled={isDisabled}
                   onCheckedChange={(checked) => {
                     setSelectedConsent(category, checked);

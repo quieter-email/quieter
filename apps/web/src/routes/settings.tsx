@@ -1,27 +1,10 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
-import { lazy, Suspense } from "react";
 import { z } from "zod";
 import { SettingsLoadingPage } from "~/features/settings/components/settings-loading-page";
 import { ORGANIZATION_SETTINGS_VIEWS } from "~/features/settings/domain/organization-settings-view";
 import { SETTINGS_TABS } from "~/features/settings/domain/settings-tab";
 import { getSessionUser } from "~/lib/auth.functions";
-
-const SettingsRouteComponent = lazy(() =>
-  import("~/features/settings/components/settings-route-component").then(
-    ({ SettingsRouteComponent: Component }) => ({ default: Component }),
-  ),
-);
-
-const SettingsPage = () => {
-  const { tab } = Route.useSearch();
-
-  return (
-    <Suspense fallback={<SettingsLoadingPage tab={tab} />}>
-      <SettingsRouteComponent />
-    </Suspense>
-  );
-};
 
 const SettingsPendingPage = () => {
   const { tab } = Route.useSearch();
@@ -74,5 +57,4 @@ export const Route = createFileRoute("/settings")({
     };
   },
   pendingComponent: SettingsPendingPage,
-  component: SettingsPage,
 });

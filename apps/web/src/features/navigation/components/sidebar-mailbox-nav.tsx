@@ -35,7 +35,7 @@ const API_MAILBOX_ITEMS = SIDEBAR_MAILBOX_ITEMS.filter((item) => item.id === "se
 type SidebarMailboxNavProps = {
   animateEntrance: boolean;
   mailboxProvider: "api" | "gmail" | "managed" | null;
-  selectedMailbox: MailboxCategory;
+  selectedMailbox: MailboxCategory | null;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
 };
 

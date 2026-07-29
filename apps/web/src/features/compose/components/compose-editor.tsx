@@ -1,5 +1,6 @@
 "use client";
 
+import type { Editor } from "@tiptap/core";
 import {
   AiMicIcon,
   ArrowTurnBackwardIcon,
@@ -22,10 +23,25 @@ import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useRef } from "react";
+import {
+  createContext,
+  type ReactNode,
+  type Ref,
+  use,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+} from "react";
 import { normalizeComposeBodyHtml } from "../domain/draft";
+import {
+  createTemplatePlaceholderToken,
+  getSelectedTemplatePlaceholder,
+  hydrateTemplatePlaceholders,
+  TemplatePlaceholder,
+  type TemplatePlaceholderRange,
+} from "../domain/template-placeholders";
 
 const ComposeImage = Image.extend({
   addAttributes() {
@@ -50,52 +66,76 @@ const audioWaveBars = [
 ];
 
 type ComposeEditorProps = {
+  children: ReactNode;
   html: string;
-  className?: string;
-  compact?: boolean;
+  density?: "comfortable" | "compact";
   disabled?: boolean;
   onChange: (payload: { html: string; text: string }) => void;
   onBlur?: () => void;
   onInlineImageFiles: (files: File[]) => void | Promise<void>;
+  onPlaceholderSelectionChange?: (placeholder: TemplatePlaceholderRange | null) => void;
   onRecordingStart?: () => void;
   onRecordingStop?: () => void;
   recording?: boolean;
   recordingSupported?: boolean;
-  showToolbar?: boolean;
   transcribing?: boolean;
+  ref?: Ref<ComposeEditorHandle>;
+};
+
+export type ComposeEditorHandle = {
+  insertHtml: (html: string) => void;
+  insertPlaceholder: (label: string) => void;
+  replaceSelectedPlaceholder: (value: string) => boolean;
+};
+
+type ComposeEditorContextValue = {
+  density: NonNullable<ComposeEditorProps["density"]>;
+  disabled: boolean;
+  editor: Editor | null;
+  onRecordingStart?: () => void;
+  onRecordingStop?: () => void;
+  recording: boolean;
+  recordingSupported: boolean;
+  transcribing: boolean;
+};
+
+const ComposeEditorContext = createContext<ComposeEditorContextValue | null>(null);
+
+export const useComposeEditor = () => {
+  const value = use(ComposeEditorContext);
+  if (!value) throw new Error("Compose editor components must be inside ComposeEditor.");
+  return value;
 };
 
 export const ComposeEditor = ({
-  className,
-  compact = false,
+  children,
+  density = "comfortable",
   disabled,
   html,
   onBlur,
   onChange,
   onInlineImageFiles,
+  onPlaceholderSelectionChange,
   onRecordingStart,
   onRecordingStop,
   recording = false,
   recordingSupported = false,
-  showToolbar = true,
   transcribing = false,
+  ref,
 }: ComposeEditorProps) => {
-  const lastSyncedHtmlRef = useRef(html);
-  const audioActive = recording || transcribing;
-
   const editor = useEditor({
     autofocus: false,
-    content: html.trim(),
+    content: hydrateTemplatePlaceholders(html.trim()),
     editable: !disabled,
     editorProps: {
       attributes: {
         class: cn(
-          "bg-transparent text-foreground outline-none [&_.is-editor-empty:first-child::before]:pointer-events-none [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:h-0 [&_.is-editor-empty:first-child::before]:text-muted-foreground/75 [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_a]:text-foreground [&_a]:underline [&_blockquote]:border-l [&_blockquote]:border-border/70 [&_blockquote]:text-muted-foreground [&_img]:max-w-full [&_img]:object-contain [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0 [&_s]:text-muted-foreground [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5",
+          "bg-transparent text-foreground outline-none [&_.ProseMirror-selectednode.quieter-template-placeholder]:border-foreground [&_.is-editor-empty:first-child::before]:pointer-events-none [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:h-0 [&_.is-editor-empty:first-child::before]:text-muted-foreground/75 [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.quieter-template-placeholder]:mx-1 [&_.quieter-template-placeholder]:inline-block [&_.quieter-template-placeholder]:min-w-20 [&_.quieter-template-placeholder]:cursor-text [&_.quieter-template-placeholder]:border-b [&_.quieter-template-placeholder]:border-muted-foreground [&_.quieter-template-placeholder]:px-1 [&_.quieter-template-placeholder]:text-transparent [&_.quieter-template-placeholder]:selection:bg-primary/20 [&_.quieter-template-placeholder]:hover:border-foreground [&_a]:text-foreground [&_a]:underline [&_blockquote]:border-l [&_blockquote]:border-border [&_blockquote]:text-muted-foreground [&_img]:max-w-full [&_img]:object-contain [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0 [&_s]:text-muted-foreground [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5",
           {
             "min-h-28 text-sm/relaxed [&_.is-editor-empty:first-child::before]:text-sm/relaxed [&_blockquote]:my-3 [&_blockquote]:pl-3 [&_img]:my-3 [&_img]:max-h-48 [&_img]:rounded-lg [&_li]:my-0.5 [&_ol]:my-3 [&_p+p]:mt-2 [&_ul]:my-3":
-              compact,
+              density === "compact",
             "min-h-72 text-[15px] leading-[1.75] [&_.is-editor-empty:first-child::before]:text-[15px] [&_.is-editor-empty:first-child::before]:leading-[1.75] [&_blockquote]:my-4 [&_blockquote]:pl-4 [&_img]:my-4 [&_img]:max-h-64 [&_img]:rounded-xl [&_li]:my-1 [&_ol]:my-4 [&_p+p]:mt-3 [&_ul]:my-4":
-              !compact,
+              density === "comfortable",
           },
         ),
       },
@@ -103,7 +143,10 @@ export const ComposeEditor = ({
     extensions: [
       StarterKit.configure({
         heading: false,
+        link: false,
+        underline: false,
       }),
+      TemplatePlaceholder,
       Underline,
       Link.configure({
         openOnClick: true,
@@ -130,14 +173,47 @@ export const ComposeEditor = ({
     ],
     immediatelyRender: false,
     onBlur: () => onBlur?.(),
+    onSelectionUpdate: ({ editor: updatedEditor }) => {
+      onPlaceholderSelectionChange?.(getSelectedTemplatePlaceholder(updatedEditor));
+    },
     onUpdate: ({ editor: updatedEditor }) => {
-      lastSyncedHtmlRef.current = updatedEditor.getHTML();
       onChange({
         html: updatedEditor.getHTML(),
         text: updatedEditor.getText({ blockSeparator: "\n\n" }),
       });
     },
   });
+
+  useImperativeHandle(ref, () => ({
+    insertHtml: (nextHtml) => {
+      editor?.chain().focus().insertContent(nextHtml).run();
+    },
+    insertPlaceholder: (label) => {
+      const token = createTemplatePlaceholderToken(label);
+      if (!editor || !token) return;
+
+      editor
+        .chain()
+        .focus()
+        .insertContent({
+          attrs: { label: token.slice("{{quieter:".length, -2) },
+          type: "templatePlaceholder",
+        })
+        .run();
+      editor.commands.setNodeSelection(editor.state.selection.from - 1);
+    },
+    replaceSelectedPlaceholder: (value) => {
+      if (!editor) return false;
+      const placeholder = getSelectedTemplatePlaceholder(editor);
+      if (!placeholder) return false;
+
+      return editor
+        .chain()
+        .focus()
+        .insertContentAt({ from: placeholder.from, to: placeholder.to }, value)
+        .run();
+    },
+  }));
 
   // Tiptap's useEditor with default deps merges options but preserves `editable`; toggling
   // `disabled` must call setEditable so the instance matches without recreating the editor.
@@ -154,185 +230,244 @@ export const ComposeEditor = ({
     const current = normalizeComposeBodyHtml(editor.getHTML());
     const next = normalizeComposeBodyHtml(html);
 
-    if (current === next || normalizeComposeBodyHtml(lastSyncedHtmlRef.current) === next) return;
-    editor.commands.setContent(next || "<p></p>", { emitUpdate: false });
-    // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent
-    lastSyncedHtmlRef.current = editor.getHTML();
+    if (current === next) return;
+    editor.commands.setContent(hydrateTemplatePlaceholders(next) || "<p></p>", {
+      emitUpdate: false,
+    });
   }, [editor, html]);
 
+  const contextValue = useMemo(
+    () => ({
+      density,
+      disabled: !!disabled,
+      editor,
+      onRecordingStart,
+      onRecordingStop,
+      recording,
+      recordingSupported,
+      transcribing,
+    }),
+    [
+      density,
+      disabled,
+      editor,
+      onRecordingStart,
+      onRecordingStop,
+      recording,
+      recordingSupported,
+      transcribing,
+    ],
+  );
+
+  return <ComposeEditorContext value={contextValue}>{children}</ComposeEditorContext>;
+};
+
+export const ComposeEditorBody = ({ className }: { className?: string }) => {
+  const { density, disabled, editor, recording, transcribing } = useComposeEditor();
+  const audioActive = recording || transcribing;
+
+  return (
+    <div
+      className={cn("min-h-0 overflow-y-auto", className, {
+        "pointer-events-none opacity-80": disabled,
+      })}
+    >
+      {audioActive ? (
+        <output
+          aria-label={recording ? "Recording audio" : "Transcribing audio"}
+          className={cn("flex items-center justify-center", {
+            "min-h-28": density === "compact",
+            "min-h-72": density === "comfortable",
+          })}
+        >
+          <div className="flex h-10 items-center gap-1.5 rounded-full border border-border bg-secondary/35 px-4">
+            {audioWaveBars.map((bar, index) => (
+              <span
+                className={cn("h-6 w-1 animate-pulse rounded-full bg-foreground/75", {
+                  "bg-primary": recording,
+                  "bg-muted-foreground": transcribing,
+                })}
+                key={bar.id}
+                style={{
+                  animationDelay: `${index * 70}ms`,
+                  transform: `scaleY(${bar.scale})`,
+                }}
+              />
+            ))}
+          </div>
+        </output>
+      ) : editor ? (
+        <EditorContent editor={editor} />
+      ) : (
+        <div
+          aria-hidden
+          className={cn("text-muted-foreground/75", {
+            "min-h-28 text-sm/relaxed": density === "compact",
+            "min-h-72 text-[15px] leading-[1.75]": density === "comfortable",
+          })}
+        >
+          Write your message…
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const ComposeEditorToolbar = ({ className }: { className?: string }) => {
+  const { disabled, editor } = useComposeEditor();
+  const toolbarState = useEditorState({
+    editor,
+    selector: ({ editor: currentEditor }) => ({
+      blockquoteActive: !!currentEditor?.isActive("blockquote"),
+      boldActive: !!currentEditor?.isActive("bold"),
+      bulletListActive: !!currentEditor?.isActive("bulletList"),
+      canBlockquote: !!currentEditor?.can().chain().focus().toggleBlockquote().run(),
+      canBold: !!currentEditor?.can().chain().focus().toggleBold().run(),
+      canBulletList: !!currentEditor?.can().chain().focus().toggleBulletList().run(),
+      canItalic: !!currentEditor?.can().chain().focus().toggleItalic().run(),
+      canOrderedList: !!currentEditor?.can().chain().focus().toggleOrderedList().run(),
+      canRedo: !!currentEditor?.can().chain().focus().redo().run(),
+      canUnderline: !!currentEditor?.can().chain().focus().toggleUnderline().run(),
+      canUndo: !!currentEditor?.can().chain().focus().undo().run(),
+      italicActive: !!currentEditor?.isActive("italic"),
+      orderedListActive: !!currentEditor?.isActive("orderedList"),
+      underlineActive: !!currentEditor?.isActive("underline"),
+    }),
+  });
   const toolbarActions = [
     {
       id: "bold",
       label: "Bold",
       icon: TextBoldIcon,
-      active: !!editor?.isActive("bold"),
-      disabled: !editor?.can().chain().focus().toggleBold().run(),
+      active: toolbarState?.boldActive,
+      disabled: !toolbarState?.canBold,
       onClick: () => editor?.chain().focus().toggleBold().run(),
     },
     {
       id: "italic",
       label: "Italic",
       icon: TextItalicIcon,
-      active: !!editor?.isActive("italic"),
-      disabled: !editor?.can().chain().focus().toggleItalic().run(),
+      active: toolbarState?.italicActive,
+      disabled: !toolbarState?.canItalic,
       onClick: () => editor?.chain().focus().toggleItalic().run(),
     },
     {
       id: "underline",
       label: "Underline",
       icon: TextUnderlineIcon,
-      active: !!editor?.isActive("underline"),
-      disabled: !editor?.can().chain().focus().toggleUnderline().run(),
+      active: toolbarState?.underlineActive,
+      disabled: !toolbarState?.canUnderline,
       onClick: () => editor?.chain().focus().toggleUnderline().run(),
     },
     {
       id: "bullet-list",
       label: "Bullet list",
       icon: LeftToRightListBulletIcon,
-      active: !!editor?.isActive("bulletList"),
-      disabled: !editor?.can().chain().focus().toggleBulletList().run(),
+      active: toolbarState?.bulletListActive,
+      disabled: !toolbarState?.canBulletList,
       onClick: () => editor?.chain().focus().toggleBulletList().run(),
     },
     {
       id: "ordered-list",
       label: "Ordered list",
       icon: LeftToRightListNumberIcon,
-      active: !!editor?.isActive("orderedList"),
-      disabled: !editor?.can().chain().focus().toggleOrderedList().run(),
+      active: toolbarState?.orderedListActive,
+      disabled: !toolbarState?.canOrderedList,
       onClick: () => editor?.chain().focus().toggleOrderedList().run(),
     },
     {
       id: "quote",
       label: "Quote",
       icon: QuoteUpIcon,
-      active: !!editor?.isActive("blockquote"),
-      disabled: !editor?.can().chain().focus().toggleBlockquote().run(),
+      active: toolbarState?.blockquoteActive,
+      disabled: !toolbarState?.canBlockquote,
       onClick: () => editor?.chain().focus().toggleBlockquote().run(),
     },
     {
       id: "undo",
       label: "Undo",
       icon: ArrowTurnBackwardIcon,
-      disabled: !editor?.can().chain().focus().undo().run(),
+      disabled: !toolbarState?.canUndo,
       onClick: () => editor?.chain().focus().undo().run(),
     },
     {
       id: "redo",
       label: "Redo",
       icon: ArrowTurnForwardIcon,
-      disabled: !editor?.can().chain().focus().redo().run(),
+      disabled: !toolbarState?.canRedo,
       onClick: () => editor?.chain().focus().redo().run(),
     },
   ];
 
   return (
-    <div
-      className={cn(
-        "keyboard-focus-within flex min-h-0 flex-col overflow-hidden rounded-lg border border-input bg-background transition-colors",
-        className,
-        { "pointer-events-none opacity-80": disabled },
-      )}
-    >
-      <div className={cn("min-h-0 flex-1 overflow-y-auto", compact ? "p-3" : "p-4")}>
-        {audioActive ? (
-          <output
-            aria-label={recording ? "Recording audio" : "Transcribing audio"}
-            className={cn("flex items-center justify-center", {
-              "min-h-28": compact,
-              "min-h-72": !compact,
-            })}
-          >
-            <div className="flex h-10 items-center gap-1.5 rounded-full border border-border/70 bg-secondary/35 px-4">
-              {audioWaveBars.map((bar, index) => (
-                <span
-                  className={cn("h-6 w-1 animate-pulse rounded-full bg-foreground/75", {
-                    "bg-primary": recording,
-                    "bg-muted-foreground": transcribing,
-                  })}
-                  key={bar.id}
-                  style={{
-                    animationDelay: `${index * 70}ms`,
-                    transform: `scaleY(${bar.scale})`,
-                  }}
-                />
-              ))}
-            </div>
-          </output>
-        ) : editor ? (
-          <EditorContent editor={editor} />
-        ) : (
-          <div
-            aria-hidden
-            className={cn("text-muted-foreground/75", {
-              "min-h-28 text-sm/relaxed": compact,
-              "min-h-72 text-[15px] leading-[1.75]": !compact,
-            })}
-          >
-            Write your message…
-          </div>
-        )}
-      </div>
+    <div className={cn("flex shrink-0 items-center gap-1", className)}>
+      <TooltipGroup>
+        {toolbarActions.map((action) => {
+          const isDisabled = !!(disabled || action.disabled);
 
-      {showToolbar ? (
-        <div className="flex shrink-0 items-center gap-1 px-3 pb-3">
-          <TooltipGroup>
-            {toolbarActions.map((action) => {
-              const isDisabled = !!(disabled || action.disabled);
-
-              return (
-                <IconButtonTooltip key={action.id} label={action.label}>
-                  <Button
-                    aria-label={action.label}
-                    aria-pressed={"active" in action ? action.active : undefined}
-                    className={cn("text-muted-foreground hover:bg-muted/55 hover:text-foreground", {
-                      "bg-muted/75 text-foreground": action.active,
-                    })}
-                    disabled={isDisabled}
-                    onClick={() => action.onClick()}
-                    onMouseDown={(event) => event.preventDefault()}
-                    size="icon-sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <HugeiconsIcon className="size-4" icon={action.icon} />
-                  </Button>
-                </IconButtonTooltip>
-              );
-            })}
-          </TooltipGroup>
-          {recording ? (
-            <IconButtonTooltip label="Stop recording">
+          return (
+            <IconButtonTooltip key={action.id} label={action.label}>
               <Button
-                aria-label="Stop recording"
-                className="ml-auto text-primary"
-                disabled={disabled}
-                onClick={onRecordingStop}
+                aria-label={action.label}
+                aria-pressed={"active" in action ? action.active : undefined}
+                className={cn("text-muted-foreground hover:bg-muted/55 hover:text-foreground", {
+                  "bg-muted/75 text-foreground": action.active,
+                })}
+                disabled={isDisabled}
+                onClick={() => action.onClick()}
                 onMouseDown={(event) => event.preventDefault()}
                 size="icon-sm"
                 type="button"
                 variant="ghost"
               >
-                <HugeiconsIcon className="size-4" icon={StopIcon} />
+                <HugeiconsIcon className="size-4" icon={action.icon} />
               </Button>
             </IconButtonTooltip>
-          ) : (
-            <IconButtonTooltip label={recordingSupported ? "Dictate" : "Recording unavailable"}>
-              <Button
-                aria-label={recordingSupported ? "Dictate" : "Recording unavailable"}
-                className="ml-auto"
-                disabled={disabled || transcribing || !recordingSupported}
-                onClick={onRecordingStart}
-                onMouseDown={(event) => event.preventDefault()}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <HugeiconsIcon className="size-4" icon={AiMicIcon} />
-              </Button>
-            </IconButtonTooltip>
-          )}
-        </div>
-      ) : null}
+          );
+        })}
+      </TooltipGroup>
     </div>
+  );
+};
+
+export const ComposeEditorDictationButton = () => {
+  const {
+    disabled,
+    onRecordingStart,
+    onRecordingStop,
+    recording,
+    recordingSupported,
+    transcribing,
+  } = useComposeEditor();
+
+  return recording ? (
+    <IconButtonTooltip label="Stop recording">
+      <Button
+        aria-label="Stop recording"
+        className="text-primary"
+        disabled={disabled}
+        onClick={onRecordingStop}
+        onMouseDown={(event) => event.preventDefault()}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        <HugeiconsIcon className="size-4" icon={StopIcon} />
+      </Button>
+    </IconButtonTooltip>
+  ) : (
+    <IconButtonTooltip label={recordingSupported ? "Dictate" : "Recording unavailable"}>
+      <Button
+        aria-label={recordingSupported ? "Dictate" : "Recording unavailable"}
+        disabled={disabled || transcribing || !recordingSupported}
+        onClick={onRecordingStart}
+        onMouseDown={(event) => event.preventDefault()}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        <HugeiconsIcon className="size-4" icon={AiMicIcon} />
+      </Button>
+    </IconButtonTooltip>
   );
 };

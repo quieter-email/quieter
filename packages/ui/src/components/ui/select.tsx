@@ -163,7 +163,7 @@ export const SelectItem = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.Item>) => (
   <SelectPrimitive.Item
     className={cn(
-      "relative flex min-h-9 cursor-default scroll-my-1 items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm text-foreground transition-transform duration-100 ease-out outline-none select-none squircle active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+      "squircle relative flex min-h-9 cursor-default scroll-my-1 items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm text-foreground transition-transform duration-100 ease-out outline-none select-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
       className,
     )}
     {...props}

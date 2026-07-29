@@ -178,8 +178,8 @@ export const FirstRunManagedMailSetup = ({
   } satisfies Record<(typeof setupSteps)[number]["id"], boolean>;
 
   return (
-    <div className="@container mx-auto flex max-h-[calc(100dvh-4rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-border/70 bg-background/88 text-left shadow-2xl backdrop-blur-xl">
-      <div className="flex flex-col gap-4 border-b border-border/70 p-5 @3xl:flex-row @3xl:items-start @3xl:justify-between">
+    <div className="@container mx-auto flex max-h-[calc(100dvh-4rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-border bg-background/88 text-left shadow-2xl backdrop-blur-xl">
+      <div className="flex flex-col gap-4 border-b border-border p-5 @3xl:flex-row @3xl:items-start @3xl:justify-between">
         <div>
           <Button
             className="mb-3 -ml-2 text-muted-foreground"
@@ -223,7 +223,7 @@ export const FirstRunManagedMailSetup = ({
       </div>
 
       <div className="grid min-h-0 flex-1 overflow-hidden @3xl:grid-cols-[15rem_minmax(0,1fr)]">
-        <nav className="border-b border-border/70 p-4 @3xl:border-r @3xl:border-b-0">
+        <nav className="border-b border-border p-4 @3xl:border-r @3xl:border-b-0">
           <div className="grid grid-cols-2 gap-2 @3xl:grid-cols-1">
             {setupSteps.map((step) => (
               <div
@@ -286,7 +286,7 @@ export const FirstRunManagedMailSetup = ({
             )}
           </section>
 
-          <section className="space-y-3 border-t border-border/70 pt-5">
+          <section className="space-y-3 border-t border-border pt-5">
             <div>
               <h2 className="text-sm font-medium text-foreground">2. Verify your domain</h2>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -332,7 +332,7 @@ export const FirstRunManagedMailSetup = ({
             )}
           </section>
 
-          <section className="space-y-3 border-t border-border/70 pt-5">
+          <section className="space-y-3 border-t border-border pt-5">
             <div>
               <h2 className="text-sm font-medium text-foreground">3. Create a managed mailbox</h2>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -346,7 +346,7 @@ export const FirstRunManagedMailSetup = ({
               </p>
             ) : (
               <div className="flex flex-wrap items-center gap-3">
-                <div className="keyboard-focus-within flex h-9 w-full max-w-md items-center rounded-md border border-input bg-background-light shadow-sm transition-colors squircle">
+                <div className="keyboard-focus-within squircle flex h-9 w-full max-w-md items-center rounded-md border border-input bg-background-light shadow-sm transition-colors">
                   <TextFieldInput
                     aria-label="Managed mailbox local part"
                     chrome="ghost"
@@ -426,7 +426,7 @@ export const FirstRunManagedMailSetup = ({
             )}
           </section>
 
-          <section className="space-y-3 border-t border-border/70 pt-5">
+          <section className="space-y-3 border-t border-border pt-5">
             <div>
               <h2 className="text-sm font-medium text-foreground">4. Create an API key</h2>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -451,7 +451,7 @@ export const FirstRunManagedMailSetup = ({
                   {createdApiKey}
                 </button>
                 <a
-                  className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-background-light px-3.5 text-[13px] text-foreground shadow-sm transition-transform duration-100 ease-out outline-none select-none squircle hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] active:bg-muted/80"
+                  className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-background-light px-3.5 text-[13px] text-foreground shadow-sm transition-transform duration-100 ease-out outline-none select-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] active:bg-muted/80"
                   href="/api/openapi"
                   rel="noreferrer"
                   target="_blank"
@@ -466,7 +466,7 @@ export const FirstRunManagedMailSetup = ({
                   This organization already has an API key.
                 </p>
                 <a
-                  className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-background-light px-3.5 text-[13px] text-foreground shadow-sm transition-transform duration-100 ease-out outline-none select-none squircle hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] active:bg-muted/80"
+                  className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-background-light px-3.5 text-[13px] text-foreground shadow-sm transition-transform duration-100 ease-out outline-none select-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] active:bg-muted/80"
                   href="/api/openapi"
                   rel="noreferrer"
                   target="_blank"
@@ -494,7 +494,7 @@ export const FirstRunManagedMailSetup = ({
                   Create API key
                 </Button>
                 <a
-                  className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-[13px] text-muted-foreground transition-transform duration-100 ease-out outline-none select-none squircle hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] active:bg-muted/80 active:text-foreground"
+                  className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-[13px] text-muted-foreground transition-transform duration-100 ease-out outline-none select-none hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] active:bg-muted/80 active:text-foreground"
                   href="/api/openapi"
                   rel="noreferrer"
                   target="_blank"

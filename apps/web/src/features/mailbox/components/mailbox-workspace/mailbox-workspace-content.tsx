@@ -20,6 +20,14 @@ const ChatView = lazy(() =>
   })),
 );
 
+const TemplateWorkspace = lazy(() =>
+  import("~/features/compose/components/template-workspace").then(
+    ({ TemplateWorkspace: Component }) => ({
+      default: Component,
+    }),
+  ),
+);
+
 const FirstRunManagedMailSetup = lazy(() =>
   import("./first-run-managed-mail-setup").then(({ FirstRunManagedMailSetup: Component }) => ({
     default: Component,
@@ -34,7 +42,7 @@ type MailboxWorkspaceLayoutState = {
 };
 
 type MailboxWorkspaceContentProps = {
-  activeMailbox: MailboxCategory;
+  activeMailbox: MailboxCategory | null;
   chatContext?: {
     messageId?: string;
     query?: string;
@@ -149,7 +157,7 @@ const NoMailboxWorkspace = ({
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               <button
-                className="rounded-lg border border-border/70 bg-background/80 p-4 text-left shadow-sm transition-colors hover:bg-secondary/35 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
+                className="rounded-lg border border-border bg-background/80 p-4 text-left shadow-sm transition-colors hover:bg-secondary/35 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
                 disabled={isConnectingGmail}
                 onClick={onConnectGmail}
                 type="button"
@@ -167,7 +175,7 @@ const NoMailboxWorkspace = ({
                 </span>
               </button>
               <button
-                className="rounded-lg border border-border/70 bg-background/80 p-4 text-left shadow-sm transition-colors hover:bg-secondary/35 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
+                className="rounded-lg border border-border bg-background/80 p-4 text-left shadow-sm transition-colors hover:bg-secondary/35 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
                 onClick={() => setSetupMode("managed")}
                 type="button"
               >
@@ -272,6 +280,12 @@ export const MailboxWorkspaceContent = ({
               mailboxGroups={mailboxGroups}
               onConnectGmail={onConnectGmail}
             />
+          ) : activeMailbox === null ? (
+            <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+              <Suspense fallback={null}>
+                <TemplateWorkspace mailboxId={selectedMailboxId} onOpenSidebar={onOpenSidebar} />
+              </Suspense>
+            </div>
           ) : selectedView === "chat" ? (
             <m.div
               key={`chat-${chatId ?? draftChatKey}`}

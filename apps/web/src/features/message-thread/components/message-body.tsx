@@ -117,7 +117,7 @@ const HtmlMessageBodyContent = ({
         <section
           aria-label="Remote images"
           className={cn(
-            "flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/80 bg-muted/35 px-3 py-2",
+            "flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-muted/35 px-3 py-2",
           )}
         >
           <div className="flex min-w-0 flex-1 items-center gap-2.5">

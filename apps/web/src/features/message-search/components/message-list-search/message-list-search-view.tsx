@@ -128,7 +128,7 @@ export const MessageListSearchView = ({
           </IconButtonTooltip>
 
           <div ref={fieldRef} className="relative min-w-0 flex-1" onBlur={handleSearchFieldBlur}>
-            <div className="keyboard-focus-within flex h-10 min-w-0 items-center gap-1 rounded-xl bg-secondary/55 p-1 transition-colors duration-150 ease-out squircle">
+            <div className="keyboard-focus-within squircle flex h-10 min-w-0 items-center gap-1 rounded-xl bg-secondary/55 p-1 transition-colors duration-150 ease-out">
               <div
                 className={cn(
                   "flex min-h-8 min-w-0 flex-1 scrollbar-none items-center gap-1 overflow-x-auto pr-1 [&::-webkit-scrollbar]:hidden",

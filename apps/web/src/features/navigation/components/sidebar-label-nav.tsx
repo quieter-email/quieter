@@ -504,7 +504,7 @@ export const SidebarLabelNav = ({
                     active={isActive}
                     aria-pressed={isActive}
                     className={cn(
-                      "h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light squircle",
+                      "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light",
                       {
                         "text-foreground": isActive || labelHovered,
                         "text-muted-foreground": !isActive && !labelHovered,
@@ -579,7 +579,7 @@ export const SidebarLabelNav = ({
                 action={() => {
                   void createLabel();
                 }}
-                className="mb-8 flex flex-wrap items-center gap-3 rounded-xl bg-secondary/40 p-3 squircle"
+                className="squircle mb-8 flex flex-wrap items-center gap-3 rounded-xl bg-secondary/40 p-3"
               >
                 <Input
                   aria-label={`New ${labelNoun} name`}
@@ -621,7 +621,7 @@ export const SidebarLabelNav = ({
                         editingLabelDetails?.labelId === label.id ? editingLabelDetails : null;
                       return (
                         <div className="rounded-lg" key={label.id}>
-                          <div className="flex min-h-12 items-center gap-3 px-2 squircle hover:bg-background/50">
+                          <div className="squircle flex min-h-12 items-center gap-3 px-2 hover:bg-background/50">
                             <ManagedLabelColorDot className="size-4" color={label.color} />
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm">{label.name}</p>
@@ -767,7 +767,7 @@ export const SidebarLabelNav = ({
                                 <FieldLabel>What this {labelNoun} is for</FieldLabel>
                                 <textarea
                                   aria-label={`What this ${labelNoun} is for`}
-                                  className="keyboard-focus-ring min-h-20 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none squircle placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="keyboard-focus-ring squircle min-h-20 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
                                   disabled={updateLabelDetailsMutation.isPending}
                                   maxLength={2000}
                                   onChange={(event) => {
@@ -788,7 +788,7 @@ export const SidebarLabelNav = ({
                                   <FieldLabel>Emails to include</FieldLabel>
                                   <textarea
                                     aria-label="Emails to include"
-                                    className="keyboard-focus-ring min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none squircle placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="keyboard-focus-ring squircle min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
                                     disabled={updateLabelDetailsMutation.isPending}
                                     maxLength={4000}
                                     onChange={(event) => {

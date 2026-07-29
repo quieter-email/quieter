@@ -12,7 +12,7 @@ export const LegalDocumentPage = ({
 }) => (
   <div className="min-h-dvh bg-background text-foreground">
     <div className="mx-auto max-w-3xl px-6 py-12">
-      <header className="space-y-3 border-b border-border/70 pb-8">
+      <header className="space-y-3 border-b border-border pb-8">
         <p className="text-sm text-muted-foreground">
           <Link className="underline hover:text-foreground" to="/home">
             Quieter

@@ -19,13 +19,14 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { type UseAudioRecorderReturn, useAudioRecorder } from "@tanstack/ai-react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
+import { AnimatePresence, domAnimation, LazyMotion, m, useReducedMotion } from "motion/react";
 import {
   type ClipboardEvent,
   type KeyboardEvent,
   type ReactNode,
   type Ref,
   useImperativeHandle,
+  useRef,
   useState,
 } from "react";
 import { USER_BILLING_QUERY_KEY } from "~/features/settings/domain/billing";
@@ -33,13 +34,21 @@ import { type BrowserAudioRecording, getTranscriptionAudioFormat } from "~/lib/a
 import { parseSender } from "~/lib/gmail/message-utils";
 import { orpc } from "~/lib/orpc";
 import type { ComposeFormValues } from "../domain/compose-form";
+import type { TemplatePlaceholderRange } from "../domain/template-placeholders";
 import {
   hasComposeDraftContent,
   normalizeComposeBodyHtml,
   textToComposeBodyHtml,
   type ComposeDraftState,
 } from "../domain/draft";
-import { ComposeEditor } from "./compose-editor";
+import {
+  ComposeEditor,
+  ComposeEditorBody,
+  ComposeEditorDictationButton,
+  type ComposeEditorHandle,
+  ComposeEditorToolbar,
+} from "./compose-editor";
+import { ComposeTemplatePicker, TemplatePlaceholderSuggestion } from "./compose-templates";
 import {
   getDraftStatusMessage,
   useComposeDialogController,
@@ -55,7 +64,9 @@ type ComposeDialogProps = {
   demoMode?: boolean;
   managedDemoMode?: boolean;
   mailboxId: string | null;
+  onManageTemplates?: () => void;
   persistDrafts?: boolean;
+  senderEmail?: string | null;
   ref?: Ref<ComposeDialogHandle>;
 };
 
@@ -65,6 +76,7 @@ type ComposeTextFieldProps = {
   disabled?: boolean;
   endAdornment?: ReactNode;
   invalid?: boolean;
+  label: string;
   onBlur: () => void;
   onChange: (value: string) => void;
   placeholder: string;
@@ -82,6 +94,7 @@ type ComposeFormTextFieldProps = Omit<
 
 type ComposeRecipientFieldProps = {
   ariaLabel: string;
+  className?: string;
   disabled?: boolean;
   endAdornment?: ReactNode;
   invalid?: boolean;
@@ -107,7 +120,9 @@ type RecipientInputState = {
 };
 
 const composeInputFrameClass =
-  "keyboard-focus-within flex min-h-10 items-center gap-3 rounded-md border border-input bg-background px-3.5 transition-colors";
+  "compose-input-frame flex min-h-11 items-center gap-3 rounded-lg border border-transparent bg-transparent px-4 outline-none transition-[border-color,box-shadow,background-color]";
+const composeInputLabelClass =
+  "flex w-10 shrink-0 items-center text-xs font-normal text-muted-foreground";
 
 const serializeRecipientValue = (tokens: readonly string[], inputValue: string) =>
   [...tokens, inputValue.trim()].filter(Boolean).join(", ");
@@ -152,18 +167,20 @@ const ComposeTextField = ({
   disabled,
   endAdornment,
   invalid,
+  label,
   onBlur,
   onChange,
   placeholder,
   spellCheck,
   value,
 }: ComposeTextFieldProps) => (
-  <div className="space-y-2">
+  <div>
     <div
       className={cn(composeInputFrameClass, className, {
         "bg-destructive/10": invalid,
       })}
     >
+      <span className={composeInputLabelClass}>{label}</span>
       <input
         aria-invalid={invalid}
         aria-label={ariaLabel}
@@ -242,6 +259,7 @@ const RecipientChip = ({
 
 const ComposeRecipientField = ({
   ariaLabel,
+  className,
   disabled,
   endAdornment,
   invalid,
@@ -326,16 +344,19 @@ const ComposeRecipientField = ({
   };
 
   return (
-    <div className="space-y-2">
+    <div>
       <div
-        className={cn(composeInputFrameClass, "min-h-11 flex-wrap items-start gap-2 py-1.5 pr-2", {
-          "bg-destructive/10": invalid,
-          "cursor-text": !disabled,
-        })}
+        className={cn(
+          composeInputFrameClass,
+          "min-h-11 flex-wrap items-start gap-2 py-1.5 pr-2",
+          className,
+          {
+            "bg-destructive/10": invalid,
+            "cursor-text": !disabled,
+          },
+        )}
       >
-        <span className="flex size-8 shrink-0 items-center text-sm font-medium text-muted-foreground">
-          {label}
-        </span>
+        <span className={cn(composeInputLabelClass, "h-8")}>{label}</span>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
           {tokens.map((token, index) => (
             <RecipientChip
@@ -434,7 +455,7 @@ const ComposeFormRecipientField = ({
   </form.Field>
 );
 
-const AnimatedRecipientField = ({
+const AdditionalRecipientField = ({
   children,
   id,
   open,
@@ -443,26 +464,23 @@ const AnimatedRecipientField = ({
   id: string;
   open: boolean;
 }) => {
-  const prefersReducedMotion = useReducedMotion();
-  const hiddenOffset = prefersReducedMotion ? 0 : -4;
-  const transition = prefersReducedMotion
-    ? { duration: 0 }
-    : { duration: 0.09, ease: "easeOut" as const };
+  const reducedMotion = useReducedMotion();
 
   return (
     <AnimatePresence initial={false}>
-      {open && (
+      {open ? (
         <m.div
-          animate={{ height: "auto", marginTop: 12, opacity: 1, y: 0 }}
-          className="overflow-hidden"
-          exit={{ height: 0, marginTop: 0, opacity: 0, y: hiddenOffset }}
+          animate={{ height: "auto", opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
           id={id}
-          initial={{ height: 0, marginTop: 0, opacity: 0, y: hiddenOffset }}
-          transition={transition}
+          initial={{ height: 0, opacity: 0 }}
+          transition={
+            reducedMotion ? { duration: 0 } : { duration: 0.18, ease: [0.32, 0.72, 0, 1] }
+          }
         >
           {children}
         </m.div>
-      )}
+      ) : null}
     </AnimatePresence>
   );
 };
@@ -471,10 +489,17 @@ export const ComposeDialog = ({
   demoMode = false,
   managedDemoMode = false,
   mailboxId,
+  onManageTemplates,
   persistDrafts = true,
+  senderEmail,
   ref,
 }: ComposeDialogProps) => {
   const queryClient = useQueryClient();
+  const composeEditorRef = useRef<ComposeEditorHandle | null>(null);
+  const [selectedPlaceholder, setSelectedPlaceholder] = useState<TemplatePlaceholderRange | null>(
+    null,
+  );
+  const [activeTemplateName, setActiveTemplateName] = useState("Email template");
   const compose = useComposeDialogController({
     demoMode,
     managedDemoMode,
@@ -503,9 +528,13 @@ export const ComposeDialog = ({
 
   useImperativeHandle(ref, () => ({
     openDraft: (draft) => {
+      setSelectedPlaceholder(null);
+      setActiveTemplateName("Email template");
       compose.openComposeDraft(draft);
     },
     openNewMail: () => {
+      setSelectedPlaceholder(null);
+      setActiveTemplateName("Email template");
       compose.openComposeDraft(null);
     },
   }));
@@ -582,173 +611,228 @@ export const ComposeDialog = ({
 
   return (
     <Dialog onOpenChange={handleDialogOpenChange} open={state.open}>
-      <DialogContent
-        className="max-h-[85vh] w-[min(92vw,46rem)] overflow-hidden bg-background-light p-0 transition-opacity duration-100 data-ending-style:scale-100 data-starting-style:scale-100"
-        data-compose-dialog-content
-      >
-        <form
-          action={async () => {
-            await form.handleSubmit();
-          }}
-          className="flex max-h-[85vh] min-h-0 flex-col p-5 sm:p-6"
+      <LazyMotion features={domAnimation}>
+        <DialogContent
+          className="squircle h-[min(92vh,58rem)] max-h-[94vh] w-[min(96vw,72rem)] overflow-hidden rounded-4xl border-border bg-background p-0 transition-opacity duration-100 data-ending-style:scale-100 data-starting-style:scale-100"
+          data-compose-dialog-content
         >
-          <div className="flex min-h-0 flex-1 flex-col gap-4">
-            <div className="flex shrink-0 items-start justify-between gap-4 pb-1">
-              <div className="space-y-1">
-                <p className="text-sm font-semibold tracking-tight text-foreground">New message</p>
-                <p className="text-xs text-muted-foreground">
-                  {getDraftStatusMessage(compose.state.draft, persistDrafts)}
-                </p>
+          <form
+            action={async () => {
+              await form.handleSubmit();
+            }}
+            className="flex h-full min-h-0 flex-col p-3 sm:p-5"
+          >
+            <div className="squircle flex min-h-0 flex-1 flex-col gap-2 rounded-2xl border bg-background-dark/60 p-2">
+              <div className="flex shrink-0 items-center px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">New message</p>
+                  <p className="sr-only">
+                    {getDraftStatusMessage(compose.state.draft, persistDrafts)}
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <div className="shrink-0 space-y-3">
-              <ComposeFormRecipientField
-                ariaLabel="Recipients"
-                clearActiveDraftError={clearActiveDraftError}
-                endAdornment={
-                  <div className="flex shrink-0 items-center gap-0.5">
-                    <button
-                      aria-controls="compose-cc-field"
-                      aria-expanded={state.showCc}
-                      className={cn(
-                        "inline-flex h-8 items-center rounded-md px-2 text-sm font-medium transition-[background-color,color,transform] duration-100 ease-out outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
-                        {
-                          "bg-muted text-foreground": state.showCc,
-                          "text-muted-foreground hover:text-foreground": !state.showCc,
-                        },
-                      )}
-                      onClick={() => toggleRecipientVisibility("cc")}
-                      type="button"
-                    >
-                      Cc
-                    </button>
-                    <button
-                      aria-controls="compose-bcc-field"
-                      aria-expanded={state.showBcc}
-                      className={cn(
-                        "inline-flex h-8 items-center rounded-md px-2 text-sm font-medium transition-[background-color,color,transform] duration-100 ease-out outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
-                        {
-                          "bg-muted text-foreground": state.showBcc,
-                          "text-muted-foreground hover:text-foreground": !state.showBcc,
-                        },
-                      )}
-                      onClick={() => toggleRecipientVisibility("bcc")}
-                      type="button"
-                    >
-                      Bcc
-                    </button>
-                  </div>
-                }
-                form={form}
-                label="To"
-                name="to"
-              />
-
-              <LazyMotion features={domAnimation}>
-                <AnimatedRecipientField id="compose-cc-field" open={state.showCc}>
-                  <ComposeFormRecipientField
-                    ariaLabel="Cc recipients"
-                    clearActiveDraftError={clearActiveDraftError}
-                    form={form}
-                    label="Cc"
-                    name="cc"
-                  />
-                </AnimatedRecipientField>
-
-                <AnimatedRecipientField id="compose-bcc-field" open={state.showBcc}>
-                  <ComposeFormRecipientField
-                    ariaLabel="Bcc recipients"
-                    clearActiveDraftError={clearActiveDraftError}
-                    form={form}
-                    label="Bcc"
-                    name="bcc"
-                  />
-                </AnimatedRecipientField>
-              </LazyMotion>
-
-              <ComposeFormTextField
-                ariaLabel="Subject"
-                className="mt-3"
-                clearActiveDraftError={clearActiveDraftError}
-                form={form}
-                name="subject"
-                placeholder="Subject"
-              />
-            </div>
-
-            <form.Field name="bodyHtml">
-              {(field) => (
-                <ComposeEditor
-                  className="flex-1"
-                  disabled={!canEditBody}
-                  html={field.state.value}
-                  onBlur={() => field.handleBlur()}
-                  onChange={({ html, text }) => {
-                    if (
-                      normalizeComposeBodyHtml(html) !==
-                        normalizeComposeBodyHtml(field.state.value) ||
-                      text !== form.state.values.bodyText
-                    ) {
-                      clearActiveDraftError();
-                    }
-                    field.handleChange(html);
-                    form.setFieldValue("bodyText", text);
-                  }}
-                  onInlineImageFiles={addInlineImageFiles}
-                  onRecordingStart={handleRecordingStart}
-                  onRecordingStop={handleRecordingStop}
-                  recording={audioRecorder.isRecording}
-                  recordingSupported={audioRecorder.isSupported}
-                  transcribing={isTranscribingAudio}
+              <div className="squircle shrink-0 rounded-xl border border-border bg-background-dark">
+                {senderEmail && (
+                  <>
+                    <div className={composeInputFrameClass}>
+                      <span className={composeInputLabelClass}>From</span>
+                      <span className="min-w-0 truncate text-sm text-foreground">
+                        {senderEmail}
+                      </span>
+                    </div>
+                    <div className="h-[0.5px] w-full bg-border" />
+                  </>
+                )}
+                <ComposeFormRecipientField
+                  ariaLabel="Recipients"
+                  clearActiveDraftError={clearActiveDraftError}
+                  endAdornment={
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Button
+                        aria-controls="compose-cc-field"
+                        className="text-xs"
+                        aria-expanded={state.showCc}
+                        onClick={() => toggleRecipientVisibility("cc")}
+                        size="sm"
+                        variant={state.showCc ? "outline" : "ghost"}
+                      >
+                        CC
+                      </Button>
+                      <Button
+                        aria-controls="compose-bcc-field"
+                        className="text-xs"
+                        aria-expanded={state.showBcc}
+                        onClick={() => toggleRecipientVisibility("bcc")}
+                        size="sm"
+                        variant={state.showBcc ? "outline" : "ghost"}
+                      >
+                        BCC
+                      </Button>
+                    </div>
+                  }
+                  form={form}
+                  label="To"
+                  name="to"
                 />
-              )}
-            </form.Field>
 
-            <div className="flex min-h-10 shrink-0 items-center justify-end gap-3 pt-1">
-              {state.draft.errorMessage && (
+                <div className="h-[0.5px] w-full bg-border" />
+
+                <>
+                  <AdditionalRecipientField id="compose-cc-field" open={state.showCc}>
+                    <ComposeFormRecipientField
+                      ariaLabel="Cc recipients"
+                      clearActiveDraftError={clearActiveDraftError}
+                      form={form}
+                      label="Cc"
+                      name="cc"
+                    />
+                  </AdditionalRecipientField>
+                  {state.showCc && <div className="h-[0.5px] w-full bg-border" />}
+                  <AdditionalRecipientField id="compose-bcc-field" open={state.showBcc}>
+                    <ComposeFormRecipientField
+                      ariaLabel="Bcc recipients"
+                      clearActiveDraftError={clearActiveDraftError}
+                      form={form}
+                      label="Bcc"
+                      name="bcc"
+                    />
+                  </AdditionalRecipientField>
+                  {state.showBcc && <div className="h-[0.5px] w-full bg-border" />}
+                </>
+
+                <ComposeFormTextField
+                  ariaLabel="Subject"
+                  clearActiveDraftError={clearActiveDraftError}
+                  form={form}
+                  label="Subject"
+                  name="subject"
+                  placeholder=""
+                />
+              </div>
+
+              <form.Field name="bodyHtml">
+                {(field) => (
+                  <div className="flex min-h-0 flex-1 flex-col gap-2">
+                    <ComposeEditor
+                      disabled={!canEditBody}
+                      html={field.state.value}
+                      onBlur={() => field.handleBlur()}
+                      onChange={({ html, text }) => {
+                        if (
+                          normalizeComposeBodyHtml(html) !==
+                            normalizeComposeBodyHtml(field.state.value) ||
+                          text !== form.state.values.bodyText
+                        ) {
+                          clearActiveDraftError();
+                        }
+                        field.handleChange(html);
+                        form.setFieldValue("bodyText", text);
+                      }}
+                      onInlineImageFiles={addInlineImageFiles}
+                      onPlaceholderSelectionChange={setSelectedPlaceholder}
+                      onRecordingStart={handleRecordingStart}
+                      onRecordingStop={handleRecordingStop}
+                      recording={audioRecorder.isRecording}
+                      recordingSupported={audioRecorder.isSupported}
+                      ref={composeEditorRef}
+                      transcribing={isTranscribingAudio}
+                    >
+                      <div className="flex min-h-0 flex-1 flex-col">
+                        <ComposeEditorBody className="squircle min-h-0 flex-1 rounded-xl border border-border bg-background-dark p-5 sm:p-7" />
+                        <div className="flex shrink-0 items-center gap-1 px-2 pt-3 pb-2">
+                          <ComposeEditorToolbar />
+                          {mailboxId ? (
+                            <>
+                              <ComposeTemplatePicker
+                                disabled={!canEditBody || audioBusy}
+                                mailboxId={mailboxId}
+                                onManage={() => {
+                                  handleDialogOpenChange(false);
+                                  onManageTemplates?.();
+                                }}
+                                onInsert={(template) => {
+                                  clearActiveDraftError();
+                                  setActiveTemplateName(template.name);
+                                  composeEditorRef.current?.insertHtml(template.bodyHtml);
+                                }}
+                              />
+                              <TemplatePlaceholderSuggestion
+                                bodyText={form.state.values.bodyText}
+                                disabled={!canEditBody || audioBusy}
+                                editorRef={composeEditorRef}
+                                mailboxId={mailboxId}
+                                placeholder={selectedPlaceholder}
+                                recipients={[
+                                  form.state.values.to,
+                                  form.state.values.cc,
+                                  form.state.values.bcc,
+                                ]
+                                  .filter(Boolean)
+                                  .join(", ")}
+                                subject={form.state.values.subject}
+                                templateName={activeTemplateName}
+                              />
+                            </>
+                          ) : null}
+                          <div className="ml-auto flex shrink-0 items-center gap-1">
+                            <ComposeEditorDictationButton />
+                            {canDiscardDraft ? (
+                              <Button
+                                disabled={state.draft.saveStatus === "sending"}
+                                onClick={() => {
+                                  discardActiveDraft();
+                                }}
+                                size="sm"
+                                type="button"
+                                variant="ghost"
+                              >
+                                {state.draft.draftId ? "Discard draft" : "Discard"}
+                              </Button>
+                            ) : null}
+                            <Button
+                              disabled={!canSubmitCompose}
+                              size="sm"
+                              type="submit"
+                              variant={state.draft.saveStatus === "sending" ? "outline" : "default"}
+                            >
+                              {state.draft.saveStatus === "sending" ? (
+                                <HugeiconsIcon className="animate-spin" icon={Loading03Icon} />
+                              ) : (
+                                <HugeiconsIcon icon={MailSend02Icon} />
+                              )}
+                              Send
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </ComposeEditor>
+                    {field.state.meta.errors.map((error) => (
+                      <p
+                        className="px-1 text-xs text-destructive"
+                        key={error?.message ?? "An unknown error occurred."}
+                      >
+                        {error?.message ?? "An unknown error occurred."}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </form.Field>
+
+              {state.draft.errorMessage ? (
                 <div
                   aria-live="polite"
+                  className="flex min-w-0 shrink-0 items-start gap-2 pb-2 pl-4 text-sm text-destructive"
                   role="alert"
-                  className="mr-auto flex min-w-0 items-start gap-2 text-sm text-destructive"
                 >
                   <HugeiconsIcon className="mt-0.5 size-4 shrink-0" icon={AlertCircleIcon} />
                   <span className="min-w-0 wrap-break-word">{state.draft.errorMessage}</span>
                 </div>
-              )}
-
-              {canDiscardDraft && (
-                <Button
-                  className={cn({ "mr-auto": !state.draft.errorMessage })}
-                  disabled={state.draft.saveStatus === "sending"}
-                  onClick={() => {
-                    discardActiveDraft();
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  {state.draft.draftId ? "Discard draft" : "Discard"}
-                </Button>
-              )}
-
-              <Button
-                disabled={!canSubmitCompose}
-                size="sm"
-                type="submit"
-                variant={state.draft.saveStatus === "sending" ? "outline" : "default"}
-              >
-                {state.draft.saveStatus === "sending" ? (
-                  <HugeiconsIcon className="animate-spin" icon={Loading03Icon} />
-                ) : (
-                  <HugeiconsIcon icon={MailSend02Icon} />
-                )}
-                Send
-              </Button>
+              ) : null}
             </div>
-          </div>
-        </form>
-      </DialogContent>
+          </form>
+        </DialogContent>
+      </LazyMotion>
     </Dialog>
   );
 };

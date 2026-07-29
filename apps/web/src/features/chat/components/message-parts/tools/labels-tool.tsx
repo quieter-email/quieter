@@ -42,7 +42,7 @@ export const LabelsTool = ({ nested = false, data, error, pending }: LabelsToolP
               <div className="flex flex-wrap gap-1.5">
                 {userLabels.map((label) => (
                   <span
-                    className="rounded-full border border-border/70 px-2 py-0.5 text-[11px] text-foreground/80"
+                    className="rounded-full border border-border px-2 py-0.5 text-[11px] text-foreground/80"
                     key={label.id}
                   >
                     {label.name}

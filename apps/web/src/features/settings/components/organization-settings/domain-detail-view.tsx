@@ -68,7 +68,7 @@ const DnsCopyCell = ({ value }: { value: string }) => (
   <button
     aria-label={`Copy ${value}`}
     className={cn(
-      "max-w-full min-w-0 rounded-md px-1.5 py-0.5 text-left font-mono text-xs text-foreground outline-none squircle",
+      "squircle max-w-full min-w-0 rounded-md px-1.5 py-0.5 text-left font-mono text-xs text-foreground outline-none",
       "transition-[transform,background-color] duration-100 ease-out",
       "hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/30",
       "active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
@@ -306,7 +306,7 @@ export const DomainDetailView = ({
       {domainConnect && (
         <div
           className={cn(
-            "@container flex flex-col gap-3 rounded-lg border px-4 py-3 text-sm squircle @sm:flex-row @sm:items-center @sm:justify-between",
+            "squircle @container flex flex-col gap-3 rounded-lg border px-4 py-3 text-sm @sm:flex-row @sm:items-center @sm:justify-between",
             domainConnect === "verified"
               ? "border-success/30 bg-success/10 text-success"
               : domainConnect === "needs_dns"
@@ -342,12 +342,12 @@ export const DomainDetailView = ({
 
       <section
         className={cn(
-          "relative overflow-hidden rounded-xl border p-5 squircle",
+          "squircle relative overflow-hidden rounded-xl border p-5",
           status.tone === "success"
             ? "border-success/30 bg-success/8"
             : status.tone === "error"
               ? "border-destructive/25 bg-destructive/6"
-              : "border-border/70 bg-background/58",
+              : "border-border bg-background/58",
         )}
       >
         <div className="@container relative grid gap-6 @lg:grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(7rem,0.7fr))] @lg:items-center">
@@ -380,7 +380,7 @@ export const DomainDetailView = ({
             ["Sending", sendingReady ? "Ready" : "Checking"],
             ["Incoming mail", domain.mode === "send_only" ? "Off" : "Enabled"],
           ].map(([label, value]) => (
-            <div className="border-l border-border/70 pl-4" key={label}>
+            <div className="border-l border-border pl-4" key={label}>
               <p className="text-xs text-muted-foreground">{label}</p>
               <p className="mt-1 text-sm font-medium text-foreground">{value}</p>
             </div>
@@ -449,7 +449,7 @@ export const DomainDetailView = ({
 
         <div
           aria-label="DNS records"
-          className="overflow-x-auto rounded-lg border border-border/70 bg-background/58 squircle"
+          className="squircle overflow-x-auto rounded-lg border border-border bg-background/58"
           role="table"
         >
           <div className="min-w-160 p-2">
@@ -477,7 +477,7 @@ export const DomainDetailView = ({
                 <div
                   className={cn(
                     dnsTableColumns,
-                    "border-b border-border/50 px-3 py-1.5 last:border-b-0",
+                    "border-b border-border px-3 py-1.5 last:border-b-0",
                   )}
                   key={`${record.type}:${record.name}:${record.value}`}
                   role="row"

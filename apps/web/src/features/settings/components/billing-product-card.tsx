@@ -35,9 +35,9 @@ export const BillingProductCard = ({
 
   return (
     <article
-      className={cn("rounded-xl border bg-background p-5 squircle", {
+      className={cn("squircle rounded-xl border bg-background p-5", {
         "border-primary/50 bg-primary/4": isCurrent,
-        "border-border/70": !isCurrent,
+        "border-border": !isCurrent,
       })}
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -45,7 +45,7 @@ export const BillingProductCard = ({
           <div className="flex items-center gap-2">
             <h3 className="text-base font-semibold text-foreground">{product.name}</h3>
             {isCurrent && (
-              <span className="rounded-full border border-primary/40 px-2 py-0.5 text-[11px] font-medium text-primary squircle">
+              <span className="squircle rounded-full border border-primary/40 px-2 py-0.5 text-[11px] font-medium text-primary">
                 Current
               </span>
             )}

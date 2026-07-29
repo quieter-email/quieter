@@ -109,7 +109,7 @@ export const ToolStep = ({
         {expanded && children ? (
           <m.div {...getAppPresenceMotion({ reducedMotion: shouldReduceMotion })}>
             <div
-              className={cn("mt-1.5 border-l border-border/70", {
+              className={cn("mt-1.5 border-l border-border", {
                 "ml-1.5 pl-3": nested,
                 "pl-3": !nested,
               })}

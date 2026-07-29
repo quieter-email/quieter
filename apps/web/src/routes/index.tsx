@@ -1,24 +1,15 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
-import { lazy, Suspense } from "react";
 import { z } from "zod";
 import { LoadingPage } from "~/components/loading-page";
 import { MAILBOX_WORKSPACE_VIEWS } from "~/features/mailbox/domain/mailbox-workspace-view";
 import { getSessionUser } from "~/lib/auth.functions";
 
-const InboxPageClient = lazy(() =>
-  import("~/features/mailbox/components/inbox-page-client").then(
-    ({ InboxPageClient: Component }) => ({
-      default: Component,
-    }),
-  ),
-);
-
 export const Route = createFileRoute("/")({
   validateSearch: zodValidator(
     z.object({
       mailbox: z
-        .enum(["inbox", "unread", "archive", "spam", "sent", "trash", "drafts"])
+        .enum(["inbox", "unread", "archive", "spam", "sent", "trash", "drafts", "template"])
         .catch("inbox")
         .default("inbox"),
       mailboxId: z.string().trim().min(1).optional().catch(undefined),
@@ -50,17 +41,6 @@ export const Route = createFileRoute("/")({
     };
   },
   pendingComponent: LoadingPage,
-  component: InboxRouteComponent,
 });
 
 export type MailboxSearch = ReturnType<typeof Route.useSearch>;
-
-function InboxRouteComponent() {
-  const { user } = Route.useLoaderData();
-
-  return (
-    <Suspense fallback={<LoadingPage />}>
-      <InboxPageClient user={user} />
-    </Suspense>
-  );
-}

@@ -11,7 +11,7 @@ import { useForm } from "@tanstack/react-form";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { type FormEvent, useState } from "react";
 import type { ComposeFormValues } from "~/features/compose/domain/compose-form";
-import { ComposeEditor } from "~/features/compose/components/compose-editor";
+import { ComposeEditor, ComposeEditorBody } from "~/features/compose/components/compose-editor";
 import {
   getRenderableComposeBodyHtml,
   normalizeComposeBodyHtml,
@@ -44,7 +44,7 @@ const ComposeField = ({
   readOnly?: boolean;
   value: string;
 }) => (
-  <label className="flex min-w-0 items-center gap-3 border-b border-border/50 py-1.5 last:border-b-0">
+  <label className="flex min-w-0 items-center gap-3 border-b border-border py-1.5 last:border-b-0">
     <span className="w-12 shrink-0 text-[11px] text-muted-foreground">{label}</span>
     {readOnly ? (
       <span className={cn(fieldClass, "truncate")}>{value || "—"}</span>
@@ -202,7 +202,7 @@ export const InlineComposeTool = ({
   const isBusy = !!(processing || pendingAction);
 
   return (
-    <form className="border-l border-border/70 pl-3" onSubmit={handleSubmit}>
+    <form className="border-l border-border pl-3" onSubmit={handleSubmit}>
       <div className="mb-2 flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
           {processing ? "Sending email" : "Draft email"}
@@ -293,8 +293,7 @@ export const InlineComposeTool = ({
         <form.Field name="bodyHtml">
           {(field) => (
             <ComposeEditor
-              className="mt-2 border-0 bg-transparent shadow-none focus-within:border-0 focus-within:ring-0"
-              compact
+              density="compact"
               disabled={disabled || isBusy}
               html={field.state.value}
               onBlur={field.handleBlur}
@@ -309,8 +308,9 @@ export const InlineComposeTool = ({
                 form.setFieldValue("bodyText", text);
               }}
               onInlineImageFiles={() => undefined}
-              showToolbar={false}
-            />
+            >
+              <ComposeEditorBody className="mt-2 p-4" />
+            </ComposeEditor>
           )}
         </form.Field>
       </fieldset>

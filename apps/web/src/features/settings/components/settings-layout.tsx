@@ -80,7 +80,7 @@ export const SettingsCard = ({
 }) => (
   <div
     className={cn(
-      "@container overflow-hidden rounded-lg border border-border/70 bg-background/58 squircle",
+      "squircle @container overflow-hidden rounded-lg border border-border bg-background/58",
       className,
     )}
   >
@@ -108,7 +108,7 @@ export const settingsInsetStackedRowClass = cn(
 );
 
 export const settingsListRowClass = cn(
-  "flex flex-col gap-3 border-b border-border/70 last:border-b-0 @md:flex-row @md:items-center @md:justify-between",
+  "flex flex-col gap-3 border-b border-border last:border-b-0 @md:flex-row @md:items-center @md:justify-between",
   settingsRowPaddingClass,
 );
 
@@ -155,7 +155,7 @@ export const SettingsListRow = ({
 }) => <div className={cn(settingsListRowClass, className)}>{children}</div>;
 
 const settingsRowShellClass = cn(
-  "flex w-full items-center gap-4 squircle",
+  "squircle flex w-full items-center gap-4",
   settingsRowPaddingClass,
   settingsInsetDividerClass,
 );
@@ -215,7 +215,7 @@ export const SettingsRow = ({
 }) => (
   <div className={settingsRowShellClass}>
     {icon && (
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-foreground squircle [&_svg]:size-4">
+      <div className="squircle flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-foreground [&_svg]:size-4">
         {icon}
       </div>
     )}
@@ -246,7 +246,7 @@ export const SettingsNavigationRow = ({
   <button
     className={cn(
       settingsRowShellClass,
-      "group text-left transition-colors outline-none squircle hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+      "group squircle text-left transition-colors outline-none hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
       { "pointer-events-none": disabled },
     )}
     disabled={disabled}
@@ -259,7 +259,7 @@ export const SettingsNavigationRow = ({
     type="button"
   >
     {icon && (
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-foreground transition-colors squircle group-hover:bg-muted/70 group-hover:text-foreground [&_svg]:size-4">
+      <div className="squircle flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-foreground transition-colors group-hover:bg-muted/70 group-hover:text-foreground [&_svg]:size-4">
         {icon}
       </div>
     )}

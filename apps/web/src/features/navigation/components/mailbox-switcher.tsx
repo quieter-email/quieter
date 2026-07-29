@@ -193,7 +193,7 @@ const MailboxMenuItem = ({ children, isActive, onSelect }: MailboxMenuItemProps)
   return (
     <DropdownMenuItem
       aria-current={isActive ? "page" : undefined}
-      className="group/item isolate overflow-hidden rounded-xs border border-transparent bg-transparent px-2.5 py-2 transition-transform duration-100 ease-out squircle active:scale-[0.985] data-highlighted:bg-transparent motion-reduce:transition-none motion-reduce:active:scale-100"
+      className="group/item squircle isolate overflow-hidden rounded-xs border border-transparent bg-transparent px-2.5 py-2 transition-transform duration-100 ease-out active:scale-[0.985] data-highlighted:bg-transparent motion-reduce:transition-none motion-reduce:active:scale-100"
       onBlur={() => setHighlighted(false)}
       onFocus={() => setHighlighted(true)}
       onMouseEnter={() => setHighlighted(true)}
@@ -201,7 +201,7 @@ const MailboxMenuItem = ({ children, isActive, onSelect }: MailboxMenuItemProps)
       onSelect={onSelect}
     >
       {isActive ? (
-        <SidebarActiveSurface className="rounded-xs border border-border/80 bg-background/80 shadow-xs" />
+        <SidebarActiveSurface className="rounded-xs border border-border bg-background/80 shadow-xs" />
       ) : (
         <SidebarSimpleHoverSurface
           className="inset-px rounded-xs bg-muted/70"
@@ -313,10 +313,10 @@ const SortableGroup = ({
         })}
         ref={sectionRef}
       >
-        <div className="group/header flex min-h-7 items-center rounded-xs transition-colors squircle focus-within:bg-background/50 hover:bg-background/50">
+        <div className="group/header squircle flex min-h-7 items-center rounded-xs transition-colors focus-within:bg-background/50 hover:bg-background/50">
           <button
             aria-expanded={!collapsed}
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-xs px-2 py-1 text-left outline-none squircle"
+            className="squircle flex min-w-0 flex-1 items-center gap-2 rounded-xs px-2 py-1 text-left outline-none"
             onClick={() => onToggle(group.id)}
             ref={headerRef}
             type="button"
@@ -552,14 +552,14 @@ export const MailboxSwitcherDropdown = ({
   return (
     <DropdownMenu onOpenChange={setIsOpen} open={isOpen}>
       <div
-        className="relative min-w-0 flex-1 rounded-md squircle"
+        className="squircle relative min-w-0 flex-1 rounded-md"
         onMouseEnter={() => setIsTriggerHovered(true)}
         onMouseLeave={() => setIsTriggerHovered(false)}
       >
         <SidebarSimpleHoverSurface layoutId="mailbox-switcher-hover" visible={isTriggerHovered} />
         <DropdownMenuTrigger
           aria-label="Switch mailbox"
-          className="relative z-10 w-full min-w-0 rounded-md px-3 py-2 text-left outline-none squircle hover:bg-transparent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-100"
+          className="squircle relative z-10 w-full min-w-0 rounded-md px-3 py-2 text-left outline-none hover:bg-transparent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-100"
         >
           <AnimatePresence initial={false} mode="popLayout">
             <m.div
@@ -699,9 +699,9 @@ export const MailboxSwitcherDropdown = ({
                     );
                   })}
                   {!embedded && (
-                    <div className="border-t border-border/70 pt-1">
+                    <div className="border-t border-border pt-1">
                       <LinkButton
-                        className="h-auto min-h-9 w-full justify-between rounded-xs px-2.5 py-2 squircle"
+                        className="squircle h-auto min-h-9 w-full justify-between rounded-xs px-2.5 py-2"
                         search={{ from: "/", mailboxId: "", tab: "mailboxes" }}
                         size="sm"
                         to="/settings"
