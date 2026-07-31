@@ -4,3 +4,13 @@ reviews:
     auto_incremental_review: false
   path_filters:
     - "!packages/database/drizzle/**/snapshot.json"
+    - "!apps/web/src/features/settings/**"
+    - "!apps/web/src/features/chat/**"
+    - "!apps/web/src/features/home/**"
+    - "!apps/web/src/features/compose/**"
+    - "!apps/web/src/features/hotkeys/**"
+    - "!apps/web/src/features/legal/**"
+    - "!apps/web/src/features/gmail-useful-details/**"
+    - "!apps/web/src/routes/**"
+    - "!apps/web/src/components/**"
+    - "!AGENTS.md"
