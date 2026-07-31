@@ -491,17 +491,17 @@ const PasskeysDialog = ({
 
             <div className="space-y-3">
               {isPasskeysPending ? (
-                <p className="text-sm text-muted-foreground">Loading passkeys…</p>
+                <p className="text-sm text-muted-fg">Loading passkeys…</p>
               ) : passkeys.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No passkeys.</p>
+                <p className="text-sm text-muted-fg">No passkeys.</p>
               ) : (
                 passkeys.map((passkey) => (
                   <div className="flex items-center justify-between gap-4" key={passkey.id}>
                     <div className="min-w-0">
-                      <p className="text-sm text-foreground">
+                      <p className="text-sm text-fg">
                         {passkey.name?.trim() || passkey.deviceType}
                       </p>
-                      <p className="mt-1 text-sm text-muted-foreground">
+                      <p className="mt-1 text-sm text-muted-fg">
                         {formatPasskeyDate(passkey.createdAt)}
                       </p>
                     </div>
@@ -627,8 +627,8 @@ const DeleteAccountDialog = () => {
             }}
           >
             <DialogBody className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Type <span className="font-medium text-foreground">delete my account</span>
+              <p className="text-sm text-muted-fg">
+                Type <span className="font-medium text-fg">delete my account</span>
               </p>
 
               <form.Field name="confirmation">

@@ -59,8 +59,8 @@ export const DomainsView = ({
 
       <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
         <div>
-          <h1 className="text-base font-semibold text-foreground">Domains</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h1 className="text-base font-semibold text-fg">Domains</h1>
+          <p className="mt-1 text-sm text-muted-fg">
             {formatCount(domains.length, "Domain", "Domains")}
           </p>
         </div>
@@ -104,7 +104,7 @@ export const DomainsView = ({
           ))}
         </SettingsRows>
       ) : (
-        <p className={cn("text-center text-sm text-muted-foreground", settingsRowPaddingClass)}>
+        <p className={cn("text-center text-sm text-muted-fg", settingsRowPaddingClass)}>
           No domains registered.
         </p>
       )}

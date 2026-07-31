@@ -28,7 +28,7 @@ function PrivacyPage() {
         <br />
         Berlin, Germany
         <br />
-        <a className="underline hover:text-foreground" href="mailto:legal@quieter.email">
+        <a className="underline hover:text-fg" href="mailto:legal@quieter.email">
           legal@quieter.email
         </a>
       </p>
@@ -88,7 +88,7 @@ function PrivacyPage() {
       <p>
         Depending on your location, you may have rights to access, correct, delete, or restrict
         processing of your personal data. Contact us at{" "}
-        <a className="underline hover:text-foreground" href="mailto:legal@quieter.email">
+        <a className="underline hover:text-fg" href="mailto:legal@quieter.email">
           legal@quieter.email
         </a>{" "}
         to exercise these rights.

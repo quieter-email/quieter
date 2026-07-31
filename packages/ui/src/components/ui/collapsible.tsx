@@ -14,7 +14,7 @@ export const CollapsibleTrigger = ({
     className={cn(
       "squircle",
       className,
-      "transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      "transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
     )}
     {...props}
   />

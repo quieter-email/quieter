@@ -18,7 +18,7 @@ export const NumberFieldGroup = ({
 }: ComponentPropsWithoutRef<typeof NumberFieldPrimitive.Group>) => (
   <NumberFieldPrimitive.Group
     className={cn(
-      "keyboard-focus-within flex items-center overflow-hidden rounded-md border border-input bg-background-light shadow-sm",
+      "flex items-center rounded-md border border-border bg-bg-elevated/60 shadow-sm",
       className,
     )}
     {...props}
@@ -31,7 +31,7 @@ export const NumberFieldInput = ({
 }: ComponentPropsWithoutRef<typeof NumberFieldPrimitive.Input>) => (
   <NumberFieldPrimitive.Input
     className={cn(
-      "h-9 w-full border-0 bg-transparent px-3 text-center text-sm text-foreground shadow-none transition-colors duration-150 ease-out outline-none placeholder:text-muted-foreground read-only:bg-transparent disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive",
+      "h-9 w-full border-0 bg-transparent px-3 text-center text-sm text-fg shadow-none transition-colors duration-150 ease-out placeholder:text-muted-fg read-only:bg-transparent focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:ring-destructive/45",
       className,
     )}
     {...props}
@@ -39,7 +39,7 @@ export const NumberFieldInput = ({
 );
 
 const numberFieldButtonClassName =
-  "flex size-10 shrink-0 items-center justify-center bg-background text-muted-foreground transition-transform duration-100 ease-out outline-none active:scale-[0.97] hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 focus-visible:bg-muted focus-visible:text-foreground motion-reduce:transition-none motion-reduce:active:scale-100";
+  "flex size-10 shrink-0 items-center justify-center bg-bg text-muted-fg transition-transform duration-100 ease-out hover:bg-muted hover:text-fg focus-visible:bg-muted focus-visible:text-fg focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100";
 
 export const NumberFieldIncrement = ({
   children,

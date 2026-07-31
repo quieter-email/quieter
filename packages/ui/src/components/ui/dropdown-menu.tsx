@@ -1,7 +1,7 @@
 "use client";
 
-import type { ComponentPropsWithoutRef, MouseEvent } from "react";
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
+import { createContext, useContext, type ComponentPropsWithoutRef, type MouseEvent } from "react";
 import { cn } from "../../lib/cn";
 import { ChevronRightIcon } from "./icons";
 
@@ -9,13 +9,17 @@ export const DropdownMenu = MenuPrimitive.Root;
 export const DropdownMenuSubmenu = MenuPrimitive.SubmenuRoot;
 export const DropdownMenuPortal = MenuPrimitive.Portal;
 
+type DropdownMenuDensity = "default" | "compact";
+
+const DropdownMenuDensityContext = createContext<DropdownMenuDensity>("default");
+
 export const DropdownMenuTrigger = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<typeof MenuPrimitive.Trigger>) => (
   <MenuPrimitive.Trigger
     className={cn(
-      "transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      "transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
       className,
     )}
     {...props}
@@ -29,12 +33,13 @@ export const DropdownMenuContent = ({
   className,
   side = "bottom",
   sideOffset = 6,
+  size = "default",
   ...props
 }: ComponentPropsWithoutRef<typeof MenuPrimitive.Popup> &
   Pick<
     ComponentPropsWithoutRef<typeof MenuPrimitive.Positioner>,
     "align" | "alignOffset" | "anchor" | "side" | "sideOffset"
-  >) => (
+  > & { size?: DropdownMenuDensity }) => (
   <DropdownMenuPortal>
     <MenuPrimitive.Positioner
       align={align}
@@ -44,13 +49,16 @@ export const DropdownMenuContent = ({
       side={side}
       sideOffset={sideOffset}
     >
-      <MenuPrimitive.Popup
-        className={cn(
-          "z-50 max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] min-w-52 origin-(--transform-origin) overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-sm text-popover-foreground shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[translate,opacity,height,width] outline-none data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
-          className,
-        )}
-        {...props}
-      />
+      <DropdownMenuDensityContext.Provider value={size}>
+        <MenuPrimitive.Popup
+          className={cn(
+            "z-50 max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] min-w-52 origin-(--transform-origin) overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-sm text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[translate,opacity,height,width] data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
+            size === "compact" && "min-w-40 p-0.5 text-xs",
+            className,
+          )}
+          {...props}
+        />
+      </DropdownMenuDensityContext.Provider>
     </MenuPrimitive.Positioner>
   </DropdownMenuPortal>
 );
@@ -61,30 +69,39 @@ export const DropdownMenuSubmenuContent = ({
   className,
   side = "right",
   sideOffset = 4,
+  size,
   ...props
 }: ComponentPropsWithoutRef<typeof MenuPrimitive.Popup> &
   Pick<
     ComponentPropsWithoutRef<typeof MenuPrimitive.Positioner>,
     "align" | "alignOffset" | "side" | "sideOffset"
-  >) => (
-  <DropdownMenuPortal>
-    <MenuPrimitive.Positioner
-      align={align}
-      alignOffset={alignOffset}
-      className="z-50"
-      side={side}
-      sideOffset={sideOffset}
-    >
-      <MenuPrimitive.Popup
-        className={cn(
-          "z-50 max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] min-w-52 origin-(--transform-origin) overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-sm text-popover-foreground shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] outline-none data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
-          className,
-        )}
-        {...props}
-      />
-    </MenuPrimitive.Positioner>
-  </DropdownMenuPortal>
-);
+  > & { size?: DropdownMenuDensity }) => {
+  const parentSize = useContext(DropdownMenuDensityContext);
+  const resolvedSize = size ?? parentSize;
+
+  return (
+    <DropdownMenuPortal>
+      <MenuPrimitive.Positioner
+        align={align}
+        alignOffset={alignOffset}
+        className="z-50"
+        side={side}
+        sideOffset={sideOffset}
+      >
+        <DropdownMenuDensityContext.Provider value={resolvedSize}>
+          <MenuPrimitive.Popup
+            className={cn(
+              "z-50 max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] min-w-52 origin-(--transform-origin) overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-sm text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
+              resolvedSize === "compact" && "min-w-40 p-0.5 text-xs",
+              className,
+            )}
+            {...props}
+          />
+        </DropdownMenuDensityContext.Provider>
+      </MenuPrimitive.Positioner>
+    </DropdownMenuPortal>
+  );
+};
 
 type DropdownMenuItemProps = Omit<
   ComponentPropsWithoutRef<typeof MenuPrimitive.Item>,
@@ -100,37 +117,78 @@ export const DropdownMenuItem = ({
   onSelect,
   ...props
 }: DropdownMenuItemProps) => (
-  <MenuPrimitive.Item
-    className={cn(
-      "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-sm text-foreground transition-transform duration-100 ease-out outline-none select-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
-      className,
-    )}
-    closeOnClick={closeOnSelect}
-    onClick={(event: MouseEvent<HTMLElement>) => onSelect?.(event)}
+  <DropdownMenuItemContent
+    className={className}
+    closeOnSelect={closeOnSelect}
+    onSelect={onSelect}
     {...props}
   />
 );
+
+const DropdownMenuItemContent = ({
+  className,
+  closeOnSelect,
+  onSelect,
+  ...props
+}: DropdownMenuItemProps) => {
+  const size = useContext(DropdownMenuDensityContext);
+
+  return (
+    <MenuPrimitive.Item
+      className={cn(
+        "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-sm text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+        size === "compact" && "min-h-7 gap-1.5 px-2 text-xs",
+        className,
+      )}
+      closeOnClick={closeOnSelect}
+      onClick={(event: MouseEvent<HTMLElement>) => onSelect?.(event)}
+      {...props}
+    />
+  );
+};
 
 export const DropdownMenuSubmenuTrigger = ({
   children,
   className,
   ...props
 }: ComponentPropsWithoutRef<typeof MenuPrimitive.SubmenuTrigger>) => (
-  <MenuPrimitive.SubmenuTrigger
-    className={cn(
-      "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-sm text-foreground transition-transform duration-100 ease-out outline-none select-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
-      className,
-    )}
-    {...props}
-  >
-    <span className="min-w-0 flex-1">{children}</span>
-    <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
-  </MenuPrimitive.SubmenuTrigger>
+  <DropdownMenuSubmenuTriggerContent className={className} {...props}>
+    {children}
+  </DropdownMenuSubmenuTriggerContent>
 );
+
+const DropdownMenuSubmenuTriggerContent = ({
+  children,
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof MenuPrimitive.SubmenuTrigger>) => {
+  const size = useContext(DropdownMenuDensityContext);
+
+  return (
+    <MenuPrimitive.SubmenuTrigger
+      className={cn(
+        "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-sm text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+        size === "compact" && "min-h-7 gap-1.5 px-2 text-xs",
+        className,
+      )}
+      {...props}
+    >
+      <span className="min-w-0 flex-1">{children}</span>
+      <ChevronRightIcon className="size-4 shrink-0 text-muted-fg" />
+    </MenuPrimitive.SubmenuTrigger>
+  );
+};
 
 export const DropdownMenuSeparator = ({
   className,
   ...props
-}: ComponentPropsWithoutRef<typeof MenuPrimitive.Separator>) => (
-  <MenuPrimitive.Separator className={cn("my-1 h-px bg-border", className)} {...props} />
-);
+}: ComponentPropsWithoutRef<typeof MenuPrimitive.Separator>) => {
+  const size = useContext(DropdownMenuDensityContext);
+
+  return (
+    <MenuPrimitive.Separator
+      className={cn("my-1 h-px bg-border", size === "compact" && "my-0.5", className)}
+      {...props}
+    />
+  );
+};

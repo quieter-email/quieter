@@ -54,7 +54,7 @@ const ToastIcon = ({ type }: { type: string | undefined }) => {
 
   if (type === "loading") {
     return (
-      <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
+      <span className="flex size-4 shrink-0 items-center justify-center text-muted-fg">
         <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
       </span>
     );
@@ -95,7 +95,7 @@ const ToastItem = ({ toast: item }: { toast: Toast.Root.ToastObject }) => {
   return (
     <Toast.Root
       className={cn(
-        "squircle absolute right-0 bottom-0 left-auto z-[calc(1000-var(--toast-index))] mr-0 h-(--height) w-full origin-bottom transform-[translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--peek))-(var(--shrink)*var(--height))))_scale(var(--scale))] rounded-xl border border-border bg-popover text-popover-foreground shadow-lg outline-none select-none [--gap:0.75rem] [--height:var(--toast-frontmost-height,var(--toast-height))] [--offset-y:calc(var(--toast-offset-y)*-1+calc(var(--toast-index)*var(--gap)*-1)+var(--toast-swipe-movement-y))] [--peek:0.75rem] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))] [transition:transform_0.35s_cubic-bezier(0.22,1,0.36,1),opacity_0.25s_ease,height_0.15s_ease,scale_0.25s_cubic-bezier(0.22,1,0.36,1)] after:absolute after:top-full after:left-0 after:h-[calc(var(--gap)+1px)] after:w-full after:content-[''] data-ending-style:opacity-0 data-expanded:h-(--toast-height) data-expanded:transform-[translateX(var(--toast-swipe-movement-x))_translateY(var(--offset-y))] data-limited:opacity-0 data-starting-style:scale-90 data-starting-style:opacity-0 data-ending-style:data-[swipe-direction=down]:transform-[translateY(calc(var(--toast-swipe-movement-y)+150%))] data-expanded:data-ending-style:data-[swipe-direction=down]:transform-[translateY(calc(var(--toast-swipe-movement-y)+150%))] data-ending-style:data-[swipe-direction=left]:transform-[translateX(calc(var(--toast-swipe-movement-x)-150%))_translateY(var(--offset-y))] data-expanded:data-ending-style:data-[swipe-direction=left]:transform-[translateX(calc(var(--toast-swipe-movement-x)-150%))_translateY(var(--offset-y))] data-ending-style:data-[swipe-direction=right]:transform-[translateX(calc(var(--toast-swipe-movement-x)+150%))_translateY(var(--offset-y))] data-expanded:data-ending-style:data-[swipe-direction=right]:transform-[translateX(calc(var(--toast-swipe-movement-x)+150%))_translateY(var(--offset-y))] data-ending-style:data-[swipe-direction=up]:transform-[translateY(calc(var(--toast-swipe-movement-y)-150%))] data-expanded:data-ending-style:data-[swipe-direction=up]:transform-[translateY(calc(var(--toast-swipe-movement-y)-150%))] motion-reduce:transition-none motion-reduce:data-starting-style:scale-100 [&[data-ending-style]:not([data-swipe-direction])]:scale-90 motion-reduce:[&[data-ending-style]:not([data-swipe-direction])]:scale-100",
+        "squircle absolute right-0 bottom-0 left-auto z-[calc(1000-var(--toast-index))] mr-0 h-(--height) w-full origin-bottom transform-[translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--peek))-(var(--shrink)*var(--height))))_scale(var(--scale))] rounded-xl border border-border bg-popover text-popover-fg shadow-lg select-none [--gap:0.75rem] [--height:var(--toast-frontmost-height,var(--toast-height))] [--offset-y:calc(var(--toast-offset-y)*-1+calc(var(--toast-index)*var(--gap)*-1)+var(--toast-swipe-movement-y))] [--peek:0.75rem] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))] [transition:transform_0.35s_cubic-bezier(0.22,1,0.36,1),opacity_0.25s_ease,height_0.15s_ease,scale_0.25s_cubic-bezier(0.22,1,0.36,1)] after:absolute after:top-full after:left-0 after:h-[calc(var(--gap)+1px)] after:w-full after:content-[''] data-ending-style:opacity-0 data-expanded:h-(--toast-height) data-expanded:transform-[translateX(var(--toast-swipe-movement-x))_translateY(var(--offset-y))] data-limited:opacity-0 data-starting-style:scale-90 data-starting-style:opacity-0 data-ending-style:data-[swipe-direction=down]:transform-[translateY(calc(var(--toast-swipe-movement-y)+150%))] data-expanded:data-ending-style:data-[swipe-direction=down]:transform-[translateY(calc(var(--toast-swipe-movement-y)+150%))] data-ending-style:data-[swipe-direction=left]:transform-[translateX(calc(var(--toast-swipe-movement-x)-150%))_translateY(var(--offset-y))] data-expanded:data-ending-style:data-[swipe-direction=left]:transform-[translateX(calc(var(--toast-swipe-movement-x)-150%))_translateY(var(--offset-y))] data-ending-style:data-[swipe-direction=right]:transform-[translateX(calc(var(--toast-swipe-movement-x)+150%))_translateY(var(--offset-y))] data-expanded:data-ending-style:data-[swipe-direction=right]:transform-[translateX(calc(var(--toast-swipe-movement-x)+150%))_translateY(var(--offset-y))] data-ending-style:data-[swipe-direction=up]:transform-[translateY(calc(var(--toast-swipe-movement-y)-150%))] data-expanded:data-ending-style:data-[swipe-direction=up]:transform-[translateY(calc(var(--toast-swipe-movement-y)-150%))] motion-reduce:transition-none motion-reduce:data-starting-style:scale-100 [&[data-ending-style]:not([data-swipe-direction])]:scale-90 motion-reduce:[&[data-ending-style]:not([data-swipe-direction])]:scale-100",
         shakeClass,
       )}
       toast={item}
@@ -108,7 +108,7 @@ const ToastItem = ({ toast: item }: { toast: Toast.Root.ToastObject }) => {
         </div>
         <Toast.Close
           aria-label="Dismiss"
-          className="squircle absolute top-3 right-3 flex size-7 items-center justify-center rounded-md text-muted-foreground transition-transform duration-100 ease-out outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
+          className="squircle absolute top-3 right-3 flex size-7 items-center justify-center rounded-md text-muted-fg transition-transform duration-100 ease-out hover:text-fg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
         >
           <HugeiconsIcon aria-hidden className="size-3.5" icon={Cancel01Icon} />
         </Toast.Close>
@@ -127,7 +127,7 @@ export const Toaster = ({
     <Toast.Portal>
       <Toast.Viewport
         className={cn(
-          "fixed top-auto right-4 bottom-4 left-auto z-50 mx-auto w-[min(22.5rem,calc(100vw-2rem))] outline-none",
+          "fixed top-auto right-4 bottom-4 left-auto z-50 mx-auto w-[min(22.5rem,calc(100vw-2rem))]",
           className,
         )}
         {...props}

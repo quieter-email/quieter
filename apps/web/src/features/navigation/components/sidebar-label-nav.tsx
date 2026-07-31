@@ -53,6 +53,7 @@ import {
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
+import { Textarea } from "@quieter/ui/textarea";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LayoutGroup } from "motion/react";
@@ -437,12 +438,12 @@ export const SidebarLabelNav = ({
         className="mb-1 flex items-center justify-between px-2"
         index={8}
       >
-        <p className="text-xs font-medium text-muted-foreground">{labelTitle}</p>
+        <p className="text-xs font-medium text-muted-fg">{labelTitle}</p>
         {canManage && (
           <IconButtonTooltip label={`Edit ${labelNounPlural}`}>
             <Button
               aria-label={`Edit ${labelNounPlural}`}
-              className="size-6 text-muted-foreground hover:text-foreground"
+              className="size-6 text-muted-fg hover:text-fg"
               onClick={() => {
                 resetLabelForms();
                 setIsEditDialogOpen(true);
@@ -467,7 +468,7 @@ export const SidebarLabelNav = ({
           {areLabelsPending ? (
             <SidebarEntrance
               animateEntrance={shouldAnimateEntrance}
-              className="px-2 py-1 text-xs text-muted-foreground"
+              className="px-2 py-1 text-xs text-muted-fg"
               index={9}
             >
               Loading {labelNounPlural}…
@@ -483,7 +484,7 @@ export const SidebarLabelNav = ({
           ) : visibleUserLabels.length === 0 ? (
             <SidebarEntrance
               animateEntrance={shouldAnimateEntrance}
-              className="px-2 py-1 text-xs text-muted-foreground"
+              className="px-2 py-1 text-xs text-muted-fg"
               index={9}
             >
               No {labelNounPlural} shown.
@@ -506,8 +507,8 @@ export const SidebarLabelNav = ({
                     className={cn(
                       "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light",
                       {
-                        "text-foreground": isActive || labelHovered,
-                        "text-muted-foreground": !isActive && !labelHovered,
+                        "text-fg": isActive || labelHovered,
+                        "text-muted-fg": !isActive && !labelHovered,
                       },
                     )}
                     hover={labelHovered}
@@ -538,7 +539,7 @@ export const SidebarLabelNav = ({
                     <ManagedLabelColorDot color={label.color} />
                     <span className="min-w-0 truncate">{label.name}</span>
                     {mailboxProvider === "managed" ? (
-                      <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
+                      <span className="ml-auto text-[10px] text-muted-fg tabular-nums">
                         {managedLabelCountById.get(label.id) ?? 0}
                       </span>
                     ) : null}
@@ -584,7 +585,7 @@ export const SidebarLabelNav = ({
                 <Input
                   aria-label={`New ${labelNoun} name`}
                   autoFocus
-                  className="min-w-48 flex-1 border-0 bg-background/70 shadow-none"
+                  className="min-w-48 flex-1 border-0 bg-bg/70 shadow-none"
                   disabled={createLabelMutation.isPending}
                   onChange={(event) => setNewLabelName(event.currentTarget.value)}
                   placeholder={`New ${labelNoun}`}
@@ -608,11 +609,11 @@ export const SidebarLabelNav = ({
 
               <div>
                 {areLabelsPending ? (
-                  <p className="py-3 text-sm text-muted-foreground">Loading {labelNounPlural}…</p>
+                  <p className="py-3 text-sm text-muted-fg">Loading {labelNounPlural}…</p>
                 ) : labelsUnavailable ? (
                   <p className="py-3 text-sm text-destructive">Could not load {labelNounPlural}.</p>
                 ) : userLabels.length === 0 ? (
-                  <p className="py-3 text-sm text-muted-foreground">No {labelNounPlural} yet.</p>
+                  <p className="py-3 text-sm text-muted-fg">No {labelNounPlural} yet.</p>
                 ) : (
                   <div className="flex flex-col gap-1">
                     {userLabels.map((label, index) => {
@@ -621,12 +622,12 @@ export const SidebarLabelNav = ({
                         editingLabelDetails?.labelId === label.id ? editingLabelDetails : null;
                       return (
                         <div className="rounded-lg" key={label.id}>
-                          <div className="squircle flex min-h-12 items-center gap-3 px-2 hover:bg-background/50">
+                          <div className="squircle flex min-h-12 items-center gap-3 px-2 hover:bg-bg/50">
                             <ManagedLabelColorDot className="size-4" color={label.color} />
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm">{label.name}</p>
                               {(label.description || label.inclusionCriteria) && (
-                                <p className="truncate text-xs text-muted-foreground">
+                                <p className="truncate text-xs text-muted-fg">
                                   {label.description || label.inclusionCriteria}
                                 </p>
                               )}
@@ -686,12 +687,9 @@ export const SidebarLabelNav = ({
                               <Button
                                 aria-label={isShown ? "Hide in sidebar" : "Show in sidebar"}
                                 aria-pressed={isShown}
-                                className={cn(
-                                  "-mr-3 size-7 text-muted-foreground hover:text-foreground",
-                                  {
-                                    "text-foreground": isShown,
-                                  },
-                                )}
+                                className={cn("-mr-3 size-7 text-muted-fg hover:text-fg", {
+                                  "text-fg": isShown,
+                                })}
                                 onClick={() => toggleSidebarVisibility(label.id)}
                                 size="icon-sm"
                                 type="button"
@@ -708,7 +706,7 @@ export const SidebarLabelNav = ({
                               <IconButtonTooltip label={`${label.name} options`}>
                                 <DropdownMenuTrigger
                                   aria-label={`${label.name} options`}
-                                  className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-background/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/20"
+                                  className="inline-flex size-7 items-center justify-center rounded-md text-muted-fg hover:bg-bg/50 hover:text-fg"
                                 >
                                   <HugeiconsIcon
                                     aria-hidden
@@ -765,9 +763,9 @@ export const SidebarLabelNav = ({
                             >
                               <Field>
                                 <FieldLabel>What this {labelNoun} is for</FieldLabel>
-                                <textarea
+                                <Textarea
                                   aria-label={`What this ${labelNoun} is for`}
-                                  className="keyboard-focus-ring squircle min-h-20 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="min-h-20"
                                   disabled={updateLabelDetailsMutation.isPending}
                                   maxLength={2000}
                                   onChange={(event) => {
@@ -786,9 +784,9 @@ export const SidebarLabelNav = ({
                               {mailboxProvider === "gmail" ? (
                                 <Field>
                                   <FieldLabel>Emails to include</FieldLabel>
-                                  <textarea
+                                  <Textarea
                                     aria-label="Emails to include"
-                                    className="keyboard-focus-ring squircle min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="min-h-24"
                                     disabled={updateLabelDetailsMutation.isPending}
                                     maxLength={4000}
                                     onChange={(event) => {
@@ -857,7 +855,7 @@ export const SidebarLabelNav = ({
                 <FieldLabel>Name</FieldLabel>
                 <Input
                   autoFocus
-                  className="border-0 bg-background/70 shadow-none"
+                  className="border-0 bg-bg/70 shadow-none"
                   disabled={updateLabelMutation.isPending}
                   onChange={(event) => {
                     const name = event.currentTarget.value;
@@ -905,7 +903,7 @@ export const SidebarLabelNav = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogBody>
-            <p className="text-sm text-foreground">
+            <p className="text-sm text-fg">
               Delete {deletingLabel?.name ? `"${deletingLabel.name}"` : `this ${labelNoun}`}?
             </p>
           </AlertDialogBody>

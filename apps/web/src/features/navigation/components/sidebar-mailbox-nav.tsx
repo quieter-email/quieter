@@ -76,8 +76,8 @@ export const SidebarMailboxNav = ({
                   active={isActive}
                   aria-current={isActive ? "page" : undefined}
                   className={cn("w-full justify-start gap-3 px-3 text-left", {
-                    "text-foreground": isActive || itemHovered,
-                    "text-muted-foreground": !isActive && !itemHovered,
+                    "text-fg": isActive || itemHovered,
+                    "text-muted-fg": !isActive && !itemHovered,
                   })}
                   hover={itemHovered}
                   hoverEnter={itemHovered && hoverEnter}
@@ -100,11 +100,7 @@ export const SidebarMailboxNav = ({
                   type="button"
                   variant="ghost"
                 >
-                  <HugeiconsIcon
-                    strokeWidth={1.5}
-                    className="shrink-0 text-foreground"
-                    icon={item.icon}
-                  />
+                  <HugeiconsIcon strokeWidth={1.5} className="shrink-0 text-fg" icon={item.icon} />
                   {item.label}
                 </SidebarNavItem>
               </SidebarEntrance>

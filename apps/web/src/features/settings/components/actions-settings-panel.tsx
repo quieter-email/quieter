@@ -29,6 +29,7 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@quieter/ui/select";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
+import { Textarea } from "@quieter/ui/textarea";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -150,7 +151,7 @@ export const ActionsSettingsPanel = () => {
                 <>
                   <br />
                   <br />
-                  <span className="text-muted-foreground">
+                  <span className="text-muted-fg">
                     Local demo mail is for previewing the inbox only. Connect a real mailbox to
                     create actions.
                   </span>
@@ -427,7 +428,7 @@ const ActionSimpleEditor = ({
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogBody>
-                      <p className="text-sm text-muted-foreground">This cannot be undone.</p>
+                      <p className="text-sm text-muted-fg">This cannot be undone.</p>
                     </AlertDialogBody>
                     <AlertDialogFooter>
                       <AlertDialogCloseButton disabled={deleteActionMutation.isPending}>
@@ -601,11 +602,9 @@ const ActionSimpleEditor = ({
                 label="Instruction"
               >
                 <div className="space-y-2">
-                  <textarea
+                  <Textarea
                     aria-label="Action instruction"
-                    className={cn(
-                      "squircle min-h-36 w-full resize-y rounded-md border border-input bg-background-light px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/30",
-                    )}
+                    className="min-h-36"
                     onChange={(event) => setInstructions(event.target.value)}
                     placeholder={DEFAULT_ACTION_INSTRUCTIONS}
                     value={instructions}

@@ -6,7 +6,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../../lib/cn";
 
 const avatarRootVariants = cva(
-  "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted text-foreground",
+  "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted text-fg",
   {
     variants: {
       size: {

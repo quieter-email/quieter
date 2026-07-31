@@ -18,12 +18,14 @@ import { MessageView } from "./message-view";
 
 type MessageDetailProps = {
   activeMailbox: MailboxCategory;
+  autoFocus?: boolean;
   currentUserEmail?: string | null;
   isPending?: boolean;
   mailboxActions: MailboxActions;
   mailboxId: string;
   mailboxProvider: "api" | "gmail" | "managed";
   onBackToList?: () => void;
+  onAutoFocusComplete?: () => void;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   pendingActions: MailboxPendingActions;
   selectedMessage: MessageListItem | null;
@@ -63,10 +65,12 @@ const MessageDetailLoadingSkeleton = () => (
 
 export const MessageDetail = ({
   activeMailbox,
+  autoFocus,
   currentUserEmail,
   isPending,
   mailboxActions,
   onBackToList,
+  onAutoFocusComplete,
   onComposeDraftRequested,
   pendingActions,
   selectedMessage,
@@ -126,22 +130,21 @@ export const MessageDetail = ({
           ) : selectedMessage ? (
             <Suspense
               fallback={
-                <div className="grid h-full place-items-center text-sm text-muted-foreground">
-                  <HugeiconsIcon
-                    className="animate-spin text-muted-foreground"
-                    icon={Loading03Icon}
-                  />
+                <div className="grid h-full place-items-center text-sm text-muted-fg">
+                  <HugeiconsIcon className="animate-spin text-muted-fg" icon={Loading03Icon} />
                 </div>
               }
             >
               <MessageView
                 activeMailbox={activeMailbox}
+                autoFocus={autoFocus}
                 currentUserEmail={currentUserEmail}
                 mailboxActions={mailboxActions}
                 mailboxId={mailboxId}
                 mailboxProvider={mailboxProvider}
                 message={selectedMessage}
                 onBackToList={onBackToList}
+                onAutoFocusComplete={onAutoFocusComplete}
                 onComposeDraftRequested={onComposeDraftRequested}
                 pendingActions={pendingActions}
               />

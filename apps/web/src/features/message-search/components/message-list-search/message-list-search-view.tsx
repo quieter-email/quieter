@@ -1,5 +1,6 @@
 "use client";
 
+import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import type { ComponentPropsWithoutRef } from "react";
 import {
   Cancel01Icon,
@@ -15,6 +16,7 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import { ArrowInteractionButton } from "~/components/arrow-interaction-button";
 import { SpinWhileActive } from "~/components/spin-while-active";
+import { mailboxLabelSearchPillSurfaceClassNameByColor } from "~/features/message-labels/domain/mailbox-label-presentation";
 import { normalizeLabelSelectionKey } from "~/features/message-search/state/message-list-search-state";
 import type { MessageListSearchController } from "./use-message-list-search-controller";
 import { MessageListSearchDropdown } from "../message-list-search-dropdown";
@@ -47,7 +49,7 @@ const getFilterLabel = (type: string) => {
 };
 
 const searchToolbarControlClassName =
-  "size-10 rounded-xl bg-secondary/55 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground [&_svg]:size-3.5";
+  "h-full w-9 rounded-xl bg-secondary/55 text-muted-fg shadow-none hover:bg-muted hover:text-fg [&_svg]:size-3.5";
 
 export const MessageListSearchView = ({
   controller,
@@ -81,7 +83,6 @@ export const MessageListSearchView = ({
     openDateFilter,
     openSearchDropdown,
     removeFilterFromPointer,
-    rowRef,
     runSearch,
     selectDateFilterValue,
     selectDatePreset,
@@ -89,54 +90,61 @@ export const MessageListSearchView = ({
     setSegmentRef,
     suppressNextBlurCommit,
     textInputRef,
+    textInputIndex,
     toggleLabelToken,
     updateFilterValue,
     updateSearchText,
     userLabels,
   } = controller;
+  const userLabelsBySelectionKey = new Map<string, MailboxLabel>();
+  for (const label of userLabels) {
+    if (label.type === "user") {
+      userLabelsBySelectionKey.set(normalizeLabelSelectionKey(label.name), label);
+    }
+  }
+  const filterTypeOccurrences = new Map<string, number>();
+
   return (
     <search className="@container block bg-transparent p-2 @sm:px-4 @sm:pt-4 @sm:pb-3">
       <div className="relative">
-        <div className="flex min-w-0 items-center gap-2 lg:-ml-2">
+        <div className="flex min-w-0 items-stretch gap-2 lg:-ml-2">
           {onOpenSidebar && (
-            <IconButtonTooltip label="Open sidebar">
+            <div className="flex self-stretch">
+              <IconButtonTooltip label="Open sidebar">
+                <Button
+                  aria-label="Open sidebar"
+                  className={cn(searchToolbarControlClassName, "lg:hidden")}
+                  onClick={onOpenSidebar}
+                  size="icon-lg"
+                  variant="ghost"
+                >
+                  <HugeiconsIcon icon={SidebarLeftIcon} />
+                </Button>
+              </IconButtonTooltip>
+            </div>
+          )}
+
+          <div className="flex self-stretch">
+            <IconButtonTooltip label="Refresh list">
               <Button
-                aria-label="Open sidebar"
-                className={cn(searchToolbarControlClassName, "lg:hidden")}
-                onClick={onOpenSidebar}
+                aria-label="Refresh list"
+                className={searchToolbarControlClassName}
+                disabled={isRefreshing}
+                onClick={() => void onRefresh()}
                 size="icon-lg"
                 variant="ghost"
               >
-                <HugeiconsIcon icon={SidebarLeftIcon} />
+                <SpinWhileActive active={isRefreshing}>
+                  <HugeiconsIcon icon={Refresh01Icon} />
+                </SpinWhileActive>
               </Button>
             </IconButtonTooltip>
-          )}
+          </div>
 
-          <IconButtonTooltip label="Refresh list">
-            <Button
-              aria-label="Refresh list"
-              className={searchToolbarControlClassName}
-              disabled={isRefreshing}
-              onClick={() => void onRefresh()}
-              size="icon-lg"
-              variant="ghost"
-            >
-              <SpinWhileActive active={isRefreshing}>
-                <HugeiconsIcon icon={Refresh01Icon} />
-              </SpinWhileActive>
-            </Button>
-          </IconButtonTooltip>
-
-          <div ref={fieldRef} className="relative min-w-0 flex-1" onBlur={handleSearchFieldBlur}>
-            <div className="keyboard-focus-within squircle flex h-10 min-w-0 items-center gap-1 rounded-xl bg-secondary/55 p-1 transition-colors duration-150 ease-out">
+          <div className="relative min-w-0 flex-1" onBlur={handleSearchFieldBlur} ref={fieldRef}>
+            <div className="squircle flex min-h-9 min-w-0 items-center gap-1 rounded-xl border border-transparent bg-secondary/55 p-1 transition-colors duration-150 ease-out has-[input[data-slot=search-input]:focus-visible]:border-ring has-[input[data-slot=search-input]:focus-visible]:ring-1 has-[input[data-slot=search-input]:focus-visible]:ring-ring/45 has-[input[data-slot=search-input]:focus-visible]:outline-none">
               <div
-                className={cn(
-                  "flex min-h-8 min-w-0 flex-1 scrollbar-none items-center gap-1 overflow-x-auto pr-1 [&::-webkit-scrollbar]:hidden",
-                  {
-                    "pl-1": currentState.filters.length > 0,
-                    "pl-2.5": currentState.filters.length === 0,
-                  },
-                )}
+                className="flex min-w-0 flex-1 scroll-px-1 scrollbar-none items-center gap-1 overflow-x-auto overscroll-x-contain [&::-webkit-scrollbar]:hidden"
                 onMouseDown={(event) => {
                   const target = event.target as HTMLElement;
                   if (target.closest("button, input")) {
@@ -147,18 +155,28 @@ export const MessageListSearchView = ({
                   openSearchDropdown();
                   focusTextInput({ toEnd: true });
                 }}
-                ref={rowRef}
                 role="presentation"
               >
                 {currentState.filters.map((filter, index) => {
+                  const filterOccurrence = filterTypeOccurrences.get(filter.type) ?? 0;
+                  filterTypeOccurrences.set(filter.type, filterOccurrence + 1);
+                  const filterRenderKey = `${filter.type}:${filterOccurrence}`;
+
                   if (filter.type === "label") {
+                    const label = userLabelsBySelectionKey.get(
+                      normalizeLabelSelectionKey(filter.value),
+                    );
+
                     return (
                       <button
                         className={cn(
                           filterChipClassName,
-                          "gap-1 px-2 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30",
+                          "gap-1",
+                          label &&
+                            mailboxLabelSearchPillSurfaceClassNameByColor[label.color ?? "gray"],
                         )}
-                        key={`label:${normalizeLabelSelectionKey(filter.value)}`}
+                        key={filterRenderKey}
+                        style={{ order: index * 2 + 1 }}
                         onClick={(event) => {
                           event.stopPropagation();
                           removeFilterFromPointer(index);
@@ -177,8 +195,8 @@ export const MessageListSearchView = ({
                         }}
                         type="button"
                       >
-                        {filter.negated ? <span className="text-muted-foreground">Not</span> : null}
-                        <span>{filter.value}</span>
+                        {filter.negated ? <span className="text-muted-fg">Not</span> : null}
+                        <span className="min-w-0 truncate">{filter.value}</span>
                       </button>
                     );
                   }
@@ -186,11 +204,9 @@ export const MessageListSearchView = ({
                   if (isFixedValueFilter(filter)) {
                     return (
                       <button
-                        className={cn(
-                          filterChipClassName,
-                          "gap-1 px-2 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30",
-                        )}
-                        key={`${filter.type}:${filter.value}`}
+                        className={cn(filterChipClassName, "gap-1")}
+                        key={filterRenderKey}
+                        style={{ order: index * 2 + 1 }}
                         onClick={(event) => {
                           event.stopPropagation();
                           removeFilterFromPointer(index);
@@ -207,8 +223,8 @@ export const MessageListSearchView = ({
                         }}
                         type="button"
                       >
-                        {filter.negated ? <span className="text-muted-foreground">Not</span> : null}
-                        <span>
+                        {filter.negated ? <span className="text-muted-fg">Not</span> : null}
+                        <span className="min-w-0 truncate">
                           {filter.value.charAt(0).toLocaleUpperCase() +
                             filter.value.slice(1).replaceAll("_", " ")}
                         </span>
@@ -219,28 +235,23 @@ export const MessageListSearchView = ({
                   const isCurrentFilterDate = isDateFilter(filter);
                   return (
                     <div
-                      className={cn(filterChipClassName, "gap-1 px-1.5 transition-colors", {
+                      className={cn(filterChipClassName, "gap-1", {
                         "bg-accent ring-2 ring-ring/30": activeDateFilterIndex === index,
                       })}
-                      key={`${filter.negated ? "not:" : ""}${filter.type}:${filter.value}`}
+                      key={filterRenderKey}
                       ref={(node) => setDateTokenRef(index, node)}
+                      style={{ order: index * 2 + 1 }}
                     >
-                      {filter.negated ? (
-                        <span className="shrink-0 text-muted-foreground">Not</span>
-                      ) : null}
-                      <span className="shrink-0 text-muted-foreground">
-                        {getFilterLabel(filter.type)}
-                      </span>
+                      {filter.negated ? <span className="shrink-0 text-muted-fg">Not</span> : null}
+                      <span className="shrink-0 text-muted-fg">{getFilterLabel(filter.type)}</span>
                       <input
                         aria-label={`${filter.type} filter value`}
                         autoCapitalize="off"
                         autoCorrect="off"
                         className={cn(
-                          "field-sizing-content min-w-[1ch] bg-transparent text-foreground outline-none focus-visible:shadow-none",
+                          "field-sizing-content max-w-56 min-w-[1ch] bg-transparent text-fg outline-none",
                           {
-                            "mr-1": index === 0,
-                            "mx-1": index > 0,
-                            "placeholder:text-muted-foreground": isCurrentFilterDate,
+                            "placeholder:text-muted-fg": isCurrentFilterDate,
                           },
                         )}
                         onChange={(event) => updateFilterValue(index, event.currentTarget.value)}
@@ -257,7 +268,7 @@ export const MessageListSearchView = ({
                       />
                       <button
                         aria-label={`Remove ${getFilterLabel(filter.type)} filter`}
-                        className="flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
+                        className="flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-fg hover:text-fg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
                         onClick={(event) => {
                           event.stopPropagation();
                           removeFilterFromPointer(index);
@@ -280,14 +291,17 @@ export const MessageListSearchView = ({
                 <input
                   aria-label="Search"
                   autoCapitalize="off"
+                  autoComplete="off"
                   autoCorrect="off"
-                  className="h-7 min-w-[8ch] flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:shadow-none"
+                  className="box-border field-sizing-content h-6 max-w-full min-w-[3ch] shrink-0 grow basis-auto bg-transparent pl-2 text-[13px] text-fg outline-none placeholder:text-muted-fg"
+                  data-slot="search-input"
                   onChange={(event) => updateSearchText(event.currentTarget.value)}
                   onFocus={openSearchDropdown}
                   onKeyDown={handleTextInputKeyDown}
                   placeholder={currentState.filters.length > 0 ? "" : "Search"}
                   ref={textInputRef}
                   spellCheck={false}
+                  style={{ order: textInputIndex * 2 }}
                   type="text"
                   value={currentState.text}
                 />
@@ -299,7 +313,7 @@ export const MessageListSearchView = ({
                     <IconButtonTooltip key="clear-search" label="Clear search">
                       <Button
                         aria-label="Clear search"
-                        className="shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                        className="size-6 shrink-0 rounded-lg text-muted-fg hover:bg-muted hover:text-fg"
                         onClick={(event) => {
                           event.stopPropagation();
                           clearSearch();
@@ -307,7 +321,7 @@ export const MessageListSearchView = ({
                         onMouseDown={(event) => {
                           event.preventDefault();
                         }}
-                        size="icon-sm"
+                        size="icon-xs"
                         type="button"
                         variant="ghost"
                         render={(props) => (
@@ -329,7 +343,7 @@ export const MessageListSearchView = ({
               <IconButtonTooltip label="Run search">
                 <Button
                   aria-label="Run search"
-                  className="shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="size-6 shrink-0 rounded-lg text-muted-fg hover:bg-muted hover:text-fg"
                   onClick={(event) => {
                     event.stopPropagation();
                     runSearch();
@@ -337,7 +351,7 @@ export const MessageListSearchView = ({
                   onMouseDown={(event) => {
                     event.preventDefault();
                   }}
-                  size="icon-sm"
+                  size="icon-xs"
                   type="button"
                   variant="ghost"
                 >
@@ -419,19 +433,21 @@ export const MessageListSearchView = ({
             />
           </div>
 
-          <IconButtonTooltip label="Scroll to top">
-            <ArrowInteractionButton
-              aria-label="Scroll to top"
-              className={searchToolbarControlClassName}
-              onClick={async () => {
-                const didScroll = await onScrollToTop();
-                return typeof didScroll === "boolean" ? didScroll : true;
-              }}
-              size="icon-lg"
-              type="button"
-              variant="ghost"
-            />
-          </IconButtonTooltip>
+          <div className="flex self-stretch">
+            <IconButtonTooltip label="Scroll to top">
+              <ArrowInteractionButton
+                aria-label="Scroll to top"
+                className={searchToolbarControlClassName}
+                onClick={async () => {
+                  const didScroll = await onScrollToTop();
+                  return typeof didScroll === "boolean" ? didScroll : true;
+                }}
+                size="icon-lg"
+                type="button"
+                variant="ghost"
+              />
+            </IconButtonTooltip>
+          </div>
         </div>
       </div>
     </search>

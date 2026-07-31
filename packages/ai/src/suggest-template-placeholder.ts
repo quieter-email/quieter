@@ -1,8 +1,9 @@
 import { chat, type ChatMiddleware } from "@tanstack/ai";
 import { z } from "zod";
+import { defaultChatModel } from "./chat-models";
 import { createOpenRouterAdapter } from "./openrouter";
 
-export const TEMPLATE_PLACEHOLDER_SUGGESTION_MODEL = "openai/gpt-5-nano" as const;
+export const TEMPLATE_PLACEHOLDER_SUGGESTION_MODEL = defaultChatModel;
 
 const templatePlaceholderSuggestionSchema = z.object({
   value: z.string().trim().max(500).nullable(),

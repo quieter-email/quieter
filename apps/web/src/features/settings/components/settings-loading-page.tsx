@@ -51,15 +51,13 @@ const SettingsPendingOverview = () => {
   return (
     <div className="w-full space-y-8">
       <header>
-        <h1 className="text-xl font-normal tracking-tight text-foreground">Settings</h1>
+        <h1 className="text-xl font-normal tracking-tight text-fg">Settings</h1>
       </header>
 
       {SETTINGS_SECTIONS.map((section) => (
         <section className="space-y-4" key={section}>
-          <h2 className="text-sm font-normal text-foreground">
-            {SETTINGS_SECTION_LABELS[section]}
-          </h2>
-          <div className="squircle @container overflow-hidden rounded-lg border border-border bg-background/58">
+          <h2 className="text-sm font-normal text-fg">{SETTINGS_SECTION_LABELS[section]}</h2>
+          <div className="squircle @container overflow-hidden rounded-lg border border-border bg-bg/58">
             {navItems.map(({ description, section: itemSection, tab, title }) => {
               if (itemSection !== section) return null;
 
@@ -68,12 +66,12 @@ const SettingsPendingOverview = () => {
                   className="relative flex w-full items-center gap-4 px-4 py-3 after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6"
                   key={tab}
                 >
-                  <div className="squircle flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-foreground">
+                  <div className="squircle flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-fg">
                     <HugeiconsIcon aria-hidden className="size-4" icon={SETTINGS_NAV_ICONS[tab]} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[0.8rem] font-normal text-foreground">{title}</p>
-                    <p className="mt-0.5 truncate text-xs/4 text-muted-foreground">{description}</p>
+                    <p className="truncate text-[0.8rem] font-normal text-fg">{title}</p>
+                    <p className="mt-0.5 truncate text-xs/4 text-muted-fg">{description}</p>
                   </div>
                   {SETTINGS_DYNAMIC_META.has(tab) ? (
                     <output
@@ -89,7 +87,7 @@ const SettingsPendingOverview = () => {
                   ) : null}
                   <span
                     aria-hidden
-                    className="mr-1 size-2.5 shrink-0 rotate-45 border-t border-r border-muted-foreground"
+                    className="mr-1 size-2.5 shrink-0 rotate-45 border-t border-r border-muted-fg"
                   />
                 </div>
               );
@@ -102,14 +100,14 @@ const SettingsPendingOverview = () => {
 };
 
 export const SettingsLoadingPage = ({ tab = "overview" }: { tab?: SettingsTab }) => (
-  <main className="min-h-dvh overflow-hidden bg-background-dark text-foreground">
+  <main className="min-h-dvh overflow-hidden bg-bg-elevated text-fg">
     <div className="mx-auto w-full max-w-205 px-5 py-8 md:px-8 md:py-14">
       {tab === "overview" ? (
         <SettingsPendingOverview />
       ) : (
         <div className="space-y-8">
           <header>
-            <h1 className="text-xl font-normal tracking-tight text-foreground">
+            <h1 className="text-xl font-normal tracking-tight text-fg">
               {SETTINGS_DETAIL_TITLES[tab].title}
             </h1>
           </header>
@@ -118,7 +116,7 @@ export const SettingsLoadingPage = ({ tab = "overview" }: { tab?: SettingsTab })
             aria-live="polite"
             className="flex min-h-64 items-center justify-center"
           >
-            <LoadingSpinner className="size-8 text-muted-foreground" />
+            <LoadingSpinner className="size-8 text-muted-fg" />
             <span className="sr-only">Loading {tab} settings</span>
           </output>
         </div>

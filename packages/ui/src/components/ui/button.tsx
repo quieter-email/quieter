@@ -10,20 +10,19 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../../lib/cn";
 
 const buttonVariants = cva(
-  "squircle inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-sm whitespace-nowrap transition-transform duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "squircle inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-sm whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default:
-          "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/85",
-        outline:
-          "border-input bg-background-light text-foreground shadow-sm hover:bg-muted active:bg-muted/80",
+        default: "bg-primary text-primary-fg shadow-sm hover:bg-primary/90 active:bg-primary/85",
+        outline: "border-border bg-bg-surface text-fg shadow-sm hover:bg-muted active:bg-muted/80",
         ghost:
-          "bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground active:bg-muted/80 active:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground",
+          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-muted/80 active:text-fg aria-[current=page]:bg-muted aria-[current=page]:text-fg",
         destructive:
-          "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
+          "bg-destructive text-destructive-fg shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
       },
       size: {
+        "icon-xs": "size-7 p-0 [&_svg]:size-3.5",
         sm: "h-8 px-3.5 text-[13px] [&_svg]:size-3.5",
         default: "h-9 px-4 text-sm [&_svg]:size-4",
         lg: "h-10 px-5 text-base [&_svg]:size-4.5",

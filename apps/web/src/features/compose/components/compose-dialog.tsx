@@ -120,9 +120,8 @@ type RecipientInputState = {
 };
 
 const composeInputFrameClass =
-  "compose-input-frame flex min-h-11 items-center gap-3 rounded-lg border border-transparent bg-transparent px-4 outline-none transition-[border-color,box-shadow,background-color]";
-const composeInputLabelClass =
-  "flex w-10 shrink-0 items-center text-xs font-normal text-muted-foreground";
+  "compose-input-frame relative flex min-h-11 items-center gap-3 rounded-none border border-transparent bg-transparent px-4 transition-[border-color,box-shadow,background-color] has-[input:focus-visible]:border-ring has-[input:focus-visible]:ring-1 has-[input:focus-visible]:ring-ring/45 has-[input:focus-visible]:outline-none has-[input:focus-visible]:ring-inset";
+const composeInputLabelClass = "flex w-10 shrink-0 items-center text-xs font-normal text-muted-fg";
 
 const serializeRecipientValue = (tokens: readonly string[], inputValue: string) =>
   [...tokens, inputValue.trim()].filter(Boolean).join(", ");
@@ -177,7 +176,8 @@ const ComposeTextField = ({
   <div>
     <div
       className={cn(composeInputFrameClass, className, {
-        "bg-destructive/10": invalid,
+        "border-destructive bg-destructive/10 has-[input:focus-visible]:border-destructive has-[input:focus-visible]:ring-destructive/45":
+          invalid,
       })}
     >
       <span className={composeInputLabelClass}>{label}</span>
@@ -185,7 +185,7 @@ const ComposeTextField = ({
         aria-invalid={invalid}
         aria-label={ariaLabel}
         autoComplete="off"
-        className="min-w-0 flex-1 bg-transparent py-2.5 text-sm/6 text-foreground outline-none placeholder:text-muted-foreground/60"
+        className="min-w-0 flex-1 bg-transparent py-2.5 text-sm/6 text-fg placeholder:text-muted-fg/60 focus-visible:outline-none"
         disabled={disabled}
         onBlur={onBlur}
         onChange={(event) => onChange(event.currentTarget.value)}
@@ -219,7 +219,7 @@ const RecipientChip = ({
         "group inline-flex min-h-8 max-w-full items-center gap-2 rounded-md border bg-muted/50 px-2.5 py-1 text-left text-xs transition-colors",
         {
           "border-destructive/40 bg-destructive/10 text-destructive": invalid,
-          "border-border text-foreground": !invalid,
+          "border-border text-fg": !invalid,
         },
       )}
     >
@@ -229,7 +229,7 @@ const RecipientChip = ({
           <span
             className={cn("block truncate text-[11px]/3", {
               "text-destructive/75": invalid,
-              "text-muted-foreground": !invalid,
+              "text-muted-fg": !invalid,
             })}
           >
             {detail}
@@ -241,7 +241,7 @@ const RecipientChip = ({
           <button
             aria-label={removeLabel}
             className={cn(
-              "grid size-4 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-background hover:text-foreground",
+              "grid size-4 shrink-0 place-items-center rounded-full text-muted-fg transition-colors hover:bg-bg hover:text-fg",
               {
                 "text-destructive/70 hover:text-destructive": invalid,
               },
@@ -351,7 +351,8 @@ const ComposeRecipientField = ({
           "min-h-11 flex-wrap items-start gap-2 py-1.5 pr-2",
           className,
           {
-            "bg-destructive/10": invalid,
+            "border-destructive bg-destructive/10 has-[input:focus-visible]:border-destructive has-[input:focus-visible]:ring-destructive/45":
+              invalid,
             "cursor-text": !disabled,
           },
         )}
@@ -371,7 +372,7 @@ const ComposeRecipientField = ({
             aria-invalid={invalid}
             aria-label={ariaLabel}
             autoComplete="off"
-            className="h-8 min-w-[12ch] flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/60"
+            className="h-8 min-w-[12ch] flex-1 bg-transparent text-sm text-fg placeholder:text-muted-fg/60 focus-visible:outline-none"
             disabled={disabled}
             onBlur={() => {
               commitInputValue();
@@ -613,7 +614,7 @@ export const ComposeDialog = ({
     <Dialog onOpenChange={handleDialogOpenChange} open={state.open}>
       <LazyMotion features={domAnimation}>
         <DialogContent
-          className="squircle h-[min(92vh,58rem)] max-h-[94vh] w-[min(96vw,72rem)] overflow-hidden rounded-4xl border-border bg-background p-0 transition-opacity duration-100 data-ending-style:scale-100 data-starting-style:scale-100"
+          className="squircle h-[min(92vh,58rem)] max-h-[94vh] w-[min(96vw,72rem)] overflow-hidden rounded-4xl border-border bg-bg p-0 transition-opacity duration-100 data-ending-style:scale-100 data-starting-style:scale-100"
           data-compose-dialog-content
         >
           <form
@@ -622,24 +623,22 @@ export const ComposeDialog = ({
             }}
             className="flex h-full min-h-0 flex-col p-3 sm:p-5"
           >
-            <div className="squircle flex min-h-0 flex-1 flex-col gap-2 rounded-2xl border bg-background-dark/60 p-2">
+            <div className="squircle flex min-h-0 flex-1 flex-col gap-2 rounded-2xl border bg-bg-elevated/60 p-2">
               <div className="flex shrink-0 items-center px-4 py-3">
                 <div>
-                  <p className="text-sm font-medium text-foreground">New message</p>
+                  <p className="text-sm font-medium text-fg">New message</p>
                   <p className="sr-only">
                     {getDraftStatusMessage(compose.state.draft, persistDrafts)}
                   </p>
                 </div>
               </div>
 
-              <div className="squircle shrink-0 rounded-xl border border-border bg-background-dark">
+              <div className="squircle shrink-0 overflow-hidden rounded-xl border border-border bg-bg-elevated">
                 {senderEmail && (
                   <>
-                    <div className={composeInputFrameClass}>
+                    <div className={cn(composeInputFrameClass, "rounded-t-xl")}>
                       <span className={composeInputLabelClass}>From</span>
-                      <span className="min-w-0 truncate text-sm text-foreground">
-                        {senderEmail}
-                      </span>
+                      <span className="min-w-0 truncate text-sm text-fg">{senderEmail}</span>
                     </div>
                     <div className="h-[0.5px] w-full bg-border" />
                   </>
@@ -674,6 +673,7 @@ export const ComposeDialog = ({
                   form={form}
                   label="To"
                   name="to"
+                  className={cn({ "rounded-t-xl": !senderEmail })}
                 />
 
                 <div className="h-[0.5px] w-full bg-border" />
@@ -708,6 +708,7 @@ export const ComposeDialog = ({
                   label="Subject"
                   name="subject"
                   placeholder=""
+                  className="rounded-b-xl"
                 />
               </div>
 
@@ -739,7 +740,7 @@ export const ComposeDialog = ({
                       transcribing={isTranscribingAudio}
                     >
                       <div className="flex min-h-0 flex-1 flex-col">
-                        <ComposeEditorBody className="squircle min-h-0 flex-1 rounded-xl border border-border bg-background-dark p-5 sm:p-7" />
+                        <ComposeEditorBody className="squircle min-h-0 flex-1 rounded-xl border border-border bg-bg-elevated p-5 sm:p-7" />
                         <div className="flex shrink-0 items-center gap-1 px-2 pt-3 pb-2">
                           <ComposeEditorToolbar />
                           {mailboxId ? (

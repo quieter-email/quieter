@@ -13,16 +13,11 @@ import {
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { LinkButton } from "@quieter/ui/button";
+import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@quieter/ui/popover";
 import {
   AnimatePresence,
   domMax,
@@ -31,17 +26,20 @@ import {
   m,
   useReducedMotion,
 } from "motion/react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   appEaseInOut,
   appEaseOut,
   appMotionDuration,
   getAppFlyInMotion,
 } from "~/features/motion/app-motion";
-import {
-  SidebarActiveSurface,
-  SidebarSimpleHoverSurface,
-} from "~/features/navigation/components/sidebar-surfaces";
+import { SidebarSimpleHoverSurface } from "~/features/navigation/components/sidebar-surfaces";
 
 type MailboxSwitcherMailbox = {
   connectionStatus: "connected" | "needs_reconnect";
@@ -119,6 +117,7 @@ type MailboxRowsProps = {
 };
 
 type MailboxMenuItemProps = {
+  action?: ReactNode;
   children: ReactNode;
   isActive: boolean;
   onSelect: () => void;
@@ -187,30 +186,38 @@ const MailboxRowEntrance = ({ animateEntrance, children, index }: MailboxRowEntr
   );
 };
 
-const MailboxMenuItem = ({ children, isActive, onSelect }: MailboxMenuItemProps) => {
+const MailboxMenuItem = ({ action, children, isActive, onSelect }: MailboxMenuItemProps) => {
   const [highlighted, setHighlighted] = useState(false);
 
   return (
-    <DropdownMenuItem
-      aria-current={isActive ? "page" : undefined}
-      className="group/item squircle isolate overflow-hidden rounded-xs border border-transparent bg-transparent px-2.5 py-2 transition-transform duration-100 ease-out active:scale-[0.985] data-highlighted:bg-transparent motion-reduce:transition-none motion-reduce:active:scale-100"
-      onBlur={() => setHighlighted(false)}
-      onFocus={() => setHighlighted(true)}
+    <div
+      className="group/item squircle relative isolate rounded-xs"
+      data-mailbox-switcher-navigation-row
       onMouseEnter={() => setHighlighted(true)}
       onMouseLeave={() => setHighlighted(false)}
-      onSelect={onSelect}
     >
-      {isActive ? (
-        <SidebarActiveSurface className="rounded-xs border border-border bg-background/80 shadow-xs" />
-      ) : (
-        <SidebarSimpleHoverSurface
-          className="inset-px rounded-xs bg-muted/70"
-          layoutId="mailbox-switcher-row-hover"
-          visible={highlighted}
-        />
-      )}
-      <div className="relative z-10 w-full">{children}</div>
-    </DropdownMenuItem>
+      <SidebarSimpleHoverSurface
+        className="rounded-xs"
+        layoutId="mailbox-switcher-row-hover"
+        visible={highlighted}
+      />
+      <Button
+        aria-current={isActive ? "page" : undefined}
+        className={cn(
+          "relative z-10 h-auto min-h-12 w-full justify-start rounded-xs px-2.5 py-2 pr-10 text-left active:scale-[0.985]",
+          { "font-medium": isActive },
+        )}
+        data-mailbox-switcher-navigation-item
+        onBlur={() => setHighlighted(false)}
+        onClick={onSelect}
+        onFocus={() => setHighlighted(true)}
+        type="button"
+        variant="ghost"
+      >
+        {children}
+      </Button>
+      {action && <div className="absolute inset-y-0 right-2 z-20 flex items-center">{action}</div>}
+    </div>
   );
 };
 
@@ -220,7 +227,7 @@ const MailboxInboxStatus = ({ mailbox }: { mailbox: MailboxSwitcherMailbox }) =>
   }
 
   if (mailbox.provider === "api") {
-    return <span className="text-xs text-muted-foreground">Send only</span>;
+    return <span className="text-xs text-muted-fg">Send only</span>;
   }
 
   if (mailbox.unreadNonSpamCount === 0) {
@@ -228,9 +235,7 @@ const MailboxInboxStatus = ({ mailbox }: { mailbox: MailboxSwitcherMailbox }) =>
   }
 
   return (
-    <span className="text-xs text-muted-foreground">
-      {formatUnreadCount(mailbox.unreadNonSpamCount)}
-    </span>
+    <span className="text-xs text-muted-fg">{formatUnreadCount(mailbox.unreadNonSpamCount)}</span>
   );
 };
 
@@ -239,10 +244,8 @@ const MailboxSummary = ({ action, className, mailbox }: MailboxSummaryProps) => 
   return (
     <div className={cn("flex min-w-0 items-center gap-2 rounded-md", className)}>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm/5 text-foreground">{displayName || mailbox.emailAddress}</p>
-        {displayName && (
-          <p className="truncate text-xs/4 text-muted-foreground">{mailbox.emailAddress}</p>
-        )}
+        <p className="truncate text-sm/5 text-fg">{displayName || mailbox.emailAddress}</p>
+        {displayName && <p className="truncate text-xs/4 text-muted-fg">{mailbox.emailAddress}</p>}
       </div>
       {action}
       <MailboxInboxStatus mailbox={mailbox} />
@@ -257,25 +260,24 @@ const MailboxDefaultButton = ({
   onSetDefaultMailbox,
 }: MailboxDefaultButtonProps) => (
   <IconButtonTooltip label={defaultMailboxLabel}>
-    <button
+    <Button
       aria-label={defaultMailboxLabel}
-      className={cn(
-        "flex size-5 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
-        {
-          "text-foreground": isDefault,
-          "text-muted-foreground/50 opacity-0 group-focus-within/item:opacity-100 group-hover/item:opacity-100 hover:text-foreground focus-visible:opacity-100":
-            !isDefault,
-        },
-      )}
+      className={cn("size-5 shrink-0 rounded-md p-0", {
+        "text-fg": isDefault,
+        "text-muted-fg/50 opacity-0 group-focus-within/item:opacity-100 group-hover/item:opacity-100 hover:text-fg focus-visible:opacity-100":
+          !isDefault,
+      })}
+      data-mailbox-switcher-navigation-action
       onClick={(event) => {
-        event.preventDefault();
         event.stopPropagation();
         onSetDefaultMailbox(isDefault ? null : mailboxId);
       }}
+      size="icon-sm"
       type="button"
+      variant="ghost"
     >
       <HugeiconsIcon aria-hidden className="size-3.5" icon={isDefault ? PinIcon : PinOffIcon} />
-    </button>
+    </Button>
   </IconButtonTooltip>
 );
 
@@ -291,6 +293,7 @@ const SortableGroup = ({
   const sectionRef = useRef<HTMLElement>(null);
   const headerRef = useRef<HTMLButtonElement>(null);
   const shouldReduceMotion = useReducedMotion();
+  const [isHeaderHovered, setIsHeaderHovered] = useState(false);
   const { isDragSource } = useSortable({
     accept: GROUP_SORTABLE_TYPE,
     disabled,
@@ -313,10 +316,21 @@ const SortableGroup = ({
         })}
         ref={sectionRef}
       >
-        <div className="group/header squircle flex min-h-7 items-center rounded-xs transition-colors focus-within:bg-background/50 hover:bg-background/50">
+        <div
+          className="group/header squircle relative isolate flex min-h-7 items-center rounded-xs"
+          data-mailbox-switcher-navigation-row
+          onMouseEnter={() => setIsHeaderHovered(true)}
+          onMouseLeave={() => setIsHeaderHovered(false)}
+        >
+          <SidebarSimpleHoverSurface
+            className="rounded-xs"
+            layoutId="mailbox-switcher-group-hover"
+            visible={isHeaderHovered}
+          />
           <button
             aria-expanded={!collapsed}
-            className="squircle flex min-w-0 flex-1 items-center gap-2 rounded-xs px-2 py-1 text-left outline-none"
+            className="squircle relative z-10 flex min-w-0 flex-1 items-center gap-2 rounded-xs px-2 py-1 text-left focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
+            data-mailbox-switcher-navigation-item
             onClick={() => onToggle(group.id)}
             ref={headerRef}
             type="button"
@@ -325,7 +339,7 @@ const SortableGroup = ({
               animate={{
                 transform: collapsed ? "rotate(0deg)" : "rotate(90deg)",
               }}
-              className="flex size-3 shrink-0 items-center justify-center text-muted-foreground/70"
+              className="flex size-3 shrink-0 items-center justify-center text-muted-fg/70"
               initial={false}
               transition={{
                 duration: shouldReduceMotion ? 0 : appMotionDuration.layout,
@@ -334,15 +348,14 @@ const SortableGroup = ({
             >
               <HugeiconsIcon aria-hidden className="size-3" icon={ArrowRight01Icon} />
             </m.span>
-            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-              {group.name}
-            </span>
+            <span className="min-w-0 flex-1 truncate text-xs text-muted-fg">{group.name}</span>
           </button>
           {group.kind === "organization" && !embedded && (
             <IconButtonTooltip label={`Open ${group.name} settings`}>
               <LinkButton
                 aria-label={`Open ${group.name} settings`}
-                className="pointer-events-none mr-0.5 size-7 opacity-0 transition-opacity group-focus-within/header:pointer-events-auto group-focus-within/header:opacity-100 group-hover/header:pointer-events-auto group-hover/header:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100"
+                className="pointer-events-none relative z-10 mr-0.5 size-7 opacity-0 transition-opacity group-focus-within/header:pointer-events-auto group-focus-within/header:opacity-100 group-hover/header:pointer-events-auto group-hover/header:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100"
+                data-mailbox-switcher-navigation-action
                 search={{
                   from: "/",
                   organizationId: group.id,
@@ -436,6 +449,7 @@ const SortableMailboxRow = ({
     id: getMailboxSortableId(groupId, mailbox.id),
     index,
     modifiers: VERTICAL_AXIS_MODIFIERS,
+    sensors: GROUP_DRAG_SENSORS,
     type: mailboxSortableType,
   });
 
@@ -445,6 +459,7 @@ const SortableMailboxRow = ({
         "opacity-70": isDragSource,
       })}
       ref={ref}
+      tabIndex={-1}
     >
       {children}
     </div>
@@ -481,6 +496,58 @@ export const MailboxSwitcherDropdown = ({
   const [isTriggerHovered, setIsTriggerHovered] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const handleArrowNavigation = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!event.key.startsWith("Arrow")) {
+      return;
+    }
+
+    if (event.target instanceof HTMLInputElement) {
+      return;
+    }
+
+    const target = event.target as HTMLElement;
+    const row = target.closest<HTMLElement>("[data-mailbox-switcher-navigation-row]");
+    const primaryItem = row?.querySelector<HTMLElement>("[data-mailbox-switcher-navigation-item]");
+    const action = row?.querySelector<HTMLElement>("[data-mailbox-switcher-navigation-action]");
+
+    if (event.key === "ArrowRight" && target.closest("[data-mailbox-switcher-navigation-item]")) {
+      if (action) {
+        event.preventDefault();
+        action.focus();
+      }
+      return;
+    }
+
+    if (event.key === "ArrowLeft" && target.closest("[data-mailbox-switcher-navigation-action]")) {
+      if (primaryItem) {
+        event.preventDefault();
+        primaryItem.focus();
+      }
+      return;
+    }
+
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+      return;
+    }
+
+    const items = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>("[data-mailbox-switcher-navigation-item]"),
+    ).filter((item) => !item.matches(":disabled"));
+    const currentItem =
+      target.closest<HTMLElement>("[data-mailbox-switcher-navigation-item]") ?? primaryItem;
+    const currentIndex = items.indexOf(currentItem ?? (document.activeElement as HTMLElement));
+
+    if (currentIndex === -1) {
+      return;
+    }
+
+    event.preventDefault();
+    const nextIndex = Math.max(
+      0,
+      Math.min(items.length - 1, currentIndex + (event.key === "ArrowDown" ? 1 : -1)),
+    );
+    items[nextIndex]?.focus();
+  };
   const isFiltering = normalizedSearchQuery.length > 0;
   const canReorderGroups = !isFiltering && groups.length > 1;
   const mailboxEntranceIds = new Set(
@@ -550,16 +617,16 @@ export const MailboxSwitcherDropdown = ({
   }, [isOpen, mailboxes]);
 
   return (
-    <DropdownMenu onOpenChange={setIsOpen} open={isOpen}>
+    <Popover onOpenChange={setIsOpen} open={isOpen}>
       <div
         className="squircle relative min-w-0 flex-1 rounded-md"
         onMouseEnter={() => setIsTriggerHovered(true)}
         onMouseLeave={() => setIsTriggerHovered(false)}
       >
         <SidebarSimpleHoverSurface layoutId="mailbox-switcher-hover" visible={isTriggerHovered} />
-        <DropdownMenuTrigger
+        <PopoverTrigger
           aria-label="Switch mailbox"
-          className="squircle relative z-10 w-full min-w-0 rounded-md px-3 py-2 text-left outline-none hover:bg-transparent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-100"
+          className="squircle relative z-10 w-full min-w-0 rounded-md px-3 py-2 text-left hover:bg-transparent hover:text-fg active:scale-100"
         >
           <AnimatePresence initial={false} mode="popLayout">
             <m.div
@@ -570,24 +637,27 @@ export const MailboxSwitcherDropdown = ({
               initial={{ opacity: 0 }}
               transition={{ duration: appMotionDuration.feedback, ease: appEaseOut }}
             >
-              <p className="truncate text-[13px]/5 font-medium tracking-tight text-foreground">
+              <p className="truncate text-[13px]/5 font-medium tracking-tight text-fg">
                 {primaryLabel}
               </p>
-              <p className="mt-1 truncate text-xs text-muted-foreground">{secondaryLabel}</p>
+              <p className="mt-1 truncate text-xs text-muted-fg">{secondaryLabel}</p>
             </m.div>
           </AnimatePresence>
-        </DropdownMenuTrigger>
+        </PopoverTrigger>
       </div>
 
-      <DropdownMenuContent
+      <PopoverContent
         align="start"
-        className="w-[min(20rem,calc(100vw-2rem))]"
+        className="w-[min(20rem,calc(100vw-2rem))] p-1"
         side={side}
         sideOffset={10}
       >
         <DragDropProvider onDragEnd={handleGroupDragEnd}>
           <LayoutGroup id="mailbox-switcher-rows">
-            <div className="flex max-h-96 flex-col gap-1 overflow-y-auto p-1">
+            <div
+              className="flex max-h-96 flex-col gap-1 overflow-y-auto p-1"
+              onKeyDown={handleArrowNavigation}
+            >
               {mailboxes.length > 0 ? (
                 <>
                   {(mailboxes.length >= 8 || isFiltering) && (
@@ -645,47 +715,46 @@ export const MailboxSwitcherDropdown = ({
                                     index={mailboxEntranceIndexById.get(mailbox.id) ?? 0}
                                   >
                                     <MailboxMenuItem
-                                      isActive={isActive}
-                                      onSelect={() => onSelectMailboxId(mailbox.id)}
-                                    >
-                                      <MailboxSummary
-                                        action={
-                                          <div className="flex items-center gap-1">
-                                            {needsReconnect && (
-                                              <button
-                                                aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
-                                                className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-destructive/20 bg-destructive/10 px-1.5 text-xs font-medium text-destructive transition-[color,transform] duration-100 hover:text-destructive/80 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:scale-100"
-                                                disabled={isReconnecting}
-                                                onClick={(event) => {
-                                                  event.preventDefault();
-                                                  event.stopPropagation();
-                                                  onReconnectMailbox(mailbox);
-                                                }}
-                                                type="button"
-                                              >
-                                                <HugeiconsIcon
-                                                  aria-hidden
-                                                  className={cn("size-3.5", {
-                                                    "animate-spin": isReconnecting,
-                                                  })}
-                                                  icon={isReconnecting ? Loading03Icon : Mail01Icon}
-                                                />
-                                                Reconnect
-                                              </button>
-                                            )}
-                                            {canSetDefault && (
-                                              <MailboxDefaultButton
-                                                defaultMailboxLabel={defaultMailboxLabel}
-                                                isDefault={isDefault}
-                                                mailboxId={mailbox.id}
-                                                onSetDefaultMailbox={onSetDefaultMailbox}
+                                      action={
+                                        <div className="flex items-center gap-1">
+                                          {needsReconnect && (
+                                            <button
+                                              aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
+                                              className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-destructive/20 bg-destructive/10 px-1.5 text-xs font-medium text-destructive transition-[color,transform] duration-100 hover:text-destructive/80 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:scale-100"
+                                              disabled={isReconnecting}
+                                              onClick={(event) => {
+                                                event.stopPropagation();
+                                                onReconnectMailbox(mailbox);
+                                              }}
+                                              type="button"
+                                            >
+                                              <HugeiconsIcon
+                                                aria-hidden
+                                                className={cn("size-3.5", {
+                                                  "animate-spin": isReconnecting,
+                                                })}
+                                                icon={isReconnecting ? Loading03Icon : Mail01Icon}
                                               />
-                                            )}
-                                          </div>
-                                        }
-                                        className="w-full"
-                                        mailbox={mailbox}
-                                      />
+                                              Reconnect
+                                            </button>
+                                          )}
+                                          {canSetDefault && (
+                                            <MailboxDefaultButton
+                                              defaultMailboxLabel={defaultMailboxLabel}
+                                              isDefault={isDefault}
+                                              mailboxId={mailbox.id}
+                                              onSetDefaultMailbox={onSetDefaultMailbox}
+                                            />
+                                          )}
+                                        </div>
+                                      }
+                                      isActive={isActive}
+                                      onSelect={() => {
+                                        onSelectMailboxId(mailbox.id);
+                                        setIsOpen(false);
+                                      }}
+                                    >
+                                      <MailboxSummary className="w-full" mailbox={mailbox} />
                                     </MailboxMenuItem>
                                   </MailboxRowEntrance>
                                 </SortableMailboxRow>
@@ -693,15 +762,16 @@ export const MailboxSwitcherDropdown = ({
                             }}
                           </MailboxRows>
                         ) : (
-                          <p className="px-2 py-1 text-sm text-muted-foreground">No Mailbox</p>
+                          <p className="px-2 py-1 text-sm text-muted-fg">No Mailbox</p>
                         )}
                       </SortableGroup>
                     );
                   })}
                   {!embedded && (
-                    <div className="border-t border-border pt-1">
+                    <div className="mt-1">
                       <LinkButton
                         className="squircle h-auto min-h-9 w-full justify-between rounded-xs px-2.5 py-2"
+                        data-mailbox-switcher-navigation-item
                         search={{ from: "/", mailboxId: "", tab: "mailboxes" }}
                         size="sm"
                         to="/settings"
@@ -714,15 +784,13 @@ export const MailboxSwitcherDropdown = ({
                   )}
                 </>
               ) : (
-                <div className="rounded-md px-2.5 py-2 text-sm text-muted-foreground">
-                  No Mailbox
-                </div>
+                <div className="rounded-md px-2.5 py-2 text-sm text-muted-fg">No Mailbox</div>
               )}
             </div>
           </LayoutGroup>
         </DragDropProvider>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverContent>
+    </Popover>
   );
 };
 

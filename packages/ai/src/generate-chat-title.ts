@@ -1,5 +1,8 @@
 import { chat, type ChatMiddleware } from "@tanstack/ai";
+import { defaultChatModel } from "./chat-models";
 import { createOpenRouterAdapter } from "./openrouter";
+
+export const CHAT_TITLE_MODEL = defaultChatModel;
 
 export const generateChatTitle = async ({
   middleware,
@@ -9,7 +12,7 @@ export const generateChatTitle = async ({
   prompt: string;
 }) => {
   const title = await chat({
-    adapter: createOpenRouterAdapter("openai/gpt-5-nano"),
+    adapter: createOpenRouterAdapter(CHAT_TITLE_MODEL),
     messages: [
       {
         content: `<chat_request>\n${prompt}\n</chat_request>`,

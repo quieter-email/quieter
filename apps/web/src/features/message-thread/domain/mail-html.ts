@@ -203,6 +203,8 @@ const EMAIL_SANITIZE_CONFIG: Config = {
 
 const createMailRenderStyles = (theme: MailRenderTheme): string => {
   const isDarkTheme = theme === "dark";
+  const focusInner = isDarkTheme ? "#bfdbfe" : "#1d4ed8";
+  const focusOuter = isDarkTheme ? "rgba(96, 165, 250, 0.45)" : "rgba(37, 99, 235, 0.4)";
 
   return `
     <style type="text/css">
@@ -229,6 +231,13 @@ const createMailRenderStyles = (theme: MailRenderTheme): string => {
         text-decoration-line: underline;
         text-decoration-thickness: 1px;
         text-underline-offset: 0.14em;
+      }
+
+      a:focus-visible {
+        border-radius: 2px !important;
+        box-shadow: 0 0 0 2px ${focusOuter} !important;
+        outline: 1px solid ${focusInner} !important;
+        outline-offset: 0 !important;
       }
 
       table {

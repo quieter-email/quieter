@@ -371,7 +371,7 @@ const DeleteDivisionDialog = ({
         </AlertDialogHeader>
 
         <AlertDialogBody>
-          <p className="text-sm text-muted-foreground">This action cannot be undone.</p>
+          <p className="text-sm text-muted-fg">This action cannot be undone.</p>
         </AlertDialogBody>
 
         <AlertDialogFooter>
@@ -426,8 +426,8 @@ const DivisionDetailView = ({
       <SettingsBackButton onClick={onBack}>Divisions</SettingsBackButton>
 
       <div>
-        <h1 className="text-base font-semibold text-foreground">{division.name}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h1 className="text-base font-semibold text-fg">{division.name}</h1>
+        <p className="mt-1 text-sm text-muted-fg">
           {formatCount(division.members.length, "Member")},{" "}
           {formatCount(division.mailboxCount, "Mailbox", "Mailboxes")}
         </p>
@@ -505,10 +505,10 @@ const DivisionDetailView = ({
                       <CheckboxIndicator />
                     </Checkbox>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm text-foreground">
+                      <span className="block truncate text-sm text-fg">
                         {memberRecord.user.name || memberRecord.user.email}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                      <span className="mt-0.5 block truncate text-xs text-muted-fg">
                         {memberRecord.user.email}
                       </span>
                     </span>
@@ -517,7 +517,7 @@ const DivisionDetailView = ({
               })}
             </SettingsInsetRows>
           ) : (
-            <p className={cn("text-sm text-muted-foreground", settingsRowPaddingClass)}>
+            <p className={cn("text-sm text-muted-fg", settingsRowPaddingClass)}>
               No team members yet.
             </p>
           )}
@@ -585,10 +585,8 @@ export const DivisionsView = ({
 
       <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
         <div>
-          <h1 className="text-base font-semibold text-foreground">Divisions</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {formatCount(divisions.length, "Division")}
-          </p>
+          <h1 className="text-base font-semibold text-fg">Divisions</h1>
+          <p className="mt-1 text-sm text-muted-fg">{formatCount(divisions.length, "Division")}</p>
         </div>
 
         {canManageDivisions ? (
@@ -618,7 +616,7 @@ export const DivisionsView = ({
           ))}
         </SettingsRows>
       ) : (
-        <p className={cn("text-center text-sm text-muted-foreground", settingsRowPaddingClass)}>
+        <p className={cn("text-center text-sm text-muted-fg", settingsRowPaddingClass)}>
           No divisions yet.
         </p>
       )}

@@ -95,9 +95,9 @@ const SavedViewsSection = ({
   views,
 }: SavedViewsSectionProps) => (
   <section className="mt-4">
-    <p className="mb-1 px-2 text-xs font-medium text-muted-foreground">{title}</p>
+    <p className="mb-1 px-2 text-xs font-medium text-muted-fg">{title}</p>
     {views.length === 0 ? (
-      <p className="px-2 py-1 text-xs text-muted-foreground">{emptyMessage}</p>
+      <p className="px-2 py-1 text-xs text-muted-fg">{emptyMessage}</p>
     ) : (
       <nav aria-label={title} className="flex flex-col">
         {views.map((view) => {
@@ -110,8 +110,8 @@ const SavedViewsSection = ({
               className={cn(
                 "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light",
                 {
-                  "text-foreground": active,
-                  "text-muted-foreground": !active,
+                  "text-fg": active,
+                  "text-muted-fg": !active,
                 },
               )}
               key={view.id}
@@ -304,7 +304,7 @@ export const ManagedMailboxOrganizer = ({
         <IconButtonTooltip label="Manage views and rules">
           <Button
             aria-label="Manage views and rules"
-            className="mt-4 size-6 self-start text-muted-foreground hover:text-foreground"
+            className="mt-4 size-6 self-start text-muted-fg hover:text-fg"
             onClick={() => {
               setRuleQueryDraft(searchQuery);
               setIsOpen(true);
@@ -339,7 +339,7 @@ export const ManagedMailboxOrganizer = ({
                   <div className="flex gap-2">
                     <Input
                       aria-label="Saved view name"
-                      className="border-0 bg-background/70 shadow-none"
+                      className="border-0 bg-bg/70 shadow-none"
                       onChange={(event) => setViewName(event.target.value)}
                       placeholder="View name"
                       size="sm"
@@ -386,7 +386,7 @@ export const ManagedMailboxOrganizer = ({
                         )}
                       />
                       <span className="min-w-0 flex-1 truncate text-sm">{view.name}</span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-fg">
                         {view.ownerUserId === null ? "Shared" : "Personal"}
                       </span>
                       {(view.ownerUserId !== null || canManage) && (
@@ -572,7 +572,7 @@ export const ManagedMailboxOrganizer = ({
                           <Button
                             aria-pressed={ruleMatchMode === mode}
                             className={cn({
-                              "bg-background shadow-sm": ruleMatchMode === mode,
+                              "bg-bg shadow-sm": ruleMatchMode === mode,
                             })}
                             key={mode}
                             onClick={() => setRuleMatchMode(mode)}
@@ -585,7 +585,7 @@ export const ManagedMailboxOrganizer = ({
                         ))}
                       </div>
                       <div className="squircle space-y-2 rounded-lg bg-secondary/40 p-3">
-                        <p className="text-xs font-medium text-muted-foreground">Apply labels</p>
+                        <p className="text-xs font-medium text-muted-fg">Apply labels</p>
                         {(labelsData ?? []).flatMap((label) =>
                           label.type === "user"
                             ? [
@@ -604,7 +604,7 @@ export const ManagedMailboxOrganizer = ({
                                   </Checkbox>
                                   <HugeiconsIcon
                                     aria-hidden
-                                    className="size-3.5 text-muted-foreground"
+                                    className="size-3.5 text-muted-fg"
                                     icon={Tag01Icon}
                                   />
                                   {label.name}
@@ -614,7 +614,7 @@ export const ManagedMailboxOrganizer = ({
                         )}
                       </div>
                       {preview ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-muted-fg">
                           {preview.count} matching conversation
                           {preview.count === 1 ? "" : "s"}
                         </p>
@@ -654,12 +654,12 @@ export const ManagedMailboxOrganizer = ({
                         <div className="flex items-center gap-3 py-2" key={rule.id}>
                           <HugeiconsIcon
                             aria-hidden
-                            className="size-4 text-muted-foreground"
+                            className="size-4 text-muted-fg"
                             icon={Tag01Icon}
                           />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm">{rule.name}</p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-muted-fg">
                               {rule.enabled ? "Enabled" : "Disabled"}
                             </p>
                           </div>
@@ -794,7 +794,7 @@ export const ManagedMailboxOrganizer = ({
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="font-medium">Historical labeling</p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-muted-fg">
                               {backfillData.processedCount} processed {backfillData.matchedCount}{" "}
                               matched
                             </p>
@@ -815,7 +815,7 @@ export const ManagedMailboxOrganizer = ({
                               Cancel
                             </Button>
                           ) : (
-                            <span className="text-xs text-muted-foreground capitalize">
+                            <span className="text-xs text-muted-fg capitalize">
                               {backfillData.status}
                             </span>
                           )}
@@ -824,7 +824,7 @@ export const ManagedMailboxOrganizer = ({
                     ) : null}
                   </>
                 ) : (
-                  <p className="mt-5 text-sm text-muted-foreground">
+                  <p className="mt-5 text-sm text-muted-fg">
                     Mailbox managers configure automatic labels.
                   </p>
                 )}
@@ -854,7 +854,7 @@ export const ManagedMailboxOrganizer = ({
                 <FieldLabel>Name</FieldLabel>
                 <Input
                   autoFocus
-                  className="border-0 bg-background/70 shadow-none"
+                  className="border-0 bg-bg/70 shadow-none"
                   disabled={updateViewMutation.isPending}
                   onChange={(event) => {
                     const name = event.currentTarget.value;

@@ -143,26 +143,20 @@ const NoMailboxWorkspace = ({
           </m.div>
         ) : (
           <m.div className="w-full max-w-2xl text-center" {...workspaceContentMotion}>
-            <HugeiconsIcon
-              aria-hidden
-              className="mx-auto size-5 text-muted-foreground"
-              icon={Mail01Icon}
-            />
-            <h1 className="mt-5 text-lg font-semibold tracking-tight text-foreground">
-              Connect a mailbox
-            </h1>
-            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+            <HugeiconsIcon aria-hidden className="mx-auto size-5 text-muted-fg" icon={Mail01Icon} />
+            <h1 className="mt-5 text-lg font-semibold tracking-tight text-fg">Connect a mailbox</h1>
+            <p className="mx-auto mt-2 max-w-md text-sm text-muted-fg">
               Connect Gmail, or set up managed mail to send and receive from your own domain with
               managed mailboxes and API keys.
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               <button
-                className="rounded-lg border border-border bg-background/80 p-4 text-left shadow-sm transition-colors hover:bg-secondary/35 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
+                className="rounded-lg border border-border bg-bg/80 p-4 text-left shadow-sm transition-colors hover:bg-secondary/35"
                 disabled={isConnectingGmail}
                 onClick={onConnectGmail}
                 type="button"
               >
-                <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <span className="flex items-center gap-2 text-sm font-medium text-fg">
                   <HugeiconsIcon
                     aria-hidden
                     className={cn("size-4", { "animate-spin": isConnectingGmail })}
@@ -170,20 +164,20 @@ const NoMailboxWorkspace = ({
                   />
                   {isConnectingGmail ? "Opening Google" : "Connect Gmail"}
                 </span>
-                <span className="mt-2 block text-sm text-muted-foreground">
+                <span className="mt-2 block text-sm text-muted-fg">
                   Add an existing Gmail or Google Workspace inbox.
                 </span>
               </button>
               <button
-                className="rounded-lg border border-border bg-background/80 p-4 text-left shadow-sm transition-colors hover:bg-secondary/35 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
+                className="rounded-lg border border-border bg-bg/80 p-4 text-left shadow-sm transition-colors hover:bg-secondary/35"
                 onClick={() => setSetupMode("managed")}
                 type="button"
               >
-                <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <span className="flex items-center gap-2 text-sm font-medium text-fg">
                   <HugeiconsIcon aria-hidden className="size-4" icon={Mail01Icon} />
                   Set up managed mail
                 </span>
-                <span className="mt-2 block text-sm text-muted-foreground">
+                <span className="mt-2 block text-sm text-muted-fg">
                   Use your own domain with managed mailboxes and API keys.
                 </span>
               </button>
@@ -240,7 +234,7 @@ export const MailboxWorkspaceContent = ({
   selectedView,
 }: MailboxWorkspaceContentProps) => (
   <LazyMotion features={domAnimation}>
-    <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-background-dark pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-foreground lg:p-0">
+    <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-bg-elevated pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-fg lg:p-0">
       <WorkspaceDitherBackground />
       <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
         {selectedMailboxId && (
@@ -289,7 +283,7 @@ export const MailboxWorkspaceContent = ({
           ) : selectedView === "chat" ? (
             <m.div
               key={`chat-${chatId ?? draftChatKey}`}
-              className="absolute inset-1.5 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border bg-background/60"
+              className="absolute inset-1.5 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border bg-bg/60"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.08, ease: "linear" }}
@@ -314,12 +308,12 @@ export const MailboxWorkspaceContent = ({
           ) : (
             <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
               {selectedMailboxNeedsReconnect ? (
-                <section className="flex min-h-0 flex-1 items-center justify-center bg-background px-8">
+                <section className="flex min-h-0 flex-1 items-center justify-center bg-bg px-8">
                   <m.div className="max-w-md space-y-3 text-center" {...workspaceContentMotion}>
-                    <h1 className="text-lg font-semibold tracking-tight text-foreground">
+                    <h1 className="text-lg font-semibold tracking-tight text-fg">
                       Reconnect Google
                     </h1>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-fg">
                       This account needs to reconnect through Google before Quieter can load mail.
                     </p>
                     <div className="pt-1">

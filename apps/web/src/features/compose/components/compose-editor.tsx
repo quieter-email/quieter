@@ -130,7 +130,7 @@ export const ComposeEditor = ({
     editorProps: {
       attributes: {
         class: cn(
-          "bg-transparent text-foreground outline-none [&_.ProseMirror-selectednode.quieter-template-placeholder]:border-foreground [&_.is-editor-empty:first-child::before]:pointer-events-none [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:h-0 [&_.is-editor-empty:first-child::before]:text-muted-foreground/75 [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.quieter-template-placeholder]:mx-1 [&_.quieter-template-placeholder]:inline-block [&_.quieter-template-placeholder]:min-w-20 [&_.quieter-template-placeholder]:cursor-text [&_.quieter-template-placeholder]:border-b [&_.quieter-template-placeholder]:border-muted-foreground [&_.quieter-template-placeholder]:px-1 [&_.quieter-template-placeholder]:text-transparent [&_.quieter-template-placeholder]:selection:bg-primary/20 [&_.quieter-template-placeholder]:hover:border-foreground [&_a]:text-foreground [&_a]:underline [&_blockquote]:border-l [&_blockquote]:border-border [&_blockquote]:text-muted-foreground [&_img]:max-w-full [&_img]:object-contain [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0 [&_s]:text-muted-foreground [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5",
+          "bg-transparent text-fg [&_.ProseMirror-selectednode.quieter-template-placeholder]:border-fg [&_.is-editor-empty:first-child::before]:pointer-events-none [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:h-0 [&_.is-editor-empty:first-child::before]:text-muted-fg/75 [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.quieter-template-placeholder]:mx-1 [&_.quieter-template-placeholder]:inline-block [&_.quieter-template-placeholder]:min-w-20 [&_.quieter-template-placeholder]:cursor-text [&_.quieter-template-placeholder]:border-b [&_.quieter-template-placeholder]:border-muted-fg [&_.quieter-template-placeholder]:px-1 [&_.quieter-template-placeholder]:text-transparent [&_.quieter-template-placeholder]:selection:bg-primary/20 [&_.quieter-template-placeholder]:hover:border-fg [&_a]:text-fg [&_a]:underline [&_blockquote]:border-l [&_blockquote]:border-border [&_blockquote]:text-muted-fg [&_img]:max-w-full [&_img]:object-contain [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0 [&_s]:text-muted-fg [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5",
           {
             "min-h-28 text-sm/relaxed [&_.is-editor-empty:first-child::before]:text-sm/relaxed [&_blockquote]:my-3 [&_blockquote]:pl-3 [&_img]:my-3 [&_img]:max-h-48 [&_img]:rounded-lg [&_li]:my-0.5 [&_ol]:my-3 [&_p+p]:mt-2 [&_ul]:my-3":
               density === "compact",
@@ -283,9 +283,9 @@ export const ComposeEditorBody = ({ className }: { className?: string }) => {
           <div className="flex h-10 items-center gap-1.5 rounded-full border border-border bg-secondary/35 px-4">
             {audioWaveBars.map((bar, index) => (
               <span
-                className={cn("h-6 w-1 animate-pulse rounded-full bg-foreground/75", {
+                className={cn("h-6 w-1 animate-pulse rounded-full bg-fg/75", {
                   "bg-primary": recording,
-                  "bg-muted-foreground": transcribing,
+                  "bg-muted-fg": transcribing,
                 })}
                 key={bar.id}
                 style={{
@@ -301,7 +301,7 @@ export const ComposeEditorBody = ({ className }: { className?: string }) => {
       ) : (
         <div
           aria-hidden
-          className={cn("text-muted-foreground/75", {
+          className={cn("text-muted-fg/75", {
             "min-h-28 text-sm/relaxed": density === "compact",
             "min-h-72 text-[15px] leading-[1.75]": density === "comfortable",
           })}
@@ -410,8 +410,8 @@ export const ComposeEditorToolbar = ({ className }: { className?: string }) => {
               <Button
                 aria-label={action.label}
                 aria-pressed={"active" in action ? action.active : undefined}
-                className={cn("text-muted-foreground hover:bg-muted/55 hover:text-foreground", {
-                  "bg-muted/75 text-foreground": action.active,
+                className={cn("text-muted-fg hover:bg-muted/55 hover:text-fg", {
+                  "bg-muted/75 text-fg": action.active,
                 })}
                 disabled={isDisabled}
                 onClick={() => action.onClick()}

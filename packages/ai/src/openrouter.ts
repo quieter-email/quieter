@@ -4,8 +4,6 @@ import { createOpenRouterText } from "@tanstack/ai-openrouter";
 import { defaultChatModel, type ChatModel } from "./chat-models";
 
 type OpenRouterModel = Parameters<typeof createOpenRouterText>[0];
-// openai/gpt-5-nano is retained for chat title generation and backward compatibility
-type QuieterOpenRouterModel = ChatModel | "openai/gpt-5-nano";
 
 const withZeroDataRetention = <TAdapter extends AnyTextAdapter>(adapter: TAdapter): TAdapter => {
   type ProviderOptions = TAdapter["~types"]["providerOptions"];
@@ -55,7 +53,7 @@ const withZeroDataRetention = <TAdapter extends AnyTextAdapter>(adapter: TAdapte
   } as TAdapter;
 };
 
-export const createOpenRouterAdapter = (model: QuieterOpenRouterModel = defaultChatModel) => {
+export const createOpenRouterAdapter = (model: ChatModel = defaultChatModel) => {
   const apiKey = serverEnv.OPENROUTER_API_KEY;
 
   if (!apiKey) {

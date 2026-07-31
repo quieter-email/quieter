@@ -1,9 +1,10 @@
 import { chat, type ChatMiddleware } from "@tanstack/ai";
 import { z } from "zod";
+import { defaultChatModel } from "./chat-models";
 import { createOpenRouterAdapter } from "./openrouter";
 
-export const MAILBOX_ACTION_CONDITION_MODEL = "deepseek/deepseek-v4-flash" as const;
-export const MAILBOX_ACTION_LINEAR_AGENT_MODEL = "openai/gpt-5.6-sol" as const;
+export const MAILBOX_ACTION_CONDITION_MODEL = defaultChatModel;
+export const MAILBOX_ACTION_LINEAR_AGENT_MODEL = defaultChatModel;
 
 export type ActionEmailInput = {
   attachments?: Array<{ fileName: string; mimeType: string }>;

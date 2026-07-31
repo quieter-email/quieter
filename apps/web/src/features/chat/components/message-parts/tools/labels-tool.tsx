@@ -38,11 +38,11 @@ export const LabelsTool = ({ nested = false, data, error, pending }: LabelsToolP
         <div className="space-y-2">
           {userLabels.length > 0 ? (
             <div>
-              <p className="mb-1 text-[11px] text-muted-foreground/75">Custom</p>
+              <p className="mb-1 text-[11px] text-muted-fg/75">Custom</p>
               <div className="flex flex-wrap gap-1.5">
                 {userLabels.map((label) => (
                   <span
-                    className="rounded-full border border-border px-2 py-0.5 text-[11px] text-foreground/80"
+                    className="rounded-full border border-border px-2 py-0.5 text-[11px] text-fg/80"
                     key={label.id}
                   >
                     {label.name}
@@ -51,7 +51,7 @@ export const LabelsTool = ({ nested = false, data, error, pending }: LabelsToolP
               </div>
             </div>
           ) : null}
-          <p className="text-[11px] text-muted-foreground/75">
+          <p className="text-[11px] text-muted-fg/75">
             {success.labels.length - userLabels.length} system label
             {success.labels.length - userLabels.length === 1 ? "" : "s"}
           </p>

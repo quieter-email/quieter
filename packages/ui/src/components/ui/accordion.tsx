@@ -12,7 +12,7 @@ export const AccordionItem = ({
   ...props
 }: ComponentPropsWithoutRef<typeof AccordionPrimitive.Item>) => (
   <AccordionPrimitive.Item
-    className={cn("overflow-hidden rounded-lg border bg-card text-card-foreground", className)}
+    className={cn("rounded-lg border bg-card text-card-fg", className)}
     {...props}
   />
 );
@@ -34,13 +34,13 @@ export const AccordionTrigger = ({
 }) => (
   <AccordionPrimitive.Trigger
     className={cn(
-      "squircle flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-foreground transition-transform duration-100 ease-out outline-none hover:bg-muted/40 focus-visible:bg-muted/40 active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      "squircle flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-fg transition-transform duration-100 ease-out hover:bg-muted/40 focus-visible:border-ring focus-visible:bg-muted/40 focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
       className,
     )}
     {...props}
   >
     <span className="min-w-0 flex-1">{children}</span>
-    <span className="shrink-0 text-muted-foreground">
+    <span className="shrink-0 text-muted-fg">
       {indicator ?? <ChevronDownIcon className="size-4" />}
     </span>
   </AccordionPrimitive.Trigger>
@@ -51,7 +51,7 @@ export const AccordionPanel = ({
   ...props
 }: ComponentPropsWithoutRef<typeof AccordionPrimitive.Panel>) => (
   <AccordionPrimitive.Panel
-    className={cn("overflow-hidden border-t px-4 py-3 text-sm text-muted-foreground", className)}
+    className={cn("overflow-hidden border-t px-4 py-3 text-sm text-muted-fg", className)}
     {...props}
   />
 );

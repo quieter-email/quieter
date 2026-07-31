@@ -33,6 +33,7 @@ import {
   useReducedMotion,
 } from "motion/react";
 import {
+  type FocusEvent as ReactFocusEvent,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
@@ -49,13 +50,13 @@ import {
 import { ManagedMailboxOrganizer } from "~/features/navigation/components/managed-mailbox-organizer";
 import { SidebarLabelNav } from "~/features/navigation/components/sidebar-label-nav";
 import { SidebarMailboxNav } from "~/features/navigation/components/sidebar-mailbox-nav";
+import { SidebarNavItem } from "~/features/navigation/components/sidebar-nav-item";
 import {
-  SidebarActiveSurface,
   SidebarEntrance,
   SidebarSimpleHoverSurface,
 } from "~/features/navigation/components/sidebar-surfaces";
 import { SidebarWorkspaceViewSwitch } from "~/features/navigation/components/sidebar-workspace-view-switch";
-import { sidebarNavButtonClassName } from "~/features/navigation/domain/sidebar-surfaces";
+import { useSidebarNavHover } from "~/features/navigation/hooks/use-sidebar-nav-hover";
 
 type MailSidebarProps = {
   activeChatId: string | null;
@@ -122,13 +123,21 @@ type SidebarChatRowProps = {
   index: number;
   isActive: boolean;
   isEditing: boolean;
+  isHoverExiting: boolean;
+  isHovered: boolean;
+  hoverEnter: boolean;
+  hoverLayoutId: string;
   onCancelRename: () => void;
   onDelete: (chatId: string) => void;
   onEditingTitleChange: (title: string) => void;
+  onHoverExitComplete: () => void;
   onRenameKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
   onRenameSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onSelect: (chatId: string) => void;
   onStartRename: (chat: SidebarChat) => void;
+  onBlur: (event: ReactFocusEvent<HTMLButtonElement>) => void;
+  onHover: () => void;
+  onFocus: () => void;
 };
 
 const SidebarHelpMenu = ({ onRequestClose }: { onRequestClose?: () => void }) => {
@@ -147,13 +156,13 @@ const SidebarHelpMenu = ({ onRequestClose }: { onRequestClose?: () => void }) =>
         <IconButtonTooltip label="Help and legal">
           <DropdownMenuTrigger
             aria-label="Help and legal"
-            className="relative z-10 inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground hover:bg-transparent hover:text-foreground focus-visible:bg-transparent focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring/20 focus-visible:outline-none data-popup-open:bg-transparent data-popup-open:text-foreground"
+            className="relative z-10 inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-fg hover:bg-transparent hover:text-fg focus-visible:bg-transparent focus-visible:text-fg data-popup-open:bg-transparent data-popup-open:text-fg"
           >
             <HugeiconsIcon aria-hidden className="size-4" icon={HelpCircleIcon} strokeWidth={1.5} />
           </DropdownMenuTrigger>
         </IconButtonTooltip>
       </div>
-      <DropdownMenuContent align="end" side="top">
+      <DropdownMenuContent align="end" side="top" size="compact">
         <DropdownMenuItem onSelect={onRequestClose} render={<Link to="/privacy" />}>
           Privacy
         </DropdownMenuItem>
@@ -190,17 +199,23 @@ const SidebarChatRow = ({
   index,
   isActive,
   isEditing,
+  isHoverExiting,
+  isHovered,
+  hoverEnter,
+  hoverLayoutId,
   onCancelRename,
   onDelete,
   onEditingTitleChange,
+  onHoverExitComplete,
   onRenameKeyDown,
   onRenameSubmit,
   onSelect,
   onStartRename,
+  onBlur,
+  onFocus,
+  onHover,
 }: SidebarChatRowProps) => {
   const title = chat.title?.trim() || "New chat";
-  const [isHovered, setIsHovered] = useState(false);
-  const [isFocusWithin, setIsFocusWithin] = useState(false);
 
   return (
     <SidebarEntrance
@@ -223,71 +238,60 @@ const SidebarChatRow = ({
           />
         </form>
       ) : (
-        <div
-          className="group squircle relative flex h-8 w-full items-center rounded-md py-px"
-          onBlurCapture={(event) => {
-            const next = event.relatedTarget;
-            if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
-              setIsFocusWithin(false);
-            }
-          }}
-          onFocusCapture={() => setIsFocusWithin(true)}
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
+        <SidebarNavItem
+          active={isActive}
+          aria-current={isActive ? "page" : undefined}
+          className={cn(
+            "h-8 min-w-0 flex-1 justify-start gap-3 rounded-md px-3 text-left transition-[color,transform] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) active:scale-[0.985] motion-reduce:active:scale-100",
+            {
+              "text-fg": isActive || isHovered,
+              "text-muted-fg": !isActive && !isHovered,
+            },
+          )}
+          hover={isHovered}
+          hoverEnter={isHovered && hoverEnter}
+          hoverExiting={isHoverExiting}
+          hoverLayoutId={hoverLayoutId}
+          onBlur={onBlur}
+          onClick={() => onSelect(chat.id)}
+          onFocus={onFocus}
+          onHoverExitComplete={onHoverExitComplete}
+          onMouseEnter={onHover}
+          size="sm"
+          trailing={
+            <DropdownMenu>
+              <IconButtonTooltip label={`Options for "${title}"`}>
+                <DropdownMenuTrigger
+                  aria-label={`Options for "${title}"`}
+                  className="squircle pointer-events-none relative z-20 mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-fg opacity-0 transition-[opacity,background-color,color,transform] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-hover:pointer-events-auto group-hover:bg-bg/45 group-hover:opacity-100 hover:bg-bg/80 hover:text-fg focus-visible:pointer-events-auto focus-visible:bg-bg/60 focus-visible:text-fg focus-visible:opacity-100 active:scale-95 data-popup-open:pointer-events-auto data-popup-open:bg-bg/70 data-popup-open:text-fg data-popup-open:opacity-100"
+                >
+                  <HugeiconsIcon aria-hidden className="size-3.5" icon={MoreVerticalIcon} />
+                </DropdownMenuTrigger>
+              </IconButtonTooltip>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => onStartRename(chat)}>
+                  <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
+                  Rename
+                </DropdownMenuItem>
+                <DropdownMenuItem className="text-destructive" onSelect={() => onDelete(chat.id)}>
+                  <HugeiconsIcon aria-hidden className="size-4" icon={Delete01Icon} />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          }
+          type="button"
+          variant="ghost"
         >
-          {isActive ? (
-            <SidebarActiveSurface />
-          ) : (
-            <SidebarSimpleHoverSurface
-              layoutId="sidebar-chat-row-hover"
-              visible={isHovered || isFocusWithin}
+          {chat.isGenerating && (
+            <HugeiconsIcon
+              aria-hidden
+              className="size-3.5 shrink-0 animate-spin text-muted-fg"
+              icon={Loading03Icon}
             />
           )}
-          <Button
-            aria-current={isActive ? "page" : undefined}
-            className={cn(
-              sidebarNavButtonClassName,
-              "h-full min-w-0 flex-1 justify-start gap-3 rounded-md px-3 text-left transition-[color,transform] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) active:scale-[0.985] motion-reduce:active:scale-100",
-              {
-                "text-foreground": isActive,
-                "text-muted-foreground group-focus-within:text-foreground group-hover:text-foreground":
-                  !isActive,
-              },
-            )}
-            onClick={() => onSelect(chat.id)}
-            type="button"
-            variant="ghost"
-          >
-            {chat.isGenerating && (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-3.5 shrink-0 animate-spin text-muted-foreground"
-                icon={Loading03Icon}
-              />
-            )}
-            <span className="truncate">{title}</span>
-          </Button>
-          <DropdownMenu>
-            <IconButtonTooltip label={`Options for "${title}"`}>
-              <DropdownMenuTrigger
-                aria-label={`Options for "${title}"`}
-                className="squircle pointer-events-none relative z-20 mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground opacity-0 transition-[opacity,background-color,color,transform] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) outline-none group-hover:pointer-events-auto group-hover:bg-background/45 group-hover:opacity-100 hover:bg-background/80 hover:text-foreground focus-visible:pointer-events-auto focus-visible:bg-background/60 focus-visible:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/20 active:scale-95 data-popup-open:pointer-events-auto data-popup-open:bg-background/70 data-popup-open:text-foreground data-popup-open:opacity-100"
-              >
-                <HugeiconsIcon aria-hidden className="size-3.5" icon={MoreVerticalIcon} />
-              </DropdownMenuTrigger>
-            </IconButtonTooltip>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => onStartRename(chat)}>
-                <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
-                Rename
-              </DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive" onSelect={() => onDelete(chat.id)}>
-                <HugeiconsIcon aria-hidden className="size-4" icon={Delete01Icon} />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+          <span className="truncate">{title}</span>
+        </SidebarNavItem>
       )}
     </SidebarEntrance>
   );
@@ -329,6 +333,17 @@ const SidebarContent = ({
     .find((mailbox) => mailbox.id === selectedMailboxId)?.grantRole;
   const [editingChat, setEditingChat] = useState<{ id: string; title: string } | null>(null);
   const [isSettingsHovered, setIsSettingsHovered] = useState(false);
+  const {
+    clearHover: clearChatHover,
+    clearHoverIfLeavingNav: clearChatHoverIfLeavingNav,
+    hoverEnter: chatHoverEnter,
+    hoverLayoutId: chatHoverLayoutId,
+    isHoverExiting: isChatHoverExiting,
+    isHovered: isChatHovered,
+    navRef: chatNavRef,
+    onHoverExitComplete: onChatHoverExitComplete,
+    setHover: setChatHover,
+  } = useSidebarNavHover<string>("sidebar-chat-row-hover");
 
   const handleComposeNewMail = () => {
     onComposeNewMail();
@@ -495,8 +510,10 @@ const SidebarContent = ({
 
           <LayoutGroup id="sidebar-chats">
             <nav
+              ref={chatNavRef}
               aria-label="Chats"
               className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1"
+              onMouseLeave={clearChatHover}
             >
               {chats.map((chat, index) => {
                 const isActive = chat.id === activeChatId;
@@ -510,9 +527,25 @@ const SidebarContent = ({
                     index={index}
                     isActive={isActive}
                     isEditing={editingChat?.id === chat.id}
+                    isHoverExiting={isChatHoverExiting(chat.id)}
+                    isHovered={isChatHovered(chat.id)}
+                    hoverEnter={chatHoverEnter}
+                    hoverLayoutId={chatHoverLayoutId}
+                    onBlur={(event) => clearChatHoverIfLeavingNav(event.relatedTarget)}
                     onCancelRename={() => setEditingChat(null)}
                     onDelete={onDeleteChat}
                     onEditingTitleChange={(title) => setEditingChat({ id: chat.id, title })}
+                    onFocus={() => {
+                      if (!isActive) setChatHover(chat.id);
+                    }}
+                    onHover={() => {
+                      if (isActive) {
+                        clearChatHover();
+                        return;
+                      }
+                      setChatHover(chat.id);
+                    }}
+                    onHoverExitComplete={onChatHoverExitComplete}
                     onRenameKeyDown={handleRenameKeyDown}
                     onRenameSubmit={submitRenameChat}
                     onSelect={handleSelectChat}
@@ -607,7 +640,7 @@ export const MailSidebar = ({
     <LazyMotion features={domMax}>
       <>
         <aside
-          className="relative hidden h-full shrink-0 bg-transparent text-foreground lg:flex lg:flex-col"
+          className="relative hidden h-full shrink-0 bg-transparent text-fg lg:flex lg:flex-col"
           style={{ width: "272px" }}
         >
           <SidebarContent {...sidebarProps} animateEntrance={animateEntrance} />
@@ -618,7 +651,7 @@ export const MailSidebar = ({
             <>
               <m.button
                 aria-label="Close sidebar"
-                className="fixed inset-0 z-40 bg-background-dark/50 backdrop-blur-[2px] lg:hidden"
+                className="fixed inset-0 z-40 bg-bg-elevated/50 backdrop-blur-[2px] lg:hidden"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -627,7 +660,7 @@ export const MailSidebar = ({
               />
               <m.aside
                 aria-label="Mail sidebar"
-                className="fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-hidden bg-background-dark pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-foreground shadow-2xl lg:hidden"
+                className="fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-hidden bg-bg-elevated pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-fg shadow-2xl lg:hidden"
                 initial={
                   reducedMotion
                     ? { opacity: 0, transform: "translate3d(0, 0, 0)" }

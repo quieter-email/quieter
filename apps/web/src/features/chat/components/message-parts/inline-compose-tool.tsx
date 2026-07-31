@@ -29,7 +29,7 @@ type InlineComposeToolProps = {
 };
 
 const fieldClass =
-  "h-8 w-full min-w-0 bg-transparent px-0 text-sm text-foreground outline-none placeholder:text-muted-foreground/60";
+  "h-8 w-full min-w-0 bg-transparent px-0 text-sm text-fg placeholder:text-muted-fg/60";
 
 const ComposeField = ({
   label,
@@ -45,7 +45,7 @@ const ComposeField = ({
   value: string;
 }) => (
   <label className="flex min-w-0 items-center gap-3 border-b border-border py-1.5 last:border-b-0">
-    <span className="w-12 shrink-0 text-[11px] text-muted-foreground">{label}</span>
+    <span className="w-12 shrink-0 text-[11px] text-muted-fg">{label}</span>
     {readOnly ? (
       <span className={cn(fieldClass, "truncate")}>{value || "—"}</span>
     ) : (
@@ -99,7 +99,7 @@ const ComposeDeclinedView = ({
         {initial.cc.trim() ? <ComposeField label="Cc" readOnly value={initial.cc} /> : null}
         {initial.bcc.trim() ? <ComposeField label="Bcc" readOnly value={initial.bcc} /> : null}
         <ComposeField label="Subject" readOnly value={initial.subject} />
-        <div className="py-2 text-sm/relaxed text-muted-foreground">
+        <div className="py-2 text-sm/relaxed text-muted-fg">
           {bodyHtml ? (
             <div
               className="typeset typeset-docs max-w-[37em]"
@@ -204,16 +204,16 @@ export const InlineComposeTool = ({
   return (
     <form className="border-l border-border pl-3" onSubmit={handleSubmit}>
       <div className="mb-2 flex items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-fg">
           {processing ? "Sending email" : "Draft email"}
           {initial.subject.trim() ? (
-            <span className="text-foreground/75">{` "${initial.subject}"`}</span>
+            <span className="text-fg/75">{` "${initial.subject}"`}</span>
           ) : null}
         </p>
         <div className="flex shrink-0 items-center gap-2 text-[11px]">
           <button
-            className={cn("text-muted-foreground transition-colors hover:text-foreground", {
-              "text-foreground": showCc,
+            className={cn("text-muted-fg transition-colors hover:text-fg", {
+              "text-fg": showCc,
             })}
             onClick={() => setShowCc((current) => !current)}
             type="button"
@@ -221,8 +221,8 @@ export const InlineComposeTool = ({
             Cc
           </button>
           <button
-            className={cn("text-muted-foreground transition-colors hover:text-foreground", {
-              "text-foreground": showBcc,
+            className={cn("text-muted-fg transition-colors hover:text-fg", {
+              "text-fg": showBcc,
             })}
             onClick={() => setShowBcc((current) => !current)}
             type="button"

@@ -81,7 +81,7 @@ export const ToolActivityGroup = ({
         ) : (
           <HugeiconsIcon
             aria-hidden
-            className={cn("size-3.5 shrink-0 text-muted-foreground/45", {
+            className={cn("size-3.5 shrink-0 text-muted-fg/45", {
               "rotate-90": expanded,
               "transition-none": shouldReduceMotion,
               "transition-transform duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out)":
@@ -90,11 +90,9 @@ export const ToolActivityGroup = ({
             icon={ArrowRight01Icon}
           />
         )}
-        <span className="min-w-0 flex-1 truncate text-sm/relaxed text-muted-foreground">
+        <span className="min-w-0 flex-1 truncate text-sm/relaxed text-muted-fg">
           <span className="capitalize">{summary}</span>
-          {activeDetail ? (
-            <span className="ml-2 text-muted-foreground/70">{activeDetail}</span>
-          ) : null}
+          {activeDetail ? <span className="ml-2 text-muted-fg/70">{activeDetail}</span> : null}
         </span>
       </button>
 

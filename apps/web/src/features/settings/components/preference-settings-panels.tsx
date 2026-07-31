@@ -85,7 +85,7 @@ export const ReadingSettingsPanel = () => {
               id="external-images-toggle"
               onCheckedChange={setExternalImagesEnabled}
             >
-              <SwitchThumb className="size-4 bg-background-light data-checked:translate-x-4 data-checked:bg-primary-foreground" />
+              <SwitchThumb className="size-4 bg-bg-surface data-checked:translate-x-4 data-checked:bg-primary-fg" />
             </Switch>
           }
           title="Allow external images"
@@ -124,7 +124,7 @@ export const PrivacySettingsPanel = () => (
     <SettingsRows>
       <SettingsRow
         action={
-          <ConsentPreferencesLink className="squircle inline-flex h-8 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/60" />
+          <ConsentPreferencesLink className="squircle inline-flex h-8 items-center justify-center rounded-md border border-border bg-bg px-3 text-sm font-medium text-fg transition-colors hover:bg-muted/60" />
         }
         title="Cookie and analytics preferences"
       >
@@ -153,7 +153,7 @@ export const DevelopmentSettingsPanel = () => {
               id="demo-mode-toggle"
               onCheckedChange={setDemoModeEnabled}
             >
-              <SwitchThumb className="size-4 bg-background-light data-checked:translate-x-4 data-checked:bg-primary-foreground" />
+              <SwitchThumb className="size-4 bg-bg-surface data-checked:translate-x-4 data-checked:bg-primary-fg" />
             </Switch>
           }
           title="Gmail demo mailbox"
@@ -168,7 +168,7 @@ export const DevelopmentSettingsPanel = () => {
               id="managed-demo-mode-toggle"
               onCheckedChange={setManagedDemoModeEnabled}
             >
-              <SwitchThumb className="size-4 bg-background-light data-checked:translate-x-4 data-checked:bg-primary-foreground" />
+              <SwitchThumb className="size-4 bg-bg-surface data-checked:translate-x-4 data-checked:bg-primary-fg" />
             </Switch>
           }
           title="Managed demo mailbox"
@@ -187,10 +187,10 @@ export const DevelopmentSettingsUnavailable = () => (
       <div className="flex items-start gap-3">
         <HugeiconsIcon
           aria-hidden
-          className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+          className="mt-0.5 size-4 shrink-0 text-muted-fg"
           icon={CodeIcon}
         />
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-muted-fg">
           Local demo mailbox options are only available in development builds.
         </p>
       </div>

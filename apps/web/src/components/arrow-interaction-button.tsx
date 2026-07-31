@@ -78,7 +78,7 @@ export const ArrowInteractionButton = ({ className, onClick, ...props }: ButtonP
   return (
     <Button
       {...props}
-      className={cn("relative overflow-hidden", className)}
+      className={cn("relative", className)}
       onClick={(event) => {
         void Promise.resolve(onClick?.(event))
           .then((success) => {

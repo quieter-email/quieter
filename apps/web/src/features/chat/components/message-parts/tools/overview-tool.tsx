@@ -38,34 +38,26 @@ export const OverviewTool = ({ nested = false, data, error, pending }: OverviewT
       pending={pending}
     >
       {success ? (
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-fg">
           <div className="flex justify-between gap-3">
             <dt>Messages</dt>
-            <dd className="text-foreground/80 tabular-nums">
-              {formatCount(success.totalMessages)}
-            </dd>
+            <dd className="text-fg/80 tabular-nums">{formatCount(success.totalMessages)}</dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt>Threads</dt>
-            <dd className="text-foreground/80 tabular-nums">{formatCount(success.totalThreads)}</dd>
+            <dd className="text-fg/80 tabular-nums">{formatCount(success.totalThreads)}</dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt>Unread</dt>
-            <dd className="text-foreground/80 tabular-nums">
-              {formatCount(success.unreadMessages)}
-            </dd>
+            <dd className="text-fg/80 tabular-nums">{formatCount(success.unreadMessages)}</dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt>Starred</dt>
-            <dd className="text-foreground/80 tabular-nums">
-              {formatCount(success.starredMessages)}
-            </dd>
+            <dd className="text-fg/80 tabular-nums">{formatCount(success.starredMessages)}</dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt>Attachments</dt>
-            <dd className="text-foreground/80 tabular-nums">
-              {formatCount(success.attachmentMessages)}
-            </dd>
+            <dd className="text-fg/80 tabular-nums">{formatCount(success.attachmentMessages)}</dd>
           </div>
         </dl>
       ) : null}

@@ -114,7 +114,7 @@ const getShortcutDisplay = (shortcut: KeyboardShortcut): string[][] => {
 };
 
 const KeyBadge = ({ value }: { value: string }) => (
-  <kbd className="squircle inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-border bg-background-light px-1.5 font-mono text-[11px] font-medium text-foreground shadow-xs">
+  <kbd className="squircle inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-border bg-bg-surface px-1.5 font-mono text-[11px] font-medium text-fg shadow-xs">
     {value}
   </kbd>
 );
@@ -128,12 +128,12 @@ const ShortcutKeys = ({ shortcut }: { shortcut: KeyboardShortcut }) => (
         <div className="flex items-center gap-1" key={`${shortcut.id}-${bindingKey}`}>
           {binding.map((key, keyIndex) => (
             <span className="flex items-center gap-1" key={`${shortcut.id}-${key}-${keyIndex}`}>
-              {keyIndex > 0 && <span className="text-[11px] text-muted-foreground">then</span>}
+              {keyIndex > 0 && <span className="text-[11px] text-muted-fg">then</span>}
               <KeyBadge value={key} />
             </span>
           ))}
           {bindingIndex < bindings.length - 1 && (
-            <span className="text-[11px] text-muted-foreground">or</span>
+            <span className="text-[11px] text-muted-fg">or</span>
           )}
         </div>
       );
@@ -149,13 +149,13 @@ const ShortcutRow = ({ item }: { item: ShortcutViewItem }) => {
     <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-border px-3 py-2 last:border-b-0">
       <div className="min-w-0">
         <p
-          className={cn("truncate text-[0.8rem] font-normal text-foreground", {
-            "text-muted-foreground": shortcut.status === "coming-soon",
+          className={cn("truncate text-[0.8rem] font-normal text-fg", {
+            "text-muted-fg": shortcut.status === "coming-soon",
           })}
         >
           {item.label ?? shortcut.label}
         </p>
-        {context && <p className="mt-0.5 truncate text-xs/5 text-muted-foreground">{context}</p>}
+        {context && <p className="mt-0.5 truncate text-xs/5 text-muted-fg">{context}</p>}
       </div>
       <ShortcutKeys shortcut={shortcut} />
     </div>
@@ -178,8 +178,8 @@ export const KeyboardShortcutsDialog = ({ onOpenChange, open }: KeyboardShortcut
         <div className="mx-auto w-full max-w-4xl columns-1 gap-4 lg:columns-2">
           {SHORTCUT_VIEW_SECTIONS.map((section) => (
             <section className="mb-4 break-inside-avoid space-y-2" key={section.title}>
-              <h2 className="px-1 text-sm font-normal text-foreground">{section.title}</h2>
-              <div className="squircle overflow-hidden rounded-lg border border-border bg-background/58">
+              <h2 className="px-1 text-sm font-normal text-fg">{section.title}</h2>
+              <div className="squircle overflow-hidden rounded-lg border border-border bg-bg/58">
                 {section.items.map((item) => (
                   <ShortcutRow item={item} key={`${section.title}-${item.id}`} />
                 ))}

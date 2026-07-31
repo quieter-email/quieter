@@ -27,6 +27,7 @@ export type MessageListProps = {
   /** Plain row click on the already-open thread closes the reading pane (same as back). */
   onDeactivateActiveMessage: () => void;
   onLoadMore: () => void;
+  onKeyboardOpenMessage?: () => void;
   onOpenSidebar?: () => void;
   onOpenDraft: (message: MessageListItem) => void;
   onRefresh: () => void;

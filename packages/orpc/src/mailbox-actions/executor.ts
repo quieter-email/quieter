@@ -54,7 +54,7 @@ type NodeResult = {
 };
 
 type MailboxActionUsageMiddlewareFactory = (input: {
-  model: typeof MAILBOX_ACTION_CONDITION_MODEL | typeof MAILBOX_ACTION_LINEAR_AGENT_MODEL;
+  model: typeof MAILBOX_ACTION_CONDITION_MODEL;
   nodeId: string;
   stepRunId: string;
 }) => ChatMiddleware[];

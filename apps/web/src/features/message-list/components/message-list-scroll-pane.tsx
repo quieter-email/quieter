@@ -29,6 +29,7 @@ const MESSAGE_LIST_SKELETON_ROW_IDS = [
 type MessageListScrollPaneProps = {
   gmailLabels: MailboxLabel[];
   list: MessageListProps;
+  onKeyboardOpenMessage?: () => void;
   selection: ReturnType<typeof useMessageListSelection>;
   threadedMessages: ThreadListEntry[];
 };
@@ -84,6 +85,7 @@ const MessageListLoadingSkeleton = () => (
 export const MessageListScrollPane = ({
   gmailLabels,
   list,
+  onKeyboardOpenMessage,
   selection,
   threadedMessages,
 }: MessageListScrollPaneProps) => {
@@ -200,15 +202,6 @@ export const MessageListScrollPane = ({
         `li[data-thread-id="${CSS.escape(threadId)}"] [data-message-row-trigger]`,
       );
       trigger?.focus({ preventScroll: true, focusVisible: true });
-
-      requestAnimationFrame(() => {
-        const row = trigger?.closest<HTMLElement>("[data-message-row]");
-        if (trigger?.matches(":focus-visible")) {
-          row?.setAttribute("data-focus-visible", "");
-        } else {
-          row?.removeAttribute("data-focus-visible");
-        }
-      });
     });
 
     return () => cancelAnimationFrame(frameId);
@@ -278,6 +271,7 @@ export const MessageListScrollPane = ({
                   onThreadFocus={selection.focusThread}
                   onThreadIntent={handleThreadIntent}
                   onOpenDraft={list.onOpenDraft}
+                  onKeyboardOpen={onKeyboardOpenMessage}
                   onThreadPress={selection.handleThreadPress}
                   onThreadSelectionPress={selection.handleThreadSelectionPress}
                   pendingActions={list.pendingActions}
@@ -296,7 +290,7 @@ export const MessageListScrollPane = ({
       )}
 
       {!isLoadingEmptyMessages && !list.isError && threadedMessages.length === 0 && (
-        <p className="px-2 py-8 text-sm text-muted-foreground">
+        <p className="px-2 py-8 text-sm text-muted-fg">
           {list.activeMailbox === "drafts"
             ? list.searchQuery
               ? "No drafts found."
@@ -308,12 +302,9 @@ export const MessageListScrollPane = ({
       )}
 
       {!list.isError && threadedMessages.length > 0 && (
-        <p className="px-2 py-5 text-center text-xs text-muted-foreground">
+        <p className="px-2 py-5 text-center text-xs text-muted-fg">
           {list.isFetchingNextPage || list.hasNextPage ? (
-            <HugeiconsIcon
-              className="mx-auto animate-spin text-muted-foreground"
-              icon={Loading03Icon}
-            />
+            <HugeiconsIcon className="mx-auto animate-spin text-muted-fg" icon={Loading03Icon} />
           ) : (
             "You're all caught up."
           )}

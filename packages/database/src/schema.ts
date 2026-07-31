@@ -208,8 +208,8 @@ export const userAiContext = pgTable(
     userId: text("userId")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    autoLabelModel: text("autoLabelModel").notNull().default("deepseek/deepseek-v4-flash"),
-    usefulDetailModel: text("usefulDetailModel").notNull().default("deepseek/deepseek-v4-flash"),
+    autoLabelModel: text("autoLabelModel").notNull().default("openai/gpt-5.6-luna"),
+    usefulDetailModel: text("usefulDetailModel").notNull().default("openai/gpt-5.6-luna"),
     markdown: text("markdown").notNull(),
     revision: integer("revision").notNull().default(1),
     lastEditedAt: timestamp("lastEditedAt").notNull(),

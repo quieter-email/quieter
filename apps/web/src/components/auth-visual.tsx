@@ -374,7 +374,7 @@ const readColors = (canvas: HTMLCanvasElement): Colors => {
   const background = getCssColor(
     canvas,
     "background-color",
-    getCssColor(canvas, "--background", [0.02, 0.02, 0.02]),
+    getCssColor(canvas, "--bg", [0.02, 0.02, 0.02]),
   );
   const primary = getCssColor(canvas, "--primary", [0.25, 0.25, 0.25]);
 
@@ -1341,11 +1341,6 @@ export const AuthVisual = () => {
   }, []);
 
   return (
-    <canvas
-      aria-hidden="true"
-      className="block size-full bg-background"
-      ref={canvasRef}
-      tabIndex={-1}
-    />
+    <canvas aria-hidden="true" className="block size-full bg-bg" ref={canvasRef} tabIndex={-1} />
   );
 };

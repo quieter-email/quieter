@@ -109,25 +109,23 @@ export const GmailUsefulDetailCard = ({
     : (feedbackMutation.variables?.feedback ?? detail.feedback);
   const content = isVerificationCode ? (
     <span className="block min-w-0">
-      <span className="block text-xs/4 font-medium text-muted-foreground">
-        {detailText.headline}
-      </span>
-      <span className="mt-2 block font-mono text-xl font-medium tracking-widest text-foreground">
+      <span className="block text-xs/4 font-medium text-muted-fg">{detailText.headline}</span>
+      <span className="mt-2 block font-mono text-xl font-medium tracking-widest text-fg">
         {detail.code}
       </span>
       {detailText.kicker && (
-        <span className="mt-2 block text-xs/4 wrap-break-word text-muted-foreground">
+        <span className="mt-2 block text-xs/4 wrap-break-word text-muted-fg">
           {detailText.kicker}
         </span>
       )}
     </span>
   ) : (
     <span className="block min-w-0">
-      <span className="block text-sm/5 font-semibold wrap-break-word text-foreground">
+      <span className="block text-sm/5 font-semibold wrap-break-word text-fg">
         {detailText.headline}
       </span>
       {metadata.length > 0 && (
-        <span className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs/4 font-medium text-foreground/70">
+        <span className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs/4 font-medium text-fg/70">
           {metadata.map((value) => (
             <span className="wrap-break-word" key={value}>
               {value}
@@ -136,7 +134,7 @@ export const GmailUsefulDetailCard = ({
         </span>
       )}
       {detailText.kicker && (
-        <span className="mt-1.5 block text-xs/4 wrap-break-word text-muted-foreground">
+        <span className="mt-1.5 block text-xs/4 wrap-break-word text-muted-fg">
           {detailText.kicker}
         </span>
       )}
@@ -149,16 +147,12 @@ export const GmailUsefulDetailCard = ({
         className={cn(
           "relative z-10 grid min-w-0 grid-cols-1 items-start gap-x-3 gap-y-2 rounded-xl bg-card px-4 py-3.5 shadow-xs sm:grid-cols-[minmax(0,1fr)_auto]",
           {
-            "bg-label-red": detail.kind === "security_alert",
+            "bg-q-red": detail.kind === "security_alert",
           },
         )}
       >
         {onOpen ? (
-          <button
-            className="min-w-0 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-            onClick={onOpen}
-            type="button"
-          >
+          <button className="min-w-0 rounded-md text-left" onClick={onOpen} type="button">
             {content}
           </button>
         ) : (
@@ -184,9 +178,9 @@ export const GmailUsefulDetailCard = ({
               aria-label="Mark as useful"
               aria-pressed={feedback === "useful"}
               className={cn(
-                "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50",
+                "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-fg hover:bg-muted hover:text-fg disabled:pointer-events-none disabled:opacity-50",
                 {
-                  "bg-muted text-foreground": feedback === "useful",
+                  "bg-muted text-fg": feedback === "useful",
                 },
               )}
               disabled={feedbackMutation.isPending}
@@ -204,9 +198,9 @@ export const GmailUsefulDetailCard = ({
               aria-label="Mark as not useful"
               aria-pressed={feedback === "not_useful"}
               className={cn(
-                "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50",
+                "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-fg hover:bg-muted hover:text-fg disabled:pointer-events-none disabled:opacity-50",
                 {
-                  "bg-muted text-foreground": feedback === "not_useful",
+                  "bg-muted text-fg": feedback === "not_useful",
                 },
               )}
               disabled={feedbackMutation.isPending}
@@ -223,7 +217,7 @@ export const GmailUsefulDetailCard = ({
             <IconButtonTooltip label="Dismiss">
               <button
                 aria-label="Dismiss useful detail"
-                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
+                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-fg hover:bg-muted hover:text-fg"
                 onClick={onDismiss}
                 type="button"
               >

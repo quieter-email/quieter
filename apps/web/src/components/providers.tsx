@@ -7,7 +7,6 @@ import { useLocation } from "@tanstack/react-router";
 import { MotionConfig } from "motion/react";
 import { lazy, Suspense, type PropsWithChildren, useEffect, useState } from "react";
 import { ConsentManager } from "~/components/consent-manager";
-import { FocusModalityProvider } from "~/components/focus-modality-provider";
 import { MailtoProtocolHandler } from "~/components/mailto-protocol-handler";
 import { SiteFooter } from "~/components/site-footer";
 import { TelemetryProvider } from "~/components/telemetry-provider";
@@ -74,15 +73,13 @@ export const Providers = ({ children }: PropsWithChildren) => {
             <TelemetryProvider>
               <QueryClientProvider client={queryClient}>
                 <QueryPersistenceSessionBoundary />
-                <FocusModalityProvider>
-                  <KeyboardShortcutsProvider>
-                    <MailtoProtocolHandler />
-                    {children}
-                    <Suspense fallback={null}>
-                      <Toaster />
-                    </Suspense>
-                  </KeyboardShortcutsProvider>
-                </FocusModalityProvider>
+                <KeyboardShortcutsProvider>
+                  <MailtoProtocolHandler />
+                  {children}
+                  <Suspense fallback={null}>
+                    <Toaster />
+                  </Suspense>
+                </KeyboardShortcutsProvider>
               </QueryClientProvider>
             </TelemetryProvider>
             <SiteFooter />

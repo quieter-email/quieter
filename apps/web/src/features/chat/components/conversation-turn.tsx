@@ -4,6 +4,7 @@ import { Copy01Icon, Edit01Icon, Refresh01Icon } from "@hugeicons/core-free-icon
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Textarea } from "@quieter/ui/textarea";
 import { type KeyboardEvent, useState } from "react";
 import type { ChatTurn, ResolveComposeTool } from "../types";
 import { getCopyableMessageText } from "../domain/copy-message-text";
@@ -85,9 +86,9 @@ export const ConversationTurn = ({
         <div className="group/message flex flex-col items-end gap-1">
           {isEditing ? (
             <div className="flex w-full max-w-[85%] flex-col gap-2 sm:max-w-[75%]">
-              <textarea
+              <Textarea
                 aria-label="Edit message"
-                className="keyboard-focus-ring min-h-20 w-full resize-none rounded-lg border border-border bg-muted px-3.5 py-2 text-sm/relaxed text-foreground focus:outline-none"
+                className="min-h-20 resize-none rounded-lg px-3.5 text-sm/relaxed"
                 onChange={(event) => setEditDraft(event.target.value)}
                 onKeyDown={handleEditKeyDown}
                 value={editDraft}
@@ -103,7 +104,7 @@ export const ConversationTurn = ({
             </div>
           ) : (
             <>
-              <div className="max-w-[85%] rounded-lg bg-muted px-3.5 py-2 text-sm/relaxed text-foreground sm:max-w-[75%]">
+              <div className="max-w-[85%] rounded-lg bg-muted px-3.5 py-2 text-sm/relaxed text-fg sm:max-w-[75%]">
                 <UserParts parts={turn.user.parts} />
               </div>
               {showActions ? (

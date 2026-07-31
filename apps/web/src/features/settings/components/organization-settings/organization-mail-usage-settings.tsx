@@ -93,10 +93,10 @@ const ManagedUsageUnavailable = ({ message }: { message: string }) => (
 
 const Price = ({ label, suffix, value }: { label: string; suffix: string; value: number }) => (
   <div className="min-w-0 py-3 md:px-4 md:first:pl-0 md:last:pr-0">
-    <p className="text-xs text-muted-foreground">{label}</p>
-    <p className="mt-1 font-mono text-sm font-medium text-foreground">
+    <p className="text-xs text-muted-fg">{label}</p>
+    <p className="mt-1 font-mono text-sm font-medium text-fg">
       {rateFormatter.format(value)}
-      <span className="font-sans font-normal text-muted-foreground"> {suffix}</span>
+      <span className="font-sans font-normal text-muted-fg"> {suffix}</span>
     </p>
   </div>
 );
@@ -133,7 +133,7 @@ const usageBreakdownConfig = [
     label: "Outbound mail",
   },
   {
-    className: "bg-muted-foreground/50",
+    className: "bg-muted-fg/50",
     kind: "other",
     label: "Other",
   },
@@ -182,7 +182,7 @@ const UsageBreakdown = ({
                       {moneyFormatter.format(item.costCents / centsPerDollar)}
                     </span>
                   </div>
-                  <p className="mt-0.5 text-muted-foreground">{percentage}% of usage</p>
+                  <p className="mt-0.5 text-muted-fg">{percentage}% of usage</p>
                 </TooltipContent>
               </Tooltip>,
             ];
@@ -194,8 +194,8 @@ const UsageBreakdown = ({
         {items.map((item) => (
           <div className="flex min-w-0 items-center gap-2 text-xs" key={item.kind}>
             <span className={`size-2 shrink-0 rounded-full ${item.className}`} />
-            <span className="min-w-0 flex-1 truncate text-muted-foreground">{item.label}</span>
-            <span className="font-mono text-foreground">
+            <span className="min-w-0 flex-1 truncate text-muted-fg">{item.label}</span>
+            <span className="font-mono text-fg">
               {moneyFormatter.format(item.costCents / centsPerDollar)}
             </span>
           </div>
@@ -328,12 +328,12 @@ const ManagedUsageSettingsForm = ({
       <div className="mt-5 px-4 md:px-6">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <p className="font-mono text-xl font-semibold text-foreground">
+            <p className="font-mono text-xl font-semibold text-fg">
               {formatMoney(managedUsageCostCents)}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">used across team features</p>
+            <p className="mt-1 text-xs text-muted-fg">used across team features</p>
           </div>
-          <p className="text-right text-xs text-muted-foreground">
+          <p className="text-right text-xs text-muted-fg">
             {formatMoney(includedUsageCents)} monthly usage balance
             <br />
             {formatMoney(overview.usage.billableCostCents)} overage
@@ -385,7 +385,7 @@ const ManagedUsageSettingsForm = ({
             id="managed-overage-toggle"
             onCheckedChange={setOverageEnabled}
           >
-            <SwitchThumb className="size-4 bg-background-light data-checked:translate-x-4 data-checked:bg-primary-foreground" />
+            <SwitchThumb className="size-4 bg-bg-surface data-checked:translate-x-4 data-checked:bg-primary-fg" />
           </Switch>
         </SettingsInsetRow>
 
@@ -483,9 +483,9 @@ const ManagedUsageSettingsForm = ({
                 </NumberFieldGroup>
               </NumberField>
 
-              <div className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <div className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-fg">
                 <span>
-                  <span className="font-mono text-foreground">
+                  <span className="font-mono text-fg">
                     {includedThresholdCents == null
                       ? "Enter a threshold"
                       : formatMoney(includedThresholdCents)}
@@ -494,9 +494,7 @@ const ManagedUsageSettingsForm = ({
                 </span>
                 {overageThresholdCents != null && (
                   <span>
-                    <span className="font-mono text-foreground">
-                      {formatMoney(overageThresholdCents)}
-                    </span>{" "}
+                    <span className="font-mono text-fg">{formatMoney(overageThresholdCents)}</span>{" "}
                     of the overage limit
                   </span>
                 )}
@@ -531,9 +529,7 @@ const ManagedUsageSettingsForm = ({
 
         {canManageOrganizationMailUsage ? (
           <SettingsInsetRow className="justify-end gap-3">
-            {hasUnsavedChanges ? (
-              <p className="text-xs text-muted-foreground">Unsaved changes</p>
-            ) : null}
+            {hasUnsavedChanges ? <p className="text-xs text-muted-fg">Unsaved changes</p> : null}
             <Button
               disabled={!hasUnsavedChanges || !!milestoneError || updateMutation.isPending}
               onClick={() => void saveSettings()}
@@ -549,7 +545,7 @@ const ManagedUsageSettingsForm = ({
       </SettingsInsetRows>
 
       {!canManageOrganizationMailUsage && (
-        <p className="px-4 pt-1 pb-3 text-xs text-muted-foreground md:px-6">
+        <p className="px-4 pt-1 pb-3 text-xs text-muted-fg md:px-6">
           Only admins and owners can change team credit settings.
         </p>
       )}

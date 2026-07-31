@@ -8,23 +8,23 @@ const publicFooterRoutes = new Set(["/home", "/privacy", "/cookies", "/terms", "
 
 const FooterLinks = ({ className, tabIndex }: { className?: string; tabIndex?: number }) => (
   <div className={cn("flex flex-wrap items-center gap-x-4 gap-y-2", className)}>
-    <Link className="hover:text-foreground" tabIndex={tabIndex} to="/privacy">
+    <Link className="hover:text-fg" tabIndex={tabIndex} to="/privacy">
       Privacy
     </Link>
-    <Link className="hover:text-foreground" tabIndex={tabIndex} to="/cookies">
+    <Link className="hover:text-fg" tabIndex={tabIndex} to="/cookies">
       Cookies
     </Link>
-    <Link className="hover:text-foreground" tabIndex={tabIndex} to="/terms">
+    <Link className="hover:text-fg" tabIndex={tabIndex} to="/terms">
       Terms
     </Link>
-    <Link className="hover:text-foreground" tabIndex={tabIndex} to="/imprint">
+    <Link className="hover:text-fg" tabIndex={tabIndex} to="/imprint">
       Imprint
     </Link>
-    <ConsentPreferencesLink className="hover:text-foreground" tabIndex={tabIndex}>
+    <ConsentPreferencesLink className="hover:text-fg" tabIndex={tabIndex}>
       Preferences
     </ConsentPreferencesLink>
     <a
-      className="hover:text-foreground"
+      className="hover:text-fg"
       href="https://logo.dev"
       rel="noreferrer"
       tabIndex={tabIndex}
@@ -43,7 +43,7 @@ export const SiteFooter = () => {
 
   if (publicFooterRoutes.has(pathname)) {
     return (
-      <footer className="border-t border-border bg-background py-6 text-sm text-muted-foreground">
+      <footer className="border-t border-border bg-bg py-6 text-sm text-muted-fg">
         <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 md:px-8">
           <p>© 2026 quieter</p>
           <FooterLinks className="max-w-xl md:justify-end" />

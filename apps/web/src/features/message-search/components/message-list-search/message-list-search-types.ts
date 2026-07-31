@@ -11,7 +11,7 @@ export type MessageListSearchProps = {
 
 export type PendingFocusTarget =
   | { kind: "segment"; index: number; selectAll?: boolean; toEnd?: boolean }
-  | { kind: "text"; toEnd?: boolean };
+  | { kind: "text"; index?: number; toEnd?: boolean };
 
 export type DropdownDirection = "next" | "previous";
 

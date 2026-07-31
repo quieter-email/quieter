@@ -30,7 +30,7 @@ import { toast } from "@quieter/ui/toast";
 import { TooltipGroup } from "@quieter/ui/tooltip";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type {
   MailboxActions,
   MailboxPendingActions,
@@ -75,6 +75,7 @@ import {
 
 type MessageViewProps = {
   activeMailbox: MailboxCategory;
+  autoFocus?: boolean;
   currentUserEmail?: string | null;
   mailboxId: string;
   mailboxProvider: "api" | "gmail" | "managed";
@@ -82,6 +83,7 @@ type MessageViewProps = {
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onBackToList?: () => void;
+  onAutoFocusComplete?: () => void;
   pendingActions: MailboxPendingActions;
 };
 
@@ -181,12 +183,12 @@ const MessageHeaderContent = ({
     <div className="w-full min-w-0 flex-1 select-text">
       <div className="flex w-full min-w-0 flex-wrap items-baseline justify-start gap-x-2 gap-y-1">
         {isMessageUnread(message) && (
-          <span aria-hidden className="size-2 shrink-0 rounded-full bg-foreground/75" />
+          <span aria-hidden className="size-2 shrink-0 rounded-full bg-fg/75" />
         )}
 
         <span
           className={cn(
-            "max-w-full min-w-0 shrink cursor-text truncate text-sm font-medium text-foreground @sm:text-[15px]",
+            "max-w-full min-w-0 shrink cursor-text truncate text-sm font-medium text-fg @sm:text-[15px]",
             senderNameClassName,
           )}
         >
@@ -194,28 +196,26 @@ const MessageHeaderContent = ({
         </span>
 
         {senderEmail && (
-          <span className="max-w-full min-w-0 shrink cursor-text truncate text-xs text-muted-foreground @sm:text-sm">
+          <span className="max-w-full min-w-0 shrink cursor-text truncate text-xs text-muted-fg @sm:text-sm">
             {senderEmail}
           </span>
         )}
 
-        <span className="shrink-0 basis-full cursor-text text-xs whitespace-nowrap text-muted-foreground @sm:basis-auto @sm:text-sm">
+        <span className="shrink-0 basis-full cursor-text text-xs whitespace-nowrap text-muted-fg @sm:basis-auto @sm:text-sm">
           {date}
         </span>
       </div>
 
       {previewMode === "collapsed" && !isExpanded ? (
-        <p className="mt-1 min-h-5 cursor-text truncate text-sm text-foreground">
+        <p className="mt-1 min-h-5 cursor-text truncate text-sm text-fg">
           {preview || <span aria-hidden>&nbsp;</span>}
         </p>
       ) : (
         <div className="mt-1 min-h-5 space-y-1">
           {participantRows.map((row) => (
             <div className="flex min-w-0 items-start gap-2 text-xs @sm:text-sm" key={row.label}>
-              <span className="shrink-0 cursor-text text-muted-foreground">{row.label}</span>
-              <span className="min-w-0 cursor-text wrap-break-word text-foreground">
-                {row.value}
-              </span>
+              <span className="shrink-0 cursor-text text-muted-fg">{row.label}</span>
+              <span className="min-w-0 cursor-text wrap-break-word text-fg">{row.value}</span>
             </div>
           ))}
         </div>
@@ -242,7 +242,7 @@ const MessageHeaderContent = ({
             <button
               aria-controls={`message-body-${message.id}`}
               aria-expanded={isExpanded}
-              className="w-full min-w-0 rounded-sm text-left outline-hidden transition-colors select-text focus-visible:ring-2 focus-visible:ring-ring/60 @sm:flex-1"
+              className="w-full min-w-0 rounded-sm text-left transition-colors select-text @sm:flex-1"
               onClick={(event) => {
                 const selection = window.getSelection();
                 if (selection && !selection.isCollapsed && selection.toString().trim()) {
@@ -306,7 +306,7 @@ const MessageHeaderActions = ({
       <IconButtonTooltip label="Continue with draft">
         <Button
           aria-label="Continue with draft"
-          className="h-10 gap-1.5 px-2.5 text-muted-foreground hover:text-foreground @md:size-8 @md:px-0"
+          className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
           onClick={onContinueDraft}
           type="button"
           variant="ghost"
@@ -319,7 +319,7 @@ const MessageHeaderActions = ({
     <IconButtonTooltip label="Reply">
       <Button
         aria-label="Reply"
-        className="h-10 gap-1.5 px-2.5 text-muted-foreground hover:text-foreground @md:size-8 @md:px-0"
+        className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
         onClick={onReply}
         type="button"
         variant="ghost"
@@ -332,7 +332,7 @@ const MessageHeaderActions = ({
       <IconButtonTooltip label="Reply all">
         <Button
           aria-label="Reply all"
-          className="h-10 gap-1.5 px-2.5 text-muted-foreground hover:text-foreground @md:size-8 @md:px-0"
+          className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
           onClick={onReplyAll}
           type="button"
           variant="ghost"
@@ -345,7 +345,7 @@ const MessageHeaderActions = ({
     <IconButtonTooltip label="Forward">
       <Button
         aria-label="Forward"
-        className="h-10 gap-1.5 px-2.5 text-muted-foreground hover:text-foreground @md:size-8 @md:px-0"
+        className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
         onClick={onForward}
         type="button"
         variant="ghost"
@@ -358,7 +358,7 @@ const MessageHeaderActions = ({
       <IconButtonTooltip label="Unsubscribe">
         <Button
           aria-label="Unsubscribe"
-          className="h-10 gap-1.5 px-2.5 text-muted-foreground hover:text-foreground @md:size-8 @md:px-0"
+          className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
           disabled={isPending && onUnsubscribe.kind === "mailto"}
           onClick={onUnsubscribe.onClick}
           type="button"
@@ -375,7 +375,7 @@ const MessageHeaderActions = ({
     <IconButtonTooltip label="Details">
       <Button
         aria-label="Details"
-        className="h-10 gap-1.5 px-2.5 text-muted-foreground hover:text-foreground @md:size-8 @md:px-0"
+        className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
         onClick={onDetails}
         type="button"
         variant="ghost"
@@ -411,14 +411,14 @@ const MessageInspectorPanel = ({
       <DialogContent className="w-[min(92vw,56rem)]">
         <DialogHeader>
           <DialogTitle className="text-base font-bold">Full details</DialogTitle>
-          <DialogDescription className="text-foreground">
+          <DialogDescription className="text-fg">
             Complete information available for this message.
           </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="max-h-[70vh] space-y-5 overflow-y-auto">
           {isInspectorPending ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 text-sm text-muted-fg">
               <HugeiconsIcon aria-hidden className="animate-spin" icon={Loading03Icon} />
               <span>Loading message details…</span>
             </div>
@@ -430,7 +430,7 @@ const MessageInspectorPanel = ({
             inspector && (
               <>
                 <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Summary</h3>
+                  <h3 className="text-sm font-semibold text-fg">Summary</h3>
                   {[
                     { label: "Reference", value: inspector.messageHeaderId },
                     { label: "Subject", value: inspector.subject },
@@ -439,8 +439,8 @@ const MessageInspectorPanel = ({
                   ].flatMap((row) =>
                     row.value?.trim()
                       ? [
-                          <p className="text-sm text-foreground" key={row.label}>
-                            <span className="font-semibold text-foreground">{row.label}: </span>
+                          <p className="text-sm text-fg" key={row.label}>
+                            <span className="font-semibold text-fg">{row.label}: </span>
                             <span className="wrap-break-word">{row.value}</span>
                           </p>,
                         ]
@@ -449,13 +449,13 @@ const MessageInspectorPanel = ({
                 </section>
 
                 <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Delivery details</h3>
+                  <h3 className="text-sm font-semibold text-fg">Delivery details</h3>
                   {inspector.headers.map((header) => (
                     <p
-                      className="text-sm text-foreground"
+                      className="text-sm text-fg"
                       key={`${inspector.messageHeaderId}-${header.name}-${header.value}`}
                     >
-                      <span className="font-semibold text-foreground">{header.name}: </span>
+                      <span className="font-semibold text-fg">{header.name}: </span>
                       <span className="wrap-break-word">{header.value}</span>
                     </p>
                   ))}
@@ -463,8 +463,8 @@ const MessageInspectorPanel = ({
 
                 {inspector.rawText && (
                   <section className="space-y-2">
-                    <h3 className="text-sm font-semibold text-foreground">Original message</h3>
-                    <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground">
+                    <h3 className="text-sm font-semibold text-fg">Original message</h3>
+                    <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-fg">
                       {inspector.rawText}
                     </pre>
                   </section>
@@ -472,8 +472,8 @@ const MessageInspectorPanel = ({
 
                 {inspector.raw && (
                   <section className="space-y-2">
-                    <h3 className="text-sm font-semibold text-foreground">Gmail record</h3>
-                    <pre className="overflow-x-auto text-sm break-all whitespace-pre-wrap text-foreground">
+                    <h3 className="text-sm font-semibold text-fg">Gmail record</h3>
+                    <pre className="overflow-x-auto text-sm break-all whitespace-pre-wrap text-fg">
                       {inspector.raw}
                     </pre>
                   </section>
@@ -481,8 +481,8 @@ const MessageInspectorPanel = ({
 
                 {payloadText && (
                   <section className="space-y-2">
-                    <h3 className="text-sm font-semibold text-foreground">Message structure</h3>
-                    <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-foreground">
+                    <h3 className="text-sm font-semibold text-fg">Message structure</h3>
+                    <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-fg">
                       {payloadText}
                     </pre>
                   </section>
@@ -547,8 +547,8 @@ const MessageExpandButton = ({
       aria-controls={`message-body-${messageId}`}
       aria-expanded={expanded}
       aria-label={expanded ? "Collapse message" : "Expand message"}
-      className={cn("text-muted-foreground hover:text-foreground", {
-        "text-foreground/80": expanded,
+      className={cn("text-muted-fg hover:text-fg", {
+        "text-fg/80": expanded,
       })}
       onClick={onToggleExpanded}
       size="icon-sm"
@@ -623,7 +623,7 @@ const ThreadMessageCard = ({
   return (
     <section
       className={cn("border-b transition-colors duration-200", {
-        "border-foreground/40": isMessageUnread(message) && !expanded,
+        "border-fg/40": isMessageUnread(message) && !expanded,
       })}
     >
       <MessageHeaderContent
@@ -838,6 +838,7 @@ const ThreadMessageList = ({
 
 export const MessageView = ({
   activeMailbox,
+  autoFocus = false,
   mailboxId,
   mailboxProvider,
   currentUserEmail,
@@ -845,8 +846,10 @@ export const MessageView = ({
   message,
   onComposeDraftRequested,
   onBackToList,
+  onAutoFocusComplete,
   pendingActions,
 }: MessageViewProps) => {
+  const viewRef = useRef<HTMLElement>(null);
   const queryClient = useQueryClient();
   const { data: gmailLabels = [] } = useQuery(
     labelsQueryOptions(mailboxId, mailboxProvider !== "api"),
@@ -1055,11 +1058,26 @@ export const MessageView = ({
     { ignoreInputs: true },
   );
 
+  useEffect(() => {
+    if (!autoFocus) return;
+
+    const frameId = requestAnimationFrame(() => {
+      const view = viewRef.current;
+      const focusTarget = view?.querySelector<HTMLElement>(
+        "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])",
+      );
+      (focusTarget ?? view)?.focus({ preventScroll: true, focusVisible: true });
+      onAutoFocusComplete?.();
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [autoFocus, onAutoFocusComplete]);
+
   return (
-    <article className="@container w-full">
+    <article ref={viewRef} tabIndex={-1} className="@container w-full">
       <header className="w-full border-b p-4 @sm:p-6">
         <div className="flex min-w-0 flex-col items-start gap-3 @sm:grid @sm:grid-cols-[minmax(0,1fr)_auto] @sm:items-center @sm:gap-8">
-          <h1 className="min-w-0 text-lg/tight font-medium tracking-tight wrap-break-word text-foreground @sm:text-xl">
+          <h1 className="min-w-0 text-lg/tight font-medium tracking-tight wrap-break-word text-fg @sm:text-xl">
             {subject}
           </h1>
 
@@ -1084,9 +1102,7 @@ export const MessageView = ({
 
         {apiSource && (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">
-              Sent through API from {apiSource.senderAddress}.
-            </span>
+            <span className="text-muted-fg">Sent through API from {apiSource.senderAddress}.</span>
             {apiSource.canCreateMailbox ? (
               <Button
                 disabled={createApiMailboxMutation.isPending}
@@ -1110,7 +1126,7 @@ export const MessageView = ({
                 Create mailbox
               </Button>
             ) : apiSource.senderMailboxId ? (
-              <span className="squircle rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+              <span className="squircle rounded-md bg-muted px-2 py-1 text-xs text-muted-fg">
                 {apiSource.includedInMailbox ? "Included in mailbox" : "Mailbox copy disabled"}
               </span>
             ) : null}
@@ -1118,7 +1134,7 @@ export const MessageView = ({
         )}
 
         {!isSingleMessageThread && (
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="mt-2 text-sm text-muted-fg">
             {visibleMessages.length} {visibleMessages.length === 1 ? "message" : "messages"}
           </p>
         )}

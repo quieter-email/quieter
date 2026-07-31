@@ -110,13 +110,13 @@ export const MemberActions = ({
     <div className="space-y-1">
       <div className={cn(settingsInsetRowClass, settingsInsetDividerClass, "gap-3")}>
         <div className="min-w-0 flex-1 text-left">
-          <p className="truncate text-sm font-medium text-foreground">
+          <p className="truncate text-sm font-medium text-fg">
             {member.user.name || member.user.email}
           </p>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{member.user.email}</p>
+          <p className="mt-0.5 truncate text-xs text-muted-fg">{member.user.email}</p>
         </div>
 
-        <p className="shrink-0 text-sm text-muted-foreground">
+        <p className="shrink-0 text-sm text-muted-fg">
           {formatRoleLabel(member.role)}
           {isActiveMember ? " / You" : ""}
         </p>

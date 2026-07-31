@@ -77,7 +77,7 @@ const AuthLastUsedHint = () => (
         }}
         transition={{ duration: 5, ease: "linear", repeat: Infinity }}
       />
-      <span className="squircle relative block rounded-[inherit] bg-background px-2 py-1 text-[0.625rem] font-medium tracking-wide text-muted-foreground">
+      <span className="squircle relative block rounded-[inherit] bg-bg px-2 py-1 text-[0.625rem] font-medium tracking-wide text-muted-fg">
         Last used
       </span>
     </span>
@@ -332,7 +332,7 @@ const AuthCredentials = ({
         </form.Field>
 
         {isSignup ? (
-          <label className="flex items-start gap-3 text-sm text-muted-foreground">
+          <label className="flex items-start gap-3 text-sm text-muted-fg">
             <Checkbox
               checked={termsAccepted}
               className="mt-0.5"
@@ -348,11 +348,11 @@ const AuthCredentials = ({
             </Checkbox>
             <span>
               I agree to the{" "}
-              <Link className="text-foreground underline" target="_blank" to="/terms">
+              <Link className="text-fg underline" target="_blank" to="/terms">
                 Terms of Service
               </Link>{" "}
               and{" "}
-              <Link className="text-foreground underline" target="_blank" to="/privacy">
+              <Link className="text-fg underline" target="_blank" to="/privacy">
                 Privacy Policy
               </Link>
               .
@@ -532,13 +532,13 @@ export const AuthScreen = () => {
     : null;
 
   return (
-    <div className="grid h-dvh max-h-dvh w-full overflow-hidden bg-background md:grid-cols-2">
-      <div className="size-full min-h-0 border-r bg-background-light max-md:hidden">
+    <div className="grid h-dvh max-h-dvh w-full overflow-hidden bg-bg md:grid-cols-2">
+      <div className="size-full min-h-0 border-r bg-bg-surface max-md:hidden">
         <AuthVisual />
       </div>
       <div className="flex size-full min-h-0 items-center justify-center px-6">
         <div className="w-full max-w-md">
-          <h1 className="text-3xl font-medium tracking-tight text-foreground">
+          <h1 className="text-3xl font-medium tracking-tight text-fg">
             {mode === "signup" ? "Sign up" : "Log in"}
           </h1>
 
@@ -557,9 +557,9 @@ export const AuthScreen = () => {
             </p>
           ) : null}
 
-          <p className="mt-6 text-sm text-muted-foreground">
+          <p className="mt-6 text-sm text-muted-fg">
             <Link
-              className="text-foreground underline"
+              className="text-fg underline"
               search={{ mode: mode === "signup" ? "login" : "signup", returnTo }}
               to="/auth"
             >

@@ -51,12 +51,12 @@ export const ChatComposer = ({
 
   return (
     <form
-      className="squircle flex w-full flex-col rounded-xl border bg-background/85 shadow-xl"
+      className="squircle flex w-full flex-col rounded-xl border border-border bg-bg/85 shadow-xl has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-1 has-[textarea:focus-visible]:ring-ring/45 has-[textarea:focus-visible]:outline-none"
       onSubmit={onSubmit}
     >
       <textarea
         aria-label="Message"
-        className="max-h-40 min-h-18 w-full grow resize-none bg-transparent px-4 pt-4 pb-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+        className="max-h-40 min-h-18 w-full grow resize-none bg-transparent px-4 pt-4 pb-2 text-sm text-fg outline-none placeholder:text-muted-fg/50 disabled:cursor-not-allowed disabled:opacity-60"
         disabled={disabled}
         onChange={(event) => onInputChange(event.target.value)}
         onKeyDown={onInputKeyDown}
@@ -69,7 +69,7 @@ export const ChatComposer = ({
           <m.output
             {...statusMotion}
             aria-live="polite"
-            className="flex h-6 items-center gap-2 px-4 text-xs text-muted-foreground"
+            className="flex h-6 items-center gap-2 px-4 text-xs text-muted-fg"
             key={recording ? "recording" : "transcribing"}
           >
             {recording ? (

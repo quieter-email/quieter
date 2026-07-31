@@ -76,12 +76,12 @@ export const useMessageListSearchController = ({
   searchQuery,
 }: MessageListSearchProps) => {
   const fieldRef = useRef<HTMLDivElement>(null);
-  const rowRef = useRef<HTMLDivElement>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
   const segmentRefs = useRef<Array<HTMLElement | null>>([]);
   const [dateTokenRefs] = useState(() => ({ current: new Map<number, HTMLDivElement>() }));
   const pendingFocusRef = useRef<PendingFocusTarget | null>(null);
   const suppressNextBlurCommitRef = useRef(false);
+  const [textInputIndex, setTextInputIndex] = useState<number | null>(null);
   const committedSearchQuery = searchQuery.trim();
   const [draftState, setDraftState] = useState<DraftSearchState | null>(null);
   const calendarFallbackMonth = useSyncExternalStore(
@@ -129,6 +129,10 @@ export const useMessageListSearchController = ({
       ? draftState.state
       : null;
   const currentState = activeDraftState ?? committedState;
+  const currentTextInputIndex = Math.min(
+    textInputIndex ?? currentState.filters.length,
+    currentState.filters.length,
+  );
   const {
     data: labelsData,
     error: labelsError,
@@ -256,7 +260,11 @@ export const useMessageListSearchController = ({
     }
   };
 
-  const focusTextInput = ({ toEnd = false }: { toEnd?: boolean } = {}) => {
+  const focusTextInput = ({
+    index = currentState.filters.length,
+    toEnd = false,
+  }: { index?: number; toEnd?: boolean } = {}) => {
+    setTextInputIndex(Math.max(0, Math.min(index, currentState.filters.length)));
     requestAnimationFrame(() => {
       const input = textInputRef.current;
       if (!input) {
@@ -268,8 +276,7 @@ export const useMessageListSearchController = ({
         const position = input.value.length;
         input.setSelectionRange(position, position);
       }
-
-      rowRef.current?.scrollTo({ left: rowRef.current.scrollWidth });
+      input.scrollIntoView({ block: "nearest", inline: "nearest" });
     });
   };
 
@@ -291,6 +298,7 @@ export const useMessageListSearchController = ({
       }
 
       segment.focus();
+      segment.scrollIntoView({ block: "nearest", inline: "nearest" });
       if (segment instanceof HTMLInputElement) {
         if (selectAll) {
           segment.select();
@@ -299,8 +307,6 @@ export const useMessageListSearchController = ({
           segment.setSelectionRange(position, position);
         }
       }
-
-      segment.scrollIntoView({ block: "nearest", inline: "nearest" });
     });
   };
 
@@ -323,6 +329,27 @@ export const useMessageListSearchController = ({
     }
 
     focusSegment(index + 1);
+  };
+
+  const insertFilterAtTextInput = (filter: SearchFilterChip) => {
+    const { filters, index } = upsertFilter(currentState.filters, filter);
+    if (index !== currentState.filters.length) {
+      return { filters, index };
+    }
+
+    const appendedFilter = filters.at(-1);
+    if (!appendedFilter) {
+      return { filters, index };
+    }
+
+    return {
+      filters: [
+        ...filters.slice(0, currentTextInputIndex),
+        appendedFilter,
+        ...filters.slice(currentTextInputIndex, -1),
+      ],
+      index: currentTextInputIndex,
+    };
   };
 
   const removeFilterAtIndex = (
@@ -394,7 +421,7 @@ export const useMessageListSearchController = ({
   };
 
   const handleFilterSelection = (filter: SearchFilterChip) => {
-    const { filters, index } = upsertFilter(currentState.filters, filter);
+    const { filters, index } = insertFilterAtTextInput(filter);
     stageState({
       ...currentState,
       filters,
@@ -402,7 +429,7 @@ export const useMessageListSearchController = ({
 
     if (isFixedValueFilter(filter)) {
       openDropdown(true);
-      pendingFocusRef.current = { kind: "text", toEnd: true };
+      pendingFocusRef.current = { index: index + 1, kind: "text", toEnd: true };
       return;
     }
 
@@ -414,12 +441,13 @@ export const useMessageListSearchController = ({
   const toggleLabelToken = (labelName: string) => {
     const existingIndex = findLabelFilterIndex(currentState.filters, labelName);
     if (existingIndex === -1) {
+      const { filters, index } = insertFilterAtTextInput({ type: "label", value: labelName });
       stageState({
         ...currentState,
-        filters: [...currentState.filters, { type: "label", value: labelName }],
+        filters,
       });
       openDropdown(true);
-      pendingFocusRef.current = { kind: "text", toEnd: true };
+      pendingFocusRef.current = { index: index + 1, kind: "text", toEnd: true };
       return;
     }
 
@@ -635,25 +663,44 @@ export const useMessageListSearchController = ({
       return;
     }
 
-    if (
-      event.key === "Backspace" &&
-      currentState.text.length === 0 &&
-      currentState.filters.length > 0
-    ) {
+    if (event.key === "Backspace" && currentState.text.length === 0 && currentTextInputIndex > 0) {
       event.preventDefault();
-      removeFilterAtIndex(currentState.filters.length - 1);
+      removeFilterAtIndex(currentTextInputIndex - 1, {
+        index: currentTextInputIndex - 1,
+        kind: "text",
+        toEnd: true,
+      });
       return;
     }
 
-    if (
-      event.key === "ArrowLeft" &&
-      isCaretAtStart(event.currentTarget) &&
-      currentState.filters.length > 0
-    ) {
+    if (event.key === "ArrowLeft" && isCaretAtStart(event.currentTarget)) {
+      const previousIndex = currentTextInputIndex - 1;
+      const previousFilter = currentState.filters[previousIndex];
+      if (!previousFilter) {
+        return;
+      }
+
       event.preventDefault();
-      focusSegment(currentState.filters.length - 1, {
-        toEnd: shouldFocusFilterValueEnd(currentState.filters.at(-1)),
-      });
+      if (shouldFocusFilterValueEnd(previousFilter)) {
+        focusSegment(previousIndex, { toEnd: true });
+      } else {
+        focusTextInput({ index: previousIndex });
+      }
+      return;
+    }
+
+    if (event.key === "ArrowRight" && isCaretAtEnd(event.currentTarget)) {
+      const nextFilter = currentState.filters[currentTextInputIndex];
+      if (!nextFilter) {
+        return;
+      }
+
+      event.preventDefault();
+      if (shouldFocusFilterValueEnd(nextFilter)) {
+        focusSegment(currentTextInputIndex);
+      } else {
+        focusTextInput({ index: currentTextInputIndex + 1 });
+      }
     }
   };
 
@@ -676,7 +723,7 @@ export const useMessageListSearchController = ({
       return false;
     }
 
-    const { filters, index } = upsertFilter(currentState.filters, parsedToken);
+    const { filters, index } = insertFilterAtTextInput(parsedToken);
     stageState({
       filters,
       text: normalizeSearchText(
@@ -693,7 +740,7 @@ export const useMessageListSearchController = ({
     openSearchDropdown();
     pendingFocusRef.current =
       parsedToken.type === "label" || isFixedValueFilter(parsedToken)
-        ? { kind: "text", toEnd: true }
+        ? { index: index + 1, kind: "text", toEnd: true }
         : { index, kind: "segment", selectAll: true };
     return true;
   };
@@ -715,7 +762,7 @@ export const useMessageListSearchController = ({
 
     updateFilterValue(activeDateFilterIndex, formatDateFilterValue(date));
     openSearchDropdown();
-    pendingFocusRef.current = { kind: "text", toEnd: true };
+    pendingFocusRef.current = { index: activeDateFilterIndex + 1, kind: "text", toEnd: true };
   };
 
   const selectDatePreset = (filter: SearchFilterChip) => {
@@ -728,11 +775,11 @@ export const useMessageListSearchController = ({
     });
     setActiveDateFilterIndex(null);
     openDropdown(true);
-    pendingFocusRef.current = { kind: "text", toEnd: true };
+    pendingFocusRef.current = { index: activeDateFilterIndex + 1, kind: "text", toEnd: true };
   };
 
   useHotkey(
-    "/",
+    "Mod+K",
     (event) => {
       if (shouldIgnoreAppShortcut(event)) return;
       openSearchDropdown();
@@ -771,7 +818,7 @@ export const useMessageListSearchController = ({
     const target = pendingFocusRef.current;
     pendingFocusRef.current = null;
     if (target.kind === "text") {
-      focusTextInput({ toEnd: target.toEnd });
+      focusTextInput({ index: target.index, toEnd: target.toEnd });
       return;
     }
 
@@ -826,7 +873,6 @@ export const useMessageListSearchController = ({
     openSearchDropdown,
     removeFilterAtIndex,
     removeFilterFromPointer,
-    rowRef,
     runSearch,
     selectDateFilterValue,
     selectDatePreset,
@@ -834,6 +880,7 @@ export const useMessageListSearchController = ({
     setSegmentRef,
     suppressNextBlurCommit,
     textInputRef,
+    textInputIndex: currentTextInputIndex,
     toggleLabelToken,
     updateFilterValue,
     updateSearchText,

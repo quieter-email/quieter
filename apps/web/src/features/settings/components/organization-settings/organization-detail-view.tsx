@@ -111,7 +111,7 @@ export const OrganizationDetailView = ({
     return (
       <>
         <SettingsBackButton onClick={onBackToList}>Teams</SettingsBackButton>
-        <p className="text-sm text-muted-foreground">Team not found.</p>
+        <p className="text-sm text-muted-fg">Team not found.</p>
       </>
     );
   }

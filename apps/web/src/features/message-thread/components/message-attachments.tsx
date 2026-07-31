@@ -221,10 +221,10 @@ export const MessageAttachments = ({
               <button
                 aria-busy={isDownloading}
                 className={cn(
-                  "squircle inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-xs text-foreground",
+                  "squircle inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-xs text-fg",
                   "bg-muted/25 shadow-xs ring-1 ring-border/55 ring-inset",
                   "transition-colors hover:bg-muted/45",
-                  "focus-visible:ring-2 focus-visible:ring-ring/35 focus-visible:outline-none",
+                  "",
                   "disabled:cursor-progress disabled:opacity-65",
                 )}
                 disabled={isDownloading || areConnectorsLoading}
@@ -235,11 +235,11 @@ export const MessageAttachments = ({
                 title={attachment.fileName}
                 type="button"
               >
-                <span className="flex size-5 shrink-0 items-center justify-center text-muted-foreground">
+                <span className="flex size-5 shrink-0 items-center justify-center text-muted-fg">
                   <HugeiconsIcon
                     aria-hidden="true"
                     className={cn("size-3.5", {
-                      "animate-pulse text-foreground": isDownloading || areConnectorsLoading,
+                      "animate-pulse text-fg": isDownloading || areConnectorsLoading,
                     })}
                     icon={isDownloading ? Download01Icon : CalendarAdd01Icon}
                   />
@@ -253,10 +253,10 @@ export const MessageAttachments = ({
             <button
               aria-busy={isDownloading}
               className={cn(
-                "squircle inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-xs text-foreground",
+                "squircle inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-xs text-fg",
                 "bg-muted/25 shadow-xs ring-1 ring-border/55 ring-inset",
                 "transition-colors hover:bg-muted/45",
-                "focus-visible:ring-2 focus-visible:ring-ring/35 focus-visible:outline-none",
+                "",
                 "disabled:cursor-progress disabled:opacity-65",
               )}
               disabled={isDownloading}
@@ -267,10 +267,10 @@ export const MessageAttachments = ({
               title={isDownloading ? `Downloading ${attachment.fileName}` : attachment.fileName}
               type="button"
             >
-              <span className="flex size-5 shrink-0 items-center justify-center text-muted-foreground">
+              <span className="flex size-5 shrink-0 items-center justify-center text-muted-fg">
                 <HugeiconsIcon
                   aria-hidden="true"
-                  className={cn("size-3.5", { "animate-pulse text-foreground": isDownloading })}
+                  className={cn("size-3.5", { "animate-pulse text-fg": isDownloading })}
                   icon={isDownloading ? Download01Icon : typeIcon}
                 />
               </span>
@@ -278,7 +278,7 @@ export const MessageAttachments = ({
               {sizeLabel ? (
                 <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
                   <span className="truncate font-medium">{attachment.fileName}</span>
-                  <span className="shrink-0 whitespace-nowrap text-muted-foreground tabular-nums">
+                  <span className="shrink-0 whitespace-nowrap text-muted-fg tabular-nums">
                     {sizeLabel}
                   </span>
                 </span>

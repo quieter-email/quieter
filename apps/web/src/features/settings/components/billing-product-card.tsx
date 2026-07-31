@@ -35,7 +35,7 @@ export const BillingProductCard = ({
 
   return (
     <article
-      className={cn("squircle rounded-xl border bg-background p-5", {
+      className={cn("squircle rounded-xl border bg-bg p-5", {
         "border-primary/50 bg-primary/4": isCurrent,
         "border-border": !isCurrent,
       })}
@@ -43,19 +43,19 @@ export const BillingProductCard = ({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold text-foreground">{product.name}</h3>
+            <h3 className="text-base font-semibold text-fg">{product.name}</h3>
             {isCurrent && (
               <span className="squircle rounded-full border border-primary/40 px-2 py-0.5 text-[11px] font-medium text-primary">
                 Current
               </span>
             )}
           </div>
-          <p className="mt-1.5 text-sm/6 text-muted-foreground">{product.description}</p>
+          <p className="mt-1.5 text-sm/6 text-muted-fg">{product.description}</p>
         </div>
         <div className="flex shrink-0 flex-col gap-3 sm:items-end">
-          <p className="text-2xl font-semibold tracking-tight text-foreground">
+          <p className="text-2xl font-semibold tracking-tight text-fg">
             {moneyFormatter.format(product.monthlyPriceCents / 100)}
-            <span className="ml-1 text-sm font-normal text-muted-foreground">/mo</span>
+            <span className="ml-1 text-sm font-normal text-muted-fg">/mo</span>
           </p>
           <Button
             className="w-full sm:w-auto"
@@ -71,12 +71,12 @@ export const BillingProductCard = ({
           </Button>
         </div>
       </div>
-      <ul className="mt-4 flex flex-col gap-2 text-sm text-muted-foreground">
+      <ul className="mt-4 flex flex-col gap-2 text-sm text-muted-fg">
         {product.features.map((feature) => (
           <li className="flex items-start gap-2" key={feature}>
             <HugeiconsIcon
               aria-hidden
-              className="mt-0.5 size-4 shrink-0 text-foreground/60"
+              className="mt-0.5 size-4 shrink-0 text-fg/60"
               icon={CheckmarkCircle02Icon}
             />
             <span>{feature}</span>

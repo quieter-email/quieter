@@ -5,7 +5,7 @@ import { useHeadlessConsentUI } from "@c15t/react";
 
 export const ConsentPreferencesLink = ({
   children = "Manage privacy preferences",
-  className = "underline hover:text-foreground",
+  className = "underline hover:text-fg",
   tabIndex,
 }: {
   children?: ReactNode;
