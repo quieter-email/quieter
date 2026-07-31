@@ -5,7 +5,7 @@ import {
   composeEmailResultSchema,
   type ComposeEmailResult,
 } from "@quieter/ai/chat-agent";
-import { defaultChatModel, chatModelSchema } from "@quieter/ai/chat-models";
+import { chatModelSchema, CHAT_TITLE_MODEL } from "@quieter/ai/chat-models";
 import {
   OPENROUTER_TRANSCRIPTION_MODEL,
   openRouterAudioFormatSchema,
@@ -492,7 +492,7 @@ export const chatRouter = {
               completionTokens: usage.completionTokens,
               externalId: `chat-title:${authorizedChat.id}`,
               mailboxId: input.mailboxId,
-              model: defaultChatModel,
+              model: CHAT_TITLE_MODEL,
               promptTokens: usage.promptTokens,
               promptTokensDetails: usage.promptTokensDetails,
               usageKind: "aiChat",

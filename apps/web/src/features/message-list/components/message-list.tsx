@@ -242,7 +242,9 @@ export const MessageList = (props: MessageListProps) => {
     ) {
       void props.mailboxActions.markThreadAsRead(thread.threadId).catch(() => {});
     }
-    props.onKeyboardOpenMessage?.();
+    if (props.activeMailbox !== "drafts" && thread) {
+      props.onKeyboardOpenMessage?.();
+    }
     selection.openFocusedThread();
   };
   const previousActiveMessageIdRef = useRef(props.activeMessageId);

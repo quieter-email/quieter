@@ -82,6 +82,12 @@ export const MailboxMessagesPanel = ({
   const normalizedSearchQuery = searchQuery.trim();
   const isMessageRouteOpen = activeMailbox !== "drafts" && !!messageId;
   const [shouldFocusMessageView, setShouldFocusMessageView] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!isMessageRouteOpen) {
+      setShouldFocusMessageView(false);
+    }
+  }, [isMessageRouteOpen]);
   const {
     isMessageActionPending,
     isThreadActionPending,

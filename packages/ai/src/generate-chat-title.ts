@@ -1,8 +1,8 @@
 import { chat, type ChatMiddleware } from "@tanstack/ai";
-import { defaultChatModel } from "./chat-models";
+import { CHAT_TITLE_MODEL } from "./chat-models";
 import { createOpenRouterAdapter } from "./openrouter";
 
-export const CHAT_TITLE_MODEL = defaultChatModel;
+export { CHAT_TITLE_MODEL };
 
 export const generateChatTitle = async ({
   middleware,

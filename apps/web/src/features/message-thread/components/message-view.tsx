@@ -850,6 +850,8 @@ export const MessageView = ({
   pendingActions,
 }: MessageViewProps) => {
   const viewRef = useRef<HTMLElement>(null);
+  const onAutoFocusCompleteRef = useRef(onAutoFocusComplete);
+  onAutoFocusCompleteRef.current = onAutoFocusComplete;
   const queryClient = useQueryClient();
   const { data: gmailLabels = [] } = useQuery(
     labelsQueryOptions(mailboxId, mailboxProvider !== "api"),
@@ -1067,11 +1069,11 @@ export const MessageView = ({
         "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])",
       );
       (focusTarget ?? view)?.focus({ preventScroll: true, focusVisible: true });
-      onAutoFocusComplete?.();
+      onAutoFocusCompleteRef.current?.();
     });
 
     return () => cancelAnimationFrame(frameId);
-  }, [autoFocus, onAutoFocusComplete]);
+  }, [autoFocus]);
 
   return (
     <article ref={viewRef} tabIndex={-1} className="@container w-full">

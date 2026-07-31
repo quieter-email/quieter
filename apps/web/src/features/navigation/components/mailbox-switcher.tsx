@@ -97,7 +97,9 @@ type SortableGroupProps = {
   disabled: boolean;
   embedded?: boolean;
   group: MailboxSwitcherGroup;
+  highlighted: boolean;
   index: number;
+  onHighlightChange: (highlighted: boolean) => void;
   onToggle: (groupId: string) => void;
 };
 
@@ -119,7 +121,9 @@ type MailboxRowsProps = {
 type MailboxMenuItemProps = {
   action?: ReactNode;
   children: ReactNode;
+  highlighted: boolean;
   isActive: boolean;
+  onHighlightChange: (highlighted: boolean) => void;
   onSelect: () => void;
 };
 
@@ -186,20 +190,32 @@ const MailboxRowEntrance = ({ animateEntrance, children, index }: MailboxRowEntr
   );
 };
 
-const MailboxMenuItem = ({ action, children, isActive, onSelect }: MailboxMenuItemProps) => {
-  const [highlighted, setHighlighted] = useState(false);
-
+const MailboxMenuItem = ({
+  action,
+  children,
+  highlighted,
+  isActive,
+  onHighlightChange,
+  onSelect,
+}: MailboxMenuItemProps) => {
   return (
     <div
       className="group/item squircle relative isolate rounded-xs"
       data-mailbox-switcher-navigation-row
-      onMouseEnter={() => setHighlighted(true)}
-      onMouseLeave={() => setHighlighted(false)}
+      onBlur={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          return;
+        }
+        onHighlightChange(false);
+      }}
+      onFocus={() => onHighlightChange(true)}
+      onMouseEnter={() => onHighlightChange(true)}
+      onMouseLeave={() => onHighlightChange(false)}
     >
       <SidebarSimpleHoverSurface
         className="rounded-xs"
         layoutId="mailbox-switcher-row-hover"
-        visible={highlighted}
+        visible={highlighted && !isActive}
       />
       <Button
         aria-current={isActive ? "page" : undefined}
@@ -208,9 +224,7 @@ const MailboxMenuItem = ({ action, children, isActive, onSelect }: MailboxMenuIt
           { "font-medium": isActive },
         )}
         data-mailbox-switcher-navigation-item
-        onBlur={() => setHighlighted(false)}
         onClick={onSelect}
-        onFocus={() => setHighlighted(true)}
         type="button"
         variant="ghost"
       >
@@ -287,13 +301,14 @@ const SortableGroup = ({
   disabled,
   embedded = false,
   group,
+  highlighted,
   index,
+  onHighlightChange,
   onToggle,
 }: SortableGroupProps) => {
   const sectionRef = useRef<HTMLElement>(null);
   const headerRef = useRef<HTMLButtonElement>(null);
   const shouldReduceMotion = useReducedMotion();
-  const [isHeaderHovered, setIsHeaderHovered] = useState(false);
   const { isDragSource } = useSortable({
     accept: GROUP_SORTABLE_TYPE,
     disabled,
@@ -319,13 +334,20 @@ const SortableGroup = ({
         <div
           className="group/header squircle relative isolate flex min-h-7 items-center rounded-xs"
           data-mailbox-switcher-navigation-row
-          onMouseEnter={() => setIsHeaderHovered(true)}
-          onMouseLeave={() => setIsHeaderHovered(false)}
+          onBlur={(event) => {
+            if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              return;
+            }
+            onHighlightChange(false);
+          }}
+          onFocus={() => onHighlightChange(true)}
+          onMouseEnter={() => onHighlightChange(true)}
+          onMouseLeave={() => onHighlightChange(false)}
         >
           <SidebarSimpleHoverSurface
             className="rounded-xs"
             layoutId="mailbox-switcher-group-hover"
-            visible={isHeaderHovered}
+            visible={highlighted}
           />
           <button
             aria-expanded={!collapsed}
@@ -492,6 +514,8 @@ export const MailboxSwitcherDropdown = ({
         .join(" / ")
     : "No team";
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [highlightedGroupId, setHighlightedGroupId] = useState<string | null>(null);
+  const [highlightedMailboxId, setHighlightedMailboxId] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isTriggerHovered, setIsTriggerHovered] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -682,8 +706,17 @@ export const MailboxSwitcherDropdown = ({
                         disabled={!canReorderGroups}
                         embedded={embedded}
                         group={group}
+                        highlighted={highlightedGroupId === group.id}
                         index={groupIndex}
                         key={group.id}
+                        onHighlightChange={(nextHighlighted) => {
+                          setHighlightedGroupId((current) => {
+                            if (nextHighlighted) {
+                              return group.id;
+                            }
+                            return current === group.id ? null : current;
+                          });
+                        }}
                         onToggle={toggleGroup}
                       >
                         {group.mailboxes.length > 0 ? (
@@ -721,6 +754,7 @@ export const MailboxSwitcherDropdown = ({
                                             <button
                                               aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
                                               className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-destructive/20 bg-destructive/10 px-1.5 text-xs font-medium text-destructive transition-[color,transform] duration-100 hover:text-destructive/80 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:scale-100"
+                                              data-mailbox-switcher-navigation-action
                                               disabled={isReconnecting}
                                               onClick={(event) => {
                                                 event.stopPropagation();
@@ -748,7 +782,16 @@ export const MailboxSwitcherDropdown = ({
                                           )}
                                         </div>
                                       }
+                                      highlighted={highlightedMailboxId === mailbox.id}
                                       isActive={isActive}
+                                      onHighlightChange={(nextHighlighted) => {
+                                        setHighlightedMailboxId((current) => {
+                                          if (nextHighlighted) {
+                                            return mailbox.id;
+                                          }
+                                          return current === mailbox.id ? null : current;
+                                        });
+                                      }}
                                       onSelect={() => {
                                         onSelectMailboxId(mailbox.id);
                                         setIsOpen(false);

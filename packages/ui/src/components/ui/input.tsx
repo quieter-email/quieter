@@ -33,7 +33,7 @@ type InputProps = Omit<ComponentPropsWithoutRef<typeof InputPrimitive>, "size"> 
   };
 
 export const GhostFieldShell = ({ children }: { children: ReactNode }) => (
-  <div className="flex h-full min-w-0 flex-1 items-stretch gap-2 has-[input:focus-visible]:**:data-[slot=ghost-focus]:bg-fg/50">
+  <div className="flex h-full min-w-0 flex-1 items-stretch gap-2 has-focus-visible:**:data-[slot=ghost-focus]:bg-fg/50">
     <span
       aria-hidden
       className="w-0.5 shrink-0 self-stretch rounded-md bg-transparent transition-colors"
