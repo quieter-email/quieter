@@ -1,8 +1,9 @@
 import { chat, type ChatMiddleware } from "@tanstack/ai";
 import { z } from "zod";
+import { defaultChatModel } from "./chat-models";
 import { createOpenRouterAdapter } from "./openrouter";
 
-export const USER_AI_CONTEXT_MODEL = "deepseek/deepseek-v4-flash" as const;
+export const USER_AI_CONTEXT_MODEL = defaultChatModel;
 export const USER_AI_CONTEXT_MARKDOWN_MAX_LENGTH = 12_000;
 const USER_AI_CONTEXT_EDIT_TIMEOUT_MS = 20_000;
 

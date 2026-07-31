@@ -36,8 +36,8 @@ const ModelCostInfo = () => (
       Model costs
     </TooltipTrigger>
     <TooltipContent className="max-w-sm p-3" side="bottom">
-      <p className="font-medium text-foreground">Actual generation cost</p>
-      <p className="mt-1 text-muted-foreground">
+      <p className="font-medium text-fg">Actual generation cost</p>
+      <p className="mt-1 text-muted-fg">
         Team credits cover the actual generation cost, including any available savings, plus a 15%
         processing and service fee.
       </p>

@@ -33,10 +33,10 @@ export const MailboxColorPicker = ({
         aria-label={`${color} ${label.toLocaleLowerCase()}`}
         aria-pressed={value === color}
         className={cn(
-          "size-5 rounded-full transition-transform outline-none hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring/30 motion-reduce:transition-none motion-reduce:hover:scale-100",
+          "size-5 rounded-full transition-transform hover:scale-110 motion-reduce:transition-none motion-reduce:hover:scale-100",
           mailboxLabelDotClassNameByColor[color],
           {
-            "ring-2 ring-foreground ring-offset-2 ring-offset-background": value === color,
+            "ring-2 ring-fg ring-offset-2 ring-offset-bg": value === color,
           },
         )}
         key={color}

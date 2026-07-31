@@ -47,10 +47,8 @@ export const OrganizationDangerView = ({
       <SettingsBackButton onClick={onBack}>{fullOrganization.name}</SettingsBackButton>
 
       <div>
-        <h1 className="text-base font-semibold text-foreground">Danger zone</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Leave this team or delete it permanently.
-        </p>
+        <h1 className="text-base font-semibold text-fg">Danger zone</h1>
+        <p className="mt-1 text-sm text-muted-fg">Leave this team or delete it permanently.</p>
       </div>
 
       <SettingsCard>

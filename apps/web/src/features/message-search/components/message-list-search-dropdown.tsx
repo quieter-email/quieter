@@ -50,7 +50,7 @@ const isSearchFilterOptionActive = (
   );
 
 const SearchDropdownSectionLabel = ({ children }: { children: string }) => (
-  <p className="px-2.5 pb-1 text-xs text-muted-foreground">{children}</p>
+  <p className="px-2.5 pb-1 text-xs text-muted-fg">{children}</p>
 );
 
 const SearchDropdownRow = ({
@@ -70,7 +70,7 @@ const SearchDropdownRow = ({
 }) => (
   <button
     className={cn(
-      "flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground outline-none hover:bg-muted focus-visible:bg-muted",
+      "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-[13px] text-fg hover:bg-muted focus-visible:z-10 focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
       {
         "bg-muted": highlighted,
         "bg-accent": active,
@@ -79,9 +79,9 @@ const SearchDropdownRow = ({
     onClick={onClick}
     type="button"
   >
-    <HugeiconsIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" icon={icon} />
+    <HugeiconsIcon aria-hidden className="size-3.5 shrink-0 text-muted-fg" icon={icon} />
     <span className="min-w-0 flex-1 truncate">{label}</span>
-    {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
+    {hint && <span className="text-[11px] text-muted-fg">{hint}</span>}
   </button>
 );
 
@@ -197,9 +197,9 @@ export const MessageListSearchDropdown = ({
   }, [showLabelsSubmenu]);
 
   const labelsContent = labelsErrorMessage ? (
-    <div className="px-2.5 py-2 text-[13px] text-foreground">{labelsErrorMessage}</div>
+    <div className="px-2.5 py-2 text-[13px] text-fg">{labelsErrorMessage}</div>
   ) : isLoadingLabels ? (
-    <div className="px-2.5 py-2 text-[13px] text-muted-foreground">Loading labels…</div>
+    <div className="px-2.5 py-2 text-[13px] text-muted-fg">Loading labels…</div>
   ) : userLabels.length > 0 ? (
     <div className="flex flex-col gap-0.5">
       {userLabels.map((label) => (
@@ -214,7 +214,7 @@ export const MessageListSearchDropdown = ({
       ))}
     </div>
   ) : (
-    <div className="px-2.5 py-2 text-[13px] text-muted-foreground">No custom labels.</div>
+    <div className="px-2.5 py-2 text-[13px] text-muted-fg">No custom labels.</div>
   );
 
   const labelsSubmenu =
@@ -327,7 +327,7 @@ export const MessageListSearchDropdown = ({
                       aria-expanded={showLabelsSubmenu}
                       aria-haspopup="true"
                       className={cn(
-                        "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground outline-none hover:bg-muted focus-visible:bg-muted",
+                        "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-[13px] text-fg hover:bg-muted focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
                         {
                           "bg-muted": isLabelHighlighted,
                           "bg-accent": selectedUserLabelKeys.size > 0,
@@ -341,18 +341,15 @@ export const MessageListSearchDropdown = ({
                     >
                       <HugeiconsIcon
                         aria-hidden
-                        className="size-3.5 shrink-0 text-muted-foreground"
+                        className="size-3.5 shrink-0 text-muted-fg"
                         icon={Tag01Icon}
                       />
                       <span className="min-w-0 flex-1 truncate">Labels</span>
                       <HugeiconsIcon
                         aria-hidden
-                        className={cn(
-                          "size-3.5 shrink-0 text-muted-foreground transition-transform",
-                          {
-                            "rotate-90 lg:rotate-0": showLabelsSubmenu,
-                          },
-                        )}
+                        className={cn("size-3.5 shrink-0 text-muted-fg transition-transform", {
+                          "rotate-90 lg:rotate-0": showLabelsSubmenu,
+                        })}
                         icon={ArrowRight01Icon}
                       />
                     </button>
@@ -386,7 +383,7 @@ export const MessageListSearchDropdown = ({
 
             <div className="mt-1 shrink-0 lg:hidden">
               <button
-                className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 active:bg-muted"
+                className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md text-xs text-muted-fg hover:bg-muted hover:text-fg active:bg-muted"
                 onClick={onDismiss}
                 type="button"
               >

@@ -17,7 +17,7 @@ export const SettingsBackButton = ({
   onClick: () => void;
 }) => (
   <Button
-    className={cn("fixed top-4 left-4 z-50 text-muted-foreground hover:text-foreground", className)}
+    className={cn("fixed top-4 left-4 z-50 text-muted-fg hover:text-fg", className)}
     onClick={onClick}
     size="sm"
     variant="ghost"
@@ -39,10 +39,8 @@ export const SettingsPageHeader = ({
   <div className="@container">
     <header className="flex flex-col gap-3 @md:flex-row @md:items-end @md:justify-between">
       <div className="min-w-0">
-        <h1 className="text-xl font-normal tracking-tight text-foreground">{title}</h1>
-        {children && (
-          <div className="mt-2 max-w-2xl text-sm/6 text-muted-foreground">{children}</div>
-        )}
+        <h1 className="text-xl font-normal tracking-tight text-fg">{title}</h1>
+        {children && <div className="mt-2 max-w-2xl text-sm/6 text-muted-fg">{children}</div>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </header>
@@ -61,10 +59,8 @@ export const SettingsSection = ({
   <section className="space-y-4">
     {(title || description) && (
       <div>
-        {title && <h2 className="text-sm font-normal text-foreground">{title}</h2>}
-        {description && (
-          <div className="mt-1 max-w-3xl text-sm/6 text-muted-foreground">{description}</div>
-        )}
+        {title && <h2 className="text-sm font-normal text-fg">{title}</h2>}
+        {description && <div className="mt-1 max-w-3xl text-sm/6 text-muted-fg">{description}</div>}
       </div>
     )}
     {children}
@@ -80,7 +76,7 @@ export const SettingsCard = ({
 }) => (
   <div
     className={cn(
-      "squircle @container overflow-hidden rounded-lg border border-border bg-background/58",
+      "squircle @container overflow-hidden rounded-lg border border-border bg-bg/60",
       className,
     )}
   >
@@ -90,8 +86,8 @@ export const SettingsCard = ({
 
 export const settingsInsetDividerClass =
   "relative after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:after:inset-x-6";
-export const settingsRowTitleClass = "text-[0.8rem] font-normal text-foreground";
-export const settingsRowValueClass = "text-xs leading-4 text-muted-foreground";
+export const settingsRowTitleClass = "text-[0.8rem] font-normal text-fg";
+export const settingsRowValueClass = "text-xs leading-4 text-muted-fg";
 export const settingsRowPaddingClass = "px-4 py-3 @md:px-6";
 export const settingsDivideClass = "divide-y divide-border/70";
 
@@ -215,7 +211,7 @@ export const SettingsRow = ({
 }) => (
   <div className={settingsRowShellClass}>
     {icon && (
-      <div className="squircle flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-foreground [&_svg]:size-4">
+      <div className="squircle flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-fg [&_svg]:size-4">
         {icon}
       </div>
     )}
@@ -246,7 +242,7 @@ export const SettingsNavigationRow = ({
   <button
     className={cn(
       settingsRowShellClass,
-      "group squircle text-left transition-colors outline-none hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+      "group squircle border border-transparent text-left transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-muted/20 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none focus-visible:ring-inset",
       { "pointer-events-none": disabled },
     )}
     disabled={disabled}
@@ -259,18 +255,18 @@ export const SettingsNavigationRow = ({
     type="button"
   >
     {icon && (
-      <div className="squircle flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-foreground transition-colors group-hover:bg-muted/70 group-hover:text-foreground [&_svg]:size-4">
+      <div className="squircle flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-fg transition-colors group-hover:bg-muted/70 group-hover:text-fg [&_svg]:size-4">
         {icon}
       </div>
     )}
     <span className="min-w-0 flex-1">
-      <span className="block truncate text-[0.8rem] font-normal text-foreground">{title}</span>
+      <span className="block truncate text-[0.8rem] font-normal text-fg">{title}</span>
       <span className={cn("mt-0.5 block truncate", settingsRowValueClass)}>{description}</span>
     </span>
-    {meta && <span className="hidden text-xs text-muted-foreground @sm:block">{meta}</span>}
+    {meta && <span className="hidden text-xs text-muted-fg @sm:block">{meta}</span>}
     <HugeiconsIcon
       aria-hidden
-      className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+      className="size-4 shrink-0 text-muted-fg transition-transform group-hover:translate-x-0.5 group-hover:text-fg"
       icon={ArrowRight01Icon}
     />
   </button>
@@ -288,7 +284,7 @@ export const SettingsLoadingState = ({
     aria-live="polite"
     className={cn("flex min-h-24 items-center justify-center", className)}
   >
-    <LoadingSpinner className="size-8 text-muted-foreground" />
+    <LoadingSpinner className="size-8 text-muted-fg" />
     <span className="sr-only">{label}</span>
   </output>
 );

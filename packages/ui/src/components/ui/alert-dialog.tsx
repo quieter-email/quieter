@@ -17,7 +17,7 @@ export const AlertDialogTrigger = ({
     className={cn(
       "squircle",
       className,
-      "transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      "transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
     )}
     {...props}
   />
@@ -36,7 +36,7 @@ export const AlertDialogContent = ({
     />
     <AlertDialogPrimitive.Popup
       className={cn(
-        "fixed top-1/2 left-1/2 z-50 w-[min(92vw,30rem)] -translate-1/2 overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0",
+        "fixed top-1/2 left-1/2 z-50 w-[min(92vw,30rem)] -translate-1/2 overflow-hidden rounded-xl border bg-popover text-popover-fg shadow-lg transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0",
         className,
       )}
       {...props}
@@ -63,7 +63,7 @@ export const AlertDialogTitle = ({
   ...props
 }: ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Title>) => (
   <AlertDialogPrimitive.Title
-    className={cn("text-base font-semibold tracking-tight text-foreground", className)}
+    className={cn("text-base font-semibold tracking-tight text-fg", className)}
     {...props}
   />
 );
@@ -73,24 +73,24 @@ export const AlertDialogDescription = ({
   ...props
 }: ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Description>) => (
   <AlertDialogPrimitive.Description
-    className={cn("mt-2 text-sm text-muted-foreground", className)}
+    className={cn("mt-2 text-sm text-muted-fg", className)}
     {...props}
   />
 );
 
 const alertDialogCloseButtonVariants = cva(
-  "squircle inline-flex min-w-20 shrink-0 items-center justify-center gap-2 rounded-md px-3.5 text-[13px] font-medium whitespace-nowrap transition-transform duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+  "squircle inline-flex min-w-20 shrink-0 items-center justify-center gap-2 rounded-md px-3.5 text-[13px] font-medium whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         default:
-          "h-8 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/85",
+          "h-8 bg-primary text-primary-fg shadow-sm hover:bg-primary/90 active:bg-primary/85",
         outline:
-          "h-8 border border-input bg-background-light text-foreground shadow-sm hover:bg-muted active:bg-muted/80",
+          "h-8 border border-border bg-bg-surface text-fg shadow-sm hover:bg-muted active:bg-muted/80",
         ghost:
-          "h-8 bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground active:bg-muted/80 active:text-foreground",
+          "h-8 bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-muted/80 active:text-fg",
         destructive:
-          "h-8 bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
+          "h-8 bg-destructive text-destructive-fg shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
       },
     },
     defaultVariants: {

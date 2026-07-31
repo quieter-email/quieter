@@ -1,10 +1,9 @@
 export const sidebarActiveSurfaceClassName =
-  "pointer-events-none absolute inset-0 z-0 rounded-md bg-background squircle";
+  "pointer-events-none absolute inset-0 z-0 rounded-md bg-bg squircle";
 
-export const sidebarHoverSurfaceClassName = "rounded-md bg-background/50 squircle";
+export const sidebarHoverSurfaceClassName = "rounded-md bg-bg/50 squircle";
 
-export const sidebarHoverSurfaceItemClassName =
-  "block size-full rounded-md bg-background/50 squircle";
+export const sidebarHoverSurfaceItemClassName = "block size-full rounded-md bg-bg/50 squircle";
 
 export const sidebarSurfaceSpringTransition = {
   layout: { type: "spring" as const, stiffness: 560, damping: 38, mass: 0.55 },

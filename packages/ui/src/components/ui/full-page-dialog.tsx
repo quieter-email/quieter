@@ -16,7 +16,7 @@ export const FullPageDialogContent = ({
     <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm transition-opacity duration-200 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0" />
     <DialogPrimitive.Popup
       className={cn(
-        "fixed inset-2 z-50 flex flex-col overflow-hidden rounded-xl border bg-background-light text-foreground shadow-2xl transition-[opacity,transform] duration-200 ease-out will-change-[opacity,transform] outline-none focus-visible:ring-2 focus-visible:ring-ring/30 data-ending-style:scale-[0.99] data-ending-style:opacity-0 data-starting-style:scale-[0.99] data-starting-style:opacity-0 sm:inset-4 lg:inset-6",
+        "fixed inset-2 z-50 flex flex-col overflow-hidden rounded-xl border bg-bg-surface text-fg shadow-2xl transition-[opacity,transform] duration-200 ease-out will-change-[opacity,transform] data-ending-style:scale-[0.99] data-ending-style:opacity-0 data-starting-style:scale-[0.99] data-starting-style:opacity-0 sm:inset-4 lg:inset-6",
         className,
       )}
       {...props}
@@ -54,10 +54,7 @@ export const FullPageDialogDescription = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Description>) => (
-  <DialogPrimitive.Description
-    className={cn("text-sm text-muted-foreground", className)}
-    {...props}
-  />
+  <DialogPrimitive.Description className={cn("text-sm text-muted-fg", className)} {...props} />
 );
 
 export const FullPageDialogClose = ({
@@ -66,7 +63,7 @@ export const FullPageDialogClose = ({
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Close>) => (
   <DialogPrimitive.Close
     className={cn(
-      "squircle inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 active:scale-[0.97] [&_svg]:size-4",
+      "squircle inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-fg transition-colors hover:bg-muted hover:text-fg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] [&_svg]:size-4",
       className,
     )}
     {...props}

@@ -1,19 +1,23 @@
 "use client";
 
-import type { ComponentPropsWithoutRef } from "react";
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 import { cva, type VariantProps } from "class-variance-authority";
+import { createContext, useContext, type ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/cn";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "./icons";
 
+type SelectDensity = "default" | "compact";
+
+const SelectDensityContext = createContext<SelectDensity>("default");
+
 const selectTriggerVariants = cva(
-  "squircle inline-flex shrink-0 items-center justify-between text-left gap-2 rounded-md font-normal whitespace-nowrap transition-transform duration-100 ease-out outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "squircle inline-flex shrink-0 items-center justify-between text-left gap-2 rounded-md font-normal whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "w-full border border-input bg-background-light text-foreground shadow-sm",
+        default: "w-full border border-border bg-bg-elevated/60 text-fg shadow-sm",
         ghost:
-          "w-auto bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground active:bg-muted/80 active:text-foreground",
+          "w-auto bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-muted/80 active:text-fg",
       },
       size: {
         sm: "h-8 px-3 text-[13px] [&_svg]:size-3.5",
@@ -48,7 +52,7 @@ export const SelectValue = ({
   ...props
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.Value>) => (
   <SelectPrimitive.Value
-    className={cn("min-w-0 flex-1 truncate data-placeholder:text-muted-foreground", className)}
+    className={cn("min-w-0 flex-1 truncate data-placeholder:text-muted-fg", className)}
     {...props}
   />
 );
@@ -68,7 +72,7 @@ export const SelectTrigger = ({
     {...props}
   >
     {children}
-    <SelectPrimitive.Icon className="shrink-0 text-muted-foreground">
+    <SelectPrimitive.Icon className="shrink-0 text-muted-fg">
       <ChevronDownIcon className="size-4" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
@@ -76,13 +80,14 @@ export const SelectTrigger = ({
 
 export const SelectContent = ({
   align = "center",
-  alignItemWithTrigger = true,
+  alignItemWithTrigger = false,
   alignOffset = 0,
   children,
   className,
   positionerClassName,
   side,
   sideOffset = 4,
+  size = "default",
   ...props
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.Popup> &
   Pick<
@@ -90,6 +95,7 @@ export const SelectContent = ({
     "align" | "alignItemWithTrigger" | "alignOffset" | "side" | "sideOffset"
   > & {
     positionerClassName?: string;
+    size?: SelectDensity;
   }) => (
   <SelectPortal>
     <SelectPrimitive.Positioner
@@ -100,15 +106,18 @@ export const SelectContent = ({
       side={side}
       sideOffset={sideOffset}
     >
-      <SelectPrimitive.Popup
-        className={cn(
-          "z-50 min-w-52 origin-(--transform-origin) overflow-hidden rounded-lg border bg-popover p-1 text-popover-foreground shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] outline-none data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0 data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
-          className,
-        )}
-        {...props}
-      >
-        {children}
-      </SelectPrimitive.Popup>
+      <SelectDensityContext.Provider value={size}>
+        <SelectPrimitive.Popup
+          className={cn(
+            "z-50 min-w-52 origin-(--transform-origin) overflow-hidden rounded-lg border bg-popover p-1 text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0 data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
+            size === "compact" && "min-w-40 p-0.5 text-xs",
+            className,
+          )}
+          {...props}
+        >
+          {children}
+        </SelectPrimitive.Popup>
+      </SelectDensityContext.Provider>
     </SelectPrimitive.Positioner>
   </SelectPortal>
 );
@@ -119,7 +128,7 @@ export const SelectScrollUpArrow = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollUpArrow>) => (
   <SelectPrimitive.ScrollUpArrow
     className={cn(
-      "flex h-7 items-center justify-center text-muted-foreground transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-instant:transition-none data-starting-style:opacity-0",
+      "flex h-7 items-center justify-center text-muted-fg transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-instant:transition-none data-starting-style:opacity-0",
       className,
     )}
     {...props}
@@ -134,7 +143,7 @@ export const SelectScrollDownArrow = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollDownArrow>) => (
   <SelectPrimitive.ScrollDownArrow
     className={cn(
-      "flex h-7 items-center justify-center text-muted-foreground transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-instant:transition-none data-starting-style:opacity-0",
+      "flex h-7 items-center justify-center text-muted-fg transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-instant:transition-none data-starting-style:opacity-0",
       className,
     )}
     {...props}
@@ -160,29 +169,42 @@ export const SelectItem = ({
   children,
   className,
   ...props
-}: ComponentPropsWithoutRef<typeof SelectPrimitive.Item>) => (
-  <SelectPrimitive.Item
-    className={cn(
-      "squircle relative flex min-h-9 cursor-default scroll-my-1 items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm text-foreground transition-transform duration-100 ease-out outline-none select-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
-      className,
-    )}
-    {...props}
-  >
-    <SelectPrimitive.ItemIndicator className="absolute right-2.5 flex size-4 items-center justify-center text-primary">
-      <CheckIcon className="size-4" />
-    </SelectPrimitive.ItemIndicator>
-    <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
-  </SelectPrimitive.Item>
-);
+}: ComponentPropsWithoutRef<typeof SelectPrimitive.Item>) => {
+  const size = useContext(SelectDensityContext);
+
+  return (
+    <SelectPrimitive.Item
+      className={cn(
+        "squircle relative flex min-h-9 cursor-default scroll-my-1 items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+        size === "compact" && "min-h-7 gap-1.5 py-1 pr-7 pl-2 text-xs",
+        className,
+      )}
+      {...props}
+    >
+      <SelectPrimitive.ItemIndicator className="absolute right-2.5 flex size-4 items-center justify-center text-primary">
+        <CheckIcon className="size-4" />
+      </SelectPrimitive.ItemIndicator>
+      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    </SelectPrimitive.Item>
+  );
+};
 
 export const SelectGroupLabel = ({
   className,
   ...props
-}: ComponentPropsWithoutRef<typeof SelectPrimitive.GroupLabel>) => (
-  <SelectPrimitive.GroupLabel
-    className={cn("px-2.5 py-1 text-xs text-muted-foreground", className)}
-    {...props}
-  />
-);
+}: ComponentPropsWithoutRef<typeof SelectPrimitive.GroupLabel>) => {
+  const size = useContext(SelectDensityContext);
+
+  return (
+    <SelectPrimitive.GroupLabel
+      className={cn(
+        "px-2.5 py-1 text-xs text-muted-fg",
+        size === "compact" && "px-2 py-0.5 text-[11px]",
+        className,
+      )}
+      {...props}
+    />
+  );
+};
 
 export const SelectSeparator = SelectPrimitive.Separator;

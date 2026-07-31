@@ -48,11 +48,11 @@ export const MessageTool = ({
     >
       {success ? (
         <button
-          className="block w-full rounded-sm text-left transition-colors hover:text-foreground"
+          className="block w-full rounded-sm text-left transition-colors hover:text-fg"
           onClick={() => onOpenMessage(success.category, success.id)}
           type="button"
         >
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-[11px] text-muted-fg">
             {success.to ? <span className="mr-3">To {success.to}</span> : null}
             {success.attachmentCount > 0 ? (
               <span>
@@ -62,11 +62,11 @@ export const MessageTool = ({
             ) : null}
           </p>
           {success.attachments.length ? (
-            <p className="mt-1 truncate text-[11px] text-muted-foreground/80">
+            <p className="mt-1 truncate text-[11px] text-muted-fg/80">
               {success.attachments.map((attachment) => attachment.fileName).join(", ")}
             </p>
           ) : null}
-          <p className="mt-1 text-xs/relaxed whitespace-pre-wrap text-muted-foreground">
+          <p className="mt-1 text-xs/relaxed whitespace-pre-wrap text-muted-fg">
             {success.body || success.snippet || "(No content)"}
             {success.bodyTruncated ? "…" : ""}
           </p>

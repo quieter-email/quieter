@@ -9,7 +9,7 @@ export const AvatarFallback = ({
   ...props
 }: ComponentPropsWithoutRef<typeof AvatarPrimitive.Fallback>) => (
   <AvatarPrimitive.Fallback
-    className={cn("flex size-full items-center justify-center bg-muted text-foreground", className)}
+    className={cn("flex size-full items-center justify-center bg-muted text-fg", className)}
     {...props}
   />
 );

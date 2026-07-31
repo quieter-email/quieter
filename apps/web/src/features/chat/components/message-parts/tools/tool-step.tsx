@@ -55,7 +55,7 @@ export const ToolStep = ({
           canExpand ? (
             <HugeiconsIcon
               aria-hidden
-              className={cn("size-3.5 shrink-0 text-muted-foreground/45", {
+              className={cn("size-3.5 shrink-0 text-muted-fg/45", {
                 "rotate-90": expanded,
                 "transition-none": shouldReduceMotion,
                 "transition-transform duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out)":
@@ -76,13 +76,13 @@ export const ToolStep = ({
           <span
             className={cn({
               "text-destructive": hasError,
-              "text-muted-foreground": !hasError,
+              "text-muted-fg": !hasError,
             })}
           >
             {label}
           </span>
-          {detail ? <span className="text-foreground/75">{detail}</span> : null}
-          {meta ? <span className="text-muted-foreground/65">{meta}</span> : null}
+          {detail ? <span className="text-fg/75">{detail}</span> : null}
+          {meta ? <span className="text-muted-fg/65">{meta}</span> : null}
           {hasError ? (
             <span className="border-l border-destructive/30 pl-2 text-destructive/90">{error}</span>
           ) : null}
@@ -91,7 +91,7 @@ export const ToolStep = ({
           <HugeiconsIcon
             aria-hidden
             className={cn(
-              "size-3.5 shrink-0 text-muted-foreground/50",
+              "size-3.5 shrink-0 text-muted-fg/50",
               "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
               {
                 "rotate-90 opacity-100": expanded,

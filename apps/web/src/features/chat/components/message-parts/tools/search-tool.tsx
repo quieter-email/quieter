@@ -53,25 +53,25 @@ export const SearchTool = ({
         <div className="space-y-0.5">
           {messages.map((message) => (
             <button
-              className="flex w-full items-baseline gap-2 rounded-sm py-0.5 text-left text-xs transition-colors hover:text-foreground"
+              className="flex w-full items-baseline gap-2 rounded-sm py-0.5 text-left text-xs transition-colors hover:text-fg"
               key={message.id}
               onClick={() => onOpenMessage(success.category, message.id)}
               type="button"
             >
               <span
                 className={cn("size-1 shrink-0 rounded-full", {
-                  "bg-foreground/70": message.isUnread,
+                  "bg-fg/70": message.isUnread,
                   "bg-transparent": !message.isUnread,
                 })}
               />
-              <span className="min-w-0 flex-1 truncate text-foreground/85">
+              <span className="min-w-0 flex-1 truncate text-fg/85">
                 {message.subject || "(No subject)"}
               </span>
-              <span className="hidden shrink-0 truncate text-muted-foreground sm:inline sm:max-w-32">
+              <span className="hidden shrink-0 truncate text-muted-fg sm:inline sm:max-w-32">
                 {message.from || "Unknown"}
               </span>
               {message.date ? (
-                <span className="shrink-0 text-muted-foreground/70 tabular-nums">
+                <span className="shrink-0 text-muted-fg/70 tabular-nums">
                   {formatMessageDate(message.date)}
                 </span>
               ) : null}

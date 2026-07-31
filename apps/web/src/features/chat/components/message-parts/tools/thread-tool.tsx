@@ -51,25 +51,25 @@ export const ThreadTool = ({
       {success ? (
         <div className="space-y-2">
           {success.omittedMessageCount > 0 ? (
-            <p className="text-[11px] text-muted-foreground/75">
+            <p className="text-[11px] text-muted-fg/75">
               {success.omittedMessageCount} earlier message
               {success.omittedMessageCount === 1 ? "" : "s"} hidden
             </p>
           ) : null}
           {success.messages.slice(-4).map((message) => (
             <button
-              className="block w-full rounded-sm text-left transition-colors hover:text-foreground"
+              className="block w-full rounded-sm text-left transition-colors hover:text-fg"
               key={message.id}
               onClick={() => onOpenMessage(success.category, message.id)}
               type="button"
             >
-              <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
-                <span className="truncate text-foreground/80">{message.from || "Unknown"}</span>
+              <div className="flex items-center justify-between gap-3 text-[11px] text-muted-fg">
+                <span className="truncate text-fg/80">{message.from || "Unknown"}</span>
                 {message.date ? (
                   <span className="shrink-0 tabular-nums">{formatMessageDate(message.date)}</span>
                 ) : null}
               </div>
-              <p className="mt-0.5 line-clamp-3 text-xs/relaxed whitespace-pre-wrap text-muted-foreground">
+              <p className="mt-0.5 line-clamp-3 text-xs/relaxed whitespace-pre-wrap text-muted-fg">
                 {message.body || message.snippet || "(No content)"}
                 {message.bodyTruncated ? "…" : ""}
               </p>

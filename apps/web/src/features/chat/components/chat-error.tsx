@@ -18,8 +18,8 @@ export const ChatError = ({
       icon={Alert02Icon}
     />
     <div className="min-w-0 flex-1">
-      <p className="font-medium text-foreground">Response interrupted</p>
-      <p className="mt-0.5 text-muted-foreground">{message}</p>
+      <p className="font-medium text-fg">Response interrupted</p>
+      <p className="mt-0.5 text-muted-fg">{message}</p>
     </div>
     {onRetry ? (
       <Button disabled={disabled} onClick={onRetry} size="sm" type="button" variant="ghost">

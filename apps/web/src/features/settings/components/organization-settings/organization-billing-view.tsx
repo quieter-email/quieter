@@ -28,10 +28,8 @@ export const OrganizationBillingView = ({
     <SettingsBackButton onClick={onBack}>{organizationName}</SettingsBackButton>
 
     <div>
-      <h1 className="text-base font-semibold text-foreground">Billing</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Plans, usage balance, and overage controls.
-      </p>
+      <h1 className="text-base font-semibold text-fg">Billing</h1>
+      <p className="mt-1 text-sm text-muted-fg">Plans, usage balance, and overage controls.</p>
     </div>
 
     <SettingsCard>

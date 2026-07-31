@@ -22,6 +22,7 @@ type SidebarNavItemProps = Omit<ButtonProps, "onMouseEnter" | "onMouseLeave"> & 
   onHoverExitComplete?: () => void;
   onMouseEnter?: MouseEventHandler<HTMLDivElement>;
   onMouseLeave?: MouseEventHandler<HTMLDivElement>;
+  trailing?: ReactNode;
 };
 
 export const SidebarNavItem = ({
@@ -39,6 +40,7 @@ export const SidebarNavItem = ({
   onHoverExitComplete,
   onMouseEnter,
   onMouseLeave,
+  trailing,
   variant = "ghost",
   ...buttonProps
 }: SidebarNavItemProps) => {
@@ -46,7 +48,7 @@ export const SidebarNavItem = ({
 
   return (
     <div
-      className="squircle relative w-full rounded-md py-px"
+      className="group squircle relative flex w-full items-center rounded-md py-px"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onPointerCancel={() => setPressed(false)}
@@ -78,6 +80,7 @@ export const SidebarNavItem = ({
       >
         {children}
       </Button>
+      {trailing}
     </div>
   );
 };

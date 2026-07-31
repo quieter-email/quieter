@@ -34,10 +34,6 @@ const getSelectionGesture = (event: MessageRowGestureEvent): MessageRowSelection
   range: event.shiftKey,
 });
 
-const clearRowFocusRing = (row: HTMLElement | null) => {
-  row?.removeAttribute("data-focus-visible");
-};
-
 const rowPressTransition = { damping: 28, mass: 0.7, stiffness: 700, type: "spring" } as const;
 
 type MessageRowProps = {
@@ -48,6 +44,7 @@ type MessageRowProps = {
   mailboxProvider: MessageListProps["mailboxProvider"];
   offsetY: number;
   onOpenDraft: MessageListProps["onOpenDraft"];
+  onKeyboardOpen?: () => void;
   onThreadFocus: (threadId: string | null) => void;
   onThreadIntent: (threadId: string | null) => void;
   onThreadPress: ReturnType<typeof useMessageListSelection>["handleThreadPress"];
@@ -83,7 +80,7 @@ const MessageRowMetaBadge = ({
   title: string;
 }) => (
   <span
-    className="squircle inline-flex h-4.5 shrink-0 items-center gap-1 rounded-md border border-border bg-background/75 px-1 text-[10.5px] font-medium text-muted-foreground tabular-nums shadow-xs"
+    className="squircle inline-flex h-4.5 shrink-0 items-center gap-1 rounded-md border border-border bg-bg/75 px-1 text-[10.5px] font-medium text-muted-fg tabular-nums shadow-xs"
     title={title}
   >
     <HugeiconsIcon aria-hidden className="size-3" icon={icon} />
@@ -98,6 +95,7 @@ const MessageRowContent = ({
   mailboxId,
   mailboxProvider,
   onOpenDraft,
+  onKeyboardOpen,
   onThreadFocus,
   onThreadIntent,
   onThreadPress,
@@ -135,9 +133,9 @@ const MessageRowContent = ({
     pendingActions.isMessageActionPending(anchorMessage.id) ||
     pendingActions.isThreadActionPending(thread.threadId);
   const metaTextClassName = cn("text-xs tabular-nums", {
-    "font-semibold text-foreground/90": unread,
-    "text-muted-foreground": !unread,
-    "text-foreground/75": isActive && !unread,
+    "font-semibold text-fg/90": unread,
+    "text-muted-fg": !unread,
+    "text-fg/75": isActive && !unread,
   });
   const surfaceOpacity = Math.max(
     isActive ? 1 : 0,
@@ -180,12 +178,14 @@ const MessageRowContent = ({
     }
   };
   const handleRowClick = (event: MouseEvent<HTMLButtonElement>) => {
-    event.currentTarget.closest("[data-message-row]")?.removeAttribute("data-focus-visible");
-
     const gesture = getSelectionGesture(event);
 
     if (gesture.additive || gesture.range) {
       return;
+    }
+
+    if (!isActive && event.detail === 0) {
+      onKeyboardOpen?.();
     }
 
     if (!showSelectionControl && unread && mailboxProvider !== "api" && !isActionPending) {
@@ -203,16 +203,6 @@ const MessageRowContent = ({
     onThreadSelectionPress(thread, getSelectionGesture(event));
   };
 
-  const syncRowFocusRing = (row: HTMLElement, trigger: HTMLButtonElement) => {
-    if (trigger.matches(":focus-visible")) {
-      row.setAttribute("data-focus-visible", "");
-      onThreadFocus(thread.threadId);
-      onThreadIntent(thread.threadId);
-      return;
-    }
-
-    row.removeAttribute("data-focus-visible");
-  };
   const handleRowFocusCapture = (event: FocusEvent<HTMLDivElement>) => {
     if (!(event.target instanceof HTMLButtonElement)) {
       return;
@@ -221,7 +211,8 @@ const MessageRowContent = ({
       return;
     }
 
-    syncRowFocusRing(event.currentTarget, event.target);
+    onThreadFocus(thread.threadId);
+    onThreadIntent(thread.threadId);
   };
   const handleRowBlurCapture = (event: FocusEvent<HTMLDivElement>) => {
     const next = event.relatedTarget;
@@ -229,7 +220,6 @@ const MessageRowContent = ({
       return;
     }
 
-    event.currentTarget.removeAttribute("data-focus-visible");
     onThreadFocus(null);
     onThreadIntent(null);
   };
@@ -237,8 +227,7 @@ const MessageRowContent = ({
   return (
     <m.div
       animate={{ scale: reducedMotion || !isPressed ? 1 : 0.97 }}
-      className="relative flex h-17 items-stretch overflow-hidden rounded-lg"
-      data-message-row
+      className="relative flex h-17 items-stretch rounded-lg"
       initial={false}
       onBlurCapture={handleRowBlurCapture}
       onFocusCapture={handleRowFocusCapture}
@@ -256,8 +245,6 @@ const MessageRowContent = ({
         }
 
         onThreadFocus(null);
-        clearRowFocusRing(event.currentTarget);
-
         const active = document.activeElement;
         if (
           active instanceof HTMLButtonElement &&
@@ -286,7 +273,7 @@ const MessageRowContent = ({
         <button
           aria-label={selectionAriaLabel}
           aria-pressed={isSelected}
-          className="relative size-9.5 rounded-lg outline-none focus-visible:shadow-none disabled:pointer-events-none"
+          className="relative size-9.5 rounded-lg border border-transparent focus-visible:z-20 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:pointer-events-none"
           disabled={isActionPending}
           onKeyDown={handleSelectionKeyDown}
           onMouseDown={handleSelectionPress}
@@ -324,10 +311,10 @@ const MessageRowContent = ({
           >
             <span
               className={cn(
-                "flex size-4.5 items-center justify-center rounded-[5px] border bg-background text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
+                "flex size-4.5 items-center justify-center rounded-[5px] border bg-bg text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
                 {
-                  "border-primary bg-primary text-primary-foreground": isSelected,
-                  "border-input": !isSelected,
+                  "border-primary bg-primary text-primary-fg": isSelected,
+                  "border-border": !isSelected,
                 },
               )}
             >
@@ -361,12 +348,12 @@ const MessageRowContent = ({
         mailboxId={mailboxId}
         mailbox={activeMailbox}
         message={anchorMessage}
-        triggerClassName="flex h-full min-w-0 flex-1 outline-none focus-visible:shadow-none active:scale-100"
+        triggerClassName="flex h-full min-w-0 flex-1 active:scale-100"
       >
         <button
           aria-label={openAriaLabel}
           aria-current={isActive ? "true" : undefined}
-          className="relative z-10 flex h-full min-w-0 flex-1 items-center rounded-lg text-left outline-none focus-visible:shadow-none"
+          className="relative z-10 flex h-full min-w-0 flex-1 items-center rounded-lg border border-transparent text-left focus-visible:z-20 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
           data-message-row-trigger
           onClick={handleRowClick}
           onKeyDown={handleRowKeyDown}
@@ -380,13 +367,13 @@ const MessageRowContent = ({
           <div className="relative z-10 flex min-w-0 flex-1 items-center gap-2 px-2 @sm:gap-3 @sm:px-3">
             <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden">
               <div className="flex w-full min-w-0 items-center justify-between gap-2">
-                <p className="min-w-0 truncate text-left text-[13px]/4.5 text-foreground">
-                  {isDraftMailbox && <span className="font-medium text-muted-foreground">To </span>}
+                <p className="min-w-0 truncate text-left text-[13px]/4.5 text-fg">
+                  {isDraftMailbox && <span className="font-medium text-muted-fg">To </span>}
                   <span className={cn({ "font-semibold": unread, "font-medium": !unread })}>
                     {senderLabel}
                   </span>
                   {senderEmail && (
-                    <span className="ml-2 hidden text-[11px] text-muted-foreground @sm:inline">
+                    <span className="ml-2 hidden text-[11px] text-muted-fg @sm:inline">
                       {senderEmail}
                     </span>
                   )}
@@ -424,8 +411,8 @@ const MessageRowContent = ({
               <div className="flex w-full min-w-0 items-center gap-1.5">
                 <p
                   className={cn("min-w-0 flex-1 truncate text-left text-[13px]/4.5", {
-                    "font-medium text-foreground": unread,
-                    "text-muted-foreground": !unread,
+                    "font-medium text-fg": unread,
+                    "text-muted-fg": !unread,
                   })}
                 >
                   {isDraftMailbox ? (
@@ -458,6 +445,7 @@ export const MessageRow = ({
   mailboxId,
   mailboxProvider,
   offsetY,
+  onKeyboardOpen,
   onOpenDraft,
   onThreadFocus,
   onThreadIntent,
@@ -480,6 +468,7 @@ export const MessageRow = ({
       mailboxId={mailboxId}
       mailboxProvider={mailboxProvider}
       onOpenDraft={onOpenDraft}
+      onKeyboardOpen={onKeyboardOpen}
       onThreadFocus={onThreadFocus}
       onThreadIntent={onThreadIntent}
       onThreadPress={onThreadPress}
@@ -492,9 +481,7 @@ export const MessageRow = ({
 
   return (
     <li
-      className={cn("relative", className, {
-        "overflow-hidden": isNew,
-      })}
+      className={cn("relative", className)}
       data-index={dataIndex}
       data-thread-id={thread.threadId}
       ref={rowRef}

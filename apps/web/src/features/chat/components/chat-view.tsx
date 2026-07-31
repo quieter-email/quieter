@@ -675,8 +675,8 @@ const PlanRequiredBlock = ({
 
   return (
     <div className="mb-3 rounded-lg border border-border bg-secondary/35 p-3 text-sm">
-      <p className="font-medium text-foreground">Upgrade required</p>
-      <p className="mt-1 text-muted-foreground">
+      <p className="font-medium text-fg">Upgrade required</p>
+      <p className="mt-1 text-muted-fg">
         AI chat requires {requirementLabel} billing with available credits.
       </p>
       <Button

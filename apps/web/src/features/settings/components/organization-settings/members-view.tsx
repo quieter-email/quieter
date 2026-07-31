@@ -61,8 +61,8 @@ export const MembersView = ({
       <SettingsBackButton onClick={onBack}>{organization.name}</SettingsBackButton>
 
       <div>
-        <h1 className="text-base font-semibold text-foreground">Members</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h1 className="text-base font-semibold text-fg">Members</h1>
+        <p className="mt-1 text-sm text-muted-fg">
           {formatCount(organization.members.length, "Member", "Members")}
         </p>
       </div>
@@ -81,7 +81,7 @@ export const MembersView = ({
           <TextField className={cn(settingsInsetRowClass, settingsInsetDividerClass, "relative")}>
             <HugeiconsIcon
               aria-hidden
-              className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground @md:left-6"
+              className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-fg @md:left-6"
               icon={Search01Icon}
             />
             <TextFieldInput
@@ -107,7 +107,7 @@ export const MembersView = ({
         ))}
 
         {visibleMembers.length === 0 && (
-          <p className={cn("text-center text-sm text-muted-foreground", settingsRowPaddingClass)}>
+          <p className={cn("text-center text-sm text-muted-fg", settingsRowPaddingClass)}>
             No members found.
           </p>
         )}

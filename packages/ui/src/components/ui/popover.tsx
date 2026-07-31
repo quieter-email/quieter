@@ -15,7 +15,7 @@ export const PopoverTrigger = ({
     className={cn(
       "squircle",
       className,
-      "transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      "transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
     )}
     {...props}
   />
@@ -44,7 +44,7 @@ export const PopoverContent = ({
     >
       <PopoverPrimitive.Popup
         className={cn(
-          "z-50 max-w-sm min-w-52 origin-(--transform-origin) rounded-lg border bg-popover p-4 text-popover-foreground shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] outline-none data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
+          "z-50 max-w-sm min-w-52 origin-(--transform-origin) rounded-lg border bg-popover p-4 text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
           className,
         )}
         {...props}
@@ -59,10 +59,7 @@ export const PopoverTitle = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Title>) => (
-  <PopoverPrimitive.Title
-    className={cn("text-sm font-semibold text-foreground", className)}
-    {...props}
-  />
+  <PopoverPrimitive.Title className={cn("text-sm font-semibold text-fg", className)} {...props} />
 );
 
 export const PopoverDescription = ({
@@ -70,7 +67,7 @@ export const PopoverDescription = ({
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Description>) => (
   <PopoverPrimitive.Description
-    className={cn("mt-1 text-sm text-muted-foreground", className)}
+    className={cn("mt-1 text-sm text-muted-fg", className)}
     {...props}
   />
 );

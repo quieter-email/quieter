@@ -49,8 +49,8 @@ export const ConsentPreferencesDialog = () => {
                 key={category}
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">{copy?.title ?? category}</p>
-                  <p className="mt-1 text-sm/6 text-muted-foreground">{copy?.description ?? ""}</p>
+                  <p className="text-sm font-medium text-fg">{copy?.title ?? category}</p>
+                  <p className="mt-1 text-sm/6 text-muted-fg">{copy?.description ?? ""}</p>
                 </div>
 
                 <Switch
@@ -62,7 +62,7 @@ export const ConsentPreferencesDialog = () => {
                     setSelectedConsent(category, checked);
                   }}
                 >
-                  <SwitchThumb className="size-4 bg-background-light data-checked:translate-x-4 data-checked:bg-primary-foreground" />
+                  <SwitchThumb className="size-4 bg-bg-surface data-checked:translate-x-4 data-checked:bg-primary-fg" />
                 </Switch>
               </div>
             );

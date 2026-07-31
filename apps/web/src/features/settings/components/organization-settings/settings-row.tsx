@@ -18,13 +18,13 @@ export const MutedActionButton = ({
 }) => (
   <Tooltip>
     <TooltipTrigger
-      className="inline-flex focus-visible:outline-none"
+      className="inline-flex"
       render={<button aria-label={`${label} unavailable`} type="button" />}
     >
       <Button
         className={
           buttonClassName ??
-          "pointer-events-none bg-transparent text-muted-foreground opacity-100 hover:bg-transparent hover:text-muted-foreground"
+          "pointer-events-none bg-transparent text-muted-fg opacity-100 hover:bg-transparent hover:text-muted-fg"
         }
         disabled
         size="sm"

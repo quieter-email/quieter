@@ -151,13 +151,13 @@ const CreatedApiKeyReveal = ({
 
     <DialogBody className="space-y-3">
       <button
-        className="squircle w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-xs break-all text-foreground outline-none hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring/30"
+        className="squircle w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-xs break-all text-fg hover:bg-secondary/50"
         onClick={() => void copyText(createdKey)}
         type="button"
       >
         {createdKey}
       </button>
-      <p className="text-sm text-muted-foreground">Click the key to copy it.</p>
+      <p className="text-sm text-muted-fg">Click the key to copy it.</p>
     </DialogBody>
 
     <DialogFooter>
@@ -482,13 +482,13 @@ const ResetApiKeyDialog = ({
 
             <AlertDialogBody className="space-y-3">
               <button
-                className="squircle w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-xs break-all text-foreground outline-none hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring/30"
+                className="squircle w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-xs break-all text-fg hover:bg-secondary/50"
                 onClick={() => void copyText(createdKey)}
                 type="button"
               >
                 {createdKey}
               </button>
-              <p className="text-sm text-muted-foreground">Click the key to copy it.</p>
+              <p className="text-sm text-muted-fg">Click the key to copy it.</p>
             </AlertDialogBody>
 
             <AlertDialogFooter>
@@ -508,7 +508,7 @@ const ResetApiKeyDialog = ({
             </AlertDialogHeader>
 
             <AlertDialogBody>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-fg">
                 Update any integrations that still use the old key.
               </p>
             </AlertDialogBody>
@@ -603,7 +603,7 @@ const DeleteApiKeyDialog = ({
         </AlertDialogHeader>
 
         <AlertDialogBody>
-          <p className="text-sm text-muted-foreground">This action cannot be undone.</p>
+          <p className="text-sm text-muted-fg">This action cannot be undone.</p>
         </AlertDialogBody>
 
         <AlertDialogFooter>
@@ -665,10 +665,8 @@ export const ApiKeysView = ({
 
       <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
         <div>
-          <h1 className="text-base font-semibold text-foreground">API keys</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {formatCount(apiKeys.length, "Key", "Keys")}
-          </p>
+          <h1 className="text-base font-semibold text-fg">API keys</h1>
+          <p className="mt-1 text-sm text-muted-fg">{formatCount(apiKeys.length, "Key", "Keys")}</p>
         </div>
 
         {manageApiKeysReason ? (
@@ -710,7 +708,7 @@ export const ApiKeysView = ({
           ))}
         </SettingsRows>
       ) : (
-        <p className={cn("text-center text-sm text-muted-foreground", settingsRowPaddingClass)}>
+        <p className={cn("text-center text-sm text-muted-fg", settingsRowPaddingClass)}>
           No API keys.
         </p>
       )}

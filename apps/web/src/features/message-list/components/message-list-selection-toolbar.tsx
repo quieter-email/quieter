@@ -25,7 +25,7 @@ const MessageListBulkActions = ({
     <IconButtonTooltip label="Bulk actions">
       <DropdownMenuTrigger
         aria-label="Open bulk actions"
-        className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-input bg-background text-foreground shadow-sm outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:bg-muted/80 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
+        className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-bg text-fg shadow-sm hover:bg-muted/60 active:bg-muted/80 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
         disabled={disabled || actions.length === 0}
         type="button"
       >
@@ -88,7 +88,7 @@ export const MessageListSelectionToolbar = ({
           </Checkbox>
         </IconButtonTooltip>
 
-        <p className="truncate text-sm font-medium text-foreground">{selectedCount} selected</p>
+        <p className="truncate text-sm font-medium text-fg">{selectedCount} selected</p>
       </div>
 
       <div className="flex items-center gap-1">

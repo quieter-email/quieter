@@ -42,7 +42,7 @@ function TermsPage() {
       <h2>Contact</h2>
       <p>
         Questions about these terms:{" "}
-        <a className="underline hover:text-foreground" href="mailto:legal@quieter.email">
+        <a className="underline hover:text-fg" href="mailto:legal@quieter.email">
           legal@quieter.email
         </a>
       </p>

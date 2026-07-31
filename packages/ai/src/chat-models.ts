@@ -77,5 +77,6 @@ export const chatModelSchema = z.enum(chatModels.map(({ value }) => value));
 export type ChatModel = z.infer<typeof chatModelSchema>;
 
 export const defaultChatModel: ChatModel = "openai/gpt-5.6-luna";
-export const defaultAutoLabelModel: ChatModel = "deepseek/deepseek-v4-flash";
-export const defaultUsefulDetailModel: ChatModel = "deepseek/deepseek-v4-flash";
+export const CHAT_TITLE_MODEL = defaultChatModel;
+export const defaultAutoLabelModel = defaultChatModel;
+export const defaultUsefulDetailModel = defaultChatModel;

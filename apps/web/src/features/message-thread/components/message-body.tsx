@@ -123,11 +123,11 @@ const HtmlMessageBodyContent = ({
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
             <div
               aria-hidden
-              className="flex size-8 shrink-0 items-center justify-center rounded-md bg-background/90 text-muted-foreground shadow-xs ring-1 ring-border/55"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md bg-bg/90 text-muted-fg shadow-xs ring-1 ring-border/55"
             >
               <HugeiconsIcon className="size-4 shrink-0" icon={Image01Icon} />
             </div>
-            <p className="min-w-0 text-sm/snug text-muted-foreground">
+            <p className="min-w-0 text-sm/snug text-muted-fg">
               Remote images are hidden for security reasons.
             </p>
           </div>
@@ -143,7 +143,7 @@ const HtmlMessageBodyContent = ({
         </section>
       )}
       <div
-        className="mail-content no-scrollbar w-full flex-1 overflow-scroll bg-transparent text-foreground"
+        className="mail-content no-scrollbar w-full flex-1 overflow-scroll bg-transparent text-fg"
         ref={hostRef}
       />
     </>
@@ -166,11 +166,11 @@ const MessageBodyLoadingSkeleton = () => (
 );
 
 const PlainTextMessageBody = ({ text }: { text: string }) => (
-  <p className="bg-transparent p-4 text-base/7 wrap-break-word whitespace-pre-wrap text-foreground">
+  <p className="bg-transparent p-4 text-base/7 wrap-break-word whitespace-pre-wrap text-fg">
     {linkifyText(text).map((segment, index) =>
       segment.kind === "link" ? (
         <a
-          className="text-primary underline decoration-border underline-offset-2 hover:decoration-current"
+          className="rounded-sm text-primary underline decoration-border underline-offset-2 hover:decoration-current focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:outline-1 focus-visible:outline-offset-0 focus-visible:outline-primary"
           href={segment.href}
           key={`${segment.href}-${index}`}
           rel="noopener noreferrer"

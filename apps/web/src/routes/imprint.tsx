@@ -26,12 +26,12 @@ function ImprintPage() {
       <h2>Contact</h2>
       <p>
         Support:{" "}
-        <a className="underline hover:text-foreground" href="mailto:support@quieter.email">
+        <a className="underline hover:text-fg" href="mailto:support@quieter.email">
           support@quieter.email
         </a>
         <br />
         Legal:{" "}
-        <a className="underline hover:text-foreground" href="mailto:legal@quieter.email">
+        <a className="underline hover:text-fg" href="mailto:legal@quieter.email">
           legal@quieter.email
         </a>
       </p>
@@ -41,7 +41,7 @@ function ImprintPage() {
         <li>
           X:{" "}
           <a
-            className="underline hover:text-foreground"
+            className="underline hover:text-fg"
             href="https://x.com/leanderriefel"
             rel="noreferrer"
             target="_blank"
@@ -52,7 +52,7 @@ function ImprintPage() {
         <li>
           GitHub:{" "}
           <a
-            className="underline hover:text-foreground"
+            className="underline hover:text-fg"
             href="https://github.com/leanderriefel"
             rel="noreferrer"
             target="_blank"

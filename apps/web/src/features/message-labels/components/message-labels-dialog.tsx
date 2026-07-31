@@ -90,7 +90,7 @@ export const MessageLabelsDialog = ({
 
         <DialogBody className="max-h-[50vh] space-y-3 overflow-y-auto">
           {areLabelsPending ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 text-sm text-muted-fg">
               <HugeiconsIcon aria-hidden className="animate-spin" icon={Loading03Icon} />
               <span>Loading labels…</span>
             </div>
@@ -112,7 +112,7 @@ export const MessageLabelsDialog = ({
                   selectedCount < targets.length;
 
                 return (
-                  <label className="flex items-center gap-2 text-sm text-foreground" key={label.id}>
+                  <label className="flex items-center gap-2 text-sm text-fg" key={label.id}>
                     <Checkbox
                       aria-label={label.name}
                       checked={checked}
@@ -133,7 +133,7 @@ export const MessageLabelsDialog = ({
               })}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No custom labels.</p>
+            <p className="text-sm text-muted-fg">No custom labels.</p>
           )}
 
           {applyError && <p className="text-sm text-destructive">{applyError}</p>}

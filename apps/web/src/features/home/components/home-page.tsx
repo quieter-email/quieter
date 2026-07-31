@@ -16,7 +16,7 @@ const LandingMailboxDemo = lazy(() =>
 );
 
 const mailboxDemoFallback = (
-  <div className="h-[min(58dvh,520px)] w-full rounded-xl border border-white/10 bg-background-dark md:h-[min(82dvh,880px)] md:rounded-2xl" />
+  <div className="h-[min(58dvh,520px)] w-full rounded-xl border border-white/10 bg-bg-elevated md:h-[min(82dvh,880px)] md:rounded-2xl" />
 );
 
 const LandingMailboxDemoClient = () => {
@@ -35,9 +35,9 @@ const LandingMailboxDemoClient = () => {
 
 export const HomePage = () => (
   <LazyMotion features={domAnimation}>
-    <div className="relative z-10 h-dvh w-full overflow-visible bg-background-dark text-foreground">
+    <div className="relative z-10 h-dvh w-full overflow-visible bg-bg-elevated text-fg">
       <LinkButton
-        className="fixed top-4 right-4 z-20 h-8 border-border bg-card/60 px-3 text-xs text-muted-foreground shadow-none backdrop-blur-sm hover:bg-card hover:text-foreground"
+        className="fixed top-4 right-4 z-20 h-8 border-border bg-card/60 px-3 text-xs text-muted-fg shadow-none backdrop-blur-sm hover:bg-card hover:text-fg"
         search={{ returnTo: "/auth" }}
         to="/site-password"
         variant="outline"
@@ -46,7 +46,7 @@ export const HomePage = () => (
       </LinkButton>
       <div className="relative z-10 flex h-[calc(100dvh-min(29dvh,260px))] w-full items-center justify-center px-4 md:h-[calc(100dvh-min(41dvh,440px))] md:px-6">
         <div className="flex w-full max-w-5xl flex-col items-center gap-y-6 md:gap-y-10">
-          <h1 className="max-w-4xl text-center text-3xl leading-[0.95] font-normal text-balance text-foreground md:text-5xl">
+          <h1 className="max-w-4xl text-center text-3xl leading-[0.95] font-normal text-balance text-fg md:text-5xl">
             <m.span
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               className="block will-change-[transform,opacity,filter]"
@@ -82,7 +82,7 @@ export const HomePage = () => (
           </h1>
           <m.h2
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            className="flex w-full max-w-xs flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-center text-xs/5 font-light text-muted-foreground will-change-[transform,opacity,filter] md:max-w-none md:flex-nowrap md:gap-y-0 md:text-sm/6 md:whitespace-nowrap"
+            className="flex w-full max-w-xs flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-center text-xs/5 font-light text-muted-fg will-change-[transform,opacity,filter] md:max-w-none md:flex-nowrap md:gap-y-0 md:text-sm/6 md:whitespace-nowrap"
             initial={{ opacity: 0, y: 20, filter: "blur(8px)" }}
             transition={{ delay: 0.4, duration: 0.8, ease: "easeOut" }}
           >
@@ -93,7 +93,7 @@ export const HomePage = () => (
             </span>
             <span
               aria-hidden
-              className="hidden size-0.5 shrink-0 rounded-full bg-muted-foreground md:mx-1.5 md:inline-block"
+              className="hidden size-0.5 shrink-0 rounded-full bg-muted-fg md:mx-1.5 md:inline-block"
             />
             <span className="inline-flex items-center gap-1.5">
               <HugeiconsIcon className="size-3 shrink-0 md:size-3.5" icon={ComputerIcon} />

@@ -55,13 +55,13 @@ export const SidebarWorkspaceViewSwitch = ({
             const itemHovered = isHovered(id);
 
             return (
-              <div key={id} className="min-w-0 flex-1 overflow-hidden">
+              <div key={id} className="min-w-0 flex-1">
                 <SidebarNavItem
                   active={isActive}
                   aria-current={isActive ? "page" : undefined}
                   className={cn("justify-center gap-2 px-3", {
-                    "text-foreground": isActive || itemHovered,
-                    "text-muted-foreground": !isActive && !itemHovered,
+                    "text-fg": isActive || itemHovered,
+                    "text-muted-fg": !isActive && !itemHovered,
                   })}
                   hover={itemHovered}
                   hoverEnter={itemHovered && hoverEnter}

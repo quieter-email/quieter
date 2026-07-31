@@ -68,9 +68,9 @@ const DnsCopyCell = ({ value }: { value: string }) => (
   <button
     aria-label={`Copy ${value}`}
     className={cn(
-      "squircle max-w-full min-w-0 rounded-md px-1.5 py-0.5 text-left font-mono text-xs text-foreground outline-none",
+      "squircle max-w-full min-w-0 rounded-md px-1.5 py-0.5 text-left font-mono text-xs text-fg",
       "transition-[transform,background-color] duration-100 ease-out",
-      "hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/30",
+      "hover:bg-muted/70",
       "active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
     )}
     onClick={() => {
@@ -103,7 +103,7 @@ const RecordState = ({ message, ok }: { message: string; ok: boolean | null }) =
         ? "bg-success/15 text-success"
         : ok === false
           ? "bg-destructive/10 text-destructive"
-          : "bg-muted/40 text-muted-foreground",
+          : "bg-muted/40 text-muted-fg",
     )}
   >
     {message}
@@ -310,7 +310,7 @@ export const DomainDetailView = ({
             domainConnect === "verified"
               ? "border-success/30 bg-success/10 text-success"
               : domainConnect === "needs_dns"
-                ? "border-border bg-muted/30 text-foreground"
+                ? "border-border bg-muted/30 text-fg"
                 : "border-destructive/25 bg-destructive/8 text-destructive",
           )}
         >
@@ -347,7 +347,7 @@ export const DomainDetailView = ({
             ? "border-success/30 bg-success/8"
             : status.tone === "error"
               ? "border-destructive/25 bg-destructive/6"
-              : "border-border bg-background/58",
+              : "border-border bg-bg/58",
         )}
       >
         <div className="@container relative grid gap-6 @lg:grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(7rem,0.7fr))] @lg:items-center">
@@ -361,7 +361,7 @@ export const DomainDetailView = ({
                     ? "text-success"
                     : status.tone === "error"
                       ? "text-destructive"
-                      : "text-muted-foreground",
+                      : "text-muted-fg",
                 )}
                 icon={
                   status.tone === "success"
@@ -371,9 +371,9 @@ export const DomainDetailView = ({
                       : Globe02Icon
                 }
               />
-              <h2 className="text-base font-medium text-foreground">{status.label}</h2>
+              <h2 className="text-base font-medium text-fg">{status.label}</h2>
             </div>
-            <p className="mt-2 max-w-lg text-sm/6 text-muted-foreground">{status.description}</p>
+            <p className="mt-2 max-w-lg text-sm/6 text-muted-fg">{status.description}</p>
           </div>
           {[
             ["DNS records", `${passingRecords}/${totalRecords}`],
@@ -381,8 +381,8 @@ export const DomainDetailView = ({
             ["Incoming mail", domain.mode === "send_only" ? "Off" : "Enabled"],
           ].map(([label, value]) => (
             <div className="border-l border-border pl-4" key={label}>
-              <p className="text-xs text-muted-foreground">{label}</p>
-              <p className="mt-1 text-sm font-medium text-foreground">{value}</p>
+              <p className="text-xs text-muted-fg">{label}</p>
+              <p className="mt-1 text-sm font-medium text-fg">{value}</p>
             </div>
           ))}
         </div>
@@ -396,13 +396,13 @@ export const DomainDetailView = ({
           <SettingsCard className="@container p-3.5 @md:px-4">
             <div className="flex flex-col gap-3 @md:flex-row @md:items-center @md:justify-between">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">
+                <p className="text-sm font-medium text-fg">
                   {domainConnectAvailability?.available
                     ? `Connect with ${domainConnectAvailability.provider.displayName}`
                     : "Checking your DNS provider…"}
                 </p>
                 {domainConnectAvailability?.available ? (
-                  <p className="mt-0.5 text-xs text-muted-foreground">
+                  <p className="mt-0.5 text-xs text-muted-fg">
                     Authorize the exact records, then Quieter verifies DNS when you return.
                   </p>
                 ) : null}
@@ -449,14 +449,14 @@ export const DomainDetailView = ({
 
         <div
           aria-label="DNS records"
-          className="squircle overflow-x-auto rounded-lg border border-border bg-background/58"
+          className="squircle overflow-x-auto rounded-lg border border-border bg-bg/58"
           role="table"
         >
           <div className="min-w-160 p-2">
             <div
               className={cn(
                 dnsTableColumns,
-                "rounded-md bg-muted/35 px-3 py-1.5 text-xs font-medium text-muted-foreground",
+                "rounded-md bg-muted/35 px-3 py-1.5 text-xs font-medium text-muted-fg",
               )}
               role="row"
             >
@@ -495,10 +495,10 @@ export const DomainDetailView = ({
                     {priority ? (
                       <DnsCopyCell value={priority} />
                     ) : (
-                      <span className="px-1.5 font-mono text-xs text-muted-foreground">-</span>
+                      <span className="px-1.5 font-mono text-xs text-muted-fg">-</span>
                     )}
                   </div>
-                  <div className="min-w-0 px-1.5 text-xs text-foreground" role="cell">
+                  <div className="min-w-0 px-1.5 text-xs text-fg" role="cell">
                     Auto
                   </div>
                   <div role="cell">
@@ -552,8 +552,8 @@ export const DomainDetailView = ({
                   key={option.value}
                 >
                   <div>
-                    <p className="text-sm font-medium text-foreground">{option.label}</p>
-                    <p className="mt-1 text-xs/5 text-muted-foreground">
+                    <p className="text-sm font-medium text-fg">{option.label}</p>
+                    <p className="mt-1 text-xs/5 text-muted-fg">
                       {blockedReason ?? option.description}
                     </p>
                   </div>
@@ -631,9 +631,9 @@ export const DomainDetailView = ({
                   key={item.purpose}
                 >
                   <div>
-                    <span className="text-sm text-foreground">{item.label}</span>
+                    <span className="text-sm text-fg">{item.label}</span>
                     {item.required ? null : (
-                      <p className="mt-0.5 text-xs text-muted-foreground">
+                      <p className="mt-0.5 text-xs text-muted-fg">
                         Recommended. Any valid policy works; quarantine is preferred.
                       </p>
                     )}
@@ -664,8 +664,8 @@ export const DomainDetailView = ({
         <SettingsCard className="p-5">
           <div className="@container flex flex-col gap-4 @md:flex-row @md:items-center @md:justify-between">
             <div>
-              <p className="text-sm font-medium text-foreground">Remove domain</p>
-              <p className="mt-1 text-xs/5 text-muted-foreground">
+              <p className="text-sm font-medium text-fg">Remove domain</p>
+              <p className="mt-1 text-xs/5 text-muted-fg">
                 {data.managedMailboxCount > 0
                   ? `Remove or migrate ${data.managedMailboxCount} shared ${data.managedMailboxCount === 1 ? "inbox" : "inboxes"} first.`
                   : "This stops Quieter from sending or receiving mail for the domain."}
@@ -696,7 +696,7 @@ export const DomainDetailView = ({
             <DialogTitle>Remove {domain.domain}?</DialogTitle>
             <DialogDescription>This action disconnects the domain from Quieter.</DialogDescription>
           </DialogHeader>
-          <DialogBody className="space-y-3 text-sm text-muted-foreground">
+          <DialogBody className="space-y-3 text-sm text-muted-fg">
             <p>Sending and incoming mail will stop for this domain.</p>
             <p>Remove the DNS records at your provider after this domain is disconnected.</p>
           </DialogBody>

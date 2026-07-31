@@ -180,7 +180,7 @@ export const OrganizationsListView = ({
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-sm font-normal text-foreground">Teams</h1>
+        <h1 className="text-sm font-normal text-fg">Teams</h1>
         <OrganizationFormDialog />
       </div>
 
@@ -206,7 +206,7 @@ export const OrganizationsListView = ({
               ))}
           </SettingsRows>
         ) : (
-          <p className="text-sm text-muted-foreground">No teams yet.</p>
+          <p className="text-sm text-muted-fg">No teams yet.</p>
         )}
       </SettingsSection>
 

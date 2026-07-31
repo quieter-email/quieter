@@ -2,7 +2,7 @@
 
 import { cn } from "@quieter/ui/cn";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useState } from "react";
 import { type ComposeDraftState, buildComposeDraftFromSavedDraftMessage } from "~/features/compose";
 import { MessageList } from "~/features/message-list/components/message-list";
 import { MessageDetail } from "~/features/message-thread/components/message-detail";
@@ -81,6 +81,13 @@ export const MailboxMessagesPanel = ({
   const queryClient = useQueryClient();
   const normalizedSearchQuery = searchQuery.trim();
   const isMessageRouteOpen = activeMailbox !== "drafts" && !!messageId;
+  const [shouldFocusMessageView, setShouldFocusMessageView] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!isMessageRouteOpen) {
+      setShouldFocusMessageView(false);
+    }
+  }, [isMessageRouteOpen]);
   const {
     isMessageActionPending,
     isThreadActionPending,
@@ -208,7 +215,7 @@ export const MailboxMessagesPanel = ({
     <>
       <section
         className={cn(
-          "m-1.5 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 lg:m-2 lg:ml-0 lg:flex",
+          "m-1.5 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg/60 lg:m-2 lg:ml-0 lg:flex",
           {
             "flex flex-1": !isMessageRouteOpen,
             hidden: isMessageRouteOpen,
@@ -231,6 +238,7 @@ export const MailboxMessagesPanel = ({
           onActivateMessage={activateMessage}
           onDeactivateActiveMessage={backToList}
           onLoadMore={loadMoreMessages}
+          onKeyboardOpenMessage={() => setShouldFocusMessageView(true)}
           onOpenDraft={openDraft}
           onOpenSidebar={onOpenSidebar}
           onRefresh={refreshMessages}
@@ -242,7 +250,7 @@ export const MailboxMessagesPanel = ({
 
       <div
         className={cn(
-          "m-1.5 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background/60 lg:m-2 lg:ml-0 lg:flex",
+          "m-1.5 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg/60 lg:m-2 lg:ml-0 lg:flex",
           {
             "flex flex-1": isMessageRouteOpen,
             hidden: !isMessageRouteOpen,
@@ -252,6 +260,7 @@ export const MailboxMessagesPanel = ({
         <MessageDetail
           activeMailbox={activeMailbox}
           currentUserEmail={currentUserEmail}
+          autoFocus={shouldFocusMessageView}
           mailboxId={mailboxId}
           mailboxProvider={mailboxProvider}
           mailboxActions={mailboxActions}
@@ -259,6 +268,7 @@ export const MailboxMessagesPanel = ({
           pendingActions={pendingActions}
           isPending={isMessageRouteOpen && isLoadingEmptyMessages}
           onBackToList={backToList}
+          onAutoFocusComplete={() => setShouldFocusMessageView(false)}
           selectedMessage={selectedMessage}
         />
       </div>

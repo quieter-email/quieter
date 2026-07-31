@@ -155,33 +155,33 @@ export const RegisterDomainDialog = ({
               <form.Field name="mode">
                 {(field) => (
                   <fieldset className="space-y-2">
-                    <legend className="mb-2 text-sm font-medium text-foreground">Mail mode</legend>
+                    <legend className="mb-2 text-sm font-medium text-fg">Mail mode</legend>
                     {modeOptions.map((option) => {
                       const selected = field.state.value === option.value;
                       return (
                         <label
                           className={cn(
-                            "squircle flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors outline-none",
+                            "squircle flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors",
                             selected
-                              ? "border-foreground/30 bg-muted/40"
+                              ? "border-fg/30 bg-muted/40"
                               : "border-border hover:bg-muted/20",
-                            "has-focus-visible:ring-2 has-focus-visible:ring-ring/30",
+                            "",
                           )}
                           key={option.value}
                         >
                           <input
                             checked={selected}
-                            className="mt-1 size-4 accent-foreground"
+                            className="mt-1 size-4 accent-fg"
                             name={field.name}
                             onChange={() => field.handleChange(option.value)}
                             type="radio"
                             value={option.value}
                           />
                           <span>
-                            <span className="block text-sm font-medium text-foreground">
+                            <span className="block text-sm font-medium text-fg">
                               {option.label}
                             </span>
-                            <span className="mt-1 block text-xs/5 text-muted-foreground">
+                            <span className="mt-1 block text-xs/5 text-muted-fg">
                               {option.description}
                             </span>
                           </span>

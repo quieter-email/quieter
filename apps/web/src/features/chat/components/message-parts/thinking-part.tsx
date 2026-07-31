@@ -33,7 +33,7 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
         onClick={() => setExpanded((prev) => !prev)}
         type="button"
       >
-        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5 text-xs text-muted-fg">
           <LoadingDots />
           Thinking
         </span>
@@ -41,7 +41,7 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
           <HugeiconsIcon
             aria-hidden
             className={cn(
-              "size-3 shrink-0 text-muted-foreground",
+              "size-3 shrink-0 text-muted-fg",
               "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
               {
                 "rotate-90 opacity-100": expanded,

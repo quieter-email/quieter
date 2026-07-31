@@ -15,17 +15,14 @@ export const ProgressLabel = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<typeof ProgressPrimitive.Label>) => (
-  <ProgressPrimitive.Label
-    className={cn("text-sm font-medium text-foreground", className)}
-    {...props}
-  />
+  <ProgressPrimitive.Label className={cn("text-sm font-medium text-fg", className)} {...props} />
 );
 
 export const ProgressValue = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<typeof ProgressPrimitive.Value>) => (
-  <ProgressPrimitive.Value className={cn("text-sm text-muted-foreground", className)} {...props} />
+  <ProgressPrimitive.Value className={cn("text-sm text-muted-fg", className)} {...props} />
 );
 
 export const ProgressTrack = ({

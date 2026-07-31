@@ -50,10 +50,10 @@ export const AiModelSelect = ({
     >
       <SelectValue />
     </SelectTrigger>
-    <SelectContent align={align}>
+    <SelectContent align={align} size="compact">
       {chatModelGroups.map((group, index) => (
         <Fragment key={group}>
-          {index > 0 && <SelectSeparator className="mx-2 my-1 h-px bg-border/70" />}
+          {index > 0 && <SelectSeparator className="mx-2 my-0.5 h-px bg-border/70" />}
           <SelectGroup>
             {chatModels
               .filter((model) => model.group === group)

@@ -150,7 +150,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
   const detail = tab === "overview" ? null : SETTINGS_DETAIL_TITLES[tab];
 
   return (
-    <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-background-dark text-foreground">
+    <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-bg-elevated text-fg">
       <SettingsDataPrefetch tab={tab} />
       <BillingCheckoutResult />
       <ConnectorConnectionResult />
@@ -177,9 +177,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
             <div className="space-y-8">
               {detail && tab !== "actions" && tab !== "mailboxes" && (
                 <header>
-                  <h1 className="text-xl font-normal tracking-tight text-foreground">
-                    {detail.title}
-                  </h1>
+                  <h1 className="text-xl font-normal tracking-tight text-fg">{detail.title}</h1>
                 </header>
               )}
 

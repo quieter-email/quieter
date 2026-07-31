@@ -312,7 +312,7 @@ export const MailboxesSettingsPanel = () => {
             <div className="space-y-5">
               {groups.map((group) => (
                 <div className="space-y-2" key={group.id}>
-                  <p className="px-1 text-xs text-muted-foreground">{group.name}</p>
+                  <p className="px-1 text-xs text-muted-fg">{group.name}</p>
                   <SettingsRows>
                     {group.mailboxes.map((mailbox) => {
                       const description = [
@@ -347,8 +347,8 @@ export const MailboxesSettingsPanel = () => {
             </div>
           ) : (
             <SettingsCard className="p-6">
-              <p className="text-sm text-foreground">No mailboxes yet</p>
-              <p className="mt-1 text-sm/6 text-muted-foreground">
+              <p className="text-sm text-fg">No mailboxes yet</p>
+              <p className="mt-1 text-sm/6 text-muted-fg">
                 Connect Gmail or create a shared inbox to start using Quieter.
               </p>
             </SettingsCard>
@@ -366,8 +366,8 @@ export const MailboxesSettingsPanel = () => {
             <DialogBody className="space-y-6">
               <div className="space-y-3">
                 <div>
-                  <p className="text-sm text-foreground">Gmail</p>
-                  <p className="mt-1 text-xs/5 text-muted-foreground">
+                  <p className="text-sm text-fg">Gmail</p>
+                  <p className="mt-1 text-xs/5 text-muted-fg">
                     Choose the team where this private mailbox should appear.
                   </p>
                 </div>
@@ -405,8 +405,8 @@ export const MailboxesSettingsPanel = () => {
 
               <div className="space-y-3 border-t border-border pt-5">
                 <div>
-                  <p className="text-sm text-foreground">Shared inbox</p>
-                  <p className="mt-1 text-xs/5 text-muted-foreground">
+                  <p className="text-sm text-fg">Shared inbox</p>
+                  <p className="mt-1 text-xs/5 text-muted-fg">
                     Team owners and admins can create an address on a verified domain with incoming
                     mail enabled.
                   </p>
@@ -433,7 +433,7 @@ export const MailboxesSettingsPanel = () => {
                 </Select>
 
                 {isCreateManagedOrganizationPending ? (
-                  <p className="squircle rounded-md border border-border bg-muted/15 px-3 py-2 text-xs/5 text-muted-foreground">
+                  <p className="squircle rounded-md border border-border bg-muted/15 px-3 py-2 text-xs/5 text-muted-fg">
                     Checking your team access…
                   </p>
                 ) : canCreateManagedMailbox ? (
@@ -444,7 +444,7 @@ export const MailboxesSettingsPanel = () => {
                       placeholder="Display name, such as Support"
                       value={managedDisplayName}
                     />
-                    <div className="keyboard-focus-within squircle flex h-9 min-w-0 items-center rounded-md border border-input bg-background shadow-sm transition-colors">
+                    <div className="squircle flex h-9 min-w-0 items-center rounded-md border border-border bg-bg-elevated/60 shadow-sm transition-colors">
                       <TextFieldInput
                         aria-label="Mailbox address"
                         chrome="ghost"
@@ -455,7 +455,7 @@ export const MailboxesSettingsPanel = () => {
                         placeholder="support"
                         value={managedLocalPart}
                       />
-                      <span aria-hidden className="text-sm text-muted-foreground select-none">
+                      <span aria-hidden className="text-sm text-muted-fg select-none">
                         @
                       </span>
                       {verifiedDomains.length > 0 ? (
@@ -484,7 +484,7 @@ export const MailboxesSettingsPanel = () => {
                           </SelectContent>
                         </Select>
                       ) : (
-                        <span className="px-2.5 text-sm text-muted-foreground">
+                        <span className="px-2.5 text-sm text-muted-fg">
                           {areManagedDomainsLoading ? "loading…" : "no receiving domain"}
                         </span>
                       )}
@@ -515,7 +515,7 @@ export const MailboxesSettingsPanel = () => {
                       </SelectContent>
                     </Select>
                     {verifiedDomains.length === 0 && !areManagedDomainsLoading && (
-                      <p className="text-xs/5 text-muted-foreground">
+                      <p className="text-xs/5 text-muted-fg">
                         Add and verify a send-and-receive domain in{" "}
                         {selectedManagedOrganization?.name ?? "team"} settings before creating a
                         shared inbox.
@@ -555,7 +555,7 @@ export const MailboxesSettingsPanel = () => {
                     </Button>
                   </>
                 ) : (
-                  <p className="squircle rounded-md border border-border bg-muted/15 px-3 py-2 text-xs/5 text-muted-foreground">
+                  <p className="squircle rounded-md border border-border bg-muted/15 px-3 py-2 text-xs/5 text-muted-fg">
                     Only a team owner or admin can create a shared inbox for this team.
                   </p>
                 )}
@@ -721,7 +721,7 @@ export const MailboxesSettingsPanel = () => {
                     Reconnect
                   </Button>
                 ) : (
-                  <span className="text-xs text-muted-foreground">Connected</span>
+                  <span className="text-xs text-muted-fg">Connected</span>
                 )
               }
               title="Connection"
@@ -744,8 +744,8 @@ export const MailboxesSettingsPanel = () => {
               <SettingsInsetRows>
                 <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm text-foreground">Useful details</span>
-                    <span className="mt-0.5 block text-xs/5 text-muted-foreground">
+                    <span className="block text-sm text-fg">Useful details</span>
+                    <span className="mt-0.5 block text-xs/5 text-muted-fg">
                       Show codes, deliveries, and deadlines above the inbox.
                       {!hasAutomationAccess && " Requires Pro access for this team."}
                     </span>
@@ -776,8 +776,8 @@ export const MailboxesSettingsPanel = () => {
                 </label>
                 <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm text-foreground">Auto-label</span>
-                    <span className="mt-0.5 block text-xs/5 text-muted-foreground">
+                    <span className="block text-sm text-fg">Auto-label</span>
+                    <span className="mt-0.5 block text-xs/5 text-muted-fg">
                       Label new Inbox mail using each label&apos;s inclusion criteria.
                       {!hasAutomationAccess && " Requires Pro access for this team."}
                     </span>
@@ -848,8 +848,8 @@ export const MailboxesSettingsPanel = () => {
       {selectedMailbox.provider === "managed" && selectedMailbox.grantRole !== "manager" && (
         <SettingsSection title="Mailbox settings">
           <SettingsCard className="p-6">
-            <p className="text-sm text-foreground">Manager access required</p>
-            <p className="mt-1 max-w-2xl text-sm/6 text-muted-foreground">
+            <p className="text-sm text-fg">Manager access required</p>
+            <p className="mt-1 max-w-2xl text-sm/6 text-muted-fg">
               A mailbox manager can change shared-inbox features, routing, and member access. Your
               current role still lets you use every mail action included with that role.
             </p>
@@ -874,7 +874,7 @@ export const MailboxesSettingsPanel = () => {
                 <SettingsCard>
                   <SettingsInsetRows>
                     <div className={cn(settingsInsetRowClass, "gap-4")}>
-                      <span className="min-w-0 flex-1 text-sm text-foreground">Display name</span>
+                      <span className="min-w-0 flex-1 text-sm text-fg">Display name</span>
                       <TextFieldInput
                         aria-label="Shared inbox display name"
                         className="max-w-64"
@@ -898,9 +898,7 @@ export const MailboxesSettingsPanel = () => {
                       />
                     </div>
                     <div className={cn(settingsInsetRowClass, "gap-4")}>
-                      <span className="min-w-0 flex-1 text-sm text-foreground">
-                        Primary division
-                      </span>
+                      <span className="min-w-0 flex-1 text-sm text-fg">Primary division</span>
                       <Select
                         items={[
                           { value: "none", label: "Unassigned" },
@@ -943,8 +941,8 @@ export const MailboxesSettingsPanel = () => {
                     </div>
                     <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-sm text-foreground">Include API messages</span>
-                        <span className="mt-0.5 block text-xs/5 text-muted-foreground">
+                        <span className="block text-sm text-fg">Include API messages</span>
+                        <span className="mt-0.5 block text-xs/5 text-muted-fg">
                           Also show messages sent from this exact address through the team API.
                         </span>
                       </span>
@@ -983,8 +981,8 @@ export const MailboxesSettingsPanel = () => {
                   <SettingsInsetRows>
                     <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-sm text-foreground">Useful details</span>
-                        <span className="mt-0.5 block text-xs/5 text-muted-foreground">
+                        <span className="block text-sm text-fg">Useful details</span>
+                        <span className="mt-0.5 block text-xs/5 text-muted-fg">
                           Show codes, deliveries, and deadlines above the inbox.
                           {!hasAutomationAccess && " Requires Pro access for this team."}
                         </span>
@@ -1014,8 +1012,8 @@ export const MailboxesSettingsPanel = () => {
                     </label>
                     <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-sm text-foreground">Auto-label</span>
-                        <span className="mt-0.5 block text-xs/5 text-muted-foreground">
+                        <span className="block text-sm text-fg">Auto-label</span>
+                        <span className="mt-0.5 block text-xs/5 text-muted-fg">
                           Label new Inbox mail using existing shared labels.
                           {!hasAutomationAccess && " Requires Pro access for this team."}
                         </span>
@@ -1057,7 +1055,7 @@ export const MailboxesSettingsPanel = () => {
                         );
                         return (
                           <div className={cn(settingsInsetRowClass, "gap-3")} key={division.id}>
-                            <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                            <span className="min-w-0 flex-1 truncate text-sm text-fg">
                               {division.name}
                             </span>
                             <Select
@@ -1102,7 +1100,7 @@ export const MailboxesSettingsPanel = () => {
                                 {grant ? (
                                   <MailboxAccessPill role={grant.role} />
                                 ) : (
-                                  <span className="text-muted-foreground">No access</span>
+                                  <span className="text-muted-fg">No access</span>
                                 )}
                               </SelectTrigger>
                               <SelectContent align="end">
@@ -1119,9 +1117,7 @@ export const MailboxesSettingsPanel = () => {
                       })}
                     </SettingsInsetRows>
                   ) : (
-                    <p className="p-6 text-sm text-muted-foreground">
-                      This team has no divisions yet.
-                    </p>
+                    <p className="p-6 text-sm text-muted-fg">This team has no divisions yet.</p>
                   )}
                 </SettingsCard>
               </SettingsSection>
@@ -1139,10 +1135,10 @@ export const MailboxesSettingsPanel = () => {
                       return (
                         <div className={cn(settingsInsetRowClass, "gap-3")} key={member.id}>
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm text-foreground">
+                            <span className="block truncate text-sm text-fg">
                               {member.user.name || member.user.email}
                             </span>
-                            <span className="block truncate text-xs text-muted-foreground">
+                            <span className="block truncate text-xs text-muted-fg">
                               {member.user.email}
                             </span>
                           </span>
@@ -1185,7 +1181,7 @@ export const MailboxesSettingsPanel = () => {
                               {grant ? (
                                 <MailboxAccessPill role={grant.role} />
                               ) : (
-                                <span className="text-muted-foreground">No access</span>
+                                <span className="text-muted-fg">No access</span>
                               )}
                             </SelectTrigger>
                             <SelectContent align="end">
@@ -1211,8 +1207,8 @@ export const MailboxesSettingsPanel = () => {
       {selectedMailbox.provider === "api" && (
         <SettingsSection title="Mailbox capabilities">
           <SettingsCard className="p-6">
-            <p className="text-sm text-foreground">Send-only mailbox</p>
-            <p className="mt-1 max-w-2xl text-sm/6 text-muted-foreground">
+            <p className="text-sm text-fg">Send-only mailbox</p>
+            <p className="mt-1 max-w-2xl text-sm/6 text-muted-fg">
               This address sends through your team API. Its domain and access are managed in team
               settings.
             </p>

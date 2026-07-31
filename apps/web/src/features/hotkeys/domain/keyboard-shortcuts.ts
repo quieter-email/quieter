@@ -52,7 +52,7 @@ export const KEYBOARD_SHORTCUTS: readonly KeyboardShortcut[] = [
   {
     category: "Global",
     id: "focus-search",
-    keys: ["/"],
+    keys: ["Mod+K"],
     label: "Focus search",
     scope: "mailbox",
   },

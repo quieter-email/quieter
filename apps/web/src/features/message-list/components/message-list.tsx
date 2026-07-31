@@ -226,6 +226,7 @@ export const MessageList = (props: MessageListProps) => {
   const scrollPaneKey = `${props.mailboxId}:${props.activeMailbox}:${props.searchQuery}`;
   const actionHotkeysEnabled =
     props.mailboxProvider !== "api" && !props.activeMessageId && props.activeMailbox !== "drafts";
+  const listNavigationHotkeysEnabled = threadedMessages.length > 0 && !props.activeMessageId;
   const openFocusedThread = () => {
     const thread = selection.focusedThread;
     const isPending =
@@ -240,6 +241,9 @@ export const MessageList = (props: MessageListProps) => {
       !isPending
     ) {
       void props.mailboxActions.markThreadAsRead(thread.threadId).catch(() => {});
+    }
+    if (props.activeMailbox !== "drafts" && thread) {
+      props.onKeyboardOpenMessage?.();
     }
     selection.openFocusedThread();
   };
@@ -264,20 +268,8 @@ export const MessageList = (props: MessageListProps) => {
       focusedRowTrigger?.focus({ preventScroll: true, focusVisible: showFocusRing });
 
       if (!showFocusRing) {
-        focusedRowTrigger
-          ?.closest<HTMLElement>("[data-message-row]")
-          ?.removeAttribute("data-focus-visible");
         return;
       }
-
-      requestAnimationFrame(() => {
-        const row = focusedRowTrigger?.closest<HTMLElement>("[data-message-row]");
-        if (focusedRowTrigger?.matches(":focus-visible")) {
-          row?.setAttribute("data-focus-visible", "");
-        } else {
-          row?.removeAttribute("data-focus-visible");
-        }
-      });
     });
 
     return () => cancelAnimationFrame(frameId);
@@ -296,7 +288,7 @@ export const MessageList = (props: MessageListProps) => {
           if (shouldIgnoreAppShortcut(event)) return;
           selection.focusThreadByOffset(1);
         },
-        options: { enabled: threadedMessages.length > 0 },
+        options: { enabled: listNavigationHotkeysEnabled },
       },
       {
         hotkey: "K",
@@ -304,7 +296,7 @@ export const MessageList = (props: MessageListProps) => {
           if (shouldIgnoreAppShortcut(event)) return;
           selection.focusThreadByOffset(-1);
         },
-        options: { enabled: threadedMessages.length > 0 },
+        options: { enabled: listNavigationHotkeysEnabled },
       },
       {
         hotkey: "O",
@@ -312,7 +304,7 @@ export const MessageList = (props: MessageListProps) => {
           if (shouldIgnoreAppShortcut(event)) return;
           openFocusedThread();
         },
-        options: { enabled: threadedMessages.length > 0 },
+        options: { enabled: listNavigationHotkeysEnabled },
       },
       {
         hotkey: "Enter",
@@ -320,7 +312,7 @@ export const MessageList = (props: MessageListProps) => {
           if (shouldIgnoreAppShortcut(event)) return;
           openFocusedThread();
         },
-        options: { enabled: threadedMessages.length > 0 },
+        options: { enabled: listNavigationHotkeysEnabled },
       },
       {
         hotkey: "X",
@@ -328,7 +320,7 @@ export const MessageList = (props: MessageListProps) => {
           if (shouldIgnoreAppShortcut(event)) return;
           selection.toggleFocusedThreadSelection();
         },
-        options: { enabled: threadedMessages.length > 0 },
+        options: { enabled: listNavigationHotkeysEnabled },
       },
       {
         hotkey: "U",
@@ -482,6 +474,7 @@ export const MessageList = (props: MessageListProps) => {
         <MessageListScrollPane
           gmailLabels={gmailLabels}
           list={props}
+          onKeyboardOpenMessage={props.onKeyboardOpenMessage}
           selection={selection}
           threadedMessages={threadedMessages}
         />

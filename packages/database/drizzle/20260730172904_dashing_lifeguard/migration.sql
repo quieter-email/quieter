@@ -1,0 +1,2 @@
+ALTER TABLE "userAiContext" ALTER COLUMN "autoLabelModel" SET DEFAULT 'openai/gpt-5.6-luna';--> statement-breakpoint
+ALTER TABLE "userAiContext" ALTER COLUMN "usefulDetailModel" SET DEFAULT 'openai/gpt-5.6-luna';

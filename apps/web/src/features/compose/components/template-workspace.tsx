@@ -154,7 +154,7 @@ export const TemplateWorkspace = ({
     <>
       <section
         className={cn(
-          "m-1.5 min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-background lg:m-2 lg:ml-0 lg:flex",
+          "m-1.5 min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-bg lg:m-2 lg:ml-0 lg:flex",
           {
             flex: !mobileEditorOpen,
             hidden: mobileEditorOpen,
@@ -175,7 +175,7 @@ export const TemplateWorkspace = ({
                 <HugeiconsIcon icon={SidebarLeftIcon} />
               </Button>
             </IconButtonTooltip>
-            <h1 className="min-w-0 flex-1 text-sm font-semibold tracking-tight text-foreground">
+            <h1 className="min-w-0 flex-1 text-sm font-semibold tracking-tight text-fg">
               Templates
             </h1>
             <Button onClick={startNewTemplate} size="sm" type="button">
@@ -185,7 +185,7 @@ export const TemplateWorkspace = ({
           </div>
           <label className="relative mt-3 block">
             <HugeiconsIcon
-              className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground"
+              className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-fg"
               icon={Search01Icon}
             />
             <Input
@@ -203,11 +203,10 @@ export const TemplateWorkspace = ({
             <button
               aria-current={editingId === template.id ? "true" : undefined}
               className={cn(
-                "keyboard-focus-ring group flex w-full items-start gap-3 rounded-lg p-3 text-left transition-colors",
+                "group flex w-full items-start gap-3 rounded-lg p-3 text-left transition-colors",
                 {
-                  "bg-muted text-foreground": editingId === template.id,
-                  "text-muted-foreground hover:bg-muted/55 hover:text-foreground":
-                    editingId !== template.id,
+                  "bg-muted text-fg": editingId === template.id,
+                  "text-muted-fg hover:bg-muted/55 hover:text-fg": editingId !== template.id,
                 },
               )}
               key={template.id}
@@ -216,23 +215,23 @@ export const TemplateWorkspace = ({
             >
               <span
                 className={cn(
-                  "mt-1.5 size-1.5 shrink-0 rounded-full bg-muted-foreground/30 transition-colors",
+                  "mt-1.5 size-1.5 shrink-0 rounded-full bg-muted-fg/30 transition-colors",
                   {
                     "bg-primary": editingId === template.id,
-                    "group-hover:bg-muted-foreground/60": editingId !== template.id,
+                    "group-hover:bg-muted-fg/60": editingId !== template.id,
                   },
                 )}
               />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium">{template.name}</span>
-                <span className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                <span className="mt-1 flex items-center gap-2 text-[11px] text-muted-fg">
                   <span>{template.scope === "team" ? "Team" : "Personal"}</span>
                 </span>
               </span>
             </button>
           ))}
           {templatesQuery.isPending ? (
-            <div className="flex items-center justify-center gap-2 px-3 py-10 text-xs text-muted-foreground">
+            <div className="flex items-center justify-center gap-2 px-3 py-10 text-xs text-muted-fg">
               <HugeiconsIcon className="size-3.5 animate-spin" icon={Loading03Icon} />
               Loading templates
             </div>
@@ -242,10 +241,10 @@ export const TemplateWorkspace = ({
             </p>
           ) : filteredTemplates.length === 0 ? (
             <div className="px-6 py-12 text-center">
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-sm font-medium text-fg">
                 {templates.length === 0 ? "No templates yet" : "No matches"}
               </p>
-              <p className="mt-1 text-xs/5 text-muted-foreground">
+              <p className="mt-1 text-xs/5 text-muted-fg">
                 {templates.length === 0
                   ? "Create a reusable message for replies or new email."
                   : "Try a different search."}
@@ -257,7 +256,7 @@ export const TemplateWorkspace = ({
 
       <form
         className={cn(
-          "m-1.5 min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-background lg:m-2 lg:ml-0 lg:flex",
+          "m-1.5 min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-bg lg:m-2 lg:ml-0 lg:flex",
           {
             flex: mobileEditorOpen,
             hidden: !mobileEditorOpen,
@@ -268,7 +267,7 @@ export const TemplateWorkspace = ({
           void templateForm.handleSubmit();
         }}
       >
-        <div className="m-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-background-dark/60 sm:m-4">
+        <div className="m-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-bg-elevated/60 sm:m-4">
           <header className="flex shrink-0 items-center gap-3 p-3">
             <IconButtonTooltip label="Back to templates">
               <Button
@@ -313,7 +312,7 @@ export const TemplateWorkspace = ({
                 onInlineImageFiles={() => {}}
                 ref={templateEditorRef}
               >
-                <ComposeEditorBody className="mx-2 min-h-0 flex-1 rounded-lg border border-border bg-background-dark p-5 sm:p-6" />
+                <ComposeEditorBody className="mx-2 min-h-0 flex-1 rounded-lg border border-border bg-bg-elevated p-5 sm:p-6" />
                 <div className="flex shrink-0 items-center gap-1 p-2">
                   <ComposeEditorToolbar />
                   <IconButtonTooltip label="Insert placeholder">
@@ -351,11 +350,10 @@ export const TemplateWorkspace = ({
                                       <button
                                         aria-pressed={selected}
                                         className={cn(
-                                          "keyboard-focus-ring relative h-6 rounded-md px-2.5 text-[13px] transition-colors outline-none select-none",
+                                          "relative h-6 rounded-md px-2.5 text-[13px] transition-colors select-none",
                                           {
-                                            "text-foreground": selected,
-                                            "text-muted-foreground hover:text-foreground":
-                                              !selected,
+                                            "text-fg": selected,
+                                            "text-muted-fg hover:text-fg": !selected,
                                             "pointer-events-none opacity-50": disabled,
                                           },
                                         )}
@@ -366,7 +364,7 @@ export const TemplateWorkspace = ({
                                         {selected ? (
                                           <motion.span
                                             aria-hidden
-                                            className="squircle absolute inset-0 rounded-md border border-input bg-background-light shadow-sm"
+                                            className="squircle absolute inset-0 rounded-md border border-border bg-bg-surface shadow-sm"
                                             layoutId="template-scope-indicator"
                                             transition={{
                                               duration: reducedMotion
@@ -416,9 +414,7 @@ export const TemplateWorkspace = ({
                         Save template
                       </Button>
                     ) : (
-                      <span className="px-2 text-xs text-muted-foreground">
-                        Only team admins can edit
-                      </span>
+                      <span className="px-2 text-xs text-muted-fg">Only team admins can edit</span>
                     )}
                   </div>
                 </div>
@@ -443,7 +439,7 @@ export const TemplateWorkspace = ({
                 : "This removes the template from your saved templates."}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogBody className="text-sm text-muted-foreground">
+          <AlertDialogBody className="text-sm text-muted-fg">
             Messages that already used this template will not change.
           </AlertDialogBody>
           <AlertDialogFooter>

@@ -115,8 +115,8 @@ export const LeaveOrganizationDialog = ({
             }}
           >
             <DialogBody className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Type <span className="font-medium text-foreground">leave team</span>
+              <p className="text-sm text-muted-fg">
+                Type <span className="font-medium text-fg">leave team</span>
               </p>
 
               <form.Field name="confirmation">
@@ -265,8 +265,8 @@ export const DeleteOrganizationDialog = ({
             }}
           >
             <DialogBody className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Type <span className="font-medium text-foreground">delete team</span>
+              <p className="text-sm text-muted-fg">
+                Type <span className="font-medium text-fg">delete team</span>
               </p>
 
               <form.Field name="confirmation">

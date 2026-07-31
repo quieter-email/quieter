@@ -21,10 +21,7 @@ export const SliderValue = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<typeof SliderPrimitive.Value>) => (
-  <SliderPrimitive.Value
-    className={cn("min-w-10 text-sm text-muted-foreground", className)}
-    {...props}
-  />
+  <SliderPrimitive.Value className={cn("min-w-10 text-sm text-muted-fg", className)} {...props} />
 );
 
 export const SliderControl = ({
@@ -72,7 +69,7 @@ export const SliderThumb = ({
 }: ComponentPropsWithoutRef<typeof SliderPrimitive.Thumb>) => (
   <SliderPrimitive.Thumb
     className={cn(
-      "block size-4 rounded-full border border-primary/20 bg-background shadow-sm transition-transform duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 motion-safe:hover:scale-105",
+      "block size-4 rounded-full border border-primary/20 bg-bg shadow-sm transition-transform duration-150 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 motion-safe:hover:scale-105",
       className,
     )}
     {...props}

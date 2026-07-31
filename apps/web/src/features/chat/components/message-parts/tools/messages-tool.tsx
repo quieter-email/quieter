@@ -49,12 +49,12 @@ export const MessagesTool = ({
         <div className="space-y-1.5">
           {success.messages.map((message) => (
             <button
-              className="block w-full rounded-sm text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+              className="block w-full rounded-sm text-left text-xs text-muted-fg transition-colors hover:text-fg"
               key={message.id}
               onClick={() => onOpenMessage(message.category, message.id)}
               type="button"
             >
-              <span className="block truncate text-foreground/80">
+              <span className="block truncate text-fg/80">
                 {message.subject ? truncateToolDetail(message.subject, 70) : "(No subject)"}
               </span>
               {message.from ? <span className="block truncate">{message.from}</span> : null}

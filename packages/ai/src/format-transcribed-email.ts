@@ -1,7 +1,8 @@
 import { chat, type ChatMiddleware } from "@tanstack/ai";
+import { defaultChatModel } from "./chat-models";
 import { createOpenRouterAdapter } from "./openrouter";
 
-export const TRANSCRIBED_EMAIL_FORMAT_MODEL = "openai/gpt-5-nano" as const;
+export const TRANSCRIBED_EMAIL_FORMAT_MODEL = defaultChatModel;
 
 export const formatTranscribedEmail = async ({
   middleware,
