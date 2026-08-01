@@ -35,6 +35,7 @@ import {
   type SearchOverlayState,
 } from "./message-list-search-types";
 import {
+  cycleSearchFilter,
   findLabelFilterIndex,
   formatDateFilterValue,
   getCalendarFallbackMonth,
@@ -402,6 +403,20 @@ export const useMessageListSearchController = ({
     }
   };
 
+  const cycleFilterFromPointer = (index: number) => {
+    pendingFocusRef.current = null;
+    setActiveDateFilterIndex(null);
+    commitState(
+      {
+        ...currentState,
+        filters: cycleSearchFilter(currentState.filters, index),
+      },
+      true,
+    );
+    suppressNextBlurCommit();
+    blurSearchField();
+  };
+
   const removeFilterFromPointer = (index: number) => {
     pendingFocusRef.current = null;
     setActiveDateFilterIndex(null);
@@ -421,6 +436,20 @@ export const useMessageListSearchController = ({
   };
 
   const handleFilterSelection = (filter: SearchFilterChip) => {
+    const existingIndex = currentState.filters.findIndex(
+      (existingFilter) =>
+        existingFilter.type === filter.type && existingFilter.value === filter.value,
+    );
+    if (isFixedValueFilter(filter) && existingIndex !== -1) {
+      stageState({
+        ...currentState,
+        filters: cycleSearchFilter(currentState.filters, existingIndex),
+      });
+      openDropdown(true);
+      pendingFocusRef.current = { kind: "text", toEnd: true };
+      return;
+    }
+
     const { filters, index } = insertFilterAtTextInput(filter);
     stageState({
       ...currentState,
@@ -451,7 +480,11 @@ export const useMessageListSearchController = ({
       return;
     }
 
-    removeFilterAtIndex(existingIndex);
+    stageState({
+      ...currentState,
+      filters: cycleSearchFilter(currentState.filters, existingIndex),
+    });
+    pendingFocusRef.current = { kind: "text", toEnd: true };
     openDropdown(true);
   };
 
@@ -561,11 +594,7 @@ export const useMessageListSearchController = ({
           toEnd: shouldFocusFilterValueEnd(currentState.filters[index - 1]),
         };
 
-  const handleTokenKeyDown = (
-    event: ReactKeyboardEvent<HTMLButtonElement>,
-    index: number,
-    { removeOnSpace = false }: { removeOnSpace?: boolean } = {},
-  ) => {
+  const handleTokenKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
     if (handleDropdownKey(event)) {
       return;
     }
@@ -582,12 +611,7 @@ export const useMessageListSearchController = ({
       return;
     }
 
-    if (
-      event.key === "Backspace" ||
-      event.key === "Delete" ||
-      event.key === "Enter" ||
-      (removeOnSpace && event.key === " ")
-    ) {
+    if (event.key === "Backspace" || event.key === "Delete") {
       event.preventDefault();
       removeFilterAtIndex(index);
     }
@@ -873,6 +897,7 @@ export const useMessageListSearchController = ({
     openSearchDropdown,
     removeFilterAtIndex,
     removeFilterFromPointer,
+    cycleFilterFromPointer,
     runSearch,
     selectDateFilterValue,
     selectDatePreset,
