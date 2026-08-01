@@ -42,9 +42,20 @@ void main() {
 
   float horizontal = column / columns;
   float vertical = row / rows;
-  float bottomLeftToTopRight = clamp((1.0 - horizontal + vertical) * 0.5, 0.0, 1.0);
-  float topRightToBottomLeft = clamp((horizontal + 1.0 - vertical) * 0.5, 0.0, 1.0);
-  float baseDensity = mix(bottomLeftToTopRight, max(bottomLeftToTopRight, topRightToBottomLeft), uPattern);
+
+  // Four corner ramps. uPattern selects which combination is used:
+  // 0 = bottom-left only, 1 = bottom-left + top-right, 2 = top-left + bottom-right.
+  float denseBottomLeft = clamp((1.0 - horizontal + vertical) * 0.5, 0.0, 1.0);
+  float denseTopRight = clamp((horizontal + 1.0 - vertical) * 0.5, 0.0, 1.0);
+  float denseTopLeft = clamp((2.0 - horizontal - vertical) * 0.5, 0.0, 1.0);
+  float denseBottomRight = clamp((horizontal + vertical) * 0.5, 0.0, 1.0);
+
+  float baseDensity = denseBottomLeft;
+  if (uPattern > 1.5) {
+    baseDensity = max(denseTopLeft, denseBottomRight);
+  } else if (uPattern > 0.5) {
+    baseDensity = max(denseBottomLeft, denseTopRight);
+  }
   float contour =
     sin(horizontal * 13.5 + vertical * 6.5) * 0.09 +
     sin(horizontal * 5.5 - vertical * 15.0) * 0.055;
@@ -71,7 +82,7 @@ type WorkspaceDitherBackgroundProps = {
   className?: string;
   dotRgb?: string;
   falloff?: number;
-  pattern?: "default" | "opposing-corners";
+  pattern?: "default" | "leading-corners" | "opposing-corners";
   strength?: number;
 };
 
@@ -156,7 +167,8 @@ export const WorkspaceDitherBackground = ({
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.uniform1f(stepLocation, DITHER_STEP);
     gl.uniform1f(falloffLocation, falloff);
-    gl.uniform1f(patternLocation, pattern === "opposing-corners" ? 1 : 0);
+    const patternIndex = { default: 0, "leading-corners": 2, "opposing-corners": 1 }[pattern];
+    gl.uniform1f(patternLocation, patternIndex);
 
     const [red, green, blue] = dotRgb
       .split(",")
