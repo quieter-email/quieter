@@ -19,4 +19,12 @@ describe("cycleSearchFilter", () => {
       ),
     ).toEqual([{ type: "is", value: "unread" }]);
   });
+
+  test("keeps filters unchanged for an invalid index", () => {
+    const filters = [{ type: "label", value: "Finance" }] as const;
+    const result = cycleSearchFilter(filters, 1);
+
+    expect(result).toEqual(filters);
+    expect(result).not.toBe(filters);
+  });
 });

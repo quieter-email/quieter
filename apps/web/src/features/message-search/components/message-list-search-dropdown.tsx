@@ -76,11 +76,13 @@ const SearchDropdownRow = ({
   <button
     className={cn(
       "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-[13px] text-fg hover:bg-muted focus-visible:z-10 focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
-      {
-        "bg-muted": highlighted,
-        "bg-accent": active,
-      },
       className,
+      {
+        "bg-muted": highlighted && !className,
+        "bg-accent": active && !className,
+        "ring-1 ring-ring/45 ring-inset": active && !highlighted && !!className,
+        "ring-2 ring-ring/60 ring-inset": highlighted && !!className,
+      },
     )}
     onClick={onClick}
     type="button"
