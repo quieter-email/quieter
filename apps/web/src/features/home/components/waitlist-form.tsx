@@ -1,4 +1,5 @@
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import { Field, FieldLabel } from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
@@ -27,8 +28,9 @@ const addToWaitlist = async (formData: FormData): Promise<WaitlistResponse> => {
   return await response.json();
 };
 
-export const WaitlistForm = () => {
+export const WaitlistForm = ({ className, id }: { className?: string; id?: string }) => {
   const [iconState, setIconState] = useState<WaitlistIconState>("idle");
+  const fieldId = id ? `${id}-email` : "waitlist-email";
 
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -61,19 +63,22 @@ export const WaitlistForm = () => {
   };
 
   return (
-    <form action="/api/waitlist" className="grid gap-2" method="post" onSubmit={handleSubmit}>
+    <form
+      action="/api/waitlist"
+      className={cn("grid w-full max-w-sm gap-2", className)}
+      method="post"
+      onSubmit={handleSubmit}
+    >
       <Field>
-        <FieldLabel className="text-white/70" htmlFor="waitlist-email">
-          Join the waitlist
-        </FieldLabel>
+        <FieldLabel htmlFor={fieldId}>Join the waitlist</FieldLabel>
         <div className="relative">
           <Input
             autoCapitalize="none"
-            autoComplete="off"
+            autoComplete="email"
             autoCorrect="off"
-            className="h-9 border-white/15 bg-white/5 pr-11 text-sm text-white placeholder:text-white/30"
+            className="bg-bg-elevated pr-11"
             disabled={iconState === "loading"}
-            id="waitlist-email"
+            id={fieldId}
             inputMode="email"
             name="email"
             placeholder="you@example.com"
@@ -83,7 +88,7 @@ export const WaitlistForm = () => {
           <IconButtonTooltip label="Join waitlist">
             <Button
               aria-label="Join waitlist"
-              className="absolute top-1/2 right-1 size-7! -translate-y-1/2 bg-transparent text-white/70 shadow-none hover:bg-white/10 hover:text-white"
+              className="absolute top-1/2 right-1 -translate-y-1/2"
               disabled={iconState === "loading"}
               size="icon-sm"
               type="submit"

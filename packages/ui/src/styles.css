@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "./typeset.css";
 @import "@fontsource-variable/geist";
-@import "@fontsource-variable/merriweather";
+@import "@fontsource-variable/lora";
 @import "@fontsource-variable/geist-mono";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -11,7 +11,7 @@
 
 .typeset-docs {
   --typeset-font-body: var(--font-geist);
-  --typeset-font-heading: var(--font-merriweather);
+  --typeset-font-heading: var(--font-lora);
   --typeset-font-mono: var(--font-geist-mono);
   --typeset-size: 15px;
   --typeset-leading: 1.75;
@@ -20,7 +20,7 @@
 
 :root {
   --font-geist: "Geist Variable", sans-serif;
-  --font-merriweather: "Merriweather Variable", serif;
+  --font-lora: "Lora Variable", serif;
   --font-geist-mono: "Geist Mono Variable", monospace;
   --bg: oklch(0.975 0.002 264);
   --bg-surface: oklch(1 0.002 264);
@@ -62,7 +62,7 @@
   --chart-4: oklch(0.62 0.002 264);
   --chart-5: oklch(0.72 0.002 264);
   --font-sans: var(--font-geist);
-  --font-serif: var(--font-merriweather);
+  --font-serif: var(--font-lora);
   --font-mono: var(--font-geist-mono);
   --radius: 0.625rem;
   --shadow-x: 0px;

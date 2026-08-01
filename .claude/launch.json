@@ -1,0 +1,22 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": [
+        "--cwd",
+        "apps/web",
+        "--env-file=../../.env.local",
+        "vp",
+        "dev",
+        "--port",
+        "3000",
+        "--strictPort",
+        "--configLoader",
+        "runner"
+      ],
+      "port": 3000
+    }
+  ]
+}
