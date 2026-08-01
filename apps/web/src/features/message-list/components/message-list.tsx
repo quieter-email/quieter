@@ -31,6 +31,7 @@ const buildDraftListEntry = (message: MessageListItem): ThreadListEntry => ({
   threadId: message.draftId ?? message.id,
   anchorMessage: message,
   messages: [message],
+  threadLabelIds: message.threadLabelIds ?? message.labelIds ?? [],
   participants: [],
   subject: message.subject?.trim() || "(No subject)",
   preview: message.snippet?.trim() || "",
@@ -492,7 +493,7 @@ export const MessageList = (props: MessageListProps) => {
         open={isBulkLabelsOpen}
         targets={selection.selectedThreads.map((thread) => ({
           id: thread.threadId,
-          labelIds: thread.anchorMessage.labelIds ?? [],
+          labelIds: thread.threadLabelIds,
         }))}
       />
     </div>

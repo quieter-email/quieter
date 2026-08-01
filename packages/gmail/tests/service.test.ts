@@ -164,6 +164,68 @@ describe("listGmailMessageIds", () => {
 });
 
 describe("listMessagesWithDetails", () => {
+  test("exposes the union of labels from every message in a thread", async () => {
+    const originalFetch = globalThis.fetch;
+
+    setFetch(async (input, init) => {
+      const url = getRequestUrl(input);
+      const body = getRequestBody(init?.body);
+
+      if (url.includes("/gmail/v1/users/me/threads") && !url.includes("/batch/")) {
+        return Response.json({ threads: [{ id: "thread-1", historyId: "10" }] });
+      }
+
+      if (url.includes("/gmail/v1/users/me/profile")) {
+        return Response.json({ emailAddress: "user@example.com", historyId: "10" });
+      }
+
+      if (body.includes("/gmail/v1/users/me/threads/thread-1")) {
+        return new Response(
+          createIdentifiedBatchResponse("thread_labels_boundary", [
+            {
+              contentId: "thread-0",
+              body: {
+                id: "thread-1",
+                historyId: "10",
+                messages: [
+                  {
+                    id: "message-latest",
+                    threadId: "thread-1",
+                    internalDate: "2000",
+                    labelIds: ["INBOX", "Label_Latest"],
+                    payload: { headers: [{ name: "Subject", value: "Labels" }] },
+                  },
+                  {
+                    id: "message-previous",
+                    threadId: "thread-1",
+                    internalDate: "1000",
+                    labelIds: ["INBOX", "Label_Previous"],
+                    payload: { headers: [{ name: "Subject", value: "Labels" }] },
+                  },
+                ],
+              },
+            },
+          ]),
+          { headers: { "content-type": "multipart/mixed; boundary=thread_labels_boundary" } },
+        );
+      }
+
+      throw new Error(`Unexpected Gmail request: ${url}`);
+    });
+
+    try {
+      const result = await listMessagesWithDetails("token");
+
+      expect(result.messages[0]?.threadLabelIds).toEqual([
+        "INBOX",
+        "Label_Latest",
+        "Label_Previous",
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test("compiles Archive to Gmail system-category exclusions", async () => {
     const originalFetch = globalThis.fetch;
     let requestedUrl = "";

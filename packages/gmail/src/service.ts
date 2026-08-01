@@ -225,6 +225,7 @@ export type GmailMessagePart = RecursiveMessagePart;
 export type MessageListItem = {
   id: string;
   threadId: string;
+  threadLabelIds?: string[];
   threadMessageCount?: number;
   threadAttachmentCount?: number;
   draftId?: string;
@@ -336,6 +337,7 @@ export type GmailMessageIdPage = {
 export { decodeMimeHeaderValue, extractMessageContent };
 
 type ThreadListSummary = {
+  labelIds: string[];
   messageCount: number;
   attachmentCount: number;
 };
@@ -873,6 +875,7 @@ const toMessageListItem = async (
   return {
     id: message.id,
     threadId: message.threadId,
+    threadLabelIds: options.threadSummary?.labelIds,
     threadMessageCount: options.threadSummary?.messageCount,
     threadAttachmentCount: options.threadSummary?.attachmentCount,
     snippet: decodeMimeHeaderValue(message.snippet),
@@ -1433,6 +1436,7 @@ const getThreadListSummaries = async (
   for (const thread of threads) {
     if (!thread) continue;
 
+    const threadMessages = thread.messages ?? [];
     const messages = (thread.messages ?? []).filter(
       (message) => options?.includeDrafts || !hasDraftLabel(message.labelIds),
     );
@@ -1440,6 +1444,9 @@ const getThreadListSummaries = async (
       attachmentCount: messages.reduce(
         (count, message) => count + extractMessageAttachments(message.payload).length,
         0,
+      ),
+      labelIds: Array.from(
+        new Set(threadMessages.flatMap((message) => normalizeLabelIds(message.labelIds) ?? [])),
       ),
       messageCount: messages.length,
     });
@@ -1488,6 +1495,13 @@ export const listMessagesWithDetails = async (
           attachmentCount: messages.reduce(
             (count, message) => count + extractMessageAttachments(message.payload).length,
             0,
+          ),
+          labelIds: Array.from(
+            new Set(
+              (thread.messages ?? []).flatMap(
+                (message) => normalizeLabelIds(message.labelIds) ?? [],
+              ),
+            ),
           ),
           messageCount: messages.length,
         },
@@ -1681,18 +1695,23 @@ export const getThreadWithDetails = async (
     return message.subject;
   }, undefined);
 
+  const resolvedMessages = messages.map((message) =>
+    draftIdsByMessageId.has(message.id)
+      ? {
+          ...message,
+          draftId: draftIdsByMessageId.get(message.id),
+        }
+      : message,
+  );
+  const threadLabelIds = Array.from(
+    new Set(resolvedMessages.flatMap((message) => message.labelIds ?? [])),
+  );
+
   return {
     threadId: thread.id,
     snippet: decodeMimeHeaderValue(thread.snippet),
     subject,
-    messages: messages.map((message) =>
-      draftIdsByMessageId.has(message.id)
-        ? {
-            ...message,
-            draftId: draftIdsByMessageId.get(message.id),
-          }
-        : message,
-    ),
+    messages: resolvedMessages.map((message) => ({ ...message, threadLabelIds })),
   };
 };
 

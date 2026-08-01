@@ -2,6 +2,7 @@ import { describe, expect, test } from "vite-plus/test";
 import type { ListMessagesPageResult, MessageListItem, ThreadMessagesResult } from "../gmail";
 import {
   applyMessageLabelChangesLocally,
+  applyThreadLabelChangesLocally,
   mergeRefreshedMailboxPagesIntoQueryData,
   upsertMessageInThreadData,
   type MessagesQueryData,
@@ -116,5 +117,20 @@ describe("applyMessageLabelChangesLocally", () => {
     );
 
     expect(next.labelIds).toEqual(["IMPORTANT", "UNREAD"]);
+  });
+});
+
+describe("applyThreadLabelChangesLocally", () => {
+  test("updates the thread label snapshot along with the message metadata", () => {
+    const next = applyThreadLabelChangesLocally(
+      message("a", {
+        labelIds: ["INBOX", "old"],
+        threadLabelIds: ["old", "keep"],
+      }),
+      { addLabelIds: ["new"], removeLabelIds: ["old"] },
+    );
+
+    expect(next.labelIds).toEqual(["INBOX", "new"]);
+    expect(next.threadLabelIds).toEqual(["keep", "new"]);
   });
 });

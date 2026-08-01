@@ -1,6 +1,5 @@
 "use client";
 
-import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import {
   ArrowDown01Icon,
   ArrowRightDoubleIcon,
@@ -59,6 +58,7 @@ import {
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
 import { getMessageInspectorOptions } from "~/lib/gmail/message-inspector-query";
 import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
+import { getThreadLabelIds } from "~/lib/gmail/thread-list";
 import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
 import { gmailThreadUsefulDetailsQueryOptions } from "~/lib/gmail/useful-details-query";
 import { getMailboxesQueryKey } from "~/lib/mailboxes-query";
@@ -88,7 +88,6 @@ type MessageViewProps = {
 };
 
 type MessageHeaderContentProps = {
-  gmailLabels: MailboxLabel[];
   message: MessageListItem;
   className?: string;
   headerActions?: ReactNode;
@@ -161,7 +160,6 @@ const runHotkeyThreadAction = async (
 
 const MessageHeaderContent = ({
   className,
-  gmailLabels,
   headerActions,
   isExpanded,
   message,
@@ -220,8 +218,6 @@ const MessageHeaderContent = ({
           ))}
         </div>
       )}
-
-      <MessageLabels className="mt-1.5" labelIds={message.labelIds} labels={gmailLabels} />
     </div>
   );
 
@@ -573,7 +569,6 @@ const ThreadMessageCard = ({
   expanded,
   isLoading,
   linkedDraftMessage,
-  gmailLabels,
   mailboxId,
   message,
   onComposeDraftRequested,
@@ -587,7 +582,6 @@ const ThreadMessageCard = ({
   isLoading?: boolean;
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
-  gmailLabels: MailboxLabel[];
   mailboxId: string;
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
@@ -628,7 +622,6 @@ const ThreadMessageCard = ({
     >
       <MessageHeaderContent
         className="p-4 @sm:px-5 @sm:py-4"
-        gmailLabels={gmailLabels}
         headerActions={
           expanded ? (
             <MessageHeaderActions
@@ -684,7 +677,6 @@ const SingleMessageCard = ({
   currentUserEmail,
   isLoading,
   linkedDraftMessage,
-  gmailLabels,
   mailboxId,
   message,
   onComposeDraftRequested,
@@ -696,7 +688,6 @@ const SingleMessageCard = ({
   isLoading?: boolean;
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
-  gmailLabels: MailboxLabel[];
   mailboxId: string;
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
@@ -732,7 +723,6 @@ const SingleMessageCard = ({
     <section>
       <MessageHeaderContent
         className="p-4 @sm:p-5"
-        gmailLabels={gmailLabels}
         headerActions={
           <MessageHeaderActions
             onContinueDraft={linkedDraftMessage ? openLinkedDraft : undefined}
@@ -777,7 +767,6 @@ const ThreadMessageList = ({
   allThreadMessages,
   currentUserEmail,
   isLoading,
-  gmailLabels,
   mailboxId,
   messages,
   onComposeDraftRequested,
@@ -788,7 +777,6 @@ const ThreadMessageList = ({
   allThreadMessages: MessageListItem[];
   currentUserEmail?: string | null;
   isLoading?: boolean;
-  gmailLabels: MailboxLabel[];
   isActionPending?: boolean;
   mailboxId: string;
   messages: MessageListItem[];
@@ -810,7 +798,6 @@ const ThreadMessageList = ({
           <ThreadMessageCard
             currentUserEmail={currentUserEmail}
             expanded={isExpanded}
-            gmailLabels={gmailLabels}
             isLoading={isLoading}
             isActionPending={isActionPending}
             key={threadMessage.id}
@@ -897,6 +884,7 @@ export const MessageView = ({
   const threadMessages = threadData?.messages?.length
     ? [...threadData.messages].reverse()
     : [message];
+  const threadLabelIds = getThreadLabelIds(threadMessages);
   const messages = threadMessages.filter((threadMessage) => !isDraftMessage(threadMessage));
   const visibleMessages = messages.length > 0 ? messages : [message];
   const messagesMissingLoadedBody = getMessagesMissingLoadedBody(visibleMessages);
@@ -1097,10 +1085,13 @@ export const MessageView = ({
                 mailbox={activeMailbox}
                 mailboxId={mailboxId}
                 message={message}
+                threadLabelIds={threadLabelIds}
               />
             </div>
           )}
         </div>
+
+        <MessageLabels className="mt-3" labelIds={threadLabelIds} labels={gmailLabels} />
 
         {apiSource && (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
@@ -1152,7 +1143,6 @@ export const MessageView = ({
         <ThreadMessageList
           allThreadMessages={threadMessages}
           currentUserEmail={currentUserEmail}
-          gmailLabels={gmailLabels}
           isLoading={isBodyRefreshPending}
           isActionPending={isActionPending}
           key={message.threadId}
@@ -1168,7 +1158,6 @@ export const MessageView = ({
         visibleMessages.map((threadMessage) => (
           <SingleMessageCard
             currentUserEmail={currentUserEmail}
-            gmailLabels={gmailLabels}
             isLoading={isBodyRefreshPending}
             isActionPending={isActionPending}
             key={threadMessage.id}

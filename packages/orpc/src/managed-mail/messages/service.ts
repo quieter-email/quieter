@@ -162,6 +162,7 @@ const toMessageListItem = async (
   options: {
     attachmentCount?: number;
     labelIds?: string[];
+    threadLabelIds?: string[];
     threadMessageCount?: number;
   } = {},
 ): Promise<MessageListItem> => ({
@@ -184,6 +185,7 @@ const toMessageListItem = async (
   senderAvatarUrls: await getSenderAvatarUrls(record.from),
   snippet: record.snippet ?? undefined,
   subject: record.subject ?? undefined,
+  threadLabelIds: options.threadLabelIds,
   threadAttachmentCount: options.attachmentCount,
   threadId: record.threadId,
   threadMessageCount: options.threadMessageCount,
@@ -315,37 +317,62 @@ export const listManagedMessages = async (input: {
   const hasNextPage = records.length > limit;
   const pageRecords = records.slice(0, limit);
   const threadIds = pageRecords.map((record) => record.threadId);
-  const aggregates =
+  const [aggregates, threadStates] =
     threadIds.length === 0
-      ? []
-      : await db
-          .select({
-            attachmentCount: countDistinct(managedMailAttachment.id),
-            labelIds: sql<
-              string[]
-            >`coalesce(array_agg(distinct ${managedMailMessageLabel.labelId}) filter (where ${managedMailMessageLabel.labelId} is not null), '{}')`,
-            messageCount: countDistinct(managedMailMessage.id),
-            threadId: managedMailMessage.threadId,
-          })
-          .from(managedMailMessage)
-          .leftJoin(
-            managedMailMessageLabel,
-            eq(managedMailMessage.id, managedMailMessageLabel.messageId),
-          )
-          .leftJoin(
-            managedMailAttachment,
-            eq(managedMailMessage.id, managedMailAttachment.messageId),
-          )
-          .where(
-            and(
-              eq(managedMailMessage.mailboxId, input.mailboxId),
-              inArray(managedMailMessage.threadId, threadIds),
+      ? [[], []]
+      : await Promise.all([
+          db
+            .select({
+              attachmentCount: countDistinct(managedMailAttachment.id),
+              labelIds: sql<
+                string[]
+              >`coalesce(array_agg(distinct ${managedMailMessageLabel.labelId}) filter (where ${managedMailMessageLabel.labelId} is not null), '{}')`,
+              messageCount: countDistinct(managedMailMessage.id),
+              threadId: managedMailMessage.threadId,
+            })
+            .from(managedMailMessage)
+            .leftJoin(
+              managedMailMessageLabel,
+              eq(managedMailMessage.id, managedMailMessageLabel.messageId),
+            )
+            .leftJoin(
+              managedMailAttachment,
+              eq(managedMailMessage.id, managedMailAttachment.messageId),
+            )
+            .where(
+              and(
+                eq(managedMailMessage.mailboxId, input.mailboxId),
+                inArray(managedMailMessage.threadId, threadIds),
+              ),
+            )
+            .groupBy(managedMailMessage.threadId),
+          db
+            .select({
+              direction: managedMailMessage.direction,
+              isRead: managedMailMessage.isRead,
+              mailboxState: managedMailMessage.mailboxState,
+              threadId: managedMailMessage.threadId,
+            })
+            .from(managedMailMessage)
+            .where(
+              and(
+                eq(managedMailMessage.mailboxId, input.mailboxId),
+                inArray(managedMailMessage.threadId, threadIds),
+              ),
             ),
-          )
-          .groupBy(managedMailMessage.threadId);
+        ]);
   const labelIdsByThreadId = new Map<string, string[]>();
+  const threadLabelIdsByThreadId = new Map<string, Set<string>>();
   for (const aggregate of aggregates) {
     labelIdsByThreadId.set(aggregate.threadId, aggregate.labelIds);
+    threadLabelIdsByThreadId.set(aggregate.threadId, new Set(aggregate.labelIds));
+  }
+  for (const state of threadStates) {
+    const labelIds = threadLabelIdsByThreadId.get(state.threadId) ?? new Set<string>();
+    for (const labelId of getManagedSystemLabelIds(state)) {
+      labelIds.add(labelId);
+    }
+    threadLabelIdsByThreadId.set(state.threadId, labelIds);
   }
   const messageCountByThreadId = new Map(
     aggregates.map((record) => [record.threadId, Number(record.messageCount)]),
@@ -360,6 +387,7 @@ export const listManagedMessages = async (input: {
         toMessageListItem(record, {
           attachmentCount: attachmentCountByThreadId.get(record.threadId) ?? 0,
           labelIds: labelIdsByThreadId.get(record.threadId) ?? [],
+          threadLabelIds: Array.from(threadLabelIdsByThreadId.get(record.threadId) ?? []),
           threadMessageCount: messageCountByThreadId.get(record.threadId) ?? 1,
         }),
       ),
@@ -441,8 +469,9 @@ export const getManagedThread = async (input: {
       }),
     ),
   );
+  const threadLabelIds = Array.from(new Set(messages.flatMap((message) => message.labelIds ?? [])));
   return {
-    messages,
+    messages: messages.map((message) => ({ ...message, threadLabelIds })),
     snippet: messages.at(-1)?.snippet,
     subject: messages.find((message) => message.subject)?.subject,
     threadId: input.threadId,
