@@ -12,11 +12,11 @@ import { getThreadQueryKey } from "../thread-query";
 import {
   applyMessageLabelChangesLocally,
   applyMessageMetadata,
+  applyThreadLabelChangesLocally,
   mergeMessagePreservingLoadedDetails,
   markMessageReadLocally,
   markMessageUnreadLocally,
   removeMessagesFromThreadData,
-  toMessageMetadataById,
   updateMessageInThreadData,
   updateMessagesInThreadData,
   type LabelChangeSet,
@@ -285,39 +285,7 @@ const runOptimisticThreadMetadataMutation = async (args: {
 
   try {
     const updatedThread = await args.mutation(args.signal);
-    const updatesById = toMessageMetadataById(updatedThread.messages);
-    const resolvedTouchedQueryKeys = updateMessagesInCachedMailboxQueries(
-      args.queryClient,
-      args.mailboxId,
-      (message) => updatesById.has(message.id),
-      (message) => {
-        const updatedMessage = updatesById.get(message.id);
-        return updatedMessage
-          ? applyMessageMetadata(message, {
-              labelIds: updatedMessage.labelIds,
-              isUnread: updatedMessage.isUnread,
-            })
-          : message;
-      },
-    );
-
-    args.queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
-      updateMessagesInThreadData(
-        currentData,
-        (message) => updatesById.has(message.id),
-        (message) => {
-          const updatedMessage = updatesById.get(message.id);
-          return updatedMessage
-            ? applyMessageMetadata(message, {
-                labelIds: updatedMessage.labelIds,
-                isUnread: updatedMessage.isUnread,
-              })
-            : message;
-        },
-      ),
-    );
-
-    await persistQueryKeys(args.queryClient, [...resolvedTouchedQueryKeys, threadQueryKey]);
+    await applyResolvedThreadMetadataToCaches(args.queryClient, args.mailboxId, updatedThread);
     await invalidateMailboxCounts(args.queryClient);
   } catch (error) {
     await restoreSnapshots(args.queryClient, previousMessagesQueries, previousThreadQuery);
@@ -340,7 +308,7 @@ const runOptimisticThreadLabelMutation = async (args: {
     args.queryClient,
     args.mailboxId,
     (message) => message.threadId === args.threadId,
-  ).map((message) => applyMessageLabelChangesLocally(message, args.changes));
+  ).map((message) => applyThreadLabelChangesLocally(message, args.changes));
   const optimisticTouchedQueryKeys = optimisticMessages.flatMap((message) =>
     applyMessageToCachedMailboxQueries(args.queryClient, args.mailboxId, message),
   );
@@ -349,7 +317,7 @@ const runOptimisticThreadLabelMutation = async (args: {
     updateMessagesInThreadData(
       currentData,
       () => true,
-      (message) => applyMessageLabelChangesLocally(message, args.changes),
+      (message) => applyThreadLabelChangesLocally(message, args.changes),
     ),
   );
   await persistQueryKeys(args.queryClient, [...optimisticTouchedQueryKeys, threadQueryKey]);

@@ -13,6 +13,7 @@ export type ThreadListEntry = {
   threadId: string;
   anchorMessage: MessageListItem;
   messages: MessageListItem[];
+  threadLabelIds: string[];
   participants: ThreadParticipant[];
   subject: string;
   preview: string;
@@ -38,6 +39,13 @@ const getParticipantKey = (participant: ThreadParticipant): string => {
   return participant.email ?? participant.label.toLowerCase();
 };
 
+export const getThreadLabelIds = (
+  messages: readonly { labelIds?: string[]; threadLabelIds?: string[] }[],
+): string[] =>
+  Array.from(
+    new Set(messages.flatMap((message) => message.threadLabelIds ?? message.labelIds ?? [])),
+  );
+
 export const buildThreadListEntries = (messages: readonly MessageListItem[]): ThreadListEntry[] => {
   const orderedThreads: ThreadListEntry[] = [];
   const threadsById = new Map<string, ThreadListEntry>();
@@ -51,6 +59,7 @@ export const buildThreadListEntries = (messages: readonly MessageListItem[]): Th
         threadId: message.threadId,
         anchorMessage: message,
         messages: [message],
+        threadLabelIds: getThreadLabelIds([message]),
         participants: [participant],
         subject: message.subject?.trim() || "(No subject)",
         preview: message.snippet?.trim() || "",
@@ -65,6 +74,7 @@ export const buildThreadListEntries = (messages: readonly MessageListItem[]): Th
     }
 
     existingThread.messages.push(message);
+    existingThread.threadLabelIds = getThreadLabelIds(existingThread.messages);
     existingThread.messageCount = Math.max(
       existingThread.messageCount,
       existingThread.messages.length,

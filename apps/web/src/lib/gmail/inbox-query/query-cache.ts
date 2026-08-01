@@ -6,6 +6,7 @@ import {
   type MessageListItem,
   type ThreadMessagesResult,
 } from "../gmail";
+import { getThreadLabelIds } from "../thread-list";
 import { getThreadQueryKey } from "../thread-query";
 import {
   applyMessageMetadata,
@@ -290,6 +291,7 @@ export const applyResolvedThreadMetadataToCaches = async (
 ) => {
   const threadQueryKey = getThreadQueryKey(mailboxId, updatedThread.threadId);
   const updatesById = toMessageMetadataById(updatedThread.messages);
+  const threadLabelIds = getThreadLabelIds(updatedThread.messages);
   const touchedQueryKeys: Array<readonly unknown[]> = [];
 
   for (const updatedMessage of updatedThread.messages) {
@@ -307,6 +309,7 @@ export const applyResolvedThreadMetadataToCaches = async (
         applyMessageMetadata(previousMessage, {
           labelIds: updatedMessage.labelIds,
           isUnread: updatedMessage.isUnread,
+          threadLabelIds,
         }),
       ),
     );
@@ -322,6 +325,7 @@ export const applyResolvedThreadMetadataToCaches = async (
           ? applyMessageMetadata(message, {
               labelIds: nextMessage.labelIds,
               isUnread: nextMessage.isUnread,
+              threadLabelIds,
             })
           : message;
       },

@@ -33,7 +33,7 @@ export const MessageLabels = ({
 
   return (
     <div
-      aria-label="Message labels"
+      aria-label="Conversation labels"
       className={cn("flex min-w-0 flex-wrap items-center gap-1", className)}
     >
       {visibleLabels.map((label) => (

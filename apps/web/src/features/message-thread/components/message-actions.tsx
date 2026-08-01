@@ -41,6 +41,7 @@ type MessageActionsSharedProps = {
   mailboxId: string;
   message: MessageListItem;
   mailbox: MailboxCategory;
+  threadLabelIds: readonly string[];
   isUnread?: boolean;
   isPending?: boolean;
   labelNounPlural?: "labels";
@@ -115,9 +116,11 @@ const MessageActionsDialogs = ({
   onOpenLabelsDialog,
   onUpdateLabels,
   openLabelsDialog,
+  threadLabelIds,
 }: {
   mailboxId: string;
   message: MessageListItem;
+  threadLabelIds: readonly string[];
   isPending: boolean;
   openLabelsDialog: boolean;
   onOpenLabelsDialog: (open: boolean) => void;
@@ -133,7 +136,7 @@ const MessageActionsDialogs = ({
       }}
       onOpenChange={onOpenLabelsDialog}
       open={openLabelsDialog}
-      targets={[{ id: message.threadId, labelIds: message.labelIds ?? [] }]}
+      targets={[{ id: message.threadId, labelIds: threadLabelIds }]}
     />
   );
 };
@@ -336,6 +339,7 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
       onOpenLabelsDialog={setOpenLabelsDialog}
       onUpdateLabels={actions.onUpdateLabels}
       openLabelsDialog={openLabelsDialog}
+      threadLabelIds={props.threadLabelIds}
     />
   ) : null;
 

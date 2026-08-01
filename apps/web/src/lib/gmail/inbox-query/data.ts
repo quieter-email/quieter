@@ -289,11 +289,13 @@ const areLabelIdsEquivalent = (
 
 export const applyMessageMetadata = (
   message: MessageListItem,
-  next: { labelIds?: string[]; isUnread: boolean },
+  next: { labelIds?: string[]; isUnread: boolean; threadLabelIds?: string[] },
 ): MessageListItem => {
+  const threadLabelIds = next.threadLabelIds ?? message.threadLabelIds;
   if (
     message.isUnread === next.isUnread &&
-    areLabelIdsEquivalent(message.labelIds, next.labelIds)
+    areLabelIdsEquivalent(message.labelIds, next.labelIds) &&
+    areLabelIdsEquivalent(message.threadLabelIds, threadLabelIds)
   ) {
     return message;
   }
@@ -302,6 +304,7 @@ export const applyMessageMetadata = (
     ...message,
     labelIds: next.labelIds,
     isUnread: next.isUnread,
+    threadLabelIds,
   };
 };
 
@@ -316,6 +319,19 @@ export const applyMessageLabelChangesLocally = (
   return applyMessageMetadata(message, {
     labelIds,
     isUnread: isMessageUnread({ labelIds }),
+  });
+};
+
+export const applyThreadLabelChangesLocally = (
+  message: MessageListItem,
+  changes: LabelChangeSet,
+) => {
+  const labelIds = applyLabelIdChanges(message.labelIds, changes);
+  const threadLabelIds = applyLabelIdChanges(message.threadLabelIds ?? message.labelIds, changes);
+  return applyMessageMetadata(message, {
+    isUnread: isMessageUnread({ labelIds }),
+    labelIds,
+    threadLabelIds,
   });
 };
 

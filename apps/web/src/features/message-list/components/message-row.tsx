@@ -126,9 +126,6 @@ const MessageRowContent = ({
   const unread = !isDraftMailbox && thread.unreadCount > 0;
   const threaded = thread.messageCount > 1;
   const attachmentCount = thread.attachmentCount;
-  const threadLabelIds = Array.from(
-    new Set(thread.messages.flatMap((message) => message.labelIds ?? [])),
-  );
   const isActionPending =
     pendingActions.isMessageActionPending(anchorMessage.id) ||
     pendingActions.isThreadActionPending(thread.threadId);
@@ -348,6 +345,7 @@ const MessageRowContent = ({
         mailboxId={mailboxId}
         mailbox={activeMailbox}
         message={anchorMessage}
+        threadLabelIds={thread.threadLabelIds}
         triggerClassName="flex h-full min-w-0 flex-1 active:scale-100"
       >
         <button
@@ -425,7 +423,12 @@ const MessageRowContent = ({
                   )}
                 </p>
                 <div className="hidden shrink-0 @sm:block">
-                  <MessageLabels compact labelIds={threadLabelIds} labels={gmailLabels} limit={2} />
+                  <MessageLabels
+                    compact
+                    labelIds={thread.threadLabelIds}
+                    labels={gmailLabels}
+                    limit={2}
+                  />
                 </div>
               </div>
             </div>

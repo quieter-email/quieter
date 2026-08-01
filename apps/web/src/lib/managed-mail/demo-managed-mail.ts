@@ -453,10 +453,22 @@ export const listManagedDemoMessages = ({
   query?: string;
 }): ListMessagesPageResult => {
   const start = pageToken ? Number(pageToken) || 0 : 0;
-  const messages = getSortedMessages().filter(
+  const allMessages = getSortedMessages();
+  const threadLabelIdsById = new Map<string, string[]>();
+  for (const message of allMessages) {
+    const labelIds = threadLabelIdsById.get(message.threadId) ?? [];
+    for (const labelId of message.labelIds ?? []) {
+      if (!labelIds.includes(labelId)) labelIds.push(labelId);
+    }
+    threadLabelIdsById.set(message.threadId, labelIds);
+  }
+  const messages = allMessages.filter(
     (message) => isMessageInMailbox(message, category) && messageMatchesQuery(message, query),
   );
-  const page = messages.slice(start, start + maxResults);
+  const page = messages.slice(start, start + maxResults).map((message) => ({
+    ...message,
+    threadLabelIds: threadLabelIdsById.get(message.threadId),
+  }));
   const nextOffset = start + maxResults;
 
   return {
@@ -469,9 +481,10 @@ export const listManagedDemoMessages = ({
 
 export const getManagedDemoThread = (threadId: string): ThreadMessagesResult => {
   const messages = getSortedMessages().filter((message) => message.threadId === threadId);
+  const threadLabelIds = Array.from(new Set(messages.flatMap((message) => message.labelIds ?? [])));
 
   return {
-    messages,
+    messages: messages.map((message) => ({ ...message, threadLabelIds })),
     snippet: messages[0]?.snippet,
     subject: messages[0]?.subject,
     threadId,
