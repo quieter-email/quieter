@@ -1,7 +1,7 @@
 "use client";
 
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
-import type { ComponentPropsWithoutRef } from "react";
+import type { ComponentPropsWithoutRef, PointerEvent as ReactPointerEvent } from "react";
 import {
   Cancel01Icon,
   Refresh01Icon,
@@ -83,6 +83,7 @@ export const MessageListSearchView = ({
     openDateFilter,
     openSearchDropdown,
     removeFilterFromPointer,
+    cycleFilterFromPointer,
     runSearch,
     selectDateFilterValue,
     selectDatePreset,
@@ -103,6 +104,16 @@ export const MessageListSearchView = ({
     }
   }
   const filterTypeOccurrences = new Map<string, number>();
+  const removeFilterOnMiddlePointer = (event: ReactPointerEvent<HTMLElement>, index: number) => {
+    if (event.button !== 1) {
+      return false;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    removeFilterFromPointer(index);
+    return true;
+  };
 
   return (
     <search className="@container block bg-transparent p-2 @sm:px-4 @sm:pt-4 @sm:pb-3">
@@ -169,6 +180,11 @@ export const MessageListSearchView = ({
 
                     return (
                       <button
+                        aria-label={
+                          filter.negated
+                            ? `Remove excluded label ${filter.value}`
+                            : `Exclude label ${filter.value}`
+                        }
                         className={cn(
                           filterChipClassName,
                           "gap-1",
@@ -179,14 +195,15 @@ export const MessageListSearchView = ({
                         style={{ order: index * 2 + 1 }}
                         onClick={(event) => {
                           event.stopPropagation();
-                          removeFilterFromPointer(index);
+                          cycleFilterFromPointer(index);
                         }}
                         onFocus={openSearchDropdown}
-                        onKeyDown={(event) =>
-                          handleTokenKeyDown(event, index, { removeOnSpace: true })
-                        }
+                        onKeyDown={(event) => handleTokenKeyDown(event, index)}
                         ref={(node) => setSegmentRef(index, node)}
                         onPointerDown={(event) => {
+                          if (removeFilterOnMiddlePointer(event, index)) {
+                            return;
+                          }
                           if (document.activeElement === event.currentTarget) {
                             suppressNextBlurCommit();
                           }
@@ -204,17 +221,25 @@ export const MessageListSearchView = ({
                   if (isFixedValueFilter(filter)) {
                     return (
                       <button
+                        aria-label={
+                          filter.negated
+                            ? `Remove excluded ${filter.value} filter`
+                            : `Exclude ${filter.value} filter`
+                        }
                         className={cn(filterChipClassName, "gap-1")}
                         key={filterRenderKey}
                         style={{ order: index * 2 + 1 }}
                         onClick={(event) => {
                           event.stopPropagation();
-                          removeFilterFromPointer(index);
+                          cycleFilterFromPointer(index);
                         }}
                         onFocus={openSearchDropdown}
                         onKeyDown={(event) => handleTokenKeyDown(event, index)}
                         ref={(node) => setSegmentRef(index, node)}
                         onPointerDown={(event) => {
+                          if (removeFilterOnMiddlePointer(event, index)) {
+                            return;
+                          }
                           if (document.activeElement === event.currentTarget) {
                             suppressNextBlurCommit();
                           }
@@ -239,11 +264,38 @@ export const MessageListSearchView = ({
                         "bg-accent ring-2 ring-ring/30": activeDateFilterIndex === index,
                       })}
                       key={filterRenderKey}
+                      onPointerDown={(event) => {
+                        removeFilterOnMiddlePointer(event, index);
+                      }}
                       ref={(node) => setDateTokenRef(index, node)}
                       style={{ order: index * 2 + 1 }}
                     >
-                      {filter.negated ? <span className="shrink-0 text-muted-fg">Not</span> : null}
-                      <span className="shrink-0 text-muted-fg">{getFilterLabel(filter.type)}</span>
+                      <button
+                        aria-label={
+                          filter.negated
+                            ? `Remove excluded ${getFilterLabel(filter.type)} filter`
+                            : `Exclude ${getFilterLabel(filter.type)} filter`
+                        }
+                        className="inline-flex shrink-0 items-center gap-1 rounded-sm text-muted-fg hover:text-fg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          cycleFilterFromPointer(index);
+                        }}
+                        onPointerDown={(event) => {
+                          if (removeFilterOnMiddlePointer(event, index)) {
+                            return;
+                          }
+                          if (document.activeElement === event.currentTarget) {
+                            suppressNextBlurCommit();
+                          }
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                        type="button"
+                      >
+                        {filter.negated ? <span>Not</span> : null}
+                        <span>{getFilterLabel(filter.type)}</span>
+                      </button>
                       <input
                         aria-label={`${filter.type} filter value`}
                         autoCapitalize="off"
@@ -274,6 +326,9 @@ export const MessageListSearchView = ({
                           removeFilterFromPointer(index);
                         }}
                         onPointerDown={(event) => {
+                          if (removeFilterOnMiddlePointer(event, index)) {
+                            return;
+                          }
                           if (document.activeElement === event.currentTarget) {
                             suppressNextBlurCommit();
                           }

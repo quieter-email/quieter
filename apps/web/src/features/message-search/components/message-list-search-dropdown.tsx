@@ -7,6 +7,7 @@ import { cn } from "@quieter/ui/cn";
 import { LazyMotion, domAnimation, AnimatePresence, m } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { mailboxLabelSearchPillSurfaceClassNameByColor } from "~/features/message-labels/domain/mailbox-label-presentation";
 import {
   normalizeLabelSelectionKey,
   type SearchFilterChip,
@@ -39,15 +40,17 @@ const createSearchFilterSections = (
   },
 ];
 
-const isSearchFilterOptionActive = (
+const getSearchFilterOptionState = (
   filters: readonly SearchFilterChip[],
   optionFilter: SearchFilterChip,
-) =>
-  filters.some(
+) => {
+  const filter = filters.find(
     (filter) =>
       filter.type === optionFilter.type &&
       (optionFilter.value.length === 0 || filter.value === optionFilter.value),
   );
+  return filter ? (filter.negated ? "exclude" : "include") : null;
+};
 
 const SearchDropdownSectionLabel = ({ children }: { children: string }) => (
   <p className="px-2.5 pb-1 text-xs text-muted-fg">{children}</p>
@@ -55,6 +58,7 @@ const SearchDropdownSectionLabel = ({ children }: { children: string }) => (
 
 const SearchDropdownRow = ({
   active = false,
+  className,
   highlighted = false,
   hint,
   icon,
@@ -62,6 +66,7 @@ const SearchDropdownRow = ({
   onClick,
 }: {
   active?: boolean;
+  className?: string;
   highlighted?: boolean;
   hint?: string;
   icon: IconSvgElement;
@@ -75,6 +80,7 @@ const SearchDropdownRow = ({
         "bg-muted": highlighted,
         "bg-accent": active,
       },
+      className,
     )}
     onClick={onClick}
     type="button"
@@ -129,10 +135,13 @@ export const MessageListSearchDropdown = ({
   const labelsInlineRef = useRef<HTMLDivElement>(null);
   const labelsSubmenuRef = useRef<HTMLDivElement>(null);
   const labelsTriggerRef = useRef<HTMLButtonElement>(null);
-  const selectedUserLabelKeys = new Set<string>();
+  const selectedUserLabelStates = new Map<string, "exclude" | "include">();
   for (const filter of draftSearchState.filters) {
     if (filter.type === "label") {
-      selectedUserLabelKeys.add(normalizeLabelSelectionKey(filter.value));
+      selectedUserLabelStates.set(
+        normalizeLabelSelectionKey(filter.value),
+        filter.negated ? "exclude" : "include",
+      );
     }
   }
   const isLabelHighlighted = highlightedItemKey?.startsWith("label:") ?? false;
@@ -202,16 +211,20 @@ export const MessageListSearchDropdown = ({
     <div className="px-2.5 py-2 text-[13px] text-muted-fg">Loading labels…</div>
   ) : userLabels.length > 0 ? (
     <div className="flex flex-col gap-0.5">
-      {userLabels.map((label) => (
-        <SearchDropdownRow
-          active={selectedUserLabelKeys.has(normalizeLabelSelectionKey(label.name))}
-          highlighted={highlightedItemKey === `label:${normalizeLabelSelectionKey(label.name)}`}
-          icon={Tag01Icon}
-          key={label.id}
-          label={label.name}
-          onClick={() => onToggleLabel(label.name)}
-        />
-      ))}
+      {userLabels.map((label) => {
+        const selectionState = selectedUserLabelStates.get(normalizeLabelSelectionKey(label.name));
+        return (
+          <SearchDropdownRow
+            active={selectionState !== undefined}
+            className={mailboxLabelSearchPillSurfaceClassNameByColor[label.color ?? "gray"]}
+            highlighted={highlightedItemKey === `label:${normalizeLabelSelectionKey(label.name)}`}
+            icon={Tag01Icon}
+            key={label.id}
+            label={selectionState === "exclude" ? `Not ${label.name}` : label.name}
+            onClick={() => onToggleLabel(label.name)}
+          />
+        );
+      })}
     </div>
   ) : (
     <div className="px-2.5 py-2 text-[13px] text-muted-fg">No custom labels.</div>
@@ -293,20 +306,28 @@ export const MessageListSearchDropdown = ({
                 {searchFilterSections.map((section) => (
                   <div className="flex flex-col gap-1" key={section.label}>
                     <SearchDropdownSectionLabel>{section.label}</SearchDropdownSectionLabel>
-                    {section.options.map((option) => (
-                      <SearchDropdownRow
-                        active={isSearchFilterOptionActive(draftSearchState.filters, option.filter)}
-                        highlighted={
-                          highlightedItemKey ===
-                          `filter:${option.filter.type}:${option.filter.value}`
-                        }
-                        hint={option.hint}
-                        icon={option.icon}
-                        key={`${option.filter.type}:${option.filter.value}`}
-                        label={option.label}
-                        onClick={() => onSelectFilter(option.filter)}
-                      />
-                    ))}
+                    {section.options.map((option) => {
+                      const selectionState = getSearchFilterOptionState(
+                        draftSearchState.filters,
+                        option.filter,
+                      );
+                      return (
+                        <SearchDropdownRow
+                          active={selectionState !== null}
+                          highlighted={
+                            highlightedItemKey ===
+                            `filter:${option.filter.type}:${option.filter.value}`
+                          }
+                          hint={selectionState === "exclude" ? `-${option.hint}` : option.hint}
+                          icon={option.icon}
+                          key={`${option.filter.type}:${option.filter.value}`}
+                          label={
+                            selectionState === "exclude" ? `Not ${option.label}` : option.label
+                          }
+                          onClick={() => onSelectFilter(option.filter)}
+                        />
+                      );
+                    })}
                   </div>
                 ))}
 
@@ -330,7 +351,7 @@ export const MessageListSearchDropdown = ({
                         "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-[13px] text-fg hover:bg-muted focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
                         {
                           "bg-muted": isLabelHighlighted,
-                          "bg-accent": selectedUserLabelKeys.size > 0,
+                          "bg-accent": selectedUserLabelStates.size > 0,
                         },
                       )}
                       onClick={() => {

@@ -66,6 +66,21 @@ export const findLabelFilterIndex = (filters: readonly SearchFilterChip[], label
   );
 };
 
+export const cycleSearchFilter = (filters: readonly SearchFilterChip[], index: number) => {
+  const filter = filters[index];
+  if (!filter) {
+    return [...filters];
+  }
+
+  if (filter.negated) {
+    return filters.filter((_, filterIndex) => filterIndex !== index);
+  }
+
+  const nextFilters = [...filters];
+  nextFilters[index] = { ...filter, negated: true };
+  return nextFilters;
+};
+
 export const upsertFilter = (
   filters: readonly SearchFilterChip[],
   nextFilter: SearchFilterChip,
