@@ -1,6 +1,6 @@
 "use client";
 
-import { Image01Icon } from "@hugeicons/core-free-icons";
+import { ArrowUpRight01Icon, Calendar03Icon, Image01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -10,8 +10,10 @@ import { useExternalImagesEnabled } from "~/features/settings/domain/external-im
 import {
   applyEmailPreferences,
   fixNonReadableColors,
+  getCalendarLinks,
   linkifyText,
   preprocessEmailHtml,
+  type CalendarLink,
   type ProcessedMailHtml,
 } from "../domain/mail-html";
 
@@ -23,6 +25,49 @@ type MessageBodyProps = {
 };
 
 const REMOTE_IMAGE_REGEX = /^https?:\/\//i;
+
+const CalendarLinkActions = ({ links }: { links: CalendarLink[] }) => {
+  if (links.length === 0) return null;
+
+  return (
+    <section
+      aria-label="Calendar actions"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-muted/35 px-3 py-2"
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2.5">
+        <div
+          aria-hidden
+          className="flex size-8 shrink-0 items-center justify-center rounded-md bg-bg/90 text-muted-fg shadow-xs ring-1 ring-border/55"
+        >
+          <HugeiconsIcon className="size-4 shrink-0" icon={Calendar03Icon} />
+        </div>
+        <p className="min-w-0 text-sm/snug text-muted-fg">
+          {links.length === 1
+            ? "This message includes a calendar event."
+            : "This message includes calendar events."}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+        {links.map((link) => (
+          <Button
+            key={link.href}
+            onClick={() => {
+              const openedWindow = window.open(link.href, "_blank", "noopener,noreferrer");
+              if (openedWindow) openedWindow.opener = null;
+            }}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {link.label}
+            <HugeiconsIcon aria-hidden className="size-3.5" icon={ArrowUpRight01Icon} />
+          </Button>
+        ))}
+      </div>
+    </section>
+  );
+};
 
 const HtmlMessageBodyContent = ({
   html,
@@ -113,6 +158,7 @@ const HtmlMessageBodyContent = ({
 
   return (
     <>
+      <CalendarLinkActions links={processedMail.calendarLinks} />
       {!shouldLoadImages && (remoteImagesPresent || cspViolation) && (
         <section
           aria-label="Remote images"
@@ -165,25 +211,35 @@ const MessageBodyLoadingSkeleton = () => (
   </output>
 );
 
-const PlainTextMessageBody = ({ text }: { text: string }) => (
-  <p className="bg-transparent p-4 text-base/7 wrap-break-word whitespace-pre-wrap text-fg">
-    {linkifyText(text).map((segment, index) =>
-      segment.kind === "link" ? (
-        <a
-          className="rounded-sm text-primary underline decoration-border underline-offset-2 hover:decoration-current focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:outline-1 focus-visible:outline-offset-0 focus-visible:outline-primary"
-          href={segment.href}
-          key={`${segment.href}-${index}`}
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          {segment.value}
-        </a>
-      ) : (
-        <span key={`${segment.value}-${index}`}>{segment.value}</span>
-      ),
-    )}
-  </p>
-);
+const PlainTextMessageBody = ({ text }: { text: string }) => {
+  const segments = linkifyText(text);
+  const calendarLinks = getCalendarLinks(
+    segments.flatMap((segment) => (segment.kind === "link" ? [segment.href] : [])),
+  );
+
+  return (
+    <>
+      <CalendarLinkActions links={calendarLinks} />
+      <p className="bg-transparent p-4 text-base/7 wrap-break-word whitespace-pre-wrap text-fg">
+        {segments.map((segment, index) =>
+          segment.kind === "link" ? (
+            <a
+              className="rounded-sm text-primary underline decoration-border underline-offset-2 hover:decoration-current focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:outline-1 focus-visible:outline-offset-0 focus-visible:outline-primary"
+              href={segment.href}
+              key={`${segment.href}-${index}`}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              {segment.value}
+            </a>
+          ) : (
+            <span key={`${segment.value}-${index}`}>{segment.value}</span>
+          ),
+        )}
+      </p>
+    </>
+  );
+};
 
 export const MessageBody = ({ html, isLoading, loadExternalImages, text }: MessageBodyProps) => {
   const fallbackText = text?.trim();
