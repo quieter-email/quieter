@@ -132,7 +132,12 @@ export const MessageAttachments = ({
   className,
   mailboxId,
 }: MessageAttachmentsProps) => {
-  const [activeAttachmentKey, setActiveAttachmentKey] = useState<string | null>(null);
+  const [activeCalendarAttachmentKey, setActiveCalendarAttachmentKey] = useState<string | null>(
+    null,
+  );
+  const [activeDownloadAttachmentKey, setActiveDownloadAttachmentKey] = useState<string | null>(
+    null,
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const hasCalendarAttachments = attachments.some(isCalendarAttachment);
   const { data: connectorsData, isLoading: areConnectorsLoading } = useQuery({
@@ -149,7 +154,7 @@ export const MessageAttachments = ({
 
   const handleDownload = async (attachment: ThreadAttachment) => {
     const attachmentKey = `${attachment.messageId}:${attachment.attachmentId}`;
-    setActiveAttachmentKey(attachmentKey);
+    setActiveDownloadAttachmentKey(attachmentKey);
     setErrorMessage(null);
 
     try {
@@ -160,18 +165,18 @@ export const MessageAttachments = ({
         attachment.fileName,
         attachment.mimeType,
       );
-      setActiveAttachmentKey((current) => (current === attachmentKey ? null : current));
     } catch (error) {
       setErrorMessage(
         (error as { message?: string })?.message ?? `Could not download ${attachment.fileName}.`,
       );
-      setActiveAttachmentKey((current) => (current === attachmentKey ? null : current));
+    } finally {
+      setActiveDownloadAttachmentKey((current) => (current === attachmentKey ? null : current));
     }
   };
 
   const handleCalendarAction = async (attachment: ThreadAttachment) => {
     const attachmentKey = `${attachment.messageId}:${attachment.attachmentId}`;
-    setActiveAttachmentKey(attachmentKey);
+    setActiveCalendarAttachmentKey(attachmentKey);
     setErrorMessage(null);
 
     try {
@@ -180,7 +185,6 @@ export const MessageAttachments = ({
           provider: "google_calendar",
           returnTo: "/settings?tab=connectors",
         });
-        setActiveAttachmentKey((current) => (current === attachmentKey ? null : current));
         return;
       }
 
@@ -190,13 +194,13 @@ export const MessageAttachments = ({
         messageId: attachment.messageId,
       });
       toast.success(`Added ${result.summary} to Google Calendar.`);
-      setActiveAttachmentKey((current) => (current === attachmentKey ? null : current));
     } catch (error) {
       setErrorMessage(
         (error as { message?: string })?.message ??
           `Could not add ${attachment.fileName} to Google Calendar.`,
       );
-      setActiveAttachmentKey((current) => (current === attachmentKey ? null : current));
+    } finally {
+      setActiveCalendarAttachmentKey((current) => (current === attachmentKey ? null : current));
     }
   };
 
@@ -205,7 +209,8 @@ export const MessageAttachments = ({
       <div className="flex min-w-0 flex-wrap items-center gap-1">
         {attachments.map((attachment) => {
           const attachmentKey = `${attachment.messageId}:${attachment.attachmentId}`;
-          const isAttachmentPending = activeAttachmentKey === attachmentKey;
+          const isCalendarPending = activeCalendarAttachmentKey === attachmentKey;
+          const isDownloadPending = activeDownloadAttachmentKey === attachmentKey;
           const isCalendarInvite = isCalendarAttachment(attachment);
           const sizeLabel = attachment.size > 0 ? formatAttachmentSize(attachment.size) : null;
           const typeIcon = getAttachmentTypeIcon(attachment.mimeType, attachment.fileName);
@@ -220,14 +225,14 @@ export const MessageAttachments = ({
             <Fragment key={attachmentKey}>
               {isCalendarInvite ? (
                 <button
-                  aria-busy={isAttachmentPending}
+                  aria-busy={isCalendarPending}
                   className={cn(
                     "squircle inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-xs text-fg",
                     "bg-muted/25 shadow-xs ring-1 ring-border/55 ring-inset",
                     "transition-colors hover:bg-muted/45",
                     "disabled:cursor-progress disabled:opacity-65",
                   )}
-                  disabled={isAttachmentPending || areConnectorsLoading}
+                  disabled={isCalendarPending || areConnectorsLoading}
                   onClick={() => {
                     void handleCalendarAction(attachment);
                   }}
@@ -238,9 +243,9 @@ export const MessageAttachments = ({
                     <HugeiconsIcon
                       aria-hidden="true"
                       className={cn("size-3.5", {
-                        "animate-pulse text-fg": isAttachmentPending || areConnectorsLoading,
+                        "animate-pulse text-fg": isCalendarPending || areConnectorsLoading,
                       })}
-                      icon={isAttachmentPending ? Download01Icon : CalendarAdd01Icon}
+                      icon={CalendarAdd01Icon}
                     />
                   </span>
                   <span className="min-w-0 truncate font-medium">{calendarActionLabel}</span>
@@ -248,27 +253,27 @@ export const MessageAttachments = ({
               ) : null}
 
               <button
-                aria-busy={isAttachmentPending}
+                aria-busy={isDownloadPending}
                 className={cn(
                   "squircle inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-xs text-fg",
                   "bg-muted/25 shadow-xs ring-1 ring-border/55 ring-inset",
                   "transition-colors hover:bg-muted/45",
                   "disabled:cursor-progress disabled:opacity-65",
                 )}
-                disabled={isAttachmentPending}
+                disabled={isDownloadPending}
                 onClick={() => {
                   void handleDownload(attachment);
                 }}
                 title={
-                  isAttachmentPending ? `Downloading ${attachment.fileName}` : attachment.fileName
+                  isDownloadPending ? `Downloading ${attachment.fileName}` : attachment.fileName
                 }
                 type="button"
               >
                 <span className="flex size-5 shrink-0 items-center justify-center text-muted-fg">
                   <HugeiconsIcon
                     aria-hidden="true"
-                    className={cn("size-3.5", { "animate-pulse text-fg": isAttachmentPending })}
-                    icon={isAttachmentPending ? Download01Icon : typeIcon}
+                    className={cn("size-3.5", { "animate-pulse text-fg": isDownloadPending })}
+                    icon={isDownloadPending ? Download01Icon : typeIcon}
                   />
                 </span>
 

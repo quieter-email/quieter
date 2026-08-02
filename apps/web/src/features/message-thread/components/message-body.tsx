@@ -212,10 +212,16 @@ const MessageBodyLoadingSkeleton = () => (
 );
 
 const PlainTextMessageBody = ({ text }: { text: string }) => {
-  const segments = linkifyText(text);
-  const calendarLinks = getCalendarLinks(
-    segments.flatMap((segment) => (segment.kind === "link" ? [segment.href] : [])),
-  );
+  const { calendarLinks, segments } = useMemo(() => {
+    const nextSegments = linkifyText(text);
+
+    return {
+      calendarLinks: getCalendarLinks(
+        nextSegments.flatMap((segment) => (segment.kind === "link" ? [segment.href] : [])),
+      ),
+      segments: nextSegments,
+    };
+  }, [text]);
 
   return (
     <>
