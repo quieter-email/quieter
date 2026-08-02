@@ -23,8 +23,14 @@ const SAFE_STYLE_OPTIONS = {
 const cssSanitizer = new CssSanitizer();
 
 export type ProcessedMailHtml = {
+  calendarLinks: CalendarLink[];
   hasBlockedImages: boolean;
   processedHtml: string;
+};
+
+export type CalendarLink = {
+  href: string;
+  label: string;
 };
 
 export type MailRenderTheme = "dark" | "light";
@@ -313,6 +319,69 @@ export const linkifyText = (text: string): LinkifiedTextSegment[] => {
   return segments.length ? segments : [{ kind: "text", value: text }];
 };
 
+const OUTLOOK_CALENDAR_HOSTS = new Set([
+  "outlook.live.com",
+  "outlook.office.com",
+  "outlook.office365.com",
+]);
+const MAX_CALENDAR_LINKS = 3;
+
+export const getCalendarLink = (href: string): CalendarLink | null => {
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return null;
+  }
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+
+  const hostname = url.hostname.toLowerCase();
+  const pathname = url.pathname.toLowerCase().replace(/\/+$/, "");
+  const googleAction = url.searchParams.get("action")?.toLowerCase();
+
+  if (
+    (hostname === "calendar.google.com" || hostname === "www.google.com") &&
+    ((pathname === "/calendar/event" && (url.searchParams.has("eid") || googleAction === "view")) ||
+      (pathname === "/calendar/render" && googleAction === "template"))
+  ) {
+    return { href: url.href, label: "Open in Google Calendar" };
+  }
+
+  const outlookPath = url.searchParams.get("path")?.toLowerCase();
+  if (
+    OUTLOOK_CALENDAR_HOSTS.has(hostname) &&
+    (pathname.includes("/calendar/0/deeplink/compose") ||
+      pathname.includes("/calendar/item/") ||
+      outlookPath?.startsWith("/calendar/action/compose") ||
+      url.searchParams.get("rru")?.toLowerCase() === "addevent")
+  ) {
+    return { href: url.href, label: "Open in Outlook Calendar" };
+  }
+
+  if (pathname.endsWith(".ics")) {
+    return { href: url.href, label: "Open calendar invite" };
+  }
+
+  return null;
+};
+
+export const getCalendarLinks = (hrefs: Iterable<string>): CalendarLink[] => {
+  const links: CalendarLink[] = [];
+  const seen = new Set<string>();
+
+  for (const href of hrefs) {
+    const calendarLink = getCalendarLink(href);
+    if (!calendarLink || seen.has(calendarLink.href)) continue;
+
+    seen.add(calendarLink.href);
+    links.push(calendarLink);
+    if (links.length === MAX_CALENDAR_LINKS) break;
+  }
+
+  return links;
+};
+
 const linkifyBareUrls = (document: Document) => {
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   const nodes: Text[] = [];
@@ -467,6 +536,11 @@ export const applyEmailPreferences = (
 ): ProcessedMailHtml => {
   let hasBlockedImages = false;
   const document = createDocument(preprocessedHtml);
+  const calendarLinks = getCalendarLinks(
+    Array.from(document.querySelectorAll("a"), (link) =>
+      link.closest("details.quoted-toggle") ? "" : (link.getAttribute("href") ?? ""),
+    ),
+  );
 
   if (!shouldLoadImages) {
     document.querySelectorAll("img").forEach((image) => {
@@ -484,6 +558,7 @@ export const applyEmailPreferences = (
   });
 
   return {
+    calendarLinks,
     hasBlockedImages,
     processedHtml: `${createMailRenderStyles(theme)}${document.documentElement.outerHTML}`,
   };
