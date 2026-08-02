@@ -1,5 +1,42 @@
-import { describe, expect, test } from "vite-plus/test";
+import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
+
+const billingMocks = vi.hoisted(() => ({
+  getPolarClient: vi.fn(),
+  getPolarSubscription: vi.fn(),
+  loadRows: vi.fn(),
+  syncBillingSubscription: vi.fn(),
+  updateReconciliationFailure: vi.fn(),
+  updateReconciliationFailureSet: vi.fn(),
+}));
+
+vi.mock("@quieter/database/client", () => ({
+  db: {
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: vi.fn(),
+          orderBy: billingMocks.loadRows,
+        })),
+      })),
+    })),
+    update: vi.fn(() => ({
+      set: billingMocks.updateReconciliationFailureSet.mockImplementation(() => ({
+        where: billingMocks.updateReconciliationFailure,
+      })),
+    })),
+  },
+}));
+
+vi.mock("../src/polar", () => ({
+  getPolarClient: billingMocks.getPolarClient,
+}));
+
+vi.mock("../src/subscription-sync", () => ({
+  syncBillingSubscription: billingMocks.syncBillingSubscription,
+}));
+
 import {
+  getOrganizationSubscription,
   isActiveBillingStatus,
   isLocalDevelopmentBillingEntitlementEnabled,
   shouldReconcileExpiredBillingSubscription,
@@ -26,6 +63,7 @@ describe("expired billing subscription reconciliation", () => {
       shouldReconcileExpiredBillingSubscription(
         {
           currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
+          lastReconciliationFailureAt: null,
           updatedAt: new Date("2026-07-23T00:00:00.000Z"),
         },
         now,
@@ -38,6 +76,7 @@ describe("expired billing subscription reconciliation", () => {
       shouldReconcileExpiredBillingSubscription(
         {
           currentPeriodEnd: new Date("2026-08-03T00:00:00.000Z"),
+          lastReconciliationFailureAt: null,
           updatedAt: new Date("2026-07-23T00:00:00.000Z"),
         },
         now,
@@ -47,11 +86,92 @@ describe("expired billing subscription reconciliation", () => {
       shouldReconcileExpiredBillingSubscription(
         {
           currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
+          lastReconciliationFailureAt: null,
           updatedAt: new Date("2026-08-01T23:58:00.000Z"),
         },
         now,
       ),
     ).toBe(false);
+  });
+
+  test("uses a recent reconciliation failure for the retry window", () => {
+    expect(
+      shouldReconcileExpiredBillingSubscription(
+        {
+          currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
+          lastReconciliationFailureAt: new Date("2026-08-01T23:58:00.000Z"),
+          updatedAt: new Date("2026-07-23T00:00:00.000Z"),
+        },
+        now,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("organization subscription reconciliation", () => {
+  const staleRow = {
+    currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
+    currentPeriodStart: new Date("2026-06-23T00:00:00.000Z"),
+    lastReconciliationFailureAt: null,
+    metadata: { quieterOrganizationId: "organization-a" },
+    plan: "pro" as const,
+    provider: "polar" as const,
+    providerSubscriptionId: "polar-subscription-1",
+    status: "active" as const,
+    updatedAt: new Date("2026-07-23T00:00:00.000Z"),
+  };
+  const refreshedRow = {
+    ...staleRow,
+    currentPeriodEnd: new Date("2026-08-23T00:00:00.000Z"),
+    currentPeriodStart: new Date("2026-07-23T00:00:00.000Z"),
+    updatedAt: new Date("2026-08-02T00:00:00.000Z"),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    billingMocks.getPolarClient.mockReturnValue({
+      subscriptions: { get: billingMocks.getPolarSubscription },
+    });
+  });
+
+  test("force-syncs an expired Polar subscription and reloads the row", async () => {
+    const providerSubscription = { id: "polar-subscription-1" };
+    billingMocks.loadRows.mockResolvedValueOnce([staleRow]).mockResolvedValueOnce([refreshedRow]);
+    billingMocks.getPolarSubscription.mockResolvedValue(providerSubscription);
+    billingMocks.syncBillingSubscription.mockResolvedValue({ synced: true });
+
+    await expect(getOrganizationSubscription("organization-a")).resolves.toMatchObject({
+      currentPeriodEnd: refreshedRow.currentPeriodEnd,
+    });
+    expect(billingMocks.getPolarSubscription).toHaveBeenCalledWith(
+      { id: "polar-subscription-1" },
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(billingMocks.syncBillingSubscription).toHaveBeenCalledWith(providerSubscription, {
+      force: true,
+    });
+    expect(billingMocks.loadRows).toHaveBeenCalledTimes(2);
+  });
+
+  test("fails closed when reconciliation is unsynced", async () => {
+    billingMocks.loadRows.mockResolvedValueOnce([staleRow]);
+    billingMocks.getPolarSubscription.mockResolvedValue({ id: "polar-subscription-1" });
+    billingMocks.syncBillingSubscription.mockResolvedValue({ synced: false });
+
+    await expect(getOrganizationSubscription("organization-a")).resolves.toBeNull();
+    expect(billingMocks.updateReconciliationFailureSet).toHaveBeenCalledWith({
+      lastReconciliationFailureAt: expect.any(Date),
+    });
+  });
+
+  test("fails closed when reconciliation throws", async () => {
+    billingMocks.loadRows.mockResolvedValueOnce([staleRow]);
+    billingMocks.getPolarSubscription.mockRejectedValue(new Error("provider unavailable"));
+
+    await expect(getOrganizationSubscription("organization-a")).resolves.toBeNull();
+    expect(billingMocks.updateReconciliationFailureSet).toHaveBeenCalledWith({
+      lastReconciliationFailureAt: expect.any(Date),
+    });
   });
 });
 

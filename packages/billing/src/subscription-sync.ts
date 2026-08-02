@@ -91,7 +91,7 @@ export const syncBillingSubscription = async (
   }
 
   const now = new Date();
-  const providerModifiedAt = subscription.modifiedAt ? new Date(subscription.modifiedAt) : now;
+  const providerModifiedAt = subscription.modifiedAt ? new Date(subscription.modifiedAt) : null;
 
   const values = {
     currentPeriodEnd: subscription.currentPeriodEnd,
@@ -106,6 +106,7 @@ export const syncBillingSubscription = async (
     providerProductId: subscription.productId,
     providerSubscriptionId: subscription.id,
     providerModifiedAt,
+    lastReconciliationFailureAt: null,
     status: normalizeSubscriptionStatus(subscription.status),
     updatedAt: now,
     userId,
@@ -121,12 +122,14 @@ export const syncBillingSubscription = async (
     .onConflictDoUpdate({
       target: [billingSubscription.provider, billingSubscription.providerSubscriptionId],
       set: values,
-      where: options.force
-        ? undefined
-        : or(
-            sql`${billingSubscription.providerModifiedAt} IS NULL`,
-            gt(sql`excluded."providerModifiedAt"`, billingSubscription.providerModifiedAt),
-          ),
+      where:
+        options.force && providerModifiedAt === null
+          ? undefined
+          : or(
+              sql`${billingSubscription.providerModifiedAt} IS NULL`,
+              sql`excluded."providerModifiedAt" IS NULL`,
+              gt(sql`excluded."providerModifiedAt"`, billingSubscription.providerModifiedAt),
+            ),
     });
 
   return { synced: true };
