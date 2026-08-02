@@ -25,6 +25,11 @@ const ACTIVE_BILLING_STATUSES = new Set<BillingSubscriptionStatus>(["active", "t
 export const isActiveBillingStatus = (status: BillingSubscriptionStatus) =>
   ACTIVE_BILLING_STATUSES.has(status);
 
+export const isActiveBillingSubscription = (
+  subscription: Pick<SubscriptionRow, "currentPeriodEnd" | "status">,
+  now = new Date(),
+) => isActiveBillingStatus(subscription.status) && subscription.currentPeriodEnd > now;
+
 export type BillingAccount = {
   creditAmountCents: number;
   currentPeriodEnd: Date;
@@ -247,7 +252,7 @@ export const getOrganizationSubscription = async (organizationId: string) => {
     }
   }
 
-  return row && row.currentPeriodEnd > new Date() ? toBillingAccount(row, organizationId) : null;
+  return row && isActiveBillingSubscription(row) ? toBillingAccount(row, organizationId) : null;
 };
 
 export const hasUnlimitedBillingAccess = async (userId: string) =>

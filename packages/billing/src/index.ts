@@ -10,8 +10,8 @@ import { getBillingCreditUsage, recordBillingCreditUsage, type BillingUsageKind 
 import {
   getOrganizationBillingEntitlement,
   hasUserBillingFeature,
+  isActiveBillingSubscription,
   isLocalDevelopmentBillingEntitlementEnabled,
-  isActiveBillingStatus,
   subscriptionBelongsToOrganization,
 } from "./entitlements";
 import { BILLING_PRODUCT_IDS, type BillingProductId } from "./plans";
@@ -126,7 +126,7 @@ export const createBillingCheckout = async (input: {
   product: BillingProductId;
   userId: string;
 }) => {
-  let successUrl = getSettingsUrl(input.headers, {
+  const successUrl = getSettingsUrl(input.headers, {
     billing: "success",
     organizationId: input.organizationId,
   });
@@ -134,7 +134,6 @@ export const createBillingCheckout = async (input: {
     billing: "canceled",
     organizationId: input.organizationId,
   });
-  successUrl = withCheckoutIdPlaceholder(successUrl);
   const [organizationRecord] = await db
     .select({ name: organization.name })
     .from(organization)
@@ -160,6 +159,7 @@ export const createBillingCheckout = async (input: {
   const providerProductId = getBillingProductId(input.product);
   const rows = await db
     .select({
+      currentPeriodEnd: billingSubscription.currentPeriodEnd,
       plan: billingSubscription.plan,
       metadata: billingSubscription.metadata,
       providerSubscriptionId: billingSubscription.providerSubscriptionId,
@@ -176,7 +176,7 @@ export const createBillingCheckout = async (input: {
     .orderBy(desc(billingSubscription.updatedAt));
   const activeSubscription = rows.find(
     (row) =>
-      isActiveBillingStatus(row.status) &&
+      isActiveBillingSubscription(row) &&
       subscriptionBelongsToOrganization(row.metadata, input.organizationId),
   );
 
@@ -231,7 +231,7 @@ export const createBillingCheckout = async (input: {
     metadata: checkoutMetadata.metadata,
     products: [providerProductId],
     returnUrl: cancelUrl,
-    successUrl,
+    successUrl: withCheckoutIdPlaceholder(successUrl),
   });
 
   return { checkoutUrl: checkout.url };
