@@ -70,10 +70,28 @@ const localDevelopmentBillingEntitlement = (): BillingEntitlement => ({
 type SubscriptionRow = {
   currentPeriodEnd: Date;
   currentPeriodStart: Date;
+  lastReconciliationFailureAt: Date | null;
   metadata: Record<string, string> | null;
   plan: StoredBillingPlan;
+  provider: "polar";
+  providerSubscriptionId: string;
   status: BillingSubscriptionStatus;
   updatedAt: Date;
+};
+
+const BILLING_RECONCILIATION_INTERVAL_MS = 5 * 60 * 1000;
+const BILLING_RECONCILIATION_TIMEOUT_MS = 5_000;
+
+export const shouldReconcileExpiredBillingSubscription = (
+  row: Pick<SubscriptionRow, "currentPeriodEnd" | "lastReconciliationFailureAt" | "updatedAt">,
+  now = new Date(),
+) => {
+  const lastAttemptAt = row.lastReconciliationFailureAt ?? row.updatedAt;
+
+  return (
+    row.currentPeriodEnd <= now &&
+    now.getTime() - lastAttemptAt.getTime() >= BILLING_RECONCILIATION_INTERVAL_MS
+  );
 };
 
 export const subscriptionBelongsToOrganization = (
@@ -141,29 +159,93 @@ const getOrganizationBillingOwnerId = async (organizationId: string) => {
   return assigned?.billingOwnerUserId ?? owner.userId;
 };
 
-const getOrganizationSubscription = async (organizationId: string) => {
-  const rows = await db
-    .select({
-      currentPeriodEnd: billingSubscription.currentPeriodEnd,
-      currentPeriodStart: billingSubscription.currentPeriodStart,
-      metadata: billingSubscription.metadata,
-      plan: billingSubscription.plan,
-      status: billingSubscription.status,
-      updatedAt: billingSubscription.updatedAt,
-    })
-    .from(billingSubscription)
-    .where(
-      and(
-        eq(billingSubscription.organizationId, organizationId),
-        inArray(billingSubscription.plan, ["managed", "pro"]),
-      ),
-    )
-    .orderBy(desc(billingSubscription.updatedAt));
-  const row = rows.find(
-    (candidate) =>
-      isActiveBillingStatus(candidate.status) &&
-      subscriptionBelongsToOrganization(candidate.metadata, organizationId),
-  );
+const recordReconciliationFailure = async ({
+  organizationId,
+  providerSubscriptionId,
+}: {
+  organizationId: string;
+  providerSubscriptionId: string;
+}) => {
+  try {
+    await db
+      .update(billingSubscription)
+      .set({ lastReconciliationFailureAt: new Date() })
+      .where(
+        and(
+          eq(billingSubscription.organizationId, organizationId),
+          eq(billingSubscription.provider, "polar"),
+          eq(billingSubscription.providerSubscriptionId, providerSubscriptionId),
+        ),
+      );
+  } catch (error) {
+    console.error("Failed to record a billing reconciliation failure.", {
+      error,
+      organizationId,
+      providerSubscriptionId,
+    });
+  }
+};
+
+export const getOrganizationSubscription = async (organizationId: string) => {
+  const loadRows = () =>
+    db
+      .select({
+        currentPeriodEnd: billingSubscription.currentPeriodEnd,
+        currentPeriodStart: billingSubscription.currentPeriodStart,
+        lastReconciliationFailureAt: billingSubscription.lastReconciliationFailureAt,
+        metadata: billingSubscription.metadata,
+        plan: billingSubscription.plan,
+        provider: billingSubscription.provider,
+        providerSubscriptionId: billingSubscription.providerSubscriptionId,
+        status: billingSubscription.status,
+        updatedAt: billingSubscription.updatedAt,
+      })
+      .from(billingSubscription)
+      .where(
+        and(
+          eq(billingSubscription.organizationId, organizationId),
+          inArray(billingSubscription.plan, ["managed", "pro"]),
+        ),
+      )
+      .orderBy(desc(billingSubscription.updatedAt));
+
+  const findActiveRow = (rows: Awaited<ReturnType<typeof loadRows>>) =>
+    rows.find(
+      (candidate) =>
+        isActiveBillingStatus(candidate.status) &&
+        subscriptionBelongsToOrganization(candidate.metadata, organizationId),
+    );
+
+  let row = findActiveRow(await loadRows());
+  if (!row) return null;
+
+  if (row.provider === "polar" && shouldReconcileExpiredBillingSubscription(row)) {
+    const providerSubscriptionId = row.providerSubscriptionId;
+    try {
+      const [{ getPolarClient }, { syncBillingSubscription }] = await Promise.all([
+        import("./polar"),
+        import("./subscription-sync"),
+      ]);
+      const subscription = await getPolarClient().subscriptions.get(
+        { id: providerSubscriptionId },
+        { signal: AbortSignal.timeout(BILLING_RECONCILIATION_TIMEOUT_MS) },
+      );
+      const syncResult = await syncBillingSubscription(subscription, { force: true });
+      if (!syncResult.synced) {
+        await recordReconciliationFailure({ organizationId, providerSubscriptionId });
+        return null;
+      }
+      row = findActiveRow(await loadRows());
+    } catch (error) {
+      await recordReconciliationFailure({ organizationId, providerSubscriptionId });
+      console.error("Failed to reconcile an expired billing subscription.", {
+        error,
+        organizationId,
+        providerSubscriptionId,
+      });
+      return null;
+    }
+  }
 
   return row ? toBillingAccount(row, organizationId) : null;
 };

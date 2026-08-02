@@ -42,7 +42,9 @@ const getSyncedBillingProduct = (subscription: Subscription) => {
   return legacyPlan === "managed" || legacyPlan === "pro" ? legacyPlan : null;
 };
 
-const normalizeSubscriptionStatus = (status: Subscription["status"]): BillingSubscriptionStatus => {
+export const normalizeSubscriptionStatus = (
+  status: Subscription["status"],
+): BillingSubscriptionStatus => {
   switch (status) {
     case "active":
       return "active";
@@ -61,7 +63,10 @@ const normalizeSubscriptionStatus = (status: Subscription["status"]): BillingSub
   }
 };
 
-export const syncBillingSubscription = async (subscription: Subscription) => {
+export const syncBillingSubscription = async (
+  subscription: Subscription,
+  options: { force?: boolean } = {},
+) => {
   const metadataUserId = subscription.metadata[BILLING_METADATA_USER_ID];
   const userId = typeof metadataUserId === "string" ? metadataUserId.trim() : "";
   const product = getSyncedBillingProduct(subscription);
@@ -86,7 +91,7 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
   }
 
   const now = new Date();
-  const providerModifiedAt = subscription.modifiedAt ? new Date(subscription.modifiedAt) : now;
+  const providerModifiedAt = subscription.modifiedAt ? new Date(subscription.modifiedAt) : null;
 
   const values = {
     currentPeriodEnd: subscription.currentPeriodEnd,
@@ -101,6 +106,7 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
     providerProductId: subscription.productId,
     providerSubscriptionId: subscription.id,
     providerModifiedAt,
+    lastReconciliationFailureAt: null,
     status: normalizeSubscriptionStatus(subscription.status),
     updatedAt: now,
     userId,
@@ -116,10 +122,14 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
     .onConflictDoUpdate({
       target: [billingSubscription.provider, billingSubscription.providerSubscriptionId],
       set: values,
-      where: or(
-        sql`${billingSubscription.providerModifiedAt} IS NULL`,
-        gt(sql`excluded."providerModifiedAt"`, billingSubscription.providerModifiedAt),
-      ),
+      where:
+        options.force && providerModifiedAt === null
+          ? undefined
+          : or(
+              sql`${billingSubscription.providerModifiedAt} IS NULL`,
+              sql`excluded."providerModifiedAt" IS NULL`,
+              gt(sql`excluded."providerModifiedAt"`, billingSubscription.providerModifiedAt),
+            ),
     });
 
   return { synced: true };

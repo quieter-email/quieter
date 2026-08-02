@@ -17,6 +17,11 @@ const polarWebhookAuth =
             }),
             use: [
               webhooks({
+                onPayload: async (payload) => {
+                  if (payload.type === "subscription.past_due") {
+                    await syncBillingSubscription(payload.data);
+                  }
+                },
                 onSubscriptionActive: async ({ data }) => {
                   await syncBillingSubscription(data);
                 },
