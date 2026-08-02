@@ -153,6 +153,24 @@ describe("organization subscription reconciliation", () => {
     expect(billingMocks.loadRows).toHaveBeenCalledTimes(2);
   });
 
+  test("fails closed when Polar still returns an expired period", async () => {
+    billingMocks.loadRows.mockResolvedValue([staleRow]);
+    billingMocks.getPolarSubscription.mockResolvedValue({ id: "polar-subscription-1" });
+    billingMocks.syncBillingSubscription.mockResolvedValue({ synced: true });
+
+    await expect(getOrganizationSubscription("organization-a")).resolves.toBeNull();
+    expect(billingMocks.loadRows).toHaveBeenCalledTimes(2);
+  });
+
+  test("fails closed during the reconciliation cooldown", async () => {
+    billingMocks.loadRows.mockResolvedValueOnce([
+      { ...staleRow, lastReconciliationFailureAt: new Date() },
+    ]);
+
+    await expect(getOrganizationSubscription("organization-a")).resolves.toBeNull();
+    expect(billingMocks.getPolarSubscription).not.toHaveBeenCalled();
+  });
+
   test("fails closed when reconciliation is unsynced", async () => {
     billingMocks.loadRows.mockResolvedValueOnce([staleRow]);
     billingMocks.getPolarSubscription.mockResolvedValue({ id: "polar-subscription-1" });
