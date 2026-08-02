@@ -42,7 +42,9 @@ const getSyncedBillingProduct = (subscription: Subscription) => {
   return legacyPlan === "managed" || legacyPlan === "pro" ? legacyPlan : null;
 };
 
-const normalizeSubscriptionStatus = (status: Subscription["status"]): BillingSubscriptionStatus => {
+export const normalizeSubscriptionStatus = (
+  status: Subscription["status"],
+): BillingSubscriptionStatus => {
   switch (status) {
     case "active":
       return "active";
@@ -61,7 +63,10 @@ const normalizeSubscriptionStatus = (status: Subscription["status"]): BillingSub
   }
 };
 
-export const syncBillingSubscription = async (subscription: Subscription) => {
+export const syncBillingSubscription = async (
+  subscription: Subscription,
+  options: { force?: boolean } = {},
+) => {
   const metadataUserId = subscription.metadata[BILLING_METADATA_USER_ID];
   const userId = typeof metadataUserId === "string" ? metadataUserId.trim() : "";
   const product = getSyncedBillingProduct(subscription);
@@ -116,10 +121,12 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
     .onConflictDoUpdate({
       target: [billingSubscription.provider, billingSubscription.providerSubscriptionId],
       set: values,
-      where: or(
-        sql`${billingSubscription.providerModifiedAt} IS NULL`,
-        gt(sql`excluded."providerModifiedAt"`, billingSubscription.providerModifiedAt),
-      ),
+      where: options.force
+        ? undefined
+        : or(
+            sql`${billingSubscription.providerModifiedAt} IS NULL`,
+            gt(sql`excluded."providerModifiedAt"`, billingSubscription.providerModifiedAt),
+          ),
     });
 
   return { synced: true };

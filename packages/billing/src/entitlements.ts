@@ -72,9 +72,20 @@ type SubscriptionRow = {
   currentPeriodStart: Date;
   metadata: Record<string, string> | null;
   plan: StoredBillingPlan;
+  provider: "polar";
+  providerSubscriptionId: string;
   status: BillingSubscriptionStatus;
   updatedAt: Date;
 };
+
+const BILLING_RECONCILIATION_INTERVAL_MS = 5 * 60 * 1000;
+
+export const shouldReconcileExpiredBillingSubscription = (
+  row: Pick<SubscriptionRow, "currentPeriodEnd" | "updatedAt">,
+  now = new Date(),
+) =>
+  row.currentPeriodEnd <= now &&
+  now.getTime() - row.updatedAt.getTime() >= BILLING_RECONCILIATION_INTERVAL_MS;
 
 export const subscriptionBelongsToOrganization = (
   metadata: Record<string, string> | null,
@@ -142,28 +153,59 @@ const getOrganizationBillingOwnerId = async (organizationId: string) => {
 };
 
 const getOrganizationSubscription = async (organizationId: string) => {
-  const rows = await db
-    .select({
-      currentPeriodEnd: billingSubscription.currentPeriodEnd,
-      currentPeriodStart: billingSubscription.currentPeriodStart,
-      metadata: billingSubscription.metadata,
-      plan: billingSubscription.plan,
-      status: billingSubscription.status,
-      updatedAt: billingSubscription.updatedAt,
-    })
-    .from(billingSubscription)
-    .where(
-      and(
-        eq(billingSubscription.organizationId, organizationId),
-        inArray(billingSubscription.plan, ["managed", "pro"]),
-      ),
-    )
-    .orderBy(desc(billingSubscription.updatedAt));
-  const row = rows.find(
-    (candidate) =>
-      isActiveBillingStatus(candidate.status) &&
-      subscriptionBelongsToOrganization(candidate.metadata, organizationId),
-  );
+  const loadRows = () =>
+    db
+      .select({
+        currentPeriodEnd: billingSubscription.currentPeriodEnd,
+        currentPeriodStart: billingSubscription.currentPeriodStart,
+        metadata: billingSubscription.metadata,
+        plan: billingSubscription.plan,
+        provider: billingSubscription.provider,
+        providerSubscriptionId: billingSubscription.providerSubscriptionId,
+        status: billingSubscription.status,
+        updatedAt: billingSubscription.updatedAt,
+      })
+      .from(billingSubscription)
+      .where(
+        and(
+          eq(billingSubscription.organizationId, organizationId),
+          inArray(billingSubscription.plan, ["managed", "pro"]),
+        ),
+      )
+      .orderBy(desc(billingSubscription.updatedAt));
+
+  const findActiveRow = (rows: Awaited<ReturnType<typeof loadRows>>) =>
+    rows.find(
+      (candidate) =>
+        isActiveBillingStatus(candidate.status) &&
+        subscriptionBelongsToOrganization(candidate.metadata, organizationId),
+    );
+
+  let row = findActiveRow(await loadRows());
+  if (!row) return null;
+
+  if (row.provider === "polar" && shouldReconcileExpiredBillingSubscription(row)) {
+    const providerSubscriptionId = row.providerSubscriptionId;
+    try {
+      const [{ getPolarClient }, { syncBillingSubscription }] = await Promise.all([
+        import("./polar"),
+        import("./subscription-sync"),
+      ]);
+      const subscription = await getPolarClient().subscriptions.get({
+        id: providerSubscriptionId,
+      });
+      const syncResult = await syncBillingSubscription(subscription, { force: true });
+      if (!syncResult.synced) return null;
+      row = findActiveRow(await loadRows());
+    } catch (error) {
+      console.error("Failed to reconcile an expired billing subscription.", {
+        error,
+        organizationId,
+        providerSubscriptionId,
+      });
+      return null;
+    }
+  }
 
   return row ? toBillingAccount(row, organizationId) : null;
 };

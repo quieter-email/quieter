@@ -2,6 +2,7 @@ import { describe, expect, test } from "vite-plus/test";
 import {
   isActiveBillingStatus,
   isLocalDevelopmentBillingEntitlementEnabled,
+  shouldReconcileExpiredBillingSubscription,
   subscriptionBelongsToOrganization,
 } from "../src/entitlements";
 import { BILLING_PRODUCTS, productHasAi, productHasManagedMail } from "../src/plans";
@@ -14,6 +15,43 @@ describe("billing entitlement statuses", () => {
     expect(isActiveBillingStatus("past_due")).toBe(false);
     expect(isActiveBillingStatus("canceled")).toBe(false);
     expect(isActiveBillingStatus("expired")).toBe(false);
+  });
+});
+
+describe("expired billing subscription reconciliation", () => {
+  const now = new Date("2026-08-02T00:00:00.000Z");
+
+  test("reconciles an expired period after the retry window", () => {
+    expect(
+      shouldReconcileExpiredBillingSubscription(
+        {
+          currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
+          updatedAt: new Date("2026-07-23T00:00:00.000Z"),
+        },
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  test("does not reconcile a current or recently refreshed period", () => {
+    expect(
+      shouldReconcileExpiredBillingSubscription(
+        {
+          currentPeriodEnd: new Date("2026-08-03T00:00:00.000Z"),
+          updatedAt: new Date("2026-07-23T00:00:00.000Z"),
+        },
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      shouldReconcileExpiredBillingSubscription(
+        {
+          currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
+          updatedAt: new Date("2026-08-01T23:58:00.000Z"),
+        },
+        now,
+      ),
+    ).toBe(false);
   });
 });
 
