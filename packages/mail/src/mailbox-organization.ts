@@ -37,9 +37,63 @@ export const mailboxSavedViewDefinitionSchema = z.object({
 
 export type MailboxSavedViewDefinition = z.infer<typeof mailboxSavedViewDefinitionSchema>;
 
+export const managedMailboxRuleActionSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("set-read"),
+    read: z.boolean(),
+  }),
+  z.object({
+    destination: z.enum(["archive", "inbox", "spam", "trash"]),
+    kind: z.literal("move"),
+  }),
+  z.object({
+    addIds: z.array(z.string().trim().min(1)).max(100),
+    kind: z.literal("set-labels"),
+    removeIds: z.array(z.string().trim().min(1)).max(100),
+  }),
+  z.object({
+    includeAttachments: z.boolean().default(false),
+    kind: z.literal("forward"),
+    recipients: z.array(z.string().trim().email()).min(1).max(5),
+  }),
+  z.object({ kind: z.literal("stop-processing") }),
+]);
+
+export type ManagedMailboxRuleAction = z.infer<typeof managedMailboxRuleActionSchema>;
+
+export const getManagedMailboxRuleActions = (input: {
+  actions?: unknown;
+  labelIds?: readonly string[];
+}) => {
+  const parsed = managedMailboxRuleActionSchema.array().safeParse(input.actions);
+  if (parsed.success && parsed.data.length > 0) return parsed.data;
+
+  const labelIds = Array.from(new Set(input.labelIds ?? [])).filter(Boolean);
+  return labelIds.length > 0
+    ? ([
+        {
+          addIds: labelIds,
+          kind: "set-labels",
+          removeIds: [],
+        },
+      ] satisfies ManagedMailboxRuleAction[])
+    : [];
+};
+
+export const managedMailboxRuleConditionGroupSchema = z.object({
+  matchMode: z.enum(["all", "any"]),
+  search: structuredMailSearchSchema,
+});
+
+export type ManagedMailboxRuleConditionGroup = z.infer<
+  typeof managedMailboxRuleConditionGroupSchema
+>;
+
 export const managedMailboxRuleDefinitionSchema = z.object({
+  actions: z.array(managedMailboxRuleActionSchema).min(1).max(20).optional(),
+  conditionGroups: z.array(managedMailboxRuleConditionGroupSchema).max(20).optional(),
   enabled: z.boolean(),
-  labelIds: z.array(z.string().trim().min(1)).min(1),
+  labelIds: z.array(z.string().trim().min(1)).max(100).default([]),
   matchMode: z.enum(["all", "any"]),
   name: z.string().trim().min(1).max(100),
   search: structuredMailSearchSchema,

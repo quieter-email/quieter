@@ -1,41 +1,135 @@
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
-  managedMailAttachment,
   managedMailMessage,
   managedMailRule,
+  managedMailRuleApplication,
   managedMailRuleBackfill,
 } from "@quieter/database/schema";
 import {
+  managedMailboxRuleActionSchema,
   managedMailboxRuleDefinitionSchema,
+  type ManagedMailboxRuleAction,
   type ManagedMailboxRuleDefinition,
 } from "@quieter/mail/mailbox-organization";
-import { structuredMailSearchSchema } from "@quieter/mail/search";
 import { and, asc, countDistinct, desc, eq, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
-import {
-  assertManagedLabelsBelongToMailbox,
-  updateManagedMessageLabelAssignments,
-} from "../labels/repository";
+import { assertManagedLabelsBelongToMailbox } from "../labels/repository";
 import { normalizeManagedOrganizationName } from "../organization/normalize-name";
 import { createManagedSearchCondition } from "../search/compiler";
-import { matchesManagedMailRule } from "../search/evaluator";
 import { assertManagedRuleSearch } from "../search/normalization";
+import { applyManagedRulesToMessage } from "./evaluator";
 
-const assertRuleLabels = async (mailboxId: string, definition: ManagedMailboxRuleDefinition) => {
-  const parsed = managedMailboxRuleDefinitionSchema.parse(definition);
-  await assertManagedLabelsBelongToMailbox(mailboxId, parsed.labelIds);
-  return { ...parsed, search: assertManagedRuleSearch(parsed.search) };
+const getLegacyLabelAction = (labelIds: readonly string[]): ManagedMailboxRuleAction | null =>
+  labelIds.length > 0
+    ? { addIds: Array.from(new Set(labelIds)), kind: "set-labels", removeIds: [] }
+    : null;
+
+const getRuleActions = (
+  definition: {
+    actions?: ManagedMailboxRuleAction[];
+    labelIds: readonly string[];
+  },
+  options: { allowEmpty?: boolean } = {},
+) => {
+  const actions = definition.actions?.length
+    ? definition.actions.map((action) => managedMailboxRuleActionSchema.parse(action))
+    : [getLegacyLabelAction(definition.labelIds)].filter(
+        (action): action is ManagedMailboxRuleAction => !!action,
+      );
+  if (actions.length === 0 && !options.allowEmpty) {
+    throw new ORPCError("BAD_REQUEST", { message: "Add at least one rule action." });
+  }
+
+  const seenKinds = new Set<string>();
+  for (const [index, action] of actions.entries()) {
+    if (
+      action.kind === "set-labels" &&
+      action.addIds.length === 0 &&
+      action.removeIds.length === 0
+    ) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "A label action must change at least one label.",
+      });
+    }
+    if (action.kind === "stop-processing" && index !== actions.length - 1) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Stop processing must be the last action.",
+      });
+    }
+    if (action.kind === "move" || action.kind === "set-read") {
+      if (seenKinds.has(action.kind)) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: `A rule can contain only one ${action.kind === "move" ? "mailbox move" : "read-state"} action.`,
+        });
+      }
+      seenKinds.add(action.kind);
+    }
+  }
+  return actions;
 };
+
+const getRuleLabelIds = (actions: readonly ManagedMailboxRuleAction[], legacy: string[]) =>
+  Array.from(
+    new Set([
+      ...legacy,
+      ...actions.flatMap((action) => (action.kind === "set-labels" ? action.addIds : [])),
+    ]),
+  );
+
+const assertRuleDefinition = async (
+  mailboxId: string,
+  mailboxEmail: string,
+  definition: ManagedMailboxRuleDefinition,
+) => {
+  const parsed = managedMailboxRuleDefinitionSchema.parse(definition);
+  const actions = getRuleActions(parsed);
+  const forwardedRecipients = actions.flatMap((action) =>
+    action.kind === "forward" ? action.recipients : [],
+  );
+  if (
+    forwardedRecipients.some((recipient) => recipient.toLowerCase() === mailboxEmail.toLowerCase())
+  ) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "A rule cannot forward messages back to the same mailbox.",
+    });
+  }
+  const labelIds = getRuleLabelIds(actions, parsed.labelIds);
+  await assertManagedLabelsBelongToMailbox(mailboxId, labelIds);
+  return {
+    ...parsed,
+    actions,
+    conditionGroups: parsed.conditionGroups?.map((group) => ({
+      ...group,
+      search: assertManagedRuleSearch(group.search),
+    })),
+    labelIds,
+    search: assertManagedRuleSearch(parsed.search),
+  };
+};
+
+const parseStoredActions = (value: unknown, labelIds: string[]) => {
+  const parsed = managedMailboxRuleActionSchema.array().safeParse(value);
+  return getRuleActions(
+    { actions: parsed.success ? parsed.data : undefined, labelIds },
+    { allowEmpty: true },
+  );
+};
+
+const toRuleResponse = <T extends { actions: unknown; labelIds: string[] }>(record: T) => ({
+  ...record,
+  actions: parseStoredActions(record.actions, record.labelIds),
+});
 
 export const listManagedRules = async (input: { mailboxId: string; userId: string }) => {
   await getAuthorizedManagedMailbox(input);
-  return await db
+  const records = await db
     .select()
     .from(managedMailRule)
     .where(eq(managedMailRule.mailboxId, input.mailboxId))
     .orderBy(asc(managedMailRule.priority), asc(managedMailRule.name));
+  return records.map(toRuleResponse);
 };
 
 export const createManagedRule = async (input: {
@@ -43,19 +137,25 @@ export const createManagedRule = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
-  await getAuthorizedManagedMailbox({
+  const selectedMailbox = await getAuthorizedManagedMailbox({
     mailboxId: input.mailboxId,
     requiredRoles: ["manager"],
     userId: input.userId,
   });
-  const definition = await assertRuleLabels(input.mailboxId, input.definition);
+  const definition = await assertRuleDefinition(
+    input.mailboxId,
+    selectedMailbox.emailAddress,
+    input.definition,
+  );
   const now = new Date();
   const [record] = await db
     .insert(managedMailRule)
     .values({
       createdAt: now,
       createdByUserId: input.userId,
+      actions: definition.actions,
       enabled: definition.enabled,
+      conditionGroups: definition.conditionGroups,
       id: randomUUID(),
       labelIds: definition.labelIds,
       mailboxId: input.mailboxId,
@@ -67,7 +167,7 @@ export const createManagedRule = async (input: {
       updatedByUserId: input.userId,
     })
     .returning();
-  return record;
+  return record ? toRuleResponse(record) : record;
 };
 
 export const updateManagedRule = async (input: {
@@ -76,16 +176,22 @@ export const updateManagedRule = async (input: {
   ruleId: string;
   userId: string;
 }) => {
-  await getAuthorizedManagedMailbox({
+  const selectedMailbox = await getAuthorizedManagedMailbox({
     mailboxId: input.mailboxId,
     requiredRoles: ["manager"],
     userId: input.userId,
   });
-  const definition = await assertRuleLabels(input.mailboxId, input.definition);
+  const definition = await assertRuleDefinition(
+    input.mailboxId,
+    selectedMailbox.emailAddress,
+    input.definition,
+  );
   const [record] = await db
     .update(managedMailRule)
     .set({
+      actions: definition.actions,
       enabled: definition.enabled,
+      conditionGroups: definition.conditionGroups,
       labelIds: definition.labelIds,
       matchMode: definition.matchMode,
       name: definition.name,
@@ -99,7 +205,10 @@ export const updateManagedRule = async (input: {
     )
     .returning();
   if (!record) throw new ORPCError("NOT_FOUND", { message: "Rule not found." });
-  return record;
+  await db
+    .delete(managedMailRuleApplication)
+    .where(eq(managedMailRuleApplication.ruleId, input.ruleId));
+  return toRuleResponse(record);
 };
 
 export const deleteManagedRule = async (input: {
@@ -161,22 +270,31 @@ export const previewManagedRule = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
-  await getAuthorizedManagedMailbox({
+  const selectedMailbox = await getAuthorizedManagedMailbox({
     mailboxId: input.mailboxId,
     requiredRoles: ["manager"],
     userId: input.userId,
   });
-  const definition = await assertRuleLabels(input.mailboxId, input.definition);
+  const definition = await assertRuleDefinition(
+    input.mailboxId,
+    selectedMailbox.emailAddress,
+    input.definition,
+  );
   const searchCondition = createManagedSearchCondition(
     input.mailboxId,
     definition.search,
     new Date(),
     definition.matchMode,
   );
+  const conditionGroupConditions =
+    definition.conditionGroups?.map((group) =>
+      createManagedSearchCondition(input.mailboxId, group.search, new Date(), group.matchMode),
+    ) ?? [];
   const where = and(
     eq(managedMailMessage.mailboxId, input.mailboxId),
     eq(managedMailMessage.direction, "inbound"),
     searchCondition,
+    ...conditionGroupConditions,
   );
   const [countRows, samples] = await Promise.all([
     db
@@ -196,7 +314,10 @@ export const previewManagedRule = async (input: {
       .orderBy(desc(managedMailMessage.sentAt))
       .limit(5),
   ]);
-  return { count: Number(countRows[0]?.count ?? 0), samples };
+  return {
+    count: Number(countRows[0]?.count ?? 0),
+    samples,
+  };
 };
 
 const processManagedBackfillBatch = async (backfillId: string) => {
@@ -207,13 +328,12 @@ const processManagedBackfillBatch = async (backfillId: string) => {
     .limit(1);
   if (!backfill || !["pending", "running"].includes(backfill.status)) return backfill;
   const [rule] = await db
-    .select()
+    .select({ id: managedMailRule.id })
     .from(managedMailRule)
     .where(eq(managedMailRule.id, backfill.ruleId))
     .limit(1);
   if (!rule) return backfill;
 
-  const search = structuredMailSearchSchema.parse(rule.search);
   const cursorCondition = backfill.cursor
     ? sql`${managedMailMessage.id} > ${backfill.cursor}`
     : undefined;
@@ -235,24 +355,16 @@ const processManagedBackfillBatch = async (backfillId: string) => {
   let errorCount = 0;
   for (const message of records) {
     try {
-      const attachments = await db
-        .select({
-          fileName: managedMailAttachment.fileName,
-          normalizedFileName: managedMailAttachment.normalizedFileName,
-        })
-        .from(managedMailAttachment)
-        .where(eq(managedMailAttachment.messageId, message.id));
-      if (matchesManagedMailRule({ attachments, matchMode: rule.matchMode, message, search })) {
+      const result = await applyManagedRulesToMessage({
+        mailboxId: backfill.mailboxId,
+        messageId: message.id,
+        ruleId: backfill.ruleId,
+      });
+      if (result?.matched) {
         matchedCount += 1;
-        await updateManagedMessageLabelAssignments({
-          addLabelIds: rule.labelIds,
-          mailboxId: backfill.mailboxId,
-          messageIds: [message.id],
-          ruleId: rule.id,
-          source: "backfill",
-        });
         updatedCount += 1;
       }
+      if (result?.error) errorCount += 1;
     } catch {
       errorCount += 1;
     }

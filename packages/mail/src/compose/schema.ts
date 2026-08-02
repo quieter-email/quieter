@@ -176,6 +176,20 @@ export const composeDraftFormValuesSchema = z.object({
   bodyText: z.string(),
 });
 
+const composeHeaderSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .max(128)
+    .regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/),
+  value: z
+    .string()
+    .trim()
+    .max(4_000)
+    .refine((value) => !/[\r\n]/.test(value), "Header values cannot contain line breaks."),
+});
+
 export const composeSendFormValuesSchema = composeDraftFormValuesSchema.superRefine(
   (value, ctx) => {
     if (splitMailAddressList(value.to).length === 0) {
@@ -239,6 +253,7 @@ export const composeDraftInputSchema = z.object({
   subject: z.string(),
   bodyHtml: z.string(),
   bodyText: z.string(),
+  headers: z.array(composeHeaderSchema).max(32).optional(),
   attachments: z.array(composeAttachmentSchema),
   inlineImages: z.array(composeInlineImageSchema),
   saveStatus: z.string(),

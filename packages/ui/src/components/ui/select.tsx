@@ -1,6 +1,8 @@
 "use client";
 
 import { Select as SelectPrimitive } from "@base-ui/react/select";
+import { Loading03Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { createContext, useContext, type ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/cn";
@@ -58,22 +60,31 @@ export const SelectValue = ({
 );
 
 export type SelectTriggerProps = ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> &
-  VariantProps<typeof selectTriggerVariants>;
+  VariantProps<typeof selectTriggerVariants> & {
+    pending?: boolean;
+  };
 
 export const SelectTrigger = ({
   children,
   className,
+  pending = false,
   size = "default",
   variant = "default",
   ...props
 }: SelectTriggerProps) => (
   <SelectPrimitive.Trigger
-    className={cn(selectTriggerVariants({ size, variant }), className)}
     {...props}
+    aria-busy={pending || undefined}
+    className={cn(selectTriggerVariants({ size, variant }), className)}
+    disabled={pending || props.disabled}
   >
     {children}
     <SelectPrimitive.Icon className="shrink-0 text-muted-fg">
-      <ChevronDownIcon className="size-4" />
+      {pending ? (
+        <HugeiconsIcon aria-hidden className="size-3.5 animate-spin" icon={Loading03Icon} />
+      ) : (
+        <ChevronDownIcon className="size-4" />
+      )}
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 );

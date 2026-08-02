@@ -42,11 +42,5 @@ export const parseManagedSearchQuery = (query: string | undefined) =>
   parseStructuredSearchQuery(query?.trim() ?? "");
 
 export const assertManagedRuleSearch = (search: StructuredMailSearch) => {
-  const unsupported = search.filters.find((filter) =>
-    ["label", "after", "before", "newer_than", "older_than"].includes(filter.type),
-  );
-  if (unsupported) {
-    throw new Error(`The ${unsupported.type} filter is not supported in automatic rules.`);
-  }
   return normalizeStructuredMailSearch(search);
 };

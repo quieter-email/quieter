@@ -19,6 +19,8 @@ const matchesFilter = (
   message: ManagedMessageRecord,
   attachments: readonly ManagedAttachmentRecord[],
   filter: MailSearchFilter,
+  customLabelIds: readonly string[] | undefined,
+  customLabelNames: readonly string[] | undefined,
   now: Date,
 ) => {
   const value = filter.value.trim();
@@ -37,6 +39,20 @@ const matchesFilter = (
     case "bcc":
       matches = includesNormalized(message.bcc, value);
       break;
+    case "header": {
+      const separator = value.indexOf(":");
+      if (separator <= 0) break;
+      const headerName = value.slice(0, separator).trim().toLocaleLowerCase();
+      const headerValue = value.slice(separator + 1).trim();
+      matches = message.headers.some(
+        (header) =>
+          header.name.trim().toLocaleLowerCase() === headerName &&
+          normalizeManagedSearchValue(header.value).includes(
+            normalizeManagedSearchValue(headerValue),
+          ),
+      );
+      break;
+    }
     case "subject":
       matches = includesNormalized(message.subject, value);
       break;
@@ -78,7 +94,9 @@ const matchesFilter = (
       break;
     }
     case "label":
-      matches = false;
+      matches = [...(customLabelIds ?? []), ...(customLabelNames ?? [])].some(
+        (label) => normalizeManagedSearchValue(label) === normalizeManagedSearchValue(value),
+      );
       break;
   }
 
@@ -87,6 +105,8 @@ const matchesFilter = (
 
 export const matchesManagedMailRule = (input: {
   attachments: readonly ManagedAttachmentRecord[];
+  customLabelIds?: readonly string[];
+  customLabelNames?: readonly string[];
   matchMode: "all" | "any";
   message: ManagedMessageRecord;
   now?: Date;
@@ -94,9 +114,16 @@ export const matchesManagedMailRule = (input: {
 }) => {
   const search = normalizeStructuredMailSearch(input.search);
   const now = input.now ?? new Date();
-  const results = search.filters
-    .filter((filter) => filter.type !== "label")
-    .map((filter) => matchesFilter(input.message, input.attachments, filter, now));
+  const results = search.filters.map((filter) =>
+    matchesFilter(
+      input.message,
+      input.attachments,
+      filter,
+      input.customLabelIds,
+      input.customLabelNames,
+      now,
+    ),
+  );
 
   if (search.text) results.push(includesNormalized(input.message.searchText, search.text));
   if (results.length === 0) return false;

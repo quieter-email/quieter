@@ -1,6 +1,6 @@
 "use client";
 
-import { Cancel01Icon, MoreVerticalIcon } from "@hugeicons/core-free-icons";
+import { Cancel01Icon, Loading03Icon, MoreVerticalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
@@ -17,19 +17,26 @@ import type { MessageListBulkAction } from "./message-list-types";
 const MessageListBulkActions = ({
   actions,
   disabled,
+  pending,
 }: {
   actions: readonly MessageListBulkAction[];
   disabled: boolean;
+  pending: boolean;
 }) => (
   <DropdownMenu>
     <IconButtonTooltip label="Bulk actions">
       <DropdownMenuTrigger
         aria-label="Open bulk actions"
+        aria-busy={pending || undefined}
         className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-bg text-fg shadow-sm hover:bg-muted/60 active:bg-muted/80 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
         disabled={disabled || actions.length === 0}
         type="button"
       >
-        <HugeiconsIcon aria-hidden icon={MoreVerticalIcon} />
+        <HugeiconsIcon
+          aria-hidden
+          className={cn({ "animate-spin": pending })}
+          icon={pending ? Loading03Icon : MoreVerticalIcon}
+        />
       </DropdownMenuTrigger>
     </IconButtonTooltip>
 
@@ -60,6 +67,7 @@ export const MessageListSelectionToolbar = ({
   onToggleAll,
   selectedCount,
   actions,
+  pending,
 }: {
   actions: readonly MessageListBulkAction[];
   allSelected: boolean;
@@ -69,6 +77,7 @@ export const MessageListSelectionToolbar = ({
   onClearSelection: () => void;
   onToggleAll: (selected: boolean) => void;
   selectedCount: number;
+  pending: boolean;
 }) => (
   <div className="bg-transparent p-4 pb-3">
     <div className="flex min-w-0 items-center justify-between gap-3">
@@ -92,7 +101,11 @@ export const MessageListSelectionToolbar = ({
       </div>
 
       <div className="flex items-center gap-1">
-        <MessageListBulkActions actions={actions} disabled={disabled || selectedCount === 0} />
+        <MessageListBulkActions
+          actions={actions}
+          disabled={disabled || selectedCount === 0}
+          pending={pending}
+        />
         <IconButtonTooltip label="Clear selection">
           <Button
             aria-label="Clear selection"
@@ -106,6 +119,11 @@ export const MessageListSelectionToolbar = ({
           </Button>
         </IconButtonTooltip>
       </div>
+      {pending && (
+        <p aria-live="polite" className="sr-only" role="status">
+          Updating selected conversations…
+        </p>
+      )}
     </div>
   </div>
 );

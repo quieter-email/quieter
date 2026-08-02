@@ -27,6 +27,7 @@ import {
   listAccessibleMailboxState,
   moveGmailMailbox,
   startGmailOAuth,
+  updateMailboxSignature,
 } from "../../mailbox/service";
 import {
   backfillApiMessagesForManagedMailbox,
@@ -129,6 +130,17 @@ export const mailboxProcedures = {
       }),
     )
     .handler(async ({ context, input }) => moveGmailMailbox({ ...input, userId: context.userId })),
+  updateMailboxSignature: protectedProcedure
+    .input(
+      z.object({
+        mailboxId: mailboxIdSchema,
+        signatureHtml: z.string().max(20_000).nullable(),
+        signatureText: z.string().max(10_000).nullable(),
+      }),
+    )
+    .handler(async ({ context, input }) =>
+      updateMailboxSignature({ ...input, userId: context.userId }),
+    ),
   createManagedMailbox: protectedProcedure
     .input(
       z.object({

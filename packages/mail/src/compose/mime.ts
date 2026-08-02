@@ -118,6 +118,9 @@ export const buildMimeMessage = async (
   if (replyReferences.length > 0) {
     headers.push(`References: ${replyReferences.join(" ")}`);
   }
+  for (const header of draft.headers ?? []) {
+    headers.push(`${header.name.trim()}: ${encodeMimeHeaderValue(header.value.trim())}`);
+  }
   if (options?.includeQuieterDraftHeaders) {
     addQuieterDraftHeaders(headers, draft);
   }

@@ -131,6 +131,14 @@ export const useMailboxSelection = ({
       groupName: mailbox.groupName,
       id: mailbox.id,
       provider: mailbox.provider,
+      signatureHtml:
+        "signatureHtml" in mailbox && typeof mailbox.signatureHtml === "string"
+          ? mailbox.signatureHtml
+          : null,
+      signatureText:
+        "signatureText" in mailbox && typeof mailbox.signatureText === "string"
+          ? mailbox.signatureText
+          : null,
       unreadNonSpamCount:
         mailbox.provider === "gmail"
           ? (gmailUnreadCountsByMailboxId.get(mailbox.id) ?? mailbox.unreadNonSpamCount)

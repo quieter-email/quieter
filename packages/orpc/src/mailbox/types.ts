@@ -27,6 +27,8 @@ export type MailboxListItem = MailboxGroupMetadata & {
   usefulDetailsEnabled: boolean;
   id: string;
   includeApiSentMessages: boolean;
+  signatureHtml?: string | null;
+  signatureText?: string | null;
   organizationId: string;
   ownerUserId: string | null;
   provider: "api" | PersistedMailboxProvider;

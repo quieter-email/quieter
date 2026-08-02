@@ -25,6 +25,7 @@ import {
 } from "../domain/compose-form";
 import {
   attachInlineImagesToHtml,
+  appendComposeSignature,
   clearComposeDraftRuntimeFiles,
   cloneComposeDraft,
   createComposeInlineImagesFromFiles,
@@ -64,11 +65,13 @@ export const useComposeDialogController = ({
   managedDemoMode = false,
   mailboxId,
   persistDrafts = true,
+  signature,
 }: {
   demoMode?: boolean;
   managedDemoMode?: boolean;
   mailboxId: string | null;
   persistDrafts?: boolean;
+  signature?: { html: string | null; text: string | null };
 }) => {
   const queryClient = useQueryClient();
   const [state, setState] = useState(createDialogState);
@@ -239,7 +242,12 @@ export const useComposeDialogController = ({
 
   const openComposeDraft = (nextDraft: ComposeDraftState | null) => {
     openIdRef.current += 1;
-    openDraftInDialog(nextDraft ? cloneComposeDraft(nextDraft) : createEmptyComposeDraft());
+    const draft = nextDraft ? cloneComposeDraft(nextDraft) : createEmptyComposeDraft();
+    openDraftInDialog(
+      nextDraft?.draftId
+        ? draft
+        : appendComposeSignature(draft, signature ?? { html: undefined, text: undefined }),
+    );
   };
 
   const closeComposeDialog = () => {

@@ -136,11 +136,20 @@ export const MessageLabelsDialog = ({
             <p className="text-sm text-muted-fg">No custom labels.</p>
           )}
 
-          {applyError && <p className="text-sm text-destructive">{applyError}</p>}
+          {isBusy && (
+            <p aria-live="polite" className="sr-only" role="status">
+              Applying labels…
+            </p>
+          )}
+          {applyError && (
+            <p aria-live="assertive" className="text-sm text-destructive" role="alert">
+              {applyError}
+            </p>
+          )}
         </DialogBody>
 
         <DialogFooter>
-          <DialogCloseButton>Cancel</DialogCloseButton>
+          <DialogCloseButton disabled={isBusy}>Cancel</DialogCloseButton>
           <Button
             disabled={
               Object.keys(draftLabels).length === 0 ||
@@ -149,6 +158,8 @@ export const MessageLabelsDialog = ({
               isBusy
             }
             onClick={() => void applyLabels()}
+            pending={isBusy}
+            pendingLabel="Applying…"
           >
             Apply
           </Button>

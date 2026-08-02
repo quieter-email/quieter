@@ -9,6 +9,7 @@ export const mailSearchFilterTypeSchema = z.enum([
   "filename",
   "from",
   "has",
+  "header",
   "is",
   "label",
   "newer_than",
