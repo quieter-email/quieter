@@ -37,6 +37,7 @@ vi.mock("../src/subscription-sync", () => ({
 
 import {
   getOrganizationSubscription,
+  isActiveBillingSubscription,
   isActiveBillingStatus,
   isLocalDevelopmentBillingEntitlementEnabled,
   shouldReconcileExpiredBillingSubscription,
@@ -52,6 +53,29 @@ describe("billing entitlement statuses", () => {
     expect(isActiveBillingStatus("past_due")).toBe(false);
     expect(isActiveBillingStatus("canceled")).toBe(false);
     expect(isActiveBillingStatus("expired")).toBe(false);
+  });
+
+  test("requires an active status with a current billing period", () => {
+    const now = new Date("2026-08-02T00:00:00.000Z");
+
+    expect(
+      isActiveBillingSubscription(
+        { currentPeriodEnd: new Date("2026-08-03T00:00:00.000Z"), status: "active" },
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      isActiveBillingSubscription(
+        { currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"), status: "active" },
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      isActiveBillingSubscription(
+        { currentPeriodEnd: new Date("2026-08-03T00:00:00.000Z"), status: "canceled" },
+        now,
+      ),
+    ).toBe(false);
   });
 });
 
