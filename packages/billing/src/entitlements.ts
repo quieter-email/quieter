@@ -247,7 +247,7 @@ export const getOrganizationSubscription = async (organizationId: string) => {
     }
   }
 
-  return row ? toBillingAccount(row, organizationId) : null;
+  return row && row.currentPeriodEnd > new Date() ? toBillingAccount(row, organizationId) : null;
 };
 
 export const hasUnlimitedBillingAccess = async (userId: string) =>
