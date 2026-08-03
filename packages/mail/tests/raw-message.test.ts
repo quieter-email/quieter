@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
-import { parseRawMailMessage } from "../src/raw-message";
+import { parseRawMailAttachments, parseRawMailMessage } from "../src/raw-message";
 
 describe("parseRawMailMessage", () => {
   test("parses envelope, thread, and body fields from RFC822 mail", async () => {
@@ -29,5 +29,35 @@ describe("parseRawMailMessage", () => {
       to: "inbox@quieter.email",
     });
     expect(message.date?.toISOString()).toBe("2026-06-07T10:00:00.000Z");
+  });
+
+  test("preserves attachment content for forwarding", async () => {
+    const [attachment] = await parseRawMailAttachments(
+      [
+        "From: sender@example.com",
+        "To: inbox@quieter.email",
+        "Subject: Attachment",
+        'Content-Type: multipart/mixed; boundary="mixed"',
+        "",
+        "--mixed",
+        'Content-Type: text/plain; charset="UTF-8"',
+        "",
+        "See attachment.",
+        "--mixed",
+        'Content-Type: text/plain; name="notes.txt"',
+        'Content-Disposition: attachment; filename="notes.txt"',
+        "Content-Transfer-Encoding: base64",
+        "",
+        "SGVsbG8=",
+        "--mixed--",
+      ].join("\r\n"),
+    );
+
+    expect(attachment).toMatchObject({
+      fileName: "notes.txt",
+      inline: false,
+      mimeType: "text/plain",
+    });
+    expect(new TextDecoder().decode(attachment?.content)).toBe("Hello");
   });
 });

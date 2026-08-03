@@ -430,6 +430,7 @@ export const MessageList = (props: MessageListProps) => {
           itemLabelPlural={props.activeMailbox === "drafts" ? "drafts" : "conversations"}
           onClearSelection={selection.clearSelection}
           onToggleAll={selection.toggleAllLoadedThreads}
+          pending={isBulkActionPending}
           selectedCount={selection.selectedThreadIds.size}
         />
       ) : (

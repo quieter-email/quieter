@@ -65,4 +65,84 @@ describe("managed mail search evaluator", () => {
     expect(matchesState(message({ mailboxState: "trash" }), "trash")).toBe(true);
     expect(matchesState(message({ mailboxState: "trash" }), "inbox")).toBe(false);
   });
+
+  test("matches rule labels and headers", () => {
+    expect(
+      matchesManagedMailRule({
+        attachments: [],
+        customLabelIds: ["label-vip"],
+        matchMode: "all",
+        message: message({ headers: [{ name: "X-Account", value: "VIP" }] }),
+        search: {
+          filters: [
+            { type: "label", value: "label-vip" },
+            { type: "header", value: "X-Account:vip" },
+          ],
+          text: "",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      matchesManagedMailRule({
+        attachments: [],
+        matchMode: "all",
+        message: message({ headers: [{ name: "X-Account", value: "VIP" }] }),
+        search: { filters: [{ type: "header", value: "X-Account" }], text: "" },
+      }),
+    ).toBe(false);
+    expect(
+      matchesManagedMailRule({
+        attachments: [],
+        matchMode: "all",
+        message: message({ headers: [{ name: "X-Account", value: "VIP" }] }),
+        search: { filters: [{ type: "header", value: ":VIP" }], text: "" },
+      }),
+    ).toBe(false);
+    expect(
+      matchesManagedMailRule({
+        attachments: [],
+        matchMode: "all",
+        message: message({ headers: [{ name: "X-Account", value: "VIP" }] }),
+        search: { filters: [{ type: "header", value: "X-Account:" }], text: "" },
+      }),
+    ).toBe(false);
+    expect(
+      matchesManagedMailRule({
+        attachments: [],
+        matchMode: "all",
+        message: message({ headers: [{ name: "X-Account", value: "VIP" }] }),
+        search: { filters: [{ type: "header", value: "X-Account:other" }], text: "" },
+      }),
+    ).toBe(false);
+    expect(
+      matchesManagedMailRule({
+        attachments: [],
+        customLabelNames: ["VIP/Important"],
+        matchMode: "all",
+        message: message(),
+        search: { filters: [{ type: "label", value: "vip/important" }], text: "" },
+      }),
+    ).toBe(true);
+  });
+
+  test("matches absolute and relative date conditions", () => {
+    expect(
+      matchesManagedMailRule({
+        attachments: [],
+        matchMode: "all",
+        message: message(),
+        now: NOW,
+        search: { filters: [{ type: "after", value: "2026-06-28" }], text: "" },
+      }),
+    ).toBe(true);
+    expect(
+      matchesManagedMailRule({
+        attachments: [],
+        matchMode: "all",
+        message: message(),
+        now: NOW,
+        search: { filters: [{ type: "older_than", value: "1d" }], text: "" },
+      }),
+    ).toBe(false);
+  });
 });

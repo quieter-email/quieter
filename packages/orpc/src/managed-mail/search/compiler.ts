@@ -36,6 +36,20 @@ const createFilterCondition = (
     case "bcc":
       condition = ilike(managedMailMessage.bccNormalized, createContainsPattern(normalizedValue));
       break;
+    case "header": {
+      const separator = value.indexOf(":");
+      if (separator <= 0) break;
+      const headerName = normalizeManagedSearchValue(value.slice(0, separator));
+      const headerValue = value.slice(separator + 1).trim();
+      if (!headerName || !headerValue) break;
+      condition = exists(
+        sql`select 1
+            from jsonb_array_elements(${managedMailMessage.headers}) as header
+            where regexp_replace(lower(trim(header->>'name')), '[[:space:]]+', ' ', 'g') = ${headerName}
+              and regexp_replace(lower(trim(header->>'value')), '[[:space:]]+', ' ', 'g') like ${createContainsPattern(normalizeManagedSearchValue(headerValue))}`,
+      );
+      break;
+    }
     case "subject":
       condition = ilike(managedMailMessage.subject, createContainsPattern(value));
       break;
@@ -66,7 +80,10 @@ const createFilterCondition = (
               on ${managedMailLabel.id} = ${managedMailMessageLabel.labelId}
             where ${managedMailMessageLabel.messageId} = ${managedMailMessage.id}
               and ${managedMailMessageLabel.mailboxId} = ${mailboxId}
-              and ${managedMailLabel.normalizedName} = ${normalizedValue}`,
+              and (
+                ${managedMailLabel.normalizedName} = ${normalizedValue}
+                or lower(${managedMailLabel.id}) = ${normalizedValue}
+              )`,
       );
       break;
     case "is":

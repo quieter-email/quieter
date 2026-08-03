@@ -588,6 +588,14 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
             });
           }}
           persistDrafts={!isManagedDemoMode && selectedMailboxProvider !== "api"}
+          signature={
+            selectedMailbox
+              ? {
+                  html: selectedMailbox.signatureHtml ?? null,
+                  text: selectedMailbox.signatureText ?? null,
+                }
+              : undefined
+          }
           senderEmail={currentUserEmail}
           ref={composeDialogRef}
         />

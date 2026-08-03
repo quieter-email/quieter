@@ -12,7 +12,11 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  getManagedMailboxRuleActions,
   mailboxLabelColorSchema,
+  managedMailboxRuleConditionGroupSchema,
+  type ManagedMailboxRuleAction,
+  type ManagedMailboxRuleConditionGroup,
   type MailboxLabelColor,
 } from "@quieter/mail/mailbox-organization";
 import {
@@ -49,7 +53,7 @@ import { Input } from "@quieter/ui/input";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { MailboxColorPicker } from "~/features/message-labels/components/mailbox-color-picker";
 import { mailboxLabelDotClassNameByColor } from "~/features/message-labels/domain/mailbox-label-presentation";
 import { labelsQueryOptions } from "~/lib/gmail/labels-query";
@@ -86,6 +90,39 @@ type SavedViewsSectionProps = {
 const getSearchFromStoredValue = (value: unknown) => structuredMailSearchSchema.parse(value);
 const getSavedViewColor = (color: string | null) =>
   color ? mailboxLabelColorSchema.parse(color) : "gray";
+const getPrimaryRuleAction = (actions: readonly ManagedMailboxRuleAction[]) =>
+  actions.find((action) => action.kind !== "stop-processing") ?? actions[0];
+const getRuleActionLabel = (actions: readonly ManagedMailboxRuleAction[]) => {
+  const action = getPrimaryRuleAction(actions);
+  if (!action) return "No action";
+  if (action.kind === "set-labels") return "Apply labels";
+  if (action.kind === "set-read") return action.read ? "Mark read" : "Mark unread";
+  if (action.kind === "move") {
+    return action.destination === "inbox"
+      ? "Move to Inbox"
+      : `Move to ${action.destination[0]?.toUpperCase()}${action.destination.slice(1)}`;
+  }
+  if (action.kind === "forward") return `Forward to ${action.recipients.join(", ")}`;
+  return "Stop processing";
+};
+const getRuleConditionGroups = (conditionGroups: unknown) => {
+  const parsed = managedMailboxRuleConditionGroupSchema.array().safeParse(conditionGroups);
+  return parsed.success ? parsed.data : undefined;
+};
+const hasInvalidRuleConditionGroups = (
+  storedConditionGroups: unknown,
+  conditionGroups: ManagedMailboxRuleConditionGroup[] | undefined,
+) =>
+  storedConditionGroups !== null &&
+  storedConditionGroups !== undefined &&
+  conditionGroups === undefined;
+
+type PendingRowKind = "rule" | "view";
+type PendingRowAction = "backfill" | "delete" | "duplicate" | "update";
+type ReorderScope = "rules" | "views:personal" | "views:shared";
+
+const getPendingRowActionKey = (kind: PendingRowKind, id: string, action: PendingRowAction) =>
+  `${kind}:${id}:${action}`;
 
 const SavedViewsSection = ({
   currentSearch,
@@ -151,6 +188,19 @@ export const ManagedMailboxOrganizer = ({
   const [ruleQueryDraft, setRuleQueryDraft] = useState<string | null>(null);
   const ruleQuery = ruleQueryDraft ?? searchQuery;
   const [ruleMatchMode, setRuleMatchMode] = useState<"all" | "any">("all");
+  const ruleConditionGroupsRef = useRef<ManagedMailboxRuleConditionGroup[] | undefined>(undefined);
+  const ruleActionsRef = useRef<ManagedMailboxRuleAction[]>([]);
+  const ruleEnabledRef = useRef(true);
+  const [ruleActionKind, setRuleActionKind] = useState<
+    "forward" | "move" | "set-labels" | "set-read"
+  >("set-labels");
+  const [ruleReadState, setRuleReadState] = useState(true);
+  const [ruleMoveDestination, setRuleMoveDestination] = useState<
+    "archive" | "inbox" | "spam" | "trash"
+  >("archive");
+  const [ruleForwardRecipients, setRuleForwardRecipients] = useState("");
+  const [ruleForwardIncludesAttachments, setRuleForwardIncludesAttachments] = useState(false);
+  const [ruleStopsProcessing, setRuleStopsProcessing] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [selectedRuleLabelIds, setSelectedRuleLabelIds] = useState<string[]>([]);
   const selectedRuleLabelIdSet = new Set(selectedRuleLabelIds);
@@ -158,6 +208,8 @@ export const ManagedMailboxOrganizer = ({
   const [preview, setPreview] = useState<{ count: number; samples: Array<{ id: string }> } | null>(
     null,
   );
+  const [pendingRowActions, setPendingRowActions] = useState<Record<string, true>>({});
+  const [pendingReorders, setPendingReorders] = useState<Partial<Record<ReorderScope, string>>>({});
   const { data: viewsData } = useQuery(managedSavedViewsQueryOptions(mailboxId));
   const { data: rulesData } = useQuery(managedRulesQueryOptions(mailboxId, isOpen && canManage));
   const { data: labelsData } = useQuery(labelsQueryOptions(mailboxId, isOpen));
@@ -190,6 +242,52 @@ export const ManagedMailboxOrganizer = ({
   const backfillMutation = useMutation(orpc.mail.startManagedRuleBackfill.mutationOptions());
   const cancelBackfillMutation = useMutation(orpc.mail.cancelManagedRuleBackfill.mutationOptions());
 
+  const isRowActionPending = (kind: PendingRowKind, id: string, action: PendingRowAction) =>
+    pendingRowActions[getPendingRowActionKey(kind, id, action)] === true;
+
+  const runRowAction = async <T,>(
+    kind: PendingRowKind,
+    id: string,
+    action: PendingRowAction,
+    operation: () => Promise<T>,
+  ) => {
+    const key = getPendingRowActionKey(kind, id, action);
+    setPendingRowActions((current) => ({ ...current, [key]: true }));
+    try {
+      return await operation();
+    } finally {
+      setPendingRowActions((current) => {
+        if (!current[key]) return current;
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    }
+  };
+
+  const runReorder = async <T,>(
+    scope: ReorderScope,
+    rowId: string,
+    operation: () => Promise<T>,
+  ) => {
+    setPendingReorders((current) => ({ ...current, [scope]: rowId }));
+    try {
+      return await operation();
+    } finally {
+      setPendingReorders((current) => {
+        if (current[scope] !== rowId) return current;
+        const next = { ...current };
+        delete next[scope];
+        return next;
+      });
+    }
+  };
+
+  const editingRuleUpdatePending =
+    editingRuleId !== null && isRowActionPending("rule", editingRuleId, "update");
+  const editingViewUpdatePending =
+    editingView !== null && isRowActionPending("view", editingView.view.id, "update");
+
   const saveView = async (shared: boolean) => {
     const name = viewName.trim();
     if (!name) return;
@@ -217,17 +315,19 @@ export const ManagedMailboxOrganizer = ({
     if (!editingView?.name.trim()) return;
 
     try {
-      await updateViewMutation.mutateAsync({
-        definition: {
-          color: editingView.color,
-          icon: editingView.view.icon,
-          name: editingView.name.trim(),
-          search: getSearchFromStoredValue(editingView.view.search),
-          sort: editingView.view.sort,
-        },
-        mailboxId,
-        viewId: editingView.view.id,
-      });
+      await runRowAction("view", editingView.view.id, "update", () =>
+        updateViewMutation.mutateAsync({
+          definition: {
+            color: editingView.color,
+            icon: editingView.view.icon,
+            name: editingView.name.trim(),
+            search: getSearchFromStoredValue(editingView.view.search),
+            sort: editingView.view.sort,
+          },
+          mailboxId,
+          viewId: editingView.view.id,
+        }),
+      );
       setEditingView(null);
       await invalidateViews();
     } catch (error) {
@@ -235,13 +335,47 @@ export const ManagedMailboxOrganizer = ({
     }
   };
 
-  const createRuleDefinition = () => ({
-    enabled: true,
-    labelIds: selectedRuleLabelIds,
-    matchMode: ruleMatchMode,
-    name: ruleName.trim(),
-    search: parseStructuredSearchQuery(ruleQuery),
-  });
+  const createRuleDefinition = () => {
+    const primaryAction: ManagedMailboxRuleAction =
+      ruleActionKind === "set-labels"
+        ? { addIds: selectedRuleLabelIds, kind: "set-labels", removeIds: [] }
+        : ruleActionKind === "set-read"
+          ? { kind: "set-read", read: ruleReadState }
+          : ruleActionKind === "move"
+            ? { destination: ruleMoveDestination, kind: "move" }
+            : {
+                includeAttachments: ruleForwardIncludesAttachments,
+                kind: "forward",
+                recipients: ruleForwardRecipients
+                  .split(/[,;\n]/)
+                  .map((recipient) => recipient.trim())
+                  .filter(Boolean),
+              };
+    const primaryActionIndex = ruleActionsRef.current.findIndex(
+      (action) => action.kind !== "stop-processing",
+    );
+    const actions: ManagedMailboxRuleAction[] = editingRuleId
+      ? ruleActionsRef.current.flatMap((action, index) =>
+          action.kind === "stop-processing"
+            ? []
+            : index === primaryActionIndex
+              ? [primaryAction]
+              : [action],
+        )
+      : [primaryAction];
+    if (editingRuleId && primaryActionIndex === -1) actions.unshift(primaryAction);
+    if (ruleStopsProcessing) actions.push({ kind: "stop-processing" });
+
+    return {
+      actions,
+      conditionGroups: ruleConditionGroupsRef.current,
+      enabled: ruleEnabledRef.current,
+      labelIds: actions.flatMap((action) => (action.kind === "set-labels" ? action.addIds : [])),
+      matchMode: ruleMatchMode,
+      name: ruleName.trim(),
+      search: parseStructuredSearchQuery(ruleQuery),
+    };
+  };
 
   const previewRule = async () => {
     try {
@@ -256,14 +390,21 @@ export const ManagedMailboxOrganizer = ({
   };
 
   const saveRule = async () => {
-    if (!ruleName.trim() || selectedRuleLabelIds.length === 0) return;
+    if (
+      !ruleName.trim() ||
+      (ruleActionKind === "set-labels" && selectedRuleLabelIds.length === 0) ||
+      (ruleActionKind === "forward" && !ruleForwardRecipients.trim())
+    )
+      return;
     try {
       if (editingRuleId) {
-        await updateRuleMutation.mutateAsync({
-          definition: createRuleDefinition(),
-          mailboxId,
-          ruleId: editingRuleId,
-        });
+        await runRowAction("rule", editingRuleId, "update", () =>
+          updateRuleMutation.mutateAsync({
+            definition: createRuleDefinition(),
+            mailboxId,
+            ruleId: editingRuleId,
+          }),
+        );
       } else {
         await createRuleMutation.mutateAsync({
           definition: createRuleDefinition(),
@@ -273,6 +414,15 @@ export const ManagedMailboxOrganizer = ({
       setRuleName("");
       setRuleQueryDraft("");
       setRuleMatchMode("all");
+      ruleConditionGroupsRef.current = undefined;
+      ruleActionsRef.current = [];
+      ruleEnabledRef.current = true;
+      setRuleActionKind("set-labels");
+      setRuleReadState(true);
+      setRuleMoveDestination("archive");
+      setRuleForwardRecipients("");
+      setRuleForwardIncludesAttachments(false);
+      setRuleStopsProcessing(false);
       setSelectedRuleLabelIds([]);
       setEditingRuleId(null);
       setPreview(null);
@@ -348,6 +498,8 @@ export const ManagedMailboxOrganizer = ({
                     <Button
                       disabled={!viewName.trim() || createViewMutation.isPending}
                       onClick={() => void saveView(false)}
+                      pending={createViewMutation.isPending}
+                      pendingLabel="Saving…"
                       size="sm"
                       type="button"
                     >
@@ -357,6 +509,8 @@ export const ManagedMailboxOrganizer = ({
                       <Button
                         disabled={!viewName.trim() || createViewMutation.isPending}
                         onClick={() => void saveView(true)}
+                        pending={createViewMutation.isPending}
+                        pendingLabel="Saving…"
                         size="sm"
                         type="button"
                         variant="ghost"
@@ -373,182 +527,231 @@ export const ManagedMailboxOrganizer = ({
                   />
                 </div>
                 <div className="mt-5 space-y-1">
-                  {views.map((view, index) => (
-                    <div
-                      className="squircle flex items-center gap-3 rounded-lg p-2 hover:bg-secondary/25"
-                      key={view.id}
-                    >
-                      <span
-                        aria-hidden
-                        className={cn(
-                          "size-3 shrink-0 rounded-full",
-                          mailboxLabelDotClassNameByColor[getSavedViewColor(view.color)],
-                        )}
-                      />
-                      <span className="min-w-0 flex-1 truncate text-sm">{view.name}</span>
-                      <span className="text-xs text-muted-fg">
-                        {view.ownerUserId === null ? "Shared" : "Personal"}
-                      </span>
-                      {(view.ownerUserId !== null || canManage) && (
-                        <IconButtonTooltip label={`Edit ${view.name}`}>
-                          <Button
-                            aria-label={`Edit ${view.name}`}
-                            onClick={() =>
-                              setEditingView({
-                                color: getSavedViewColor(view.color),
-                                name: view.name,
-                                view,
-                              })
-                            }
-                            size="icon-sm"
-                            type="button"
-                            variant="ghost"
-                          >
-                            <HugeiconsIcon aria-hidden icon={Edit01Icon} />
-                          </Button>
-                        </IconButtonTooltip>
-                      )}
-                      {view.ownerUserId !== null || canManage ? (
-                        <Button
-                          disabled={
-                            updateViewMutation.isPending ||
-                            areStructuredMailSearchesEqual(
-                              currentSearch,
-                              getSearchFromStoredValue(view.search),
-                            )
-                          }
-                          onClick={() => {
-                            void updateViewMutation
-                              .mutateAsync({
-                                definition: {
+                  {views.map((view) => {
+                    const viewScope: ReorderScope =
+                      view.ownerUserId === null ? "views:shared" : "views:personal";
+                    const sameScopeViews = views.filter(
+                      (candidate) =>
+                        (candidate.ownerUserId === null) === (view.ownerUserId === null),
+                    );
+                    const scopeIndex = sameScopeViews.findIndex(
+                      (candidate) => candidate.id === view.id,
+                    );
+                    const reorderLocked = pendingReorders[viewScope] !== undefined;
+                    const reorderPending = pendingReorders[viewScope] === view.id;
+
+                    return (
+                      <div
+                        className="squircle flex items-center gap-3 rounded-lg p-2 hover:bg-secondary/25"
+                        key={view.id}
+                      >
+                        <span
+                          aria-hidden
+                          className={cn(
+                            "size-3 shrink-0 rounded-full",
+                            mailboxLabelDotClassNameByColor[getSavedViewColor(view.color)],
+                          )}
+                        />
+                        <span className="min-w-0 flex-1 truncate text-sm">{view.name}</span>
+                        <span className="text-xs text-muted-fg">
+                          {view.ownerUserId === null ? "Shared" : "Personal"}
+                        </span>
+                        {(view.ownerUserId !== null || canManage) && (
+                          <IconButtonTooltip label={`Edit ${view.name}`}>
+                            <Button
+                              aria-label={`Edit ${view.name}`}
+                              onClick={() =>
+                                setEditingView({
                                   color: getSavedViewColor(view.color),
-                                  icon: view.icon,
                                   name: view.name,
-                                  search: currentSearch,
-                                  sort: view.sort,
-                                },
-                                mailboxId,
-                                viewId: view.id,
-                              })
-                              .then(invalidateViews);
-                          }}
-                          size="sm"
-                          type="button"
-                          variant="ghost"
-                        >
-                          Use current search
-                        </Button>
-                      ) : null}
-                      {view.ownerUserId === null ? (
-                        <Button
-                          disabled={createViewMutation.isPending}
-                          onClick={() => {
-                            void createViewMutation
-                              .mutateAsync({
-                                definition: {
-                                  color: getSavedViewColor(view.color),
-                                  icon: view.icon,
-                                  name: `${view.name} copy`,
-                                  search: getSearchFromStoredValue(view.search),
-                                  sort: view.sort,
-                                },
-                                mailboxId,
-                                shared: false,
-                              })
-                              .then(invalidateViews);
-                          }}
-                          size="sm"
-                          type="button"
-                          variant="ghost"
-                        >
-                          Duplicate
-                        </Button>
-                      ) : null}
-                      <IconButtonTooltip label={`Move ${view.name} up`}>
-                        <Button
-                          aria-label={`Move ${view.name} up`}
-                          disabled={index === 0 || reorderViewsMutation.isPending}
-                          onClick={() => {
-                            const sameScopeViews = views.filter(
-                              (candidate) =>
-                                (candidate.ownerUserId === null) === (view.ownerUserId === null),
-                            );
-                            const scopeIndex = sameScopeViews.findIndex(
-                              (candidate) => candidate.id === view.id,
-                            );
-                            if (scopeIndex <= 0) return;
-                            const viewIds = sameScopeViews.map((candidate) => candidate.id);
-                            [viewIds[scopeIndex - 1], viewIds[scopeIndex]] = [
-                              viewIds[scopeIndex],
-                              viewIds[scopeIndex - 1],
-                            ];
-                            void reorderViewsMutation
-                              .mutateAsync({ mailboxId, viewIds })
-                              .then(invalidateViews);
-                          }}
-                          size="icon-sm"
-                          type="button"
-                          variant="ghost"
-                        >
-                          <HugeiconsIcon aria-hidden icon={ArrowUp01Icon} />
-                        </Button>
-                      </IconButtonTooltip>
-                      <IconButtonTooltip label={`Move ${view.name} down`}>
-                        <Button
-                          aria-label={`Move ${view.name} down`}
-                          disabled={index === views.length - 1 || reorderViewsMutation.isPending}
-                          onClick={() => {
-                            const sameScopeViews = views.filter(
-                              (candidate) =>
-                                (candidate.ownerUserId === null) === (view.ownerUserId === null),
-                            );
-                            const scopeIndex = sameScopeViews.findIndex(
-                              (candidate) => candidate.id === view.id,
-                            );
-                            if (scopeIndex === -1 || scopeIndex === sameScopeViews.length - 1)
-                              return;
-                            const viewIds = sameScopeViews.map((candidate) => candidate.id);
-                            [viewIds[scopeIndex], viewIds[scopeIndex + 1]] = [
-                              viewIds[scopeIndex + 1],
-                              viewIds[scopeIndex],
-                            ];
-                            void reorderViewsMutation
-                              .mutateAsync({ mailboxId, viewIds })
-                              .then(invalidateViews);
-                          }}
-                          size="icon-sm"
-                          type="button"
-                          variant="ghost"
-                        >
-                          <HugeiconsIcon aria-hidden icon={ArrowDown01Icon} />
-                        </Button>
-                      </IconButtonTooltip>
-                      {(view.ownerUserId !== null || canManage) && (
-                        <IconButtonTooltip label={`Delete ${view.name}`}>
+                                  view,
+                                })
+                              }
+                              size="icon-sm"
+                              type="button"
+                              variant="ghost"
+                            >
+                              <HugeiconsIcon aria-hidden icon={Edit01Icon} />
+                            </Button>
+                          </IconButtonTooltip>
+                        )}
+                        {view.ownerUserId !== null || canManage ? (
                           <Button
-                            aria-label={`Delete ${view.name}`}
+                            disabled={
+                              isRowActionPending("view", view.id, "update") ||
+                              areStructuredMailSearchesEqual(
+                                currentSearch,
+                                getSearchFromStoredValue(view.search),
+                              )
+                            }
                             onClick={() => {
-                              void deleteViewMutation
-                                .mutateAsync({ mailboxId, viewId: view.id })
-                                .then(invalidateViews);
+                              void runRowAction("view", view.id, "update", () =>
+                                updateViewMutation.mutateAsync({
+                                  definition: {
+                                    color: getSavedViewColor(view.color),
+                                    icon: view.icon,
+                                    name: view.name,
+                                    search: currentSearch,
+                                    sort: view.sort,
+                                  },
+                                  mailboxId,
+                                  viewId: view.id,
+                                }),
+                              )
+                                .then(invalidateViews)
+                                .catch((error) =>
+                                  toast.error(
+                                    error instanceof Error
+                                      ? error.message
+                                      : "Could not update view.",
+                                  ),
+                                );
                             }}
+                            pending={isRowActionPending("view", view.id, "update")}
+                            pendingLabel="Updating…"
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            Use current search
+                          </Button>
+                        ) : null}
+                        {view.ownerUserId === null ? (
+                          <Button
+                            disabled={isRowActionPending("view", view.id, "duplicate")}
+                            onClick={() => {
+                              void runRowAction("view", view.id, "duplicate", () =>
+                                createViewMutation.mutateAsync({
+                                  definition: {
+                                    color: getSavedViewColor(view.color),
+                                    icon: view.icon,
+                                    name: `${view.name} copy`,
+                                    search: getSearchFromStoredValue(view.search),
+                                    sort: view.sort,
+                                  },
+                                  mailboxId,
+                                  shared: false,
+                                }),
+                              )
+                                .then(invalidateViews)
+                                .catch((error) =>
+                                  toast.error(
+                                    error instanceof Error
+                                      ? error.message
+                                      : "Could not duplicate view.",
+                                  ),
+                                );
+                            }}
+                            pending={isRowActionPending("view", view.id, "duplicate")}
+                            pendingLabel="Copying…"
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            Duplicate
+                          </Button>
+                        ) : null}
+                        <IconButtonTooltip label={`Move ${view.name} up`}>
+                          <Button
+                            aria-label={`Move ${view.name} up`}
+                            disabled={scopeIndex <= 0 || reorderLocked}
+                            onClick={() => {
+                              if (scopeIndex <= 0) return;
+                              const viewIds = sameScopeViews.map((candidate) => candidate.id);
+                              [viewIds[scopeIndex - 1], viewIds[scopeIndex]] = [
+                                viewIds[scopeIndex],
+                                viewIds[scopeIndex - 1],
+                              ];
+                              void runReorder(viewScope, view.id, () =>
+                                reorderViewsMutation.mutateAsync({ mailboxId, viewIds }),
+                              )
+                                .then(invalidateViews)
+                                .catch((error) =>
+                                  toast.error(
+                                    error instanceof Error
+                                      ? error.message
+                                      : "Could not reorder views.",
+                                  ),
+                                );
+                            }}
+                            pending={reorderPending}
                             size="icon-sm"
                             type="button"
                             variant="ghost"
                           >
-                            <HugeiconsIcon aria-hidden icon={Delete01Icon} />
+                            <HugeiconsIcon aria-hidden icon={ArrowUp01Icon} />
                           </Button>
                         </IconButtonTooltip>
-                      )}
-                    </div>
-                  ))}
+                        <IconButtonTooltip label={`Move ${view.name} down`}>
+                          <Button
+                            aria-label={`Move ${view.name} down`}
+                            disabled={scopeIndex === sameScopeViews.length - 1 || reorderLocked}
+                            onClick={() => {
+                              if (scopeIndex === -1 || scopeIndex === sameScopeViews.length - 1)
+                                return;
+                              const viewIds = sameScopeViews.map((candidate) => candidate.id);
+                              [viewIds[scopeIndex], viewIds[scopeIndex + 1]] = [
+                                viewIds[scopeIndex + 1],
+                                viewIds[scopeIndex],
+                              ];
+                              void runReorder(viewScope, view.id, () =>
+                                reorderViewsMutation.mutateAsync({ mailboxId, viewIds }),
+                              )
+                                .then(invalidateViews)
+                                .catch((error) =>
+                                  toast.error(
+                                    error instanceof Error
+                                      ? error.message
+                                      : "Could not reorder views.",
+                                  ),
+                                );
+                            }}
+                            pending={reorderPending}
+                            size="icon-sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <HugeiconsIcon aria-hidden icon={ArrowDown01Icon} />
+                          </Button>
+                        </IconButtonTooltip>
+                        {(view.ownerUserId !== null || canManage) && (
+                          <IconButtonTooltip label={`Delete ${view.name}`}>
+                            <Button
+                              aria-label={`Delete ${view.name}`}
+                              disabled={isRowActionPending("view", view.id, "delete")}
+                              pending={isRowActionPending("view", view.id, "delete")}
+                              onClick={() => {
+                                void runRowAction("view", view.id, "delete", () =>
+                                  deleteViewMutation.mutateAsync({ mailboxId, viewId: view.id }),
+                                )
+                                  .then(invalidateViews)
+                                  .catch((error) =>
+                                    toast.error(
+                                      error instanceof Error
+                                        ? error.message
+                                        : "Could not delete view.",
+                                    ),
+                                  );
+                              }}
+                              size="icon-sm"
+                              type="button"
+                              variant="ghost"
+                            >
+                              <HugeiconsIcon aria-hidden icon={Delete01Icon} />
+                            </Button>
+                          </IconButtonTooltip>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
 
               <section>
-                <h2 className="text-lg font-semibold tracking-tight">Automatic labels</h2>
+                <h2 className="text-lg font-semibold tracking-tight">Automatic rules</h2>
                 <FullPageDialogDescription className="mt-1">
-                  Match new inbound mail with the same filters used by search.
+                  Match new inbound mail with the same filters used by search, then apply a
+                  predictable action.
                 </FullPageDialogDescription>
                 {canManage ? (
                   <>
@@ -585,34 +788,130 @@ export const ManagedMailboxOrganizer = ({
                         ))}
                       </div>
                       <div className="squircle space-y-2 rounded-lg bg-secondary/40 p-3">
-                        <p className="text-xs font-medium text-muted-fg">Apply labels</p>
-                        {(labelsData ?? []).flatMap((label) =>
-                          label.type === "user"
-                            ? [
-                                <label className="flex items-center gap-2 text-sm" key={label.id}>
-                                  <Checkbox
-                                    checked={selectedRuleLabelIdSet.has(label.id)}
-                                    onCheckedChange={(checked) =>
-                                      setSelectedRuleLabelIds((current) =>
-                                        checked
-                                          ? [...current, label.id]
-                                          : current.filter((labelId) => labelId !== label.id),
-                                      )
-                                    }
-                                  >
-                                    <CheckboxIndicator />
-                                  </Checkbox>
-                                  <HugeiconsIcon
-                                    aria-hidden
-                                    className="size-3.5 text-muted-fg"
-                                    icon={Tag01Icon}
-                                  />
-                                  {label.name}
-                                </label>,
-                              ]
-                            : [],
-                        )}
+                        <p className="text-xs font-medium text-muted-fg">Then</p>
+                        <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+                          {(
+                            [
+                              ["set-labels", "Apply labels"],
+                              ["set-read", "Read state"],
+                              ["move", "Move"],
+                              ["forward", "Forward"],
+                            ] as const
+                          ).map(([kind, label]) => (
+                            <Button
+                              aria-pressed={ruleActionKind === kind}
+                              className={cn({
+                                "bg-bg shadow-sm": ruleActionKind === kind,
+                              })}
+                              key={kind}
+                              onClick={() => setRuleActionKind(kind)}
+                              size="sm"
+                              type="button"
+                              variant="ghost"
+                            >
+                              {label}
+                            </Button>
+                          ))}
+                        </div>
+                        {ruleActionKind === "set-read" ? (
+                          <div className="grid grid-cols-2 gap-1">
+                            {[true, false].map((read) => (
+                              <Button
+                                aria-pressed={ruleReadState === read}
+                                className={cn({ "bg-bg shadow-sm": ruleReadState === read })}
+                                key={String(read)}
+                                onClick={() => setRuleReadState(read)}
+                                size="sm"
+                                type="button"
+                                variant="ghost"
+                              >
+                                {read ? "Mark read" : "Mark unread"}
+                              </Button>
+                            ))}
+                          </div>
+                        ) : null}
+                        {ruleActionKind === "move" ? (
+                          <div className="grid grid-cols-2 gap-1">
+                            {(["archive", "inbox", "spam", "trash"] as const).map((destination) => (
+                              <Button
+                                aria-pressed={ruleMoveDestination === destination}
+                                className={cn({
+                                  "bg-bg shadow-sm": ruleMoveDestination === destination,
+                                })}
+                                key={destination}
+                                onClick={() => setRuleMoveDestination(destination)}
+                                size="sm"
+                                type="button"
+                                variant="ghost"
+                              >
+                                {destination === "inbox"
+                                  ? "Move to Inbox"
+                                  : `Move to ${destination[0]?.toUpperCase()}${destination.slice(1)}`}
+                              </Button>
+                            ))}
+                          </div>
+                        ) : null}
+                        {ruleActionKind === "forward" ? (
+                          <div className="space-y-2">
+                            <Input
+                              aria-label="Forward recipients"
+                              onChange={(event) => setRuleForwardRecipients(event.target.value)}
+                              placeholder="Forward to email addresses"
+                              size="sm"
+                              value={ruleForwardRecipients}
+                            />
+                            <label className="flex items-center gap-2 text-sm">
+                              <Checkbox
+                                checked={ruleForwardIncludesAttachments}
+                                onCheckedChange={setRuleForwardIncludesAttachments}
+                              >
+                                <CheckboxIndicator />
+                              </Checkbox>
+                              Include attachments
+                            </label>
+                          </div>
+                        ) : null}
+                        <label className="flex items-center gap-2 text-sm">
+                          <Checkbox
+                            checked={ruleStopsProcessing}
+                            onCheckedChange={setRuleStopsProcessing}
+                          >
+                            <CheckboxIndicator />
+                          </Checkbox>
+                          Stop evaluating later rules after this match
+                        </label>
                       </div>
+                      {ruleActionKind === "set-labels" ? (
+                        <div className="squircle space-y-2 rounded-lg bg-secondary/40 p-3">
+                          <p className="text-xs font-medium text-muted-fg">Labels</p>
+                          {(labelsData ?? []).flatMap((label) =>
+                            label.type === "user"
+                              ? [
+                                  <label className="flex items-center gap-2 text-sm" key={label.id}>
+                                    <Checkbox
+                                      checked={selectedRuleLabelIdSet.has(label.id)}
+                                      onCheckedChange={(checked) =>
+                                        setSelectedRuleLabelIds((current) =>
+                                          checked
+                                            ? [...current, label.id]
+                                            : current.filter((labelId) => labelId !== label.id),
+                                        )
+                                      }
+                                    >
+                                      <CheckboxIndicator />
+                                    </Checkbox>
+                                    <HugeiconsIcon
+                                      aria-hidden
+                                      className="size-3.5 text-muted-fg"
+                                      icon={Tag01Icon}
+                                    />
+                                    {label.name}
+                                  </label>,
+                                ]
+                              : [],
+                          )}
+                        </div>
+                      ) : null}
                       {preview ? (
                         <p className="text-sm text-muted-fg">
                           {preview.count} matching conversation
@@ -624,10 +923,14 @@ export const ManagedMailboxOrganizer = ({
                           disabled={
                             !ruleName.trim() ||
                             !ruleQuery.trim() ||
-                            selectedRuleLabelIds.length === 0 ||
+                            (ruleActionKind === "set-labels" &&
+                              selectedRuleLabelIds.length === 0) ||
+                            (ruleActionKind === "forward" && !ruleForwardRecipients.trim()) ||
                             previewRuleMutation.isPending
                           }
                           onClick={() => void previewRule()}
+                          pending={previewRuleMutation.isPending}
+                          pendingLabel="Previewing…"
                           size="sm"
                           type="button"
                           variant="outline"
@@ -638,10 +941,15 @@ export const ManagedMailboxOrganizer = ({
                           disabled={
                             !ruleName.trim() ||
                             !ruleQuery.trim() ||
-                            selectedRuleLabelIds.length === 0 ||
-                            createRuleMutation.isPending
+                            (ruleActionKind === "set-labels" &&
+                              selectedRuleLabelIds.length === 0) ||
+                            (ruleActionKind === "forward" && !ruleForwardRecipients.trim()) ||
+                            createRuleMutation.isPending ||
+                            editingRuleUpdatePending
                           }
                           onClick={() => void saveRule()}
+                          pending={createRuleMutation.isPending || editingRuleUpdatePending}
+                          pendingLabel={editingRuleId ? "Updating…" : "Saving…"}
                           size="sm"
                           type="button"
                         >
@@ -660,19 +968,38 @@ export const ManagedMailboxOrganizer = ({
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm">{rule.name}</p>
                             <p className="text-xs text-muted-fg">
-                              {rule.enabled ? "Enabled" : "Disabled"}
+                              {rule.enabled ? "Enabled" : "Disabled"} /{" "}
+                              {getRuleActionLabel(
+                                getManagedMailboxRuleActions({
+                                  actions: rule.actions,
+                                  labelIds: rule.labelIds,
+                                }),
+                              )}
                             </p>
                           </div>
                           <Switch
                             aria-label={`${rule.enabled ? "Disable" : "Enable"} ${rule.name}`}
                             checked={rule.enabled}
                             className="h-5 w-9 shrink-0 p-0.5"
-                            disabled={updateRuleMutation.isPending}
+                            disabled={isRowActionPending("rule", rule.id, "update")}
+                            pending={isRowActionPending("rule", rule.id, "update")}
                             onCheckedChange={(enabled) => {
-                              void updateRuleMutation
-                                .mutateAsync({
+                              const conditionGroups = getRuleConditionGroups(rule.conditionGroups);
+                              if (
+                                hasInvalidRuleConditionGroups(rule.conditionGroups, conditionGroups)
+                              ) {
+                                toast.error("This rule has invalid condition groups.");
+                                return;
+                              }
+                              void runRowAction("rule", rule.id, "update", () =>
+                                updateRuleMutation.mutateAsync({
                                   definition: {
                                     enabled,
+                                    actions: getManagedMailboxRuleActions({
+                                      actions: rule.actions,
+                                      labelIds: rule.labelIds,
+                                    }),
+                                    conditionGroups,
                                     labelIds: rule.labelIds,
                                     matchMode: rule.matchMode,
                                     name: rule.name,
@@ -680,8 +1007,16 @@ export const ManagedMailboxOrganizer = ({
                                   },
                                   mailboxId,
                                   ruleId: rule.id,
-                                })
-                                .then(invalidateRules);
+                                }),
+                              )
+                                .then(invalidateRules)
+                                .catch((error) =>
+                                  toast.error(
+                                    error instanceof Error
+                                      ? error.message
+                                      : "Could not update rule.",
+                                  ),
+                                );
                             }}
                           >
                             <SwitchThumb className="size-4 data-checked:translate-x-4" />
@@ -690,6 +1025,18 @@ export const ManagedMailboxOrganizer = ({
                             <Button
                               aria-label={`Edit ${rule.name}`}
                               onClick={() => {
+                                const conditionGroups = getRuleConditionGroups(
+                                  rule.conditionGroups,
+                                );
+                                if (
+                                  hasInvalidRuleConditionGroups(
+                                    rule.conditionGroups,
+                                    conditionGroups,
+                                  )
+                                ) {
+                                  toast.error("This rule has invalid condition groups.");
+                                  return;
+                                }
                                 setEditingRuleId(rule.id);
                                 setRuleName(rule.name);
                                 setRuleQueryDraft(
@@ -698,7 +1045,34 @@ export const ManagedMailboxOrganizer = ({
                                   ),
                                 );
                                 setRuleMatchMode(rule.matchMode);
-                                setSelectedRuleLabelIds(rule.labelIds);
+                                ruleConditionGroupsRef.current = conditionGroups;
+                                const actions = getManagedMailboxRuleActions({
+                                  actions: rule.actions,
+                                  labelIds: rule.labelIds,
+                                });
+                                const action = getPrimaryRuleAction(actions);
+                                ruleActionsRef.current = actions;
+                                ruleEnabledRef.current = rule.enabled;
+                                setSelectedRuleLabelIds(
+                                  action?.kind === "set-labels" ? action.addIds : [],
+                                );
+                                setRuleForwardIncludesAttachments(false);
+                                if (action?.kind === "set-read") {
+                                  setRuleActionKind("set-read");
+                                  setRuleReadState(action.read);
+                                } else if (action?.kind === "move") {
+                                  setRuleActionKind("move");
+                                  setRuleMoveDestination(action.destination);
+                                } else if (action?.kind === "forward") {
+                                  setRuleActionKind("forward");
+                                  setRuleForwardRecipients(action.recipients.join(", "));
+                                  setRuleForwardIncludesAttachments(action.includeAttachments);
+                                } else {
+                                  setRuleActionKind("set-labels");
+                                }
+                                setRuleStopsProcessing(
+                                  actions.some((candidate) => candidate.kind === "stop-processing"),
+                                );
                                 setPreview(null);
                               }}
                               size="icon-sm"
@@ -711,16 +1085,25 @@ export const ManagedMailboxOrganizer = ({
                           <IconButtonTooltip label={`Move ${rule.name} up`}>
                             <Button
                               aria-label={`Move ${rule.name} up`}
-                              disabled={index === 0 || reorderRulesMutation.isPending}
+                              disabled={index === 0 || pendingReorders.rules !== undefined}
+                              pending={pendingReorders.rules === rule.id}
                               onClick={() => {
                                 const ruleIds = rules.map((candidate) => candidate.id);
                                 [ruleIds[index - 1], ruleIds[index]] = [
                                   ruleIds[index],
                                   ruleIds[index - 1],
                                 ];
-                                void reorderRulesMutation
-                                  .mutateAsync({ mailboxId, ruleIds })
-                                  .then(invalidateRules);
+                                void runReorder("rules", rule.id, () =>
+                                  reorderRulesMutation.mutateAsync({ mailboxId, ruleIds }),
+                                )
+                                  .then(invalidateRules)
+                                  .catch((error) =>
+                                    toast.error(
+                                      error instanceof Error
+                                        ? error.message
+                                        : "Could not reorder rules.",
+                                    ),
+                                  );
                               }}
                               size="icon-sm"
                               type="button"
@@ -733,17 +1116,26 @@ export const ManagedMailboxOrganizer = ({
                             <Button
                               aria-label={`Move ${rule.name} down`}
                               disabled={
-                                index === rules.length - 1 || reorderRulesMutation.isPending
+                                index === rules.length - 1 || pendingReorders.rules !== undefined
                               }
+                              pending={pendingReorders.rules === rule.id}
                               onClick={() => {
                                 const ruleIds = rules.map((candidate) => candidate.id);
                                 [ruleIds[index], ruleIds[index + 1]] = [
                                   ruleIds[index + 1],
                                   ruleIds[index],
                                 ];
-                                void reorderRulesMutation
-                                  .mutateAsync({ mailboxId, ruleIds })
-                                  .then(invalidateRules);
+                                void runReorder("rules", rule.id, () =>
+                                  reorderRulesMutation.mutateAsync({ mailboxId, ruleIds }),
+                                )
+                                  .then(invalidateRules)
+                                  .catch((error) =>
+                                    toast.error(
+                                      error instanceof Error
+                                        ? error.message
+                                        : "Could not reorder rules.",
+                                    ),
+                                  );
                               }}
                               size="icon-sm"
                               type="button"
@@ -755,14 +1147,24 @@ export const ManagedMailboxOrganizer = ({
                           <IconButtonTooltip label={`Apply ${rule.name} to existing mail`}>
                             <Button
                               aria-label={`Apply ${rule.name} to existing mail`}
-                              disabled={backfillMutation.isPending}
+                              disabled={isRowActionPending("rule", rule.id, "backfill")}
+                              pending={isRowActionPending("rule", rule.id, "backfill")}
+                              pendingLabel="Running…"
                               onClick={() => {
-                                void backfillMutation
-                                  .mutateAsync({ mailboxId, ruleId: rule.id })
+                                void runRowAction("rule", rule.id, "backfill", () =>
+                                  backfillMutation.mutateAsync({ mailboxId, ruleId: rule.id }),
+                                )
                                   .then((backfill) => {
                                     setActiveBackfillId(backfill.id);
-                                    toast.success("Historical labeling started.");
-                                  });
+                                    toast.success("Historical rule run started.");
+                                  })
+                                  .catch((error) =>
+                                    toast.error(
+                                      error instanceof Error
+                                        ? error.message
+                                        : "Could not start the historical rule run.",
+                                    ),
+                                  );
                               }}
                               size="icon-sm"
                               type="button"
@@ -774,10 +1176,20 @@ export const ManagedMailboxOrganizer = ({
                           <IconButtonTooltip label={`Delete ${rule.name}`}>
                             <Button
                               aria-label={`Delete ${rule.name}`}
+                              disabled={isRowActionPending("rule", rule.id, "delete")}
+                              pending={isRowActionPending("rule", rule.id, "delete")}
                               onClick={() => {
-                                void deleteRuleMutation
-                                  .mutateAsync({ mailboxId, ruleId: rule.id })
-                                  .then(invalidateRules);
+                                void runRowAction("rule", rule.id, "delete", () =>
+                                  deleteRuleMutation.mutateAsync({ mailboxId, ruleId: rule.id }),
+                                )
+                                  .then(invalidateRules)
+                                  .catch((error) =>
+                                    toast.error(
+                                      error instanceof Error
+                                        ? error.message
+                                        : "Could not delete rule.",
+                                    ),
+                                  );
                               }}
                               size="icon-sm"
                               type="button"
@@ -793,7 +1205,7 @@ export const ManagedMailboxOrganizer = ({
                       <div className="mt-4 rounded-lg border bg-muted/30 p-3 text-sm">
                         <div className="flex items-center justify-between gap-3">
                           <div>
-                            <p className="font-medium">Historical labeling</p>
+                            <p className="font-medium">Historical rule run</p>
                             <p className="text-xs text-muted-fg">
                               {backfillData.processedCount} processed {backfillData.matchedCount}{" "}
                               matched
@@ -802,11 +1214,21 @@ export const ManagedMailboxOrganizer = ({
                           {["pending", "running"].includes(backfillData.status) ? (
                             <Button
                               disabled={cancelBackfillMutation.isPending}
+                              pending={cancelBackfillMutation.isPending}
+                              pendingLabel="Cancelling…"
                               onClick={() => {
-                                void cancelBackfillMutation.mutateAsync({
-                                  backfillId: backfillData.id,
-                                  mailboxId,
-                                });
+                                void cancelBackfillMutation
+                                  .mutateAsync({
+                                    backfillId: backfillData.id,
+                                    mailboxId,
+                                  })
+                                  .catch((error) =>
+                                    toast.error(
+                                      error instanceof Error
+                                        ? error.message
+                                        : "Could not cancel the historical rule run.",
+                                    ),
+                                  );
                               }}
                               size="sm"
                               type="button"
@@ -825,7 +1247,7 @@ export const ManagedMailboxOrganizer = ({
                   </>
                 ) : (
                   <p className="mt-5 text-sm text-muted-fg">
-                    Mailbox managers configure automatic labels.
+                    Mailbox managers configure automatic rules.
                   </p>
                 )}
               </section>
@@ -855,7 +1277,7 @@ export const ManagedMailboxOrganizer = ({
                 <Input
                   autoFocus
                   className="border-0 bg-bg/70 shadow-none"
-                  disabled={updateViewMutation.isPending}
+                  disabled={editingViewUpdatePending}
                   onChange={(event) => {
                     const name = event.currentTarget.value;
                     setEditingView((current) => (current ? { ...current, name } : current));
@@ -877,7 +1299,9 @@ export const ManagedMailboxOrganizer = ({
             <DialogFooter>
               <DialogCloseButton variant="ghost">Cancel</DialogCloseButton>
               <Button
-                disabled={updateViewMutation.isPending || !editingView?.name.trim()}
+                disabled={editingViewUpdatePending || !editingView?.name.trim()}
+                pending={editingViewUpdatePending}
+                pendingLabel="Saving…"
                 size="sm"
                 type="submit"
               >

@@ -24,6 +24,14 @@ export type ParsedRawMailMessage = {
   to?: string;
 };
 
+export type ParsedRawMailAttachment = {
+  content: Uint8Array;
+  contentId?: string;
+  fileName: string;
+  inline: boolean;
+  mimeType: string;
+};
+
 const formatMailbox = (mailbox: { address: string; name: string }) => {
   const name = mailbox.name.trim();
   if (!name) return mailbox.address;
@@ -97,4 +105,20 @@ export const parseRawMailMessage = async (
     subject: email.subject?.trim() || undefined,
     to: formatAddresses(email.to),
   };
+};
+
+export const parseRawMailAttachments = async (
+  rawMessage: string | ArrayBuffer | Uint8Array | Buffer,
+): Promise<ParsedRawMailAttachment[]> => {
+  const email = await PostalMime.parse(rawMessage);
+  return email.attachments.map((attachment, index) => ({
+    content:
+      typeof attachment.content === "string"
+        ? new TextEncoder().encode(attachment.content)
+        : new Uint8Array(attachment.content),
+    contentId: attachment.contentId?.trim() || undefined,
+    fileName: attachment.filename?.trim() || `attachment-${index + 1}`,
+    inline: attachment.disposition === "inline",
+    mimeType: attachment.mimeType || "application/octet-stream",
+  }));
 };

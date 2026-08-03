@@ -10,6 +10,7 @@ import {
   InboxIcon,
   Mail01Icon,
   MailOpen02Icon,
+  Loading03Icon,
   MoreVerticalIcon,
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
@@ -360,11 +361,16 @@ export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
         <IconButtonTooltip label="Message actions">
           <DropdownMenuTrigger
             aria-label="Open message actions"
+            aria-busy={isBusy || undefined}
             className="inline-flex size-10 items-center justify-center rounded-md border border-border bg-bg shadow-sm hover:bg-muted/60 disabled:pointer-events-none disabled:opacity-50"
             disabled={isBusy}
             type="button"
           >
-            <HugeiconsIcon aria-hidden className="size-4" icon={MoreVerticalIcon} />
+            <HugeiconsIcon
+              aria-hidden
+              className={cn("size-4", { "animate-spin": isBusy })}
+              icon={isBusy ? Loading03Icon : MoreVerticalIcon}
+            />
           </DropdownMenuTrigger>
         </IconButtonTooltip>
 

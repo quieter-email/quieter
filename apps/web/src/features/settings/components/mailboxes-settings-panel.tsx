@@ -25,10 +25,12 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@quieter/ui/select";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { TextFieldInput } from "@quieter/ui/text-field";
+import { Textarea } from "@quieter/ui/textarea";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { textToComposeBodyHtml } from "~/features/compose/domain/draft";
 import {
   MailboxAccessPill,
   type MailboxGrantRole,
@@ -83,6 +85,70 @@ const getProviderLabel = (provider: string) => {
   if (provider === "gmail") return "Gmail";
   if (provider === "managed") return "Shared inbox";
   return "Send-only mailbox";
+};
+
+const MailboxSignatureSettings = ({
+  mailbox,
+}: {
+  mailbox: {
+    emailAddress: string;
+    id: string;
+    signatureText?: string | null;
+  };
+}) => {
+  const queryClient = useQueryClient();
+  const [signatureText, setSignatureText] = useState(mailbox.signatureText ?? "");
+  const updateSignatureMutation = useMutation({
+    ...orpc.mail.updateMailboxSignature.mutationOptions(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() });
+    },
+  });
+  const isDirty = signatureText.trim() !== (mailbox.signatureText ?? "").trim();
+
+  return (
+    <SettingsSection
+      description="Add a reusable footer to new messages, replies, and forwards from this mailbox."
+      title="Signature"
+    >
+      <SettingsCard>
+        <div className="space-y-3 p-4">
+          <Textarea
+            aria-label={`Signature for ${mailbox.emailAddress}`}
+            onChange={(event) => setSignatureText(event.currentTarget.value)}
+            placeholder="Your name\nYour role"
+            rows={5}
+            value={signatureText}
+          />
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-muted-fg">Leave it empty to send without a signature.</p>
+            <Button
+              disabled={!isDirty}
+              onClick={() =>
+                updateSignatureMutation.mutate(
+                  {
+                    mailboxId: mailbox.id,
+                    signatureHtml: textToComposeBodyHtml(signatureText) || null,
+                    signatureText: signatureText.trim() || null,
+                  },
+                  {
+                    onError: (error) =>
+                      toast.error(getMutationErrorMessage(error, "Could not save signature.")),
+                  },
+                )
+              }
+              pending={updateSignatureMutation.isPending}
+              pendingLabel="Saving…"
+              size="sm"
+              type="button"
+            >
+              Save signature
+            </Button>
+          </div>
+        </div>
+      </SettingsCard>
+    </SettingsSection>
+  );
 };
 
 export const MailboxesSettingsPanel = () => {
@@ -391,6 +457,8 @@ export const MailboxesSettingsPanel = () => {
                   <Button
                     disabled={isStartingGmail || organizations.length === 0}
                     onClick={() => void startGmailConnection()}
+                    pending={isStartingGmail}
+                    pendingLabel="Connecting…"
                     type="button"
                   >
                     <HugeiconsIcon
@@ -626,6 +694,8 @@ export const MailboxesSettingsPanel = () => {
                 <Button
                   disabled={setDefaultMailboxMutation.isPending}
                   onClick={() => setDefaultMailbox(selectedMailbox.id)}
+                  pending={setDefaultMailboxMutation.isPending}
+                  pendingLabel="Saving…"
                   size="sm"
                   type="button"
                   variant="ghost"
@@ -665,6 +735,7 @@ export const MailboxesSettingsPanel = () => {
                   <SelectTrigger
                     aria-label={`Team for ${selectedMailbox.emailAddress}`}
                     className="max-w-44"
+                    pending={moveGmailMailboxMutation.isPending}
                     size="sm"
                     variant="ghost"
                   >
@@ -710,6 +781,8 @@ export const MailboxesSettingsPanel = () => {
                         organizationId: selectedMailbox.organizationId,
                       })
                     }
+                    pending={isStartingGmail}
+                    pendingLabel="Connecting…"
                     size="sm"
                     type="button"
                   >
@@ -733,6 +806,11 @@ export const MailboxesSettingsPanel = () => {
           )}
         </SettingsRows>
       </SettingsSection>
+
+      {(selectedMailbox.provider === "gmail" ||
+        (selectedMailbox.provider === "managed" && selectedMailbox.grantRole === "manager")) && (
+        <MailboxSignatureSettings key={selectedMailbox.id} mailbox={selectedMailbox} />
+      )}
 
       {selectedMailbox.provider === "gmail" && (
         <>
@@ -759,6 +837,7 @@ export const MailboxesSettingsPanel = () => {
                       setGmailUsefulDetailsMutation.isPending ||
                       selectedMailbox.connectionStatus !== "connected"
                     }
+                    pending={setGmailUsefulDetailsMutation.isPending}
                     onCheckedChange={(enabled) =>
                       setGmailUsefulDetailsMutation.mutate(
                         { enabled, mailboxId: selectedMailbox.id },
@@ -791,6 +870,7 @@ export const MailboxesSettingsPanel = () => {
                       setGmailAutoLabelingMutation.isPending ||
                       selectedMailbox.connectionStatus !== "connected"
                     }
+                    pending={setGmailAutoLabelingMutation.isPending}
                     onCheckedChange={(enabled) =>
                       setGmailAutoLabelingMutation.mutate(
                         { enabled, mailboxId: selectedMailbox.id },
@@ -828,6 +908,8 @@ export const MailboxesSettingsPanel = () => {
                         },
                       )
                     }
+                    pending={disconnectMailboxMutation.isPending}
+                    pendingLabel="Removing…"
                     size="sm"
                     type="button"
                     variant="ghost"
@@ -926,7 +1008,12 @@ export const MailboxesSettingsPanel = () => {
                         }
                         value={selectedManagedMailboxDetails.mailbox.divisionId ?? "none"}
                       >
-                        <SelectTrigger aria-label="Primary division" size="sm" variant="ghost">
+                        <SelectTrigger
+                          aria-label="Primary division"
+                          pending={updateManagedMailboxMutation.isPending}
+                          size="sm"
+                          variant="ghost"
+                        >
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent align="end">
@@ -951,6 +1038,7 @@ export const MailboxesSettingsPanel = () => {
                         checked={selectedManagedMailboxDetails.mailbox.includeApiSentMessages}
                         className={switchClassName}
                         disabled={updateManagedMailboxMutation.isPending}
+                        pending={updateManagedMailboxMutation.isPending}
                         onCheckedChange={(includeApiSentMessages) =>
                           updateManagedMailboxMutation.mutate(
                             { includeApiSentMessages, mailboxId: selectedMailbox.id },
@@ -992,6 +1080,7 @@ export const MailboxesSettingsPanel = () => {
                         checked={selectedManagedMailboxDetails.mailbox.usefulDetailsEnabled}
                         className={switchClassName}
                         disabled={!hasAutomationAccess || setGmailUsefulDetailsMutation.isPending}
+                        pending={setGmailUsefulDetailsMutation.isPending}
                         onCheckedChange={(enabled) =>
                           setGmailUsefulDetailsMutation.mutate(
                             { enabled, mailboxId: selectedMailbox.id },
@@ -1023,6 +1112,7 @@ export const MailboxesSettingsPanel = () => {
                         checked={selectedManagedMailboxDetails.mailbox.autoLabelEnabled}
                         className={switchClassName}
                         disabled={!hasAutomationAccess || setGmailAutoLabelingMutation.isPending}
+                        pending={setGmailAutoLabelingMutation.isPending}
                         onCheckedChange={(enabled) =>
                           setGmailAutoLabelingMutation.mutate(
                             { enabled, mailboxId: selectedMailbox.id },

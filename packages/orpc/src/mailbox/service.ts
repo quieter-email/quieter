@@ -49,6 +49,7 @@ export {
   MAILBOX_PROVIDER_MANAGED,
 } from "./access";
 import {
+  assertOwnedGmailMailbox,
   getAuthorizedManagedMailbox,
   getStrongestMailboxGrantRole,
   MAILBOX_PROVIDER_GMAIL,
@@ -135,6 +136,8 @@ const toMailboxListItem = (
     usefulDetailsEnabled?: boolean | null;
     id: string;
     includeApiSentMessages?: boolean | null;
+    signatureHtml?: string | null;
+    signatureText?: string | null;
     organizationId: string;
     ownerUserId: string | null;
     provider: "api" | "gmail" | "managed";
@@ -162,6 +165,8 @@ const toMailboxListItem = (
   groupName: group.groupName,
   id: record.id,
   includeApiSentMessages: record.includeApiSentMessages ?? false,
+  signatureHtml: record.signatureHtml ?? null,
+  signatureText: record.signatureText ?? null,
   organizationId: record.organizationId,
   ownerUserId: record.ownerUserId,
   provider: record.provider,
@@ -218,6 +223,8 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
           usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
           id: mailbox.id,
           includeApiSentMessages: mailbox.includeApiSentMessages,
+          signatureHtml: mailbox.signatureHtml,
+          signatureText: mailbox.signatureText,
           organizationId: mailbox.organizationId,
           ownerUserId: mailbox.ownerUserId,
           provider: mailbox.provider,
@@ -243,6 +250,8 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
           usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
           id: mailbox.id,
           includeApiSentMessages: mailbox.includeApiSentMessages,
+          signatureHtml: mailbox.signatureHtml,
+          signatureText: mailbox.signatureText,
           organizationId: mailbox.organizationId,
           ownerUserId: mailbox.ownerUserId,
           provider: mailbox.provider,
@@ -278,6 +287,8 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
           usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
           id: mailbox.id,
           includeApiSentMessages: mailbox.includeApiSentMessages,
+          signatureHtml: mailbox.signatureHtml,
+          signatureText: mailbox.signatureText,
           organizationId: mailbox.organizationId,
           ownerUserId: mailbox.ownerUserId,
           provider: mailbox.provider,
@@ -942,6 +953,46 @@ export const moveGmailMailbox = async (input: {
     throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
   }
   return updatedMailbox;
+};
+
+export const updateMailboxSignature = async (input: {
+  mailboxId: string;
+  signatureHtml: string | null;
+  signatureText: string | null;
+  userId: string;
+}) => {
+  const [selectedMailbox] = await db
+    .select({ provider: mailbox.provider })
+    .from(mailbox)
+    .where(eq(mailbox.id, input.mailboxId))
+    .limit(1);
+  if (!selectedMailbox) throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
+
+  if (selectedMailbox.provider === MAILBOX_PROVIDER_GMAIL) {
+    await assertOwnedGmailMailbox({ mailboxId: input.mailboxId, userId: input.userId });
+  } else {
+    await getAuthorizedManagedMailbox({
+      mailboxId: input.mailboxId,
+      requiredRoles: ["manager"],
+      userId: input.userId,
+    });
+  }
+
+  const [updated] = await db
+    .update(mailbox)
+    .set({
+      signatureHtml: input.signatureHtml?.trim() || null,
+      signatureText: input.signatureText?.trim() || null,
+      updatedAt: new Date(),
+    })
+    .where(eq(mailbox.id, input.mailboxId))
+    .returning({
+      mailboxId: mailbox.id,
+      signatureHtml: mailbox.signatureHtml,
+      signatureText: mailbox.signatureText,
+    });
+  if (!updated) throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
+  return updated;
 };
 
 export const isGmailAccessRepairError = (error: unknown) =>

@@ -11,7 +11,11 @@ import {
   writeComposeFormValues,
   type ComposeFormValues,
 } from "./compose-form";
-import { createEmptyComposeDraft, getRenderableComposeBodyHtml } from "./draft";
+import {
+  appendComposeSignature,
+  createEmptyComposeDraft,
+  getRenderableComposeBodyHtml,
+} from "./draft";
 
 const sourceMessage = {
   id: "msg-1",
@@ -112,6 +116,42 @@ describe("buildComposeDraftFromMessageAction", () => {
     expect(draft.draftId).toBeUndefined();
     expect(draft.bodyHtml).toContain("<blockquote><p>Hello from Alex.</p></blockquote>");
     expect(draft.recipients.to).toBe("Alex Sender <alex@example.com>");
+  });
+});
+
+describe("appendComposeSignature", () => {
+  test("adds one mailbox signature to a new draft", () => {
+    const draft = appendComposeSignature(createEmptyComposeDraft(), {
+      html: "<p>Alex</p>",
+      text: "Alex",
+    });
+
+    expect(draft.bodyHtml).toContain('data-quieter-signature="true"');
+    expect(draft.bodyHtml).toContain("<p>Alex</p>");
+    expect(draft.bodyText).toBe("Alex");
+  });
+
+  test("does not duplicate an existing signature", () => {
+    const draft = appendComposeSignature(
+      {
+        ...createEmptyComposeDraft(),
+        bodyHtml: '<p>Hello</p><div data-quieter-signature="true"><p>Alex</p></div>',
+        bodyText: "Hello\n\nAlex",
+      },
+      { html: "<p>Alex</p>", text: "Alex" },
+    );
+
+    expect(draft.bodyHtml.match(/data-quieter-signature/g)).toHaveLength(1);
+    expect(draft.bodyText).toBe("Hello\n\nAlex");
+  });
+
+  test("derives plain text when only an HTML signature is available", () => {
+    const draft = appendComposeSignature(createEmptyComposeDraft(), {
+      html: "<p>Alex Support</p>",
+      text: null,
+    });
+
+    expect(draft.bodyText).toBe("Alex Support");
   });
 });
 

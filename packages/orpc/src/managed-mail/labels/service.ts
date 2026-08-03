@@ -10,7 +10,12 @@ import {
   type ManagedMailMailboxState,
 } from "@quieter/database/schema";
 import { MAILBOX_LABELS } from "@quieter/gmail";
-import { mailboxLabelColorSchema, type MailboxLabel } from "@quieter/mail/mailbox-organization";
+import {
+  mailboxLabelColorSchema,
+  managedMailboxRuleActionSchema,
+  type MailboxLabel,
+  type ManagedMailboxRuleAction,
+} from "@quieter/mail/mailbox-organization";
 import { structuredMailSearchSchema } from "@quieter/mail/search";
 import { and, asc, countDistinct, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -227,11 +232,47 @@ export const deleteManagedLabel = async (input: {
     }
   }
   for (const rule of rules) {
-    if (!rule.labelIds.includes(input.labelId)) continue;
     const labelIds = rule.labelIds.filter((labelId) => labelId !== input.labelId);
+    const parsedActions = managedMailboxRuleActionSchema.array().safeParse(rule.actions);
+    const actions: ManagedMailboxRuleAction[] | undefined = parsedActions.success
+      ? parsedActions.data.reduce<ManagedMailboxRuleAction[]>((nextActions, action) => {
+          if (action.kind !== "set-labels") {
+            nextActions.push(action);
+            return nextActions;
+          }
+          const nextAction: ManagedMailboxRuleAction = {
+            ...action,
+            addIds: action.addIds.filter((labelId) => labelId !== input.labelId),
+            removeIds: action.removeIds.filter((labelId) => labelId !== input.labelId),
+          };
+          if (nextAction.addIds.length > 0 || nextAction.removeIds.length > 0) {
+            nextActions.push(nextAction);
+          }
+          return nextActions;
+        }, [])
+      : undefined;
+    const referencesDeletedLabel =
+      rule.labelIds.includes(input.labelId) ||
+      (parsedActions.success &&
+        parsedActions.data.some(
+          (action) =>
+            action.kind === "set-labels" &&
+            (action.addIds.includes(input.labelId) || action.removeIds.includes(input.labelId)),
+        ));
+    if (!referencesDeletedLabel) {
+      continue;
+    }
+    const hasAction = actions
+      ? actions.some((action) => action.kind !== "stop-processing")
+      : labelIds.length > 0;
     await db
       .update(managedMailRule)
-      .set({ enabled: labelIds.length > 0 && rule.enabled, labelIds, updatedAt: new Date() })
+      .set({
+        actions,
+        enabled: hasAction && rule.enabled,
+        labelIds,
+        updatedAt: new Date(),
+      })
       .where(eq(managedMailRule.id, rule.id));
   }
   await db

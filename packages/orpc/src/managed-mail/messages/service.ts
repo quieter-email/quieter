@@ -1377,6 +1377,7 @@ export const sendManagedMailboxMessage = async (input: {
         bodyHtml: input.message.bodyHtml,
         bodyText: input.message.bodyText,
         cc,
+        headers: input.message.headers,
         messageHeaderId,
         organizationId,
         providerMessageId,

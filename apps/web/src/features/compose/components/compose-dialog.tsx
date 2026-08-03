@@ -67,6 +67,7 @@ type ComposeDialogProps = {
   onManageTemplates?: () => void;
   persistDrafts?: boolean;
   senderEmail?: string | null;
+  signature?: { html: string | null; text: string | null };
   ref?: Ref<ComposeDialogHandle>;
 };
 
@@ -493,6 +494,7 @@ export const ComposeDialog = ({
   onManageTemplates,
   persistDrafts = true,
   senderEmail,
+  signature,
   ref,
 }: ComposeDialogProps) => {
   const queryClient = useQueryClient();
@@ -506,6 +508,7 @@ export const ComposeDialog = ({
     managedDemoMode,
     mailboxId,
     persistDrafts,
+    signature,
   });
   const {
     state,

@@ -237,6 +237,29 @@ export const textToComposeBodyHtml = (value: string): string => {
     .join("");
 };
 
+const COMPOSE_SIGNATURE_MARKER = "data-quieter-signature";
+
+export const appendComposeSignature = (
+  draft: ComposeDraftState,
+  signature: { html: string | null | undefined; text: string | null | undefined },
+): ComposeDraftState => {
+  const html = signature.html?.trim();
+  const text = signature.text?.trim();
+  if (!html && !text) return draft;
+  if (draft.bodyHtml.includes(COMPOSE_SIGNATURE_MARKER)) return draft;
+
+  const signatureHtml = `<div ${COMPOSE_SIGNATURE_MARKER}="true"><br>${html || textToComposeBodyHtml(text ?? "")}</div>`;
+  const nextHtml = draft.bodyHtml.trim()
+    ? `${draft.bodyHtml}${signatureHtml}`
+    : signatureHtml.replace("<br>", "");
+  const signatureText = text || htmlToText(html ?? "");
+  const nextText = draft.bodyText.trim()
+    ? `${draft.bodyText.trim()}\n\n${signatureText}`
+    : signatureText;
+
+  return { ...draft, bodyHtml: nextHtml, bodyText: nextText };
+};
+
 const hasMeaningfulBodyHtml = (bodyHtml: string): boolean => {
   const normalizedHtml = bodyHtml.trim();
   if (!normalizedHtml) return false;
