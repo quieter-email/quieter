@@ -44,6 +44,7 @@ const matchesFilter = (
       if (separator <= 0) break;
       const headerName = normalizeManagedSearchValue(value.slice(0, separator));
       const headerValue = value.slice(separator + 1).trim();
+      if (!headerName || !headerValue) break;
       matches = message.headers.some(
         (header) =>
           normalizeManagedSearchValue(header.name) === headerName &&

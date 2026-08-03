@@ -144,6 +144,15 @@ describe("appendComposeSignature", () => {
     expect(draft.bodyHtml.match(/data-quieter-signature/g)).toHaveLength(1);
     expect(draft.bodyText).toBe("Hello\n\nAlex");
   });
+
+  test("derives plain text when only an HTML signature is available", () => {
+    const draft = appendComposeSignature(createEmptyComposeDraft(), {
+      html: "<p>Alex Support</p>",
+      text: null,
+    });
+
+    expect(draft.bodyText).toBe("Alex Support");
+  });
 });
 
 describe("writeComposeFormValues", () => {

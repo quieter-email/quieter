@@ -24,25 +24,62 @@ const createMimeBoundary = (prefix: string) =>
 
 const encodeMimeHeaderValue = (value: string) => {
   if (/^[\x20-\x7E]*$/.test(value)) return value;
-  return bytesToBase64(new TextEncoder().encode(value))
-    .match(/.{1,48}/g)!
-    .map((chunk) => `=?UTF-8?B?${chunk}?=`)
-    .join(" ");
+
+  const encoder = new TextEncoder();
+  const encodedWords: string[] = [];
+  let chunk: number[] = [];
+  for (const character of value) {
+    const bytes = encoder.encode(character);
+    if (chunk.length > 0 && chunk.length + bytes.length > 36) {
+      encodedWords.push(`=?UTF-8?B?${bytesToBase64(Uint8Array.from(chunk))}?=`);
+      chunk = [];
+    }
+    chunk.push(...bytes);
+  }
+  if (chunk.length > 0) {
+    encodedWords.push(`=?UTF-8?B?${bytesToBase64(Uint8Array.from(chunk))}?=`);
+  }
+  return encodedWords.join(" ");
 };
 
-const foldMimeHeaderLine = (line: string) => {
-  if (line.length <= 78) return line;
+const escapeMimeParameter = (value: string) => value.replaceAll(/["\\\r\n]/g, "_");
+
+const normalizeMimeType = (value: string) =>
+  /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/.test(value) ? value : "application/octet-stream";
+
+const foldMimeHeader = (name: string, value: string) => {
+  const fieldName = `${name}:`;
+  if (!value) return fieldName;
+  if (`${fieldName} ${value}`.length <= 78) return `${fieldName} ${value}`;
 
   const folded: string[] = [];
-  let remaining = line;
-  while (remaining.length > 78) {
-    const preferredBreak = remaining.lastIndexOf(" ", 78);
-    const breakAt = preferredBreak > 0 ? preferredBreak : 78;
-    folded.push(remaining.slice(0, breakAt));
-    remaining = ` ${remaining.slice(breakAt).trimStart()}`;
+  let prefix = `${fieldName} `;
+  let remaining = value;
+  while (remaining.length > 0) {
+    if (prefix.length >= 78) {
+      folded.push(prefix.trimEnd());
+      prefix = " ";
+      continue;
+    }
+
+    const available = 78 - prefix.length;
+    if (remaining.length <= available) {
+      folded.push(`${prefix}${remaining}`);
+      break;
+    }
+
+    const preferredBreak = remaining.lastIndexOf(" ", available);
+    if (preferredBreak <= 0 && prefix !== " " && remaining.startsWith("=?")) {
+      folded.push(prefix.trimEnd());
+      prefix = " ";
+      continue;
+    }
+    const breakAt = preferredBreak > 0 ? preferredBreak : available;
+    folded.push(`${prefix}${remaining.slice(0, breakAt)}`);
+    remaining = remaining.slice(breakAt).trimStart();
+    prefix = " ";
   }
 
-  folded.push(remaining);
   return folded.join("\r\n");
 };
 
@@ -138,9 +175,7 @@ export const buildMimeMessage = async (
     headers.push(`References: ${replyReferences.join(" ")}`);
   }
   for (const header of draft.headers ?? []) {
-    headers.push(
-      foldMimeHeaderLine(`${header.name.trim()}: ${encodeMimeHeaderValue(header.value.trim())}`),
-    );
+    headers.push(foldMimeHeader(header.name.trim(), encodeMimeHeaderValue(header.value.trim())));
   }
   if (options?.includeQuieterDraftHeaders) {
     addQuieterDraftHeaders(headers, draft);
@@ -168,10 +203,12 @@ export const buildMimeMessage = async (
 
         return [
           `--${relatedBoundary}`,
-          `Content-Type: ${inlineImage.mimeType}; name="${inlineImage.name}"`,
-          `Content-Disposition: inline; filename="${inlineImage.name}"`,
+          `Content-Type: ${normalizeMimeType(inlineImage.mimeType)}; name="${escapeMimeParameter(
+            inlineImage.name,
+          )}"`,
+          `Content-Disposition: inline; filename="${escapeMimeParameter(inlineImage.name)}"`,
           "Content-Transfer-Encoding: base64",
-          `Content-ID: <${inlineImage.contentId}>`,
+          `Content-ID: <${inlineImage.contentId.replaceAll(/[<>\r\n]/g, "")}>`,
           "",
           base64WithCrlf(await fileToBytes(inlineImage.file)),
         ].join("\r\n");
@@ -216,8 +253,10 @@ export const buildMimeMessage = async (
 
           return [
             `--${mixedBoundary}`,
-            `Content-Type: ${attachment.mimeType}; name="${attachment.name}"`,
-            `Content-Disposition: attachment; filename="${attachment.name}"`,
+            `Content-Type: ${normalizeMimeType(attachment.mimeType)}; name="${escapeMimeParameter(
+              attachment.name,
+            )}"`,
+            `Content-Disposition: attachment; filename="${escapeMimeParameter(attachment.name)}"`,
             "Content-Transfer-Encoding: base64",
             "",
             base64WithCrlf(await fileToBytes(attachment.file)),

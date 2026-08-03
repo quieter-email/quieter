@@ -103,6 +103,14 @@ describe("managed mail search evaluator", () => {
         attachments: [],
         matchMode: "all",
         message: message({ headers: [{ name: "X-Account", value: "VIP" }] }),
+        search: { filters: [{ type: "header", value: "X-Account:" }], text: "" },
+      }),
+    ).toBe(false);
+    expect(
+      matchesManagedMailRule({
+        attachments: [],
+        matchMode: "all",
+        message: message({ headers: [{ name: "X-Account", value: "VIP" }] }),
         search: { filters: [{ type: "header", value: "X-Account:other" }], text: "" },
       }),
     ).toBe(false);

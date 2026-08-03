@@ -83,4 +83,61 @@ describe("buildMimeMessage", () => {
       expect(line.length).toBeLessThanOrEqual(78);
     }
   });
+
+  test("folds custom header values without splitting field names or UTF-8 characters", async () => {
+    const longName = `X${"a".repeat(127)}`;
+    const utf8Value = `${"a".repeat(35)}ü${"b".repeat(10)}`;
+    const message = await buildMimeMessage({
+      ...draft,
+      headers: [
+        { name: longName, value: "value" },
+        { name: "X-UTF8", value: utf8Value },
+      ],
+    });
+    const lines = (message.split("\r\n\r\n", 1)[0] ?? "").split("\r\n");
+    const longNameIndex = lines.indexOf(`${longName}:`);
+    expect(longNameIndex).toBeGreaterThanOrEqual(0);
+    expect(lines[longNameIndex + 1]).toBe(" value");
+
+    const utf8Index = lines.findIndex((line) => line.startsWith("X-UTF8:"));
+    const encodedValue = lines
+      .slice(utf8Index)
+      .filter((line, index) => index === 0 || line.startsWith(" "))
+      .join(" ")
+      .match(/=\?UTF-8\?B\?([^?]+)\?=/g);
+    expect(encodedValue).not.toBeNull();
+    const decodedValue = encodedValue!
+      .map((word) => {
+        const encoded = word.match(/=\?UTF-8\?B\?([^?]+)\?=/)?.[1] ?? "";
+        return new TextDecoder().decode(
+          Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0)),
+        );
+      })
+      .join("");
+    expect(decodedValue).toBe(utf8Value);
+  });
+
+  test("sanitizes attachment MIME headers", async () => {
+    const message = await buildMimeMessage({
+      ...draft,
+      attachments: [
+        {
+          file: new File(["content"], 'report"\r\nX-Injected: yes.txt'),
+          id: "attachment",
+          isInline: false,
+          mimeType: "text/plain\r\nX-Injected: yes",
+          name: 'report"\r\nX-Injected: yes.txt',
+          size: 7,
+        },
+      ],
+    });
+
+    expect(message).toContain(
+      'Content-Type: application/octet-stream; name="report___X-Injected: yes.txt"',
+    );
+    expect(message).toContain(
+      'Content-Disposition: attachment; filename="report___X-Injected: yes.txt"',
+    );
+    expect(message).not.toContain("\r\nX-Injected: yes\r\n");
+  });
 });

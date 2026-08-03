@@ -21,29 +21,14 @@ import { createManagedSearchCondition } from "../search/compiler";
 import { assertManagedRuleSearch } from "../search/normalization";
 import { applyManagedRulesToMessage } from "./evaluator";
 
-const assertRuleActions = (
-  definition: {
-    actions?: unknown;
-    labelIds: readonly string[];
-  },
-  options: { allowEmpty?: boolean } = {},
-) => {
-  const actions = getManagedMailboxRuleActions(definition, options);
-  if (actions.length === 0 && !options.allowEmpty) {
+const assertRuleActions = (definition: { actions?: unknown; labelIds: readonly string[] }) => {
+  const actions = getManagedMailboxRuleActions(definition);
+  if (actions.length === 0) {
     throw new ORPCError("BAD_REQUEST", { message: "Add at least one rule action." });
   }
 
   const seenKinds = new Set<string>();
   for (const [index, action] of actions.entries()) {
-    if (
-      action.kind === "set-labels" &&
-      action.addIds.length === 0 &&
-      action.removeIds.length === 0
-    ) {
-      throw new ORPCError("BAD_REQUEST", {
-        message: "A label action must change at least one label.",
-      });
-    }
     if (action.kind === "stop-processing" && index !== actions.length - 1) {
       throw new ORPCError("BAD_REQUEST", {
         message: "Stop processing must be the last action.",
@@ -87,7 +72,10 @@ const assertRuleDefinition = async (
     });
   }
   const labelIds = getRuleLabelIds(actions, parsed.labelIds);
-  await assertManagedLabelsBelongToMailbox(mailboxId, labelIds);
+  await assertManagedLabelsBelongToMailbox(mailboxId, [
+    ...labelIds,
+    ...actions.flatMap((action) => (action.kind === "set-labels" ? action.removeIds : [])),
+  ]);
   return {
     ...parsed,
     actions,
@@ -100,13 +88,9 @@ const assertRuleDefinition = async (
   };
 };
 
-const parseStoredActions = (value: unknown, labelIds: string[]) => {
-  return getManagedMailboxRuleActions({ actions: value, labelIds }, { allowEmpty: true });
-};
-
 const toRuleResponse = <T extends { actions: unknown; labelIds: string[] }>(record: T) => ({
   ...record,
-  actions: parseStoredActions(record.actions, record.labelIds),
+  actions: getManagedMailboxRuleActions({ actions: record.actions, labelIds: record.labelIds }),
 });
 
 export const listManagedRules = async (input: { mailboxId: string; userId: string }) => {

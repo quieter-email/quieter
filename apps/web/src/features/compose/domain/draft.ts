@@ -252,9 +252,10 @@ export const appendComposeSignature = (
   const nextHtml = draft.bodyHtml.trim()
     ? `${draft.bodyHtml}${signatureHtml}`
     : signatureHtml.replace("<br>", "");
+  const signatureText = text || htmlToText(html ?? "");
   const nextText = draft.bodyText.trim()
-    ? `${draft.bodyText.trim()}\n\n${text || html}`
-    : text || html || "";
+    ? `${draft.bodyText.trim()}\n\n${signatureText}`
+    : signatureText;
 
   return { ...draft, bodyHtml: nextHtml, bodyText: nextText };
 };

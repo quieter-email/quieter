@@ -65,15 +65,12 @@ export const managedMailboxRuleActionSchema = z.discriminatedUnion("kind", [
 
 export type ManagedMailboxRuleAction = z.infer<typeof managedMailboxRuleActionSchema>;
 
-export const getManagedMailboxRuleActions = (
-  input: {
-    actions?: unknown;
-    labelIds?: readonly string[];
-  },
-  options: { allowEmpty?: boolean } = {},
-) => {
+export const getManagedMailboxRuleActions = (input: {
+  actions?: unknown;
+  labelIds?: readonly string[];
+}) => {
   const parsed = managedMailboxRuleActionSchema.array().safeParse(input.actions);
-  if (parsed.success && (parsed.data.length > 0 || options.allowEmpty)) return parsed.data;
+  if (parsed.success) return parsed.data;
 
   const labelIds = Array.from(new Set(input.labelIds ?? [])).filter(Boolean);
   return labelIds.length > 0
