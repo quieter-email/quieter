@@ -251,10 +251,15 @@ export const deleteManagedLabel = async (input: {
           return nextActions;
         }, [])
       : undefined;
-    if (
-      !rule.labelIds.includes(input.labelId) &&
-      !actions?.some((action) => action.kind === "set-labels")
-    ) {
+    const referencesDeletedLabel =
+      rule.labelIds.includes(input.labelId) ||
+      (parsedActions.success &&
+        parsedActions.data.some(
+          (action) =>
+            action.kind === "set-labels" &&
+            (action.addIds.includes(input.labelId) || action.removeIds.includes(input.labelId)),
+        ));
+    if (!referencesDeletedLabel) {
       continue;
     }
     const hasAction = actions

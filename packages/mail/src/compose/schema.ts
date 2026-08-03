@@ -176,17 +176,36 @@ export const composeDraftFormValuesSchema = z.object({
   bodyText: z.string(),
 });
 
+const MIME_OWNED_HEADER_NAMES = new Set([
+  "bcc",
+  "cc",
+  "content-transfer-encoding",
+  "content-type",
+  "date",
+  "from",
+  "in-reply-to",
+  "message-id",
+  "mime-version",
+  "references",
+  "reply-to",
+  "subject",
+  "to",
+]);
+
 const composeHeaderSchema = z.object({
   name: z
     .string()
     .trim()
     .min(1)
     .max(128)
-    .regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/),
+    .regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/)
+    .refine((name) => !MIME_OWNED_HEADER_NAMES.has(name.toLowerCase()), {
+      message: "Header name is reserved for the MIME message.",
+    }),
   value: z
     .string()
     .trim()
-    .max(4_000)
+    .max(998)
     .refine((value) => !/[\r\n]/.test(value), "Header values cannot contain line breaks."),
 });
 

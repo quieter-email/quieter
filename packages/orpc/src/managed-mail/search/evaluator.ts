@@ -42,11 +42,11 @@ const matchesFilter = (
     case "header": {
       const separator = value.indexOf(":");
       if (separator <= 0) break;
-      const headerName = value.slice(0, separator).trim().toLocaleLowerCase();
+      const headerName = normalizeManagedSearchValue(value.slice(0, separator));
       const headerValue = value.slice(separator + 1).trim();
       matches = message.headers.some(
         (header) =>
-          header.name.trim().toLocaleLowerCase() === headerName &&
+          normalizeManagedSearchValue(header.name) === headerName &&
           normalizeManagedSearchValue(header.value).includes(
             normalizeManagedSearchValue(headerValue),
           ),

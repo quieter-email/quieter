@@ -24,7 +24,26 @@ const createMimeBoundary = (prefix: string) =>
 
 const encodeMimeHeaderValue = (value: string) => {
   if (/^[\x20-\x7E]*$/.test(value)) return value;
-  return `=?UTF-8?B?${btoa(unescape(encodeURIComponent(value)))}?=`;
+  return bytesToBase64(new TextEncoder().encode(value))
+    .match(/.{1,48}/g)!
+    .map((chunk) => `=?UTF-8?B?${chunk}?=`)
+    .join(" ");
+};
+
+const foldMimeHeaderLine = (line: string) => {
+  if (line.length <= 78) return line;
+
+  const folded: string[] = [];
+  let remaining = line;
+  while (remaining.length > 78) {
+    const preferredBreak = remaining.lastIndexOf(" ", 78);
+    const breakAt = preferredBreak > 0 ? preferredBreak : 78;
+    folded.push(remaining.slice(0, breakAt));
+    remaining = ` ${remaining.slice(breakAt).trimStart()}`;
+  }
+
+  folded.push(remaining);
+  return folded.join("\r\n");
 };
 
 const encodeQuotedPrintable = (value: string) => {
@@ -119,7 +138,9 @@ export const buildMimeMessage = async (
     headers.push(`References: ${replyReferences.join(" ")}`);
   }
   for (const header of draft.headers ?? []) {
-    headers.push(`${header.name.trim()}: ${encodeMimeHeaderValue(header.value.trim())}`);
+    headers.push(
+      foldMimeHeaderLine(`${header.name.trim()}: ${encodeMimeHeaderValue(header.value.trim())}`),
+    );
   }
   if (options?.includeQuieterDraftHeaders) {
     addQuieterDraftHeaders(headers, draft);

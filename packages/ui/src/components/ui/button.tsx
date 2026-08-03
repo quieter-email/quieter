@@ -57,7 +57,9 @@ export const Button = ({
   variant = "default",
   ...props
 }: ButtonProps) => {
-  const content = <span className={cn({ "opacity-0": pending })}>{props.children}</span>;
+  const content = (
+    <span className={cn("contents", { "opacity-0": pending })}>{props.children}</span>
+  );
 
   return (
     <ButtonPrimitive

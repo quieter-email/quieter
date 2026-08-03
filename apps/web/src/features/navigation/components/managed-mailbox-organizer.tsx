@@ -12,8 +12,8 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  getManagedMailboxRuleActions,
   mailboxLabelColorSchema,
-  managedMailboxRuleActionSchema,
   managedMailboxRuleConditionGroupSchema,
   type ManagedMailboxRuleAction,
   type ManagedMailboxRuleConditionGroup,
@@ -105,19 +105,16 @@ const getRuleActionLabel = (actions: readonly ManagedMailboxRuleAction[]) => {
   if (action.kind === "forward") return `Forward to ${action.recipients.join(", ")}`;
   return "Stop processing";
 };
-const getRuleActions = (actions: unknown, labelIds: readonly string[]) => {
-  const parsed = managedMailboxRuleActionSchema.array().safeParse(actions);
-  if (parsed.success && parsed.data.length > 0) return parsed.data;
-  return labelIds.length > 0
-    ? ([
-        { addIds: [...labelIds], kind: "set-labels", removeIds: [] },
-      ] satisfies ManagedMailboxRuleAction[])
-    : [];
-};
 const getRuleConditionGroups = (conditionGroups: unknown) => {
   const parsed = managedMailboxRuleConditionGroupSchema.array().safeParse(conditionGroups);
   return parsed.success ? parsed.data : undefined;
 };
+
+type PendingRowKind = "rule" | "view";
+type PendingRowAction = "backfill" | "delete" | "duplicate" | "reorder" | "update";
+
+const getPendingRowActionKey = (kind: PendingRowKind, id: string, action: PendingRowAction) =>
+  `${kind}:${id}:${action}`;
 
 const SavedViewsSection = ({
   currentSearch,
@@ -200,6 +197,7 @@ export const ManagedMailboxOrganizer = ({
   const [preview, setPreview] = useState<{ count: number; samples: Array<{ id: string }> } | null>(
     null,
   );
+  const [pendingRowActions, setPendingRowActions] = useState<Record<string, true>>({});
   const { data: viewsData } = useQuery(managedSavedViewsQueryOptions(mailboxId));
   const { data: rulesData } = useQuery(managedRulesQueryOptions(mailboxId, isOpen && canManage));
   const { data: labelsData } = useQuery(labelsQueryOptions(mailboxId, isOpen));
@@ -232,6 +230,34 @@ export const ManagedMailboxOrganizer = ({
   const backfillMutation = useMutation(orpc.mail.startManagedRuleBackfill.mutationOptions());
   const cancelBackfillMutation = useMutation(orpc.mail.cancelManagedRuleBackfill.mutationOptions());
 
+  const isRowActionPending = (kind: PendingRowKind, id: string, action: PendingRowAction) =>
+    pendingRowActions[getPendingRowActionKey(kind, id, action)] === true;
+
+  const runRowAction = async <T,>(
+    kind: PendingRowKind,
+    id: string,
+    action: PendingRowAction,
+    operation: () => Promise<T>,
+  ) => {
+    const key = getPendingRowActionKey(kind, id, action);
+    setPendingRowActions((current) => ({ ...current, [key]: true }));
+    try {
+      return await operation();
+    } finally {
+      setPendingRowActions((current) => {
+        if (!current[key]) return current;
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    }
+  };
+
+  const editingRuleUpdatePending =
+    editingRuleId !== null && isRowActionPending("rule", editingRuleId, "update");
+  const editingViewUpdatePending =
+    editingView !== null && isRowActionPending("view", editingView.view.id, "update");
+
   const saveView = async (shared: boolean) => {
     const name = viewName.trim();
     if (!name) return;
@@ -259,17 +285,19 @@ export const ManagedMailboxOrganizer = ({
     if (!editingView?.name.trim()) return;
 
     try {
-      await updateViewMutation.mutateAsync({
-        definition: {
-          color: editingView.color,
-          icon: editingView.view.icon,
-          name: editingView.name.trim(),
-          search: getSearchFromStoredValue(editingView.view.search),
-          sort: editingView.view.sort,
-        },
-        mailboxId,
-        viewId: editingView.view.id,
-      });
+      await runRowAction("view", editingView.view.id, "update", () =>
+        updateViewMutation.mutateAsync({
+          definition: {
+            color: editingView.color,
+            icon: editingView.view.icon,
+            name: editingView.name.trim(),
+            search: getSearchFromStoredValue(editingView.view.search),
+            sort: editingView.view.sort,
+          },
+          mailboxId,
+          viewId: editingView.view.id,
+        }),
+      );
       setEditingView(null);
       await invalidateViews();
     } catch (error) {
@@ -326,11 +354,13 @@ export const ManagedMailboxOrganizer = ({
       return;
     try {
       if (editingRuleId) {
-        await updateRuleMutation.mutateAsync({
-          definition: createRuleDefinition(),
-          mailboxId,
-          ruleId: editingRuleId,
-        });
+        await runRowAction("rule", editingRuleId, "update", () =>
+          updateRuleMutation.mutateAsync({
+            definition: createRuleDefinition(),
+            mailboxId,
+            ruleId: editingRuleId,
+          }),
+        );
       } else {
         await createRuleMutation.mutateAsync({
           definition: createRuleDefinition(),
@@ -488,15 +518,15 @@ export const ManagedMailboxOrganizer = ({
                       {view.ownerUserId !== null || canManage ? (
                         <Button
                           disabled={
-                            updateViewMutation.isPending ||
+                            isRowActionPending("view", view.id, "update") ||
                             areStructuredMailSearchesEqual(
                               currentSearch,
                               getSearchFromStoredValue(view.search),
                             )
                           }
                           onClick={() => {
-                            void updateViewMutation
-                              .mutateAsync({
+                            void runRowAction("view", view.id, "update", () =>
+                              updateViewMutation.mutateAsync({
                                 definition: {
                                   color: getSavedViewColor(view.color),
                                   icon: view.icon,
@@ -506,7 +536,8 @@ export const ManagedMailboxOrganizer = ({
                                 },
                                 mailboxId,
                                 viewId: view.id,
-                              })
+                              }),
+                            )
                               .then(invalidateViews)
                               .catch((error) =>
                                 toast.error(
@@ -514,7 +545,7 @@ export const ManagedMailboxOrganizer = ({
                                 ),
                               );
                           }}
-                          pending={updateViewMutation.isPending}
+                          pending={isRowActionPending("view", view.id, "update")}
                           pendingLabel="Updating…"
                           size="sm"
                           type="button"
@@ -525,10 +556,10 @@ export const ManagedMailboxOrganizer = ({
                       ) : null}
                       {view.ownerUserId === null ? (
                         <Button
-                          disabled={createViewMutation.isPending}
+                          disabled={isRowActionPending("view", view.id, "duplicate")}
                           onClick={() => {
-                            void createViewMutation
-                              .mutateAsync({
+                            void runRowAction("view", view.id, "duplicate", () =>
+                              createViewMutation.mutateAsync({
                                 definition: {
                                   color: getSavedViewColor(view.color),
                                   icon: view.icon,
@@ -538,7 +569,8 @@ export const ManagedMailboxOrganizer = ({
                                 },
                                 mailboxId,
                                 shared: false,
-                              })
+                              }),
+                            )
                               .then(invalidateViews)
                               .catch((error) =>
                                 toast.error(
@@ -548,7 +580,7 @@ export const ManagedMailboxOrganizer = ({
                                 ),
                               );
                           }}
-                          pending={createViewMutation.isPending}
+                          pending={isRowActionPending("view", view.id, "duplicate")}
                           pendingLabel="Copying…"
                           size="sm"
                           type="button"
@@ -560,7 +592,7 @@ export const ManagedMailboxOrganizer = ({
                       <IconButtonTooltip label={`Move ${view.name} up`}>
                         <Button
                           aria-label={`Move ${view.name} up`}
-                          disabled={index === 0 || reorderViewsMutation.isPending}
+                          disabled={index === 0 || isRowActionPending("view", view.id, "reorder")}
                           onClick={() => {
                             const sameScopeViews = views.filter(
                               (candidate) =>
@@ -575,8 +607,9 @@ export const ManagedMailboxOrganizer = ({
                               viewIds[scopeIndex],
                               viewIds[scopeIndex - 1],
                             ];
-                            void reorderViewsMutation
-                              .mutateAsync({ mailboxId, viewIds })
+                            void runRowAction("view", view.id, "reorder", () =>
+                              reorderViewsMutation.mutateAsync({ mailboxId, viewIds }),
+                            )
                               .then(invalidateViews)
                               .catch((error) =>
                                 toast.error(
@@ -586,7 +619,7 @@ export const ManagedMailboxOrganizer = ({
                                 ),
                               );
                           }}
-                          pending={reorderViewsMutation.isPending}
+                          pending={isRowActionPending("view", view.id, "reorder")}
                           size="icon-sm"
                           type="button"
                           variant="ghost"
@@ -597,7 +630,10 @@ export const ManagedMailboxOrganizer = ({
                       <IconButtonTooltip label={`Move ${view.name} down`}>
                         <Button
                           aria-label={`Move ${view.name} down`}
-                          disabled={index === views.length - 1 || reorderViewsMutation.isPending}
+                          disabled={
+                            index === views.length - 1 ||
+                            isRowActionPending("view", view.id, "reorder")
+                          }
                           onClick={() => {
                             const sameScopeViews = views.filter(
                               (candidate) =>
@@ -613,8 +649,9 @@ export const ManagedMailboxOrganizer = ({
                               viewIds[scopeIndex + 1],
                               viewIds[scopeIndex],
                             ];
-                            void reorderViewsMutation
-                              .mutateAsync({ mailboxId, viewIds })
+                            void runRowAction("view", view.id, "reorder", () =>
+                              reorderViewsMutation.mutateAsync({ mailboxId, viewIds }),
+                            )
                               .then(invalidateViews)
                               .catch((error) =>
                                 toast.error(
@@ -624,7 +661,7 @@ export const ManagedMailboxOrganizer = ({
                                 ),
                               );
                           }}
-                          pending={reorderViewsMutation.isPending}
+                          pending={isRowActionPending("view", view.id, "reorder")}
                           size="icon-sm"
                           type="button"
                           variant="ghost"
@@ -636,11 +673,12 @@ export const ManagedMailboxOrganizer = ({
                         <IconButtonTooltip label={`Delete ${view.name}`}>
                           <Button
                             aria-label={`Delete ${view.name}`}
-                            disabled={deleteViewMutation.isPending}
-                            pending={deleteViewMutation.isPending}
+                            disabled={isRowActionPending("view", view.id, "delete")}
+                            pending={isRowActionPending("view", view.id, "delete")}
                             onClick={() => {
-                              void deleteViewMutation
-                                .mutateAsync({ mailboxId, viewId: view.id })
+                              void runRowAction("view", view.id, "delete", () =>
+                                deleteViewMutation.mutateAsync({ mailboxId, viewId: view.id }),
+                              )
                                 .then(invalidateViews)
                                 .catch((error) =>
                                   toast.error(
@@ -848,10 +886,10 @@ export const ManagedMailboxOrganizer = ({
                               selectedRuleLabelIds.length === 0) ||
                             (ruleActionKind === "forward" && !ruleForwardRecipients.trim()) ||
                             createRuleMutation.isPending ||
-                            updateRuleMutation.isPending
+                            editingRuleUpdatePending
                           }
                           onClick={() => void saveRule()}
-                          pending={createRuleMutation.isPending || updateRuleMutation.isPending}
+                          pending={createRuleMutation.isPending || editingRuleUpdatePending}
                           pendingLabel={editingRuleId ? "Updating…" : "Saving…"}
                           size="sm"
                           type="button"
@@ -872,22 +910,39 @@ export const ManagedMailboxOrganizer = ({
                             <p className="truncate text-sm">{rule.name}</p>
                             <p className="text-xs text-muted-fg">
                               {rule.enabled ? "Enabled" : "Disabled"} /{" "}
-                              {getRuleActionLabel(getRuleActions(rule.actions, rule.labelIds))}
+                              {getRuleActionLabel(
+                                getManagedMailboxRuleActions({
+                                  actions: rule.actions,
+                                  labelIds: rule.labelIds,
+                                }),
+                              )}
                             </p>
                           </div>
                           <Switch
                             aria-label={`${rule.enabled ? "Disable" : "Enable"} ${rule.name}`}
                             checked={rule.enabled}
                             className="h-5 w-9 shrink-0 p-0.5"
-                            disabled={updateRuleMutation.isPending}
-                            pending={updateRuleMutation.isPending}
+                            disabled={isRowActionPending("rule", rule.id, "update")}
+                            pending={isRowActionPending("rule", rule.id, "update")}
                             onCheckedChange={(enabled) => {
-                              void updateRuleMutation
-                                .mutateAsync({
+                              const conditionGroups = getRuleConditionGroups(rule.conditionGroups);
+                              if (
+                                rule.conditionGroups !== null &&
+                                rule.conditionGroups !== undefined &&
+                                conditionGroups === undefined
+                              ) {
+                                toast.error("This rule has invalid condition groups.");
+                                return;
+                              }
+                              void runRowAction("rule", rule.id, "update", () =>
+                                updateRuleMutation.mutateAsync({
                                   definition: {
                                     enabled,
-                                    actions: getRuleActions(rule.actions, rule.labelIds),
-                                    conditionGroups: getRuleConditionGroups(rule.conditionGroups),
+                                    actions: getManagedMailboxRuleActions({
+                                      actions: rule.actions,
+                                      labelIds: rule.labelIds,
+                                    }),
+                                    conditionGroups,
                                     labelIds: rule.labelIds,
                                     matchMode: rule.matchMode,
                                     name: rule.name,
@@ -895,7 +950,8 @@ export const ManagedMailboxOrganizer = ({
                                   },
                                   mailboxId,
                                   ruleId: rule.id,
-                                })
+                                }),
+                              )
                                 .then(invalidateRules)
                                 .catch((error) =>
                                   toast.error(
@@ -924,7 +980,10 @@ export const ManagedMailboxOrganizer = ({
                                 ruleConditionGroupsRef.current = getRuleConditionGroups(
                                   rule.conditionGroups,
                                 );
-                                const actions = getRuleActions(rule.actions, rule.labelIds);
+                                const actions = getManagedMailboxRuleActions({
+                                  actions: rule.actions,
+                                  labelIds: rule.labelIds,
+                                });
                                 const action = getPrimaryRuleAction(actions);
                                 if (action?.kind === "set-read") {
                                   setRuleActionKind("set-read");
@@ -953,16 +1012,19 @@ export const ManagedMailboxOrganizer = ({
                           <IconButtonTooltip label={`Move ${rule.name} up`}>
                             <Button
                               aria-label={`Move ${rule.name} up`}
-                              disabled={index === 0 || reorderRulesMutation.isPending}
-                              pending={reorderRulesMutation.isPending}
+                              disabled={
+                                index === 0 || isRowActionPending("rule", rule.id, "reorder")
+                              }
+                              pending={isRowActionPending("rule", rule.id, "reorder")}
                               onClick={() => {
                                 const ruleIds = rules.map((candidate) => candidate.id);
                                 [ruleIds[index - 1], ruleIds[index]] = [
                                   ruleIds[index],
                                   ruleIds[index - 1],
                                 ];
-                                void reorderRulesMutation
-                                  .mutateAsync({ mailboxId, ruleIds })
+                                void runRowAction("rule", rule.id, "reorder", () =>
+                                  reorderRulesMutation.mutateAsync({ mailboxId, ruleIds }),
+                                )
                                   .then(invalidateRules)
                                   .catch((error) =>
                                     toast.error(
@@ -983,17 +1045,19 @@ export const ManagedMailboxOrganizer = ({
                             <Button
                               aria-label={`Move ${rule.name} down`}
                               disabled={
-                                index === rules.length - 1 || reorderRulesMutation.isPending
+                                index === rules.length - 1 ||
+                                isRowActionPending("rule", rule.id, "reorder")
                               }
-                              pending={reorderRulesMutation.isPending}
+                              pending={isRowActionPending("rule", rule.id, "reorder")}
                               onClick={() => {
                                 const ruleIds = rules.map((candidate) => candidate.id);
                                 [ruleIds[index], ruleIds[index + 1]] = [
                                   ruleIds[index + 1],
                                   ruleIds[index],
                                 ];
-                                void reorderRulesMutation
-                                  .mutateAsync({ mailboxId, ruleIds })
+                                void runRowAction("rule", rule.id, "reorder", () =>
+                                  reorderRulesMutation.mutateAsync({ mailboxId, ruleIds }),
+                                )
                                   .then(invalidateRules)
                                   .catch((error) =>
                                     toast.error(
@@ -1013,12 +1077,13 @@ export const ManagedMailboxOrganizer = ({
                           <IconButtonTooltip label={`Apply ${rule.name} to existing mail`}>
                             <Button
                               aria-label={`Apply ${rule.name} to existing mail`}
-                              disabled={backfillMutation.isPending}
-                              pending={backfillMutation.isPending}
+                              disabled={isRowActionPending("rule", rule.id, "backfill")}
+                              pending={isRowActionPending("rule", rule.id, "backfill")}
                               pendingLabel="Running…"
                               onClick={() => {
-                                void backfillMutation
-                                  .mutateAsync({ mailboxId, ruleId: rule.id })
+                                void runRowAction("rule", rule.id, "backfill", () =>
+                                  backfillMutation.mutateAsync({ mailboxId, ruleId: rule.id }),
+                                )
                                   .then((backfill) => {
                                     setActiveBackfillId(backfill.id);
                                     toast.success("Historical rule run started.");
@@ -1041,11 +1106,12 @@ export const ManagedMailboxOrganizer = ({
                           <IconButtonTooltip label={`Delete ${rule.name}`}>
                             <Button
                               aria-label={`Delete ${rule.name}`}
-                              disabled={deleteRuleMutation.isPending}
-                              pending={deleteRuleMutation.isPending}
+                              disabled={isRowActionPending("rule", rule.id, "delete")}
+                              pending={isRowActionPending("rule", rule.id, "delete")}
                               onClick={() => {
-                                void deleteRuleMutation
-                                  .mutateAsync({ mailboxId, ruleId: rule.id })
+                                void runRowAction("rule", rule.id, "delete", () =>
+                                  deleteRuleMutation.mutateAsync({ mailboxId, ruleId: rule.id }),
+                                )
                                   .then(invalidateRules)
                                   .catch((error) =>
                                     toast.error(
@@ -1141,7 +1207,7 @@ export const ManagedMailboxOrganizer = ({
                 <Input
                   autoFocus
                   className="border-0 bg-bg/70 shadow-none"
-                  disabled={updateViewMutation.isPending}
+                  disabled={editingViewUpdatePending}
                   onChange={(event) => {
                     const name = event.currentTarget.value;
                     setEditingView((current) => (current ? { ...current, name } : current));
@@ -1163,8 +1229,8 @@ export const ManagedMailboxOrganizer = ({
             <DialogFooter>
               <DialogCloseButton variant="ghost">Cancel</DialogCloseButton>
               <Button
-                disabled={updateViewMutation.isPending || !editingView?.name.trim()}
-                pending={updateViewMutation.isPending}
+                disabled={editingViewUpdatePending || !editingView?.name.trim()}
+                pending={editingViewUpdatePending}
                 pendingLabel="Saving…"
                 size="sm"
                 type="submit"

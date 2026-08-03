@@ -7,7 +7,7 @@ import {
   managedMailRuleBackfill,
 } from "@quieter/database/schema";
 import {
-  managedMailboxRuleActionSchema,
+  getManagedMailboxRuleActions,
   managedMailboxRuleDefinitionSchema,
   type ManagedMailboxRuleAction,
   type ManagedMailboxRuleDefinition,
@@ -21,23 +21,14 @@ import { createManagedSearchCondition } from "../search/compiler";
 import { assertManagedRuleSearch } from "../search/normalization";
 import { applyManagedRulesToMessage } from "./evaluator";
 
-const getLegacyLabelAction = (labelIds: readonly string[]): ManagedMailboxRuleAction | null =>
-  labelIds.length > 0
-    ? { addIds: Array.from(new Set(labelIds)), kind: "set-labels", removeIds: [] }
-    : null;
-
-const getRuleActions = (
+const assertRuleActions = (
   definition: {
-    actions?: ManagedMailboxRuleAction[];
+    actions?: unknown;
     labelIds: readonly string[];
   },
   options: { allowEmpty?: boolean } = {},
 ) => {
-  const actions = definition.actions?.length
-    ? definition.actions.map((action) => managedMailboxRuleActionSchema.parse(action))
-    : [getLegacyLabelAction(definition.labelIds)].filter(
-        (action): action is ManagedMailboxRuleAction => !!action,
-      );
+  const actions = getManagedMailboxRuleActions(definition, options);
   if (actions.length === 0 && !options.allowEmpty) {
     throw new ORPCError("BAD_REQUEST", { message: "Add at least one rule action." });
   }
@@ -84,7 +75,7 @@ const assertRuleDefinition = async (
   definition: ManagedMailboxRuleDefinition,
 ) => {
   const parsed = managedMailboxRuleDefinitionSchema.parse(definition);
-  const actions = getRuleActions(parsed);
+  const actions = assertRuleActions(parsed);
   const forwardedRecipients = actions.flatMap((action) =>
     action.kind === "forward" ? action.recipients : [],
   );
@@ -110,11 +101,7 @@ const assertRuleDefinition = async (
 };
 
 const parseStoredActions = (value: unknown, labelIds: string[]) => {
-  const parsed = managedMailboxRuleActionSchema.array().safeParse(value);
-  return getRuleActions(
-    { actions: parsed.success ? parsed.data : undefined, labelIds },
-    { allowEmpty: true },
-  );
+  return getManagedMailboxRuleActions({ actions: value, labelIds }, { allowEmpty: true });
 };
 
 const toRuleResponse = <T extends { actions: unknown; labelIds: string[] }>(record: T) => ({
@@ -186,6 +173,29 @@ export const updateManagedRule = async (input: {
     selectedMailbox.emailAddress,
     input.definition,
   );
+  const [existing] = await db
+    .select({
+      actions: managedMailRule.actions,
+      conditionGroups: managedMailRule.conditionGroups,
+      labelIds: managedMailRule.labelIds,
+      matchMode: managedMailRule.matchMode,
+      search: managedMailRule.search,
+    })
+    .from(managedMailRule)
+    .where(
+      and(eq(managedMailRule.id, input.ruleId), eq(managedMailRule.mailboxId, input.mailboxId)),
+    )
+    .limit(1);
+  if (!existing) throw new ORPCError("NOT_FOUND", { message: "Rule not found." });
+  const matchingOrActionConfigurationChanged =
+    existing.matchMode !== definition.matchMode ||
+    JSON.stringify(existing.search) !== JSON.stringify(definition.search) ||
+    JSON.stringify(existing.conditionGroups ?? []) !==
+      JSON.stringify(definition.conditionGroups ?? []) ||
+    JSON.stringify(existing.labelIds) !== JSON.stringify(definition.labelIds) ||
+    JSON.stringify(
+      getManagedMailboxRuleActions({ actions: existing.actions, labelIds: existing.labelIds }),
+    ) !== JSON.stringify(definition.actions);
   const [record] = await db
     .update(managedMailRule)
     .set({
@@ -205,9 +215,11 @@ export const updateManagedRule = async (input: {
     )
     .returning();
   if (!record) throw new ORPCError("NOT_FOUND", { message: "Rule not found." });
-  await db
-    .delete(managedMailRuleApplication)
-    .where(eq(managedMailRuleApplication.ruleId, input.ruleId));
+  if (matchingOrActionConfigurationChanged) {
+    await db
+      .delete(managedMailRuleApplication)
+      .where(eq(managedMailRuleApplication.ruleId, input.ruleId));
+  }
   return toRuleResponse(record);
 };
 
@@ -280,15 +292,16 @@ export const previewManagedRule = async (input: {
     selectedMailbox.emailAddress,
     input.definition,
   );
+  const now = new Date();
   const searchCondition = createManagedSearchCondition(
     input.mailboxId,
     definition.search,
-    new Date(),
+    now,
     definition.matchMode,
   );
   const conditionGroupConditions =
     definition.conditionGroups?.map((group) =>
-      createManagedSearchCondition(input.mailboxId, group.search, new Date(), group.matchMode),
+      createManagedSearchCondition(input.mailboxId, group.search, now, group.matchMode),
     ) ?? [];
   const where = and(
     eq(managedMailMessage.mailboxId, input.mailboxId),
@@ -362,7 +375,7 @@ const processManagedBackfillBatch = async (backfillId: string) => {
       });
       if (result?.matched) {
         matchedCount += 1;
-        updatedCount += 1;
+        if (!result.error) updatedCount += 1;
       }
       if (result?.error) errorCount += 1;
     } catch {

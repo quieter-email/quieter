@@ -121,7 +121,7 @@ export const MessageListSelectionToolbar = ({
       </div>
       {pending && (
         <p aria-live="polite" className="sr-only" role="status">
-          Updating selected conversations…
+          Updating selected {itemLabelPlural}…
         </p>
       )}
     </div>

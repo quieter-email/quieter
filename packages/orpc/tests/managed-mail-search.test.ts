@@ -85,6 +85,30 @@ describe("managed mail search evaluator", () => {
     expect(
       matchesManagedMailRule({
         attachments: [],
+        matchMode: "all",
+        message: message({ headers: [{ name: "X-Account", value: "VIP" }] }),
+        search: { filters: [{ type: "header", value: "X-Account" }], text: "" },
+      }),
+    ).toBe(false);
+    expect(
+      matchesManagedMailRule({
+        attachments: [],
+        matchMode: "all",
+        message: message({ headers: [{ name: "X-Account", value: "VIP" }] }),
+        search: { filters: [{ type: "header", value: ":VIP" }], text: "" },
+      }),
+    ).toBe(false);
+    expect(
+      matchesManagedMailRule({
+        attachments: [],
+        matchMode: "all",
+        message: message({ headers: [{ name: "X-Account", value: "VIP" }] }),
+        search: { filters: [{ type: "header", value: "X-Account:other" }], text: "" },
+      }),
+    ).toBe(false);
+    expect(
+      matchesManagedMailRule({
+        attachments: [],
         customLabelNames: ["VIP/Important"],
         matchMode: "all",
         message: message(),

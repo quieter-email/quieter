@@ -17,6 +17,7 @@ import {
 import { structuredMailSearchSchema } from "@quieter/mail/search";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { updateManagedMessageLabelAssignments } from "../labels/repository";
 import { sendManagedMailboxMessage } from "../messages/service";
 import { matchesManagedMailRule } from "../search/evaluator";
@@ -32,21 +33,56 @@ type RuleActionResult = {
   status: "applied" | "skipped";
 };
 
+const storedRuleActionResultSchema = z.object({
+  kind: z.enum(["set-read", "move", "set-labels", "forward", "stop-processing"]),
+  message: z.string().optional(),
+  status: z.enum(["applied", "skipped"]),
+});
+
+const parseStoredRuleActionResults = (value: unknown): RuleActionResult[] => {
+  const parsed = storedRuleActionResultSchema.array().safeParse(value);
+  return parsed.success ? parsed.data : [];
+};
+
 const getHeader = (message: ManagedMessageRecord, name: string) =>
   message.headers.find((header) => header.name.toLowerCase() === name.toLowerCase())?.value;
 
 const getConditionExplanation = (
   search: { filters: Array<{ type: string; value: string }>; text: string },
   matchMode: "all" | "any",
+  conditionGroups: unknown,
 ) => {
-  const conditions = [
-    ...search.filters.map((filter) => `${filter.type}:${filter.value}`),
-    ...(search.text ? [`text:${search.text}`] : []),
+  const describeSearch = (
+    currentSearch: { filters: Array<{ type: string; value: string }>; text: string },
+    currentMatchMode: "all" | "any",
+  ) => {
+    const conditions = [
+      ...currentSearch.filters.map((filter) => `${filter.type}:${filter.value}`),
+      ...(currentSearch.text ? [`text:${currentSearch.text}`] : []),
+    ];
+    return conditions.length > 0
+      ? `Matched ${currentMatchMode === "all" ? "all" : "one or more"} of ${conditions.join(", ")}.`
+      : "Matched the rule conditions.";
+  };
+  const parsedGroups = managedMailboxRuleConditionGroupSchema.array().safeParse(conditionGroups);
+  const descriptions = [
+    describeSearch(search, matchMode),
+    ...(parsedGroups.success
+      ? parsedGroups.data.map((group) => describeSearch(group.search, group.matchMode))
+      : []),
   ];
-  return conditions.length > 0
-    ? `Matched ${matchMode === "all" ? "all" : "one or more"} of ${conditions.join(", ")}.`
-    : "Matched the rule conditions.";
+  return descriptions.length === 1
+    ? descriptions[0]
+    : descriptions.map((description, index) => `Condition ${index + 1}: ${description}`).join(" ");
 };
+
+const escapeHtml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 
 const matchesRuleConditions = (input: {
   attachments: readonly ManagedAttachmentRecord[];
@@ -90,17 +126,19 @@ const createForwardMessage = (input: {
   ruleId: string;
 }) => {
   const subject = input.message.subject?.trim() || "(No subject)";
+  const forwardedBodyText = input.message.bodyText?.trim() || input.message.snippet?.trim() || "";
   const bodyText = [
     "---------- Forwarded message ----------",
     `From: ${input.message.from}`,
     `Subject: ${subject}`,
     "",
-    input.message.bodyText?.trim() || input.message.snippet?.trim() || "",
+    forwardedBodyText,
   ].join("\n");
   const bodyHtml = [
     "<p>---------- Forwarded message ----------</p>",
-    `<p><strong>From:</strong> ${input.message.from}<br><strong>Subject:</strong> ${subject}</p>`,
-    input.message.bodyHtml?.trim() || `<p>${bodyText.replaceAll("\n", "<br>")}</p>`,
+    `<p><strong>From:</strong> ${escapeHtml(input.message.from)}<br><strong>Subject:</strong> ${escapeHtml(subject)}</p>`,
+    input.message.bodyHtml?.trim() ||
+      `<p>${escapeHtml(forwardedBodyText).replaceAll("\n", "<br>")}</p>`,
   ].join("");
 
   return composeMessageInputSchema.parse({
@@ -122,18 +160,29 @@ const createForwardMessage = (input: {
 
 const applyRuleActions = async (input: {
   actions: readonly ManagedMailboxRuleAction[];
+  completedActionResults: readonly RuleActionResult[];
   mailboxId: string;
   message: ManagedMessageRecord;
+  persistActionResults: (actionResults: readonly RuleActionResult[]) => Promise<void>;
   ruleId: string;
   ruleOwnerUserId: string | null;
 }) => {
-  const results: RuleActionResult[] = [];
+  const results: RuleActionResult[] = [...input.completedActionResults];
   let contentChanged = false;
+  const recordActionResult = async (result: RuleActionResult) => {
+    results.push(result);
+    await input.persistActionResults(results);
+  };
 
-  for (const action of input.actions) {
+  for (let index = input.completedActionResults.length; index < input.actions.length; index += 1) {
+    const action = input.actions[index];
     if (action.kind === "set-read") {
       if (input.message.isRead === action.read) {
-        results.push({ kind: action.kind, status: "skipped", message: "Already in that state." });
+        await recordActionResult({
+          kind: action.kind,
+          status: "skipped",
+          message: "Already in that state.",
+        });
       } else {
         await db
           .update(managedMailMessage)
@@ -146,7 +195,7 @@ const applyRuleActions = async (input: {
           );
         input.message.isRead = action.read;
         contentChanged = true;
-        results.push({ kind: action.kind, status: "applied" });
+        await recordActionResult({ kind: action.kind, status: "applied" });
       }
       continue;
     }
@@ -159,7 +208,11 @@ const applyRuleActions = async (input: {
             ? "active"
             : action.destination;
       if (input.message.mailboxState === state) {
-        results.push({ kind: action.kind, status: "skipped", message: "Already in that mailbox." });
+        await recordActionResult({
+          kind: action.kind,
+          status: "skipped",
+          message: "Already in that mailbox.",
+        });
       } else {
         await db
           .update(managedMailMessage)
@@ -172,7 +225,7 @@ const applyRuleActions = async (input: {
           );
         input.message.mailboxState = state;
         contentChanged = true;
-        results.push({ kind: action.kind, status: "applied" });
+        await recordActionResult({ kind: action.kind, status: "applied" });
       }
       continue;
     }
@@ -188,13 +241,13 @@ const applyRuleActions = async (input: {
         source: "rule",
       });
       contentChanged = true;
-      results.push({ kind: action.kind, status: "applied" });
+      await recordActionResult({ kind: action.kind, status: "applied" });
       continue;
     }
 
     if (action.kind === "forward") {
       if (getHeader(input.message, "X-Quieter-Rule-Forwarded")) {
-        results.push({
+        await recordActionResult({
           kind: action.kind,
           message: "Skipped a message that was already forwarded by an automatic rule.",
           status: "skipped",
@@ -212,13 +265,15 @@ const applyRuleActions = async (input: {
           userId: input.ruleOwnerUserId,
         });
         contentChanged = true;
-        results.push({ kind: action.kind, status: "applied" });
+        await recordActionResult({ kind: action.kind, status: "applied" });
       }
       continue;
     }
 
-    results.push({ kind: action.kind, status: "applied" });
-    break;
+    if (action.kind === "stop-processing") {
+      await recordActionResult({ kind: action.kind, status: "applied" });
+      break;
+    }
   }
 
   if (contentChanged) {
@@ -302,20 +357,27 @@ export const applyManagedRulesToMessage = async (input: {
 
   for (const rule of rules) {
     const previousApplication = applicationByRuleId.get(rule.id);
-    if (previousApplication?.matched && !previousApplication.error) {
-      if (
-        getManagedMailboxRuleActions({ actions: rule.actions, labelIds: rule.labelIds }).some(
-          (action) => action.kind === "stop-processing",
-        )
-      ) {
+    const actions = getManagedMailboxRuleActions({
+      actions: rule.actions,
+      labelIds: rule.labelIds,
+    });
+    const previousActionResults = parseStoredRuleActionResults(previousApplication?.actionResults);
+    const applicationIsComplete =
+      previousApplication?.matched &&
+      !previousApplication.error &&
+      previousActionResults.length >= actions.length;
+    if (applicationIsComplete) {
+      matchedRule ||= true;
+      if (actions.some((action) => action.kind === "stop-processing")) {
         break;
       }
       continue;
     }
 
     const now = new Date();
+    let matched = false;
     try {
-      const matched = matchesRuleConditions({
+      matched = matchesRuleConditions({
         attachments,
         conditionGroups: rule.conditionGroups,
         customLabelIds: Array.from(customLabelIds),
@@ -324,15 +386,47 @@ export const applyManagedRulesToMessage = async (input: {
         message,
         search: rule.search,
       });
-      const actions = getManagedMailboxRuleActions({
-        actions: rule.actions,
-        labelIds: rule.labelIds,
-      });
+      matchedRule ||= matched;
+      const explanation = matched
+        ? getConditionExplanation(
+            structuredMailSearchSchema.parse(rule.search),
+            rule.matchMode,
+            rule.conditionGroups,
+          )
+        : "The rule conditions did not match this message.";
       const actionResults = matched
         ? await applyRuleActions({
             actions,
+            completedActionResults: previousActionResults,
             mailboxId: input.mailboxId,
             message,
+            persistActionResults: async (partialActionResults) => {
+              await db
+                .insert(managedMailRuleApplication)
+                .values({
+                  actionResults: Array.from(partialActionResults),
+                  appliedAt: now,
+                  createdAt: now,
+                  explanation,
+                  id: randomUUID(),
+                  mailboxId: input.mailboxId,
+                  matched: true,
+                  messageId: input.messageId,
+                  ruleId: rule.id,
+                  updatedAt: now,
+                })
+                .onConflictDoUpdate({
+                  target: [managedMailRuleApplication.ruleId, managedMailRuleApplication.messageId],
+                  set: {
+                    actionResults: Array.from(partialActionResults),
+                    appliedAt: now,
+                    error: null,
+                    explanation,
+                    matched: true,
+                    updatedAt: now,
+                  },
+                });
+            },
             ruleId: rule.id,
             ruleOwnerUserId: rule.updatedByUserId ?? rule.createdByUserId,
           })
@@ -352,11 +446,7 @@ export const applyManagedRulesToMessage = async (input: {
           }
         }
       }
-      matchedRule ||= matched;
       const stopProcessing = matched && actions.some((action) => action.kind === "stop-processing");
-      const explanation = matched
-        ? getConditionExplanation(structuredMailSearchSchema.parse(rule.search), rule.matchMode)
-        : "The rule conditions did not match this message.";
       await db
         .insert(managedMailRuleApplication)
         .values({
@@ -384,17 +474,19 @@ export const applyManagedRulesToMessage = async (input: {
         });
       if (stopProcessing) break;
     } catch (error) {
-      matchedRule = true;
       ruleError = error instanceof Error ? error.message : "Rule evaluation failed.";
+      const explanation = matched
+        ? "The rule matched, but one or more actions could not be completed."
+        : "The rule conditions could not be evaluated.";
       await db
         .insert(managedMailRuleApplication)
         .values({
           createdAt: now,
           error: error instanceof Error ? error.message : "Rule evaluation failed.",
-          explanation: "The rule matched, but one or more actions could not be completed.",
+          explanation,
           id: randomUUID(),
           mailboxId: input.mailboxId,
-          matched: true,
+          matched,
           messageId: input.messageId,
           ruleId: rule.id,
           updatedAt: now,
@@ -403,8 +495,8 @@ export const applyManagedRulesToMessage = async (input: {
           target: [managedMailRuleApplication.ruleId, managedMailRuleApplication.messageId],
           set: {
             error: error instanceof Error ? error.message : "Rule evaluation failed.",
-            explanation: "The rule matched, but one or more actions could not be completed.",
-            matched: true,
+            explanation,
+            matched,
             updatedAt: now,
           },
         });
