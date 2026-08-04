@@ -5,14 +5,16 @@ const expectedDateCounts = new Map([
   ["packages/cloudflare/wrangler.types.jsonc", 1],
   [".github/review-worker.wrangler.jsonc", 1],
   [".github/workflows/ci-main.yml", 1],
-  [".github/workflows/review-deploy.yml", 1],
+  [".github/workflows/review-deploy.yml", 2],
 ]);
 
 const failures: string[] = [];
 for (const [path, expectedCount] of expectedDateCounts) {
   const source = await Bun.file(path).text();
   const dates = [
-    ...source.matchAll(/(?:compatibility_date["\\]*\s*:\s*["\\]*|date:\s*")(\d{4}-\d{2}-\d{2})/g),
+    ...source.matchAll(
+      /(?:compatibility_date["\\]*\s*:\s*["\\]*|date:\s*"|--compatibility-date\s+)(\d{4}-\d{2}-\d{2})/g,
+    ),
   ].map((match) => match[1]);
   if (dates.length !== expectedCount || dates.some((date) => date !== compatibilityDate)) {
     failures.push(

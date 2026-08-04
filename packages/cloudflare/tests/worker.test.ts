@@ -23,6 +23,7 @@ const encodeJson = (value: unknown) =>
 const liveSyncToken = async (overrides: Partial<{ expiresAt: number; issuedAt: number }> = {}) => {
   const now = Math.floor(Date.now() / 1000);
   const payload = encodeJson({
+    emailAddress,
     expiresAt: now + 300,
     issuedAt: now,
     mailboxId,
@@ -200,7 +201,9 @@ describe("Pub/Sub ingress", () => {
 describe("Durable Object WebSockets", () => {
   test("upgrades, broadcasts attachments, auto-responds to exact pings, and closes", async () => {
     const token = await liveSyncToken();
-    const stub = env.GmailLiveSyncMailbox.get(env.GmailLiveSyncMailbox.idFromName(mailboxId));
+    const stub = env.GmailLiveSyncMailbox.get(
+      env.GmailLiveSyncMailbox.idFromName(emailAddress.trim().toLowerCase()),
+    );
     const response = await stub.fetch(
       new Request(`https://worker.invalid/gmail/live?token=${token}`, {
         headers: { upgrade: "websocket" },
@@ -262,7 +265,7 @@ describe("Queue consumer", () => {
     const messages = batch();
     const context = createExecutionContext();
     let settled = false;
-    const processing = worker.queue(messages, env).then(() => {
+    const processing = worker.queue(messages, env, context).then(() => {
       settled = true;
     });
     await Promise.resolve();
@@ -278,8 +281,9 @@ describe("Queue consumer", () => {
       vi.fn(async () => new Response(null, { status: 503 })),
     );
     const messages = batch();
-    await expect(worker.queue(messages, env)).rejects.toThrow("returned 503");
-    expect(await getQueueResult(messages, createExecutionContext())).toMatchObject({
+    const context = createExecutionContext();
+    await expect(worker.queue(messages, env, context)).rejects.toThrow("returned 503");
+    expect(await getQueueResult(messages, context)).toMatchObject({
       ackAll: false,
     });
   });

@@ -1,6 +1,6 @@
 {
   // Type generation only. SST remains the sole production deployment authority.
-  "$schema": "../../apps/web/node_modules/wrangler/config-schema.json",
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "quieter-gmail-realtime-types",
   "main": "src/worker.ts",
   "compatibility_date": "2026-08-04",

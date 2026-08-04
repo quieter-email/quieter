@@ -44,7 +44,7 @@ const gmailNotificationSchema = z.object({
 });
 
 const tokenPayloadSchema = z.object({
-  emailAddress: z.string().email().optional(),
+  emailAddress: z.string().email(),
   expiresAt: z.number().int().positive(),
   issuedAt: z.number().int().positive(),
   mailboxId: z.string().min(1),
@@ -204,7 +204,7 @@ const handleLiveSync = async (request: Request, env: Env) => {
     token,
     readLinkedSecret(env.SST_RESOURCE_GmailLiveSyncTokenSecret),
   );
-  return mailboxObject(env, payload.emailAddress ?? payload.mailboxId).fetch(request);
+  return mailboxObject(env, payload.emailAddress).fetch(request);
 };
 
 const handlePubSub = async (request: Request, env: Env) => {
@@ -251,6 +251,17 @@ export class GmailLiveSyncMailbox extends DurableObject<Env> {
     this.ctx.setWebSocketAutoResponse(
       new WebSocketRequestResponsePair('{"action":"ping"}', '{"type":"pong"}'),
     );
+  }
+
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+    console.error(
+      JSON.stringify({
+        category: "websocket_unexpected_message",
+        route: "durable_object",
+        size: typeof message === "string" ? message.length : message.byteLength,
+      }),
+    );
+    ws.close(1003, "Unexpected message");
   }
 
   async fetch(request: Request) {
@@ -310,7 +321,7 @@ export default {
     }
   },
 
-  async queue(batch, env) {
+  async queue(batch, env, _ctx) {
     await Promise.all(
       batch.messages.map(async (message) => {
         const response = await fetch(env.GMAIL_PUBSUB_PROCESS_URL, {
@@ -323,7 +334,11 @@ export default {
         });
         if (!response.ok) {
           console.error(
-            JSON.stringify({ category: "processor_response_error", route: "queue", status: 500 }),
+            JSON.stringify({
+              category: "processor_response_error",
+              route: "queue",
+              status: response.status,
+            }),
           );
           throw new Error(`Gmail Pub/Sub processor returned ${response.status}.`);
         }

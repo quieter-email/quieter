@@ -69,6 +69,7 @@ export const Button = ({
         <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
         {pendingLabel}
       </span>
+      {pendingLabel === undefined ? <span className="sr-only">{props.children}</span> : null}
     </span>
   ) : (
     props.children
