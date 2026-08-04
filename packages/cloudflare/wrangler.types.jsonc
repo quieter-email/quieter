@@ -1,0 +1,61 @@
+{
+  // Type generation only. SST remains the sole production deployment authority.
+  "$schema": "../../apps/web/node_modules/wrangler/config-schema.json",
+  "name": "quieter-gmail-realtime-types",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-08-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "GMAIL_PUBSUB_PROCESS_URL": "https://processor.invalid/process",
+    "GMAIL_PUBSUB_PUSH_AUDIENCE": "https://audience.invalid/gmail/pubsub",
+    "GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT": "gmail-push@example.invalid",
+    "GMAIL_PUBSUB_SUBSCRIPTION": "projects/example/subscriptions/gmail",
+  },
+  "secrets": {
+    "required": ["SST_RESOURCE_GmailLiveSyncTokenSecret", "SST_RESOURCE_GmailPubSubProcessToken"],
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GmailLiveSyncMailbox",
+        "class_name": "GmailLiveSyncMailbox",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["GmailLiveSyncMailbox"],
+    },
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "GmailPsQueue",
+        "queue": "gmail-pubsub-types",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "gmail-pubsub-types",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+      },
+    ],
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true,
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01,
+      "persist": true,
+    },
+  },
+}

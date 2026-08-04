@@ -8,6 +8,9 @@
       "packages/*"
     ],
     "catalog": {
+      "@cloudflare/vite-plugin": "1.50.0",
+      "@cloudflare/vitest-pool-workers": "0.20.1",
+      "@cloudflare/workers-types": "5.20260804.1",
       "@aws-sdk/client-apigatewaymanagementapi": "3.1063.0",
       "@aws-sdk/client-dynamodb": "3.1063.0",
       "@aws-sdk/client-s3": "^3.1077.0",
@@ -60,7 +63,9 @@
       "vaul": "^1.1.2",
       "vite": "npm:@voidzero-dev/vite-plus-core@0.2.4",
       "zod": "^4.4.3",
-      "vite-plus": "0.2.4"
+      "vite-plus": "0.2.4",
+      "vitest": "4.1.10",
+      "wrangler": "4.118.0"
     }
   },
   "scripts": {
@@ -69,6 +74,7 @@
     "build": "vp run -r build",
     "check:boundaries": "vp run @quieter/aws#check:boundaries",
     "check:bundles": "vp run @quieter/aws#check:bundles",
+    "check:cloudflare": "bun scripts/check-cloudflare-worker-config.ts",
     "check:copy": "bun scripts/check-no-middle-dot.ts",
     "db:check": "vp run @quieter/database#db:check",
     "db:deploy": "vp run @quieter/database#db:deploy",

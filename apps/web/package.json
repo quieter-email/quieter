@@ -66,8 +66,8 @@
   },
   "devDependencies": {
     "@babel/core": "^8.0.1",
-    "@cloudflare/vite-plugin": "^1.44.0",
-    "@cloudflare/workers-types": "^5.20260711.1",
+    "@cloudflare/vite-plugin": "catalog:",
+    "@cloudflare/workers-types": "catalog:",
     "@quieter/config": "workspace:*",
     "@react-scan/vite-plugin-react-scan": "^0.2.7",
     "@rolldown/plugin-babel": "^0.2.3",
@@ -82,6 +82,6 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:",
-    "wrangler": "^4.110.0"
+    "wrangler": "catalog:"
   }
 }

@@ -104,6 +104,6 @@ export default defineConfig({
     },
   },
   test: {
-    exclude: [...configDefaults.exclude, ".scratch/**"],
+    exclude: [...configDefaults.exclude, ".scratch/**", "packages/cloudflare/tests/**"],
   },
 });

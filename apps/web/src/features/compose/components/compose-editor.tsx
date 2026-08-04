@@ -130,7 +130,7 @@ export const ComposeEditor = ({
     editorProps: {
       attributes: {
         class: cn(
-          "bg-transparent text-fg [&_.ProseMirror-selectednode.quieter-template-placeholder]:border-fg [&_.is-editor-empty:first-child::before]:pointer-events-none [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:h-0 [&_.is-editor-empty:first-child::before]:text-muted-fg/75 [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.quieter-template-placeholder]:mx-1 [&_.quieter-template-placeholder]:inline-block [&_.quieter-template-placeholder]:min-w-20 [&_.quieter-template-placeholder]:cursor-text [&_.quieter-template-placeholder]:border-b [&_.quieter-template-placeholder]:border-muted-fg [&_.quieter-template-placeholder]:px-1 [&_.quieter-template-placeholder]:text-transparent [&_.quieter-template-placeholder]:selection:bg-primary/20 [&_.quieter-template-placeholder]:hover:border-fg [&_a]:text-fg [&_a]:underline [&_blockquote]:border-l [&_blockquote]:border-border [&_blockquote]:text-muted-fg [&_img]:max-w-full [&_img]:object-contain [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0 [&_s]:text-muted-fg [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5",
+          "bg-transparent text-fg outline-none [&_.ProseMirror-selectednode.quieter-template-placeholder]:border-fg [&_.is-editor-empty:first-child::before]:pointer-events-none [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:h-0 [&_.is-editor-empty:first-child::before]:text-muted-fg/75 [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.quieter-template-placeholder]:mx-1 [&_.quieter-template-placeholder]:inline-block [&_.quieter-template-placeholder]:min-w-20 [&_.quieter-template-placeholder]:cursor-text [&_.quieter-template-placeholder]:border-b [&_.quieter-template-placeholder]:border-muted-fg [&_.quieter-template-placeholder]:px-1 [&_.quieter-template-placeholder]:text-transparent [&_.quieter-template-placeholder]:selection:bg-primary/20 [&_.quieter-template-placeholder]:hover:border-fg [&_a]:text-fg [&_a]:underline [&_blockquote]:border-l [&_blockquote]:border-border [&_blockquote]:text-muted-fg [&_img]:max-w-full [&_img]:object-contain [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0 [&_s]:text-muted-fg [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5",
           {
             "min-h-28 text-sm/relaxed [&_.is-editor-empty:first-child::before]:text-sm/relaxed [&_blockquote]:my-3 [&_blockquote]:pl-3 [&_img]:my-3 [&_img]:max-h-48 [&_img]:rounded-lg [&_li]:my-0.5 [&_ol]:my-3 [&_p+p]:mt-2 [&_ul]:my-3":
               density === "compact",
@@ -268,9 +268,13 @@ export const ComposeEditorBody = ({ className }: { className?: string }) => {
 
   return (
     <div
-      className={cn("min-h-0 overflow-y-auto", className, {
-        "pointer-events-none opacity-80": disabled,
-      })}
+      className={cn(
+        "min-h-0 overflow-y-auto transition-[border-color,box-shadow] has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:ring-1 has-[.ProseMirror:focus-visible]:ring-ring/45 has-[.ProseMirror:focus-visible]:outline-none",
+        className,
+        {
+          "pointer-events-none opacity-80": disabled,
+        },
+      )}
     >
       {audioActive ? (
         <output

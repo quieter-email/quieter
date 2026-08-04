@@ -254,7 +254,7 @@ jobs:
             '{' \
             '  "name": "quieter-review-artifact",' \
             '  "main": "./apps/web/src/server.ts",' \
-            '  "compatibility_date": "2026-07-11",' \
+            '  "compatibility_date": "2026-08-04",' \
             '  "compatibility_flags": ["nodejs_compat"]' \
             '}' \
             > review-build-worker.wrangler.jsonc
@@ -370,7 +370,7 @@ jobs:
           byte_count=$(du -sb .review-deploy | cut -f1)
           test "$file_count" -le 5000
           test "$byte_count" -le 157286400
-          test "$(bun -e "console.log(require('./apps/web/node_modules/wrangler/package.json').version)")" = "4.110.0"
+          test "$(bun -e "console.log(require('./apps/web/node_modules/wrangler/package.json').version)")" = "4.118.0"
           node apps/web/node_modules/wrangler/bin/wrangler.js deploy \
             --config .github/review-worker.wrangler.jsonc \
             --dry-run \

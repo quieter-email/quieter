@@ -34,6 +34,7 @@ import {
   runAuthorizedGmailMailbox,
 } from "../gmail-mailbox-access";
 import { getOrganizationApiMailboxId } from "../organization-api-mail";
+import { DEFAULT_GMAIL_MAILBOX_NAME, getGmailMailboxDisplayName } from "./display-name";
 
 export {
   GMAIL_SCOPES,
@@ -152,7 +153,10 @@ const toMailboxListItem = (
       ? "needs_reconnect"
       : record.status,
   directGrantRole: record.directGrantRole ?? null,
-  displayName: record.displayName,
+  displayName:
+    record.provider === MAILBOX_PROVIDER_GMAIL
+      ? getGmailMailboxDisplayName(record.displayName, record.emailAddress)
+      : record.displayName,
   divisionGrantRoles: record.divisionGrantRoles ?? [],
   divisionId: record.divisionId ?? null,
   divisionName: record.divisionName ?? null,
@@ -865,7 +869,6 @@ export const completeGmailOAuth = async (input: {
     ? db
         .update(mailbox)
         .set({
-          displayName: profile.emailAddress,
           emailAddress,
           organizationId: oauthState.organizationId,
           status: "connected",
@@ -874,7 +877,7 @@ export const completeGmailOAuth = async (input: {
         .where(and(eq(mailbox.id, existingMailboxId), eq(mailbox.ownerUserId, session.user.id)))
     : db.insert(mailbox).values({
         createdAt: now,
-        displayName: profile.emailAddress,
+        displayName: DEFAULT_GMAIL_MAILBOX_NAME,
         emailAddress,
         id: mailboxId,
         organizationId: oauthState.organizationId,
@@ -956,6 +959,30 @@ export const moveGmailMailbox = async (input: {
       ),
     )
     .returning({ id: mailbox.id, organizationId: mailbox.organizationId });
+  if (!updatedMailbox) {
+    throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
+  }
+  return updatedMailbox;
+};
+
+export const updateGmailMailboxDisplayName = async (input: {
+  displayName: string | null;
+  mailboxId: string;
+  userId: string;
+}) => {
+  await assertOwnedGmailMailbox({ mailboxId: input.mailboxId, userId: input.userId });
+
+  const [updatedMailbox] = await db
+    .update(mailbox)
+    .set({
+      displayName: input.displayName?.trim() || null,
+      updatedAt: new Date(),
+    })
+    .where(eq(mailbox.id, input.mailboxId))
+    .returning({
+      displayName: mailbox.displayName,
+      mailboxId: mailbox.id,
+    });
   if (!updatedMailbox) {
     throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
   }
