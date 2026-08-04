@@ -15,19 +15,20 @@ export const Switch = ({ className, children, pending = false, ...props }: Switc
     {...props}
     aria-busy={pending || undefined}
     className={cn(
-      "squircle relative inline-flex h-6 w-11 items-center rounded-full bg-bg-elevated/60 p-0.5 transition-colors duration-150 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none data-checked:bg-primary data-disabled:cursor-not-allowed data-disabled:opacity-50",
+      "squircle inline-flex h-6 w-11 items-center rounded-full bg-bg-elevated/60 p-0.5 transition-colors duration-150 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none data-checked:bg-primary data-disabled:cursor-not-allowed data-disabled:opacity-50",
       className,
     )}
     disabled={pending || props.disabled}
   >
-    {children}
     {pending ? (
       <HugeiconsIcon
         aria-hidden
-        className="absolute inset-0 m-auto size-3.5 animate-spin text-muted-fg"
+        className="mx-auto size-3.5 animate-spin text-muted-fg"
         icon={Loading03Icon}
       />
-    ) : null}
+    ) : (
+      children
+    )}
   </SwitchPrimitive.Root>
 );
 

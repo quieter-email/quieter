@@ -12,7 +12,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../../lib/cn";
 
 const buttonVariants = cva(
-  "squircle relative inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-sm whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "squircle inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-sm whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -57,8 +57,22 @@ export const Button = ({
   variant = "default",
   ...props
 }: ButtonProps) => {
-  const content = (
-    <span className={cn("contents", { "opacity-0": pending })}>{props.children}</span>
+  const content = pending ? (
+    <span className="inline-grid place-items-center">
+      <span
+        aria-hidden
+        className="invisible col-start-1 row-start-1 inline-flex items-center gap-2"
+      >
+        {props.children}
+      </span>
+      <span className="col-start-1 row-start-1 inline-flex items-center gap-2">
+        <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+        {pendingLabel}
+      </span>
+      {pendingLabel === undefined ? <span className="sr-only">{props.children}</span> : null}
+    </span>
+  ) : (
+    props.children
   );
 
   return (
@@ -75,17 +89,6 @@ export const Button = ({
       type={type}
     >
       {content}
-      {pending ? (
-        <span
-          aria-hidden
-          className={cn("absolute inset-0 flex items-center justify-center gap-2", {
-            "pointer-events-none": pendingLabel === undefined,
-          })}
-        >
-          <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
-          {pendingLabel}
-        </span>
-      ) : null}
     </ButtonPrimitive>
   );
 };

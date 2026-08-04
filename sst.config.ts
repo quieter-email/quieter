@@ -146,7 +146,7 @@ export default $config({
         transform: {
           server: {
             compatibility: {
-              date: "2026-07-11",
+              date: "2026-08-04",
               flags: ["nodejs_compat"],
             },
             transform: {
@@ -564,9 +564,23 @@ export default $config({
       const gmailLiveSyncMailbox = new sst.cloudflare.DurableObject("GmailLiveSyncMailbox", {
         className: "GmailLiveSyncMailbox",
       });
+      const cloudflareWorkerObservability = {
+        enabled: true,
+        logs: {
+          enabled: true,
+          headSamplingRate: 1,
+          invocationLogs: true,
+          persist: true,
+        },
+        traces: {
+          enabled: true,
+          headSamplingRate: 0.01,
+          persist: true,
+        },
+      };
       const gmailRealtimeWorker = new sst.cloudflare.Worker("GmailRealtimeWorker", {
         compatibility: {
-          date: "2026-06-24",
+          date: "2026-08-04",
           flags: ["nodejs_compat"],
         },
         environment: {
@@ -589,9 +603,7 @@ export default $config({
             tag: "v1",
           },
         ],
-        observability: {
-          enabled: true,
-        },
+        observability: cloudflareWorkerObservability,
         url: true,
       });
       gmailPubSubCloudflareQueue.subscribe(
@@ -601,6 +613,11 @@ export default $config({
           },
           handler: "packages/cloudflare/src/worker.ts",
           link: [gmailPubSubProcessToken],
+          transform: {
+            worker(args) {
+              args.observability = cloudflareWorkerObservability;
+            },
+          },
         },
         {
           batch: {

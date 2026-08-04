@@ -2,15 +2,22 @@
   "name": "@quieter/cloudflare",
   "private": true,
   "type": "module",
+  "scripts": {
+    "cf-typecheck": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --strict-vars false --check",
+    "cf-typegen": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --strict-vars false",
+    "test:workers": "vp test run --config vite.config.ts"
+  },
   "dependencies": {
     "jose": "5.10.0",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "4.20260620.1",
+    "@cloudflare/vitest-pool-workers": "catalog:",
     "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:",
-    "vite-plus": "catalog:"
+    "vite-plus": "catalog:",
+    "vitest": "catalog:",
+    "wrangler": "catalog:"
   }
 }

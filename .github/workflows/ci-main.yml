@@ -45,6 +45,11 @@ jobs:
       - name: Check copy policy
         run: vp run check:copy
 
+      - name: Check Cloudflare Worker configuration
+        run: |
+          vp run check:cloudflare
+          vp run @quieter/cloudflare#cf-typecheck
+
       - name: Check backend import boundaries
         run: vp run @quieter/aws#check:boundaries
 
@@ -53,6 +58,9 @@ jobs:
 
       - name: Test
         run: vp test
+
+      - name: Test Cloudflare Worker runtime
+        run: vp run @quieter/cloudflare#test:workers
 
       - name: Build web worker
         env:
@@ -63,7 +71,7 @@ jobs:
             '{' \
             '  "name": "quieter-ci-artifact",' \
             '  "main": "./apps/web/src/server.ts",' \
-            '  "compatibility_date": "2026-07-11",' \
+            '  "compatibility_date": "2026-08-04",' \
             '  "compatibility_flags": ["nodejs_compat"]' \
             '}' \
             > ci-build-worker.wrangler.jsonc

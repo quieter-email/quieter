@@ -27,6 +27,7 @@ import {
   listAccessibleMailboxState,
   moveGmailMailbox,
   startGmailOAuth,
+  updateGmailMailboxDisplayName,
   updateMailboxSignature,
 } from "../../mailbox/service";
 import {
@@ -130,6 +131,16 @@ export const mailboxProcedures = {
       }),
     )
     .handler(async ({ context, input }) => moveGmailMailbox({ ...input, userId: context.userId })),
+  updateGmailMailboxDisplayName: protectedProcedure
+    .input(
+      z.object({
+        displayName: z.string().trim().max(120).nullable(),
+        mailboxId: mailboxIdSchema,
+      }),
+    )
+    .handler(async ({ context, input }) =>
+      updateGmailMailboxDisplayName({ ...input, userId: context.userId }),
+    ),
   updateMailboxSignature: protectedProcedure
     .input(
       z.object({

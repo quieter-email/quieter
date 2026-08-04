@@ -87,6 +87,72 @@ const getProviderLabel = (provider: string) => {
   return "Send-only mailbox";
 };
 
+const GmailMailboxNameSettings = ({
+  mailbox,
+}: {
+  mailbox: {
+    displayName: string | null;
+    emailAddress: string;
+    id: string;
+  };
+}) => {
+  const queryClient = useQueryClient();
+  const [displayName, setDisplayName] = useState(() => mailbox.displayName?.trim() || "Gmail");
+  const updateDisplayNameMutation = useMutation({
+    ...orpc.mail.updateGmailMailboxDisplayName.mutationOptions(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() });
+    },
+  });
+  const savedDisplayName = mailbox.displayName?.trim() || "Gmail";
+  const isDirty = displayName.trim() !== savedDisplayName;
+
+  return (
+    <SettingsSection
+      description="Choose how this mailbox appears in Quieter. Its Gmail address remains visible beneath the name."
+      title="Mailbox name"
+    >
+      <SettingsCard>
+        <form
+          className="flex flex-col gap-3 p-4 @md:flex-row @md:items-center"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!isDirty) return;
+            updateDisplayNameMutation.mutate(
+              {
+                displayName: displayName.trim() || null,
+                mailboxId: mailbox.id,
+              },
+              {
+                onError: (error) =>
+                  toast.error(getMutationErrorMessage(error, "Could not save mailbox name.")),
+              },
+            );
+          }}
+        >
+          <TextFieldInput
+            aria-label={`Name for ${mailbox.emailAddress}`}
+            className="min-w-0 flex-1"
+            maxLength={120}
+            onChange={(event) => setDisplayName(event.currentTarget.value)}
+            placeholder="Gmail"
+            value={displayName}
+          />
+          <Button
+            disabled={!isDirty}
+            pending={updateDisplayNameMutation.isPending}
+            pendingLabel="Saving…"
+            size="sm"
+            type="submit"
+          >
+            Save name
+          </Button>
+        </form>
+      </SettingsCard>
+    </SettingsSection>
+  );
+};
+
 const MailboxSignatureSettings = ({
   mailbox,
 }: {
@@ -116,7 +182,7 @@ const MailboxSignatureSettings = ({
           <Textarea
             aria-label={`Signature for ${mailbox.emailAddress}`}
             onChange={(event) => setSignatureText(event.currentTarget.value)}
-            placeholder="Your name\nYour role"
+            placeholder={"Your name\nYour role"}
             rows={5}
             value={signatureText}
           />
@@ -806,6 +872,10 @@ export const MailboxesSettingsPanel = () => {
           )}
         </SettingsRows>
       </SettingsSection>
+
+      {selectedMailbox.provider === "gmail" && (
+        <GmailMailboxNameSettings key={selectedMailbox.id} mailbox={selectedMailbox} />
+      )}
 
       {(selectedMailbox.provider === "gmail" ||
         (selectedMailbox.provider === "managed" && selectedMailbox.grantRole === "manager")) && (

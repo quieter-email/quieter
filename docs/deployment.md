@@ -22,6 +22,21 @@ Cloudflare receives runtime variables and encrypted bindings from SST for each r
 resource URLs and names remain deployment outputs and are never copied into a second configuration
 store.
 
+### Worker rollback and Durable Object versions
+
+Roll back a production Worker by redeploying a known-good repository revision through the protected
+SST workflow. Do not deploy production Worker code with Wrangler or edit the Worker in the
+Cloudflare dashboard. Confirm that any database migration applied since that revision is compatible
+with the older application before rollback; otherwise ship a forward fix.
+
+Treat Durable Object migration tags and lifecycle changes as compatibility boundaries. Deploy code
+that can safely communicate with both the preceding and succeeding object behavior, keep migration
+tags append-only, and verify object state before removing compatibility paths. Quieter does not use
+gradual deployments for the realtime Worker by default because each Durable Object instance is
+assigned to one Worker version and Durable Object migrations are applied atomically. A failed
+realtime release should be replaced through the same SST workflow with a compatible known-good or
+forward-fix revision.
+
 ## Review environment
 
 Pull request review is opt-in. When `leanderriefel` posts the exact comment `quieter review` on an
@@ -87,6 +102,15 @@ secrets and encryption keys live only as encrypted bindings on the isolated Revi
 Non-secret Worker configuration, OAuth client ids, the fixed domain, and the Review Hyperdrive id
 are source-controlled in `.github/review-worker.wrangler.jsonc`. Rotate runtime secrets directly on
 the Review Worker; do not copy them into pull-request jobs or source control.
+
+## Cloudflare dashboard verification
+
+Repository checks cannot validate account-level state. After changing Worker infrastructure, verify
+that the deployment token remains least-privilege, logs and traces have the intended retention,
+Queues and their dead-letter queue are healthy, Hyperdrive targets the expected database with query
+caching disabled, and production and Review custom domains still route to their intended Workers.
+Treat this as verification only; SST and the repository-controlled Review workflow remain the
+configuration authorities.
 
 ## Database safety
 
