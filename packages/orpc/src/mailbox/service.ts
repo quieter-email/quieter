@@ -590,12 +590,19 @@ export const assertAccessibleMailbox = async (input: { mailboxId: string; userId
     .limit(1);
 
   if (ownedGmailMailbox) {
-    return ownedGmailMailbox;
+    return {
+      ...ownedGmailMailbox,
+      capabilities: getMailboxCapabilities({ provider: ownedGmailMailbox.provider }),
+    };
   }
 
   try {
     const grantedManagedMailbox = await getAuthorizedManagedMailbox(input);
     return {
+      capabilities: getMailboxCapabilities({
+        provider: grantedManagedMailbox.provider,
+        role: grantedManagedMailbox.role,
+      }),
       id: grantedManagedMailbox.id,
       contentRevision: grantedManagedMailbox.contentRevision,
       organizationId: grantedManagedMailbox.organizationId,

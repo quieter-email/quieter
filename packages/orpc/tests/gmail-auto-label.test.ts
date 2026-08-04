@@ -58,7 +58,7 @@ describe("Gmail auto-label selection", () => {
     ).toEqual([]);
   });
 
-  test("passes recent user corrections as explicit classifier context", () => {
+  test("passes dynamically retrieved memory as advisory classifier context", () => {
     const input = buildAutoLabelPromptInput({
       labels: [
         {
@@ -73,27 +73,16 @@ describe("Gmail auto-label selection", () => {
         id: "message-1",
         subject: "Weekly product digest",
       },
-      userCorrectionContext: JSON.stringify({
-        corrections: [
-          {
-            count: 2,
-            labelId: "label-dev",
-            labelName: "Dev",
-            signal: "removed",
-            source: "github.com",
-          },
-        ],
-        kind: "auto_label_user_corrections",
-      }),
+      memoryContext:
+        "Current mailbox memory (more specific):\n- Do not apply Dev to GitHub product digests.",
     });
 
     expect(input).toMatchObject({
-      recentUserLabelCorrections: expect.stringContaining('"signal":"removed"'),
+      relevantMemory: expect.stringContaining("Do not apply Dev"),
     });
-    expect(input).not.toHaveProperty("pastDecisions");
   });
 
-  test("passes shared user context as advisory classifier context", () => {
+  test("passes authored instructions and selected learned memory together", () => {
     const input = buildAutoLabelPromptInput({
       labels: [
         {
@@ -108,15 +97,16 @@ describe("Gmail auto-label selection", () => {
         id: "message-1",
         subject: "Your invoice",
       },
-      userAiContext: "## Labeling\n- Treat invoices as receipts.",
+      memoryContext:
+        "User-authored instructions:\nTreat invoices as receipts.\n\nRelevant learned memory:\n- Store receipts usually arrive from orders@example.com.",
     });
 
     expect(input).toMatchObject({
-      userAiContext: "## Labeling\n- Treat invoices as receipts.",
+      relevantMemory: expect.stringContaining("User-authored instructions"),
     });
   });
 
-  test("caps shared user context in classifier payloads", () => {
+  test("caps dynamic memory in classifier payloads", () => {
     const input = buildAutoLabelPromptInput({
       labels: [
         {
@@ -130,9 +120,9 @@ describe("Gmail auto-label selection", () => {
         id: "message-1",
         subject: "Invoice",
       },
-      userAiContext: "x".repeat(5_000),
+      memoryContext: "x".repeat(8_000),
     });
 
-    expect(input.userAiContext).toHaveLength(4_000);
+    expect(input.relevantMemory).toHaveLength(6_000);
   });
 });

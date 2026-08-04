@@ -50,6 +50,7 @@ export type MailboxCapabilities = {
   categories: MailCategory[];
   canArchive: boolean;
   canDeletePermanently: boolean;
+  canManageKnowledge: boolean;
   canManageLabels: boolean;
   canMarkRead: boolean;
   canMoveToInbox: boolean;
@@ -105,6 +106,7 @@ export const getMailboxCapabilities = (input: {
       categories: ["sent"],
       canArchive: false,
       canDeletePermanently: false,
+      canManageKnowledge: false,
       canManageLabels: false,
       canMarkRead: false,
       canMoveToInbox: false,
@@ -120,6 +122,7 @@ export const getMailboxCapabilities = (input: {
     categories: ["inbox", "unread", "archive", "sent", "drafts", "trash", "spam"],
     canArchive: canRespond,
     canDeletePermanently: false,
+    canManageKnowledge: input.provider === "gmail" || input.role === "manager",
     canManageLabels: input.provider === "gmail" || input.role === "manager",
     canMarkRead: canRespond,
     canMoveToInbox: canRespond,

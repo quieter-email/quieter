@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./ai-memory": "./src/ai-memory.ts",
     "./chat-agent": "./src/chat-agent.ts",
     "./chat-models": "./src/chat-models.ts",
     "./classify-gmail-message": "./src/classify-gmail-message.ts",
@@ -14,8 +15,7 @@
     "./openrouter-transcription": "./src/openrouter-transcription.ts",
     "./run-chat-stream": "./src/run-chat-stream.ts",
     "./suggest-template-placeholder": "./src/suggest-template-placeholder.ts",
-    "./transcription-format": "./src/transcription-format.ts",
-    "./user-ai-context": "./src/user-ai-context.ts"
+    "./transcription-format": "./src/transcription-format.ts"
   },
   "dependencies": {
     "@quieter/env": "workspace:*",
