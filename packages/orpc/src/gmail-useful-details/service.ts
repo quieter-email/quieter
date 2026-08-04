@@ -22,15 +22,19 @@ import {
   type GmailUsefulDetailRelevanceSource,
 } from "@quieter/database/schema";
 import { MAILBOX_LABELS } from "@quieter/gmail";
-import { and, asc, count, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lte, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
+import {
+  buildMailMemoryQuery,
+  loadAiAgentContext,
+  loadAiConfiguration,
+  loadUsefulDetailFeedbackPolicies,
+  recordAndRefreshAiMemory,
+  serializeAiAgentContext,
+} from "../ai-memory";
 import { decryptSecret, encryptSecret } from "../gmail-mailbox-access";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
-import {
-  loadAutomationMemoryPrompt,
-  refreshUsefulDetailMemoryProfile,
-} from "../mail-automation/memory";
-import { loadUserAiConfiguration, recordAndRefreshUserAiContext } from "../user-ai-context";
+import { refreshUsefulDetailMemoryProfile } from "../mail-automation/memory";
 
 const RETRY_BASE_MS = 1000 * 60 * 5;
 const RETRY_MAX_MS = 1000 * 60 * 60 * 24;
@@ -831,35 +835,26 @@ const getGmailUsefulDetailPreferenceProfile = async (
   mailboxId: string,
   source: string | null,
   userId: string,
+  message: AutomationMailMessage,
 ): Promise<{ model: ChatModel; preferences: GmailUsefulDetailPreferenceProfile }> => {
-  const rows = await db
-    .select({
-      count: count(),
-      kind: gmailUsefulDetailFeedback.kind,
-      signal: gmailUsefulDetailFeedback.signal,
-      sourceCount: source
-        ? sql<number>`count(*) filter (where ${gmailUsefulDetailFeedback.source} = ${source})`
-        : sql<number>`0`,
-    })
-    .from(gmailUsefulDetailFeedback)
-    .where(eq(gmailUsefulDetailFeedback.mailboxId, mailboxId))
-    .groupBy(gmailUsefulDetailFeedback.kind, gmailUsefulDetailFeedback.signal);
-  const global = rows.map((row) => ({ ...row, count: Number(row.count) }));
-  const sourceSpecific = rows.flatMap((row) => {
-    const sourceCount = Number(row.sourceCount);
-    return sourceCount > 0 ? [{ ...row, count: sourceCount }] : [];
-  });
-  const [memoryProfile, aiConfiguration] = await Promise.all([
-    loadAutomationMemoryPrompt({ agent: "useful_detail", mailboxId }),
-    loadUserAiConfiguration({ userId }),
+  const [aiConfiguration, feedbackPolicies, memoryContext] = await Promise.all([
+    loadAiConfiguration({ userId }),
+    loadUsefulDetailFeedbackPolicies({ mailboxId, source }),
+    loadAiAgentContext({
+      agent: "useful_detail",
+      includeUserScope: false,
+      mailboxId,
+      query: buildMailMemoryQuery(message),
+      userId,
+    }),
   ]);
 
   return {
     model: aiConfiguration.usefulDetailModel,
     preferences: {
-      ...buildGmailUsefulDetailPreferenceProfile({ global, source: sourceSpecific }),
-      memoryProfile,
-      userAiContext: aiConfiguration.markdown,
+      avoidKinds: USEFUL_DETAIL_KINDS.filter((kind) => feedbackPolicies.get(kind) === "suppress"),
+      memoryContext: serializeAiAgentContext(memoryContext),
+      preferKinds: USEFUL_DETAIL_KINDS.filter((kind) => feedbackPolicies.get(kind) === "prefer"),
     },
   };
 };
@@ -913,7 +908,7 @@ export const processGmailUsefulDetailMessage = async ({
         .from(mailboxAutomationSettings)
         .where(eq(mailboxAutomationSettings.mailboxId, mailboxId))
         .limit(1),
-      getGmailUsefulDetailPreferenceProfile(mailboxId, source, userId),
+      getGmailUsefulDetailPreferenceProfile(mailboxId, source, userId, message),
     ]);
     const { model, preferences } = preferenceSettings;
     if (!currentSettings?.enabled) {
@@ -1266,8 +1261,10 @@ export const setGmailUsefulDetailFeedback = async (input: {
       .where(eq(gmailUsefulDetail.id, detail.id));
   }
 
-  await refreshUsefulDetailMemoryProfile(input.mailboxId);
-  void recordAndRefreshUserAiContext({
+  void refreshUsefulDetailMemoryProfile(input.mailboxId, input.userId).catch((error) => {
+    console.error("Could not refresh useful-detail memory after feedback.", error);
+  });
+  void recordAndRefreshAiMemory({
     kind: "useful_detail_feedback",
     mailboxId: input.mailboxId,
     metadata: {
@@ -1277,7 +1274,7 @@ export const setGmailUsefulDetailFeedback = async (input: {
     },
     userId: input.userId,
   }).catch((error) => {
-    console.error("Could not refresh user AI context from useful-detail feedback.", error);
+    console.error("Could not learn dynamic memory from useful-detail feedback.", error);
   });
 
   return { feedback: input.feedback, id: detail.id };

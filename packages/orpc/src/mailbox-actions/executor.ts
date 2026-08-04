@@ -25,6 +25,7 @@ import {
 import { getMessageWithDetails } from "@quieter/gmail";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
+import { buildMailMemoryQuery, loadAiAgentContext, serializeAiAgentContext } from "../ai-memory";
 import {
   createLinearIssueForCredential,
   listLinearIssueMetadataForCredential,
@@ -254,6 +255,7 @@ const executeNode = async (input: {
   actionId: string;
   email: ActionEmailInput;
   frame: RuntimeFrame;
+  memoryContext: string | null;
   node: MailboxActionNode;
   revisionId: string;
   runId: string;
@@ -274,6 +276,7 @@ const executeNode = async (input: {
         context,
         criteria: input.node.config.criteria,
         email: input.email,
+        memoryContext: input.memoryContext,
         middleware: input.usageMiddleware({
           model: MAILBOX_ACTION_CONDITION_MODEL,
           nodeId: input.node.id,
@@ -291,6 +294,7 @@ const executeNode = async (input: {
         context,
         email: input.email,
         fallbackPort: input.node.config.fallbackPort,
+        memoryContext: input.memoryContext,
         middleware: input.usageMiddleware({
           model: MAILBOX_ACTION_CONDITION_MODEL,
           nodeId: input.node.id,
@@ -356,6 +360,7 @@ const executeNode = async (input: {
               context,
               email: input.email,
               instructions: input.node.config.instructions,
+              memoryContext: input.memoryContext,
               middleware: input.usageMiddleware({
                 model: MAILBOX_ACTION_LINEAR_AGENT_MODEL,
                 nodeId: input.node.id,
@@ -381,6 +386,7 @@ const executeNode = async (input: {
         instructions: input.node.config.instructions,
         linear: metadata,
         linearMcpResearch: mcpResearch,
+        memoryContext: input.memoryContext,
         middleware: input.usageMiddleware({
           model: MAILBOX_ACTION_LINEAR_AGENT_MODEL,
           nodeId: input.node.id,
@@ -469,7 +475,9 @@ export const executeMailboxActionRun = async (runId: string) => {
     }
     const graph = validation.graph;
     const [actionOwner] = await db
-      .select({ userId: mailboxAction.createdByUserId })
+      .select({
+        userId: mailboxAction.createdByUserId,
+      })
       .from(mailboxAction)
       .where(eq(mailboxAction.id, run.actionId))
       .limit(1);
@@ -515,6 +523,13 @@ export const executeMailboxActionRun = async (runId: string) => {
       mailboxId: run.mailboxId,
       sourceMessageId: run.sourceMessageId,
     });
+    const memoryContext = await loadAiAgentContext({
+      agent: "automation",
+      includeUserScope: false,
+      mailboxId: run.mailboxId,
+      query: buildMailMemoryQuery(email),
+      userId: actionOwner?.userId ?? "",
+    }).then(serializeAiAgentContext);
     const nodesById = getNodeById(graph);
     const triggerNode = nodesById.get(run.triggerNodeId);
     if (!triggerNode) throw new Error("Trigger node was not found.");
@@ -577,6 +592,7 @@ export const executeMailboxActionRun = async (runId: string) => {
         actionId: run.actionId,
         email,
         frame: item.frame,
+        memoryContext,
         node: item.node,
         revisionId: run.revisionId,
         runId: run.id,

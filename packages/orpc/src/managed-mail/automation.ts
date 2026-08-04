@@ -21,17 +21,20 @@ import { MAILBOX_LABELS } from "@quieter/gmail";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
+  buildMailMemoryQuery,
+  type AiAgentMemoryCandidates,
+  loadAiAgentMemoryCandidates,
+  loadAiConfiguration,
+  rankAiAgentMemoryCandidates,
+  serializeAiAgentContext,
+} from "../ai-memory";
+import {
   listPendingGmailUsefulDetailMessageIds,
   processGmailUsefulDetailMessage,
   reportPendingGmailUsefulDetailUsage,
 } from "../gmail-useful-details/service";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
-import {
-  loadAutoLabelUserCorrectionPrompt,
-  loadAutomationMemoryPrompt,
-} from "../mail-automation/memory";
-import { loadUserAiConfiguration } from "../user-ai-context";
 import { updateManagedMessageLabelAssignments } from "./labels/repository";
 
 const AUTO_LABEL_RETRY_BASE_MS = 1000 * 60 * 5;
@@ -40,10 +43,8 @@ const AUTO_LABEL_RETRY_MAX_MS = 1000 * 60 * 60 * 24;
 type ManagedAutoLabelContext = {
   availableLabelIds: Set<string>;
   labels: MailAutoLabelCandidate[];
-  memoryProfile: string | null;
+  memoryCandidates: AiAgentMemoryCandidates;
   model: ChatModel;
-  userAiContext: string | null;
-  userCorrectionContext: string | null;
 };
 
 const toAutomationMessage = (
@@ -91,14 +92,22 @@ const getManagedAutoLabelCandidates = async (input: {
   mailboxId: string;
   userId: string;
 }): Promise<ManagedAutoLabelContext> => {
-  const labels = await db
-    .select({
-      description: managedMailLabel.description,
-      id: managedMailLabel.id,
-      name: managedMailLabel.name,
-    })
-    .from(managedMailLabel)
-    .where(eq(managedMailLabel.mailboxId, input.mailboxId));
+  const [labels, aiConfiguration, memoryCandidates] = await Promise.all([
+    db
+      .select({
+        description: managedMailLabel.description,
+        id: managedMailLabel.id,
+        name: managedMailLabel.name,
+      })
+      .from(managedMailLabel)
+      .where(eq(managedMailLabel.mailboxId, input.mailboxId)),
+    loadAiConfiguration({ userId: input.userId }),
+    loadAiAgentMemoryCandidates({
+      includeUserScope: false,
+      mailboxId: input.mailboxId,
+      userId: input.userId,
+    }),
+  ]);
 
   const candidates = labels.map((label) => ({
     description: label.description,
@@ -106,22 +115,12 @@ const getManagedAutoLabelCandidates = async (input: {
     inclusionCriteria: null,
     name: label.name,
   }));
-  const [memoryProfile, aiConfiguration, userCorrectionContext] = await Promise.all([
-    loadAutomationMemoryPrompt({
-      agent: "auto_label",
-      mailboxId: input.mailboxId,
-    }),
-    loadUserAiConfiguration({ userId: input.userId }),
-    loadAutoLabelUserCorrectionPrompt(input.mailboxId),
-  ]);
 
   return {
     availableLabelIds: new Set(candidates.map((label) => label.id)),
     labels: candidates,
-    memoryProfile,
+    memoryCandidates,
     model: aiConfiguration.autoLabelModel,
-    userAiContext: aiConfiguration.markdown,
-    userCorrectionContext,
   };
 };
 
@@ -300,12 +299,16 @@ const processManagedAutoLabelMessage = async (input: {
 
       const labelIds = await classifyMailMessage({
         labels: input.autoLabelContext.labels,
-        memoryProfile: input.autoLabelContext.memoryProfile,
+        memoryContext: serializeAiAgentContext(
+          rankAiAgentMemoryCandidates({
+            agent: "auto_label",
+            candidates: input.autoLabelContext.memoryCandidates,
+            query: buildMailMemoryQuery(message),
+          }),
+        ),
         message,
         middleware: [usageMiddleware],
         model: input.autoLabelContext.model,
-        userAiContext: input.autoLabelContext.userAiContext,
-        userCorrectionContext: input.autoLabelContext.userCorrectionContext,
       });
       const [classified] = await db
         .update(gmailAutoLabelEvent)

@@ -25,6 +25,11 @@ import {
 import { and, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
+  learnAiMemoryFromSentMessage,
+  loadAiAgentContext,
+  serializeAiAgentContext,
+} from "../ai-memory";
+import {
   ActiveChatRunConflictError,
   cancelActiveChatRun,
   continueAssistantRun,
@@ -404,7 +409,14 @@ export const chatRouter = {
           ? await (async () => {
               const { formatTranscribedEmail, TRANSCRIBED_EMAIL_FORMAT_MODEL } =
                 await import("@quieter/ai/format-transcribed-email");
+              const memoryContext = await loadAiAgentContext({
+                agent: "compose",
+                mailboxId: input.mailboxId,
+                query: text,
+                userId: context.userId,
+              });
               return await formatTranscribedEmail({
+                memoryContext: serializeAiAgentContext(memoryContext),
                 middleware: [
                   {
                     name: "polar-ai-transcribed-email-format-usage",
@@ -964,6 +976,13 @@ export const chatRouter = {
               composeMessageInputSchema.parse(draft),
               context.signal,
             );
+            await learnAiMemoryFromSentMessage({
+              bodyText: input.message.bodyText,
+              isReply: false,
+              mailboxId: input.mailboxId,
+              recipients: [input.message.to, input.message.cc, input.message.bcc].join(","),
+              userId: context.userId,
+            }).catch((error) => console.error("Could not record sent-message learning.", error));
             return {
               messageId: sent.id,
               status: "sent" as const,

@@ -91,11 +91,12 @@ When drafting:
 - include a clear subject; use "Re:" / "Fwd:" when appropriate
 - leave to/cc/bcc empty only when truly unknown; otherwise make a reasonable guess and note it briefly
 
-### remember_user_preference
+### remember_preference
 Record an explicit durable user preference that should improve future Quieter AI behavior. Use only
 when the user clearly states a reusable preference, rule, correction, or stable context. Do not use
 it for one-off facts, secrets, verification codes, message summaries, inferred private facts, or
-temporary tasks.
+temporary tasks. Choose personal memory for preferences that follow the user across mailboxes, and
+current mailbox memory for shared rules or context specific to that mailbox.
 
 ## Gmail search syntax
 
@@ -699,17 +700,18 @@ export type LinearToolsContext = {
   listLinearIssueMetadata: () => Promise<LinearIssueMetadataResult>;
 };
 
-export type UserAiContextMemoryResult = {
+export type AiMemoryResult = {
   status: "recorded" | "skipped";
 };
 
-export const userAiContextMemoryResultSchema = z.object({
+export const aiMemoryResultSchema = z.object({
   status: z.enum(["recorded", "skipped"]),
 });
 
-export const userAiContextMemoryToolDef = toolDefinition({
-  name: "remember_user_preference",
-  description: "Record an explicit durable user preference for future Quieter AI behavior.",
+export const aiMemoryToolDef = toolDefinition({
+  name: "remember_preference",
+  description:
+    "Record an explicit durable preference in personal memory or the current mailbox memory.",
   inputSchema: z.object({
     preference: z.string().trim().min(1).max(1_000).meta({
       description: "The reusable user preference or rule to remember.",
@@ -717,15 +719,20 @@ export const userAiContextMemoryToolDef = toolDefinition({
     reason: z.string().trim().max(500).optional().meta({
       description: "Short reason this is durable context rather than a one-off fact.",
     }),
+    scope: z.enum(["mailbox", "user"]).meta({
+      description:
+        "Use user for personal preferences that should follow the person across mailboxes. Use mailbox for behavior specific to the current mailbox or its collaborators.",
+    }),
   }),
-  outputSchema: userAiContextMemoryResultSchema,
+  outputSchema: aiMemoryResultSchema,
 });
 
-export type UserAiContextToolsContext = {
-  rememberUserPreference: (input: {
+export type AiMemoryToolsContext = {
+  rememberPreference: (input: {
     preference: string;
     reason?: string;
-  }) => Promise<UserAiContextMemoryResult>;
+    scope: "mailbox" | "user";
+  }) => Promise<AiMemoryResult>;
 };
 
 const getMailboxToolErrorMessage = (operation: string, error: unknown, fallback: string) => {
@@ -938,14 +945,12 @@ export const createLinearIssueServerTool = (context: LinearToolsContext): Server
     }
   });
 
-export const createUserAiContextMemoryServerTool = (
-  context: UserAiContextToolsContext,
-): ServerTool =>
-  userAiContextMemoryToolDef.server(async (input) => {
+export const createAiMemoryServerTool = (context: AiMemoryToolsContext): ServerTool =>
+  aiMemoryToolDef.server(async (input) => {
     try {
-      return await context.rememberUserPreference(input);
+      return await context.rememberPreference(input);
     } catch (error) {
-      console.error("Could not record user AI context preference.", {
+      console.error("Could not record dynamic AI memory.", {
         error: error instanceof Error ? error.message : "Unknown error.",
         preferenceLength: input.preference.length,
       });

@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "ai_memory_change_set_undo_of_unique" ON "aiMemoryChangeSet" ("undoOfId");--> statement-breakpoint
+ALTER TABLE "aiMemoryChangeSet" ADD CONSTRAINT "aiMemoryChangeSet_undoOfId_aiMemoryChangeSet_id_fkey" FOREIGN KEY ("undoOfId") REFERENCES "aiMemoryChangeSet"("id") ON DELETE CASCADE;

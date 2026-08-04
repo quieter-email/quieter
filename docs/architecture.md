@@ -16,6 +16,11 @@ flowchart LR
   AWS --> MailInfra["SES, S3, SNS, SQS, WebSocket"]
 ```
 
+Behavior-producing AI agents share the scoped dynamic knowledge boundary in
+[`docs/ai-memory.md`](./ai-memory.md). Personal knowledge follows one user, mailbox knowledge follows
+the mailbox and is more specific, and all retrieval and mutation goes through
+`packages/orpc/src/ai-memory.ts`.
+
 `apps/web` owns routing, rendering, browser state, server functions, and HTTP API handlers.
 Database-backed business logic crosses through `packages/orpc`. Shared packages own provider and
 domain-specific behavior.

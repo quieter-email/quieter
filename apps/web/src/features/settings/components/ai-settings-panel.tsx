@@ -3,13 +3,26 @@
 import type { RouterOutputs } from "@quieter/orpc";
 import { InformationCircleIcon, Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { AI_MEMORY_REQUEST_MAX_LENGTH } from "@quieter/ai/ai-memory";
 import {
   defaultAutoLabelModel,
   defaultUsefulDetailModel,
   type ChatModel,
 } from "@quieter/ai/chat-models";
+import {
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogCloseButton,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
 import { Field, FieldControl, FieldDescription, FieldLabel } from "@quieter/ui/field";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@quieter/ui/select";
+import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { toast } from "@quieter/ui/toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -25,6 +38,19 @@ import { SettingsCard, SettingsRow, SettingsRows, SettingsSection } from "./sett
 
 type AiSettings = RouterOutputs["ai"]["settings"];
 type CloudModelSettings = AiSettings["models"];
+type MemoryScope = AiSettings["memory"]["scopes"][number];
+
+const memoryDateFormatter = new Intl.DateTimeFormat("en", {
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  month: "short",
+  timeZone: "UTC",
+  timeZoneName: "short",
+  year: "numeric",
+});
+
+const formatMemoryDate = (value: Date | string) => memoryDateFormatter.format(new Date(value));
 
 const ModelCostInfo = () => (
   <Tooltip>
@@ -51,23 +77,56 @@ export const AiSettingsPanel = () => {
   const { data: settings, isPending } = useQuery(settingsQuery);
   const defaultChatModel = useDefaultChatModel();
   const [cloudModelDraft, setCloudModelDraft] = useState<CloudModelSettings | null>(null);
-  const [memoryDraft, setMemoryDraft] = useState<{
-    markdown: string;
+  const [learningDraft, setLearningDraft] = useState<{
+    activeLearningEnabled: boolean;
     revision: number;
+    scopeKey: string;
+    text: string;
   } | null>(null);
+  const [memoryRequest, setMemoryRequest] = useState("");
+  const [memoryResponse, setMemoryResponse] = useState<{ scopeKey: string; text: string } | null>(
+    null,
+  );
+  const [selectedScopeKey, setSelectedScopeKey] = useState("user");
+  const [deleteMemoryOpen, setDeleteMemoryOpen] = useState(false);
   const updateModelsMutation = useMutation(orpc.ai.updateModels.mutationOptions());
-  const updateMemoryMutation = useMutation(orpc.ai.updateMemory.mutationOptions());
+  const interactMemoryMutation = useMutation(orpc.ai.interactMemory.mutationOptions());
+  const updateLearningMutation = useMutation(orpc.ai.updateLearningGuidance.mutationOptions());
+  const forgetMemoryMutation = useMutation(orpc.ai.forgetMemory.mutationOptions());
+  const undoMemoryMutation = useMutation(orpc.ai.undoMemoryChange.mutationOptions());
+  const deleteMemoryMutation = useMutation(orpc.ai.deleteMemory.mutationOptions());
+  const exportMemoryMutation = useMutation(orpc.ai.exportMemory.mutationOptions());
   const cloudModels = cloudModelDraft ??
     settings?.models ?? {
       autoLabel: defaultAutoLabelModel,
       usefulDetail: defaultUsefulDetailModel,
     };
-  const memoryRevision = settings?.memory.revision ?? 0;
-  const memoryMarkdown =
-    memoryDraft?.revision === memoryRevision
-      ? memoryDraft.markdown
-      : (settings?.memory.markdown ?? "");
-  const memoryChanged = !!settings && memoryMarkdown !== settings.memory.markdown;
+  const selectedScope =
+    settings?.memory.scopes.find((scope) => scope.key === selectedScopeKey) ??
+    settings?.memory.scopes[0];
+  const memoryMutationPending =
+    interactMemoryMutation.isPending ||
+    forgetMemoryMutation.isPending ||
+    undoMemoryMutation.isPending ||
+    deleteMemoryMutation.isPending;
+
+  const updateSettings = (updater: (current: AiSettings) => AiSettings) => {
+    queryClient.setQueryData<AiSettings>(settingsQuery.queryKey, (current) =>
+      current ? updater(current) : current,
+    );
+    void persistQueryByKey(settingsQuery.queryKey, queryClient);
+  };
+
+  const updateScopeMemory = (scopeKey: string, memory: MemoryScope["memory"]) => {
+    updateSettings((current) => ({
+      ...current,
+      memory: {
+        scopes: current.memory.scopes.map((scope) =>
+          scope.key === scopeKey ? { ...scope, memory } : scope,
+        ),
+      },
+    }));
+  };
 
   const updateCloudModels = (nextModels: CloudModelSettings) => {
     setCloudModelDraft(nextModels);
@@ -79,10 +138,7 @@ export const AiSettingsPanel = () => {
         );
       },
       onSuccess: (models) => {
-        queryClient.setQueryData<AiSettings>(settingsQuery.queryKey, (current) =>
-          current ? { ...current, models } : current,
-        );
-        void persistQueryByKey(settingsQuery.queryKey, queryClient);
+        updateSettings((current) => ({ ...current, models }));
         setCloudModelDraft(null);
       },
     });
@@ -92,26 +148,153 @@ export const AiSettingsPanel = () => {
     updateCloudModels({ ...cloudModels, [key]: model });
   };
 
-  const saveMemory = () => {
-    updateMemoryMutation.mutate(
-      { markdown: memoryMarkdown, revision: memoryRevision },
+  const memoryTarget = selectedScope
+    ? {
+        mailboxId: selectedScope.mailboxId ?? undefined,
+        scope: selectedScope.kind,
+      }
+    : null;
+
+  const interactWithMemory = () => {
+    if (!selectedScope || !memoryTarget || !memoryRequest.trim()) return;
+    interactMemoryMutation.mutate(
+      { ...memoryTarget, request: memoryRequest.trim() },
       {
-        onError: (error) => {
-          void queryClient.invalidateQueries({ queryKey: settingsQuery.queryKey });
+        onError: (error) =>
           toast.error(
-            error instanceof Error && error.message ? error.message : "Could not save AI memory.",
-          );
-        },
-        onSuccess: (memory) => {
-          queryClient.setQueryData<AiSettings>(settingsQuery.queryKey, (current) =>
-            current ? { ...current, memory } : current,
-          );
-          void persistQueryByKey(settingsQuery.queryKey, queryClient);
-          setMemoryDraft(null);
-          toast.success("AI memory saved.");
+            error instanceof Error && error.message ? error.message : "Could not update AI memory.",
+          ),
+        onSuccess: ({ answer, memory }) => {
+          updateScopeMemory(selectedScope.key, memory);
+          setMemoryResponse({ scopeKey: selectedScope.key, text: answer });
+          setMemoryRequest("");
         },
       },
     );
+  };
+
+  const learning =
+    learningDraft &&
+    selectedScope &&
+    learningDraft.scopeKey === selectedScope.key &&
+    learningDraft.revision === selectedScope.learning.revision
+      ? learningDraft
+      : selectedScope
+        ? {
+            activeLearningEnabled: selectedScope.learning.activeLearningEnabled,
+            revision: selectedScope.learning.revision,
+            scopeKey: selectedScope.key,
+            text: selectedScope.learning.learningPrompt,
+          }
+        : null;
+  const learningChanged =
+    !!selectedScope &&
+    !!learning &&
+    (learning.text !== selectedScope.learning.learningPrompt ||
+      learning.activeLearningEnabled !== selectedScope.learning.activeLearningEnabled);
+
+  const saveLearningGuidance = () => {
+    if (!selectedScope || !memoryTarget || !learning) return;
+    updateLearningMutation.mutate(
+      {
+        ...memoryTarget,
+        activeLearningEnabled: learning.activeLearningEnabled,
+        learningPrompt: learning.text,
+        revision: selectedScope.learning.revision,
+      },
+      {
+        onError: (error) => {
+          setLearningDraft(null);
+          void queryClient.invalidateQueries({ queryKey: settingsQuery.queryKey });
+          toast.error(
+            error instanceof Error && error.message
+              ? error.message
+              : "Could not save learning guidance.",
+          );
+        },
+        onSuccess: (nextLearning) => {
+          updateSettings((current) => ({
+            ...current,
+            memory: {
+              scopes: current.memory.scopes.map((scope) =>
+                scope.key === selectedScope.key ? { ...scope, learning: nextLearning } : scope,
+              ),
+            },
+          }));
+          setLearningDraft(null);
+          toast.success("Learning guidance saved.");
+        },
+      },
+    );
+  };
+
+  const forgetMemory = (memoryId: string) => {
+    if (!selectedScope || !memoryTarget) return;
+    forgetMemoryMutation.mutate(
+      { ...memoryTarget, memoryId },
+      {
+        onError: (error) =>
+          toast.error(
+            error instanceof Error && error.message ? error.message : "Could not forget memory.",
+          ),
+        onSuccess: ({ memory, summary }) => {
+          updateScopeMemory(selectedScope.key, memory);
+          toast.success(summary);
+        },
+      },
+    );
+  };
+
+  const undoMemoryChange = (changeSetId: string) => {
+    if (!selectedScope || !memoryTarget) return;
+    undoMemoryMutation.mutate(
+      { ...memoryTarget, changeSetId },
+      {
+        onError: (error) =>
+          toast.error(
+            error instanceof Error && error.message ? error.message : "Could not undo this change.",
+          ),
+        onSuccess: ({ memory, summary }) => {
+          updateScopeMemory(selectedScope.key, memory);
+          toast.success(summary);
+        },
+      },
+    );
+  };
+
+  const deleteAllMemory = () => {
+    if (!selectedScope || !memoryTarget) return;
+    deleteMemoryMutation.mutate(memoryTarget, {
+      onError: (error) =>
+        toast.error(
+          error instanceof Error && error.message ? error.message : "Could not delete AI memory.",
+        ),
+      onSuccess: ({ memory }) => {
+        updateScopeMemory(selectedScope.key, memory);
+        toast.success(`${selectedScope.name} memory deleted.`);
+      },
+    });
+    setDeleteMemoryOpen(false);
+  };
+
+  const exportMemory = () => {
+    if (!selectedScope || !memoryTarget) return;
+    exportMemoryMutation.mutate(memoryTarget, {
+      onError: (error) =>
+        toast.error(
+          error instanceof Error && error.message ? error.message : "Could not export AI memory.",
+        ),
+      onSuccess: (memoryExport) => {
+        const url = URL.createObjectURL(
+          new Blob([JSON.stringify(memoryExport, null, 2)], { type: "application/json" }),
+        );
+        const link = document.createElement("a");
+        link.download = `quieter-${selectedScope.kind === "user" ? "personal" : "mailbox"}-memory.json`;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+      },
+    });
   };
 
   const cloudModelsDisabled = isPending || updateModelsMutation.isPending;
@@ -182,49 +365,277 @@ export const AiSettingsPanel = () => {
       </SettingsSection>
 
       <SettingsSection
-        description="This is the one durable profile Quieter continuously refines from your explicit preferences and feedback. Chat, auto-labeling, and useful details all read this same context."
-        title="AI memory"
+        description="Ask what Quieter knows, give it instructions, or correct what it has learned. Instructions and learned knowledge stay connected in the selected scope."
+        title="Knowledge & memory"
       >
         <SettingsCard className="p-4 md:p-6">
-          <Field>
-            <FieldLabel>Saved context</FieldLabel>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-fg">Memory scope</p>
+              <p className="mt-1 text-sm text-muted-fg">
+                {selectedScope?.description ?? "Loading memory scopes."}
+              </p>
+            </div>
+            <Select
+              onValueChange={(value) => value && setSelectedScopeKey(value)}
+              value={selectedScope?.key ?? "user"}
+            >
+              <SelectTrigger aria-label="Memory scope" className="w-48" size="sm">
+                <SelectValue placeholder="Select scope" />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {settings?.memory.scopes.map((scope) => (
+                  <SelectItem key={scope.key} value={scope.key}>
+                    {scope.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Field className="mt-5">
+            <FieldLabel>Ask or update</FieldLabel>
             <FieldControl
-              aria-label="Saved AI context"
-              className="h-auto min-h-56 resize-y p-3 font-mono text-xs/5"
-              disabled={isPending || updateMemoryMutation.isPending}
-              maxLength={12_000}
-              onChange={(event) =>
-                setMemoryDraft({ markdown: event.target.value, revision: memoryRevision })
+              aria-label="Ask or update memory"
+              className="h-auto min-h-24 resize-y p-3 text-sm/6"
+              disabled={!selectedScope || memoryMutationPending}
+              maxLength={AI_MEMORY_REQUEST_MAX_LENGTH}
+              onChange={(event) => setMemoryRequest(event.target.value)}
+              placeholder={
+                selectedScope?.kind === "mailbox"
+                  ? "Ask what this mailbox knows, or say how Quieter should handle its email."
+                  : "Ask what Quieter knows about you, or give it a personal instruction."
               }
-              placeholder="No durable preferences have been learned yet."
               render={<textarea />}
-              value={memoryMarkdown}
+              value={memoryRequest}
             />
-            <FieldDescription className="flex flex-wrap items-center justify-between gap-3">
-              <span>
-                Edit the Markdown directly. Future feedback may refine it while preserving durable
-                preferences.
-              </span>
-              <span className="font-mono tabular-nums">
-                {memoryMarkdown.length.toLocaleString("en-US")} / 12,000
-              </span>
+            <FieldDescription>
+              {selectedScope?.canManage
+                ? "Use natural language to ask questions, add instructions, correct knowledge, or forget something."
+                : "Ask questions about this mailbox knowledge. Only mailbox managers can change it."}
             </FieldDescription>
           </Field>
           <div className="mt-4 flex justify-end">
             <Button
-              disabled={!memoryChanged || updateMemoryMutation.isPending}
-              onClick={saveMemory}
+              disabled={!selectedScope || !memoryRequest.trim() || memoryMutationPending}
+              onClick={interactWithMemory}
               size="sm"
               type="button"
             >
-              {updateMemoryMutation.isPending && (
+              {interactMemoryMutation.isPending && (
                 <HugeiconsIcon aria-hidden className="animate-spin" icon={Loading03Icon} />
               )}
-              Save memory
+              Send
             </Button>
           </div>
+
+          {memoryResponse && memoryResponse.scopeKey === selectedScope?.key && (
+            <div className="mt-4 rounded-lg border border-border bg-bg-elevated/40 p-4 text-sm/6 text-fg">
+              {memoryResponse.text}
+            </div>
+          )}
+
+          <div className="mt-6 border-t border-border pt-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-fg">Knowledge base</p>
+                <p className="mt-1 text-xs text-muted-fg">
+                  {selectedScope?.memory.activeCount ?? 0} active,{" "}
+                  {selectedScope?.memory.archivedCount ?? 0} forgotten
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  disabled={!selectedScope || exportMemoryMutation.isPending}
+                  onClick={exportMemory}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Export
+                </Button>
+                <Button
+                  disabled={
+                    !selectedScope?.canManage ||
+                    memoryMutationPending ||
+                    (selectedScope?.memory.activeCount === 0 &&
+                      selectedScope.memory.archivedCount === 0)
+                  }
+                  onClick={() => setDeleteMemoryOpen(true)}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  Delete all
+                </Button>
+              </div>
+            </div>
+
+            {selectedScope?.memory.items.length ? (
+              <div className="mt-4 flex flex-col gap-5">
+                {(["instruction", "learned"] as const).map((kind) => {
+                  const items = selectedScope.memory.items.filter((memory) => memory.kind === kind);
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={kind}>
+                      <p className="mb-2 text-xs font-medium tracking-wide text-muted-fg uppercase">
+                        {kind === "instruction" ? "Instructions" : "Learned knowledge"}
+                      </p>
+                      <div className="divide-y divide-border rounded-lg border border-border">
+                        {items.map((memory) => (
+                          <div
+                            className="flex items-start justify-between gap-4 p-3"
+                            key={memory.id}
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm text-fg">{memory.content}</p>
+                              <p className="mt-1 text-xs text-muted-fg">
+                                Updated {formatMemoryDate(memory.updatedAt)}
+                              </p>
+                            </div>
+                            {selectedScope.canManage && (
+                              <Button
+                                disabled={memoryMutationPending}
+                                onClick={() => forgetMemory(memory.id)}
+                                size="sm"
+                                type="button"
+                                variant="ghost"
+                              >
+                                Forget
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-4 rounded-lg border border-dashed border-border p-4 text-sm text-muted-fg">
+                This scope has no durable instructions or learned knowledge yet.
+              </p>
+            )}
+          </div>
+
+          <div className="mt-6 border-t border-border pt-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-fg">Active learning</p>
+                <p className="mt-1 text-sm text-muted-fg">
+                  Learn durable patterns from sent messages, replies, feedback, and important
+                  mailbox actions. Raw message text is not stored in the knowledge base.
+                </p>
+              </div>
+              <Switch
+                aria-label="Active memory learning"
+                checked={learning?.activeLearningEnabled ?? true}
+                disabled={!selectedScope?.canManage}
+                onCheckedChange={(checked) => {
+                  if (!selectedScope || !learning) return;
+                  setLearningDraft({ ...learning, activeLearningEnabled: checked });
+                }}
+              >
+                <SwitchThumb />
+              </Switch>
+            </div>
+            <Field className="mt-4">
+              <FieldLabel>Learning guidance</FieldLabel>
+              <FieldControl
+                aria-label="Memory learning guidance"
+                className="h-auto min-h-32 resize-y p-3 text-sm/6"
+                disabled={!selectedScope?.canManage || updateLearningMutation.isPending}
+                maxLength={6000}
+                onChange={(event) => {
+                  if (!selectedScope || !learning) return;
+                  setLearningDraft({ ...learning, text: event.target.value });
+                }}
+                placeholder="Describe which durable patterns Quieter should focus on learning."
+                render={<textarea />}
+                value={learning?.text ?? ""}
+              />
+              <FieldDescription>
+                This prompt tunes what the memory writer notices. Privacy, evidence, and instruction
+                precedence remain enforced.
+              </FieldDescription>
+            </Field>
+            <div className="mt-4 flex justify-end">
+              <Button
+                disabled={
+                  !selectedScope?.canManage || !learningChanged || updateLearningMutation.isPending
+                }
+                onClick={saveLearningGuidance}
+                size="sm"
+                type="button"
+              >
+                {updateLearningMutation.isPending && (
+                  <HugeiconsIcon aria-hidden className="animate-spin" icon={Loading03Icon} />
+                )}
+                Save learning guidance
+              </Button>
+            </div>
+          </div>
+
+          {selectedScope?.memory.recentChanges.length ? (
+            <div className="mt-6 border-t border-border pt-5">
+              <p className="text-sm font-medium text-fg">Recent changes</p>
+              <div className="mt-3 flex flex-col gap-3">
+                {selectedScope.memory.recentChanges.map((change) => (
+                  <div className="flex items-start justify-between gap-4" key={change.id}>
+                    <div className="min-w-0">
+                      <p className="text-sm text-fg">{change.summary}</p>
+                      <p className="mt-1 text-xs text-muted-fg capitalize">
+                        {change.source.replaceAll("_", " ")} — {formatMemoryDate(change.createdAt)}
+                      </p>
+                    </div>
+                    {selectedScope.canManage && change.canUndo && (
+                      <Button
+                        disabled={memoryMutationPending}
+                        onClick={() => undoMemoryChange(change.id)}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        Undo
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </SettingsCard>
       </SettingsSection>
+
+      <AlertDialog onOpenChange={setDeleteMemoryOpen} open={deleteMemoryOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete all {selectedScope?.name ?? "AI"} memory?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes both active and forgotten memory from this scope.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogBody>
+            <p className="text-sm text-muted-fg">
+              Future activity may build new knowledge again if active learning remains enabled.
+              Learning guidance is not deleted.
+            </p>
+          </AlertDialogBody>
+          <AlertDialogFooter>
+            <AlertDialogCloseButton disabled={deleteMemoryMutation.isPending}>
+              Cancel
+            </AlertDialogCloseButton>
+            <Button
+              disabled={deleteMemoryMutation.isPending}
+              onClick={deleteAllMemory}
+              type="button"
+              variant="destructive"
+            >
+              Delete memory
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

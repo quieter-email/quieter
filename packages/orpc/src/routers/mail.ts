@@ -85,6 +85,19 @@ import {
 import { mailboxProcedures } from "./mail/mailboxes";
 import { managedOrganizationMailRouter } from "./mail/managed-organization";
 
+type MailActionMemoryInput = Parameters<
+  (typeof import("../ai-memory"))["learnAiMemoryFromMailAction"]
+>[0];
+type SentMessageMemoryInput = Parameters<
+  (typeof import("../ai-memory"))["learnAiMemoryFromSentMessage"]
+>[0];
+
+const learnAiMemoryFromMailAction = async (input: MailActionMemoryInput) =>
+  await (await import("../ai-memory")).learnAiMemoryFromMailAction(input);
+
+const learnAiMemoryFromSentMessage = async (input: SentMessageMemoryInput) =>
+  await (await import("../ai-memory")).learnAiMemoryFromSentMessage(input);
+
 const parseListUnsubscribeMailto = (value: string) => {
   let url: URL;
 
@@ -231,6 +244,14 @@ export const mailRouter = {
       });
       if (selectedMailbox.provider === "managed") {
         const result = await applyManagedMessageChanges({ ...input, userId: context.userId });
+        if (input.command.kind === "move") {
+          await learnAiMemoryFromMailAction({
+            action: `move:${input.command.destination}`,
+            mailboxId: input.mailboxId,
+            targetCount: input.targets.length,
+            userId: context.userId,
+          }).catch((error) => console.error("Could not record mailbox action.", error));
+        }
         return {
           syncToken: result.revision === null ? undefined : String(result.revision),
           targets: result.targets,
@@ -304,6 +325,14 @@ export const mailRouter = {
               : { addLabelIds: ["SPAM"], removeLabelIds: ["INBOX"] },
             signal,
           );
+        }
+        if (input.command.kind === "move") {
+          await learnAiMemoryFromMailAction({
+            action: `move:${input.command.destination}`,
+            mailboxId: input.mailboxId,
+            targetCount: validTargets.length,
+            userId: context.userId,
+          }).catch((error) => console.error("Could not record mailbox action.", error));
         }
         return {
           targets: targetResults,
@@ -978,14 +1007,38 @@ export const mailRouter = {
         userId: context.userId,
       });
       if (selectedMailbox.provider === "managed") {
-        return await sendManagedMailboxMessage({
+        const sent = await sendManagedMailboxMessage({
           ...input,
           userId: context.userId,
         });
+        await learnAiMemoryFromSentMessage({
+          bodyText: input.message.bodyText,
+          isReply: !!input.message.replyContext,
+          mailboxId: input.mailboxId,
+          recipients: [
+            input.message.recipients.to,
+            input.message.recipients.cc,
+            input.message.recipients.bcc,
+          ].join(","),
+          userId: context.userId,
+        }).catch((error) => console.error("Could not record sent-message learning.", error));
+        return sent;
       }
 
       return await callGmail(context, input.mailboxId, async (accessToken) => {
-        return await sendGmailMessage(accessToken, input.message, context.signal);
+        const sent = await sendGmailMessage(accessToken, input.message, context.signal);
+        await learnAiMemoryFromSentMessage({
+          bodyText: input.message.bodyText,
+          isReply: !!input.message.replyContext,
+          mailboxId: input.mailboxId,
+          recipients: [
+            input.message.recipients.to,
+            input.message.recipients.cc,
+            input.message.recipients.bcc,
+          ].join(","),
+          userId: context.userId,
+        }).catch((error) => console.error("Could not record sent-message learning.", error));
+        return sent;
       });
     }),
 
@@ -1017,7 +1070,24 @@ export const mailRouter = {
           });
         }
 
-        return await sendGmailDraft(accessToken, draftId, raw, input.draft.replyContext?.threadId);
+        const sent = await sendGmailDraft(
+          accessToken,
+          draftId,
+          raw,
+          input.draft.replyContext?.threadId,
+        );
+        await learnAiMemoryFromSentMessage({
+          bodyText: input.draft.bodyText,
+          isReply: !!input.draft.replyContext,
+          mailboxId: input.mailboxId,
+          recipients: [
+            input.draft.recipients.to,
+            input.draft.recipients.cc,
+            input.draft.recipients.bcc,
+          ].join(","),
+          userId: context.userId,
+        }).catch((error) => console.error("Could not record sent-message learning.", error));
+        return sent;
       });
     }),
 

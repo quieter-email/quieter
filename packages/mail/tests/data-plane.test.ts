@@ -18,6 +18,7 @@ describe("mail data plane", () => {
     expect(getMailboxCapabilities({ provider: "api" })).toMatchObject({
       categories: ["sent"],
       canArchive: false,
+      canManageKnowledge: false,
       canManageLabels: false,
       canSend: false,
     });
@@ -27,17 +28,24 @@ describe("mail data plane", () => {
     expect(getMailboxCapabilities({ provider: "managed", role: "reader" })).toMatchObject({
       canArchive: false,
       canMarkRead: false,
+      canManageKnowledge: false,
       canSend: false,
     });
     expect(getMailboxCapabilities({ provider: "managed", role: "responder" })).toMatchObject({
       canArchive: true,
+      canManageKnowledge: false,
       canManageLabels: false,
       canSend: true,
     });
     expect(getMailboxCapabilities({ provider: "managed", role: "manager" })).toMatchObject({
       canArchive: true,
+      canManageKnowledge: true,
       canManageLabels: true,
       canSend: true,
     });
+  });
+
+  test("exposes knowledge management through the mailbox capability contract", () => {
+    expect(getMailboxCapabilities({ provider: "gmail" }).canManageKnowledge).toBe(true);
   });
 });

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   check,
@@ -186,7 +187,39 @@ export type UserAiContextEventKind =
   | "auto_label_feedback"
   | "chat_discovery"
   | "explicit_preference"
+  | "mail_action"
+  | "sent_message"
   | "useful_detail_feedback";
+export type AiMemoryStatus = "active" | "archived";
+export type AiMemoryScope = "mailbox" | "user";
+export type AiMemoryKind = "instruction" | "learned";
+export type AiMemorySource = "explicit" | "feedback" | "inferred" | "migration";
+export type AiMemoryChangeSetSource = "chat" | "feedback" | "migration" | "settings" | "system";
+export type AiMemoryChangeSetStatus = "applied" | "failed" | "no_change";
+export type AiMemoryMetadata = {
+  agents?: string[];
+  sourceDomains?: string[];
+  topics?: string[];
+  [key: string]: unknown;
+};
+export type AiMemorySnapshot = {
+  confidence: number;
+  content: string;
+  expiresAt: string | null;
+  importance: number;
+  kind: AiMemoryKind;
+  key: string;
+  metadata: AiMemoryMetadata;
+  status: AiMemoryStatus;
+  summary: string;
+  version: number;
+};
+export type AiMemoryChange = {
+  after: AiMemorySnapshot | null;
+  before: AiMemorySnapshot | null;
+  memoryId: string;
+  operation: "add" | "archive" | "restore" | "update";
+};
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -494,6 +527,7 @@ export const userAiContextEvent = pgTable(
     metadata: jsonb("metadata").$type<Record<string, string | number | boolean | null>>().notNull(),
     mergedAt: timestamp("mergedAt"),
     skippedAt: timestamp("skippedAt"),
+    processingAt: timestamp("processingAt"),
     lastError: text("lastError"),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
@@ -501,7 +535,7 @@ export const userAiContextEvent = pgTable(
   (table) => [
     check(
       "user_ai_context_event_kind_check",
-      sql`${table.kind} in ('auto_label_feedback', 'chat_discovery', 'explicit_preference', 'useful_detail_feedback')`,
+      sql`${table.kind} in ('auto_label_feedback', 'chat_discovery', 'explicit_preference', 'mail_action', 'sent_message', 'useful_detail_feedback')`,
     ),
     index("user_ai_context_event_organization_merge_idx").on(
       table.organizationId,
@@ -511,6 +545,139 @@ export const userAiContextEvent = pgTable(
     ),
     index("user_ai_context_event_user_merge_idx").on(table.userId, table.mergedAt, table.createdAt),
     index("user_ai_context_event_mailbox_created_idx").on(table.mailboxId, table.createdAt),
+  ],
+);
+
+export const aiMemory = pgTable(
+  "aiMemory",
+  {
+    id: text("id").primaryKey(),
+    scope: text("scope").$type<AiMemoryScope>().notNull(),
+    kind: text("kind").$type<AiMemoryKind>().notNull(),
+    scopeKey: text("scopeKey").notNull(),
+    userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
+    mailboxId: text("mailboxId").references(() => mailbox.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    content: text("content").notNull(),
+    summary: text("summary").notNull(),
+    metadata: jsonb("metadata").$type<AiMemoryMetadata>().notNull().default({}),
+    source: text("source").$type<AiMemorySource>().notNull(),
+    sourceReference: text("sourceReference"),
+    status: text("status").$type<AiMemoryStatus>().notNull().default("active"),
+    confidence: doublePrecision("confidence").notNull().default(0.75),
+    importance: integer("importance").notNull().default(3),
+    reinforcementCount: integer("reinforcementCount").notNull().default(1),
+    version: integer("version").notNull().default(1),
+    expiresAt: timestamp("expiresAt"),
+    archivedAt: timestamp("archivedAt"),
+    lastConfirmedAt: timestamp("lastConfirmedAt").notNull(),
+    lastUsedAt: timestamp("lastUsedAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check("ai_memory_scope_check", sql`${table.scope} in ('mailbox', 'user')`),
+    check("ai_memory_kind_check", sql`${table.kind} in ('instruction', 'learned')`),
+    check("ai_memory_status_check", sql`${table.status} in ('active', 'archived')`),
+    check(
+      "ai_memory_source_check",
+      sql`${table.source} in ('explicit', 'feedback', 'inferred', 'migration')`,
+    ),
+    check(
+      "ai_memory_scope_owner_check",
+      sql`(
+        (${table.scope} = 'user' and ${table.userId} is not null and ${table.mailboxId} is null)
+        or
+        (${table.scope} = 'mailbox' and ${table.userId} is null and ${table.mailboxId} is not null)
+      )`,
+    ),
+    check("ai_memory_key_length_check", sql`char_length(${table.key}) between 1 and 200`),
+    check("ai_memory_content_length_check", sql`char_length(${table.content}) between 1 and 2000`),
+    check("ai_memory_summary_length_check", sql`char_length(${table.summary}) between 1 and 300`),
+    check("ai_memory_confidence_check", sql`${table.confidence} between 0 and 1`),
+    check("ai_memory_importance_check", sql`${table.importance} between 1 and 5`),
+    check("ai_memory_reinforcement_count_check", sql`${table.reinforcementCount} >= 1`),
+    index("ai_memory_user_status_updated_idx").on(table.userId, table.status, table.updatedAt),
+    index("ai_memory_mailbox_status_updated_idx").on(
+      table.mailboxId,
+      table.status,
+      table.updatedAt,
+    ),
+    index("ai_memory_expiration_idx").on(table.status, table.expiresAt),
+    unique("ai_memory_scope_key_memory_key_unique").on(table.scopeKey, table.key),
+  ],
+);
+
+export const aiMemoryChangeSet = pgTable(
+  "aiMemoryChangeSet",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    mailboxId: text("mailboxId").references(() => mailbox.id, { onDelete: "cascade" }),
+    source: text("source").$type<AiMemoryChangeSetSource>().notNull(),
+    sourceEventId: text("sourceEventId").references(() => userAiContextEvent.id, {
+      onDelete: "set null",
+    }),
+    request: text("request"),
+    status: text("status").$type<AiMemoryChangeSetStatus>().notNull(),
+    summary: text("summary").notNull(),
+    changes: jsonb("changes").$type<AiMemoryChange[]>().notNull().default([]),
+    error: text("error"),
+    undoOfId: text("undoOfId").references((): AnyPgColumn => aiMemoryChangeSet.id, {
+      onDelete: "cascade",
+    }),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "ai_memory_change_set_source_check",
+      sql`${table.source} in ('chat', 'feedback', 'migration', 'settings', 'system')`,
+    ),
+    check(
+      "ai_memory_change_set_status_check",
+      sql`${table.status} in ('applied', 'failed', 'no_change')`,
+    ),
+    check("ai_memory_change_set_request_length_check", sql`char_length(${table.request}) <= 2000`),
+    check("ai_memory_change_set_summary_length_check", sql`char_length(${table.summary}) <= 500`),
+    index("ai_memory_change_set_user_created_idx").on(table.userId, table.createdAt),
+    index("ai_memory_change_set_mailbox_created_idx").on(table.mailboxId, table.createdAt),
+    uniqueIndex("ai_memory_change_set_undo_of_unique").on(table.undoOfId),
+    unique("ai_memory_change_set_source_event_unique").on(table.sourceEventId),
+  ],
+);
+
+export const aiMemoryScopeConfig = pgTable(
+  "aiMemoryScopeConfig",
+  {
+    id: text("id").primaryKey(),
+    scope: text("scope").$type<AiMemoryScope>().notNull(),
+    scopeKey: text("scopeKey").notNull(),
+    userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
+    mailboxId: text("mailboxId").references(() => mailbox.id, { onDelete: "cascade" }),
+    activeLearningEnabled: boolean("activeLearningEnabled").notNull().default(true),
+    learningPrompt: text("learningPrompt").notNull().default(""),
+    revision: integer("revision").notNull().default(1),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check("ai_memory_scope_config_scope_check", sql`${table.scope} in ('mailbox', 'user')`),
+    check(
+      "ai_memory_scope_config_owner_check",
+      sql`(
+        (${table.scope} = 'user' and ${table.userId} is not null and ${table.mailboxId} is null)
+        or
+        (${table.scope} = 'mailbox' and ${table.userId} is null and ${table.mailboxId} is not null)
+      )`,
+    ),
+    check(
+      "ai_memory_scope_config_learning_prompt_length_check",
+      sql`char_length(${table.learningPrompt}) <= 6000`,
+    ),
+    unique("ai_memory_scope_config_scope_key_unique").on(table.scopeKey),
   ],
 );
 
@@ -1974,6 +2141,9 @@ export const apikey = pgTable(
 
 export const tables = {
   apikey,
+  aiMemory,
+  aiMemoryChangeSet,
+  aiMemoryScopeConfig,
   billingCreditUsageEvent,
   billingEntitlementOverride,
   billingSubscription,
@@ -2055,6 +2225,15 @@ export const authRelations = defineRelations(tables, (r) => ({
     aiContextEvents: r.many.userAiContextEvent({
       from: r.user.id,
       to: r.userAiContextEvent.userId,
+    }),
+    aiMemories: r.many.aiMemory({ from: r.user.id, to: r.aiMemory.userId }),
+    aiMemoryChangeSets: r.many.aiMemoryChangeSet({
+      from: r.user.id,
+      to: r.aiMemoryChangeSet.userId,
+    }),
+    aiMemoryScopeConfigs: r.many.aiMemoryScopeConfig({
+      from: r.user.id,
+      to: r.aiMemoryScopeConfig.userId,
     }),
     chats: r.many.chat({ from: r.user.id, to: r.chat.userId }),
     connectorCredentials: r.many.connectorCredential({
@@ -2323,6 +2502,18 @@ export const authRelations = defineRelations(tables, (r) => ({
     }),
   },
   mailbox: {
+    aiMemories: r.many.aiMemory({
+      from: r.mailbox.id,
+      to: r.aiMemory.mailboxId,
+    }),
+    aiMemoryChangeSets: r.many.aiMemoryChangeSet({
+      from: r.mailbox.id,
+      to: r.aiMemoryChangeSet.mailboxId,
+    }),
+    aiMemoryScopeConfigs: r.many.aiMemoryScopeConfig({
+      from: r.mailbox.id,
+      to: r.aiMemoryScopeConfig.mailboxId,
+    }),
     userAiContextEvents: r.many.userAiContextEvent({
       from: r.mailbox.id,
       to: r.userAiContextEvent.mailboxId,
@@ -2425,6 +2616,42 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.mailbox.organizationId,
       to: r.organization.id,
       optional: false,
+    }),
+  },
+  aiMemory: {
+    mailbox: r.one.mailbox({
+      from: r.aiMemory.mailboxId,
+      to: r.mailbox.id,
+      optional: true,
+    }),
+    user: r.one.user({
+      from: r.aiMemory.userId,
+      to: r.user.id,
+      optional: true,
+    }),
+  },
+  aiMemoryChangeSet: {
+    mailbox: r.one.mailbox({
+      from: r.aiMemoryChangeSet.mailboxId,
+      to: r.mailbox.id,
+      optional: true,
+    }),
+    user: r.one.user({
+      from: r.aiMemoryChangeSet.userId,
+      to: r.user.id,
+      optional: false,
+    }),
+  },
+  aiMemoryScopeConfig: {
+    mailbox: r.one.mailbox({
+      from: r.aiMemoryScopeConfig.mailboxId,
+      to: r.mailbox.id,
+      optional: true,
+    }),
+    user: r.one.user({
+      from: r.aiMemoryScopeConfig.userId,
+      to: r.user.id,
+      optional: true,
     }),
   },
   gmailCredential: {

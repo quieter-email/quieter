@@ -2,21 +2,18 @@ import { db } from "@quieter/database/client";
 import {
   gmailLabel,
   gmailUsefulDetailFeedback,
-  mailAutomationMemoryProfile,
   mailAutoLabelFeedback,
   managedMailLabel,
   managedMailMessage,
   mailbox,
-  type MailAutomationAgent,
   type MailAutoLabelFeedbackSignal,
   type PersistedMailboxProvider,
 } from "@quieter/database/schema";
 import { MAILBOX_LABELS } from "@quieter/gmail";
 import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
+import { recordAndRefreshAiMemory, replaceMailboxFeedbackMemories } from "../ai-memory";
 
-const AUTOMATION_MEMORY_PROMPT_BUDGET = 900;
-const AUTO_LABEL_CORRECTION_PROMPT_BUDGET = 1_200;
 const SYSTEM_LABEL_IDS = new Set<string>(Object.values(MAILBOX_LABELS));
 
 export type AutoLabelMemoryRule = {
@@ -32,19 +29,6 @@ export type AutoLabelMemoryProfile = {
   rules: AutoLabelMemoryRule[];
 };
 
-export type AutoLabelUserCorrection = {
-  count: number;
-  labelId: string;
-  labelName: string | null;
-  signal: MailAutoLabelFeedbackSignal;
-  source: string | null;
-};
-
-export type AutoLabelUserCorrectionContext = {
-  corrections: AutoLabelUserCorrection[];
-  kind: "auto_label_user_corrections";
-};
-
 export type UsefulDetailMemoryRule = {
   count: number;
   kind: string;
@@ -55,152 +39,6 @@ export type UsefulDetailMemoryRule = {
 export type UsefulDetailMemoryProfile = {
   kind: "useful_detail";
   rules: UsefulDetailMemoryRule[];
-};
-
-const serializeProfile = (profile: object) => JSON.stringify(profile);
-
-const trimAutoLabelProfileToBudget = (profile: AutoLabelMemoryProfile): AutoLabelMemoryProfile => {
-  const rules = [...profile.rules];
-
-  while (
-    rules.length > 0 &&
-    serializeProfile({ ...profile, rules }).length > AUTOMATION_MEMORY_PROMPT_BUDGET
-  ) {
-    rules.pop();
-  }
-
-  return { ...profile, rules };
-};
-
-const trimAutoLabelCorrectionContextToBudget = (
-  context: AutoLabelUserCorrectionContext,
-): AutoLabelUserCorrectionContext => {
-  const corrections = [...context.corrections];
-
-  while (
-    corrections.length > 0 &&
-    serializeProfile({ ...context, corrections }).length > AUTO_LABEL_CORRECTION_PROMPT_BUDGET
-  ) {
-    corrections.pop();
-  }
-
-  return { ...context, corrections };
-};
-
-const trimUsefulDetailProfileToBudget = (
-  profile: UsefulDetailMemoryProfile,
-): UsefulDetailMemoryProfile => {
-  const rules = [...profile.rules];
-
-  while (
-    rules.length > 0 &&
-    serializeProfile({ ...profile, rules }).length > AUTOMATION_MEMORY_PROMPT_BUDGET
-  ) {
-    rules.pop();
-  }
-
-  return { ...profile, rules };
-};
-
-const upsertMemoryProfile = async (
-  mailboxId: string,
-  agent: MailAutomationAgent,
-  profile: AutoLabelMemoryProfile | UsefulDetailMemoryProfile,
-) => {
-  const now = new Date();
-  await db
-    .insert(mailAutomationMemoryProfile)
-    .values({
-      agent,
-      createdAt: now,
-      id: randomUUID(),
-      lastMergedAt: now,
-      mailboxId,
-      profile,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      set: {
-        lastMergedAt: now,
-        profile,
-        revision: sql`${mailAutomationMemoryProfile.revision} + 1`,
-        updatedAt: now,
-      },
-      target: [mailAutomationMemoryProfile.mailboxId, mailAutomationMemoryProfile.agent],
-    });
-};
-
-export const loadAutomationMemoryPrompt = async (input: {
-  agent: MailAutomationAgent;
-  mailboxId: string;
-}) => {
-  const [record] = await db
-    .select({ profile: mailAutomationMemoryProfile.profile })
-    .from(mailAutomationMemoryProfile)
-    .where(
-      and(
-        eq(mailAutomationMemoryProfile.mailboxId, input.mailboxId),
-        eq(mailAutomationMemoryProfile.agent, input.agent),
-      ),
-    )
-    .limit(1);
-  if (!record) return null;
-
-  const serialized = JSON.stringify(record.profile);
-  return serialized.length <= AUTOMATION_MEMORY_PROMPT_BUDGET ? serialized : null;
-};
-
-export const buildAutoLabelUserCorrectionContext = (
-  rows: Array<{
-    labelId: string;
-    labelName: string | null;
-    signal: MailAutoLabelFeedbackSignal;
-    source: string | null;
-  }>,
-): AutoLabelUserCorrectionContext => {
-  const correctionsByKey = new Map<string, AutoLabelUserCorrection>();
-
-  for (const row of rows) {
-    const key = JSON.stringify([row.labelId, row.signal, row.source]);
-    const existing = correctionsByKey.get(key);
-    if (existing) {
-      existing.count += 1;
-      continue;
-    }
-
-    correctionsByKey.set(key, {
-      count: 1,
-      labelId: row.labelId,
-      labelName: row.labelName,
-      signal: row.signal,
-      source: row.source,
-    });
-  }
-
-  return trimAutoLabelCorrectionContextToBudget({
-    corrections: Array.from(correctionsByKey.values()),
-    kind: "auto_label_user_corrections",
-  });
-};
-
-export const loadAutoLabelUserCorrectionPrompt = async (mailboxId: string) => {
-  const rows = await db
-    .select({
-      labelId: mailAutoLabelFeedback.labelId,
-      labelName: mailAutoLabelFeedback.labelName,
-      signal: mailAutoLabelFeedback.signal,
-      source: mailAutoLabelFeedback.source,
-    })
-    .from(mailAutoLabelFeedback)
-    .where(eq(mailAutoLabelFeedback.mailboxId, mailboxId))
-    .orderBy(desc(mailAutoLabelFeedback.updatedAt))
-    .limit(40);
-
-  const context = buildAutoLabelUserCorrectionContext(rows);
-  if (context.corrections.length === 0) return null;
-
-  const serialized = JSON.stringify(context);
-  return serialized.length <= AUTO_LABEL_CORRECTION_PROMPT_BUDGET ? serialized : null;
 };
 
 const listLabelNames = async (
@@ -341,37 +179,33 @@ export const recordMailAutoLabelFeedback = async (input: {
         mailAutoLabelFeedback.labelId,
       ],
     });
-  await refreshAutoLabelMemoryProfile(input.mailboxId);
-  void import("../user-ai-context")
-    .then(({ recordAndRefreshUserAiContext }) =>
-      recordAndRefreshUserAiContext({
-        kind: "auto_label_feedback",
-        mailboxId: input.mailboxId,
-        metadata: {
-          addedLabels: addLabelIds
-            .map((labelId) => labelNames.get(labelId) ?? labelId)
-            .join(", ")
-            .slice(0, 600),
-          messageCount: providerMessageIds.length,
-          removedLabels: removeLabelIds
-            .map((labelId) => labelNames.get(labelId) ?? labelId)
-            .join(", ")
-            .slice(0, 600),
-          sources: Array.from(
-            new Set(
-              providerMessageIds.map((providerMessageId) => resolveSource(providerMessageId)),
-            ),
-          )
-            .filter(Boolean)
-            .join(", ")
-            .slice(0, 600),
-        },
-        userId: input.userId,
-      }),
-    )
-    .catch((error) => {
-      console.error("Could not refresh user AI context from auto-label feedback.", error);
-    });
+  void refreshAutoLabelMemoryProfile(input.mailboxId, input.userId).catch((error) => {
+    console.error("Could not refresh auto-label memory after feedback.", error);
+  });
+  void recordAndRefreshAiMemory({
+    kind: "auto_label_feedback",
+    mailboxId: input.mailboxId,
+    metadata: {
+      addedLabels: addLabelIds
+        .map((labelId) => labelNames.get(labelId) ?? labelId)
+        .join(", ")
+        .slice(0, 600),
+      messageCount: providerMessageIds.length,
+      removedLabels: removeLabelIds
+        .map((labelId) => labelNames.get(labelId) ?? labelId)
+        .join(", ")
+        .slice(0, 600),
+      sources: Array.from(
+        new Set(providerMessageIds.map((providerMessageId) => resolveSource(providerMessageId))),
+      )
+        .filter(Boolean)
+        .join(", ")
+        .slice(0, 600),
+    },
+    userId: input.userId,
+  }).catch((error) => {
+    console.error("Could not learn dynamic memory from auto-label feedback.", error);
+  });
 };
 
 export const buildAutoLabelMemoryProfile = (
@@ -405,10 +239,18 @@ export const buildAutoLabelMemoryProfile = (
       return sourceRank || right.count - left.count || left.labelId.localeCompare(right.labelId);
     });
 
-  return trimAutoLabelProfileToBudget({ kind: "auto_label", rules });
+  return { kind: "auto_label", rules };
 };
 
-export const refreshAutoLabelMemoryProfile = async (mailboxId: string) => {
+const toMemoryKeyPart = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9._:-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
+
+export const refreshAutoLabelMemoryProfile = async (mailboxId: string, userId: string) => {
   const rows = await db
     .select({
       added: sql<number>`count(*) filter (where ${mailAutoLabelFeedback.signal} = 'added')`,
@@ -422,17 +264,37 @@ export const refreshAutoLabelMemoryProfile = async (mailboxId: string) => {
     .groupBy(mailAutoLabelFeedback.labelId, mailAutoLabelFeedback.source)
     .orderBy(desc(count()));
 
-  await upsertMemoryProfile(
-    mailboxId,
-    "auto_label",
-    buildAutoLabelMemoryProfile(
-      rows.map((row) => ({
-        ...row,
-        added: Number(row.added),
-        removed: Number(row.removed),
-      })),
-    ),
+  const profile = buildAutoLabelMemoryProfile(
+    rows.map((row) => ({
+      ...row,
+      added: Number(row.added),
+      removed: Number(row.removed),
+    })),
   );
+  await replaceMailboxFeedbackMemories({
+    agent: "auto_label",
+    mailboxId,
+    memories: profile.rules.map((rule) => {
+      const label = rule.labelName ?? rule.labelId;
+      const action = rule.policy === "prefer" ? "Prefer applying" : "Avoid applying";
+      const scope = rule.source ? ` to messages from ${rule.source}` : " when it clearly matches";
+      return {
+        confidence: Math.min(0.98, 0.65 + rule.count * 0.08),
+        content: `${action} the “${label}” label${scope}; learned from ${rule.count} manual correction${rule.count === 1 ? "" : "s"}.`,
+        importance: rule.source ? 4 : 3,
+        key: `${toMemoryKeyPart(rule.labelId)}:${toMemoryKeyPart(rule.source ?? "all")}`,
+        metadata: {
+          labelId: rule.labelId,
+          policy: rule.policy,
+        },
+        reinforcementCount: rule.count,
+        sourceDomains: rule.source ? [rule.source] : [],
+        summary: `${rule.policy === "prefer" ? "Prefers" : "Avoids"} “${label}”${rule.source ? ` for ${rule.source}` : ""}`,
+        topics: ["email-labeling", label, ...(rule.source ? [rule.source] : [])],
+      };
+    }),
+    userId,
+  });
 };
 
 export const buildUsefulDetailMemoryProfile = (
@@ -464,10 +326,10 @@ export const buildUsefulDetailMemoryProfile = (
       return sourceRank || right.count - left.count || left.kind.localeCompare(right.kind);
     });
 
-  return trimUsefulDetailProfileToBudget({ kind: "useful_detail", rules });
+  return { kind: "useful_detail", rules };
 };
 
-export const refreshUsefulDetailMemoryProfile = async (mailboxId: string) => {
+export const refreshUsefulDetailMemoryProfile = async (mailboxId: string, userId: string) => {
   const rows = await db
     .select({
       kind: gmailUsefulDetailFeedback.kind,
@@ -480,17 +342,36 @@ export const refreshUsefulDetailMemoryProfile = async (mailboxId: string) => {
     .groupBy(gmailUsefulDetailFeedback.kind, gmailUsefulDetailFeedback.source)
     .orderBy(desc(count()));
 
-  await upsertMemoryProfile(
-    mailboxId,
-    "useful_detail",
-    buildUsefulDetailMemoryProfile(
-      rows.map((row) => ({
-        ...row,
-        notUseful: Number(row.notUseful),
-        useful: Number(row.useful),
-      })),
-    ),
+  const profile = buildUsefulDetailMemoryProfile(
+    rows.map((row) => ({
+      ...row,
+      notUseful: Number(row.notUseful),
+      useful: Number(row.useful),
+    })),
   );
+  await replaceMailboxFeedbackMemories({
+    agent: "useful_detail",
+    mailboxId,
+    memories: profile.rules.map((rule) => {
+      const action = rule.policy === "prefer" ? "Treat" : "Do not treat";
+      const scope = rule.source ? ` from ${rule.source}` : " across this mailbox";
+      return {
+        confidence: Math.min(0.98, 0.65 + rule.count * 0.08),
+        content: `${action} ${rule.kind.replaceAll("_", " ")} details${scope} as useful; learned from ${rule.count} rating${rule.count === 1 ? "" : "s"}.`,
+        importance: rule.source ? 4 : 3,
+        key: `${toMemoryKeyPart(rule.kind)}:${toMemoryKeyPart(rule.source ?? "all")}`,
+        metadata: {
+          detailKind: rule.kind,
+          policy: rule.policy,
+        },
+        reinforcementCount: rule.count,
+        sourceDomains: rule.source ? [rule.source] : [],
+        summary: `${rule.policy === "prefer" ? "Prefers" : "Suppresses"} ${rule.kind.replaceAll("_", " ")}${rule.source ? ` from ${rule.source}` : ""}`,
+        topics: ["useful-details", rule.kind, ...(rule.source ? [rule.source] : [])],
+      };
+    }),
+    userId,
+  });
 };
 
 export const getSenderSource = (from?: string | null) => {

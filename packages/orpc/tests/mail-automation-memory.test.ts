@@ -1,7 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 import {
   buildAutoLabelMemoryProfile,
-  buildAutoLabelUserCorrectionContext,
   buildUsefulDetailMemoryProfile,
 } from "../src/mail-automation/memory";
 
@@ -84,7 +83,7 @@ describe("mail automation memory profiles", () => {
     });
   });
 
-  test("keeps auto-label profile under the prompt budget without a recent window", () => {
+  test("preserves every durable auto-label policy as a separate memory candidate", () => {
     const profile = buildAutoLabelMemoryProfile(
       Array.from({ length: 80 }, (_, index) => ({
         added: 5,
@@ -95,51 +94,8 @@ describe("mail automation memory profiles", () => {
       })),
     );
 
-    expect(JSON.stringify(profile).length).toBeLessThanOrEqual(900);
+    expect(profile.rules).toHaveLength(80);
     expect(profile.rules.every((rule) => rule.count === 5)).toBe(true);
-  });
-
-  test("compresses recent user auto-label corrections without message history", () => {
-    const context = buildAutoLabelUserCorrectionContext([
-      {
-        labelId: "label-dev",
-        labelName: "Dev",
-        signal: "removed",
-        source: "github.com",
-      },
-      {
-        labelId: "label-dev",
-        labelName: "Dev",
-        signal: "removed",
-        source: "github.com",
-      },
-      {
-        labelId: "label-travel",
-        labelName: "Travel",
-        signal: "added",
-        source: "airline.example",
-      },
-    ]);
-
-    expect(context).toEqual({
-      corrections: [
-        {
-          count: 2,
-          labelId: "label-dev",
-          labelName: "Dev",
-          signal: "removed",
-          source: "github.com",
-        },
-        {
-          count: 1,
-          labelId: "label-travel",
-          labelName: "Travel",
-          signal: "added",
-          source: "airline.example",
-        },
-      ],
-      kind: "auto_label_user_corrections",
-    });
   });
 
   test("compresses useful-detail feedback into category policies", () => {
@@ -168,5 +124,19 @@ describe("mail automation memory profiles", () => {
       kind: "useful_detail",
       rules: [{ count: 1, kind: "delivery", policy: "suppress", source: "shop.example" }],
     });
+  });
+
+  test("preserves every durable useful-detail policy as a separate memory candidate", () => {
+    const profile = buildUsefulDetailMemoryProfile(
+      Array.from({ length: 80 }, (_, index) => ({
+        kind: "delivery",
+        notUseful: 0,
+        source: `sender-${index}.example.com`,
+        useful: 5,
+      })),
+    );
+
+    expect(profile.rules).toHaveLength(80);
+    expect(profile.rules.every((rule) => rule.count === 5)).toBe(true);
   });
 });
