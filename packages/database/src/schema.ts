@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   check,
@@ -624,7 +625,9 @@ export const aiMemoryChangeSet = pgTable(
     summary: text("summary").notNull(),
     changes: jsonb("changes").$type<AiMemoryChange[]>().notNull().default([]),
     error: text("error"),
-    undoOfId: text("undoOfId"),
+    undoOfId: text("undoOfId").references((): AnyPgColumn => aiMemoryChangeSet.id, {
+      onDelete: "cascade",
+    }),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
   },
@@ -641,6 +644,7 @@ export const aiMemoryChangeSet = pgTable(
     check("ai_memory_change_set_summary_length_check", sql`char_length(${table.summary}) <= 500`),
     index("ai_memory_change_set_user_created_idx").on(table.userId, table.createdAt),
     index("ai_memory_change_set_mailbox_created_idx").on(table.mailboxId, table.createdAt),
+    uniqueIndex("ai_memory_change_set_undo_of_unique").on(table.undoOfId),
     unique("ai_memory_change_set_source_event_unique").on(table.sourceEventId),
   ],
 );

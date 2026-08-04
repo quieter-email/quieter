@@ -22,8 +22,10 @@ import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
   buildMailMemoryQuery,
-  loadAiAgentContext,
+  type AiAgentMemoryCandidates,
+  loadAiAgentMemoryCandidates,
   loadAiConfiguration,
+  rankAiAgentMemoryCandidates,
   serializeAiAgentContext,
 } from "../ai-memory";
 import {
@@ -41,6 +43,7 @@ const AUTO_LABEL_RETRY_MAX_MS = 1000 * 60 * 60 * 24;
 type ManagedAutoLabelContext = {
   availableLabelIds: Set<string>;
   labels: MailAutoLabelCandidate[];
+  memoryCandidates: AiAgentMemoryCandidates;
   model: ChatModel;
 };
 
@@ -89,14 +92,22 @@ const getManagedAutoLabelCandidates = async (input: {
   mailboxId: string;
   userId: string;
 }): Promise<ManagedAutoLabelContext> => {
-  const labels = await db
-    .select({
-      description: managedMailLabel.description,
-      id: managedMailLabel.id,
-      name: managedMailLabel.name,
-    })
-    .from(managedMailLabel)
-    .where(eq(managedMailLabel.mailboxId, input.mailboxId));
+  const [labels, aiConfiguration, memoryCandidates] = await Promise.all([
+    db
+      .select({
+        description: managedMailLabel.description,
+        id: managedMailLabel.id,
+        name: managedMailLabel.name,
+      })
+      .from(managedMailLabel)
+      .where(eq(managedMailLabel.mailboxId, input.mailboxId)),
+    loadAiConfiguration({ userId: input.userId }),
+    loadAiAgentMemoryCandidates({
+      includeUserScope: false,
+      mailboxId: input.mailboxId,
+      userId: input.userId,
+    }),
+  ]);
 
   const candidates = labels.map((label) => ({
     description: label.description,
@@ -104,11 +115,11 @@ const getManagedAutoLabelCandidates = async (input: {
     inclusionCriteria: null,
     name: label.name,
   }));
-  const aiConfiguration = await loadAiConfiguration({ userId: input.userId });
 
   return {
     availableLabelIds: new Set(candidates.map((label) => label.id)),
     labels: candidates,
+    memoryCandidates,
     model: aiConfiguration.autoLabelModel,
   };
 };
@@ -288,13 +299,13 @@ const processManagedAutoLabelMessage = async (input: {
 
       const labelIds = await classifyMailMessage({
         labels: input.autoLabelContext.labels,
-        memoryContext: await loadAiAgentContext({
-          agent: "auto_label",
-          includeUserScope: false,
-          mailboxId: input.mailboxId,
-          query: buildMailMemoryQuery(message),
-          userId: input.userId,
-        }).then(serializeAiAgentContext),
+        memoryContext: serializeAiAgentContext(
+          rankAiAgentMemoryCandidates({
+            agent: "auto_label",
+            candidates: input.autoLabelContext.memoryCandidates,
+            query: buildMailMemoryQuery(message),
+          }),
+        ),
         message,
         middleware: [usageMiddleware],
         model: input.autoLabelContext.model,

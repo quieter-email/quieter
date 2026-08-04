@@ -106,15 +106,15 @@ SELECT
 	'legacy-context:' || context."id" || ':' || chunk."number",
 	'user', 'learned', 'user:' || context."userId", context."userId", NULL,
 	'legacy-profile:' || chunk."number",
-	btrim(substr(context."markdown", ((chunk."number" - 1) * 1900) + 1, 1900)),
+	btrim(substr(context."markdown", ((chunk."number" - 1) * 1800) + 1, 1800)),
 	'Imported legacy AI profile (part ' || chunk."number" || ')',
 	jsonb_build_object('agents', jsonb_build_array('all'), 'topics', jsonb_build_array('legacy-profile')),
-	'migration', context."id", 'active', 0.8, 5, 1, 1,
+	'migration', context."id", 'active', 0.8, 3, 1, 1,
 	context."updatedAt", context."createdAt", context."updatedAt"
 FROM "userAiContext" context
-CROSS JOIN LATERAL generate_series(1, ceil(char_length(context."markdown") / 1900.0)::integer) AS chunk("number")
+CROSS JOIN LATERAL generate_series(1, ceil(char_length(context."markdown") / 1800.0)::integer) AS chunk("number")
 WHERE btrim(context."markdown") <> ''
-	AND btrim(substr(context."markdown", ((chunk."number" - 1) * 1900) + 1, 1900)) <> ''
+	AND btrim(substr(context."markdown", ((chunk."number" - 1) * 1800) + 1, 1800)) <> ''
 ON CONFLICT ("scopeKey", "key") DO NOTHING;
 --> statement-breakpoint
 -- Carry forward explicit preferences that had not reached the old aggregate profile.
@@ -126,10 +126,10 @@ INSERT INTO "aiMemory" (
 SELECT
 	'legacy-event:' || event."id", 'user', 'learned', 'user:' || event."userId",
 	event."userId", NULL, 'legacy-event:' || event."id",
-	left(btrim(event."metadata"->>'preference'), 2000),
+	left(btrim(event."metadata"->>'preference'), 1800),
 	left(btrim(event."metadata"->>'preference'), 300),
 	jsonb_build_object('agents', jsonb_build_array('all'), 'topics', jsonb_build_array('chat-preference')),
-	'explicit', event."id", 'active', 0.95, 5, 1, 1,
+	'explicit', event."id", 'active', 0.95, 3, 1, 1,
 	event."createdAt", event."createdAt", event."updatedAt"
 FROM "userAiContextEvent" event
 WHERE event."kind" IN ('chat_discovery', 'explicit_preference')
@@ -153,7 +153,7 @@ INSERT INTO "aiMemory" (
 SELECT
 	'legacy-automation:' || profile."id" || ':' || rule."ordinality",
 	'mailbox', 'learned', 'mailbox:' || profile."mailboxId", NULL, profile."mailboxId",
-	'feedback:' || profile."agent" || ':legacy:' || profile."id" || ':' || rule."ordinality",
+	'legacy-automation:' || profile."agent" || ':' || profile."id" || ':' || rule."ordinality",
 	left(
 		CASE WHEN profile."agent" = 'auto_label' THEN
 			CASE WHEN rule."value"->>'policy' = 'prefer' THEN 'Prefer applying ' ELSE 'Avoid applying ' END
@@ -176,7 +176,11 @@ SELECT
 	),
 	jsonb_strip_nulls(jsonb_build_object(
 		'agents', jsonb_build_array(profile."agent"),
-		'topics', jsonb_build_array(profile."agent", coalesce(rule."value"->>'kind', rule."value"->>'labelName', rule."value"->>'labelId')),
+		'topics', jsonb_build_array(profile."agent") ||
+			CASE
+				WHEN coalesce(rule."value"->>'kind', rule."value"->>'labelName', rule."value"->>'labelId') IS NULL THEN '[]'::jsonb
+				ELSE jsonb_build_array(coalesce(rule."value"->>'kind', rule."value"->>'labelName', rule."value"->>'labelId'))
+			END,
 		'sourceDomains', CASE WHEN nullif(rule."value"->>'source', '') IS NULL THEN '[]'::jsonb ELSE jsonb_build_array(rule."value"->>'source') END,
 		'policy', rule."value"->>'policy',
 		'detailKind', CASE WHEN profile."agent" = 'useful_detail' THEN rule."value"->>'kind' END,

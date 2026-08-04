@@ -14,7 +14,6 @@ import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { recordAndRefreshAiMemory, replaceMailboxFeedbackMemories } from "../ai-memory";
 
-const AUTOMATION_MEMORY_PROMPT_BUDGET = 900;
 const SYSTEM_LABEL_IDS = new Set<string>(Object.values(MAILBOX_LABELS));
 
 export type AutoLabelMemoryRule = {
@@ -40,36 +39,6 @@ export type UsefulDetailMemoryRule = {
 export type UsefulDetailMemoryProfile = {
   kind: "useful_detail";
   rules: UsefulDetailMemoryRule[];
-};
-
-const serializeProfile = (profile: object) => JSON.stringify(profile);
-
-const trimAutoLabelProfileToBudget = (profile: AutoLabelMemoryProfile): AutoLabelMemoryProfile => {
-  const rules = [...profile.rules];
-
-  while (
-    rules.length > 0 &&
-    serializeProfile({ ...profile, rules }).length > AUTOMATION_MEMORY_PROMPT_BUDGET
-  ) {
-    rules.pop();
-  }
-
-  return { ...profile, rules };
-};
-
-const trimUsefulDetailProfileToBudget = (
-  profile: UsefulDetailMemoryProfile,
-): UsefulDetailMemoryProfile => {
-  const rules = [...profile.rules];
-
-  while (
-    rules.length > 0 &&
-    serializeProfile({ ...profile, rules }).length > AUTOMATION_MEMORY_PROMPT_BUDGET
-  ) {
-    rules.pop();
-  }
-
-  return { ...profile, rules };
 };
 
 const listLabelNames = async (
@@ -210,7 +179,9 @@ export const recordMailAutoLabelFeedback = async (input: {
         mailAutoLabelFeedback.labelId,
       ],
     });
-  await refreshAutoLabelMemoryProfile(input.mailboxId, input.userId);
+  void refreshAutoLabelMemoryProfile(input.mailboxId, input.userId).catch((error) => {
+    console.error("Could not refresh auto-label memory after feedback.", error);
+  });
   void recordAndRefreshAiMemory({
     kind: "auto_label_feedback",
     mailboxId: input.mailboxId,
@@ -268,7 +239,7 @@ export const buildAutoLabelMemoryProfile = (
       return sourceRank || right.count - left.count || left.labelId.localeCompare(right.labelId);
     });
 
-  return trimAutoLabelProfileToBudget({ kind: "auto_label", rules });
+  return { kind: "auto_label", rules };
 };
 
 const toMemoryKeyPart = (value: string) =>
@@ -355,7 +326,7 @@ export const buildUsefulDetailMemoryProfile = (
       return sourceRank || right.count - left.count || left.kind.localeCompare(right.kind);
     });
 
-  return trimUsefulDetailProfileToBudget({ kind: "useful_detail", rules });
+  return { kind: "useful_detail", rules };
 };
 
 export const refreshUsefulDetailMemoryProfile = async (mailboxId: string, userId: string) => {

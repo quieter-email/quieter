@@ -44,6 +44,48 @@ const aiMemoryUpdateSchema = z.object({
 
 export type AiMemoryUpdatePlan = z.infer<typeof aiMemoryUpdateSchema>;
 
+const EXPLICIT_MEMORY_INTENT =
+  /\b(?:always|from now on|i (?:prefer|want)|my preference|never|only|remember|save (?:this|that|my))\b|\bplease\b.*\b(?:avoid|classify|draft|label|remember|reply|use|write)\b/i;
+const MEMORY_CONFIRMATION_STOP_WORDS = new Set([
+  "about",
+  "from",
+  "have",
+  "that",
+  "their",
+  "there",
+  "this",
+  "user",
+  "with",
+]);
+
+const memoryConfirmationTokens = (value: string) =>
+  value
+    .toLowerCase()
+    .match(/[a-z0-9][a-z0-9_-]{2,}/g)
+    ?.filter((token) => !MEMORY_CONFIRMATION_STOP_WORDS.has(token)) ?? [];
+
+export const isExplicitAiMemoryRequest = ({
+  preference,
+  userRequest,
+}: {
+  preference: string;
+  userRequest: string;
+}) => {
+  if (!EXPLICIT_MEMORY_INTENT.test(userRequest)) return false;
+  const requestTokens = memoryConfirmationTokens(userRequest);
+  const preferenceTokens = memoryConfirmationTokens(preference);
+
+  return preferenceTokens.some((preferenceToken) =>
+    requestTokens.some(
+      (requestToken) =>
+        requestToken === preferenceToken ||
+        (requestToken.length >= 5 &&
+          preferenceToken.length >= 5 &&
+          requestToken.slice(0, 5) === preferenceToken.slice(0, 5)),
+    ),
+  );
+};
+
 const sanitizeMemoryText = (value: string, maxLength: number) =>
   value.replace(/\s+/g, " ").trim().slice(0, maxLength).trimEnd();
 
@@ -83,7 +125,9 @@ export const sanitizeAiMemoryUpdatePlan = (plan: AiMemoryUpdatePlan): AiMemoryUp
         confidence: operation.kind === "instruction" ? 1 : operation.confidence,
         content,
         expiresAt:
-          expiresAt && Number.isFinite(expiresAt.getTime()) ? expiresAt.toISOString() : null,
+          expiresAt && Number.isFinite(expiresAt.getTime()) && expiresAt > new Date()
+            ? expiresAt.toISOString()
+            : null,
         importance: operation.kind === "instruction" ? 5 : operation.importance,
         key,
         summary,

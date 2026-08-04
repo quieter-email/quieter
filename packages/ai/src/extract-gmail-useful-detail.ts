@@ -1,7 +1,7 @@
 import { chat, type ChatMiddleware } from "@tanstack/ai";
 import { z } from "zod";
-import type { AutomationMailMessage } from "./classify-gmail-message";
 import { defaultUsefulDetailModel, type ChatModel } from "./chat-models";
+import { AI_MEMORY_CONTEXT_MAX_LENGTH, type AutomationMailMessage } from "./classify-gmail-message";
 import { createOpenRouterAdapter } from "./openrouter";
 
 const deliveryStatusSchema = z.enum([
@@ -79,6 +79,12 @@ export const extractMailUsefulDetail = async ({
   now?: Date;
   preferences?: GmailUsefulDetailPreferenceProfile;
 }) => {
+  const mailboxPreferences = preferences
+    ? {
+        ...preferences,
+        memoryContext: preferences.memoryContext?.slice(0, AI_MEMORY_CONTEXT_MAX_LENGTH),
+      }
+    : undefined;
   const result = await chat({
     adapter: createOpenRouterAdapter(model),
     messages: [
@@ -97,11 +103,11 @@ export const extractMailUsefulDetail = async ({
             subject: message.subject,
             to: message.to,
           },
-          ...(preferences &&
-          (preferences.avoidKinds.length > 0 ||
-            preferences.preferKinds.length > 0 ||
-            preferences.memoryContext)
-            ? { mailboxPreferences: preferences }
+          ...(mailboxPreferences &&
+          (mailboxPreferences.avoidKinds.length > 0 ||
+            mailboxPreferences.preferKinds.length > 0 ||
+            mailboxPreferences.memoryContext)
+            ? { mailboxPreferences }
             : {}),
         }),
         role: "user",

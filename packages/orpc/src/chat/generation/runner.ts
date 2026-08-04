@@ -1,5 +1,6 @@
 import type { MailboxCategory } from "@quieter/gmail";
 import type { ChatMiddleware, UIMessage } from "@tanstack/ai";
+import { isExplicitAiMemoryRequest } from "@quieter/ai/ai-memory";
 import {
   composeEmailToolDef,
   createAiMemoryServerTool,
@@ -129,6 +130,18 @@ const getChatMemoryQuery = (
     .join(" ")
     .slice(0, 4_000);
 
+const getLatestUserRequest = (
+  messages: Array<{
+    parts: ChatMessagePart[];
+    role: "assistant" | "system" | "user";
+  }>,
+) =>
+  messages
+    .findLast((message) => message.role === "user")
+    ?.parts.flatMap((part) => (typeof part.content === "string" ? [part.content] : []))
+    .join(" ")
+    .slice(0, 4_000) ?? "";
+
 export const runChatGeneration = async (runId: string) => {
   const [run] = await db.select().from(chatRun).where(eq(chatRun.id, runId)).limit(1);
 
@@ -183,6 +196,7 @@ export const runChatGeneration = async (runId: string) => {
   const visibleMessages = messages.filter(
     (message) => message.role === "user" || message.role === "assistant",
   );
+  const latestUserRequest = getLatestUserRequest(visibleMessages);
   const assistantDraft = visibleMessages.find((message) => message.id === run.assistantMessageId);
 
   if (!assistantDraft) {
@@ -516,6 +530,9 @@ ${aiContext.memory}`,
         ];
         const memoryContext: AiMemoryToolsContext = {
           rememberPreference: async ({ preference, reason, scope }) => {
+            if (!isExplicitAiMemoryRequest({ preference, userRequest: latestUserRequest })) {
+              return { status: "skipped" };
+            }
             if (scope === "mailbox") {
               const selectedMailbox = await assertAccessibleMailbox({
                 mailboxId: run.mailboxId,

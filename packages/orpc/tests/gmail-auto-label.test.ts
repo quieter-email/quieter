@@ -104,6 +104,11 @@ describe("Gmail auto-label selection", () => {
     expect(input).toMatchObject({
       relevantMemory: expect.stringContaining("User-authored instructions"),
     });
+    expect(input).toMatchObject({
+      relevantMemory: expect.stringContaining(
+        "Store receipts usually arrive from orders@example.com.",
+      ),
+    });
   });
 
   test("caps dynamic memory in classifier payloads", () => {

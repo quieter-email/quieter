@@ -837,17 +837,17 @@ const getGmailUsefulDetailPreferenceProfile = async (
   userId: string,
   message: AutomationMailMessage,
 ): Promise<{ model: ChatModel; preferences: GmailUsefulDetailPreferenceProfile }> => {
-  const [aiConfiguration, feedbackPolicies] = await Promise.all([
+  const [aiConfiguration, feedbackPolicies, memoryContext] = await Promise.all([
     loadAiConfiguration({ userId }),
     loadUsefulDetailFeedbackPolicies({ mailboxId, source }),
+    loadAiAgentContext({
+      agent: "useful_detail",
+      includeUserScope: false,
+      mailboxId,
+      query: buildMailMemoryQuery(message),
+      userId,
+    }),
   ]);
-  const memoryContext = await loadAiAgentContext({
-    agent: "useful_detail",
-    includeUserScope: false,
-    mailboxId,
-    query: buildMailMemoryQuery(message),
-    userId,
-  });
 
   return {
     model: aiConfiguration.usefulDetailModel,
@@ -1261,7 +1261,9 @@ export const setGmailUsefulDetailFeedback = async (input: {
       .where(eq(gmailUsefulDetail.id, detail.id));
   }
 
-  await refreshUsefulDetailMemoryProfile(input.mailboxId, input.userId);
+  void refreshUsefulDetailMemoryProfile(input.mailboxId, input.userId).catch((error) => {
+    console.error("Could not refresh useful-detail memory after feedback.", error);
+  });
   void recordAndRefreshAiMemory({
     kind: "useful_detail_feedback",
     mailboxId: input.mailboxId,

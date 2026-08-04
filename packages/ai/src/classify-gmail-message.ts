@@ -27,7 +27,7 @@ export type MailAutoLabelCandidate = {
 
 export type GmailAutoLabelCandidate = MailAutoLabelCandidate;
 
-const AI_MEMORY_CONTEXT_MAX_LENGTH = 6_000;
+export const AI_MEMORY_CONTEXT_MAX_LENGTH = 6_000;
 
 export const buildAutoLabelPromptInput = ({
   labels,

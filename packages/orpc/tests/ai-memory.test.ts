@@ -66,10 +66,10 @@ describe("AI memory retrieval ranking", () => {
       agent: "auto_label",
       candidates: [
         memory({
-          content: "Prefer applying Receipts to store mail",
+          content: "Prefer applying Receipts to newsletter mail",
           id: "personal",
           key: "personal-receipts",
-          metadata: { agents: ["auto_label"], topics: ["receipts"] },
+          metadata: { agents: ["auto_label"], topics: ["newsletter", "receipts"] },
         }),
         memory({
           content: "Avoid applying Receipts to newsletters from store.example",
@@ -90,7 +90,7 @@ describe("AI memory retrieval ranking", () => {
       query: "Newsletter from deals@store.example",
     });
 
-    expect(ranked[0]?.memory.id).toBe("mailbox");
+    expect(ranked.map(({ memory: candidate }) => candidate.id)).toEqual(["mailbox", "personal"]);
   });
 
   test("keeps explicit importance-five cross-agent constraints available without lexical overlap", () => {

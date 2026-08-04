@@ -30,8 +30,10 @@ import { and, eq, isNull, lt, lte, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
   buildMailMemoryQuery,
-  loadAiAgentContext,
+  type AiAgentMemoryCandidates,
+  loadAiAgentMemoryCandidates,
   loadAiConfiguration,
+  rankAiAgentMemoryCandidates,
   serializeAiAgentContext,
 } from "../ai-memory";
 import { syncGmailLabels } from "../gmail-labels";
@@ -62,6 +64,7 @@ const AUTO_LABEL_EXCLUDED_LABELS = new Set<string>([
 type AutoLabelContext = {
   availableLabelIds: Set<string>;
   labels: MailAutoLabelCandidate[];
+  memoryCandidates: AiAgentMemoryCandidates;
   model: ChatModel;
   organizationId: string | null;
 };
@@ -388,13 +391,13 @@ const processAutoLabelMessage = async ({
 
       const labelIds = await classifyMailMessage({
         labels: autoLabelContext.labels,
-        memoryContext: await loadAiAgentContext({
-          agent: "auto_label",
-          includeUserScope: false,
-          mailboxId,
-          query: buildMailMemoryQuery(message),
-          userId,
-        }).then(serializeAiAgentContext),
+        memoryContext: serializeAiAgentContext(
+          rankAiAgentMemoryCandidates({
+            agent: "auto_label",
+            candidates: autoLabelContext.memoryCandidates,
+            query: buildMailMemoryQuery(message),
+          }),
+        ),
         message,
         middleware: [usageMiddleware],
         model: autoLabelContext.model,
@@ -724,11 +727,19 @@ const processMailboxHistory = async ({
                 name: label.name,
               }));
 
-            const aiConfiguration = await loadAiConfiguration({ userId });
+            const [aiConfiguration, memoryCandidates] = await Promise.all([
+              loadAiConfiguration({ userId }),
+              loadAiAgentMemoryCandidates({
+                includeUserScope: false,
+                mailboxId,
+                userId,
+              }),
+            ]);
 
             return {
               availableLabelIds: new Set(labels.map((label) => label.id)),
               labels,
+              memoryCandidates,
               model: aiConfiguration.autoLabelModel,
               organizationId,
             };

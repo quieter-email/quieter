@@ -15,9 +15,9 @@ import {
   exportMailboxAiMemory,
   exportPersonalAiMemory,
   forgetAiMemory,
-  getMailboxAiMemoryScopeConfig,
   getPersonalAiMemoryScopeConfig,
   listMailboxAiMemory,
+  listMailboxAiMemorySettings,
   listPersonalAiMemory,
   purgeMailboxAiMemory,
   purgePersonalAiMemory,
@@ -35,7 +35,7 @@ const memoryTargetSchema = z
   })
   .superRefine((target, context) => {
     if (target.scope === "mailbox" && !target.mailboxId) {
-      context.addIssue({ code: "custom", message: "Choose a mailbox." });
+      context.addIssue({ code: "custom", message: "Choose a mailbox.", path: ["mailboxId"] });
     }
   });
 
@@ -63,15 +63,10 @@ const listAccessibleMemoryMailboxes = async (userId: string) => {
 
 const loadMemorySettings = async (userId: string) => {
   const mailboxes = await listAccessibleMemoryMailboxes(userId);
-  const [personal, personalLearning, mailboxMemories, mailboxLearning] = await Promise.all([
+  const [personal, personalLearning, mailboxSettings] = await Promise.all([
     listPersonalAiMemory(userId),
     getPersonalAiMemoryScopeConfig(userId),
-    Promise.all(
-      mailboxes.map((selectedMailbox) => listMailboxAiMemory(selectedMailbox.id, userId)),
-    ),
-    Promise.all(
-      mailboxes.map((selectedMailbox) => getMailboxAiMemoryScopeConfig(selectedMailbox.id)),
-    ),
+    listMailboxAiMemorySettings(mailboxes.map((selectedMailbox) => selectedMailbox.id)),
   ]);
 
   return {
@@ -86,17 +81,21 @@ const loadMemorySettings = async (userId: string) => {
         memory: personal,
         name: "Personal",
       },
-      ...mailboxes.map((selectedMailbox, index) => ({
-        canManage: selectedMailbox.capabilities.canManageKnowledge,
-        description:
-          "Stays with this mailbox and is shared with everyone who can access the mailbox.",
-        key: `mailbox:${selectedMailbox.id}`,
-        kind: "mailbox" as const,
-        learning: mailboxLearning[index],
-        mailboxId: selectedMailbox.id,
-        memory: mailboxMemories[index],
-        name: selectedMailbox.displayName || selectedMailbox.emailAddress,
-      })),
+      ...mailboxes.map((selectedMailbox) => {
+        const settings = mailboxSettings.get(selectedMailbox.id);
+        if (!settings) throw new Error("Could not load mailbox AI knowledge settings.");
+        return {
+          canManage: selectedMailbox.capabilities.canManageKnowledge,
+          description:
+            "Stays with this mailbox and is shared with everyone who can access the mailbox.",
+          key: `mailbox:${selectedMailbox.id}`,
+          kind: "mailbox" as const,
+          learning: settings.learning,
+          mailboxId: selectedMailbox.id,
+          memory: settings.memory,
+          name: selectedMailbox.displayName || selectedMailbox.emailAddress,
+        };
+      }),
     ],
   };
 };
@@ -122,7 +121,7 @@ const getBillingMailboxId = async (userId: string) => {
 };
 
 const assertMemoryTarget = async (target: MemoryTarget, userId: string, write: boolean) => {
-  if (target.scope === "user") return;
+  if (target.scope === "user") return null;
   const selectedMailbox = await assertAccessibleMailbox({
     mailboxId: target.mailboxId ?? "",
     userId,
@@ -132,6 +131,7 @@ const assertMemoryTarget = async (target: MemoryTarget, userId: string, write: b
       message: "Only mailbox managers can change this knowledge.",
     });
   }
+  return selectedMailbox;
 };
 
 const loadTargetMemory = async (target: MemoryTarget, userId: string) =>
@@ -140,12 +140,14 @@ const loadTargetMemory = async (target: MemoryTarget, userId: string) =>
     : await listMailboxAiMemory(target.mailboxId ?? "", userId);
 
 const toUserMemoryError = (error: unknown) =>
-  new ORPCError("BAD_REQUEST", {
-    message:
-      error instanceof Error && error.message
-        ? error.message
-        : "Quieter could not safely update AI memory. Nothing changed.",
-  });
+  error instanceof ORPCError
+    ? error
+    : new ORPCError("BAD_REQUEST", {
+        message:
+          error instanceof Error && error.message
+            ? error.message
+            : "Quieter could not safely update AI memory. Nothing changed.",
+      });
 
 export const aiRouter = {
   settings: protectedProcedure
@@ -193,13 +195,8 @@ export const aiRouter = {
     )
     .handler(async ({ context, input }) => {
       try {
-        await assertMemoryTarget(input, context.userId, false);
-        let allowMutations = true;
-        try {
-          await assertMemoryTarget(input, context.userId, true);
-        } catch {
-          allowMutations = false;
-        }
+        const selectedMailbox = await assertMemoryTarget(input, context.userId, false);
+        const allowMutations = selectedMailbox?.capabilities.canManageKnowledge ?? true;
         const billingMailboxId = input.mailboxId ?? (await getBillingMailboxId(context.userId));
         if (!billingMailboxId) throw new Error("Connect a mailbox before updating AI memory.");
         const change = await requestAiMemoryUpdate({
