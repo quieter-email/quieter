@@ -32,7 +32,7 @@ export const terminalizeFailedChatRun = async (
   error: string,
   assistant?: { id: string; parts: ChatMessagePart[] },
 ) => {
-  const terminal = await terminalizeChatRun({
+  await terminalizeChatRun({
     error,
     parts: assistant?.parts,
     runId,
@@ -40,8 +40,4 @@ export const terminalizeFailedChatRun = async (
   });
 
   await closeChatRunStreamLog(runId);
-
-  if (!terminal) {
-    return;
-  }
 };

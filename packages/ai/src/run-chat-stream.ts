@@ -50,8 +50,10 @@ export const streamChunksThroughDurability = async function* <TOffset extends st
       return;
     }
 
-    const pending = batch.splice(0, batch.length);
+    // Keep chunks in `batch` until append succeeds so a rejected append can retry.
+    const pending = batch.slice();
     await durability.append(pending);
+    batch.splice(0, pending.length);
   };
 
   const enqueue = async (chunk: StreamChunk) => {
@@ -86,9 +88,11 @@ export const streamChunksThroughDurability = async function* <TOffset extends st
                 message: "Generation stopped unexpectedly.",
               },
             } satisfies StreamChunk),
-      ).catch(() => {});
+      );
     }
-    await flush().catch(() => {});
+
+    // A rejected flush must leave the log open for recovery; do not close after it.
+    await flush();
     await durability.close();
   }
 };

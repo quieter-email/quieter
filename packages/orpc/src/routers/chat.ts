@@ -38,7 +38,7 @@ import {
   hasActiveChatRun,
   startAssistantRun,
 } from "../chat-run-store";
-import { ACTIVE_CHAT_RUN_STATUSES } from "../chat-run-stream";
+import { ACTIVE_CHAT_RUN_STATUSES } from "../chat-run-store";
 import { terminalizeFailedChatRun } from "../chat/generation/failure";
 import { startChatRun } from "../chat/generation/lifecycle";
 import { abortChatRun } from "../chat/generation/runtime";

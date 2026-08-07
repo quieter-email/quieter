@@ -1,4 +1,10 @@
-import { EventType, memoryStream, replayRunStream, type StreamChunk } from "@tanstack/ai";
+import {
+  EventType,
+  memoryStream,
+  replayRunStream,
+  type StreamChunk,
+  type StreamDurability,
+} from "@tanstack/ai";
 import { describe, expect, test } from "vite-plus/test";
 import {
   CHAT_AGENT_MAX_ITERATIONS,
@@ -84,5 +90,38 @@ describe("streamChunksThroughDurability", () => {
     const replayed = await collect(replayRunStream(durability));
     expect(replayed.filter((chunk) => chunk.type === EventType.RUN_FINISHED)).toHaveLength(1);
     expect(replayed.some((chunk) => chunk.type === EventType.RUN_ERROR)).toBe(false);
+  });
+
+  test("does not close the log when durability.append rejects", async () => {
+    let closed = false;
+    const durability = {
+      resumeFrom: () => null,
+      append: async () => {
+        throw new Error("append failed");
+      },
+      close: async () => {
+        closed = true;
+      },
+      snapshot: async () => [],
+      read: async function* () {},
+    } satisfies StreamDurability;
+
+    await expect(
+      collect(
+        streamChunksThroughDurability({
+          durability,
+          stream: (async function* () {
+            yield {
+              type: EventType.RUN_STARTED,
+              timestamp: Date.now(),
+              runId: "run-append-fail",
+              threadId: "thread-1",
+            } as StreamChunk;
+          })(),
+        }),
+      ),
+    ).rejects.toThrow("append failed");
+
+    expect(closed).toBe(false);
   });
 });

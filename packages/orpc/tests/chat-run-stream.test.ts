@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vite-plus/test";
-import { isActiveChatRunStatus } from "../src/chat-run-stream";
-import { createPostgresStreamDurability } from "../src/chat/stream-durability";
+import { isActiveChatRunStatus } from "../src/chat-run-store";
+import {
+  decodeChatRunStreamSeq,
+  encodeChatRunStreamOffset,
+  sanitizeChatRunStreamOffset,
+} from "../src/chat/stream-durability";
 
 describe("chat run stream", () => {
   test("identifies active statuses", () => {
@@ -9,18 +13,16 @@ describe("chat run stream", () => {
     expect(isActiveChatRunStatus("complete")).toBe(false);
   });
 
-  test("postgres durability encodes opaque offsets per chunk", async () => {
-    const durability = createPostgresStreamDurability({
-      offset: null,
-      runId: "run-offset-shape",
-    });
-
-    expect(durability.resumeFrom()).toBeNull();
-
-    // append/read need a live database; shape-check construction only here.
-    expect(typeof durability.append).toBe("function");
-    expect(typeof durability.read).toBe("function");
-    expect(typeof durability.close).toBe("function");
-    expect(typeof durability.snapshot).toBe("function");
+  test("postgres durability encodes opaque offsets per chunk", () => {
+    expect(encodeChatRunStreamOffset("run-a", 1)).toBe("run-a:1");
+    expect(decodeChatRunStreamSeq("run-a", "run-a:1")).toBe(1);
+    expect(decodeChatRunStreamSeq("run-a", "run-a:12")).toBe(12);
+    expect(decodeChatRunStreamSeq("run-a", "-1")).toBe(0);
+    expect(decodeChatRunStreamSeq("run-a", "run-b:1")).toBeNull();
+    expect(decodeChatRunStreamSeq("run-a", "run-a:0")).toBeNull();
+    expect(decodeChatRunStreamSeq("run-a", "run-a:-1")).toBeNull();
+    expect(decodeChatRunStreamSeq("run-a", "not-an-offset")).toBeNull();
+    expect(sanitizeChatRunStreamOffset("run-a", "run-b:1")).toBe("-1");
+    expect(sanitizeChatRunStreamOffset("run-a", "run-a:3")).toBe("run-a:3");
   });
 });

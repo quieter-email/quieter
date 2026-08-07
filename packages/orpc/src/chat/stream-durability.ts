@@ -1,5 +1,5 @@
 import type { StreamChunk, StreamDurability } from "@tanstack/ai";
-import { db } from "@quieter/database/client";
+import { db, type DatabaseClient } from "@quieter/database/client";
 import { chatRun, chatRunStreamChunk } from "@quieter/database/schema";
 import { and, asc, desc, eq, gt, isNull } from "drizzle-orm";
 
@@ -9,14 +9,15 @@ const READ_POLL_INTERVAL_MS = 200;
 const DEFAULT_FIRST_CHUNK_DEADLINE_MS = 30_000;
 
 type PostgresStreamDurabilityInit = {
+  client?: DatabaseClient;
   firstChunkDeadlineMs?: number;
   offset?: string | null;
   runId: string;
 };
 
-const encodeOffset = (runId: string, seq: number) => `${runId}:${seq}`;
+export const encodeChatRunStreamOffset = (runId: string, seq: number) => `${runId}:${seq}`;
 
-const decodeSeq = (runId: string, offset: string): number | null => {
+export const decodeChatRunStreamSeq = (runId: string, offset: string): number | null => {
   if (offset === FROM_START_OFFSET) {
     return 0;
   }
@@ -28,6 +29,22 @@ const decodeSeq = (runId: string, offset: string): number | null => {
 
   const seq = Number(offset.slice(prefix.length));
   return Number.isSafeInteger(seq) && seq >= 1 ? seq : null;
+};
+
+/** Normalize a client resume cursor; unknown/unsafe values restart from the beginning. */
+export const sanitizeChatRunStreamOffset = (
+  runId: string,
+  offset: string | null | undefined,
+): string => {
+  if (offset == null || offset === "" || offset === FROM_START_OFFSET) {
+    return FROM_START_OFFSET;
+  }
+
+  if (offset === FROM_TAIL_OFFSET) {
+    return FROM_TAIL_OFFSET;
+  }
+
+  return decodeChatRunStreamSeq(runId, offset) === null ? FROM_START_OFFSET : offset;
 };
 
 const wait = (ms: number, signal?: AbortSignal) =>
@@ -51,8 +68,15 @@ const wait = (ms: number, signal?: AbortSignal) =>
     signal?.addEventListener("abort", onAbort, { once: true });
   });
 
-const isStreamClosed = async (runId: string) => {
-  const [row] = await db
+export const closeChatRunStreamLog = async (runId: string, client: DatabaseClient = db) => {
+  await client
+    .update(chatRun)
+    .set({ streamClosedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(chatRun.id, runId), isNull(chatRun.streamClosedAt)));
+};
+
+const isStreamClosed = async (runId: string, client: DatabaseClient) => {
+  const [row] = await client
     .select({ streamClosedAt: chatRun.streamClosedAt })
     .from(chatRun)
     .where(eq(chatRun.id, runId))
@@ -60,8 +84,8 @@ const isStreamClosed = async (runId: string) => {
   return Boolean(row?.streamClosedAt);
 };
 
-const readAfter = async (runId: string, afterSeq: number) =>
-  db
+const readAfter = async (runId: string, afterSeq: number, client: DatabaseClient) =>
+  client
     .select({
       chunk: chatRunStreamChunk.chunk,
       offset: chatRunStreamChunk.offset,
@@ -77,11 +101,12 @@ const readAfter = async (runId: string, afterSeq: number) =>
  */
 export const createPostgresStreamDurability = (
   source: Request | PostgresStreamDurabilityInit,
-  options?: { firstChunkDeadlineMs?: number },
+  options?: { client?: DatabaseClient; firstChunkDeadlineMs?: number },
 ): StreamDurability => {
   const init: PostgresStreamDurabilityInit =
     source instanceof Request
       ? {
+          client: options?.client,
           firstChunkDeadlineMs: options?.firstChunkDeadlineMs,
           offset:
             source.headers.get("Last-Event-ID") ?? new URL(source.url).searchParams.get("offset"),
@@ -97,6 +122,8 @@ export const createPostgresStreamDurability = (
   }
 
   const runId = init.runId;
+  // Capture the request-scoped client so long-lived SSE reads keep using it after ALS ends.
+  const client = init.client ?? options?.client ?? db;
   const resumeOffset = init.offset ?? null;
   const firstChunkDeadlineMs =
     init.firstChunkDeadlineMs ?? options?.firstChunkDeadlineMs ?? DEFAULT_FIRST_CHUNK_DEADLINE_MS;
@@ -111,7 +138,7 @@ export const createPostgresStreamDurability = (
       const now = new Date();
       const offsets: string[] = [];
 
-      await db.transaction(async (tx) => {
+      await client.transaction(async (tx) => {
         const [tail] = await tx
           .select({ seq: chatRunStreamChunk.seq })
           .from(chatRunStreamChunk)
@@ -122,7 +149,7 @@ export const createPostgresStreamDurability = (
 
         const rows = chunks.map((chunk) => {
           nextSeq += 1;
-          const offset = encodeOffset(runId, nextSeq);
+          const offset = encodeChatRunStreamOffset(runId, nextSeq);
           offsets.push(offset);
           return {
             chunk: chunk as unknown as Record<string, unknown>,
@@ -139,13 +166,10 @@ export const createPostgresStreamDurability = (
       return offsets;
     },
     close: async () => {
-      await db
-        .update(chatRun)
-        .set({ streamClosedAt: new Date(), updatedAt: new Date() })
-        .where(and(eq(chatRun.id, runId), isNull(chatRun.streamClosedAt)));
+      await closeChatRunStreamLog(runId, client);
     },
     snapshot: async () => {
-      const rows = await db
+      const rows = await client
         .select({
           chunk: chatRunStreamChunk.chunk,
           offset: chatRunStreamChunk.offset,
@@ -162,7 +186,7 @@ export const createPostgresStreamDurability = (
     read: async function* (offset, signal) {
       let cursorSeq: number;
       if (offset === FROM_TAIL_OFFSET) {
-        const [tail] = await db
+        const [tail] = await client
           .select({ seq: chatRunStreamChunk.seq })
           .from(chatRunStreamChunk)
           .where(eq(chatRunStreamChunk.runId, runId))
@@ -170,7 +194,7 @@ export const createPostgresStreamDurability = (
           .limit(1);
         cursorSeq = tail?.seq ?? 0;
       } else {
-        const seq = decodeSeq(runId, offset);
+        const seq = decodeChatRunStreamSeq(runId, offset);
         if (seq === null) {
           throw new Error(`Invalid stream offset ${JSON.stringify(offset)}`);
         }
@@ -185,7 +209,7 @@ export const createPostgresStreamDurability = (
           return;
         }
 
-        const entries = await readAfter(runId, cursorSeq);
+        const entries = await readAfter(runId, cursorSeq, client);
         for (const entry of entries) {
           cursorSeq = entry.seq;
           sawChunk = true;
@@ -195,8 +219,22 @@ export const createPostgresStreamDurability = (
           };
         }
 
-        if (await isStreamClosed(runId)) {
-          return;
+        if (await isStreamClosed(runId, client)) {
+          // Race: producer may append the terminal batch then close. Drain once more.
+          const trailing = await readAfter(runId, cursorSeq, client);
+          if (trailing.length === 0) {
+            return;
+          }
+
+          for (const entry of trailing) {
+            cursorSeq = entry.seq;
+            sawChunk = true;
+            yield {
+              chunk: entry.chunk as unknown as StreamChunk,
+              offset: entry.offset,
+            };
+          }
+          continue;
         }
 
         if (!sawChunk && Date.now() - startedAt > firstChunkDeadlineMs) {
@@ -213,11 +251,4 @@ export const createPostgresStreamDurability = (
       }
     },
   };
-};
-
-export const closeChatRunStreamLog = async (runId: string) => {
-  await db
-    .update(chatRun)
-    .set({ streamClosedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(chatRun.id, runId), isNull(chatRun.streamClosedAt)));
 };

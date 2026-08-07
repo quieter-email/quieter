@@ -2118,7 +2118,6 @@ export const chatRunStreamChunk = pgTable(
   (table) => [
     primaryKey({ columns: [table.runId, table.seq] }),
     unique("chat_run_stream_chunk_run_id_offset_unique").on(table.runId, table.offset),
-    index("chat_run_stream_chunk_run_id_seq_idx").on(table.runId, table.seq),
   ],
 );
 
