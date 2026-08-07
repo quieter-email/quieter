@@ -195,6 +195,9 @@ export const ChatView = ({
 
   const activeRun = chatData?.activeRun ?? null;
   const liveRunId = streamRunId ?? (isActiveRun(activeRun) ? (activeRun?.id ?? null) : null);
+  const liveAssistantMessageId =
+    streamingAssistant?.messageId ??
+    (isActiveRun(activeRun) ? (activeRun?.assistantMessageId ?? null) : null);
 
   const commitStreamResult = (result: ChatRunStreamDone, resolvedChatId?: string | null) => {
     let targetChatId = resolvedChatId;
@@ -237,7 +240,8 @@ export const ChatView = ({
   };
 
   useChatRunStream({
-    enabled: !!liveRunId,
+    assistantMessageId: liveAssistantMessageId,
+    enabled: !!liveRunId && !!liveAssistantMessageId,
     onDone: (result) => {
       commitStreamResult(result);
       const resolvedChatId = streamChatIdRef.current ?? chatId;
@@ -246,6 +250,9 @@ export const ChatView = ({
       streamChatIdRef.current = null;
 
       if (resolvedChatId) {
+        void queryClient.invalidateQueries({
+          queryKey: getChatQueryKey(mailboxId, resolvedChatId),
+        });
         void queryClient.invalidateQueries({ queryKey: getChatsQueryKey(mailboxId) });
       }
     },

@@ -27,17 +27,22 @@ import { chatModelSchema } from "@quieter/ai/chat-models";
 import { runChatStream } from "@quieter/ai/run-chat-stream";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
-import { chatMessage, chatRun, type ChatMessagePart } from "@quieter/database/schema";
+import {
+  chatMessage,
+  chatRun,
+  chatRunStreamChunk,
+  type ChatMessagePart,
+} from "@quieter/database/schema";
 import { and, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { loadAiAgentContext, recordAiMemoryEvent, refreshAiMemoryFromEvent } from "../../ai-memory";
 import {
+  isActiveChatRunStatus,
   isCancelRequested,
   persistChatRunDraft,
   terminalizeChatRun,
   touchChatRunHeartbeat,
   updateRunStatus,
 } from "../../chat-run-store";
-import { isActiveChatRunStatus, publishChatRunEvent } from "../../chat-run-stream";
 import {
   createGoogleCalendarEventForUser,
   createLinearIssueForUser,
@@ -57,10 +62,11 @@ import {
   searchGmailForUser,
 } from "../../gmail-chat-search";
 import { assertAccessibleMailbox } from "../../mailbox/service";
+import { closeChatRunStreamLog, createPostgresStreamDurability } from "../stream-durability";
 import { getChatRunFailureMessage, terminalizeFailedChatRun } from "./failure";
 import { registerChatRunController } from "./runtime";
 
-const DRAFT_PERSIST_INTERVAL_MS = 250;
+const DRAFT_PERSIST_INTERVAL_MS = 1_000;
 const CANCEL_POLL_INTERVAL_MS = 250;
 const HEARTBEAT_INTERVAL_MS = 5_000;
 const STALE_RUN_CLAIM_MS = 30_000;
@@ -182,6 +188,13 @@ export const runChatGeneration = async (runId: string) => {
     return;
   }
 
+  // Stale takeovers (and any prior partial attempt) must not replay old chunks.
+  await db.delete(chatRunStreamChunk).where(eq(chatRunStreamChunk.runId, runId));
+  await db
+    .update(chatRun)
+    .set({ streamClosedAt: null, updatedAt: now })
+    .where(eq(chatRun.id, runId));
+
   const messages = await db
     .select({
       createdAt: chatMessage.createdAt,
@@ -260,16 +273,6 @@ export const runChatGeneration = async (runId: string) => {
     void pendingPersist.catch((error) => {
       console.error("Could not persist the chat generation draft.", error);
     });
-  };
-
-  const emitDraft = (parts: ChatMessagePart[]) => {
-    pendingParts = parts;
-    publishChatRunEvent(runId, {
-      assistantMessageId: run.assistantMessageId,
-      parts,
-      type: "draft",
-    });
-    scheduleAssistantDraftPersist(parts);
   };
 
   const scheduleAssistantDraftPersist = (parts: ChatMessagePart[]) => {
@@ -410,8 +413,10 @@ ${aiContext.memory}`,
       ...(hasLinearConnector ? [linearToolsPrompt] : []),
     ];
 
+    const durability = createPostgresStreamDurability({ runId });
     const finalMessages = await runChatStream({
       abortController,
+      durability,
       initialMessages: streamInitialMessages,
       middleware: [usageMiddleware],
       model,
@@ -422,11 +427,10 @@ ${aiContext.memory}`,
           return;
         }
 
-        emitDraft(parts);
+        scheduleAssistantDraftPersist(parts);
       },
       onToolCall: () => {
         void updateRunStatus(runId, "waiting_on_tool");
-        publishChatRunEvent(runId, { status: "waiting_on_tool", type: "status" });
       },
       systemPrompts,
       tools: (() => {
@@ -605,29 +609,21 @@ ${aiContext.memory}`,
     pendingParts = finalParts;
     await settleUsageReports();
     await drainAssistantDraftPersist();
-    const terminal = await terminalizeChatRun({
+    await terminalizeChatRun({
       parts: finalParts,
       runId,
       status: cancelled || abortController.signal.aborted ? "cancelled" : "complete",
     });
-
-    if (terminal) {
-      publishChatRunEvent(runId, { ...terminal, type: "done" });
-    }
   } catch (error) {
     await settleUsageReports();
 
     if (cancelled || abortController.signal.aborted) {
       await drainAssistantDraftPersist();
-      const terminal = await terminalizeChatRun({
+      await terminalizeChatRun({
         parts: pendingParts,
         runId,
         status: "cancelled",
       });
-
-      if (terminal) {
-        publishChatRunEvent(runId, { ...terminal, type: "done" });
-      }
       return;
     }
 
@@ -638,6 +634,9 @@ ${aiContext.memory}`,
       parts: pendingParts,
     });
   } finally {
+    await closeChatRunStreamLog(runId).catch((error) => {
+      console.error("Could not close the chat stream log.", error);
+    });
     clearInterval(cancelPoll);
     clearInterval(heartbeat);
     unregisterController();

@@ -1,15 +1,14 @@
 "use client";
 
-import type { ChatMessagePart, ChatRunStatus } from "@quieter/database/schema";
+import type { ChatMessagePart } from "@quieter/database/schema";
 import { useEffect, useRef } from "react";
-import { ChatRunStreamError, consumeChatRunStream } from "../lib/chat-run-stream";
+import {
+  ChatRunStreamError,
+  consumeChatRunStream,
+  type ChatRunStreamDone,
+} from "../lib/chat-run-stream";
 
-export type ChatRunStreamDone = {
-  assistantMessageId: string;
-  error?: string | null;
-  parts: ChatMessagePart[];
-  status: ChatRunStatus;
-};
+export type { ChatRunStreamDone };
 
 const waitForRetry = (attempt: number, signal: AbortSignal) =>
   new Promise<void>((resolve) => {
@@ -28,19 +27,20 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
   });
 
 export const useChatRunStream = ({
+  assistantMessageId,
   enabled,
   onDone,
   onDraft,
   onError,
   runId,
 }: {
+  assistantMessageId: string | null;
   enabled: boolean;
   onDone: (result: ChatRunStreamDone) => void;
   onDraft: (input: { assistantMessageId: string; parts: ChatMessagePart[] }) => void;
   onError: (message: string) => void;
   runId: string | null;
 }) => {
-  const assistantMessageIdRef = useRef<string | null>(null);
   const onDoneRef = useRef(onDone);
   const onDraftRef = useRef(onDraft);
   const onErrorRef = useRef(onError);
@@ -52,11 +52,11 @@ export const useChatRunStream = ({
   }, [onDone, onDraft, onError]);
 
   useEffect(() => {
-    if (!enabled || !runId) {
+    if (!enabled || !runId || !assistantMessageId) {
       return;
     }
 
-    assistantMessageIdRef.current = null;
+    const activeAssistantMessageId = assistantMessageId;
     const controller = new AbortController();
 
     void (async () => {
@@ -64,37 +64,35 @@ export const useChatRunStream = ({
 
       while (!controller.signal.aborted) {
         try {
-          await consumeChatRunStream({
-            onEvent: (event) => {
-              if (event.type === "draft") {
-                assistantMessageIdRef.current = event.assistantMessageId;
-                onDraftRef.current({
-                  assistantMessageId: event.assistantMessageId,
-                  parts: event.parts,
-                });
-                return;
-              }
-
-              if (event.type === "done") {
-                onDoneRef.current({
-                  assistantMessageId:
-                    event.assistantMessageId || assistantMessageIdRef.current || "",
-                  error: event.error,
-                  parts: event.parts,
-                  status: event.status,
-                });
-              }
-            },
+          const result = await consumeChatRunStream({
+            assistantMessageId: activeAssistantMessageId,
+            onDraft: (draft) => onDraftRef.current(draft),
             runId,
             signal: controller.signal,
           });
+          if (!controller.signal.aborted) {
+            onDoneRef.current(result);
+          }
           return;
         } catch (error) {
           if (controller.signal.aborted) {
             return;
           }
 
+          if (error instanceof DOMException && error.name === "AbortError") {
+            return;
+          }
+
           if (!(error instanceof ChatRunStreamError) || error.retryable) {
+            if (attempt >= 8) {
+              onErrorRef.current(
+                error instanceof Error && error.message
+                  ? error.message
+                  : "Could not open chat stream.",
+              );
+              return;
+            }
+
             await waitForRetry(attempt++, controller.signal);
             continue;
           }
@@ -108,8 +106,7 @@ export const useChatRunStream = ({
     })();
 
     return () => {
-      assistantMessageIdRef.current = null;
       controller.abort();
     };
-  }, [enabled, runId]);
+  }, [assistantMessageId, enabled, runId]);
 };

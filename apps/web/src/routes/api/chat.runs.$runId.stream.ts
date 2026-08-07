@@ -13,7 +13,7 @@ export const Route = createFileRoute("/api/chat/runs/$runId/stream")({
 
         const { createChatRunStreamResponse } = await import("@quieter/orpc/stream-chat-run");
         return createChatRunStreamResponse({
-          requestSignal: request.signal,
+          request,
           runId: params.runId,
           userId: session.user.id,
         });

@@ -38,7 +38,7 @@ import {
   hasActiveChatRun,
   startAssistantRun,
 } from "../chat-run-store";
-import { ACTIVE_CHAT_RUN_STATUSES, publishChatRunEvent } from "../chat-run-stream";
+import { ACTIVE_CHAT_RUN_STATUSES } from "../chat-run-store";
 import { terminalizeFailedChatRun } from "../chat/generation/failure";
 import { startChatRun } from "../chat/generation/lifecycle";
 import { abortChatRun } from "../chat/generation/runtime";
@@ -1052,13 +1052,6 @@ export const chatRouter = {
       }
 
       abortChatRun(cancelledRun.runId);
-      publishChatRunEvent(cancelledRun.runId, {
-        assistantMessageId: cancelledRun.assistantMessageId,
-        error: cancelledRun.error,
-        parts: cancelledRun.parts,
-        status: cancelledRun.status,
-        type: "done",
-      });
 
       return { cancelled: true as const, ...cancelledRun };
     }),

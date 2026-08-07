@@ -1,35 +1,28 @@
 import { describe, expect, test } from "vite-plus/test";
+import { isActiveChatRunStatus } from "../src/chat-run-store";
 import {
-  isActiveChatRunStatus,
-  publishChatRunEvent,
-  subscribeChatRunEvents,
-  type ChatRunStreamEvent,
-} from "../src/chat-run-stream";
+  decodeChatRunStreamSeq,
+  encodeChatRunStreamOffset,
+  sanitizeChatRunStreamOffset,
+} from "../src/chat/stream-durability";
 
 describe("chat run stream", () => {
-  test("publishes events to every active subscriber", () => {
-    const first: ChatRunStreamEvent[] = [];
-    const second: ChatRunStreamEvent[] = [];
-    const unsubscribeFirst = subscribeChatRunEvents("run-1", (event) => first.push(event));
-    const unsubscribeSecond = subscribeChatRunEvents("run-1", (event) => second.push(event));
-    const event: ChatRunStreamEvent = {
-      assistantMessageId: "message-1",
-      parts: [{ content: "Hello", type: "text" }],
-      type: "draft",
-    };
-
-    publishChatRunEvent("run-1", event);
-    unsubscribeFirst();
-    publishChatRunEvent("run-1", { status: "running", type: "status" });
-    unsubscribeSecond();
-
-    expect(first).toEqual([event]);
-    expect(second).toEqual([event, { status: "running", type: "status" }]);
-  });
-
   test("identifies active statuses", () => {
     expect(isActiveChatRunStatus("queued")).toBe(true);
     expect(isActiveChatRunStatus("waiting_on_tool")).toBe(true);
     expect(isActiveChatRunStatus("complete")).toBe(false);
+  });
+
+  test("postgres durability encodes opaque offsets per chunk", () => {
+    expect(encodeChatRunStreamOffset("run-a", 1)).toBe("run-a:1");
+    expect(decodeChatRunStreamSeq("run-a", "run-a:1")).toBe(1);
+    expect(decodeChatRunStreamSeq("run-a", "run-a:12")).toBe(12);
+    expect(decodeChatRunStreamSeq("run-a", "-1")).toBe(0);
+    expect(decodeChatRunStreamSeq("run-a", "run-b:1")).toBeNull();
+    expect(decodeChatRunStreamSeq("run-a", "run-a:0")).toBeNull();
+    expect(decodeChatRunStreamSeq("run-a", "run-a:-1")).toBeNull();
+    expect(decodeChatRunStreamSeq("run-a", "not-an-offset")).toBeNull();
+    expect(sanitizeChatRunStreamOffset("run-a", "run-b:1")).toBe("-1");
+    expect(sanitizeChatRunStreamOffset("run-a", "run-a:3")).toBe("run-a:3");
   });
 });
