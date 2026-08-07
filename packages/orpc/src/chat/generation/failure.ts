@@ -1,6 +1,6 @@
 import type { ChatMessagePart } from "@quieter/database/schema";
 import { terminalizeChatRun } from "../../chat-run-store";
-import { publishChatRunEvent } from "../../chat-run-stream";
+import { closeChatRunStreamLog } from "../stream-durability";
 
 export const getChatRunFailureMessage = (error: unknown) => {
   const message = error instanceof Error ? error.message : "";
@@ -39,12 +39,9 @@ export const terminalizeFailedChatRun = async (
     status: "failed",
   });
 
+  await closeChatRunStreamLog(runId);
+
   if (!terminal) {
     return;
   }
-
-  publishChatRunEvent(runId, {
-    ...terminal,
-    type: "done",
-  });
 };

@@ -10,6 +10,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -2079,6 +2080,7 @@ export const chatRun = pgTable(
     context: jsonb("context").$type<ChatRunContext>(),
     cancelRequestedAt: timestamp("cancelRequestedAt"),
     lastHeartbeatAt: timestamp("lastHeartbeatAt"),
+    streamClosedAt: timestamp("streamClosedAt"),
     error: text("error"),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
@@ -2098,6 +2100,25 @@ export const chatRun = pgTable(
     uniqueIndex("chat_run_one_active_per_chat")
       .on(table.chatId)
       .where(sql`${table.status} in ('queued', 'running', 'waiting_on_tool')`),
+  ],
+);
+
+/** Append-only TanStack AI delivery-durability log for resumable chat observation. */
+export const chatRunStreamChunk = pgTable(
+  "chatRunStreamChunk",
+  {
+    runId: text("runId")
+      .notNull()
+      .references(() => chatRun.id, { onDelete: "cascade" }),
+    seq: bigint("seq", { mode: "number" }).notNull(),
+    offset: text("offset").notNull(),
+    chunk: jsonb("chunk").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.runId, table.seq] }),
+    unique("chat_run_stream_chunk_run_id_offset_unique").on(table.runId, table.offset),
+    index("chat_run_stream_chunk_run_id_seq_idx").on(table.runId, table.seq),
   ],
 );
 

@@ -1,132 +1,97 @@
-import type { ChatRunStreamEvent } from "@quieter/orpc/chat-run-stream";
+import type { ChatMessagePart, ChatRunStatus } from "@quieter/database/schema";
+import { StreamProcessor, type UIMessage } from "@tanstack/ai";
+import { fetchServerSentEvents } from "@tanstack/ai-react";
 
-const chatRunStatuses = new Set([
-  "queued",
-  "running",
-  "waiting_on_tool",
-  "complete",
-  "failed",
-  "cancelled",
-]);
-
-const isChatMessageParts = (value: unknown) =>
-  Array.isArray(value) &&
-  value.every(
-    (part) =>
-      part !== null && typeof part === "object" && "type" in part && typeof part.type === "string",
-  );
-
-const hasValidError = (event: Record<string, unknown>) =>
-  !("error" in event) || event.error === null || typeof event.error === "string";
-
-const isChatRunStreamEvent = (value: unknown): value is ChatRunStreamEvent => {
-  if (!value || typeof value !== "object" || !("type" in value)) {
-    return false;
-  }
-
-  const event = value as Record<string, unknown>;
-
-  if (event.type === "draft") {
-    return typeof event.assistantMessageId === "string" && isChatMessageParts(event.parts);
-  }
-
-  if (event.type === "status") {
-    return (
-      typeof event.status === "string" && chatRunStatuses.has(event.status) && hasValidError(event)
-    );
-  }
-
-  return (
-    event.type === "done" &&
-    typeof event.assistantMessageId === "string" &&
-    isChatMessageParts(event.parts) &&
-    typeof event.status === "string" &&
-    chatRunStatuses.has(event.status) &&
-    hasValidError(event)
-  );
+export type ChatRunStreamDone = {
+  assistantMessageId: string;
+  error?: string | null;
+  parts: ChatMessagePart[];
+  status: ChatRunStatus;
 };
 
-const parseSseEvent = (chunk: string): ChatRunStreamEvent | null => {
-  const dataLine = chunk.split("\n").find((line) => line.startsWith("data: "));
+const getAssistantParts = (messages: UIMessage[]): ChatMessagePart[] => {
+  const parts = messages.flatMap((message) =>
+    message.role === "assistant" ? (message.parts as ChatMessagePart[]) : [],
+  );
+  return parts.length > 0 ? parts : [{ content: "", type: "text" }];
+};
 
-  if (!dataLine) {
-    return null;
+const statusFromStreamError = (
+  error: Error | null,
+): {
+  error?: string | null;
+  status: ChatRunStatus;
+} => {
+  if (!error) {
+    return { status: "complete" };
   }
 
-  try {
-    const event: unknown = JSON.parse(dataLine.slice("data: ".length));
-
-    return isChatRunStreamEvent(event) ? event : null;
-  } catch {
-    return null;
+  const code = "code" in error && typeof error.code === "string" ? error.code : undefined;
+  if (code === "cancelled" || /cancel/i.test(error.message)) {
+    return { error: null, status: "cancelled" };
   }
+
+  return {
+    error: error.message || "The response could not finish.",
+    status: "failed",
+  };
 };
 
 export const consumeChatRunStream = async ({
-  onEvent,
+  assistantMessageId,
+  onDraft,
   runId,
   signal,
 }: {
-  onEvent: (event: ChatRunStreamEvent) => void;
+  assistantMessageId: string;
+  onDraft: (input: { assistantMessageId: string; parts: ChatMessagePart[] }) => void;
   runId: string;
   signal?: AbortSignal;
-}) => {
-  const response = await fetch(`/api/chat/runs/${runId}/stream`, {
+}): Promise<ChatRunStreamDone> => {
+  const connection = fetchServerSentEvents(`/api/chat/runs/${encodeURIComponent(runId)}/stream`, {
     credentials: "include",
-    signal,
+    reconnect: { delayMs: 250, maxAttempts: 8 },
   });
 
-  if (!response.ok) {
+  let streamError: Error | null = null;
+
+  const processor = new StreamProcessor({
+    initialMessages: [],
+    events: {
+      onError: (error) => {
+        streamError = error;
+      },
+      onMessagesChange: (messages) => {
+        onDraft({
+          assistantMessageId,
+          parts: getAssistantParts(messages),
+        });
+      },
+    },
+  });
+
+  try {
+    await processor.process(connection.joinRun(runId, signal));
+  } catch (error) {
+    if (signal?.aborted) {
+      throw error;
+    }
+
     throw new ChatRunStreamError(
-      "Could not open the chat stream.",
-      response.status !== 401 && response.status !== 403,
+      error instanceof Error && error.message ? error.message : "Could not open the chat stream.",
+      !(error instanceof Error && /401|403|Unauthorized/i.test(error.message)),
     );
   }
 
-  if (!response.body) {
-    throw new ChatRunStreamError("The chat stream did not return a body.");
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
   }
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let completed = false;
-
-  const emitEvent = (event: ChatRunStreamEvent | null) => {
-    if (!event) {
-      return;
-    }
-
-    onEvent(event);
-    completed ||= event.type === "done";
+  return {
+    assistantMessageId,
+    parts: getAssistantParts(processor.getMessages()),
+    ...statusFromStreamError(streamError),
   };
-
-  while (true) {
-    const { done, value } = await reader.read();
-
-    if (done) {
-      break;
-    }
-
-    buffer += decoder.decode(value, { stream: true });
-
-    const chunks = buffer.split("\n\n");
-    buffer = chunks.pop() ?? "";
-
-    for (const chunk of chunks) {
-      emitEvent(parseSseEvent(chunk));
-    }
-  }
-
-  buffer += decoder.decode();
-
-  if (buffer.trim()) {
-    emitEvent(parseSseEvent(buffer));
-  }
-
-  if (!completed && !signal?.aborted) {
-    throw new ChatRunStreamError("Chat stream disconnected.");
-  }
 };
 
 export class ChatRunStreamError extends Error {

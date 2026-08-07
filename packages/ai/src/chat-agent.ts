@@ -1,5 +1,5 @@
 import { MAILBOX_LABELS, type MailboxCategory } from "@quieter/gmail";
-import { toolDefinition, type ServerTool } from "@tanstack/ai";
+import { toolDefinition, type AnyTool } from "@tanstack/ai";
 import { z } from "zod";
 
 const mailboxCategories = Object.keys(MAILBOX_LABELS) as MailboxCategory[];
@@ -759,7 +759,7 @@ const getMailboxToolErrorMessage = (operation: string, error: unknown, fallback:
   return fallback;
 };
 
-export const createGmailSearchServerTool = (context: GmailToolsContext): ServerTool =>
+export const createGmailSearchServerTool = (context: GmailToolsContext): AnyTool =>
   gmailSearchToolDef.server(async ({ query, maxResults, pageToken }) => {
     try {
       return await context.searchGmail({
@@ -781,7 +781,7 @@ export const createGmailSearchServerTool = (context: GmailToolsContext): ServerT
     }
   });
 
-export const createGmailMessagesServerTool = (context: GmailToolsContext): ServerTool =>
+export const createGmailMessagesServerTool = (context: GmailToolsContext): AnyTool =>
   gmailMessagesToolDef.server(async ({ messageIds }) => {
     try {
       return await context.readGmailMessages({ messageIds });
@@ -797,7 +797,7 @@ export const createGmailMessagesServerTool = (context: GmailToolsContext): Serve
     }
   });
 
-export const createGmailAttachmentServerTool = (context: GmailToolsContext): ServerTool =>
+export const createGmailAttachmentServerTool = (context: GmailToolsContext): AnyTool =>
   gmailAttachmentToolDef.server(async ({ attachmentId, messageId }) => {
     try {
       return await context.readGmailAttachment({ attachmentId, messageId });
@@ -815,7 +815,7 @@ export const createGmailAttachmentServerTool = (context: GmailToolsContext): Ser
     }
   });
 
-export const createGmailThreadServerTool = (context: GmailToolsContext): ServerTool =>
+export const createGmailThreadServerTool = (context: GmailToolsContext): AnyTool =>
   gmailThreadToolDef.server(async ({ threadId }) => {
     try {
       return await context.readGmailThread({ threadId });
@@ -833,7 +833,7 @@ export const createGmailThreadServerTool = (context: GmailToolsContext): ServerT
     }
   });
 
-export const createMailboxOverviewServerTool = (context: GmailToolsContext): ServerTool =>
+export const createMailboxOverviewServerTool = (context: GmailToolsContext): AnyTool =>
   mailboxOverviewToolDef.server(async () => {
     try {
       return await context.getMailboxOverview();
@@ -850,7 +850,7 @@ export const createMailboxOverviewServerTool = (context: GmailToolsContext): Ser
     }
   });
 
-export const createGmailMessageServerTool = (context: GmailToolsContext): ServerTool =>
+export const createGmailMessageServerTool = (context: GmailToolsContext): AnyTool =>
   gmailMessageToolDef.server(async ({ messageId }) => {
     try {
       return await context.readGmailMessage({ messageId });
@@ -868,7 +868,7 @@ export const createGmailMessageServerTool = (context: GmailToolsContext): Server
     }
   });
 
-export const createGmailLabelListServerTool = (context: GmailToolsContext): ServerTool =>
+export const createGmailLabelListServerTool = (context: GmailToolsContext): AnyTool =>
   gmailLabelListToolDef.server(async () => {
     try {
       return await context.listGmailLabels();
@@ -885,7 +885,7 @@ export const createGmailLabelListServerTool = (context: GmailToolsContext): Serv
     }
   });
 
-export const createModifyMailServerTool = (context: GmailToolsContext): ServerTool =>
+export const createModifyMailServerTool = (context: GmailToolsContext): AnyTool =>
   modifyMailToolDef.server(async ({ action, id, target }) => {
     try {
       return await context.modifyMail({ action, id, target });
@@ -905,9 +905,7 @@ export const createModifyMailServerTool = (context: GmailToolsContext): ServerTo
     }
   });
 
-export const createGoogleCalendarEventServerTool = (
-  context: GoogleCalendarToolsContext,
-): ServerTool =>
+export const createGoogleCalendarEventServerTool = (context: GoogleCalendarToolsContext): AnyTool =>
   googleCalendarCreateEventToolDef.server(async (input) => {
     try {
       return await context.createGoogleCalendarEvent(input);
@@ -920,7 +918,7 @@ export const createGoogleCalendarEventServerTool = (
     }
   });
 
-export const createLinearIssueMetadataServerTool = (context: LinearToolsContext): ServerTool =>
+export const createLinearIssueMetadataServerTool = (context: LinearToolsContext): AnyTool =>
   linearIssueMetadataToolDef.server(async () => {
     try {
       return await context.listLinearIssueMetadata();
@@ -932,7 +930,7 @@ export const createLinearIssueMetadataServerTool = (context: LinearToolsContext)
     }
   });
 
-export const createLinearIssueServerTool = (context: LinearToolsContext): ServerTool =>
+export const createLinearIssueServerTool = (context: LinearToolsContext): AnyTool =>
   linearIssueCreateToolDef.server(async (input) => {
     try {
       return await context.createLinearIssue(input);
@@ -945,7 +943,7 @@ export const createLinearIssueServerTool = (context: LinearToolsContext): Server
     }
   });
 
-export const createAiMemoryServerTool = (context: AiMemoryToolsContext): ServerTool =>
+export const createAiMemoryServerTool = (context: AiMemoryToolsContext): AnyTool =>
   aiMemoryToolDef.server(async (input) => {
     try {
       return await context.rememberPreference(input);

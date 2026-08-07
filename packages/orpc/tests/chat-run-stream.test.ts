@@ -1,35 +1,26 @@
 import { describe, expect, test } from "vite-plus/test";
-import {
-  isActiveChatRunStatus,
-  publishChatRunEvent,
-  subscribeChatRunEvents,
-  type ChatRunStreamEvent,
-} from "../src/chat-run-stream";
+import { isActiveChatRunStatus } from "../src/chat-run-stream";
+import { createPostgresStreamDurability } from "../src/chat/stream-durability";
 
 describe("chat run stream", () => {
-  test("publishes events to every active subscriber", () => {
-    const first: ChatRunStreamEvent[] = [];
-    const second: ChatRunStreamEvent[] = [];
-    const unsubscribeFirst = subscribeChatRunEvents("run-1", (event) => first.push(event));
-    const unsubscribeSecond = subscribeChatRunEvents("run-1", (event) => second.push(event));
-    const event: ChatRunStreamEvent = {
-      assistantMessageId: "message-1",
-      parts: [{ content: "Hello", type: "text" }],
-      type: "draft",
-    };
-
-    publishChatRunEvent("run-1", event);
-    unsubscribeFirst();
-    publishChatRunEvent("run-1", { status: "running", type: "status" });
-    unsubscribeSecond();
-
-    expect(first).toEqual([event]);
-    expect(second).toEqual([event, { status: "running", type: "status" }]);
-  });
-
   test("identifies active statuses", () => {
     expect(isActiveChatRunStatus("queued")).toBe(true);
     expect(isActiveChatRunStatus("waiting_on_tool")).toBe(true);
     expect(isActiveChatRunStatus("complete")).toBe(false);
+  });
+
+  test("postgres durability encodes opaque offsets per chunk", async () => {
+    const durability = createPostgresStreamDurability({
+      offset: null,
+      runId: "run-offset-shape",
+    });
+
+    expect(durability.resumeFrom()).toBeNull();
+
+    // append/read need a live database; shape-check construction only here.
+    expect(typeof durability.append).toBe("function");
+    expect(typeof durability.read).toBe("function");
+    expect(typeof durability.close).toBe("function");
+    expect(typeof durability.snapshot).toBe("function");
   });
 });

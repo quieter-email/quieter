@@ -37,7 +37,7 @@ import {
   touchChatRunHeartbeat,
   updateRunStatus,
 } from "../../chat-run-store";
-import { isActiveChatRunStatus, publishChatRunEvent } from "../../chat-run-stream";
+import { isActiveChatRunStatus } from "../../chat-run-stream";
 import {
   createGoogleCalendarEventForUser,
   createLinearIssueForUser,
@@ -57,10 +57,11 @@ import {
   searchGmailForUser,
 } from "../../gmail-chat-search";
 import { assertAccessibleMailbox } from "../../mailbox/service";
+import { closeChatRunStreamLog, createPostgresStreamDurability } from "../stream-durability";
 import { getChatRunFailureMessage, terminalizeFailedChatRun } from "./failure";
 import { registerChatRunController } from "./runtime";
 
-const DRAFT_PERSIST_INTERVAL_MS = 250;
+const DRAFT_PERSIST_INTERVAL_MS = 1_000;
 const CANCEL_POLL_INTERVAL_MS = 250;
 const HEARTBEAT_INTERVAL_MS = 5_000;
 const STALE_RUN_CLAIM_MS = 30_000;
@@ -264,11 +265,6 @@ export const runChatGeneration = async (runId: string) => {
 
   const emitDraft = (parts: ChatMessagePart[]) => {
     pendingParts = parts;
-    publishChatRunEvent(runId, {
-      assistantMessageId: run.assistantMessageId,
-      parts,
-      type: "draft",
-    });
     scheduleAssistantDraftPersist(parts);
   };
 
@@ -410,8 +406,10 @@ ${aiContext.memory}`,
       ...(hasLinearConnector ? [linearToolsPrompt] : []),
     ];
 
+    const durability = createPostgresStreamDurability({ runId });
     const finalMessages = await runChatStream({
       abortController,
+      durability,
       initialMessages: streamInitialMessages,
       middleware: [usageMiddleware],
       model,
@@ -426,7 +424,6 @@ ${aiContext.memory}`,
       },
       onToolCall: () => {
         void updateRunStatus(runId, "waiting_on_tool");
-        publishChatRunEvent(runId, { status: "waiting_on_tool", type: "status" });
       },
       systemPrompts,
       tools: (() => {
@@ -605,29 +602,23 @@ ${aiContext.memory}`,
     pendingParts = finalParts;
     await settleUsageReports();
     await drainAssistantDraftPersist();
-    const terminal = await terminalizeChatRun({
+    await terminalizeChatRun({
       parts: finalParts,
       runId,
       status: cancelled || abortController.signal.aborted ? "cancelled" : "complete",
     });
-
-    if (terminal) {
-      publishChatRunEvent(runId, { ...terminal, type: "done" });
-    }
+    await closeChatRunStreamLog(runId);
   } catch (error) {
     await settleUsageReports();
 
     if (cancelled || abortController.signal.aborted) {
       await drainAssistantDraftPersist();
-      const terminal = await terminalizeChatRun({
+      await terminalizeChatRun({
         parts: pendingParts,
         runId,
         status: "cancelled",
       });
-
-      if (terminal) {
-        publishChatRunEvent(runId, { ...terminal, type: "done" });
-      }
+      await closeChatRunStreamLog(runId);
       return;
     }
 
@@ -637,6 +628,7 @@ ${aiContext.memory}`,
       id: run.assistantMessageId,
       parts: pendingParts,
     });
+    await closeChatRunStreamLog(runId);
   } finally {
     clearInterval(cancelPoll);
     clearInterval(heartbeat);
