@@ -1,28 +1,69 @@
+import { EventType, type StreamChunk } from "@tanstack/ai";
 import { describe, expect, test } from "vite-plus/test";
 import { isActiveChatRunStatus } from "../src/chat-run-store";
 import {
-  decodeChatRunStreamSeq,
-  encodeChatRunStreamOffset,
-  sanitizeChatRunStreamOffset,
-} from "../src/chat/stream-durability";
+  createHubStreamDurability,
+  encodeChatRunHubOffset,
+  getChatRunHub,
+  peekChatRunHub,
+  releaseChatRunHub,
+} from "../src/chat/stream-hub";
 
-describe("chat run stream", () => {
+describe("chat run stream hub", () => {
   test("identifies active statuses", () => {
     expect(isActiveChatRunStatus("queued")).toBe(true);
     expect(isActiveChatRunStatus("waiting_on_tool")).toBe(true);
     expect(isActiveChatRunStatus("complete")).toBe(false);
   });
 
-  test("postgres durability encodes opaque offsets per chunk", () => {
-    expect(encodeChatRunStreamOffset("run-a", 1)).toBe("run-a:1");
-    expect(decodeChatRunStreamSeq("run-a", "run-a:1")).toBe(1);
-    expect(decodeChatRunStreamSeq("run-a", "run-a:12")).toBe(12);
-    expect(decodeChatRunStreamSeq("run-a", "-1")).toBe(0);
-    expect(decodeChatRunStreamSeq("run-a", "run-b:1")).toBeNull();
-    expect(decodeChatRunStreamSeq("run-a", "run-a:0")).toBeNull();
-    expect(decodeChatRunStreamSeq("run-a", "run-a:-1")).toBeNull();
-    expect(decodeChatRunStreamSeq("run-a", "not-an-offset")).toBeNull();
-    expect(sanitizeChatRunStreamOffset("run-a", "run-b:1")).toBe("-1");
-    expect(sanitizeChatRunStreamOffset("run-a", "run-a:3")).toBe("run-a:3");
+  test("encodes opaque offsets per chunk", () => {
+    expect(encodeChatRunHubOffset("run-a", 1)).toBe("run-a:1");
+  });
+
+  test("dump-then-live delivers buffered chunks then live appends", async () => {
+    const runId = `hub-${crypto.randomUUID()}`;
+    const hub = getChatRunHub(runId);
+    const durability = createHubStreamDurability(runId);
+
+    await durability.append([
+      {
+        type: EventType.TEXT_MESSAGE_CONTENT,
+        timestamp: Date.now(),
+        messageId: "m1",
+        delta: "Hello",
+      } as StreamChunk,
+    ]);
+
+    const received: string[] = [];
+    const reader = (async () => {
+      for await (const entry of hub.subscribe()) {
+        if (entry.chunk.type === EventType.TEXT_MESSAGE_CONTENT) {
+          received.push(String((entry.chunk as { delta?: string }).delta ?? ""));
+        }
+        if (entry.chunk.type === EventType.RUN_FINISHED) {
+          break;
+        }
+      }
+    })();
+
+    await durability.append([
+      {
+        type: EventType.TEXT_MESSAGE_CONTENT,
+        timestamp: Date.now(),
+        messageId: "m1",
+        delta: " world",
+      } as StreamChunk,
+      {
+        type: EventType.RUN_FINISHED,
+        timestamp: Date.now(),
+      } as StreamChunk,
+    ]);
+    await durability.close();
+    await reader;
+
+    expect(received.join("")).toBe("Hello world");
+    expect(peekChatRunHub(runId)?.isClosed()).toBe(true);
+    releaseChatRunHub(runId);
+    expect(peekChatRunHub(runId)).toBeUndefined();
   });
 });

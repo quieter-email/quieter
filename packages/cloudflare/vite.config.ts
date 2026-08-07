@@ -1,6 +1,8 @@
 import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vite-plus";
 
+const dependencyBuild = [{ task: "build", from: "dependencies" as const }];
+
 export default defineConfig({
   plugins: [
     cloudflareTest({
@@ -13,6 +15,15 @@ export default defineConfig({
       wrangler: { configPath: "./wrangler.types.jsonc" },
     }),
   ],
+  run: {
+    tasks: {
+      "check:bundles": {
+        cache: false,
+        command: "bun scripts/check-handler-bundles.ts",
+        dependsOn: dependencyBuild,
+      },
+    },
+  },
   test: {
     include: ["tests/**/*.test.ts"],
   },

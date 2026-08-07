@@ -18,8 +18,9 @@ export const chatsQueryOptions = (mailboxId: string | null) =>
 
       return rpc.chat.list({ mailboxId }, { signal });
     },
+    // Sidebar generating dots only; live tokens come from the run SSE, not list polling.
     refetchInterval: (query) =>
-      query.state.data?.some((chat) => chat.isGenerating) ? 2_000 : false,
+      query.state.data?.some((chat) => chat.isGenerating) ? 10_000 : false,
   });
 
 export const chatQueryOptions = (mailboxId: string, chatId: string | null) =>

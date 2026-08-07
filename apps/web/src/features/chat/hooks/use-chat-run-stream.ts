@@ -29,6 +29,7 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
 export const useChatRunStream = ({
   assistantMessageId,
   enabled,
+  initialParts,
   onDone,
   onDraft,
   onError,
@@ -36,6 +37,8 @@ export const useChatRunStream = ({
 }: {
   assistantMessageId: string | null;
   enabled: boolean;
+  /** Latest known assistant parts to paint before tailing live tokens. */
+  initialParts?: ChatMessagePart[];
   onDone: (result: ChatRunStreamDone) => void;
   onDraft: (input: { assistantMessageId: string; parts: ChatMessagePart[] }) => void;
   onError: (message: string) => void;
@@ -44,12 +47,17 @@ export const useChatRunStream = ({
   const onDoneRef = useRef(onDone);
   const onDraftRef = useRef(onDraft);
   const onErrorRef = useRef(onError);
+  const initialPartsRef = useRef(initialParts);
 
   useEffect(() => {
     onDoneRef.current = onDone;
     onDraftRef.current = onDraft;
     onErrorRef.current = onError;
   }, [onDone, onDraft, onError]);
+
+  useEffect(() => {
+    initialPartsRef.current = initialParts;
+  }, [initialParts]);
 
   useEffect(() => {
     if (!enabled || !runId || !assistantMessageId) {
@@ -66,6 +74,7 @@ export const useChatRunStream = ({
         try {
           const result = await consumeChatRunStream({
             assistantMessageId: activeAssistantMessageId,
+            initialParts: initialPartsRef.current,
             onDraft: (draft) => onDraftRef.current(draft),
             runId,
             signal: controller.signal,
@@ -108,5 +117,7 @@ export const useChatRunStream = ({
     return () => {
       controller.abort();
     };
+    // initialParts are read from a ref so reconnects keep the freshest draft without
+    // tearing down the SSE when parts update every token.
   }, [assistantMessageId, enabled, runId]);
 };

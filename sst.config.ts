@@ -321,47 +321,54 @@ export default $config({
 
     const chatGenerationStartToken = secretResources.CHAT_GENERATION_START_TOKEN;
     const gmailLiveSyncTokenSecret = secretResources.GMAIL_LIVE_SYNC_TOKEN_SECRET;
-    const chatGenerationQueue = new sst.aws.Queue("ChatGenerationQueue");
-    const chatGenerationWorkflow = new sst.aws.Workflow("ChatGenerationWorkflow", {
+    const cloudflareWorkerObservability = {
+      enabled: true,
+      logs: {
+        enabled: true,
+        headSamplingRate: 1,
+        invocationLogs: true,
+        persist: true,
+      },
+      traces: {
+        enabled: true,
+        headSamplingRate: 0.01,
+        persist: true,
+      },
+    };
+    const chatRunSession = new sst.cloudflare.DurableObject("ChatRunSession", {
+      className: "ChatRunSession",
+    });
+    const chatGenerationWorker = new sst.cloudflare.Worker("ChatGenerationWorker", {
+      compatibility: {
+        date: "2026-08-04",
+        flags: ["nodejs_compat"],
+      },
       environment: {
         CONNECTOR_TOKEN_ENCRYPTION_KEY: connectorTokenEncryptionKey,
-        DATABASE_URL: databaseUrl,
         GMAIL_TOKEN_ENCRYPTION_KEY: gmailTokenEncryptionKey,
         GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: gmailTokenEncryptionKeyCurrent,
         GOOGLE_CALENDAR_CLIENT_ID: googleCalendarClientId,
         GOOGLE_CALENDAR_CLIENT_SECRET: googleCalendarClientSecret,
         GOOGLE_GMAIL_CLIENT_ID: googleGmailClientId,
         GOOGLE_GMAIL_CLIENT_SECRET: googleGmailClientSecret,
+        LINEAR_CLIENT_ID: linearClientId,
+        LINEAR_CLIENT_SECRET: linearClientSecret,
         OPENROUTER_API_KEY: openRouterApiKey,
         POLAR_ACCESS_TOKEN: polarAccessToken,
         POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
         POLAR_SANDBOX: polarSandbox,
+        QUIETER_DEPLOYMENT_ENV: production ? "production" : "preview",
         ...sentryEnvironment,
       },
-      handler: "packages/aws/src/chat-generation-workflow.handler",
-      timeout: {
-        execution: "2 hours",
-        invocation: "15 minutes",
-      },
-    });
-    chatGenerationQueue.subscribe(
-      {
-        environment: sentryEnvironment,
-        handler: "packages/aws/src/chat-generation-starter.handler",
-        link: [chatGenerationWorkflow],
-        timeout: "30 seconds",
-      },
-      {
-        batch: {
-          partialResponses: true,
+      handler: "packages/cloudflare/src/chat-generation-worker.ts",
+      link: [appDatabase, chatGenerationStartToken, chatRunSession],
+      migrations: [
+        {
+          newSqliteClasses: [chatRunSession.className],
+          tag: "v1",
         },
-      },
-    );
-    const chatGenerationEnqueue = new sst.aws.Function("ChatGenerationEnqueue", {
-      environment: sentryEnvironment,
-      handler: "packages/aws/src/chat-generation-enqueue.handler",
-      link: [chatGenerationQueue, chatGenerationStartToken],
-      timeout: "30 seconds",
+      ],
+      observability: cloudflareWorkerObservability,
       url: true,
     });
     const mailboxActionDeadLetterQueue = new sst.aws.Queue("MailboxActionDeadLetterQueue", {
@@ -564,20 +571,6 @@ export default $config({
       const gmailLiveSyncMailbox = new sst.cloudflare.DurableObject("GmailLiveSyncMailbox", {
         className: "GmailLiveSyncMailbox",
       });
-      const cloudflareWorkerObservability = {
-        enabled: true,
-        logs: {
-          enabled: true,
-          headSamplingRate: 1,
-          invocationLogs: true,
-          persist: true,
-        },
-        traces: {
-          enabled: true,
-          headSamplingRate: 0.01,
-          persist: true,
-        },
-      };
       const gmailRealtimeWorker = new sst.cloudflare.Worker("GmailRealtimeWorker", {
         compatibility: {
           date: "2026-08-04",
@@ -656,7 +649,7 @@ export default $config({
     });
     const web = createWeb(
       {
-        CHAT_GENERATION_START_URL: chatGenerationEnqueue.url,
+        CHAT_GENERATION_START_URL: chatGenerationWorker.url,
         GMAIL_LIVE_SYNC_URL: gmailLiveSyncUrl,
         MAILBOX_ACTION_QUEUE_URL: mailboxActionQueue.url,
         MAIL_BUCKET: mailBucket.name,
@@ -678,8 +671,8 @@ export default $config({
     );
 
     return {
-      chatGenerationEnqueueUrl: chatGenerationEnqueue.url,
       chatGenerationStartTokenSecretName: chatGenerationStartToken.name,
+      chatGenerationWorkerUrl: chatGenerationWorker.url,
       gmailLiveSyncTokenSecretName: gmailLiveSyncTokenSecret.name,
       gmailLiveSyncUrl,
       gmailPubSubIngressUrl,

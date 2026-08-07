@@ -5,7 +5,7 @@ import { and, asc, desc, eq, gt, isNull } from "drizzle-orm";
 
 const FROM_START_OFFSET = "-1";
 const FROM_TAIL_OFFSET = "now";
-const READ_POLL_INTERVAL_MS = 200;
+const READ_POLL_INTERVAL_MS = 50;
 const DEFAULT_FIRST_CHUNK_DEADLINE_MS = 30_000;
 
 type PostgresStreamDurabilityInit = {
@@ -96,8 +96,8 @@ const readAfter = async (runId: string, afterSeq: number, client: DatabaseClient
     .orderBy(asc(chatRunStreamChunk.seq));
 
 /**
- * Postgres-backed TanStack AI StreamDurability for detached chat producers
- * (AWS Workflow / local in-process) and Cloudflare Worker observers.
+ * Postgres-backed TanStack AI StreamDurability (legacy delivery log).
+ * Live chat observation uses the in-memory hub / Durable Object instead.
  */
 export const createPostgresStreamDurability = (
   source: Request | PostgresStreamDurabilityInit,
@@ -127,6 +127,8 @@ export const createPostgresStreamDurability = (
   const resumeOffset = init.offset ?? null;
   const firstChunkDeadlineMs =
     init.firstChunkDeadlineMs ?? options?.firstChunkDeadlineMs ?? DEFAULT_FIRST_CHUNK_DEADLINE_MS;
+  // Single-writer producer: resolve the tail once, then allocate seq in memory.
+  let nextSeq: number | undefined;
 
   return {
     resumeFrom: () => resumeOffset,
@@ -139,28 +141,32 @@ export const createPostgresStreamDurability = (
       const offsets: string[] = [];
 
       await client.transaction(async (tx) => {
-        const [tail] = await tx
-          .select({ seq: chatRunStreamChunk.seq })
-          .from(chatRunStreamChunk)
-          .where(eq(chatRunStreamChunk.runId, runId))
-          .orderBy(desc(chatRunStreamChunk.seq))
-          .limit(1);
-        let nextSeq = tail?.seq ?? 0;
+        if (nextSeq === undefined) {
+          const [tail] = await tx
+            .select({ seq: chatRunStreamChunk.seq })
+            .from(chatRunStreamChunk)
+            .where(eq(chatRunStreamChunk.runId, runId))
+            .orderBy(desc(chatRunStreamChunk.seq))
+            .limit(1);
+          nextSeq = tail?.seq ?? 0;
+        }
 
+        let seq = nextSeq;
         const rows = chunks.map((chunk) => {
-          nextSeq += 1;
-          const offset = encodeChatRunStreamOffset(runId, nextSeq);
+          seq += 1;
+          const offset = encodeChatRunStreamOffset(runId, seq);
           offsets.push(offset);
           return {
             chunk: chunk as unknown as Record<string, unknown>,
             createdAt: now,
             offset,
             runId,
-            seq: nextSeq,
+            seq,
           };
         });
 
         await tx.insert(chatRunStreamChunk).values(rows);
+        nextSeq = seq;
       });
 
       return offsets;
@@ -187,12 +193,24 @@ export const createPostgresStreamDurability = (
       let cursorSeq: number;
       if (offset === FROM_TAIL_OFFSET) {
         const [tail] = await client
-          .select({ seq: chatRunStreamChunk.seq })
+          .select({
+            chunk: chatRunStreamChunk.chunk,
+            seq: chatRunStreamChunk.seq,
+          })
           .from(chatRunStreamChunk)
           .where(eq(chatRunStreamChunk.runId, runId))
           .orderBy(desc(chatRunStreamChunk.seq))
           .limit(1);
         cursorSeq = tail?.seq ?? 0;
+
+        // Late joiners using `now` after close would otherwise skip the terminal
+        // event and hang/reconnect forever. Rewind to just before it.
+        if (tail && (await isStreamClosed(runId, client))) {
+          const tipType = (tail.chunk as { type?: string } | null)?.type;
+          if (tipType === "RUN_FINISHED" || tipType === "RUN_ERROR") {
+            cursorSeq = tail.seq - 1;
+          }
+        }
       } else {
         const seq = decodeChatRunStreamSeq(runId, offset);
         if (seq === null) {

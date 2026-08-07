@@ -73,7 +73,7 @@
     "billing:sync-polar": "vp run @quieter/billing#catalog:sync",
     "build": "vp run -r build",
     "check:boundaries": "vp run @quieter/aws#check:boundaries",
-    "check:bundles": "vp run @quieter/aws#check:bundles",
+    "check:bundles": "vp run @quieter/aws#check:bundles && vp run @quieter/cloudflare#check:bundles",
     "check:cloudflare": "bun scripts/check-cloudflare-worker-config.ts",
     "check:copy": "bun scripts/check-no-middle-dot.ts",
     "db:check": "vp run @quieter/database#db:check",

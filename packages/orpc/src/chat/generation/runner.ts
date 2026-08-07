@@ -27,12 +27,7 @@ import { chatModelSchema } from "@quieter/ai/chat-models";
 import { runChatStream } from "@quieter/ai/run-chat-stream";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
-import {
-  chatMessage,
-  chatRun,
-  chatRunStreamChunk,
-  type ChatMessagePart,
-} from "@quieter/database/schema";
+import { chatMessage, chatRun, type ChatMessagePart } from "@quieter/database/schema";
 import { and, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { loadAiAgentContext, recordAiMemoryEvent, refreshAiMemoryFromEvent } from "../../ai-memory";
 import {
@@ -62,7 +57,7 @@ import {
   searchGmailForUser,
 } from "../../gmail-chat-search";
 import { assertAccessibleMailbox } from "../../mailbox/service";
-import { closeChatRunStreamLog, createPostgresStreamDurability } from "../stream-durability";
+import { createHubStreamDurability, releaseChatRunHub, sealChatRunHub } from "../stream-hub";
 import { getChatRunFailureMessage, terminalizeFailedChatRun } from "./failure";
 import { registerChatRunController } from "./runtime";
 
@@ -188,12 +183,8 @@ export const runChatGeneration = async (runId: string) => {
     return;
   }
 
-  // Stale takeovers (and any prior partial attempt) must not replay old chunks.
-  await db.delete(chatRunStreamChunk).where(eq(chatRunStreamChunk.runId, runId));
-  await db
-    .update(chatRun)
-    .set({ streamClosedAt: null, updatedAt: now })
-    .where(eq(chatRun.id, runId));
+  // Stale takeovers must not reuse a sealed in-memory hub from a prior attempt.
+  releaseChatRunHub(runId);
 
   const messages = await db
     .select({
@@ -413,7 +404,7 @@ ${aiContext.memory}`,
       ...(hasLinearConnector ? [linearToolsPrompt] : []),
     ];
 
-    const durability = createPostgresStreamDurability({ runId });
+    const durability = createHubStreamDurability(runId);
     const finalMessages = await runChatStream({
       abortController,
       durability,
@@ -634,15 +625,23 @@ ${aiContext.memory}`,
       parts: pendingParts,
     });
   } finally {
-    await closeChatRunStreamLog(runId).catch((error) => {
-      console.error("Could not close the chat stream log.", error);
-    });
     clearInterval(cancelPoll);
     clearInterval(heartbeat);
     unregisterController();
 
     if (persistTimeout) {
       clearTimeout(persistTimeout);
+    }
+
+    // Never seal the log while the run is still active — observers treat a
+    // closed empty/incomplete log as a clean stream end and spam reconnects.
+    const [current] = await db
+      .select({ status: chatRun.status })
+      .from(chatRun)
+      .where(eq(chatRun.id, runId))
+      .limit(1);
+    if (!current || !isActiveChatRunStatus(current.status)) {
+      sealChatRunHub(runId);
     }
   }
 };

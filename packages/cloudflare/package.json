@@ -8,6 +8,9 @@
     "test:workers": "vp test run --config vite.config.ts"
   },
   "dependencies": {
+    "@quieter/database": "workspace:*",
+    "@quieter/orpc": "workspace:*",
+    "drizzle-orm": "catalog:",
     "jose": "5.10.0",
     "zod": "catalog:"
   },

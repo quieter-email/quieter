@@ -3,7 +3,6 @@ import { join, relative } from "node:path";
 
 const sourceRoot = join(import.meta.dir, "..", "src");
 const allowedOrpcImports = new Set([
-  "@quieter/orpc/chat-generation",
   "@quieter/orpc/gmail-live-sync",
   "@quieter/orpc/gmail-live-sync-token",
   "@quieter/orpc/gmail-pubsub",

@@ -17,8 +17,7 @@
 - `packages/orpc` is the boundary between app and DB logic.
 - AWS handlers import only deployment-safe `@quieter/orpc` entrypoints. Keep authenticated
   application services, routers, and framework adapters out of ingestion and worker dependency
-  graphs. `vp run @quieter/aws#check:boundaries` validates imports and `vp run @quieter/aws#check:bundles` bundles every
-  SST handler to catch unsupported transitive dependencies.
+  graphs. `vp run @quieter/aws#check:boundaries` validates AWS imports and `vp run @quieter/aws#check:bundles` / `vp run @quieter/cloudflare#check:bundles` bundle SST handlers to catch unsupported transitive dependencies.
 - `packages/mail` owns pure mail parsing, compose schemas, MIME building, message content extraction, and sender avatar derivation.
 - `packages/mail/data-plane` owns provider-neutral mail categories, thread/page/detail contracts, semantic commands, mutation results, errors, sync tokens, and role-derived mailbox capabilities. Gmail, managed, API, and demo implementations must adapt to this contract rather than expose provider labels to the UI.
 - `packages/gmail` owns Gmail REST service logic and Gmail-specific draft parsing; encrypted credentials and token refresh are owned by `packages/orpc`.
@@ -83,7 +82,7 @@
 - Keep Better Auth reactive hooks (`useSession`, `useListOrganizations`, `useListPasskeys`) as the source of truth for auth state. Do not use Better Auth active organization state for Quieter product context.
 - Compose state is mailbox-scoped. Persisted compose sessions and Gmail cache must stay isolated per mailbox.
 - Chats are mailbox-scoped. Chat lists, transcripts, mutations, and AI requests require an accessible `mailboxId`.
-- Chat generation is server-owned: `chat.sendMessage` persists the user message, `chatRun`, and draft assistant row, then starts generation in-process or through SST (`ChatGenerationQueue` → starter → `ChatGenerationWorkflow`) when `CHAT_GENERATION_START_URL` is set. The browser's `GET /api/chat/runs/$runId/stream` connection is observation-only: it resumes TanStack AI StreamChunks from a Postgres delivery-durability log (`chatRunStreamChunk`) via `joinRun` / `Last-Event-ID`, and may disconnect or reconnect without owning or restarting the run. Draft message writes remain atomic and debounced for transcript SoT and other tabs. `chat.get` is for initial/historical state, not token polling. `chat.cancelGeneration` atomically terminalizes the run and aborts the local controller when present; remote workers also observe the persisted cancel state.
+- Chat generation is server-owned: `chat.sendMessage` persists the user message, `chatRun`, and draft assistant row, then starts generation in-process (local/review) or through the Cloudflare `ChatGenerationWorker` / `ChatRunSession` Durable Object when `CHAT_GENERATION_START_URL` is set. The Durable Object owns the provider stream and an in-memory dump-then-live fanout; the browser's `GET /api/chat/runs/$runId/stream` connection is observation-only (auth on the web Worker, then hub SSE locally or a proxied DO attach). Postgres stores run status, heartbeats, and draft/final assistant parts — not the live token pipe. `chat.get` is for initial/historical state, not token polling. `chat.cancelGeneration` atomically terminalizes the run and aborts the in-process controller when present; remote cancels also hit the Durable Object and observe the persisted cancel state.
 - Bulk mailbox actions and conversation spam/trash actions operate on the loaded row set for the current mailbox.
 - History-based live sync applies to unfiltered mailbox views; filtered search and Drafts refresh manually.
 - Message-list prefetch on mount is capped to one extra page.

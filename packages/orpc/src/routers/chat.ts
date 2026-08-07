@@ -40,8 +40,7 @@ import {
 } from "../chat-run-store";
 import { ACTIVE_CHAT_RUN_STATUSES } from "../chat-run-store";
 import { terminalizeFailedChatRun } from "../chat/generation/failure";
-import { startChatRun } from "../chat/generation/lifecycle";
-import { abortChatRun } from "../chat/generation/runtime";
+import { cancelChatRun, startChatRun } from "../chat/generation/lifecycle";
 import { saveGmailDraft, sendGmailMessage } from "../gmail-compose";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { callGmail, mailboxCategorySchema, mailboxIdSchema, protectedProcedure } from "./base";
@@ -1051,7 +1050,7 @@ export const chatRouter = {
         return { cancelled: false as const };
       }
 
-      abortChatRun(cancelledRun.runId);
+      cancelChatRun(cancelledRun.runId);
 
       return { cancelled: true as const, ...cancelledRun };
     }),

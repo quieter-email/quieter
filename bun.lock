@@ -187,6 +187,9 @@
     "packages/cloudflare": {
       "name": "@quieter/cloudflare",
       "dependencies": {
+        "@quieter/database": "workspace:*",
+        "@quieter/orpc": "workspace:*",
+        "drizzle-orm": "catalog:",
         "jose": "5.10.0",
         "zod": "catalog:",
       },
