@@ -198,6 +198,11 @@ export const ChatView = ({
   const liveAssistantMessageId =
     streamingAssistant?.messageId ??
     (isActiveRun(activeRun) ? (activeRun?.assistantMessageId ?? null) : null);
+  const liveAssistantParts =
+    streamingAssistant?.parts ??
+    (liveAssistantMessageId
+      ? chatData?.messages.find((message) => message.id === liveAssistantMessageId)?.parts
+      : undefined);
 
   const commitStreamResult = (result: ChatRunStreamDone, resolvedChatId?: string | null) => {
     let targetChatId = resolvedChatId;
@@ -242,6 +247,7 @@ export const ChatView = ({
   useChatRunStream({
     assistantMessageId: liveAssistantMessageId,
     enabled: !!liveRunId && !!liveAssistantMessageId,
+    initialParts: liveAssistantParts,
     onDone: (result) => {
       commitStreamResult(result);
       const resolvedChatId = streamChatIdRef.current ?? chatId;
@@ -253,7 +259,12 @@ export const ChatView = ({
         void queryClient.invalidateQueries({
           queryKey: getChatQueryKey(mailboxId, resolvedChatId),
         });
-        void queryClient.invalidateQueries({ queryKey: getChatsQueryKey(mailboxId) });
+        // Soft-refresh the sidebar generating indicator without a refetch storm.
+        queryClient.setQueryData<ChatsQueryData>(getChatsQueryKey(mailboxId), (current) =>
+          current?.map((chat) =>
+            chat.id === resolvedChatId ? { ...chat, isGenerating: false } : chat,
+          ),
+        );
       }
     },
     onDraft: ({ assistantMessageId, parts }) => {

@@ -3,9 +3,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./chat-generation-enqueue": "./src/chat-generation-enqueue.ts",
-    "./chat-generation-starter": "./src/chat-generation-starter.ts",
-    "./chat-generation-workflow": "./src/chat-generation-workflow.ts",
     "./gmail-live-sync": "./src/gmail-live-sync.ts",
     "./gmail-live-sync-websocket": "./src/gmail-live-sync-websocket.ts",
     "./gmail-pubsub-consumer": "./src/gmail-pubsub-consumer.ts",

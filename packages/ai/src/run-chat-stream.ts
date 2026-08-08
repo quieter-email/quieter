@@ -14,7 +14,8 @@ import { createOpenRouterAdapter } from "./openrouter";
 
 export const CHAT_AGENT_MAX_ITERATIONS = 12;
 export const CHAT_AGENT_MAX_TOKENS = 4_096;
-export const CHAT_STREAM_DURABILITY_BATCH = 8;
+/** Flush every chunk so SSE observers see tokens live, not in multi-second batches. */
+export const CHAT_STREAM_DURABILITY_BATCH = 1;
 
 const isTerminalChunk = (chunk: StreamChunk) =>
   chunk.type === EventType.RUN_FINISHED || chunk.type === EventType.RUN_ERROR;
@@ -61,7 +62,7 @@ export const streamChunksThroughDurability = async function* <TOffset extends st
       sawTerminal = true;
     }
     batch.push(chunk);
-    if (batch.length >= batchSize) {
+    if (batch.length >= batchSize || isTerminalChunk(chunk)) {
       await flush();
     }
   };

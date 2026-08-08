@@ -1,6 +1,6 @@
 const compatibilityDate = "2026-08-04";
 const expectedDateCounts = new Map([
-  ["sst.config.ts", 2],
+  ["sst.config.ts", 3],
   ["apps/web/local-worker.jsonc", 1],
   ["packages/cloudflare/wrangler.types.jsonc", 1],
   [".github/review-worker.wrangler.jsonc", 1],

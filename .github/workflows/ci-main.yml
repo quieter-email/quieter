@@ -56,6 +56,9 @@ jobs:
       - name: Bundle AWS handlers
         run: vp run @quieter/aws#check:bundles
 
+      - name: Bundle Cloudflare workers
+        run: vp run @quieter/cloudflare#check:bundles
+
       - name: Test
         run: vp test
 

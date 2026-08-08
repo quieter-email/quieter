@@ -1,15 +1,21 @@
 import { serverEnv } from "@quieter/env/server";
 import { getChatRunFailureMessage, terminalizeFailedChatRun } from "./failure";
 import { runChatGeneration } from "./runner";
+import { abortChatRun } from "./runtime";
 
 const ENQUEUE_CHAT_RUN_TIMEOUT_MS = 10_000;
 const inFlightGenerations = new Map<string, Promise<void>>();
 
-export const ensureChatRunGeneration = (runId: string) => {
+export const ensureChatRunGeneration = (
+  runId: string,
+  options?: {
+    force?: boolean;
+  },
+) => {
   const existing = inFlightGenerations.get(runId);
   if (existing) return existing;
 
-  const generation = runChatGeneration(runId)
+  const generation = runChatGeneration(runId, options)
     .catch(async (error) => {
       console.error(`Chat generation ${runId} failed.`, error);
       await terminalizeFailedChatRun(runId, getChatRunFailureMessage(error)).catch(
@@ -75,4 +81,31 @@ export const startChatRun = async (runId: string) => {
   }
 
   await enqueueChatRun(runId);
+};
+
+/** Best-effort remote abort when generation runs outside this isolate. */
+export const cancelChatRunRemote = async (runId: string) => {
+  const startUrl = serverEnv.CHAT_GENERATION_START_URL;
+  const token = serverEnv.CHAT_GENERATION_START_TOKEN;
+  if (!startUrl || !token) {
+    return;
+  }
+
+  const cancelUrl = new URL(`/runs/${encodeURIComponent(runId)}/cancel`, startUrl);
+  try {
+    await fetch(cancelUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      method: "POST",
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch (error) {
+    console.error(`Could not cancel remote chat generation ${runId}.`, error);
+  }
+};
+
+export const cancelChatRun = (runId: string) => {
+  abortChatRun(runId);
+  void cancelChatRunRemote(runId);
 };
