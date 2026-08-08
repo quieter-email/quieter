@@ -14,10 +14,9 @@ import {
   TextUnderlineIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import { TooltipGroup } from "@quieter/ui/tooltip";
+import { Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator } from "@quieter/ui/toolbar";
 import FileHandler from "@tiptap/extension-file-handler";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
@@ -129,15 +128,8 @@ export const ComposeEditor = ({
     editable: !disabled,
     editorProps: {
       attributes: {
-        class: cn(
-          "bg-transparent text-fg outline-none [&_.ProseMirror-selectednode.quieter-template-placeholder]:border-fg [&_.is-editor-empty:first-child::before]:pointer-events-none [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:h-0 [&_.is-editor-empty:first-child::before]:text-muted-fg/75 [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.quieter-template-placeholder]:mx-1 [&_.quieter-template-placeholder]:inline-block [&_.quieter-template-placeholder]:min-w-20 [&_.quieter-template-placeholder]:cursor-text [&_.quieter-template-placeholder]:border-b [&_.quieter-template-placeholder]:border-muted-fg [&_.quieter-template-placeholder]:px-1 [&_.quieter-template-placeholder]:text-transparent [&_.quieter-template-placeholder]:selection:bg-primary/20 [&_.quieter-template-placeholder]:hover:border-fg [&_a]:text-fg [&_a]:underline [&_blockquote]:border-l [&_blockquote]:border-border [&_blockquote]:text-muted-fg [&_img]:max-w-full [&_img]:object-contain [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0 [&_s]:text-muted-fg [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5",
-          {
-            "min-h-28 text-sm/relaxed [&_.is-editor-empty:first-child::before]:text-sm/relaxed [&_blockquote]:my-3 [&_blockquote]:pl-3 [&_img]:my-3 [&_img]:max-h-48 [&_img]:rounded-lg [&_li]:my-0.5 [&_ol]:my-3 [&_p+p]:mt-2 [&_ul]:my-3":
-              density === "compact",
-            "min-h-72 text-[15px] leading-[1.75] [&_.is-editor-empty:first-child::before]:text-[15px] [&_.is-editor-empty:first-child::before]:leading-[1.75] [&_blockquote]:my-4 [&_blockquote]:pl-4 [&_img]:my-4 [&_img]:max-h-64 [&_img]:rounded-xl [&_li]:my-1 [&_ol]:my-4 [&_p+p]:mt-3 [&_ul]:my-4":
-              density === "comfortable",
-          },
-        ),
+        class:
+          "min-h-full bg-transparent text-sm text-fg outline-none [&_.ProseMirror-selectednode.quieter-template-placeholder]:border-fg [&_.is-editor-empty:first-child::before]:pointer-events-none [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:h-0 [&_.is-editor-empty:first-child::before]:text-muted-fg [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.quieter-template-placeholder]:mx-1 [&_.quieter-template-placeholder]:inline-block [&_.quieter-template-placeholder]:min-w-20 [&_.quieter-template-placeholder]:cursor-text [&_.quieter-template-placeholder]:border-b [&_.quieter-template-placeholder]:border-muted-fg [&_.quieter-template-placeholder]:px-1 [&_.quieter-template-placeholder]:text-transparent [&_.quieter-template-placeholder]:selection:bg-primary/20 [&_.quieter-template-placeholder]:hover:border-fg [&_a]:text-fg [&_a]:underline [&_blockquote]:my-3 [&_blockquote]:border-l [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-fg [&_img]:my-3 [&_img]:max-h-48 [&_img]:max-w-full [&_img]:rounded-md [&_img]:object-contain [&_li]:my-0.5 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0 [&_p+p]:mt-2 [&_s]:text-muted-fg [&_strong]:font-semibold [&_u]:underline [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5",
       },
     },
     extensions: [
@@ -259,29 +251,42 @@ export const ComposeEditor = ({
     ],
   );
 
-  return <ComposeEditorContext value={contextValue}>{children}</ComposeEditorContext>;
+  return (
+    <ComposeEditorContext value={contextValue}>
+      <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+    </ComposeEditorContext>
+  );
 };
 
-export const ComposeEditorBody = ({ className }: { className?: string }) => {
+export const ComposeEditorBody = ({
+  className,
+  invalid = false,
+}: {
+  className?: string;
+  invalid?: boolean;
+}) => {
   const { density, disabled, editor, recording, transcribing } = useComposeEditor();
   const audioActive = recording || transcribing;
 
   return (
     <div
+      aria-invalid={invalid || undefined}
       className={cn(
-        "min-h-0 overflow-y-auto transition-[border-color,box-shadow] has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:ring-1 has-[.ProseMirror:focus-visible]:ring-ring/45 has-[.ProseMirror:focus-visible]:outline-none",
+        "squircle relative min-h-20 w-full overflow-hidden rounded-md border border-border bg-bg-elevated text-sm text-fg shadow-sm transition-colors duration-150 ease-out",
+        "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:ring-1 has-[.ProseMirror:focus-visible]:ring-ring/45 has-[.ProseMirror:focus-visible]:outline-none",
+        "aria-invalid:border-destructive aria-invalid:focus-within:border-destructive aria-invalid:focus-within:ring-destructive/45",
         className,
         {
-          "pointer-events-none opacity-80": disabled,
+          "pointer-events-none opacity-50": disabled,
         },
       )}
     >
       {audioActive ? (
         <output
           aria-label={recording ? "Recording audio" : "Transcribing audio"}
-          className={cn("flex items-center justify-center", {
+          className={cn("flex h-full items-center justify-center px-4 py-3.5", {
             "min-h-28": density === "compact",
-            "min-h-72": density === "comfortable",
+            "min-h-48": density === "comfortable",
           })}
         >
           <div className="flex h-10 items-center gap-1.5 rounded-full border border-border bg-secondary/35 px-4">
@@ -301,13 +306,16 @@ export const ComposeEditorBody = ({ className }: { className?: string }) => {
           </div>
         </output>
       ) : editor ? (
-        <EditorContent editor={editor} />
+        <EditorContent
+          className="absolute inset-0 overflow-y-auto px-4 py-3.5 [&>.ProseMirror]:min-h-full"
+          editor={editor}
+        />
       ) : (
         <div
           aria-hidden
-          className={cn("text-muted-fg/75", {
-            "min-h-28 text-sm/relaxed": density === "compact",
-            "min-h-72 text-[15px] leading-[1.75]": density === "comfortable",
+          className={cn("h-full px-4 py-3.5 text-muted-fg", {
+            "min-h-28": density === "compact",
+            "min-h-48": density === "comfortable",
           })}
         >
           Write your message…
@@ -317,7 +325,13 @@ export const ComposeEditorBody = ({ className }: { className?: string }) => {
   );
 };
 
-export const ComposeEditorToolbar = ({ className }: { className?: string }) => {
+export const ComposeEditorToolbar = ({
+  className,
+  trailing,
+}: {
+  className?: string;
+  trailing?: ReactNode;
+}) => {
   const { disabled, editor } = useComposeEditor();
   const toolbarState = useEditorState({
     editor,
@@ -338,7 +352,8 @@ export const ComposeEditorToolbar = ({ className }: { className?: string }) => {
       underlineActive: !!currentEditor?.isActive("underline"),
     }),
   });
-  const toolbarActions = [
+
+  const formatActions = [
     {
       id: "bold",
       label: "Bold",
@@ -387,50 +402,66 @@ export const ComposeEditorToolbar = ({ className }: { className?: string }) => {
       disabled: !toolbarState?.canBlockquote,
       onClick: () => editor?.chain().focus().toggleBlockquote().run(),
     },
-    {
-      id: "undo",
-      label: "Undo",
-      icon: ArrowTurnBackwardIcon,
-      disabled: !toolbarState?.canUndo,
-      onClick: () => editor?.chain().focus().undo().run(),
-    },
-    {
-      id: "redo",
-      label: "Redo",
-      icon: ArrowTurnForwardIcon,
-      disabled: !toolbarState?.canRedo,
-      onClick: () => editor?.chain().focus().redo().run(),
-    },
-  ];
+  ] as const;
 
   return (
-    <div className={cn("flex shrink-0 items-center gap-1", className)}>
-      <TooltipGroup>
-        {toolbarActions.map((action) => {
-          const isDisabled = !!(disabled || action.disabled);
-
-          return (
-            <IconButtonTooltip key={action.id} label={action.label}>
-              <Button
-                aria-label={action.label}
-                aria-pressed={"active" in action ? action.active : undefined}
-                className={cn("text-muted-fg hover:bg-muted/55 hover:text-fg", {
-                  "bg-muted/75 text-fg": action.active,
-                })}
-                disabled={isDisabled}
-                onClick={() => action.onClick()}
-                onMouseDown={(event) => event.preventDefault()}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <HugeiconsIcon className="size-4" icon={action.icon} />
-              </Button>
-            </IconButtonTooltip>
-          );
-        })}
-      </TooltipGroup>
-    </div>
+    <Toolbar
+      className={cn("w-full min-w-0 shrink-0 rounded-md border-border bg-bg-elevated", className)}
+    >
+      <ToolbarGroup>
+        {formatActions.map((action) => (
+          <IconButtonTooltip key={action.id} label={action.label}>
+            <ToolbarButton
+              aria-label={action.label}
+              aria-pressed={!!action.active}
+              className={cn("size-8 px-0", {
+                "bg-bg-surface text-fg shadow-sm": action.active,
+              })}
+              disabled={!!(disabled || action.disabled)}
+              onClick={() => {
+                action.onClick();
+              }}
+              onMouseDown={(event) => event.preventDefault()}
+              type="button"
+            >
+              <HugeiconsIcon className="size-4" icon={action.icon} />
+            </ToolbarButton>
+          </IconButtonTooltip>
+        ))}
+      </ToolbarGroup>
+      <ToolbarSeparator />
+      <ToolbarGroup>
+        <IconButtonTooltip label="Undo">
+          <ToolbarButton
+            aria-label="Undo"
+            className="size-8 px-0"
+            disabled={!!(disabled || !toolbarState?.canUndo)}
+            onClick={() => {
+              editor?.chain().focus().undo().run();
+            }}
+            onMouseDown={(event) => event.preventDefault()}
+            type="button"
+          >
+            <HugeiconsIcon className="size-4" icon={ArrowTurnBackwardIcon} />
+          </ToolbarButton>
+        </IconButtonTooltip>
+        <IconButtonTooltip label="Redo">
+          <ToolbarButton
+            aria-label="Redo"
+            className="size-8 px-0"
+            disabled={!!(disabled || !toolbarState?.canRedo)}
+            onClick={() => {
+              editor?.chain().focus().redo().run();
+            }}
+            onMouseDown={(event) => event.preventDefault()}
+            type="button"
+          >
+            <HugeiconsIcon className="size-4" icon={ArrowTurnForwardIcon} />
+          </ToolbarButton>
+        </IconButtonTooltip>
+      </ToolbarGroup>
+      {trailing ? <div className="ml-auto flex min-w-0 items-center gap-1">{trailing}</div> : null}
+    </Toolbar>
   );
 };
 
@@ -446,32 +477,30 @@ export const ComposeEditorDictationButton = () => {
 
   return recording ? (
     <IconButtonTooltip label="Stop recording">
-      <Button
+      <ToolbarButton
         aria-label="Stop recording"
         className="text-primary"
         disabled={disabled}
         onClick={onRecordingStop}
         onMouseDown={(event) => event.preventDefault()}
-        size="icon-sm"
         type="button"
-        variant="ghost"
       >
         <HugeiconsIcon className="size-4" icon={StopIcon} />
-      </Button>
+        Stop
+      </ToolbarButton>
     </IconButtonTooltip>
   ) : (
     <IconButtonTooltip label={recordingSupported ? "Dictate" : "Recording unavailable"}>
-      <Button
+      <ToolbarButton
         aria-label={recordingSupported ? "Dictate" : "Recording unavailable"}
+        className="size-8 px-0"
         disabled={disabled || transcribing || !recordingSupported}
         onClick={onRecordingStart}
         onMouseDown={(event) => event.preventDefault()}
-        size="icon-sm"
         type="button"
-        variant="ghost"
       >
         <HugeiconsIcon className="size-4" icon={AiMicIcon} />
-      </Button>
+      </ToolbarButton>
     </IconButtonTooltip>
   );
 };

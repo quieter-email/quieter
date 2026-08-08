@@ -41,9 +41,11 @@ export const SiteFooter = () => {
     select: (location) => location.pathname,
   });
 
-  if (publicFooterRoutes.has(pathname)) {
+  if (!publicFooterRoutes.has(pathname)) return null;
+
+  if (pathname === "/home") {
     return (
-      <footer className="border-t border-border bg-bg py-6 text-sm text-muted-fg">
+      <footer className="dark bg-black py-6 text-sm text-muted-fg">
         <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 md:px-8">
           <p>© 2026 quieter</p>
           <FooterLinks className="max-w-xl md:justify-end" />
@@ -52,5 +54,12 @@ export const SiteFooter = () => {
     );
   }
 
-  return null;
+  return (
+    <footer className="border-t border-border bg-bg py-6 text-sm text-muted-fg">
+      <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 md:px-8">
+        <p>© 2026 quieter</p>
+        <FooterLinks className="max-w-xl md:justify-end" />
+      </div>
+    </footer>
+  );
 };

@@ -13,6 +13,7 @@ import { Button } from "@quieter/ui/button";
 import { Calendar } from "@quieter/ui/calendar";
 import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { cva } from "class-variance-authority";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import { ArrowInteractionButton } from "~/components/arrow-interaction-button";
 import { SpinWhileActive } from "~/components/spin-while-active";
@@ -21,11 +22,20 @@ import { normalizeLabelSelectionKey } from "~/features/message-search/state/mess
 import type { MessageListSearchController } from "./use-message-list-search-controller";
 import { MessageListSearchDropdown } from "../message-list-search-dropdown";
 import {
-  filterChipClassName,
   isDateFilter,
   isFixedValueFilter,
   parseDateFilterValue,
 } from "./message-list-search-utils";
+
+const searchControlVariants = cva("", {
+  variants: {
+    control: {
+      chip: "squircle inline-flex h-6 min-w-0 max-w-full shrink-0 items-center rounded-lg bg-bg-elevated/55 px-2.5 text-[13px] text-fg shadow-xs transition-colors duration-150 ease-out ring-1 ring-border/80 ring-inset hover:bg-bg-elevated/70 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring/45",
+      toolbar:
+        "h-full w-9 rounded-xl bg-secondary/55 text-muted-fg shadow-none hover:bg-muted hover:text-fg [&_svg]:size-3.5",
+    },
+  },
+});
 
 const getFilterLabel = (type: string) => {
   switch (type) {
@@ -47,9 +57,6 @@ const getFilterLabel = (type: string) => {
       return type.charAt(0).toLocaleUpperCase() + type.slice(1);
   }
 };
-
-const searchToolbarControlClassName =
-  "h-full w-9 rounded-xl bg-secondary/55 text-muted-fg shadow-none hover:bg-muted hover:text-fg [&_svg]:size-3.5";
 
 export const MessageListSearchView = ({
   controller,
@@ -124,7 +131,7 @@ export const MessageListSearchView = ({
               <IconButtonTooltip label="Open sidebar">
                 <Button
                   aria-label="Open sidebar"
-                  className={cn(searchToolbarControlClassName, "lg:hidden")}
+                  className={cn(searchControlVariants({ control: "toolbar" }), "lg:hidden")}
                   onClick={onOpenSidebar}
                   size="icon-lg"
                   variant="ghost"
@@ -139,7 +146,7 @@ export const MessageListSearchView = ({
             <IconButtonTooltip label="Refresh list">
               <Button
                 aria-label="Refresh list"
-                className={searchToolbarControlClassName}
+                className={searchControlVariants({ control: "toolbar" })}
                 disabled={isRefreshing}
                 onClick={() => void onRefresh()}
                 size="icon-lg"
@@ -186,7 +193,7 @@ export const MessageListSearchView = ({
                             : `Exclude label ${filter.value}`
                         }
                         className={cn(
-                          filterChipClassName,
+                          searchControlVariants({ control: "chip" }),
                           "gap-1",
                           label &&
                             mailboxLabelSearchPillSurfaceClassNameByColor[label.color ?? "gray"],
@@ -226,7 +233,7 @@ export const MessageListSearchView = ({
                             ? `Remove excluded ${filter.value} filter`
                             : `Exclude ${filter.value} filter`
                         }
-                        className={cn(filterChipClassName, "gap-1")}
+                        className={cn(searchControlVariants({ control: "chip" }), "gap-1")}
                         key={filterRenderKey}
                         style={{ order: index * 2 + 1 }}
                         onClick={(event) => {
@@ -260,7 +267,7 @@ export const MessageListSearchView = ({
                   const isCurrentFilterDate = isDateFilter(filter);
                   return (
                     <div
-                      className={cn(filterChipClassName, "gap-1", {
+                      className={cn(searchControlVariants({ control: "chip" }), "gap-1", {
                         "bg-accent ring-2 ring-ring/30": activeDateFilterIndex === index,
                       })}
                       key={filterRenderKey}
@@ -492,7 +499,7 @@ export const MessageListSearchView = ({
             <IconButtonTooltip label="Scroll to top">
               <ArrowInteractionButton
                 aria-label="Scroll to top"
-                className={searchToolbarControlClassName}
+                className={searchControlVariants({ control: "toolbar" })}
                 onClick={async () => {
                   const didScroll = await onScrollToTop();
                   return typeof didScroll === "boolean" ? didScroll : true;

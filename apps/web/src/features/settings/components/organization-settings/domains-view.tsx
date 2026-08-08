@@ -10,7 +10,7 @@ import {
   SettingsLoadingState,
   SettingsNavigationRow,
   SettingsRows,
-  settingsRowPaddingClass,
+  settingsSurfaceVariants,
 } from "../settings-layout";
 import { formatCount, type FullOrganization } from "./domain";
 import {
@@ -82,7 +82,12 @@ export const DomainsView = ({
       {isDomainsPending ? (
         <SettingsLoadingState label="Loading domains" />
       ) : isDomainsError ? (
-        <p className={cn("text-sm text-destructive", settingsRowPaddingClass)}>
+        <p
+          className={cn(
+            "text-sm text-destructive",
+            settingsSurfaceVariants({ variant: "padding" }),
+          )}
+        >
           {domainsError?.message ?? "Could not load domains."}
         </p>
       ) : domains.length > 0 ? (
@@ -104,7 +109,12 @@ export const DomainsView = ({
           ))}
         </SettingsRows>
       ) : (
-        <p className={cn("text-center text-sm text-muted-fg", settingsRowPaddingClass)}>
+        <p
+          className={cn(
+            "text-center text-sm text-muted-fg",
+            settingsSurfaceVariants({ variant: "padding" }),
+          )}
+        >
           No domains registered.
         </p>
       )}

@@ -3,6 +3,7 @@
 import { cn } from "@quieter/ui/cn";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLayoutEffect, useState } from "react";
+import { WorkspaceSection } from "~/components/workspace-section";
 import { type ComposeDraftState, buildComposeDraftFromSavedDraftMessage } from "~/features/compose";
 import { MessageList } from "~/features/message-list/components/message-list";
 import { MessageDetail } from "~/features/message-thread/components/message-detail";
@@ -213,14 +214,12 @@ export const MailboxMessagesPanel = ({
 
   return (
     <>
-      <section
-        className={cn(
-          "m-1.5 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg/60 lg:m-2 lg:ml-0 lg:flex",
-          {
-            "flex flex-1": !isMessageRouteOpen,
-            hidden: isMessageRouteOpen,
-          },
-        )}
+      <WorkspaceSection
+        className={cn({
+          flex: !isMessageRouteOpen,
+          hidden: isMessageRouteOpen,
+        })}
+        layout="cell"
       >
         <MessageList
           activeMailbox={activeMailbox}
@@ -246,16 +245,14 @@ export const MailboxMessagesPanel = ({
           pendingActions={pendingActions}
           searchQuery={normalizedSearchQuery}
         />
-      </section>
+      </WorkspaceSection>
 
-      <div
-        className={cn(
-          "m-1.5 min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg/60 lg:m-2 lg:ml-0 lg:flex",
-          {
-            "flex flex-1": isMessageRouteOpen,
-            hidden: !isMessageRouteOpen,
-          },
-        )}
+      <WorkspaceSection
+        className={cn({
+          flex: isMessageRouteOpen,
+          hidden: !isMessageRouteOpen,
+        })}
+        layout="cell"
       >
         <MessageDetail
           activeMailbox={activeMailbox}
@@ -271,7 +268,7 @@ export const MailboxMessagesPanel = ({
           onAutoFocusComplete={() => setShouldFocusMessageView(false)}
           selectedMessage={selectedMessage}
         />
-      </div>
+      </WorkspaceSection>
     </>
   );
 };

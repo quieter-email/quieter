@@ -7,7 +7,7 @@ import { cn } from "@quieter/ui/cn";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { authClient } from "~/lib/auth";
-import { SettingsCard, SettingsSection, settingsRowPaddingClass } from "../settings-layout";
+import { SettingsCard, SettingsSection, settingsSurfaceVariants } from "../settings-layout";
 import { type FullOrganization, formatRoleLabel, getFullOrganizationQueryKey } from "./domain";
 import { SettingsRow } from "./settings-row";
 
@@ -96,7 +96,13 @@ export const PendingOrganizationInvitations = ({
           );
         })}
         {error && (
-          <p className={cn("text-sm text-destructive", settingsRowPaddingClass)} role="alert">
+          <p
+            className={cn(
+              "text-sm text-destructive",
+              settingsSurfaceVariants({ variant: "padding" }),
+            )}
+            role="alert"
+          >
             {error}
           </p>
         )}

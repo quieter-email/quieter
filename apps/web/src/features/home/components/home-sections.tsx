@@ -2,8 +2,7 @@
 
 import { BILLING_PRODUCTS } from "@quieter/billing/plans";
 import { cn } from "@quieter/ui/cn";
-import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
-import { DotField } from "./dot-field";
+import { HomeAtmosphericBackground, HomeWorkspaceDitherBackground } from "./lazy-webgl-backgrounds";
 import { Reveal } from "./reveal";
 import { WaitlistForm } from "./waitlist-form";
 
@@ -119,10 +118,12 @@ const Pricing = () => (
 );
 
 const Closing = () => (
-  <section className="relative mt-28 flex min-h-190 flex-col items-center overflow-hidden px-6 pt-48 pb-32 md:mt-36">
-    <DotField fadeTop variant="closing" />
+  <section className="dark relative z-10 flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-black px-6 pt-32 pb-24 md:pt-36">
+    <div className="absolute inset-0">
+      <HomeAtmosphericBackground fadeBottom="black" fadeTop="black" />
+    </div>
 
-    <div className="relative z-10 flex w-full max-w-220 flex-col items-center">
+    <div className="relative z-10 flex w-full max-w-220 flex-col items-center text-fg">
       <Reveal
         as="h2"
         className="max-w-205 text-center font-serif text-[1.75rem] leading-[1.42] font-normal tracking-[-0.014em] text-balance text-fg sm:text-[2.25rem] md:text-[2.875rem] md:leading-[1.48]"
@@ -139,20 +140,23 @@ const Closing = () => (
 
 export const HomeSections = () => (
   <>
-    <div className="relative overflow-hidden pb-24 md:pb-32">
-      <WorkspaceDitherBackground
+    <div className="dark relative overflow-hidden bg-black pt-24 pb-28 md:pt-32 md:pb-36">
+      <HomeWorkspaceDitherBackground
+        animate
         className="opacity-30 dark:opacity-25"
-        dotRgb="205, 212, 228"
-        falloff={1.8}
-        pattern="leading-corners"
+        dotRgb="210, 216, 230"
+        falloff={1}
+        pattern="dual-foci"
         strength={1.5}
       />
 
-      {features.map((feature) => (
-        <FeatureSection key={feature.id} {...feature} />
-      ))}
+      <div className="relative z-10 text-fg">
+        {features.map((feature) => (
+          <FeatureSection key={feature.id} {...feature} />
+        ))}
+        <Pricing />
+      </div>
     </div>
-    <Pricing />
     <Closing />
   </>
 );

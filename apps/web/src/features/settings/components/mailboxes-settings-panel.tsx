@@ -29,6 +29,7 @@ import { Textarea } from "@quieter/ui/textarea";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { cva } from "class-variance-authority";
 import { useState } from "react";
 import { textToComposeBodyHtml } from "~/features/compose/domain/draft";
 import {
@@ -46,7 +47,6 @@ import {
   resolveMailDomainVerified,
 } from "~/features/settings/components/organization-settings/mail-domains";
 import {
-  settingsInsetRowClass,
   SettingsCard,
   SettingsErrorState,
   SettingsInsetRows,
@@ -56,6 +56,7 @@ import {
   SettingsRow,
   SettingsRows,
   SettingsSection,
+  settingsSurfaceVariants,
 } from "~/features/settings/components/settings-layout";
 import { prefetchMailboxSettingsDetail } from "~/features/settings/components/settings-prefetch";
 import {
@@ -78,8 +79,9 @@ const mailboxGrantRoleOptions = [
   { value: "manager", label: "Manager" },
 ] as const;
 const mailboxGrantSelectItems = [{ value: "none", label: "No access" }, ...mailboxGrantRoleOptions];
-const switchClassName =
-  "h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary";
+const switchVariants = cva(
+  "h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary",
+);
 
 const getProviderLabel = (provider: string) => {
   if (provider === "gmail") return "Gmail";
@@ -578,7 +580,7 @@ export const MailboxesSettingsPanel = () => {
                       placeholder="Display name, such as Support"
                       value={managedDisplayName}
                     />
-                    <div className="squircle flex h-9 min-w-0 items-center rounded-md border border-border bg-bg-elevated/60 shadow-sm transition-colors">
+                    <div className="squircle flex h-9 min-w-0 items-center rounded-md border border-border bg-bg-elevated shadow-sm transition-colors">
                       <TextFieldInput
                         aria-label="Mailbox address"
                         chrome="ghost"
@@ -890,7 +892,12 @@ export const MailboxesSettingsPanel = () => {
           >
             <SettingsCard>
               <SettingsInsetRows>
-                <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
+                <label
+                  className={cn(
+                    settingsSurfaceVariants({ variant: "insetRow" }),
+                    "cursor-pointer gap-3",
+                  )}
+                >
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm text-fg">Useful details</span>
                     <span className="mt-0.5 block text-xs/5 text-muted-fg">
@@ -901,7 +908,7 @@ export const MailboxesSettingsPanel = () => {
                   <Switch
                     aria-label={`Find time-sensitive updates in new mail for ${selectedMailbox.emailAddress}`}
                     checked={selectedMailbox.usefulDetailsEnabled}
-                    className={switchClassName}
+                    className={switchVariants()}
                     disabled={
                       !hasAutomationAccess ||
                       setGmailUsefulDetailsMutation.isPending ||
@@ -923,7 +930,12 @@ export const MailboxesSettingsPanel = () => {
                     <SwitchThumb className="size-4 data-checked:translate-x-4" />
                   </Switch>
                 </label>
-                <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
+                <label
+                  className={cn(
+                    settingsSurfaceVariants({ variant: "insetRow" }),
+                    "cursor-pointer gap-3",
+                  )}
+                >
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm text-fg">Auto-label</span>
                     <span className="mt-0.5 block text-xs/5 text-muted-fg">
@@ -934,7 +946,7 @@ export const MailboxesSettingsPanel = () => {
                   <Switch
                     aria-label={`Automatically label new mail for ${selectedMailbox.emailAddress}`}
                     checked={selectedMailbox.autoLabelEnabled}
-                    className={switchClassName}
+                    className={switchVariants()}
                     disabled={
                       !hasAutomationAccess ||
                       setGmailAutoLabelingMutation.isPending ||
@@ -1025,7 +1037,7 @@ export const MailboxesSettingsPanel = () => {
               >
                 <SettingsCard>
                   <SettingsInsetRows>
-                    <div className={cn(settingsInsetRowClass, "gap-4")}>
+                    <div className={cn(settingsSurfaceVariants({ variant: "insetRow" }), "gap-4")}>
                       <span className="min-w-0 flex-1 text-sm text-fg">Display name</span>
                       <TextFieldInput
                         aria-label="Shared inbox display name"
@@ -1049,7 +1061,7 @@ export const MailboxesSettingsPanel = () => {
                         placeholder="Display name"
                       />
                     </div>
-                    <div className={cn(settingsInsetRowClass, "gap-4")}>
+                    <div className={cn(settingsSurfaceVariants({ variant: "insetRow" }), "gap-4")}>
                       <span className="min-w-0 flex-1 text-sm text-fg">Primary division</span>
                       <Select
                         items={[
@@ -1096,7 +1108,12 @@ export const MailboxesSettingsPanel = () => {
                         </SelectContent>
                       </Select>
                     </div>
-                    <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
+                    <label
+                      className={cn(
+                        settingsSurfaceVariants({ variant: "insetRow" }),
+                        "cursor-pointer gap-3",
+                      )}
+                    >
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm text-fg">Include API messages</span>
                         <span className="mt-0.5 block text-xs/5 text-muted-fg">
@@ -1106,7 +1123,7 @@ export const MailboxesSettingsPanel = () => {
                       <Switch
                         aria-label={`Show API messages sent from ${selectedMailbox.emailAddress}`}
                         checked={selectedManagedMailboxDetails.mailbox.includeApiSentMessages}
-                        className={switchClassName}
+                        className={switchVariants()}
                         disabled={updateManagedMailboxMutation.isPending}
                         pending={updateManagedMailboxMutation.isPending}
                         onCheckedChange={(includeApiSentMessages) =>
@@ -1137,7 +1154,12 @@ export const MailboxesSettingsPanel = () => {
               >
                 <SettingsCard>
                   <SettingsInsetRows>
-                    <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
+                    <label
+                      className={cn(
+                        settingsSurfaceVariants({ variant: "insetRow" }),
+                        "cursor-pointer gap-3",
+                      )}
+                    >
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm text-fg">Useful details</span>
                         <span className="mt-0.5 block text-xs/5 text-muted-fg">
@@ -1148,7 +1170,7 @@ export const MailboxesSettingsPanel = () => {
                       <Switch
                         aria-label={`Find time-sensitive updates in new mail for ${selectedMailbox.emailAddress}`}
                         checked={selectedManagedMailboxDetails.mailbox.usefulDetailsEnabled}
-                        className={switchClassName}
+                        className={switchVariants()}
                         disabled={!hasAutomationAccess || setGmailUsefulDetailsMutation.isPending}
                         pending={setGmailUsefulDetailsMutation.isPending}
                         onCheckedChange={(enabled) =>
@@ -1169,7 +1191,12 @@ export const MailboxesSettingsPanel = () => {
                         <SwitchThumb className="size-4 data-checked:translate-x-4" />
                       </Switch>
                     </label>
-                    <label className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}>
+                    <label
+                      className={cn(
+                        settingsSurfaceVariants({ variant: "insetRow" }),
+                        "cursor-pointer gap-3",
+                      )}
+                    >
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm text-fg">Auto-label</span>
                         <span className="mt-0.5 block text-xs/5 text-muted-fg">
@@ -1180,7 +1207,7 @@ export const MailboxesSettingsPanel = () => {
                       <Switch
                         aria-label={`Automatically label new mail for ${selectedMailbox.emailAddress}`}
                         checked={selectedManagedMailboxDetails.mailbox.autoLabelEnabled}
-                        className={switchClassName}
+                        className={switchVariants()}
                         disabled={!hasAutomationAccess || setGmailAutoLabelingMutation.isPending}
                         pending={setGmailAutoLabelingMutation.isPending}
                         onCheckedChange={(enabled) =>
@@ -1214,7 +1241,13 @@ export const MailboxesSettingsPanel = () => {
                           (item) => item.divisionId === division.id,
                         );
                         return (
-                          <div className={cn(settingsInsetRowClass, "gap-3")} key={division.id}>
+                          <div
+                            className={cn(
+                              settingsSurfaceVariants({ variant: "insetRow" }),
+                              "gap-3",
+                            )}
+                            key={division.id}
+                          >
                             <span className="min-w-0 flex-1 truncate text-sm text-fg">
                               {division.name}
                             </span>
@@ -1293,7 +1326,10 @@ export const MailboxesSettingsPanel = () => {
                         (item) => item.userId === member.userId,
                       );
                       return (
-                        <div className={cn(settingsInsetRowClass, "gap-3")} key={member.id}>
+                        <div
+                          className={cn(settingsSurfaceVariants({ variant: "insetRow" }), "gap-3")}
+                          key={member.id}
+                        >
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm text-fg">
                               {member.user.name || member.user.email}

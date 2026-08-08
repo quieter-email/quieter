@@ -11,10 +11,8 @@ import {
   BillingProductCard,
 } from "~/features/settings/components/billing-product-card";
 import {
-  settingsInsetDividerClass,
-  settingsInsetSectionClass,
-  settingsRowValueClass,
   SettingsRowText,
+  settingsSurfaceVariants,
 } from "~/features/settings/components/settings-layout";
 import {
   normalizeBillingProduct,
@@ -58,7 +56,11 @@ export const OrganizationBillingSettings = ({
   if (billingPending) {
     return (
       <section
-        className={cn(settingsInsetSectionClass, "flex items-center gap-2", settingsRowValueClass)}
+        className={cn(
+          settingsSurfaceVariants({ variant: "insetSection" }),
+          "flex items-center gap-2",
+          settingsSurfaceVariants({ variant: "value" }),
+        )}
       >
         <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
         Loading billing…
@@ -68,7 +70,7 @@ export const OrganizationBillingSettings = ({
 
   if (!billing && !billingAccessUnknown) {
     return (
-      <section className={settingsInsetSectionClass}>
+      <section className={settingsSurfaceVariants({ variant: "insetSection" })}>
         <SettingsRowText title="Billing">
           Billing details are unavailable for this team.
         </SettingsRowText>
@@ -79,7 +81,11 @@ export const OrganizationBillingSettings = ({
   if (!billing) {
     return (
       <section
-        className={cn(settingsInsetSectionClass, "flex items-center gap-2", settingsRowValueClass)}
+        className={cn(
+          settingsSurfaceVariants({ variant: "insetSection" }),
+          "flex items-center gap-2",
+          settingsSurfaceVariants({ variant: "value" }),
+        )}
       >
         <HugeiconsIcon aria-hidden className="size-4" icon={Loading03Icon} />
         Could not load billing.
@@ -90,7 +96,7 @@ export const OrganizationBillingSettings = ({
   const currentProduct = normalizeBillingProduct(billing.product);
 
   return (
-    <section className={cn(settingsInsetDividerClass, "px-4 py-6 md:px-6")}>
+    <section className={cn(settingsSurfaceVariants({ variant: "divider" }), "px-4 py-6 md:px-6")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <SettingsRowText title="Billing">
           <BillingCreditSummary

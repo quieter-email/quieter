@@ -26,7 +26,9 @@ export const CollapsiblePanel = ({
 }: ComponentPropsWithoutRef<typeof CollapsiblePrimitive.Panel>) => (
   <CollapsiblePrimitive.Panel
     className={cn(
-      "grid overflow-hidden transition-[grid-template-rows,opacity] duration-200 ease-out data-closed:grid-rows-[0fr] data-closed:opacity-0 data-open:grid-rows-[1fr] data-open:opacity-100",
+      "grid overflow-hidden transition-[grid-template-rows,opacity,filter] duration-150 ease-out motion-reduce:transition-none",
+      "data-closed:grid-rows-[0fr] data-closed:opacity-0 data-closed:blur-[2px]",
+      "data-open:grid-rows-[1fr] data-open:opacity-100 data-open:blur-none",
       className,
     )}
     keepMounted
