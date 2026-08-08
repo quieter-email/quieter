@@ -4,6 +4,7 @@ import { LinkButton } from "@quieter/ui/button";
 import { domAnimation, LazyMotion } from "motion/react";
 import { useEffect } from "react";
 import { HomeSections } from "./home-sections";
+import { HomeSmoothScroll } from "./home-smooth-scroll";
 import { HomeAtmosphericBackground, preloadHomeWebglBackgrounds } from "./lazy-webgl-backgrounds";
 import { Entrance } from "./reveal";
 import { WaitlistForm } from "./waitlist-form";
@@ -51,20 +52,22 @@ export const HomePage = () => {
 
   return (
     <LazyMotion features={domAnimation}>
-      <div className="min-h-dvh bg-bg-elevated text-fg">
-        <LinkButton
-          className="fixed top-4 right-4 z-20 h-8 border-border bg-card/60 px-3 text-xs text-muted-fg shadow-none backdrop-blur-sm hover:bg-card hover:text-fg"
-          search={{ returnTo: "/auth" }}
-          to="/site-password"
-          variant="outline"
-        >
-          Access
-        </LinkButton>
-        <main>
-          <Hero />
-          <HomeSections />
-        </main>
-      </div>
+      <HomeSmoothScroll>
+        <div className="min-h-dvh bg-bg-elevated text-fg">
+          <LinkButton
+            className="fixed top-4 right-4 z-20 h-8 border-border bg-card/60 px-3 text-xs text-muted-fg shadow-none backdrop-blur-sm hover:bg-card hover:text-fg"
+            search={{ returnTo: "/auth" }}
+            to="/site-password"
+            variant="outline"
+          >
+            Access
+          </LinkButton>
+          <main>
+            <Hero />
+            <HomeSections />
+          </main>
+        </div>
+      </HomeSmoothScroll>
     </LazyMotion>
   );
 };
