@@ -30,6 +30,10 @@ uniform float uFalloff;
 uniform float uPattern;
 uniform float uTime;
 uniform float uAnimate;
+uniform float uStrengthWave;
+uniform vec2 uFocusA;
+uniform vec2 uFocusB;
+uniform vec2 uFieldDrift;
 
 float hashAt(vec2 cell) {
   return fract(sin(cell.x * 127.1 + cell.y * 311.7) * 43758.5453123);
@@ -46,7 +50,6 @@ void main() {
   float row = floor(cssPixel.y / uStep + 0.5);
 
   float t = uTime * uAnimate * 0.08;
-  float strengthWave = 1.0 + sin(t * 0.28 + 0.6) * 0.06;
 
   float horizontal = column / max(columns, 1.0);
   float vertical = row / max(rows, 1.0);
@@ -57,27 +60,17 @@ void main() {
   float baseDensity = 0.0;
 
   if (uPattern > 2.5) {
-    // Two density foci on slow opposite orbits — stay apart, no soft blobs
-    vec2 focusA =
-      vec2(0.5, 0.5)
-      + vec2(cos(t * 1.45), sin(t * 1.2)) * vec2(0.32, 0.26);
-    vec2 focusB =
-      vec2(0.5, 0.5)
-      + vec2(cos(t * 1.45 + 3.14159), sin(t * 1.2 + 3.14159)) * vec2(0.32, 0.26);
-    // Chebyshev distance → square-ish robotic falloff instead of round blobs
-    vec2 dA = abs(vec2(horizontal, vertical) - focusA);
-    vec2 dB = abs(vec2(horizontal, vertical) - focusB);
+    // Two density foci — positions computed once per frame on the CPU
+    vec2 dA = abs(vec2(horizontal, vertical) - uFocusA);
+    vec2 dB = abs(vec2(horizontal, vertical) - uFocusB);
     float distA = max(dA.x, dA.y);
     float distB = max(dB.x, dB.y);
     float densA = pow(clamp(1.0 - distA / 0.85, 0.0, 1.0), max(uFalloff * 0.4, 0.7));
     float densB = pow(clamp(1.0 - distB / 0.85, 0.0, 1.0), max(uFalloff * 0.4, 0.7));
     baseDensity = max(densA, densB);
   } else {
-    // Slow field drift for corner patterns
-    float driftX = sin(t * 0.55) * 0.035 + sin(t * 0.23 + 1.7) * 0.018;
-    float driftY = cos(t * 0.42) * 0.03 + cos(t * 0.31 + 0.8) * 0.015;
-    float hx = clamp(horizontal + driftX, 0.0, 1.0);
-    float vy = clamp(vertical + driftY, 0.0, 1.0);
+    float hx = clamp(horizontal + uFieldDrift.x, 0.0, 1.0);
+    float vy = clamp(vertical + uFieldDrift.y, 0.0, 1.0);
 
     // Four corner ramps. uPattern: 0 = BL, 1 = BL+TR, 2 = TL+BR
     float denseBottomLeft = clamp((1.0 - hx + vy) * 0.5, 0.0, 1.0);
@@ -110,7 +103,7 @@ void main() {
 
   vec2 center = vec2(column * uStep, row * uStep);
   float coverage = 1.0 - smoothstep(radius - 0.5, radius + 0.5, distance(cssPixel, center));
-  float finalAlpha = min(alpha * coverage * uAlphaScale * strengthWave, 1.0);
+  float finalAlpha = min(alpha * coverage * uAlphaScale * uStrengthWave, 1.0);
 
   gl_FragColor = vec4(uColor * finalAlpha, finalAlpha);
 }
@@ -178,6 +171,10 @@ export const WorkspaceDitherBackground = ({
     let cssSizeLocation: WebGLUniformLocation | null = null;
     let dprLocation: WebGLUniformLocation | null = null;
     let timeLocation: WebGLUniformLocation | null = null;
+    let strengthWaveLocation: WebGLUniformLocation | null = null;
+    let focusALocation: WebGLUniformLocation | null = null;
+    let focusBLocation: WebGLUniformLocation | null = null;
+    let fieldDriftLocation: WebGLUniformLocation | null = null;
     let shouldAnimate = false;
     let lastDeviceHeight = 0;
     let lastDeviceWidth = 0;
@@ -203,8 +200,33 @@ export const WorkspaceDitherBackground = ({
     };
 
     const paint = (timeSeconds: number) => {
-      if (!gl || !timeLocation || !cssWidth || !cssHeight) return;
+      if (
+        !gl ||
+        !timeLocation ||
+        !strengthWaveLocation ||
+        !focusALocation ||
+        !focusBLocation ||
+        !fieldDriftLocation ||
+        !cssWidth ||
+        !cssHeight
+      ) {
+        return;
+      }
+
+      const t = timeSeconds * (shouldAnimate ? 1 : 0) * 0.08;
+      const strengthWave = 1 + Math.sin(t * 0.28 + 0.6) * 0.06;
+      const focusAx = 0.5 + Math.cos(t * 1.45) * 0.32;
+      const focusAy = 0.5 + Math.sin(t * 1.2) * 0.26;
+      const focusBx = 0.5 + Math.cos(t * 1.45 + Math.PI) * 0.32;
+      const focusBy = 0.5 + Math.sin(t * 1.2 + Math.PI) * 0.26;
+      const driftX = Math.sin(t * 0.55) * 0.035 + Math.sin(t * 0.23 + 1.7) * 0.018;
+      const driftY = Math.cos(t * 0.42) * 0.03 + Math.cos(t * 0.31 + 0.8) * 0.015;
+
       gl.uniform1f(timeLocation, timeSeconds);
+      gl.uniform1f(strengthWaveLocation, strengthWave);
+      gl.uniform2f(focusALocation, focusAx, focusAy);
+      gl.uniform2f(focusBLocation, focusBx, focusBy);
+      gl.uniform2f(fieldDriftLocation, driftX, driftY);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -345,6 +367,10 @@ export const WorkspaceDitherBackground = ({
       const patternLocation = gl.getUniformLocation(program, "uPattern");
       timeLocation = gl.getUniformLocation(program, "uTime");
       const animateLocation = gl.getUniformLocation(program, "uAnimate");
+      strengthWaveLocation = gl.getUniformLocation(program, "uStrengthWave");
+      focusALocation = gl.getUniformLocation(program, "uFocusA");
+      focusBLocation = gl.getUniformLocation(program, "uFocusB");
+      fieldDriftLocation = gl.getUniformLocation(program, "uFieldDrift");
 
       if (
         positionLocation === -1 ||
@@ -357,7 +383,11 @@ export const WorkspaceDitherBackground = ({
         !falloffLocation ||
         !patternLocation ||
         !timeLocation ||
-        !animateLocation
+        !animateLocation ||
+        !strengthWaveLocation ||
+        !focusALocation ||
+        !focusBLocation ||
+        !fieldDriftLocation
       ) {
         teardownGl();
         return;

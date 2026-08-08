@@ -9,8 +9,8 @@ import { useEffect, useRef, useState } from "react";
  * vignette). QUIETER-176. Opt in on branded surfaces; `fadeTop` / `fadeBottom`
  * settle into black or elevated at hard section cuts.
  *
- * Perf: full visual fidelity (DPR ≤ 2). WebGL init + RAF only while near the
- * viewport so hero reveal isn't fighting below-fold contexts.
+ * Perf: full visual fidelity (DPR ≤ 2). Per-frame globals run once on the CPU;
+ * WebGL init + RAF only while near the viewport.
  */
 
 const MAX_PIXEL_RATIO = 2;
@@ -25,6 +25,10 @@ void main() {
 }
 `;
 
+/**
+ * Spatial field only — mood/drift/phases/angles arrive as uniforms so every
+ * pixel does not recompute the same global noise and ridge rotations.
+ */
 const FRAGMENT_SHADER_SOURCE = `
 precision highp float;
 
@@ -38,6 +42,19 @@ uniform float uFadeTop;
 uniform float uFadeBottom;
 uniform vec3 uFadeColorTop;
 uniform vec3 uFadeColorBottom;
+
+// Per-frame globals (same for every pixel)
+uniform float uMood;
+uniform float uHardness;
+uniform float uThick;
+uniform vec2 uDrift;
+uniform vec3 uPhase;
+uniform vec2 uLayout;
+uniform vec2 uRidgeAmp;
+uniform vec2 uCosA;
+uniform vec2 uCosB;
+uniform vec2 uCosC;
+uniform float uGrainTick;
 
 float hash12(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -75,9 +92,9 @@ float softGlow(vec2 p, vec2 center, vec2 radius) {
   return exp(-dot(d, d));
 }
 
-float ridge(vec2 p, float phase, float thickness, float hard, float angle, float freq) {
-  float ca = cos(angle);
-  float sa = sin(angle);
+float ridge(vec2 p, float phase, float thickness, float hard, vec2 cs, float freq) {
+  float ca = cs.x;
+  float sa = cs.y;
   vec2 r = vec2(ca * p.x + sa * p.y, -sa * p.x + ca * p.y);
   float fold =
     r.y
@@ -87,13 +104,11 @@ float ridge(vec2 p, float phase, float thickness, float hard, float angle, float
       + 0.12 * sin(r.x * (2.35 * freq) + phase * 1.7)
       + 0.05 * sin(r.x * (4.2 * freq) - phase * 0.65)
     );
-  // One gaussian family — sharpness only. Soft wash → razor edge.
   float soft = exp(-(fold * fold) / max(thickness * thickness, 0.0001));
   float sharp = mix(0.55, 16.0, clamp(hard, 0.0, 1.0));
   return pow(soft, sharp);
 }
 
-// Screen / under-over: lower ridge shows through edges of the upper — no max() cutoff
 float layerLight(float a, float b) {
   return a + b * (1.0 - a);
 }
@@ -104,16 +119,11 @@ void main() {
   vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
   float t = uTime * uAnimate * 0.095 + uSeed.x * 40.0;
 
-  float mood = valueNoise3(vec3(t * 0.22, uSeed.y, t * 0.16));
-  float detail = valueNoise3(vec3(uSeed.z + 1.2, t * 0.2, t * 0.18));
-  float hardnessNoise = valueNoise3(vec3(t * 0.07 + uSeed.x, 2.1, uSeed.y));
-  float hardness = mix(0.06, 0.98, smoothstep(0.42, 0.58, hardnessNoise));
-
-  float drift = (valueNoise3(vec3(t * 0.4, uSeed.y, 1.0)) - 0.5) * 0.18;
-  float drift2 = (valueNoise3(vec3(uSeed.z, t * 0.38, 2.0)) - 0.5) * 0.15;
-
-  vec2 layout = (uSeed.xy - 0.5) * 0.55;
-  vec2 q = p - layout;
+  float mood = uMood;
+  float hardness = uHardness;
+  float drift = uDrift.x;
+  float drift2 = uDrift.y;
+  vec2 q = p - uLayout;
 
   float ambient =
     softGlow(q, vec2(-0.25 + drift, -0.06 + drift2), vec2(1.2, 0.8)) * 0.4 +
@@ -133,37 +143,29 @@ void main() {
   blueField *= 1.0 - blueHole * mix(0.25, 0.55, 1.0 - mood);
   blueField = clamp(blueField, 0.0, 1.0);
 
-  float thickNoise = valueNoise3(vec3(t * 0.08 + uSeed.z, 3.7, uSeed.y));
-  float thick = mix(0.16, 0.26, thickNoise) * mix(1.0, 0.9, hardness);
-  float phaseA = uSeed.x * 6.28318 + t * 1.42;
-  float phaseB = uSeed.y * 6.28318 + t * 0.58 + 2.4;
-  float phaseC = uSeed.z * 6.28318 - t * 1.95 - 1.1;
-  float angA = -0.22 + (uSeed.x - 0.5) * 0.55;
-  float angB = 0.48 + (uSeed.y - 0.5) * 0.7;
-  float angC = -0.61 + (uSeed.z - 0.5) * 0.65;
-
+  float thick = uThick;
   float ridgeMain = ridge(
     q + vec2(drift * 0.5, drift2),
-    phaseA,
+    uPhase.x,
     thick,
     hardness,
-    angA,
+    uCosA,
     0.95
   );
   float ridgeB = ridge(
     q * vec2(1.08, 0.94) + vec2(0.32, -0.2),
-    phaseB,
+    uPhase.y,
     thick * 1.12,
     hardness,
-    angB,
+    uCosB,
     0.68
   );
   float ridgeC = ridge(
     q * vec2(0.9, 1.14) + vec2(-0.36, 0.22),
-    phaseC,
+    uPhase.z,
     thick * 0.88,
     hardness,
-    angC,
+    uCosC,
     1.4
   );
 
@@ -173,7 +175,7 @@ void main() {
 
   float ridgeLayer = layerLight(
     ridgeMain * 1.2,
-    layerLight(ridgeB * mix(0.2, 0.7, detail), ridgeC * mix(0.05, 0.55, detail))
+    layerLight(ridgeB * uRidgeAmp.x, ridgeC * uRidgeAmp.y)
   );
   float highlight = layerLight(ridgeLayer, bloom * 0.55);
   highlight = clamp(highlight * uIntensity, 0.0, 1.0);
@@ -218,8 +220,7 @@ void main() {
     color = mix(uFadeColorTop, color, smoothstep(0.0, 0.16, 1.0 - uv.y));
   }
 
-  float grainTick = uAnimate > 0.5 ? floor(uTime * 3.0 + uSeed.x * 100.0) : uSeed.x * 100.0;
-  float gn = hash12(gl_FragCoord.xy + grainTick * 17.0);
+  float gn = hash12(gl_FragCoord.xy + uGrainTick * 17.0);
   float luma = dot(color, vec3(0.299, 0.587, 0.114));
   color += (gn - 0.5) * mix(0.02, 0.045, smoothstep(0.02, 0.3, luma)) * uGrain;
 
@@ -250,6 +251,108 @@ type AtmosphericBackgroundProps = {
 const fadeTargetRgb = (target: FadeTarget | undefined) =>
   target === "elevated" ? ELEVATED_RGB : BLACK_RGB;
 
+const f32 = Math.fround;
+
+const fract = (value: number) => f32(value - Math.floor(value));
+
+const hash13 = (x: number, y: number, z: number) => {
+  let px = fract(f32(x * 0.1031));
+  let py = fract(f32(y * 0.1031));
+  let pz = fract(f32(z * 0.1031));
+  const dot = f32(px * f32(pz + 31.32) + py * f32(py + 31.32) + pz * f32(px + 31.32));
+  // GLSL: p += dot(p, p.zyx + 31.32) → each component += same scalar dot
+  px = f32(px + dot);
+  py = f32(py + dot);
+  pz = f32(pz + dot);
+  return fract(f32(f32(px + py) * pz));
+};
+
+const valueNoise3 = (x: number, y: number, z: number) => {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const iz = Math.floor(z);
+  let fx = fract(x);
+  let fy = fract(y);
+  let fz = fract(z);
+  fx = f32(fx * fx * f32(3 - 2 * fx));
+  fy = f32(fy * fy * f32(3 - 2 * fy));
+  fz = f32(fz * fz * f32(3 - 2 * fz));
+
+  const n000 = hash13(ix, iy, iz);
+  const n100 = hash13(ix + 1, iy, iz);
+  const n010 = hash13(ix, iy + 1, iz);
+  const n110 = hash13(ix + 1, iy + 1, iz);
+  const n001 = hash13(ix, iy, iz + 1);
+  const n101 = hash13(ix + 1, iy, iz + 1);
+  const n011 = hash13(ix, iy + 1, iz + 1);
+  const n111 = hash13(ix + 1, iy + 1, iz + 1);
+
+  const nx00 = f32(n000 + f32(n100 - n000) * fx);
+  const nx10 = f32(n010 + f32(n110 - n010) * fx);
+  const nx01 = f32(n001 + f32(n101 - n001) * fx);
+  const nx11 = f32(n011 + f32(n111 - n011) * fx);
+  const nxy0 = f32(nx00 + f32(nx10 - nx00) * fy);
+  const nxy1 = f32(nx01 + f32(nx11 - nx01) * fy);
+  return f32(nxy0 + f32(nxy1 - nxy0) * fz);
+};
+
+const smoothstep = (edge0: number, edge1: number, x: number) => {
+  const t = Math.min(1, Math.max(0, f32(f32(x - edge0) / f32(edge1 - edge0))));
+  return f32(t * t * f32(3 - 2 * t));
+};
+
+const mix = (a: number, b: number, t: number) => f32(a + f32(b - a) * t);
+
+type FrameGlobals = {
+  mood: number;
+  detail: number;
+  hardness: number;
+  thick: number;
+  drift: number;
+  drift2: number;
+  phaseA: number;
+  phaseB: number;
+  phaseC: number;
+  ridgeAmpB: number;
+  ridgeAmpC: number;
+  grainTick: number;
+};
+
+const computeFrameGlobals = (
+  timeSeconds: number,
+  animate: boolean,
+  seed: readonly [number, number, number],
+): FrameGlobals => {
+  const sx = seed[0];
+  const sy = seed[1];
+  const sz = seed[2];
+  const t = f32(f32(timeSeconds * (animate ? 1 : 0) * 0.095) + f32(sx * 40));
+
+  const mood = valueNoise3(f32(t * 0.22), sy, f32(t * 0.16));
+  const detail = valueNoise3(f32(sz + 1.2), f32(t * 0.2), f32(t * 0.18));
+  const hardnessNoise = valueNoise3(f32(t * 0.07 + sx), 2.1, sy);
+  const hardness = mix(0.06, 0.98, smoothstep(0.42, 0.58, hardnessNoise));
+  const drift = f32(f32(valueNoise3(f32(t * 0.4), sy, 1) - 0.5) * 0.18);
+  const drift2 = f32(f32(valueNoise3(sz, f32(t * 0.38), 2) - 0.5) * 0.15);
+  const thickNoise = valueNoise3(f32(t * 0.08 + sz), 3.7, sy);
+  const thick = f32(mix(0.16, 0.26, thickNoise) * mix(1, 0.9, hardness));
+
+  return {
+    mood,
+    detail,
+    hardness,
+    thick,
+    drift,
+    drift2,
+    phaseA: f32(f32(sx * 6.28318) + f32(t * 1.42)),
+    phaseB: f32(f32(sy * 6.28318) + f32(t * 0.58) + 2.4),
+    phaseC: f32(f32(sz * 6.28318) - f32(t * 1.95) - 1.1),
+    ridgeAmpB: mix(0.2, 0.7, detail),
+    ridgeAmpC: mix(0.05, 0.55, detail),
+    grainTick: animate ? Math.floor(f32(timeSeconds * 3 + sx * 100)) : f32(sx * 100),
+  };
+};
+
 const compileShader = (gl: WebGLRenderingContext, type: number, source: string) => {
   const shader = gl.createShader(type);
   if (!shader) return null;
@@ -263,6 +366,18 @@ const compileShader = (gl: WebGLRenderingContext, type: number, source: string) 
   }
 
   return shader;
+};
+
+type UniformSet = {
+  resolution: WebGLUniformLocation;
+  time: WebGLUniformLocation;
+  mood: WebGLUniformLocation;
+  hardness: WebGLUniformLocation;
+  thick: WebGLUniformLocation;
+  drift: WebGLUniformLocation;
+  phase: WebGLUniformLocation;
+  ridgeAmp: WebGLUniformLocation;
+  grainTick: WebGLUniformLocation;
 };
 
 export const AtmosphericBackground = ({
@@ -296,10 +411,19 @@ export const AtmosphericBackground = ({
     let positionBuffer: WebGLBuffer | null = null;
     let width = 0;
     let height = 0;
-    let resolutionLocation: WebGLUniformLocation | null = null;
-    let timeLocation: WebGLUniformLocation | null = null;
+    let uniforms: UniformSet | null = null;
     let shouldAnimate = false;
     const session = sessionRef.current;
+    const [sx, sy, sz] = session.seed;
+
+    const layoutX = f32(f32(sx - 0.5) * 0.55);
+    const layoutY = f32(f32(sy - 0.5) * 0.55);
+    const angA = f32(-0.22 + f32(sx - 0.5) * 0.55);
+    const angB = f32(0.48 + f32(sy - 0.5) * 0.7);
+    const angC = f32(-0.61 + f32(sz - 0.5) * 0.65);
+    const cosA: [number, number] = [f32(Math.cos(angA)), f32(Math.sin(angA))];
+    const cosB: [number, number] = [f32(Math.cos(angB)), f32(Math.sin(angB))];
+    const cosC: [number, number] = [f32(Math.cos(angC)), f32(Math.sin(angC))];
 
     const reveal = () => {
       if (cancelled || revealed) return;
@@ -319,13 +443,21 @@ export const AtmosphericBackground = ({
     };
 
     const draw = (timeSeconds: number) => {
-      if (!gl || !timeLocation) return;
-      gl.uniform1f(timeLocation, timeSeconds);
+      if (!gl || !uniforms) return;
+      const g = computeFrameGlobals(timeSeconds, shouldAnimate, session.seed);
+      gl.uniform1f(uniforms.time, timeSeconds);
+      gl.uniform1f(uniforms.mood, g.mood);
+      gl.uniform1f(uniforms.hardness, g.hardness);
+      gl.uniform1f(uniforms.thick, g.thick);
+      gl.uniform2f(uniforms.drift, g.drift, g.drift2);
+      gl.uniform3f(uniforms.phase, g.phaseA, g.phaseB, g.phaseC);
+      gl.uniform2f(uniforms.ridgeAmp, g.ridgeAmpB, g.ridgeAmpC);
+      gl.uniform1f(uniforms.grainTick, g.grainTick);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     };
 
     const resize = () => {
-      if (!gl || !resolutionLocation || cancelled) return;
+      if (!gl || !uniforms || cancelled) return;
       const rect = canvas.getBoundingClientRect();
       const pixelRatio = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
       const nextWidth = Math.max(1, Math.ceil(rect.width * pixelRatio));
@@ -337,7 +469,7 @@ export const AtmosphericBackground = ({
         canvas.width = width;
         canvas.height = height;
         gl.viewport(0, 0, width, height);
-        gl.uniform2f(resolutionLocation, width, height);
+        gl.uniform2f(uniforms.resolution, width, height);
       }
 
       draw(
@@ -376,6 +508,7 @@ export const AtmosphericBackground = ({
       if (gl && program) gl.deleteProgram(program);
       positionBuffer = null;
       program = null;
+      uniforms = null;
       gl = null;
       width = 0;
       height = 0;
@@ -438,8 +571,8 @@ export const AtmosphericBackground = ({
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
 
       const positionLocation = gl.getAttribLocation(program, "aPosition");
-      resolutionLocation = gl.getUniformLocation(program, "uResolution");
-      timeLocation = gl.getUniformLocation(program, "uTime");
+      const resolutionLocation = gl.getUniformLocation(program, "uResolution");
+      const timeLocation = gl.getUniformLocation(program, "uTime");
       const intensityLocation = gl.getUniformLocation(program, "uIntensity");
       const grainLocation = gl.getUniformLocation(program, "uGrain");
       const animateLocation = gl.getUniformLocation(program, "uAnimate");
@@ -448,6 +581,17 @@ export const AtmosphericBackground = ({
       const fadeBottomLocation = gl.getUniformLocation(program, "uFadeBottom");
       const fadeColorTopLocation = gl.getUniformLocation(program, "uFadeColorTop");
       const fadeColorBottomLocation = gl.getUniformLocation(program, "uFadeColorBottom");
+      const moodLocation = gl.getUniformLocation(program, "uMood");
+      const hardnessLocation = gl.getUniformLocation(program, "uHardness");
+      const thickLocation = gl.getUniformLocation(program, "uThick");
+      const driftLocation = gl.getUniformLocation(program, "uDrift");
+      const phaseLocation = gl.getUniformLocation(program, "uPhase");
+      const layoutLocation = gl.getUniformLocation(program, "uLayout");
+      const ridgeAmpLocation = gl.getUniformLocation(program, "uRidgeAmp");
+      const cosALocation = gl.getUniformLocation(program, "uCosA");
+      const cosBLocation = gl.getUniformLocation(program, "uCosB");
+      const cosCLocation = gl.getUniformLocation(program, "uCosC");
+      const grainTickLocation = gl.getUniformLocation(program, "uGrainTick");
 
       if (
         positionLocation === -1 ||
@@ -460,11 +604,34 @@ export const AtmosphericBackground = ({
         !fadeTopLocation ||
         !fadeBottomLocation ||
         !fadeColorTopLocation ||
-        !fadeColorBottomLocation
+        !fadeColorBottomLocation ||
+        !moodLocation ||
+        !hardnessLocation ||
+        !thickLocation ||
+        !driftLocation ||
+        !phaseLocation ||
+        !layoutLocation ||
+        !ridgeAmpLocation ||
+        !cosALocation ||
+        !cosBLocation ||
+        !cosCLocation ||
+        !grainTickLocation
       ) {
         teardownGl();
         return;
       }
+
+      uniforms = {
+        resolution: resolutionLocation,
+        time: timeLocation,
+        mood: moodLocation,
+        hardness: hardnessLocation,
+        thick: thickLocation,
+        drift: driftLocation,
+        phase: phaseLocation,
+        ridgeAmp: ridgeAmpLocation,
+        grainTick: grainTickLocation,
+      };
 
       gl.enableVertexAttribArray(positionLocation);
       gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
@@ -474,11 +641,15 @@ export const AtmosphericBackground = ({
       gl.clearColor(br, bg, bb, 1);
       gl.uniform1f(intensityLocation, intensity);
       gl.uniform1f(grainLocation, grain);
-      gl.uniform3f(seedLocation, session.seed[0], session.seed[1], session.seed[2]);
+      gl.uniform3f(seedLocation, sx, sy, sz);
       gl.uniform1f(fadeTopLocation, fadeTop ? 1 : 0);
       gl.uniform1f(fadeBottomLocation, fadeBottom ? 1 : 0);
       gl.uniform3f(fadeColorTopLocation, tr, tg, tb);
       gl.uniform3f(fadeColorBottomLocation, br, bg, bb);
+      gl.uniform2f(layoutLocation, layoutX, layoutY);
+      gl.uniform2f(cosALocation, cosA[0], cosA[1]);
+      gl.uniform2f(cosBLocation, cosB[0], cosB[1]);
+      gl.uniform2f(cosCLocation, cosC[0], cosC[1]);
 
       const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       shouldAnimate = animate && !prefersReducedMotion;
