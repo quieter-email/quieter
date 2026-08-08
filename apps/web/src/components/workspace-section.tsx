@@ -3,7 +3,7 @@ import { cn } from "@quieter/ui/cn";
 import { cva, type VariantProps } from "class-variance-authority";
 
 export const workspaceSectionVariants = cva(
-  "overflow-hidden rounded-lg border border-border bg-bg/60",
+  "overflow-hidden rounded-lg border border-border bg-bg-surface",
   {
     variants: {
       layout: {

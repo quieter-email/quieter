@@ -70,12 +70,10 @@ export const ComposeTemplatePicker = ({
     <>
       <Popover onOpenChange={setOpen} open={open}>
         <PopoverTrigger
-          aria-label="Insert template"
-          className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-fg hover:bg-muted/55 hover:text-fg disabled:pointer-events-none disabled:opacity-50"
           disabled={disabled}
-          type="button"
+          render={<Button disabled={disabled} size="sm" type="button" variant="ghost" />}
         >
-          <HugeiconsIcon className="size-4" icon={NoteIcon} />
+          <HugeiconsIcon className="size-3.5" icon={NoteIcon} />
           Templates
         </PopoverTrigger>
         <PopoverContent align="start" className="w-[min(88vw,22rem)] p-0" side="top">
@@ -215,14 +213,19 @@ export const TemplatePlaceholderSuggestion = ({
   return (
     <Popover onOpenChange={setOpen} open={open}>
       <PopoverTrigger
-        aria-label={`Suggest a value for ${placeholder.label}`}
-        className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-primary hover:bg-primary/8 disabled:pointer-events-none disabled:opacity-50"
-        disabled={disabled}
-        onClick={requestSuggestion}
-        type="button"
+        render={
+          <Button
+            aria-label={`Suggest a value for ${placeholder.label}`}
+            disabled={disabled}
+            onClick={requestSuggestion}
+            size="sm"
+            type="button"
+            variant="ghost"
+          />
+        }
       >
         <HugeiconsIcon
-          className={cn("size-4", { "animate-spin": mutation.isPending })}
+          className={cn("size-3.5", { "animate-spin": mutation.isPending })}
           icon={mutation.isPending ? Loading03Icon : SparklesIcon}
         />
         Suggest “{placeholder.label}”

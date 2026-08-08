@@ -22,16 +22,15 @@ import {
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Field, FieldControl, FieldLabel } from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { toast } from "@quieter/ui/toast";
-import { Tooltip, TooltipContent, TooltipGroup, TooltipTrigger } from "@quieter/ui/tooltip";
+import { ToolbarButton, ToolbarSeparator } from "@quieter/ui/toolbar";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { useRef, useState } from "react";
 import { WorkspaceSection, workspaceSectionVariants } from "~/components/workspace-section";
-import { appEaseInOut, appMotionDuration } from "~/features/motion/app-motion";
 import { orpc } from "~/lib/orpc";
 import { normalizeComposeBodyHtml } from "../domain/draft";
 import {
@@ -149,18 +148,17 @@ export const TemplateWorkspace = ({
   const currentTemplate = templates.find((template) => template.id === editingId) ?? null;
   const canEditCurrentTemplate = !currentTemplate || currentTemplate.canEdit;
   const isSaving = createMutation.isPending || updateMutation.isPending;
-  const reducedMotion = useReducedMotion();
 
   return (
     <>
       <WorkspaceSection
-        className={cn("bg-bg", {
+        className={cn({
           flex: !mobileEditorOpen,
           hidden: mobileEditorOpen,
         })}
         layout="cell"
       >
-        <header className="@container p-3 sm:p-4">
+        <header className="@container p-4 sm:p-5">
           <div className="flex items-center gap-2">
             <IconButtonTooltip label="Open sidebar">
               <Button
@@ -182,7 +180,7 @@ export const TemplateWorkspace = ({
               New
             </Button>
           </div>
-          <label className="relative mt-3 block">
+          <label className="relative mt-4 block">
             <HugeiconsIcon
               className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-fg"
               icon={Search01Icon}
@@ -197,7 +195,7 @@ export const TemplateWorkspace = ({
           </label>
         </header>
 
-        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2.5">
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-4 sm:px-4 sm:pb-5">
           {filteredTemplates.map((template) => (
             <button
               aria-current={editingId === template.id ? "true" : undefined}
@@ -254,7 +252,7 @@ export const TemplateWorkspace = ({
       </WorkspaceSection>
 
       <form
-        className={cn(workspaceSectionVariants({ layout: "cell" }), "border-0 bg-bg", {
+        className={cn(workspaceSectionVariants({ layout: "cell" }), {
           flex: mobileEditorOpen,
           hidden: !mobileEditorOpen,
         })}
@@ -263,12 +261,11 @@ export const TemplateWorkspace = ({
           void templateForm.handleSubmit();
         }}
       >
-        <div className="m-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-bg-elevated/60 sm:m-4">
-          <header className="flex shrink-0 items-center gap-3 p-3">
+        <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 sm:gap-5 sm:p-5">
+          <div className="-mx-4 -mt-4 flex shrink-0 items-center gap-2 border-b border-border px-4 py-3 sm:-mx-5 sm:-mt-5 sm:px-5 lg:hidden">
             <IconButtonTooltip label="Back to templates">
               <Button
                 aria-label="Back to templates"
-                className="lg:hidden"
                 onClick={() => setMobileEditorOpen(false)}
                 size="icon-sm"
                 type="button"
@@ -277,144 +274,127 @@ export const TemplateWorkspace = ({
                 <HugeiconsIcon icon={ArrowLeft01Icon} />
               </Button>
             </IconButtonTooltip>
-            <templateForm.Field name="name">
-              {(field) => (
-                <label className="min-w-0 flex-1">
-                  <span className="sr-only">Template name</span>
-                  <Input
-                    aria-label="Template name"
+            <p className="text-sm font-medium tracking-tight text-fg">
+              {editingId ? "Edit template" : "New template"}
+            </p>
+          </div>
+
+          <templateForm.Field name="name">
+            {(field) => (
+              <Field className="w-full max-w-2xl gap-1">
+                <div className="flex items-center gap-3">
+                  <FieldLabel className="w-14 shrink-0 text-sm font-normal text-muted-fg">
+                    Name
+                  </FieldLabel>
+                  <FieldControl
                     autoFocus={!editingId}
-                    chrome="ghost"
-                    className="h-auto px-0 py-1 text-sm font-medium tracking-tight"
+                    className="min-w-0 flex-1"
                     disabled={!canEditCurrentTemplate}
                     onBlur={() => field.handleBlur()}
                     onChange={(event) => field.handleChange(event.currentTarget.value)}
                     placeholder="Template name"
                     value={field.state.value}
                   />
-                </label>
-              )}
-            </templateForm.Field>
-          </header>
+                </div>
+              </Field>
+            )}
+          </templateForm.Field>
 
           <templateForm.Field name="bodyHtml">
             {(field) => (
-              <ComposeEditor
-                disabled={!canEditCurrentTemplate}
-                html={field.state.value}
-                key={editingId ?? "new"}
-                onBlur={() => field.handleBlur()}
-                onChange={({ html }) => field.handleChange(html)}
-                onInlineImageFiles={() => {}}
-                ref={templateEditorRef}
-              >
-                <ComposeEditorBody className="mx-2 min-h-0 flex-1 rounded-lg border border-border bg-bg-elevated p-5 sm:p-6" />
-                <div className="flex shrink-0 items-center gap-1 p-2">
-                  <ComposeEditorToolbar />
-                  <IconButtonTooltip label="Insert placeholder">
-                    <Button
-                      aria-label="Insert placeholder"
-                      disabled={!canEditCurrentTemplate}
-                      onClick={() => templateEditorRef.current?.insertPlaceholder("Placeholder")}
-                      size="icon-sm"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <HugeiconsIcon icon={Add01Icon} />
-                    </Button>
-                  </IconButtonTooltip>
-                  <div className="ml-auto flex shrink-0 items-center gap-1">
-                    <templateForm.Field name="scope">
-                      {(field) => (
-                        <LayoutGroup id="template-scope">
-                          <div
-                            aria-label="Template scope"
-                            className="squircle mr-1 flex items-center rounded-lg border p-1"
-                            role="group"
-                          >
-                            <TooltipGroup>
-                              {(["personal", "team"] as const).map((scope) => {
-                                const selected = field.state.value === scope;
-                                const disabled =
-                                  !canEditCurrentTemplate ||
-                                  (scope === "team" &&
-                                    !templatesQuery.data?.canManageTeamTemplates);
-
-                                return (
-                                  <Tooltip key={scope}>
-                                    <TooltipTrigger className="inline-flex" render={<span />}>
-                                      <button
-                                        aria-pressed={selected}
-                                        className={cn(
-                                          "relative h-6 rounded-md px-2.5 text-[13px] transition-colors select-none",
-                                          {
-                                            "text-fg": selected,
-                                            "text-muted-fg hover:text-fg": !selected,
-                                            "pointer-events-none opacity-50": disabled,
-                                          },
-                                        )}
-                                        disabled={disabled}
-                                        onClick={() => field.handleChange(scope)}
-                                        type="button"
-                                      >
-                                        {selected ? (
-                                          <motion.span
-                                            aria-hidden
-                                            className="squircle absolute inset-0 rounded-md border border-border bg-bg-surface shadow-sm"
-                                            layoutId="template-scope-indicator"
-                                            transition={{
-                                              duration: reducedMotion
-                                                ? 0
-                                                : appMotionDuration.layout,
-                                              ease: appEaseInOut,
-                                            }}
-                                          />
-                                        ) : null}
-                                        <span className="relative z-10">
-                                          {scope === "team" ? "Team" : "Personal"}
-                                        </span>
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      {scope === "team"
-                                        ? "Available to the current team."
-                                        : "Available across your account."}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                );
-                              })}
-                            </TooltipGroup>
-                          </div>
-                        </LayoutGroup>
-                      )}
-                    </templateForm.Field>
-                    {editingId && currentTemplate?.canEdit ? (
-                      <Button
-                        aria-label="Delete template"
-                        onClick={() => setDeleteTemplate(currentTemplate)}
-                        size="sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <HugeiconsIcon icon={Delete02Icon} />
-                        <span className="hidden sm:inline">Delete</span>
-                      </Button>
-                    ) : null}
-                    {canEditCurrentTemplate ? (
-                      <Button disabled={isSaving} size="sm" type="submit">
-                        {isSaving ? (
-                          <HugeiconsIcon className="animate-spin" icon={Loading03Icon} />
-                        ) : (
-                          <HugeiconsIcon icon={NoteEditIcon} />
-                        )}
-                        Save template
-                      </Button>
-                    ) : (
-                      <span className="px-2 text-xs text-muted-fg">Only team admins can edit</span>
-                    )}
+              <Field className="flex min-h-0 flex-1 flex-col gap-2">
+                <FieldLabel className="font-normal text-muted-fg">Message</FieldLabel>
+                <ComposeEditor
+                  disabled={!canEditCurrentTemplate}
+                  html={field.state.value}
+                  key={editingId ?? "new"}
+                  onBlur={() => field.handleBlur()}
+                  onChange={({ html }) => field.handleChange(html)}
+                  onInlineImageFiles={() => {}}
+                  ref={templateEditorRef}
+                >
+                  <div className="flex min-h-0 flex-1 flex-col gap-3">
+                    <ComposeEditorBody className="min-h-0 flex-1" />
+                    <ComposeEditorToolbar
+                      trailing={
+                        <>
+                          <IconButtonTooltip label="Insert placeholder">
+                            <ToolbarButton
+                              aria-label="Insert placeholder"
+                              className="size-8 px-0"
+                              disabled={!canEditCurrentTemplate}
+                              onClick={() =>
+                                templateEditorRef.current?.insertPlaceholder("Placeholder")
+                              }
+                              type="button"
+                            >
+                              <HugeiconsIcon icon={Add01Icon} />
+                            </ToolbarButton>
+                          </IconButtonTooltip>
+                          <templateForm.Field name="scope">
+                            {(scopeField) => (
+                              <>
+                                <ToolbarButton
+                                  aria-pressed={scopeField.state.value === "personal"}
+                                  className={cn({
+                                    "bg-bg-surface text-fg shadow-sm":
+                                      scopeField.state.value === "personal",
+                                  })}
+                                  disabled={!canEditCurrentTemplate}
+                                  onClick={() => scopeField.handleChange("personal")}
+                                  type="button"
+                                >
+                                  Personal
+                                </ToolbarButton>
+                                <ToolbarButton
+                                  aria-pressed={scopeField.state.value === "team"}
+                                  className={cn({
+                                    "bg-bg-surface text-fg shadow-sm":
+                                      scopeField.state.value === "team",
+                                  })}
+                                  disabled={
+                                    !canEditCurrentTemplate ||
+                                    !templatesQuery.data?.canManageTeamTemplates
+                                  }
+                                  onClick={() => scopeField.handleChange("team")}
+                                  type="button"
+                                >
+                                  Team
+                                </ToolbarButton>
+                              </>
+                            )}
+                          </templateForm.Field>
+                          {editingId && currentTemplate?.canEdit ? (
+                            <ToolbarButton
+                              aria-label="Delete template"
+                              onClick={() => setDeleteTemplate(currentTemplate)}
+                              type="button"
+                            >
+                              <HugeiconsIcon icon={Delete02Icon} />
+                              Delete
+                            </ToolbarButton>
+                          ) : null}
+                          <ToolbarSeparator />
+                          {canEditCurrentTemplate ? (
+                            <ToolbarButton disabled={isSaving} type="submit">
+                              {isSaving ? (
+                                <HugeiconsIcon className="animate-spin" icon={Loading03Icon} />
+                              ) : (
+                                <HugeiconsIcon icon={NoteEditIcon} />
+                              )}
+                              Save
+                            </ToolbarButton>
+                          ) : (
+                            <span className="px-2 text-xs text-muted-fg">
+                              Only team admins can edit
+                            </span>
+                          )}
+                        </>
+                      }
+                    />
                   </div>
-                </div>
-              </ComposeEditor>
+                </ComposeEditor>
+              </Field>
             )}
           </templateForm.Field>
         </div>

@@ -89,8 +89,8 @@
 :root[data-theme="dark"],
 :root[data-kb-theme="dark"] {
   --bg: oklch(0.218 0.003 264);
-  --bg-surface: oklch(0.255 0.003 264);
-  --bg-elevated: oklch(0.145 0 264);
+  --bg-surface: oklch(0.275 0.003 264);
+  --bg-elevated: oklch(0.185 0.003 264);
   --fg: oklch(1 0.002 264);
   --card: var(--bg-elevated);
   --card-fg: var(--fg);

@@ -103,7 +103,7 @@ export const SettingsCard = ({
 }) => (
   <div
     className={cn(
-      "squircle @container overflow-hidden rounded-lg border border-border bg-bg/60",
+      "squircle @container overflow-hidden rounded-lg border border-border bg-bg-surface",
       className,
     )}
   >

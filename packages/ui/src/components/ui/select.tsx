@@ -17,7 +17,7 @@ const selectTriggerVariants = cva(
   {
     variants: {
       variant: {
-        default: "w-full border border-border bg-bg-elevated/60 text-fg shadow-sm",
+        default: "w-full border border-border bg-bg-elevated text-fg shadow-sm",
         ghost:
           "w-auto bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-muted/80 active:text-fg",
       },

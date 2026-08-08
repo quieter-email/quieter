@@ -21,6 +21,14 @@ const ChatView = lazy(() =>
   })),
 );
 
+const ComposeWorkspace = lazy(() =>
+  import("~/features/compose/components/compose-workspace").then(
+    ({ ComposeWorkspace: Component }) => ({
+      default: Component,
+    }),
+  ),
+);
+
 const TemplateWorkspace = lazy(() =>
   import("~/features/compose/components/template-workspace").then(
     ({ TemplateWorkspace: Component }) => ({
@@ -51,17 +59,21 @@ type MailboxWorkspaceContentProps = {
   };
   chatId: string | null;
   chats: MailboxSidebarChats;
+  composeSessionKey: number;
   currentUserEmail: string | null;
   defaultMailboxId: string | null;
   draftChatKey: string;
+  isComposeMailbox: boolean;
   isConnectingGmail: boolean;
   isDemoMode: boolean;
   isManagedDemoMode: boolean;
   layoutState: MailboxWorkspaceLayoutState;
   mailboxGroups: MailboxSidebarGroups;
+  onCloseCompose: () => void;
   onConnectGmail: () => void;
   onComposeDraftRequested: (draft: ComposeDraftState) => void;
   onComposeNewMail: () => void;
+  onManageTemplates: () => void;
   onMobileOpenChange: (open: boolean) => void;
   onOpenSidebar: () => void;
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
@@ -76,6 +88,7 @@ type MailboxWorkspaceContentProps = {
   onSelectView: (view: MailboxWorkspaceView) => void;
   onSetDefaultMailbox: (mailboxId: string | null) => void;
   onChatIdChange: (chatId: string) => void;
+  persistComposeDrafts: boolean;
   reconnectError: string | null;
   reconnectingMailboxId: string | null;
   searchQuery: string;
@@ -83,6 +96,7 @@ type MailboxWorkspaceContentProps = {
   selectedMailboxProvider: "api" | "gmail" | "managed" | null;
   selectedMailboxNeedsReconnect: boolean;
   selectedView: MailboxWorkspaceView;
+  signature?: { html: string | null; text: string | null };
 };
 
 const workspaceContentMotion = {
@@ -201,17 +215,21 @@ export const MailboxWorkspaceContent = ({
   chatContext,
   chatId,
   chats,
+  composeSessionKey,
   currentUserEmail,
   defaultMailboxId,
   draftChatKey,
+  isComposeMailbox,
   isConnectingGmail,
   isDemoMode,
   isManagedDemoMode,
   layoutState,
   mailboxGroups,
+  onCloseCompose,
   onConnectGmail,
   onComposeDraftRequested,
   onComposeNewMail,
+  onManageTemplates,
   onMobileOpenChange,
   onOpenSidebar,
   onReorderMailboxSwitcher,
@@ -226,6 +244,7 @@ export const MailboxWorkspaceContent = ({
   onSelectView,
   onSetDefaultMailbox,
   onChatIdChange,
+  persistComposeDrafts,
   reconnectError,
   reconnectingMailboxId,
   searchQuery,
@@ -233,6 +252,7 @@ export const MailboxWorkspaceContent = ({
   selectedMailboxProvider,
   selectedMailboxNeedsReconnect,
   selectedView,
+  signature,
 }: MailboxWorkspaceContentProps) => (
   <LazyMotion features={domAnimation}>
     <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-bg-elevated pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-fg lg:p-0">
@@ -275,6 +295,21 @@ export const MailboxWorkspaceContent = ({
               mailboxGroups={mailboxGroups}
               onConnectGmail={onConnectGmail}
             />
+          ) : isComposeMailbox ? (
+            <Suspense fallback={null}>
+              <ComposeWorkspace
+                key={composeSessionKey}
+                demoMode={isDemoMode}
+                managedDemoMode={isManagedDemoMode}
+                mailboxId={selectedMailboxId}
+                onClose={onCloseCompose}
+                onManageTemplates={onManageTemplates}
+                onOpenSidebar={onOpenSidebar}
+                persistDrafts={persistComposeDrafts}
+                senderEmail={currentUserEmail}
+                signature={signature}
+              />
+            </Suspense>
           ) : activeMailbox === null ? (
             <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
               <Suspense fallback={null}>

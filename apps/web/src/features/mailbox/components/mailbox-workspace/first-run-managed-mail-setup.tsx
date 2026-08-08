@@ -337,7 +337,7 @@ export const FirstRunManagedMailSetup = ({
               </p>
             ) : (
               <div className="flex flex-wrap items-center gap-3">
-                <div className="squircle flex h-9 w-full max-w-md items-center rounded-md border border-border bg-bg-elevated/60 shadow-sm transition-colors">
+                <div className="squircle flex h-9 w-full max-w-md items-center rounded-md border border-border bg-bg-elevated shadow-sm transition-colors">
                   <TextFieldInput
                     aria-label="Managed mailbox local part"
                     chrome="ghost"

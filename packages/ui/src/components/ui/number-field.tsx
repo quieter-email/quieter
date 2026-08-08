@@ -19,7 +19,7 @@ export const NumberFieldGroup = ({
 }: ComponentPropsWithoutRef<typeof NumberFieldPrimitive.Group>) => (
   <NumberFieldPrimitive.Group
     className={cn(
-      "flex items-center rounded-md border border-border bg-bg-elevated/60 shadow-sm",
+      "flex items-center rounded-md border border-border bg-bg-elevated shadow-sm",
       className,
     )}
     {...props}

@@ -58,10 +58,8 @@ const defaultChatRouteState: ChatRouteState = {
 
 const normalizeSearchValue = (value: string | null | undefined) => value?.trim() || undefined;
 
-const normalizeComposeValue = (value: "mailto" | null | undefined) => value ?? undefined;
-
 const applyInboxPatch = (state: InboxRouteState, patch: MailboxSearchPatch): InboxRouteState => ({
-  compose: patch.compose === undefined ? state.compose : normalizeComposeValue(patch.compose),
+  compose: patch.compose === undefined ? state.compose : (patch.compose ?? undefined),
   mailto: patch.mailto === undefined ? state.mailto : normalizeSearchValue(patch.mailto),
   mailbox: patch.mailbox ?? state.mailbox,
   mailboxId:
@@ -79,9 +77,12 @@ const applyInboxPatch = (state: InboxRouteState, patch: MailboxSearchPatch): Inb
 
 const applyChatPatch = (state: ChatRouteState, patch: MailboxSearchPatch): ChatRouteState => ({
   chatId: patch.chatId === undefined ? state.chatId : normalizeSearchValue(patch.chatId),
-  compose: patch.compose === undefined ? state.compose : normalizeComposeValue(patch.compose),
+  compose: patch.compose === undefined ? state.compose : (patch.compose ?? undefined),
   mailto: patch.mailto === undefined ? state.mailto : normalizeSearchValue(patch.mailto),
-  mailbox: patch.mailbox === "template" ? state.mailbox : (patch.mailbox ?? state.mailbox),
+  mailbox:
+    patch.mailbox === "template" || patch.mailbox === "compose"
+      ? state.mailbox
+      : (patch.mailbox ?? state.mailbox),
   mailboxId:
     patch.mailboxId === undefined ? state.mailboxId : normalizeSearchValue(patch.mailboxId),
   messageId:
@@ -112,7 +113,10 @@ export const useMailboxSearchActions = () => {
             chatId: previous.chatId,
             compose: previous.compose,
             mailto: previous.mailto,
-            mailbox: previous.mailbox === "template" ? "inbox" : previous.mailbox,
+            mailbox:
+              previous.mailbox === "template" || previous.mailbox === "compose"
+                ? "inbox"
+                : previous.mailbox,
             mailboxId: previous.mailboxId,
             messageId: previous.messageId,
             query: previous.query,
@@ -139,7 +143,8 @@ export const useMailboxSearchActions = () => {
               : {
                   ...chatStateRef.current,
                   mailbox:
-                    inboxStateRef.current.mailbox === "template"
+                    inboxStateRef.current.mailbox === "template" ||
+                    inboxStateRef.current.mailbox === "compose"
                       ? "inbox"
                       : inboxStateRef.current.mailbox,
                   messageId: inboxStateRef.current.messageId,
@@ -197,7 +202,9 @@ export const useMailboxRouteSearch = () => {
     select: (search) => search.mailbox,
   });
   const isTemplateMailbox = routeMailbox === "template";
-  const activeMailbox = isTemplateMailbox ? "inbox" : routeMailbox;
+  const isComposeMailbox = routeMailbox === "compose";
+  const activeMailbox =
+    routeMailbox === "template" || routeMailbox === "compose" ? "inbox" : routeMailbox;
   const chatId = inboxRouteApi.useSearch({
     select: (search) => search.chatId,
   });
@@ -232,6 +239,7 @@ export const useMailboxRouteSearch = () => {
     chatId,
     compose,
     gmailLink,
+    isComposeMailbox,
     isTemplateMailbox,
     mailto,
     mailboxId,

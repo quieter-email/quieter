@@ -19,7 +19,7 @@ export const Radio = ({
 }: ComponentPropsWithoutRef<typeof RadioPrimitive.Root>) => (
   <RadioPrimitive.Root
     className={cn(
-      "flex size-4 shrink-0 items-center justify-center rounded-full border border-border bg-bg-elevated/60 text-primary shadow-xs transition-colors duration-150 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none data-checked:border-primary data-checked:bg-bg-elevated/60 data-disabled:cursor-not-allowed data-disabled:opacity-50",
+      "flex size-4 shrink-0 items-center justify-center rounded-full border border-border bg-bg-elevated text-primary shadow-xs transition-colors duration-150 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none data-checked:border-primary data-checked:bg-bg-elevated data-disabled:cursor-not-allowed data-disabled:opacity-50",
       className,
     )}
     {...props}

@@ -1,0 +1,500 @@
+"use client";
+
+import {
+  AlertCircleIcon,
+  Loading03Icon,
+  MailSend02Icon,
+  SidebarLeftIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Button } from "@quieter/ui/button";
+import { Field, FieldControl, FieldError, FieldLabel } from "@quieter/ui/field";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { ToolbarButton, ToolbarSeparator } from "@quieter/ui/toolbar";
+import { type UseAudioRecorderReturn, useAudioRecorder } from "@tanstack/ai-react";
+import { useHotkey } from "@tanstack/react-hotkeys";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
+import { useRef, useState } from "react";
+import { WorkspaceSection } from "~/components/workspace-section";
+import { USER_BILLING_QUERY_KEY } from "~/features/settings/domain/billing";
+import { type BrowserAudioRecording, getTranscriptionAudioFormat } from "~/lib/audio-transcription";
+import { orpc } from "~/lib/orpc";
+import type { ComposeFormValues } from "../domain/compose-form";
+import type { TemplatePlaceholderRange } from "../domain/template-placeholders";
+import { takePendingComposeSession } from "../domain/compose-session";
+import {
+  hasComposeDraftContent,
+  normalizeComposeBodyHtml,
+  textToComposeBodyHtml,
+} from "../domain/draft";
+import {
+  ComposeEditor,
+  ComposeEditorBody,
+  ComposeEditorDictationButton,
+  type ComposeEditorHandle,
+  ComposeEditorToolbar,
+} from "./compose-editor";
+import { ComposeTemplatePicker, TemplatePlaceholderSuggestion } from "./compose-templates";
+import {
+  getDraftStatusMessage,
+  useComposeDialogController,
+  type ComposeDialogController,
+} from "./use-compose-dialog-controller";
+
+type ComposeWorkspaceProps = {
+  demoMode?: boolean;
+  managedDemoMode?: boolean;
+  mailboxId: string | null;
+  onClose: () => void;
+  onManageTemplates?: () => void;
+  onOpenSidebar: () => void;
+  persistDrafts?: boolean;
+  senderEmail?: string | null;
+  signature?: { html: string | null; text: string | null };
+};
+
+type ComposeFormFieldProps = Pick<ComposeDialogController, "clearActiveDraftError" | "form"> & {
+  disabled?: boolean;
+  label: string;
+  name: keyof Pick<ComposeFormValues, "to" | "cc" | "bcc" | "subject">;
+  placeholder?: string;
+};
+
+const composeLabelClassName = "w-14 shrink-0 text-sm font-normal text-muted-fg";
+
+const composeRecipientMotion = {
+  animate: { filter: "blur(0px)", gridTemplateRows: "1fr", opacity: 1 },
+  exit: { filter: "blur(2px)", gridTemplateRows: "0fr", opacity: 0 },
+  initial: { filter: "blur(2px)", gridTemplateRows: "0fr", opacity: 0 },
+  transition: { duration: 0.16, ease: "easeOut" },
+} as const;
+
+const ComposeFormField = ({
+  clearActiveDraftError,
+  disabled,
+  form,
+  label,
+  name,
+  placeholder,
+}: ComposeFormFieldProps) => (
+  <form.Field name={name}>
+    {(field) => {
+      const error = field.state.meta.errors[0];
+      return (
+        <Field className="gap-1">
+          <div className="flex items-center gap-3">
+            <FieldLabel className={composeLabelClassName}>{label}</FieldLabel>
+            <FieldControl
+              aria-invalid={!!error}
+              className="min-w-0 flex-1"
+              disabled={disabled}
+              onBlur={() => field.handleBlur()}
+              onChange={(event) => {
+                clearActiveDraftError();
+                field.handleChange(event.currentTarget.value);
+              }}
+              placeholder={placeholder}
+              value={field.state.value}
+            />
+          </div>
+          {error ? (
+            <FieldError className="pl-17">{error.message ?? "Invalid value"}</FieldError>
+          ) : null}
+        </Field>
+      );
+    }}
+  </form.Field>
+);
+
+export const ComposeWorkspace = ({
+  demoMode = false,
+  managedDemoMode = false,
+  mailboxId,
+  onClose,
+  onManageTemplates,
+  onOpenSidebar,
+  persistDrafts = true,
+  senderEmail,
+  signature,
+}: ComposeWorkspaceProps) => {
+  const queryClient = useQueryClient();
+  const composeEditorRef = useRef<ComposeEditorHandle | null>(null);
+  const [selectedPlaceholder, setSelectedPlaceholder] = useState<TemplatePlaceholderRange | null>(
+    null,
+  );
+  const [activeTemplateName, setActiveTemplateName] = useState("Email template");
+  const [session] = useState(() => takePendingComposeSession());
+  const compose = useComposeDialogController({
+    demoMode,
+    initialDraft: session?.draft ?? null,
+    managedDemoMode,
+    mailboxId,
+    onClose,
+    persistDrafts,
+    signature,
+  });
+  const {
+    state,
+    addInlineImageFiles,
+    clearActiveDraftError,
+    closeComposeDialog,
+    discardActiveDraft,
+    form,
+    toggleRecipientVisibility,
+  } = compose;
+  const audioRecorder = useAudioRecorder({
+    mimeType: "audio/webm;codecs=opus",
+  }) as UseAudioRecorderReturn<BrowserAudioRecording>;
+  const transcribeAudioMutation = useMutation({
+    ...orpc.chat.transcribeAudio.mutationOptions(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
+    },
+  });
+  const isTranscribingAudio = transcribeAudioMutation.isPending;
+
+  const canDiscardDraft = !!(state.draft.draftId || hasComposeDraftContent(state.draft));
+  const canEditBody = state.draft.saveStatus !== "sending" && !!mailboxId;
+  const audioBusy = audioRecorder.isRecording || isTranscribingAudio;
+  const canSubmitCompose = canEditBody && !audioBusy;
+
+  const handleRecordingStart = () => {
+    if (!canEditBody || isTranscribingAudio) return;
+
+    if (!audioRecorder.isSupported) {
+      compose.setActiveDraftError("Audio recording is not supported in this browser.");
+      return;
+    }
+
+    void audioRecorder.start().catch(() => {
+      compose.setActiveDraftError("Could not start recording.");
+    });
+  };
+
+  const handleRecordingStop = () => {
+    void (async () => {
+      try {
+        const recording = await audioRecorder.stop();
+        const format = getTranscriptionAudioFormat(recording.mimeType);
+
+        if (!format) {
+          compose.setActiveDraftError("This audio format is not supported.");
+          return;
+        }
+
+        const result = await transcribeAudioMutation.mutateAsync({
+          audioBase64: recording.base64,
+          durationMs: recording.durationMs,
+          format,
+          mailboxId: mailboxId!,
+          mode: "email",
+        });
+        const currentHtml = normalizeComposeBodyHtml(form.state.values.bodyHtml);
+        const currentText = form.state.values.bodyText.trim();
+        const nextText = currentText ? `${currentText}\n\n${result.text}` : result.text;
+        const nextHtml = `${currentHtml}${textToComposeBodyHtml(result.text)}`;
+
+        clearActiveDraftError();
+        form.setFieldValue("bodyHtml", nextHtml);
+        form.setFieldValue("bodyText", nextText);
+      } catch (error) {
+        compose.setActiveDraftError(
+          error instanceof Error && error.message
+            ? error.message
+            : "Could not transcribe recording.",
+        );
+      }
+    })();
+  };
+
+  useHotkey(
+    "Mod+Enter",
+    (event) => {
+      const target = event.target;
+      if (target instanceof Element && !target.closest("[data-compose-workspace]")) {
+        return;
+      }
+
+      void form.handleSubmit();
+    },
+    {
+      enabled: canSubmitCompose,
+      ignoreInputs: false,
+    },
+  );
+
+  useHotkey(
+    "Escape",
+    () => {
+      closeComposeDialog();
+    },
+    {
+      enabled: state.draft.saveStatus !== "sending",
+      ignoreInputs: false,
+    },
+  );
+
+  return (
+    <WorkspaceSection data-compose-workspace>
+      <form
+        action={async () => {
+          await form.handleSubmit();
+        }}
+        className="flex h-full min-h-0 flex-col gap-4 p-6 sm:gap-5 sm:p-8"
+      >
+        <div className="-mx-6 -mt-6 flex shrink-0 items-center gap-2 border-b border-border px-6 py-3 sm:-mx-8 sm:-mt-8 sm:px-8 lg:hidden">
+          <IconButtonTooltip label="Open sidebar">
+            <Button
+              aria-label="Open sidebar"
+              onClick={onOpenSidebar}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <HugeiconsIcon icon={SidebarLeftIcon} />
+            </Button>
+          </IconButtonTooltip>
+          <p className="text-sm font-medium tracking-tight text-fg">New message</p>
+        </div>
+        <p className="sr-only">{getDraftStatusMessage(compose.state.draft, persistDrafts)}</p>
+
+        <div className="flex w-full shrink-0 flex-col gap-2">
+          {senderEmail ? (
+            <Field className="gap-1">
+              <div className="flex items-center gap-3">
+                <FieldLabel className={composeLabelClassName}>From</FieldLabel>
+                <FieldControl className="min-w-0 flex-1" readOnly value={senderEmail} />
+              </div>
+            </Field>
+          ) : null}
+          <div>
+            <form.Field name="to">
+              {(field) => {
+                const error = field.state.meta.errors[0];
+                return (
+                  <Field className="gap-1">
+                    <div className="flex items-center gap-3">
+                      <FieldLabel className={composeLabelClassName}>To</FieldLabel>
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <FieldControl
+                          aria-invalid={!!error}
+                          className="min-w-0 flex-1"
+                          disabled={!canEditBody}
+                          onBlur={() => field.handleBlur()}
+                          onChange={(event) => {
+                            clearActiveDraftError();
+                            field.handleChange(event.currentTarget.value);
+                          }}
+                          value={field.state.value}
+                        />
+                        <Button
+                          aria-controls="compose-cc-field"
+                          aria-expanded={state.showCc}
+                          aria-pressed={state.showCc}
+                          className={
+                            state.showCc
+                              ? "border-border bg-bg-elevated text-fg shadow-sm hover:bg-bg-elevated"
+                              : undefined
+                          }
+                          onClick={() => toggleRecipientVisibility("cc")}
+                          type="button"
+                          variant={state.showCc ? "outline" : "ghost"}
+                        >
+                          Cc
+                        </Button>
+                        <Button
+                          aria-controls="compose-bcc-field"
+                          aria-expanded={state.showBcc}
+                          aria-pressed={state.showBcc}
+                          className={
+                            state.showBcc
+                              ? "border-border bg-bg-elevated text-fg shadow-sm hover:bg-bg-elevated"
+                              : undefined
+                          }
+                          onClick={() => toggleRecipientVisibility("bcc")}
+                          type="button"
+                          variant={state.showBcc ? "outline" : "ghost"}
+                        >
+                          Bcc
+                        </Button>
+                      </div>
+                    </div>
+                    {error ? (
+                      <FieldError className="pl-17">{error.message ?? "Invalid value"}</FieldError>
+                    ) : null}
+                  </Field>
+                );
+              }}
+            </form.Field>
+            <LazyMotion features={domAnimation} strict>
+              <AnimatePresence initial={false}>
+                {state.showCc ? (
+                  <m.div
+                    {...composeRecipientMotion}
+                    className="grid"
+                    id="compose-cc-field"
+                    key="compose-cc"
+                  >
+                    <div className="min-h-0 overflow-hidden">
+                      <div className="pt-2">
+                        <ComposeFormField
+                          clearActiveDraftError={clearActiveDraftError}
+                          disabled={!canEditBody}
+                          form={form}
+                          label="Cc"
+                          name="cc"
+                        />
+                      </div>
+                    </div>
+                  </m.div>
+                ) : null}
+                {state.showBcc ? (
+                  <m.div
+                    {...composeRecipientMotion}
+                    className="grid"
+                    id="compose-bcc-field"
+                    key="compose-bcc"
+                  >
+                    <div className="min-h-0 overflow-hidden">
+                      <div className="pt-2">
+                        <ComposeFormField
+                          clearActiveDraftError={clearActiveDraftError}
+                          disabled={!canEditBody}
+                          form={form}
+                          label="Bcc"
+                          name="bcc"
+                        />
+                      </div>
+                    </div>
+                  </m.div>
+                ) : null}
+              </AnimatePresence>
+            </LazyMotion>
+          </div>
+          <ComposeFormField
+            clearActiveDraftError={clearActiveDraftError}
+            disabled={!canEditBody}
+            form={form}
+            label="Subject"
+            name="subject"
+          />
+        </div>
+
+        <form.Field name="bodyHtml">
+          {(field) => (
+            <Field className="flex min-h-0 flex-1 flex-col gap-2">
+              <FieldLabel className="font-normal text-muted-fg">Message</FieldLabel>
+              <ComposeEditor
+                disabled={!canEditBody}
+                html={field.state.value}
+                onBlur={() => field.handleBlur()}
+                onChange={({ html, text }) => {
+                  if (
+                    normalizeComposeBodyHtml(html) !==
+                      normalizeComposeBodyHtml(field.state.value) ||
+                    text !== form.state.values.bodyText
+                  ) {
+                    clearActiveDraftError();
+                  }
+                  field.handleChange(html);
+                  form.setFieldValue("bodyText", text);
+                }}
+                onInlineImageFiles={addInlineImageFiles}
+                onPlaceholderSelectionChange={setSelectedPlaceholder}
+                onRecordingStart={handleRecordingStart}
+                onRecordingStop={handleRecordingStop}
+                recording={audioRecorder.isRecording}
+                recordingSupported={audioRecorder.isSupported}
+                ref={composeEditorRef}
+                transcribing={isTranscribingAudio}
+              >
+                <div className="flex min-h-0 flex-1 flex-col gap-3">
+                  <ComposeEditorBody
+                    className="min-h-0 flex-1"
+                    invalid={field.state.meta.errors.length > 0}
+                  />
+                  {field.state.meta.errors.map((error) => (
+                    <FieldError key={error?.message ?? "An unknown error occurred."}>
+                      {error?.message ?? "An unknown error occurred."}
+                    </FieldError>
+                  ))}
+                  <ComposeEditorToolbar
+                    trailing={
+                      <>
+                        {mailboxId ? (
+                          <>
+                            <ComposeTemplatePicker
+                              disabled={!canEditBody || audioBusy}
+                              mailboxId={mailboxId}
+                              onManage={() => {
+                                closeComposeDialog(onManageTemplates);
+                              }}
+                              onInsert={(template) => {
+                                clearActiveDraftError();
+                                setActiveTemplateName(template.name);
+                                composeEditorRef.current?.insertHtml(template.bodyHtml);
+                              }}
+                            />
+                            <TemplatePlaceholderSuggestion
+                              bodyText={form.state.values.bodyText}
+                              disabled={!canEditBody || audioBusy}
+                              editorRef={composeEditorRef}
+                              mailboxId={mailboxId}
+                              placeholder={selectedPlaceholder}
+                              recipients={[
+                                form.state.values.to,
+                                form.state.values.cc,
+                                form.state.values.bcc,
+                              ]
+                                .filter(Boolean)
+                                .join(", ")}
+                              subject={form.state.values.subject}
+                              templateName={activeTemplateName}
+                            />
+                          </>
+                        ) : null}
+                        <ComposeEditorDictationButton />
+                        {canDiscardDraft ? (
+                          <ToolbarButton
+                            disabled={state.draft.saveStatus === "sending"}
+                            onClick={() => {
+                              discardActiveDraft();
+                            }}
+                            type="button"
+                          >
+                            {state.draft.draftId ? "Discard draft" : "Discard"}
+                          </ToolbarButton>
+                        ) : null}
+                        <ToolbarSeparator />
+                        <ToolbarButton disabled={!canSubmitCompose} type="submit">
+                          {state.draft.saveStatus === "sending" ? (
+                            <HugeiconsIcon className="animate-spin" icon={Loading03Icon} />
+                          ) : (
+                            <HugeiconsIcon icon={MailSend02Icon} />
+                          )}
+                          Send
+                        </ToolbarButton>
+                      </>
+                    }
+                  />
+                </div>
+              </ComposeEditor>
+            </Field>
+          )}
+        </form.Field>
+
+        {state.draft.errorMessage ? (
+          <div
+            aria-live="polite"
+            className="flex min-w-0 shrink-0 items-start gap-2 text-sm text-destructive"
+            role="alert"
+          >
+            <HugeiconsIcon className="mt-0.5 size-4 shrink-0" icon={AlertCircleIcon} />
+            <span className="min-w-0 wrap-break-word">{state.draft.errorMessage}</span>
+          </div>
+        ) : null}
+      </form>
+    </WorkspaceSection>
+  );
+};

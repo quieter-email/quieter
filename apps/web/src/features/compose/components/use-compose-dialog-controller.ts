@@ -18,7 +18,6 @@ import {
 import {
   composeFormValuesToDraft,
   draftToComposeFormValues,
-  emptyComposeFormValues,
   shouldPersistComposeDraft,
   writeComposeFormValues,
   type ComposeFormValues,
@@ -36,20 +35,7 @@ import {
   type ComposeDraftState,
 } from "../domain/draft";
 
-type ComposeDialogState = {
-  draft: ComposeDraftState;
-  open: boolean;
-  showBcc: boolean;
-  showCc: boolean;
-};
 type ComposeDraftUpdate = ComposeDraftState | ((current: ComposeDraftState) => ComposeDraftState);
-
-const createDialogState = (): ComposeDialogState => ({
-  draft: createEmptyComposeDraft(),
-  open: false,
-  showBcc: false,
-  showCc: false,
-});
 
 export const getDraftStatusMessage = (draft: ComposeDraftState, persistDrafts = true) => {
   if (draft.saveStatus === "sending") return "Sending message…";
@@ -62,20 +48,37 @@ export const getDraftStatusMessage = (draft: ComposeDraftState, persistDrafts = 
 
 export const useComposeDialogController = ({
   demoMode = false,
+  initialDraft = null,
   managedDemoMode = false,
   mailboxId,
+  onClose,
   persistDrafts = true,
   signature,
 }: {
   demoMode?: boolean;
+  initialDraft?: ComposeDraftState | null;
   managedDemoMode?: boolean;
   mailboxId: string | null;
+  onClose?: () => void;
   persistDrafts?: boolean;
   signature?: { html: string | null; text: string | null };
 }) => {
   const queryClient = useQueryClient();
-  const [state, setState] = useState(createDialogState);
+  const [state, setState] = useState(() => {
+    const draft = initialDraft ? cloneComposeDraft(initialDraft) : createEmptyComposeDraft();
+    const resolved = initialDraft?.draftId
+      ? draft
+      : appendComposeSignature(draft, signature ?? { html: undefined, text: undefined });
+    return {
+      draft: resolved,
+      open: true,
+      showBcc: !!resolved.recipients.bcc.trim(),
+      showCc: !!resolved.recipients.cc.trim(),
+    };
+  });
   const activeDraftRef = useRef(state.draft);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const openIdRef = useRef(0);
   const [saveQueueRef] = useState(() => ({ current: Promise.resolve() }));
   const [savedDraftByLocalIdRef] = useState(() => ({
@@ -83,7 +86,7 @@ export const useComposeDialogController = ({
   }));
 
   const form = useForm({
-    defaultValues: emptyComposeFormValues,
+    defaultValues: draftToComposeFormValues(state.draft),
     onSubmit: async ({ value }) => {
       await submitComposeForm(value);
     },
@@ -113,8 +116,9 @@ export const useComposeDialogController = ({
     });
   };
 
-  const closeDialog = () => {
+  const closeDialog = (afterClose?: () => void) => {
     setState((current) => ({ ...current, open: false }));
+    (afterClose ?? onCloseRef.current)?.();
   };
 
   const buildDraftFromForm = (values: ComposeFormValues): ComposeDraftState => {
@@ -250,14 +254,14 @@ export const useComposeDialogController = ({
     );
   };
 
-  const closeComposeDialog = () => {
+  const closeComposeDialog = (afterClose?: () => void) => {
     if (activeDraftRef.current.saveStatus === "sending") return;
 
     openIdRef.current += 1;
     const values = form.state.values;
     const draft = buildDraftFromForm(values);
     const saveOnClose = shouldSaveDraft(draft, values);
-    closeDialog();
+    closeDialog(afterClose);
 
     if (!saveOnClose) {
       clearComposeDraftRuntimeFiles(draft);
@@ -421,6 +425,7 @@ export const useComposeDialogController = ({
   return {
     addInlineImageFiles,
     clearActiveDraftError,
+    closeComposeDialog,
     discardActiveDraft,
     form,
     handleDialogOpenChange,

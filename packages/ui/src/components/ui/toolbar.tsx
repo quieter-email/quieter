@@ -10,7 +10,7 @@ export const Toolbar = ({
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Root>) => (
   <ToolbarPrimitive.Root
     className={cn(
-      "squircle inline-flex min-h-10 items-center gap-1 rounded-lg border bg-bg-surface p-1 shadow-sm",
+      "squircle inline-flex min-h-10 items-center gap-1 rounded-lg border border-border bg-bg-elevated p-1 shadow-sm",
       className,
     )}
     {...props}
@@ -56,7 +56,7 @@ export const ToolbarInput = ({
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Input>) => (
   <ToolbarPrimitive.Input
     className={cn(
-      "squircle h-8 w-full min-w-32 rounded-md border border-border bg-bg-elevated/60 px-3 text-[13px] text-fg shadow-sm transition-colors duration-150 ease-out placeholder:text-muted-fg read-only:cursor-default read-only:bg-muted/30 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-destructive/45",
+      "squircle h-8 w-full min-w-32 rounded-md border border-border bg-bg-elevated px-3 text-[13px] text-fg shadow-sm transition-colors duration-150 ease-out placeholder:text-muted-fg read-only:cursor-default read-only:bg-bg-elevated focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-destructive/45",
       className,
     )}
     {...props}

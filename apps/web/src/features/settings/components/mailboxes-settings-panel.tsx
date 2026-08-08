@@ -580,7 +580,7 @@ export const MailboxesSettingsPanel = () => {
                       placeholder="Display name, such as Support"
                       value={managedDisplayName}
                     />
-                    <div className="squircle flex h-9 min-w-0 items-center rounded-md border border-border bg-bg-elevated/60 shadow-sm transition-colors">
+                    <div className="squircle flex h-9 min-w-0 items-center rounded-md border border-border bg-bg-elevated shadow-sm transition-colors">
                       <TextFieldInput
                         aria-label="Mailbox address"
                         chrome="ghost"
