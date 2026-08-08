@@ -46,8 +46,7 @@ import {
   SettingsNavigationRow,
   SettingsRows,
   SettingsSection,
-  settingsInsetRowClass,
-  settingsRowPaddingClass,
+  settingsSurfaceVariants,
 } from "../settings-layout";
 import {
   getOrganizationDivisionsQueryKey,
@@ -475,7 +474,10 @@ const DivisionDetailView = ({
                 const checked = selectedMemberIds.has(memberRecord.id);
                 return (
                   <label
-                    className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}
+                    className={cn(
+                      settingsSurfaceVariants({ variant: "insetRow" }),
+                      "cursor-pointer gap-3",
+                    )}
                     key={memberRecord.id}
                   >
                     <Checkbox
@@ -517,7 +519,12 @@ const DivisionDetailView = ({
               })}
             </SettingsInsetRows>
           ) : (
-            <p className={cn("text-sm text-muted-fg", settingsRowPaddingClass)}>
+            <p
+              className={cn(
+                "text-sm text-muted-fg",
+                settingsSurfaceVariants({ variant: "padding" }),
+              )}
+            >
               No team members yet.
             </p>
           )}
@@ -600,7 +607,12 @@ export const DivisionsView = ({
       {isDivisionsPending ? (
         <SettingsLoadingState label="Loading divisions" />
       ) : isDivisionsError ? (
-        <p className={cn("text-sm text-destructive", settingsRowPaddingClass)}>
+        <p
+          className={cn(
+            "text-sm text-destructive",
+            settingsSurfaceVariants({ variant: "padding" }),
+          )}
+        >
           {divisionsError?.message ?? "Could not load divisions."}
         </p>
       ) : divisions.length > 0 ? (
@@ -616,7 +628,12 @@ export const DivisionsView = ({
           ))}
         </SettingsRows>
       ) : (
-        <p className={cn("text-center text-sm text-muted-fg", settingsRowPaddingClass)}>
+        <p
+          className={cn(
+            "text-center text-sm text-muted-fg",
+            settingsSurfaceVariants({ variant: "padding" }),
+          )}
+        >
           No divisions yet.
         </p>
       )}

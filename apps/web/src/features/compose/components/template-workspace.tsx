@@ -30,6 +30,7 @@ import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { useRef, useState } from "react";
+import { WorkspaceSection, workspaceSectionVariants } from "~/components/workspace-section";
 import { appEaseInOut, appMotionDuration } from "~/features/motion/app-motion";
 import { orpc } from "~/lib/orpc";
 import { normalizeComposeBodyHtml } from "../domain/draft";
@@ -152,14 +153,12 @@ export const TemplateWorkspace = ({
 
   return (
     <>
-      <section
-        className={cn(
-          "m-1.5 min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-bg lg:m-2 lg:ml-0 lg:flex",
-          {
-            flex: !mobileEditorOpen,
-            hidden: mobileEditorOpen,
-          },
-        )}
+      <WorkspaceSection
+        className={cn("bg-bg", {
+          flex: !mobileEditorOpen,
+          hidden: mobileEditorOpen,
+        })}
+        layout="cell"
       >
         <header className="@container p-3 sm:p-4">
           <div className="flex items-center gap-2">
@@ -252,16 +251,13 @@ export const TemplateWorkspace = ({
             </div>
           ) : null}
         </div>
-      </section>
+      </WorkspaceSection>
 
       <form
-        className={cn(
-          "m-1.5 min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-bg lg:m-2 lg:ml-0 lg:flex",
-          {
-            flex: mobileEditorOpen,
-            hidden: !mobileEditorOpen,
-          },
-        )}
+        className={cn(workspaceSectionVariants({ layout: "cell" }), "border-0 bg-bg", {
+          flex: mobileEditorOpen,
+          hidden: !mobileEditorOpen,
+        })}
         onSubmit={(event) => {
           event.preventDefault();
           void templateForm.handleSubmit();

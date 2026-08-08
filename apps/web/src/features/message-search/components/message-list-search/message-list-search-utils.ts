@@ -9,9 +9,6 @@ import type { DropdownDirection } from "./message-list-search-types";
 const initialCalendarFallbackMonth = new Date(0);
 const clientCalendarFallbackMonth = new Date();
 
-export const filterChipClassName =
-  "squircle inline-flex h-6 min-w-0 max-w-full shrink-0 items-center rounded-lg bg-bg-elevated/55 px-2.5 text-[13px] text-fg shadow-xs transition-colors duration-150 ease-out ring-1 ring-border/80 ring-inset hover:bg-bg-elevated/70 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring/45";
-
 export const subscribeToCalendarFallbackMonth = () => () => {};
 export const getCalendarFallbackMonth = () => clientCalendarFallbackMonth;
 export const getServerCalendarFallbackMonth = () => initialCalendarFallbackMonth;

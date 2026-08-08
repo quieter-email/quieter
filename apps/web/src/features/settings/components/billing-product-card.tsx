@@ -5,7 +5,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { BILLING_PRODUCTS, type BillingProductId } from "@quieter/billing/plans";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import { settingsRowValueClass } from "~/features/settings/components/settings-layout";
+import { settingsSurfaceVariants } from "~/features/settings/components/settings-layout";
 import { formatBillingProduct } from "~/features/settings/domain/billing";
 
 const moneyFormatter = new Intl.NumberFormat("en-US", {
@@ -96,7 +96,9 @@ export const BillingCreditSummary = ({
   product: BillingProductId | null;
   usage: { billableCostCents: number; costCents: number; remainingCreditCents: number } | null;
 }) => (
-  <div className={cn("flex flex-wrap gap-x-5 gap-y-1", settingsRowValueClass)}>
+  <div
+    className={cn("flex flex-wrap gap-x-5 gap-y-1", settingsSurfaceVariants({ variant: "value" }))}
+  >
     <span>{formatBillingProduct(product)}</span>
     {creditAmountCents != null && (
       <span>

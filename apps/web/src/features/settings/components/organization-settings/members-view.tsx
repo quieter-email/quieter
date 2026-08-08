@@ -5,13 +5,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@quieter/ui/cn";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { useState } from "react";
-import {
-  SettingsBackButton,
-  SettingsCard,
-  settingsInsetDividerClass,
-  settingsInsetRowClass,
-  settingsRowPaddingClass,
-} from "../settings-layout";
+import { SettingsBackButton, SettingsCard, settingsSurfaceVariants } from "../settings-layout";
 import {
   type FullOrganization,
   type OrganizationMember,
@@ -78,7 +72,13 @@ export const MembersView = ({
 
       <SettingsCard>
         {showMemberSearch && (
-          <TextField className={cn(settingsInsetRowClass, settingsInsetDividerClass, "relative")}>
+          <TextField
+            className={cn(
+              settingsSurfaceVariants({ variant: "insetRow" }),
+              settingsSurfaceVariants({ variant: "divider" }),
+              "relative",
+            )}
+          >
             <HugeiconsIcon
               aria-hidden
               className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-fg @md:left-6"
@@ -107,7 +107,12 @@ export const MembersView = ({
         ))}
 
         {visibleMembers.length === 0 && (
-          <p className={cn("text-center text-sm text-muted-fg", settingsRowPaddingClass)}>
+          <p
+            className={cn(
+              "text-center text-sm text-muted-fg",
+              settingsSurfaceVariants({ variant: "padding" }),
+            )}
+          >
             No members found.
           </p>
         )}

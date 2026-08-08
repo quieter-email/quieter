@@ -56,7 +56,7 @@ import {
   SettingsLoadingState,
   SettingsRow,
   SettingsRows,
-  settingsRowPaddingClass,
+  settingsSurfaceVariants,
 } from "../settings-layout";
 import { getOrganizationApiKeysQueryKey, organizationApiKeysQueryOptions } from "./api-keys";
 import { formatCount, type FullOrganization } from "./domain";
@@ -683,7 +683,12 @@ export const ApiKeysView = ({
       {isApiKeysPending ? (
         <SettingsLoadingState label="Loading API keys" />
       ) : isApiKeysError ? (
-        <p className={cn("text-sm text-destructive", settingsRowPaddingClass)}>
+        <p
+          className={cn(
+            "text-sm text-destructive",
+            settingsSurfaceVariants({ variant: "padding" }),
+          )}
+        >
           {apiKeysError?.message ?? "Could not load API keys."}
         </p>
       ) : apiKeys.length > 0 ? (
@@ -708,7 +713,12 @@ export const ApiKeysView = ({
           ))}
         </SettingsRows>
       ) : (
-        <p className={cn("text-center text-sm text-muted-fg", settingsRowPaddingClass)}>
+        <p
+          className={cn(
+            "text-center text-sm text-muted-fg",
+            settingsSurfaceVariants({ variant: "padding" }),
+          )}
+        >
           No API keys.
         </p>
       )}

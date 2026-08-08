@@ -14,11 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { authClient } from "~/lib/auth";
-import {
-  settingsInsetDividerClass,
-  settingsInsetRowClass,
-  settingsRowPaddingClass,
-} from "../settings-layout";
+import { settingsSurfaceVariants } from "../settings-layout";
 import {
   type OrganizationMember,
   type OrganizationRoleOption,
@@ -108,7 +104,13 @@ export const MemberActions = ({
 
   return (
     <div className="space-y-1">
-      <div className={cn(settingsInsetRowClass, settingsInsetDividerClass, "gap-3")}>
+      <div
+        className={cn(
+          settingsSurfaceVariants({ variant: "insetRow" }),
+          settingsSurfaceVariants({ variant: "divider" }),
+          "gap-3",
+        )}
+      >
         <div className="min-w-0 flex-1 text-left">
           <p className="truncate text-sm font-medium text-fg">
             {member.user.name || member.user.email}
@@ -193,7 +195,13 @@ export const MemberActions = ({
       </div>
 
       {error && (
-        <p className={cn("text-sm text-destructive", settingsRowPaddingClass)} role="alert">
+        <p
+          className={cn(
+            "text-sm text-destructive",
+            settingsSurfaceVariants({ variant: "padding" }),
+          )}
+          role="alert"
+        >
           {error}
         </p>
       )}

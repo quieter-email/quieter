@@ -1,16 +1,33 @@
 "use client";
 
 import { cn } from "@quieter/ui/cn";
+import { cva } from "class-variance-authority";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { type ReactNode, useState } from "react";
 import { appMotionDuration } from "~/features/motion/app-motion";
-import {
-  sidebarActiveSurfaceClassName,
-  sidebarHoverSurfaceClassName,
-  sidebarHoverSurfaceItemClassName,
-  sidebarSurfaceFadeTransition,
-  sidebarSurfaceSpringTransition,
-} from "~/features/navigation/domain/sidebar-surfaces";
+
+const sidebarSurfaceSpringTransition = {
+  layout: { type: "spring" as const, stiffness: 560, damping: 38, mass: 0.55 },
+};
+
+const sidebarSurfaceFadeTransition = {
+  opacity: { duration: 0.18, ease: [0.23, 1, 0.32, 1] as const },
+  transform: { duration: 0.18, ease: [0.23, 1, 0.32, 1] as const },
+};
+
+export const sidebarSurfaceVariants = cva("squircle rounded-md", {
+  variants: {
+    surface: {
+      active: "pointer-events-none absolute inset-0 z-0 bg-bg",
+      hover: "bg-bg/50",
+      hoverItem: "block size-full bg-bg/50",
+    },
+  },
+});
+
+export const sidebarNavButtonVariants = cva(
+  "relative z-10 w-full bg-transparent hover:bg-transparent active:scale-100 active:bg-transparent aria-[current=page]:bg-transparent aria-[current=page]:hover:bg-transparent aria-[current=page]:active:bg-transparent motion-reduce:active:scale-100",
+);
 
 type SidebarEntranceProps = {
   animateEntrance: boolean;
@@ -61,7 +78,7 @@ type SidebarActiveSurfaceProps = {
 };
 
 export const SidebarActiveSurface = ({ className }: SidebarActiveSurfaceProps) => (
-  <span aria-hidden className={cn(sidebarActiveSurfaceClassName, className)} />
+  <span aria-hidden className={cn(sidebarSurfaceVariants({ surface: "active" }), className)} />
 );
 
 type SidebarHoverSurfaceProps = {
@@ -104,7 +121,7 @@ export const SidebarHoverSurface = ({
                 transform: reducedMotion ? "scale(1)" : pressed ? "scale(0.98)" : "scale(1)",
               }
         }
-        className={cn(sidebarHoverSurfaceItemClassName, className)}
+        className={cn(sidebarSurfaceVariants({ surface: "hoverItem" }), className)}
         initial={
           hoverEnter
             ? {
@@ -148,7 +165,7 @@ export const SidebarSimpleHoverSurface = ({
           animate={{ opacity: 1, transform: "scale(1)" }}
           className={cn(
             "pointer-events-none absolute inset-0 z-0",
-            sidebarHoverSurfaceClassName,
+            sidebarSurfaceVariants({ surface: "hover" }),
             className,
           )}
           exit={{

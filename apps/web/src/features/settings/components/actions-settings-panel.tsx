@@ -59,8 +59,7 @@ import {
   SettingsRowText,
   SettingsRows,
   SettingsSection,
-  settingsRowTitleClass,
-  settingsRowValueClass,
+  settingsSurfaceVariants,
 } from "./settings-layout";
 
 type MailboxOption = {
@@ -609,7 +608,7 @@ const ActionSimpleEditor = ({
                     placeholder={DEFAULT_ACTION_INSTRUCTIONS}
                     value={instructions}
                   />
-                  <p className={settingsRowValueClass}>
+                  <p className={settingsSurfaceVariants({ variant: "value" })}>
                     Example: When it's a bug or feature request, use{" "}
                     <span className="rounded-full border border-[#5e6ad2]/40 bg-[#5e6ad2]/15 px-1.5 py-0.5 text-[#b8bef8]">
                       @Linear
@@ -623,7 +622,9 @@ const ActionSimpleEditor = ({
 
           {validationErrors.length > 0 ? (
             <SettingsCard className="border-destructive/35 bg-destructive/5 p-4">
-              <p className={settingsRowTitleClass}>Missing before publish</p>
+              <p className={settingsSurfaceVariants({ variant: "title" })}>
+                Missing before publish
+              </p>
               <ul className="mt-2 space-y-1 text-sm text-destructive">
                 {validationErrors.map((message) => (
                   <li key={message}>{message}</li>
@@ -729,8 +730,10 @@ const SimpleField = ({
 }) => (
   <div className="grid gap-3 p-4 md:grid-cols-[12rem_minmax(0,1fr)] md:px-6">
     <div>
-      <p className={settingsRowTitleClass}>{label}</p>
-      {description ? <p className={cn("mt-1", settingsRowValueClass)}>{description}</p> : null}
+      <p className={settingsSurfaceVariants({ variant: "title" })}>{label}</p>
+      {description ? (
+        <p className={cn("mt-1", settingsSurfaceVariants({ variant: "value" }))}>{description}</p>
+      ) : null}
     </div>
     <div className="min-w-0">{children}</div>
   </div>

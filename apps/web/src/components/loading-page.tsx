@@ -5,7 +5,7 @@ export const LoadingPage = () => {
     <output
       aria-label="Loading"
       aria-live="polite"
-      className="grid min-h-dvh place-items-center bg-bg"
+      className="grid min-h-dvh place-items-center bg-bg-elevated"
     >
       <LoadingSpinner />
       <span className="sr-only">Loading</span>

@@ -10,7 +10,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { z } from "zod";
 import { authClient } from "~/lib/auth";
-import { settingsInsetFieldRowClass } from "../settings-layout";
+import { settingsSurfaceVariants } from "../settings-layout";
 import { type FullOrganization, getFullOrganizationQueryKey } from "./domain";
 
 export const InviteMemberForm = ({
@@ -79,7 +79,7 @@ export const InviteMemberForm = ({
         await form.handleSubmit();
       }}
     >
-      <div className={cn(settingsInsetFieldRowClass, "gap-3")}>
+      <div className={cn(settingsSurfaceVariants({ variant: "insetFieldRow" }), "gap-3")}>
         <form.Field name="email">
           {(field) => {
             const hasErrors = field.state.meta.errors.length > 0;

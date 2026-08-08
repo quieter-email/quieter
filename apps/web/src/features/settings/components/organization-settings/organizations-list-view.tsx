@@ -13,7 +13,7 @@ import {
   SettingsLoadingState,
   SettingsRows,
   SettingsSection,
-  settingsRowPaddingClass,
+  settingsSurfaceVariants,
 } from "../settings-layout";
 import { prefetchOrganizationSettingsDetail } from "../settings-prefetch";
 import {
@@ -159,7 +159,16 @@ const PendingInvitationsSection = () => {
           />
         );
       })}
-      {error && <p className={cn("text-sm text-destructive", settingsRowPaddingClass)}>{error}</p>}
+      {error && (
+        <p
+          className={cn(
+            "text-sm text-destructive",
+            settingsSurfaceVariants({ variant: "padding" }),
+          )}
+        >
+          {error}
+        </p>
+      )}
     </SettingsCard>
   );
 };

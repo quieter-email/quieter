@@ -11,6 +11,7 @@ import type { MailboxWorkspaceView } from "~/features/mailbox/domain/mailbox-wor
 import type { MailboxSwitcherOrder } from "~/features/navigation/components/mailbox-switcher";
 import type { MailboxCategory } from "~/lib/gmail/gmail";
 import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
+import { WorkspaceSection, workspaceSectionVariants } from "~/components/workspace-section";
 import { MailSidebar } from "~/features/navigation/components/mail-sidebar";
 import { MailboxMessagesPanel } from "./mailbox-messages-panel";
 
@@ -280,10 +281,48 @@ export const MailboxWorkspaceContent = ({
                 <TemplateWorkspace mailboxId={selectedMailboxId} onOpenSidebar={onOpenSidebar} />
               </Suspense>
             </div>
+          ) : selectedMailboxNeedsReconnect ? (
+            <WorkspaceSection centered className="px-8">
+              <m.div className="max-w-md space-y-3 text-center" {...workspaceContentMotion}>
+                <h1 className="text-lg font-semibold tracking-tight text-fg">Reconnect Google</h1>
+                <p className="text-sm text-muted-fg">
+                  This account needs to reconnect through Google before Quieter can load mail.
+                </p>
+                <div className="pt-1">
+                  <Button
+                    disabled={reconnectingMailboxId === selectedMailboxId}
+                    onClick={() => {
+                      const selectedMailbox = mailboxGroups
+                        .flatMap((group) => group.mailboxes)
+                        .find((m) => m.id === selectedMailboxId);
+                      onReconnectMailbox({
+                        emailAddress: selectedMailbox?.emailAddress ?? "",
+                        id: selectedMailboxId ?? "",
+                      });
+                    }}
+                    type="button"
+                  >
+                    <HugeiconsIcon
+                      aria-hidden
+                      className={cn("size-4", {
+                        "animate-spin": reconnectingMailboxId === selectedMailboxId,
+                      })}
+                      icon={
+                        reconnectingMailboxId === selectedMailboxId ? Loading03Icon : Mail01Icon
+                      }
+                    />
+                    Reconnect
+                  </Button>
+                  {reconnectError && (
+                    <p className="mt-3 text-sm text-destructive">{reconnectError}</p>
+                  )}
+                </div>
+              </m.div>
+            </WorkspaceSection>
           ) : selectedView === "chat" ? (
             <m.div
               key={`chat-${chatId ?? draftChatKey}`}
-              className="absolute inset-1.5 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border bg-bg/60"
+              className={workspaceSectionVariants()}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.08, ease: "linear" }}
@@ -307,60 +346,18 @@ export const MailboxWorkspaceContent = ({
             </m.div>
           ) : (
             <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
-              {selectedMailboxNeedsReconnect ? (
-                <section className="flex min-h-0 flex-1 items-center justify-center bg-bg px-8">
-                  <m.div className="max-w-md space-y-3 text-center" {...workspaceContentMotion}>
-                    <h1 className="text-lg font-semibold tracking-tight text-fg">
-                      Reconnect Google
-                    </h1>
-                    <p className="text-sm text-muted-fg">
-                      This account needs to reconnect through Google before Quieter can load mail.
-                    </p>
-                    <div className="pt-1">
-                      <Button
-                        disabled={reconnectingMailboxId === selectedMailboxId}
-                        onClick={() => {
-                          const selectedMailbox = mailboxGroups
-                            .flatMap((group) => group.mailboxes)
-                            .find((m) => m.id === selectedMailboxId);
-                          onReconnectMailbox({
-                            emailAddress: selectedMailbox?.emailAddress ?? "",
-                            id: selectedMailboxId ?? "",
-                          });
-                        }}
-                        type="button"
-                      >
-                        <HugeiconsIcon
-                          aria-hidden
-                          className={cn("size-4", {
-                            "animate-spin": reconnectingMailboxId === selectedMailboxId,
-                          })}
-                          icon={
-                            reconnectingMailboxId === selectedMailboxId ? Loading03Icon : Mail01Icon
-                          }
-                        />
-                        Reconnect
-                      </Button>
-                      {reconnectError && (
-                        <p className="mt-3 text-sm text-destructive">{reconnectError}</p>
-                      )}
-                    </div>
-                  </m.div>
-                </section>
-              ) : (
-                <MailboxMessagesPanel
-                  activeMailbox={activeMailbox}
-                  currentUserEmail={currentUserEmail}
-                  isDemoMode={isDemoMode}
-                  isManagedDemoMode={isManagedDemoMode}
-                  mailboxId={selectedMailboxId}
-                  mailboxProvider={selectedMailboxProvider!}
-                  onComposeDraftRequested={onComposeDraftRequested}
-                  onOpenSidebar={onOpenSidebar}
-                  onSearchQueryChange={onSearch}
-                  searchQuery={searchQuery}
-                />
-              )}
+              <MailboxMessagesPanel
+                activeMailbox={activeMailbox}
+                currentUserEmail={currentUserEmail}
+                isDemoMode={isDemoMode}
+                isManagedDemoMode={isManagedDemoMode}
+                mailboxId={selectedMailboxId}
+                mailboxProvider={selectedMailboxProvider!}
+                onComposeDraftRequested={onComposeDraftRequested}
+                onOpenSidebar={onOpenSidebar}
+                onSearchQueryChange={onSearch}
+                searchQuery={searchQuery}
+              />
             </div>
           )}
         </div>

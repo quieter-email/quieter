@@ -7,8 +7,8 @@ import { useState } from "react";
 import {
   SidebarActiveSurface,
   SidebarHoverSurface,
+  sidebarNavButtonVariants,
 } from "~/features/navigation/components/sidebar-surfaces";
-import { sidebarNavButtonClassName } from "~/features/navigation/domain/sidebar-surfaces";
 
 type SidebarNavItemProps = Omit<ButtonProps, "onMouseEnter" | "onMouseLeave"> & {
   active?: boolean;
@@ -72,7 +72,7 @@ export const SidebarNavItem = ({
         />
       ) : null}
       <Button
-        className={cn(sidebarNavButtonClassName, className)}
+        className={cn(sidebarNavButtonVariants(), className)}
         onBlur={onBlur}
         onFocus={onFocus}
         variant={variant}

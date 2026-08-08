@@ -22,9 +22,8 @@ import {
   SettingsInsetRow,
   SettingsInsetRows,
   SettingsInsetStackedRow,
-  settingsInsetDividerClass,
-  settingsInsetSectionClass,
   SettingsRowText,
+  settingsSurfaceVariants,
 } from "~/features/settings/components/settings-layout";
 import { orpc, rpc } from "~/lib/orpc";
 import {
@@ -75,7 +74,7 @@ const createInitialMilestones = (percents: number[]): Milestone[] =>
   }));
 
 const ManagedUsageLoading = ({ message }: { message: string }) => (
-  <section className={settingsInsetSectionClass}>
+  <section className={settingsSurfaceVariants({ variant: "insetSection" })}>
     <SettingsRowText title="Usage balance">
       <span className="inline-flex items-center gap-2">
         <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
@@ -86,7 +85,7 @@ const ManagedUsageLoading = ({ message }: { message: string }) => (
 );
 
 const ManagedUsageUnavailable = ({ message }: { message: string }) => (
-  <section className={settingsInsetSectionClass}>
+  <section className={settingsSurfaceVariants({ variant: "insetSection" })}>
     <SettingsRowText title="Usage balance">{message}</SettingsRowText>
   </section>
 );
@@ -301,7 +300,7 @@ const ManagedUsageSettingsForm = ({
 
   if (overview.hasUnlimitedAccess) {
     return (
-      <section className={settingsInsetSectionClass}>
+      <section className={settingsSurfaceVariants({ variant: "insetSection" })}>
         <SettingsInsetRow className="justify-between gap-4">
           <SettingsRowText title="Usage balance">
             {formatMoney(managedUsageCostCents)} tracked this period
@@ -315,7 +314,7 @@ const ManagedUsageSettingsForm = ({
   }
 
   return (
-    <section className={settingsInsetDividerClass}>
+    <section className={settingsSurfaceVariants({ variant: "divider" })}>
       <div className="flex flex-col gap-4 px-4 pt-6 md:flex-row md:items-start md:justify-between md:px-6">
         <SettingsRowText title="Usage balance">
           <div className="flex flex-wrap gap-x-3 gap-y-1">

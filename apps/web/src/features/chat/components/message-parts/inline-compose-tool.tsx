@@ -28,9 +28,6 @@ type InlineComposeToolProps = {
   result?: ComposeEmailResult;
 };
 
-const fieldClass =
-  "h-8 w-full min-w-0 bg-transparent px-0 text-sm text-fg placeholder:text-muted-fg/60";
-
 const ComposeField = ({
   label,
   value,
@@ -47,11 +44,13 @@ const ComposeField = ({
   <label className="flex min-w-0 items-center gap-3 border-b border-border py-1.5 last:border-b-0">
     <span className="w-12 shrink-0 text-[11px] text-muted-fg">{label}</span>
     {readOnly ? (
-      <span className={cn(fieldClass, "truncate")}>{value || "—"}</span>
+      <span className="h-8 w-full min-w-0 truncate bg-transparent px-0 text-sm text-fg">
+        {value || "—"}
+      </span>
     ) : (
       <input
         aria-label={label}
-        className={fieldClass}
+        className="h-8 w-full min-w-0 bg-transparent px-0 text-sm text-fg placeholder:text-muted-fg/60"
         onBlur={onBlur}
         onChange={(event) => onChange?.(event.target.value)}
         value={value}

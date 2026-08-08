@@ -35,8 +35,8 @@ import {
   SettingsInsetRows,
   SettingsLoadingState,
   SettingsPageHeader,
-  settingsRowPaddingClass,
   SettingsSection,
+  settingsSurfaceVariants,
 } from "../settings-layout";
 import {
   getOrganizationDomainConnectQueryKey,
@@ -547,7 +547,7 @@ export const DomainDetailView = ({
                 <div
                   className={cn(
                     "flex flex-col gap-3 @md:flex-row @md:items-center @md:justify-between",
-                    settingsRowPaddingClass,
+                    settingsSurfaceVariants({ variant: "padding" }),
                   )}
                   key={option.value}
                 >
@@ -627,7 +627,10 @@ export const DomainDetailView = ({
               const ready = checks.length > 0 && checks.every((check) => check.ok);
               return (
                 <div
-                  className={cn("flex items-center justify-between gap-4", settingsRowPaddingClass)}
+                  className={cn(
+                    "flex items-center justify-between gap-4",
+                    settingsSurfaceVariants({ variant: "padding" }),
+                  )}
                   key={item.purpose}
                 >
                   <div>

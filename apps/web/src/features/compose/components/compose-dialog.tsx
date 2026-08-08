@@ -19,6 +19,7 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { type UseAudioRecorderReturn, useAudioRecorder } from "@tanstack/ai-react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { cva } from "class-variance-authority";
 import { AnimatePresence, domAnimation, LazyMotion, m, useReducedMotion } from "motion/react";
 import {
   type ClipboardEvent,
@@ -120,9 +121,15 @@ type RecipientInputState = {
   tokens: string[];
 };
 
-const composeInputFrameClass =
-  "compose-input-frame relative flex min-h-11 items-center gap-3 rounded-none border border-transparent bg-transparent px-4 transition-[border-color,box-shadow,background-color] has-[input:focus-visible]:border-ring has-[input:focus-visible]:ring-1 has-[input:focus-visible]:ring-ring/45 has-[input:focus-visible]:outline-none has-[input:focus-visible]:ring-inset";
-const composeInputLabelClass = "flex w-10 shrink-0 items-center text-xs font-normal text-muted-fg";
+const composeInputVariants = cva("", {
+  variants: {
+    part: {
+      frame:
+        "compose-input-frame relative flex min-h-11 items-center gap-3 rounded-none border border-transparent bg-transparent px-4 transition-[border-color,box-shadow,background-color] has-[input:focus-visible]:border-ring has-[input:focus-visible]:ring-1 has-[input:focus-visible]:ring-ring/45 has-[input:focus-visible]:outline-none has-[input:focus-visible]:ring-inset",
+      label: "flex w-10 shrink-0 items-center text-xs font-normal text-muted-fg",
+    },
+  },
+});
 
 const serializeRecipientValue = (tokens: readonly string[], inputValue: string) =>
   [...tokens, inputValue.trim()].filter(Boolean).join(", ");
@@ -176,12 +183,12 @@ const ComposeTextField = ({
 }: ComposeTextFieldProps) => (
   <div>
     <div
-      className={cn(composeInputFrameClass, className, {
+      className={cn(composeInputVariants({ part: "frame" }), className, {
         "border-destructive bg-destructive/10 has-[input:focus-visible]:border-destructive has-[input:focus-visible]:ring-destructive/45":
           invalid,
       })}
     >
-      <span className={composeInputLabelClass}>{label}</span>
+      <span className={composeInputVariants({ part: "label" })}>{label}</span>
       <input
         aria-invalid={invalid}
         aria-label={ariaLabel}
@@ -348,7 +355,7 @@ const ComposeRecipientField = ({
     <div>
       <div
         className={cn(
-          composeInputFrameClass,
+          composeInputVariants({ part: "frame" }),
           "min-h-11 flex-wrap items-start gap-2 py-1.5 pr-2",
           className,
           {
@@ -358,7 +365,7 @@ const ComposeRecipientField = ({
           },
         )}
       >
-        <span className={cn(composeInputLabelClass, "h-8")}>{label}</span>
+        <span className={cn(composeInputVariants({ part: "label" }), "h-8")}>{label}</span>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
           {tokens.map((token, index) => (
             <RecipientChip
@@ -639,8 +646,8 @@ export const ComposeDialog = ({
               <div className="squircle shrink-0 overflow-hidden rounded-xl border border-border bg-bg-elevated">
                 {senderEmail && (
                   <>
-                    <div className={cn(composeInputFrameClass, "rounded-t-xl")}>
-                      <span className={composeInputLabelClass}>From</span>
+                    <div className={cn(composeInputVariants({ part: "frame" }), "rounded-t-xl")}>
+                      <span className={composeInputVariants({ part: "label" })}>From</span>
                       <span className="min-w-0 truncate text-sm text-fg">{senderEmail}</span>
                     </div>
                     <div className="h-[0.5px] w-full bg-border" />
