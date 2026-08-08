@@ -24,6 +24,13 @@ export type ChatRunHub = {
 };
 
 const hubs = new Map<string, ChatRunHub>();
+const evictionTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Bound memory for long tool+LLM runs. */
+const MAX_HUB_BUFFER_CHUNKS = 4_000;
+/** Keep sealed hubs briefly so late dump-then-close attaches still work. */
+const SEALED_HUB_RETENTION_MS = 60_000;
+const SSE_HEARTBEAT_MS = 15_000;
 
 const isTerminalChunk = (chunk: StreamChunk) =>
   chunk.type === EventType.RUN_FINISHED || chunk.type === EventType.RUN_ERROR;
@@ -32,13 +39,34 @@ export const encodeChatRunHubOffset = (runId: string, seq: number) => `${runId}:
 
 export const peekChatRunHub = (runId: string) => hubs.get(runId);
 
+const clearEvictionTimer = (runId: string) => {
+  const timer = evictionTimers.get(runId);
+  if (!timer) {
+    return;
+  }
+  clearTimeout(timer);
+  evictionTimers.delete(runId);
+};
+
 /** Close the hub for subscribers but keep the buffer for late dump-then-close attaches. */
 export const sealChatRunHub = (runId: string) => {
   hubs.get(runId)?.close();
+  clearEvictionTimer(runId);
+  evictionTimers.set(
+    runId,
+    setTimeout(() => {
+      evictionTimers.delete(runId);
+      const hub = hubs.get(runId);
+      if (hub?.isClosed()) {
+        hubs.delete(runId);
+      }
+    }, SEALED_HUB_RETENTION_MS),
+  );
 };
 
 /** Close and drop the hub — used before a stale takeover starts a fresh producer. */
 export const releaseChatRunHub = (runId: string) => {
+  clearEvictionTimer(runId);
   const hub = hubs.get(runId);
   if (!hub) {
     return;
@@ -75,6 +103,9 @@ export const getChatRunHub = (runId: string): ChatRunHub => {
         for (const subscriber of subscribers) {
           subscriber.push(entry);
         }
+      }
+      if (buffer.length > MAX_HUB_BUFFER_CHUNKS) {
+        buffer.splice(0, buffer.length - MAX_HUB_BUFFER_CHUNKS);
       }
       return offsets;
     },
@@ -129,11 +160,18 @@ export const getChatRunHub = (runId: string): ChatRunHub => {
       subscribers.add(subscriber);
 
       try {
-        for (const entry of buffer) {
+        // Snapshot so live appends during yields only land in `queue`, not a second replay.
+        const replay = buffer.slice();
+        const replayedOffsets = new Set(replay.map((entry) => entry.offset));
+        for (const entry of replay) {
           yield entry;
         }
 
-        if (closed || buffer.some((entry) => isTerminalChunk(entry.chunk))) {
+        while (queue.length > 0 && replayedOffsets.has(queue[0]?.offset ?? "")) {
+          queue.shift();
+        }
+
+        if (closed || replay.some((entry) => isTerminalChunk(entry.chunk))) {
           return;
         }
 
@@ -185,6 +223,11 @@ export const createHubStreamDurability = (runId: string): StreamDurability<ChatR
 };
 
 const sseEncoder = new TextEncoder();
+const sseHeaders = {
+  "Cache-Control": "no-cache, no-transform",
+  "Content-Type": "text/event-stream",
+  "X-Accel-Buffering": "no",
+} as const;
 
 export const encodeChatRunSseChunk = (chunk: StreamChunk, offset: string) =>
   sseEncoder.encode(`id: ${offset}\ndata: ${JSON.stringify(chunk)}\n\n`);
@@ -226,12 +269,7 @@ export const createTerminalChatRunSseResponse = (input: {
 
   const body = encodeChatRunSseChunk(chunk, `${input.runId}:terminal`);
   return new Response(body, {
-    headers: {
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "Content-Type": "text/event-stream",
-      "X-Accel-Buffering": "no",
-    },
+    headers: sseHeaders,
   });
 };
 
@@ -239,6 +277,14 @@ export const createTerminalChatRunSseResponse = (input: {
 export const createChatRunHubSseResponse = (hub: ChatRunHub, signal?: AbortSignal) => {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(sseEncoder.encode(":\n\n"));
+        } catch {
+          clearInterval(heartbeat);
+        }
+      }, SSE_HEARTBEAT_MS);
+
       try {
         for await (const entry of hub.subscribe(signal)) {
           controller.enqueue(encodeChatRunSseChunk(entry.chunk, entry.offset));
@@ -253,6 +299,8 @@ export const createChatRunHubSseResponse = (hub: ChatRunHub, signal?: AbortSigna
           return;
         }
         controller.error(error);
+      } finally {
+        clearInterval(heartbeat);
       }
     },
     cancel() {
@@ -261,11 +309,6 @@ export const createChatRunHubSseResponse = (hub: ChatRunHub, signal?: AbortSigna
   });
 
   return new Response(stream, {
-    headers: {
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "Content-Type": "text/event-stream",
-      "X-Accel-Buffering": "no",
-    },
+    headers: sseHeaders,
   });
 };

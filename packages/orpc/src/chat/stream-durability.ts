@@ -1,11 +1,11 @@
-import type { StreamChunk, StreamDurability } from "@tanstack/ai";
 import { db, type DatabaseClient } from "@quieter/database/client";
 import { chatRun, chatRunStreamChunk } from "@quieter/database/schema";
+import { EventType, type StreamChunk, type StreamDurability } from "@tanstack/ai";
 import { and, asc, desc, eq, gt, isNull } from "drizzle-orm";
 
 const FROM_START_OFFSET = "-1";
 const FROM_TAIL_OFFSET = "now";
-const READ_POLL_INTERVAL_MS = 50;
+const READ_POLL_INTERVAL_MS = 200;
 const DEFAULT_FIRST_CHUNK_DEADLINE_MS = 30_000;
 
 type PostgresStreamDurabilityInit = {
@@ -207,7 +207,7 @@ export const createPostgresStreamDurability = (
         // event and hang/reconnect forever. Rewind to just before it.
         if (tail && (await isStreamClosed(runId, client))) {
           const tipType = (tail.chunk as { type?: string } | null)?.type;
-          if (tipType === "RUN_FINISHED" || tipType === "RUN_ERROR") {
+          if (tipType === EventType.RUN_FINISHED || tipType === EventType.RUN_ERROR) {
             cursorSeq = tail.seq - 1;
           }
         }

@@ -28,6 +28,7 @@ import { runChatStream } from "@quieter/ai/run-chat-stream";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
 import { chatMessage, chatRun, type ChatMessagePart } from "@quieter/database/schema";
+import { EventType } from "@tanstack/ai";
 import { and, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { loadAiAgentContext, recordAiMemoryEvent, refreshAiMemoryFromEvent } from "../../ai-memory";
 import {
@@ -57,7 +58,12 @@ import {
   searchGmailForUser,
 } from "../../gmail-chat-search";
 import { assertAccessibleMailbox } from "../../mailbox/service";
-import { createHubStreamDurability, releaseChatRunHub, sealChatRunHub } from "../stream-hub";
+import {
+  createHubStreamDurability,
+  peekChatRunHub,
+  releaseChatRunHub,
+  sealChatRunHub,
+} from "../stream-hub";
 import { getChatRunFailureMessage, terminalizeFailedChatRun } from "./failure";
 import { registerChatRunController } from "./runtime";
 
@@ -143,7 +149,13 @@ const getLatestUserRequest = (
     .join(" ")
     .slice(0, 4_000) ?? "";
 
-export const runChatGeneration = async (runId: string) => {
+export const runChatGeneration = async (
+  runId: string,
+  options?: {
+    /** Reclaim even when heartbeat is fresh — Durable Object owner after restart. */
+    force?: boolean;
+  },
+) => {
   const [run] = await db.select().from(chatRun).where(eq(chatRun.id, runId)).limit(1);
 
   if (!run) {
@@ -168,13 +180,15 @@ export const runChatGeneration = async (runId: string) => {
       and(
         eq(chatRun.id, runId),
         isNull(chatRun.cancelRequestedAt),
-        or(
-          eq(chatRun.status, "queued"),
-          and(
-            inArray(chatRun.status, ["running", "waiting_on_tool"]),
-            or(isNull(chatRun.lastHeartbeatAt), lt(chatRun.lastHeartbeatAt, staleBefore)),
-          ),
-        ),
+        options?.force
+          ? inArray(chatRun.status, ["queued", "running", "waiting_on_tool"])
+          : or(
+              eq(chatRun.status, "queued"),
+              and(
+                inArray(chatRun.status, ["running", "waiting_on_tool"]),
+                or(isNull(chatRun.lastHeartbeatAt), lt(chatRun.lastHeartbeatAt, staleBefore)),
+              ),
+            ),
       ),
     )
     .returning({ id: chatRun.id });
@@ -635,13 +649,41 @@ ${aiContext.memory}`,
 
     // Never seal the log while the run is still active — observers treat a
     // closed empty/incomplete log as a clean stream end and spam reconnects.
-    const [current] = await db
-      .select({ status: chatRun.status })
-      .from(chatRun)
-      .where(eq(chatRun.id, runId))
-      .limit(1);
-    if (!current || !isActiveChatRunStatus(current.status)) {
-      sealChatRunHub(runId);
+    // If the producer exits while status is still active, emit incomplete so
+    // subscribers are released (stale reclaim / DO restart can restart later).
+    try {
+      const [current] = await db
+        .select({ status: chatRun.status })
+        .from(chatRun)
+        .where(eq(chatRun.id, runId))
+        .limit(1);
+      if (!current || !isActiveChatRunStatus(current.status)) {
+        sealChatRunHub(runId);
+      } else {
+        const hub = peekChatRunHub(runId);
+        if (hub && !hub.isClosed()) {
+          hub.append([
+            {
+              type: EventType.RUN_ERROR,
+              timestamp: Date.now(),
+              message: "Generation stopped unexpectedly.",
+              code: "incomplete",
+              error: {
+                code: "incomplete",
+                message: "Generation stopped unexpectedly.",
+              },
+            },
+          ]);
+        }
+        sealChatRunHub(runId);
+      }
+    } catch (cleanupError) {
+      console.error("Could not finalize the chat stream hub.", cleanupError);
+      try {
+        sealChatRunHub(runId);
+      } catch {
+        // Preserve the original runner error if sealing also fails.
+      }
     }
   }
 };

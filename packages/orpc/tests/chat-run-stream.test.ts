@@ -31,14 +31,24 @@ describe("chat run stream hub", () => {
         timestamp: Date.now(),
         messageId: "m1",
         delta: "Hello",
-      } as StreamChunk,
+      } satisfies StreamChunk,
     ]);
 
     const received: string[] = [];
+    let resolveAttached: (() => void) | undefined;
+    const attached = new Promise<void>((resolve) => {
+      resolveAttached = resolve;
+    });
+
     const reader = (async () => {
+      let sawBuffered = false;
       for await (const entry of hub.subscribe()) {
         if (entry.chunk.type === EventType.TEXT_MESSAGE_CONTENT) {
           received.push(String((entry.chunk as { delta?: string }).delta ?? ""));
+          if (!sawBuffered) {
+            sawBuffered = true;
+            resolveAttached?.();
+          }
         }
         if (entry.chunk.type === EventType.RUN_FINISHED) {
           break;
@@ -46,17 +56,21 @@ describe("chat run stream hub", () => {
       }
     })();
 
+    await attached;
+
     await durability.append([
       {
         type: EventType.TEXT_MESSAGE_CONTENT,
         timestamp: Date.now(),
         messageId: "m1",
         delta: " world",
-      } as StreamChunk,
+      } satisfies StreamChunk,
       {
         type: EventType.RUN_FINISHED,
         timestamp: Date.now(),
-      } as StreamChunk,
+        runId,
+        threadId: runId,
+      } satisfies StreamChunk,
     ]);
     await durability.close();
     await reader;

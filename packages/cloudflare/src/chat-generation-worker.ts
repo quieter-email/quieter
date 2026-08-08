@@ -67,6 +67,20 @@ const sessionStub = (env: ChatGenerationEnv, runId: string) => {
 export class ChatRunSession extends DurableObject<ChatGenerationEnv> {
   #generation: Promise<void> | null = null;
 
+  #ensureProducer(runId: string, force: boolean) {
+    if (this.#generation) {
+      return;
+    }
+    // Ensure observers can attach before the first token lands.
+    getChatRunHub(runId);
+    this.#generation = withRequestDatabaseClient(async () => {
+      await ensureChatRunGeneration(runId, { force });
+    }).finally(() => {
+      this.#generation = null;
+    });
+    this.ctx.waitUntil(this.#generation);
+  }
+
   async fetch(request: Request) {
     const url = new URL(request.url);
     const runId = url.searchParams.get("runId")?.trim();
@@ -78,16 +92,7 @@ export class ChatRunSession extends DurableObject<ChatGenerationEnv> {
     }
 
     if (request.method === "POST" && url.pathname === "/start") {
-      if (!this.#generation) {
-        // Ensure observers can attach before the first token lands.
-        getChatRunHub(runId);
-        this.#generation = withRequestDatabaseClient(async () => {
-          await ensureChatRunGeneration(runId);
-        }).finally(() => {
-          this.#generation = null;
-        });
-        this.ctx.waitUntil(this.#generation);
-      }
+      this.#ensureProducer(runId, false);
       return new Response(JSON.stringify({ runId, started: true }), {
         headers: { "content-type": "application/json" },
       });
@@ -127,6 +132,8 @@ export class ChatRunSession extends DurableObject<ChatGenerationEnv> {
         }
 
         if (isActiveChatRunStatus(run.status)) {
+          // DO restarted (or stream beat start): reclaim and resume the producer.
+          this.#ensureProducer(runId, true);
           return createChatRunHubSseResponse(getChatRunHub(runId), request.signal);
         }
 

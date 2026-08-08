@@ -6,11 +6,16 @@ import { abortChatRun } from "./runtime";
 const ENQUEUE_CHAT_RUN_TIMEOUT_MS = 10_000;
 const inFlightGenerations = new Map<string, Promise<void>>();
 
-export const ensureChatRunGeneration = (runId: string) => {
+export const ensureChatRunGeneration = (
+  runId: string,
+  options?: {
+    force?: boolean;
+  },
+) => {
   const existing = inFlightGenerations.get(runId);
   if (existing) return existing;
 
-  const generation = runChatGeneration(runId)
+  const generation = runChatGeneration(runId, options)
     .catch(async (error) => {
       console.error(`Chat generation ${runId} failed.`, error);
       await terminalizeFailedChatRun(runId, getChatRunFailureMessage(error)).catch(

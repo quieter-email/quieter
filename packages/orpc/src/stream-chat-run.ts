@@ -12,18 +12,41 @@ const proxyChatRunStream = async (runId: string, request: Request) => {
   const startUrl = serverEnv.CHAT_GENERATION_START_URL;
   const token = serverEnv.CHAT_GENERATION_START_TOKEN;
   if (!startUrl || !token) {
-    return new Response("Chat generation stream is not configured.", { status: 503 });
+    return createTerminalChatRunSseResponse({
+      error: "Chat generation stream is not configured.",
+      runId,
+      status: "failed",
+    });
   }
 
   const streamUrl = new URL(`/runs/${encodeURIComponent(runId)}/stream`, startUrl);
-  return fetch(streamUrl, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "text/event-stream",
-    },
-    method: "GET",
-    signal: request.signal,
-  });
+  try {
+    const response = await fetch(streamUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "text/event-stream",
+      },
+      method: "GET",
+      signal: request.signal,
+    });
+    if (!response.ok) {
+      return createTerminalChatRunSseResponse({
+        error: `Chat stream failed (${response.status}).`,
+        runId,
+        status: "failed",
+      });
+    }
+    return response;
+  } catch (error) {
+    if (request.signal.aborted) {
+      throw error;
+    }
+    return createTerminalChatRunSseResponse({
+      error: "The response connection was interrupted.",
+      runId,
+      status: "failed",
+    });
+  }
 };
 
 /**
